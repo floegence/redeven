@@ -1102,7 +1102,18 @@
     "certificateRemoved": "Certificado removido. Crie ou importe um certificado válido antes do próximo início de HTTPS.",
     "certificateServerTrustHelp": "A confiança deste certificado de servidor depende da CA emissora. Configure essa CA nos clientes, se necessário. Um certificado de servidor nunca é instalado como raiz confiável.",
     "certificateFingerprint": "Impressão digital SHA-256",
-    "certificateUpgradeRequired": "Atualize o ambiente de execução para importar, gerar novamente ou remover certificados."
+    "certificateUpgradeRequired": "Atualize o ambiente de execução para importar, gerar novamente ou remover certificados.",
+    "connectionTab": "Conexão",
+    "accessTab": "Acesso e segurança",
+    "discardChanges": "Descartar alterações",
+    "savedNotApplied": "As configurações foram salvas, mas o ambiente de execução não pôde ser reiniciado. Tente reiniciá-lo novamente para aplicá-las.",
+    "cloudManaged": "Este ambiente é gerenciado pelo Redeven Cloud. Este Desktop não gerencia suas configurações de acesso.",
+    "manageCloud": "Gerenciar no Redeven Cloud",
+    "resolveAccessDraft": "Salve ou descarte as alterações de acesso antes de mudar o destino da conexão.",
+    "loadingAccess": "Carregando configurações de acesso…",
+    "loadAccessFailed": "Não foi possível carregar as configurações de acesso",
+    "startEnvironment": "Iniciar ambiente",
+    "wslStopped": "Inicie este ambiente WSL antes de ler ou salvar suas configurações de acesso."
   },
   "shell": {
     "accessibility": {
@@ -1653,11 +1664,8 @@
     "unpinEnvironment": "Desafixar ambiente",
     "pinLabel": "Fixar {label}",
     "unpinLabel": "Desafixar {label}",
-    "runtimeTargetSettings": "Configurações de destino de tempo de execução",
     "environmentSettings": "Configurações de ambiente",
-    "connectionSettings": "Configurações de conexão",
     "settingsForLabel": "Configurações de {label}",
-    "connectionSettingsForLabel": "Configurações de conexão de {label}",
     "removeEnvironment": "Remover ambiente",
     "removeLabel": "Remover {label}",
     "askFlowerForLabel": "Perguntar ao Flower sobre {label}",

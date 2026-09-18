@@ -1,8 +1,10 @@
+import { EnvironmentSettingsDialog } from './EnvironmentSettingsDialog';
+import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, createEffect, on } from 'solid-js';
 import { render } from 'solid-js/web';
 import { createDesktopI18n } from '../shared/i18n';
-import { SSHEnvironmentSettingsDialog } from './SSHEnvironmentSettingsDialog';
+import { SSHEnvironmentSettingsForm } from './SSHEnvironmentSettingsForm';
 import { validateSSHEnvironmentSettings, type SSHConnectionDialogState } from './sshEnvironmentSettingsState';
 
 const initial: SSHConnectionDialogState = {
@@ -48,6 +50,8 @@ async function mount(overrides: Partial<SSHConnectionDialogState> = {}, saveActi
   document.body.append(host);
   const [state, setState] = createSignal<SSHConnectionDialogState>({ ...initial, ...overrides });
   const [open, setOpen] = createSignal(true);
+  const [baseline, setBaseline] = createSignal(state());
+  createEffect(on(open, value => { if (value) setBaseline(state()); }));
   const [errors, setErrors] = createSignal<Partial<Record<string, string>>>({});
   const [error, setError] = createSignal('');
   const i18n = createDesktopI18n('en-US');
@@ -61,7 +65,10 @@ async function mount(overrides: Partial<SSHConnectionDialogState> = {}, saveActi
   disposers.push(
     render(
       () => (
-        <SSHEnvironmentSettingsDialog
+        <EnvironmentSettingsDialog open={open()} environment={{ id: initial.environment_id, label: baseline().label,
+          registration_ref: { kind: 'runtime_target', id: initial.environment_id } } as DesktopEnvironmentEntry}
+          tab="connection" i18n={i18n} onClose={() => setOpen(false)} onTabChange={() => {}} access={null} connection={(
+        <SSHEnvironmentSettingsForm baseline={baseline()}
           open={open()}
           i18n={i18n}
           state={state()}
@@ -93,7 +100,7 @@ async function mount(overrides: Partial<SSHConnectionDialogState> = {}, saveActi
           }
           onSave={save}
           onClose={() => setOpen(false)}
-        />
+        />)} />
       ),
       host,
     ),
@@ -155,7 +162,7 @@ describe('SSH environment settings interactions', () => {
     harness.setState({ ...initial, label: 'Latest saved name' });
     harness.setOpen(true);
     await settle();
-    expect(document.querySelector('[data-floe-dialog-panel]')?.textContent).toContain('Latest saved name · SSH Host');
+    expect(document.querySelector('[data-floe-dialog-panel]')?.textContent).toContain('Latest saved name');
     expect(button('Save changes').disabled).toBe(true);
     expect(document.getElementById('ssh-settings-runtime_root')).toBeNull();
   });

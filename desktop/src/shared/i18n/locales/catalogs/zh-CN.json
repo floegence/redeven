@@ -1102,7 +1102,18 @@
     "certificateRemoved": "证书已移除。下次启动 HTTPS 前，请创建或导入有效证书。",
     "certificateServerTrustHelp": "此服务器证书由其签发 CA 建立信任；必要时请在客户端配置信任该 CA。系统不会将服务器证书安装为受信任的根证书。",
     "certificateFingerprint": "SHA-256 指纹",
-    "certificateUpgradeRequired": "更新运行时后，即可导入、重新生成或移除证书。"
+    "certificateUpgradeRequired": "更新运行时后，即可导入、重新生成或移除证书。",
+    "connectionTab": "连接配置",
+    "accessTab": "访问与安全",
+    "discardChanges": "放弃修改",
+    "savedNotApplied": "设置已保存，但运行时未能重启。请重试重启以应用设置。",
+    "cloudManaged": "此环境由 Redeven Cloud 管理，其访问设置不由当前 Desktop 管理。",
+    "manageCloud": "在 Redeven Cloud 中管理",
+    "resolveAccessDraft": "更改连接目标前，请先保存或放弃访问设置中的修改。",
+    "loadingAccess": "正在加载访问设置…",
+    "loadAccessFailed": "无法加载访问设置",
+    "startEnvironment": "启动环境",
+    "wslStopped": "请先启动此 WSL 环境，再读取或保存其访问设置。"
   },
   "shell": {
     "accessibility": {
@@ -1653,11 +1664,8 @@
     "unpinEnvironment": "取消引脚环境",
     "pinLabel": "固定 {label}",
     "unpinLabel": "取消固定 {label}",
-    "runtimeTargetSettings": "运行时目标设置",
     "environmentSettings": "环境设置",
-    "connectionSettings": "Connection 设置",
     "settingsForLabel": "{label} 的设置",
-    "connectionSettingsForLabel": "{label} 的 Connection 设置",
     "removeEnvironment": "移除环境",
     "removeLabel": "移除 {label}",
     "askFlowerForLabel": "询问 Flower：{label}",

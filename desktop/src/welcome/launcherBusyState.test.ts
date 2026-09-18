@@ -312,22 +312,7 @@ describe('launcherBusyState', () => {
     expect(busyStateMatchesEnvironment(state, 'env_other')).toBe(false);
   });
 
-  it('maps Local Environment settings save and connection delete flows to normalized busy actions', () => {
-    expect(busyStateForLauncherRequest({
-      kind: 'save_local_environment_settings',
-      local_ui_protocol: 'http',
-      local_ui_bind: '127.0.0.1:24000',
-      local_ui_password: '',
-      local_ui_password_mode: 'replace',
-      auto_runtime_probe_enabled: false,
-    })).toMatchObject({
-      action: 'save_settings',
-      environment_id: '',
-      provider_origin: '',
-      provider_id: '',
-      progress: null,
-    });
-
+  it('maps connection delete flows to normalized busy actions', () => {
     expect(busyStateForLauncherRequest({
       kind: 'delete_environment_registration',
       registration_ref: { kind: 'saved_environment', id: 'saved_demo' },

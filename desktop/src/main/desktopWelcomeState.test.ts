@@ -659,7 +659,7 @@ describe('desktopWelcomeState', () => {
     ]);
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.99:24000/');
     expect(snapshot.issue?.title).toBe('Unable to open that Environment');
-    expect(snapshot.settings_surface.window_title_key).toBe('settings.settingsWindowTitle');
+    expect(snapshot).not.toHaveProperty('settings_surface');
   });
 
   it('carries active launcher action progress in the welcome snapshot', () => {
@@ -2084,47 +2084,12 @@ describe('desktopWelcomeState', () => {
 
 
 
-  it('builds a dedicated settings snapshot when requested by the desktop shell', () => {
-    const local = testLocalEnvironment({
-      access: {
-        local_ui_bind: '127.0.0.1:0',
-        local_ui_password: '',
-        local_ui_password_configured: false,
-      },
-    });
-
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: local,
-      }),
-      surface: 'environment_settings',
-      selectedEnvironmentID: local.id,
-    });
-
-    expect(snapshot.surface).toBe('environment_settings');
-    expect(snapshot.close_action).toBe('quit');
-    expect(snapshot.settings_surface.window_title_key).toBe('settings.settingsWindowTitle');
-    expect(snapshot.settings_surface.save_label_key).toBe('settings.saveEnvironmentSettings');
-    expect(snapshot.settings_surface.access_mode).toBe('local_only');
-    expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'visibility',
-        value_key: 'settings.localOnlyLabel',
-      }),
-      expect.objectContaining({
-        id: 'next_start_address',
-        value: '',
-        detail_key: 'settings.autoLoopbackAddressDetail',
-      }),
-    ]));
-    expect(snapshot.settings_surface.draft).toEqual({
-      local_ui_protocol: 'http',
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      local_ui_password_mode: 'replace',
-      auto_runtime_probe_enabled: true,
-    });
-    expect(snapshot.settings_surface.auto_runtime_probe_configurable).toBe(false);
+  it('publishes only the explicitly selected settings identity', () => {
+    const local = testLocalEnvironment();
+    const snapshot = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences({ local_environment: local }),
+      surface: 'environment_settings', selectedEnvironmentID: local.id });
+    expect(snapshot.settings_environment_id).toBe(local.id);
+    expect(snapshot).not.toHaveProperty('settings_surface');
   });
 
   it('threads the current Local Environment runtime url into the settings surface when Local Environment is open', () => {
@@ -2149,9 +2114,8 @@ describe('desktopWelcomeState', () => {
       selectedEnvironmentID: local.id,
     });
 
-    expect(snapshot.settings_surface.current_runtime_url).toBe('http://localhost:23998/');
-    expect(snapshot.settings_surface.current_runtime_running).toBe(true);
-    expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
+    expect(snapshot.environments.find(entry => entry.id === local.id)?.local_ui_url).toBe('http://localhost:23998/');
+    expect(snapshot.environments.find(entry => entry.id === local.id)?.runtime_health.status).toBe('online');
   });
 
   it('clears stale public addresses when presence confirms the Runtime has stopped', () => {
@@ -2169,9 +2133,9 @@ describe('desktopWelcomeState', () => {
     expect(entry?.local_environment_runtime_state).toBe('not_running');
     expect(entry?.local_ui_url).toBe('');
     expect(entry?.local_ui_urls).toEqual([]);
-    expect(snapshot.settings_surface.current_runtime_url).toBe('');
-    expect(snapshot.settings_surface.current_runtime_urls).toEqual([]);
-    expect(snapshot.settings_surface.current_runtime_running).toBe(false);
+    expect(snapshot.environments.find(entry => entry.id === local.id)?.local_ui_url).toBe('');
+    expect(snapshot.environments.find(entry => entry.id === local.id)?.local_ui_urls).toEqual([]);
+    expect(snapshot.environments.find(entry => entry.id === local.id)?.runtime_health.status).toBe('offline');
   });
 
   it('threads a verified managed Runtime url into settings without requiring an open environment window', () => {
@@ -2198,7 +2162,7 @@ describe('desktopWelcomeState', () => {
       selectedEnvironmentID: local.id,
     });
 
-    expect(snapshot.settings_surface.current_runtime_url).toBe('http://localhost:23998/');
+    expect(snapshot.environments.find(entry => entry.id === local.id)?.local_ui_url).toBe('http://localhost:23998/');
   });
 
   it('keeps provider cards remote-only while summarizing linked managed runtimes', () => {
@@ -3006,4 +2970,14 @@ describe('managed Runtime address provenance', () => {
       expect(entry.runtime_health.status).toBe(running ? 'online' : 'offline');
     }
   });
+});
+
+it('does not project Local access settings into a Cloud settings selection', () => {
+  const cloud = testProviderEnvironment('https://provider.example.invalid', 'cloud-settings');
+  const snapshot = buildDesktopWelcomeSnapshot({
+    preferences: testDesktopPreferences({ provider_environments: [cloud] }),
+    surface: 'environment_settings', selectedEnvironmentID: cloud.id,
+  });
+  expect(snapshot).not.toHaveProperty('settings_surface');
+  expect(snapshot).toHaveProperty('settings_environment_id', cloud.id);
 });

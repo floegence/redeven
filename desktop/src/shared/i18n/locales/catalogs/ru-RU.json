@@ -1111,7 +1111,18 @@
     "certificateRemoved": "Сертификат удалён. Создайте или импортируйте действительный сертификат до следующего запуска HTTPS.",
     "certificateServerTrustHelp": "Доверие к этому серверному сертификату определяется выдавшим его CA. При необходимости настройте доверие к CA на клиентах. Серверный сертификат никогда не устанавливается как доверенный корневой.",
     "certificateFingerprint": "Отпечаток SHA-256",
-    "certificateUpgradeRequired": "Обновите среду выполнения для импорта, повторного создания или удаления сертификатов."
+    "certificateUpgradeRequired": "Обновите среду выполнения для импорта, повторного создания или удаления сертификатов.",
+    "connectionTab": "Подключение",
+    "accessTab": "Доступ и безопасность",
+    "discardChanges": "Отменить изменения",
+    "savedNotApplied": "Настройки сохранены, но перезапустить среду выполнения не удалось. Повторите перезапуск, чтобы применить их.",
+    "cloudManaged": "Эта среда управляется через Redeven Cloud. Настройки доступа к ней не управляются этим Desktop.",
+    "manageCloud": "Управлять в Redeven Cloud",
+    "resolveAccessDraft": "Сохраните или отмените изменения настроек доступа, прежде чем менять цель подключения.",
+    "loadingAccess": "Загрузка настроек доступа…",
+    "loadAccessFailed": "Не удалось загрузить настройки доступа",
+    "startEnvironment": "Запустить среду",
+    "wslStopped": "Запустите эту среду WSL, прежде чем читать или сохранять её настройки доступа."
   },
   "shell": {
     "accessibility": {
@@ -1662,11 +1673,8 @@
     "unpinEnvironment": "Открепить среду",
     "pinLabel": "Закрепить {label}",
     "unpinLabel": "Открепить {label}",
-    "runtimeTargetSettings": "Настройки целевой среды выполнения",
     "environmentSettings": "Настройки среды",
-    "connectionSettings": "Настройки подключения",
     "settingsForLabel": "Настройки для {label}",
-    "connectionSettingsForLabel": "Настройки подключения для {label}",
     "removeEnvironment": "Удалить окружение",
     "removeLabel": "Удалить регистрацию {label}",
     "askFlowerForLabel": "Спросить Flower о {label}",

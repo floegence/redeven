@@ -540,25 +540,8 @@ describe('DesktopWelcomeShell', () => {
       primary_action_label: 'Open Environment',
       settings_save_key: 'settings.saveEnvironmentSettings',
     });
-    expect(snapshot.settings_surface.window_title_key).toBe('settings.settingsWindowTitle');
-    expect(snapshot.settings_surface.access_mode).toBe('shared_local_network');
-    expect(snapshot.settings_surface.password_state_id).toBe('configured');
-    expect(snapshot.settings_surface.draft.local_ui_password).toBe('');
-    expect(snapshot.settings_surface.draft.local_ui_password_mode).toBe('keep');
-    expect(snapshot.settings_surface.summary_items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'next_start_address',
-          value: '24000',
-          detail_key: 'settings.sharedAddressDetail',
-        }),
-        expect.objectContaining({
-          id: 'password_state',
-          value_key: 'settings.passwordSet',
-          tone: 'success',
-        }),
-      ]),
-    );
+    expect(snapshot.settings_environment_id).toBe(local.id);
+    expect(snapshot).not.toHaveProperty('settings_surface');
   });
 
   it('localizes issue status labels when a semantic issue key is available', () => {
@@ -798,8 +781,8 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('<ConnectEnvironmentSurface');
-    expect(appSrc).toContain('<LocalEnvironmentSettingsDialog');
-    expect(appSrc).toContain("open={snapshot().surface === 'environment_settings'}");
+    expect(appSrc).toContain('<EnvironmentSettingsDialog');
+    expect(appSrc).toContain("open={Boolean(settingsSession())}");
     expect(appSrc).not.toContain('fallback={<div class="h-full min-h-0 bg-background" />}');
   });
 
@@ -1175,7 +1158,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<GatewaySourceActionIcon intent={action.intent} class="h-3.5 w-3.5" />');
     const gatewaySourceActionIconStart = appSrc.indexOf('function GatewaySourceActionIcon');
     const gatewaySourceActionIconEnd = appSrc.indexOf(
-      'const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS',
+      'const CONNECTION_DIALOG_CLASS',
       gatewaySourceActionIconStart,
     );
     expect(gatewaySourceActionIconStart).toBeGreaterThanOrEqual(0);
@@ -2303,7 +2286,7 @@ describe('DesktopWelcomeShell', () => {
     const pickerEnd = appSrc.indexOf('function ControlPlaneDialog', pickerStart);
     const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
     const dialogStart = pickerEnd;
-    const dialogEnd = appSrc.indexOf('function LocalUIPasswordField', dialogStart);
+    const dialogEnd = appSrc.indexOf('export function EnvironmentAccessSettingsForm', dialogStart);
     const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
 
     expect(pickerSrc).toContain('<Show when={canChooseTarget} fallback={(');
@@ -2350,8 +2333,8 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain("props.i18n.t('common.settings')");
     expect(appSrc).not.toContain("case 'manage_gateway':");
-    expect(appSrc).toContain("props.i18n.t('environmentCenter.runtimeTargetSettings')");
-    expect(appSrc).toContain("props.i18n.t('environmentCenter.connectionSettingsForLabel'");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.environmentSettings')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.settingsForLabel'");
     expect(appSrc).toContain('<Settings class="h-3.5 w-3.5" />');
     expect(appSrc).not.toContain('<Pencil class="h-3.5 w-3.5" />');
   });
@@ -2422,7 +2405,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.i18n.t('connectionDialog.notProviderUrl')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.sshDescription')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.sshDescription')");
-    expect(appSrc).toContain("props.i18n.t('connectionDialog.sshEnvironmentNotice')");
+    expect(appSrc).toContain('<SSHEnvironmentSettingsForm');
     expect(appSrc).toContain("props.i18n.t('connectionDialog.localContainerDescription')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.sshContainerDescription')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.sshContainerDescription')");
@@ -2528,7 +2511,7 @@ describe('DesktopWelcomeShell', () => {
 
   it('uses the selected Environment health and card status for the settings runtime state', () => {
     const appSrc = readWelcomeSource();
-    const dialogStart = appSrc.indexOf('function LocalEnvironmentSettingsDialog');
+    const dialogStart = appSrc.indexOf('function EnvironmentAccessSettingsForm');
     const dialogEnd = appSrc.indexOf('function ConnectionDialog', dialogStart);
     const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
 
@@ -2542,7 +2525,7 @@ describe('DesktopWelcomeShell', () => {
 
   it('keeps global language controls out of Local Environment Settings', () => {
     const appSrc = readWelcomeSource();
-    const dialogStart = appSrc.indexOf('function LocalEnvironmentSettingsDialog');
+    const dialogStart = appSrc.indexOf('function EnvironmentAccessSettingsForm');
     const dialogEnd = appSrc.indexOf('function ConnectionDialog', dialogStart);
     const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
 
@@ -2553,25 +2536,17 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).not.toContain("props.i18n.t('settings.languageTitle')");
   });
 
-  it('closes Local Environment Settings after a successful save', () => {
+  it('keeps settings open after saving and reports a saved but unapplied restart', () => {
     const appSrc = readWelcomeSource();
     const saveStart = appSrc.indexOf('async function saveSettings(options: Readonly<{');
     const saveEnd = appSrc.indexOf('function cancelSettings()', saveStart);
     const saveSrc = appSrc.slice(saveStart, saveEnd);
-
-    expect(saveSrc).toContain("showActionToast(i18n().t('toast.settingsSaved'));");
-    expect(saveSrc).toContain('cancelSettings();');
-    expect(saveSrc).toContain("await restartEnvironmentRuntime(restartEnvironment, 'connect');");
-    expect(saveSrc.indexOf('if (!result.ok)')).toBeLessThan(saveSrc.indexOf('cancelSettings();'));
-    expect(saveSrc.indexOf('return;')).toBeLessThan(saveSrc.indexOf('cancelSettings();'));
-    expect(saveSrc.indexOf('cancelSettings();')).toBeLessThan(saveSrc.indexOf('await refreshSnapshot();'));
-    expect(saveSrc.indexOf('cancelSettings();')).toBeLessThan(saveSrc.indexOf('await restartEnvironmentRuntime'));
-    expect(saveSrc).toContain(
-      "showActionToast(getErrorMessage(error) || i18n().t('toast.actionFailedFallback'), 'error');",
-    );
+    expect(saveSrc).toContain('await settingsController.saveAccess()');
+    expect(saveSrc).not.toContain('cancelSettings();');
+    expect(saveSrc).toContain("i18n().t('settings.savedNotApplied')");
+    expect(saveSrc).toContain('await restartEnvironmentRuntime(environment,');
+    expect(saveSrc.indexOf('await settingsController.saveAccess()')).toBeLessThan(saveSrc.indexOf('await restartEnvironmentRuntime'));
   });
-
-
 
   it('exposes auto status detection only on non-provider runtime forms', () => {
     const appSrc = readWelcomeSource();
@@ -2662,13 +2637,13 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogBodyRule).toContain('min-height: 0;');
     expect(dialogBodyRule).toContain('flex: 1 1 auto;');
     expect(dialogBodyRule).toContain('overflow: auto;');
-    expect(styles).toContain('.redeven-welcome-dialog-panel--settings');
-    expect(styles).toContain('width: min(47.5rem, 96vw);');
+    expect(styles).toContain('.redeven-environment-settings-dialog');
+    expect(styles).toContain('width: min(48rem, calc(100vw - 2rem));');
     expect(styles).toContain('.redeven-welcome-dialog-panel--connection');
     expect(styles).toContain('width: min(58rem, 96vw);');
 
     expect(appSrc).toContain("const WELCOME_DIALOG_PANEL_CLASS = 'redeven-welcome-dialog-panel';");
-    expect(appSrc).toContain("'redeven-welcome-dialog-panel--settings'");
+    expect(appSrc).toContain('<EnvironmentSettingsDialog');
     expect(appSrc).toContain("'redeven-welcome-dialog-panel--connection'");
     expect(appSrc).not.toContain('[&>div:first-child]');
     expect(appSrc).not.toContain('[&>div:nth-child(2)]');
@@ -2679,8 +2654,8 @@ describe('DesktopWelcomeShell', () => {
     expect((styles.match(/100dvh/g) ?? []).length).toBe(2);
 
     expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
-    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(6);
-    expect((appSrc.match(/class=\{LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS\}/g) ?? []).length).toBe(1);
+    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(5);
+    expect((appSrc.match(/<EnvironmentSettingsDialog\b/g) ?? []).length).toBe(1);
     expect((appSrc.match(/class=\{CONNECTION_DIALOG_CLASS\}/g) ?? []).length).toBe(2);
     expect(appSrc).toContain('function ControlPlaneDialog');
     expect(appSrc).toContain("title={props.i18n.t('connectionDialog.addProviderTitle')}");
@@ -2745,7 +2720,8 @@ describe('DesktopWelcomeShell', () => {
     // state update - which makes typing in any input of the dialog impossible.
     expect(appSrc).not.toMatch(/<Dialog\b[^>]*open=\{props\.state\s*!==\s*null\}/);
     expect(appSrc).toMatch(/const isOpen = createMemo\(\(\) => props\.state !== null\)/);
-    expect(appSrc).toMatch(/const isOpen = createMemo\(\(\) => props\.open\)/);
+    const settingsSrc = fs.readFileSync(new URL('./EnvironmentSettingsDialog.tsx', import.meta.url), 'utf8');
+    expect(settingsSrc).toMatch(/const isOpen = createMemo\(\(\) => props\.open\)/);
     expect(appSrc).not.toContain('function RuntimeEnrollmentDialog');
     expect(appSrc).not.toContain('function ProviderRuntimeSetupDialog');
     expect(appSrc).not.toContain('environmentInitialization.');

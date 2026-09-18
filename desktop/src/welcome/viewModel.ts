@@ -458,7 +458,7 @@ export function buildDesktopWelcomeShellViewModel(
     surface_title: surfaceTitle(visibleSurface),
     connect_heading: 'Connect Environment',
     primary_action_label: 'Open Environment',
-    settings_save_key: snapshot.settings_surface.save_label_key,
+    settings_save_key: 'settings.saveEnvironmentSettings',
   };
 }
 

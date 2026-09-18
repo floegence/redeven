@@ -49,7 +49,7 @@ export type DesktopSettingsSurfaceSnapshot = Readonly<{
   mode: DesktopPageMode;
   environment_id: string;
   environment_label: string;
-  environment_kind: 'local' | 'controlplane' | 'runtime_target';
+  environment_kind: 'local' | 'runtime_target';
   window_title_key: DesktopTranslationKey;
   save_label_key: DesktopTranslationKey;
   access_mode: DesktopAccessMode;
@@ -63,6 +63,7 @@ export type DesktopSettingsSurfaceSnapshot = Readonly<{
   current_runtime_running: boolean;
   current_runtime_urls: readonly string[];
   runtime_configuration_pending?: boolean;
+  runtime_started_at_unix_ms?: number;
   password_state_id: DesktopPasswordStateID;
   password_state_tone: 'default' | 'warning' | 'success';
   local_ui_password_configured: boolean;

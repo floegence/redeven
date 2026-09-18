@@ -1,7 +1,9 @@
+import { EnvironmentSettingsDialog } from './EnvironmentSettingsDialog';
+import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { LocalEnvironmentSettingsDialog } from './App';
+import { EnvironmentAccessSettingsForm } from './App';
 import { createDesktopI18n } from '../shared/i18n';
 import { buildDesktopSettingsSurfaceSnapshot } from '../main/settingsPageContent';
 import { applyDesktopAccessModeToDraft, applyDesktopAccessFixedPortToDraft } from '../shared/desktopAccessModel';
@@ -42,7 +44,10 @@ async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'leg
   const open = vi.fn(async () => {});
   const certificate = vi.fn(options.certificate ?? (async () => ({ status: 'failed', code: 'local_ui_device_ca_missing' })));
   disposers.push(render(() => (
-    <LocalEnvironmentSettingsDialog open={isOpen()} snapshot={liveSnapshot()} baselineSnapshot={liveSnapshot()} draft={draft()}
+    <EnvironmentSettingsDialog open={isOpen()} environment={{ id: 'local', label: 'Local Environment',
+      registration_ref: { kind: options.remote ? 'runtime_target' : 'local_environment', id: 'local' } } as DesktopEnvironmentEntry}
+      tab="access" i18n={createDesktopI18n('en-US')} onClose={() => setOpen(false)} onTabChange={() => {}} connection={null} access={(
+    <EnvironmentAccessSettingsForm open={isOpen()} snapshot={liveSnapshot()} baselineSnapshot={liveSnapshot()} draft={draft()}
       i18n={createDesktopI18n('en-US')} busyState={IDLE_LAUNCHER_BUSY_STATE} settingsError=""
       settingsErrorRef={() => {}} updateDraftField={(name, value) => setDraft((current) => ({ ...current, [name]: value }))}
       applyAccessMode={(mode) => setDraft((current) => applyDesktopAccessModeToDraft(current, mode))}
@@ -50,7 +55,7 @@ async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'leg
       toggleAutoPort={() => {}} saveSettings={save} runtimeRestartAvailable={Boolean(url)} runtimeRunning={Boolean(url)}
       runtimeStatusLabel={runtimeStatus()} runtimeStatusTone="neutral" dark={false}
       desktopOpenLabel="Open Env App" openInDesktop={() => {}} openInBrowser={open} copyEnvironmentValue={copy}
-      cancelSettings={() => {}} clearStoredLocalUIPassword={() => {}} certificate={certificate} />
+      cancelSettings={() => {}} clearStoredLocalUIPassword={() => {}} certificate={certificate} />)} />
   ), host));
   await settle();
   return { draft, setDraft, copy, save, open, certificate, setSnapshot, setOpen, setRuntimeStatus };
@@ -74,7 +79,7 @@ describe('Runtime connection settings', () => {
       await settle();
     }
     const dialog = document.querySelector('[role="dialog"]')!;
-    const content = dialog.querySelector('.overflow-auto')!;
+    const content = dialog.querySelector('.environment-settings-scroll')!;
     const details = [...dialog.querySelectorAll('details')];
     expect(details).toHaveLength(2);
     for (const detail of details) detail.open = true;
@@ -90,7 +95,7 @@ describe('Runtime connection settings', () => {
       await settle();
       expect(test.certificate).toHaveBeenCalledTimes(1);
       expect(document.querySelector('[role="dialog"]')).toBe(dialog);
-      expect(dialog.querySelector('.overflow-auto')).toBe(content);
+      expect(dialog.querySelector('.environment-settings-scroll')).toBe(content);
       for (const [index, detail] of details.entries()) expect(dialog.querySelectorAll('details')[index]).toBe(detail);
       expect(details.every((detail) => detail.open)).toBe(true);
       expect(content.scrollTop).toBe(240);

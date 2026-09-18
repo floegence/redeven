@@ -6,8 +6,12 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 
 import {
   CANCEL_DESKTOP_SETTINGS_CHANNEL,
+  LOAD_DESKTOP_SETTINGS_CHANNEL,
+  parseDesktopSettingsRequest,
+  type DesktopSettingsRequest,
+  type DesktopSettingsResult,
+  type SaveDesktopSettingsRequest,
   SAVE_DESKTOP_SETTINGS_CHANNEL,
-  type DesktopSettingsDraft,
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
 import {
@@ -48,8 +52,10 @@ export function bootstrapDesktopSettingsBridge(): void {
     certificate: (request: unknown) => {
       return ipcRenderer.invoke(DESKTOP_CERTIFICATE_CHANNEL, parseDesktopCertificateRequest(request));
     },
-    save: (draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> =>
-      ipcRenderer.invoke(SAVE_DESKTOP_SETTINGS_CHANNEL, draft),
+    load: (request: DesktopSettingsRequest): Promise<DesktopSettingsResult> =>
+      ipcRenderer.invoke(LOAD_DESKTOP_SETTINGS_CHANNEL, parseDesktopSettingsRequest(request)),
+    save: (request: SaveDesktopSettingsRequest): Promise<SaveDesktopSettingsResult> =>
+      ipcRenderer.invoke(SAVE_DESKTOP_SETTINGS_CHANNEL, { ...parseDesktopSettingsRequest(request), draft: request.draft }),
     requestRuntimeFlower: (request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> =>
       ipcRenderer.invoke(REQUEST_RUNTIME_FLOWER_CHANNEL, request),
     startRuntimeFlowerStream: async (request: unknown): Promise<RuntimeFlowerStreamStartResult> => {

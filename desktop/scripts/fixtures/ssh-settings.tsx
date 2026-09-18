@@ -2,7 +2,10 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { FloeProvider, useTheme, builtInShellThemePresets } from '@floegence/floe-webapp-core';
 import { createDesktopI18n, type RedevenLocale } from '../../src/shared/i18n';
-import { SSHEnvironmentSettingsDialog } from '../../src/welcome/SSHEnvironmentSettingsDialog';
+import { SSHEnvironmentSettingsForm } from '../../src/welcome/SSHEnvironmentSettingsForm';
+import { EnvironmentSettingsDialog, EnvironmentSettingsPanel } from '../../src/welcome/EnvironmentSettingsDialog';
+import type { DesktopEnvironmentEntry } from '../../src/shared/desktopLauncherIPC';
+import type { EnvironmentSettingsTab } from '../../src/welcome/environmentSettingsSession';
 import {
   validateSSHEnvironmentSettings,
   type SSHConnectionDialogState,
@@ -36,6 +39,9 @@ function Fixture() {
   const theme = useTheme();
   const [open, setOpen] = createSignal(false);
   const [state, setState] = createSignal(initial);
+  const [baseline, setBaseline] = createSignal(initial);
+  const [tab, setTab] = createSignal<EnvironmentSettingsTab>('connection');
+  const environment = { id: initial.environment_id, label: initial.label, registration_ref: { kind: 'runtime_target', id: initial.environment_id } } as DesktopEnvironmentEntry;
   const [errors, setErrors] = createSignal<Partial<Record<string, string>>>({});
   const [error, setError] = createSignal('');
   const [saved, setSaved] = createSignal('');
@@ -51,6 +57,8 @@ function Fixture() {
             preset?.name ?? (query.get('theme') === 'light' ? 'classic-light' : 'ocean'),
           );
           setState({ ...initial });
+          setBaseline(initial);
+          setTab('connection');
           setErrors({});
           setError('');
           setOpen(true);
@@ -59,10 +67,13 @@ function Fixture() {
         Edit environment
       </button>
       <output id="fixture-saved">{saved()}</output>
-      <SSHEnvironmentSettingsDialog
+      <EnvironmentSettingsDialog open={open()} environment={environment} i18n={i18n} tab={tab()} onTabChange={setTab} onClose={() => setOpen(false)}
+        access={<EnvironmentSettingsPanel footer={<button onClick={() => setOpen(false)}>{i18n.t('common.close')}</button>}><label for="fixture-access-draft">{i18n.t('settings.portLabel')}</label><input id="fixture-access-draft" value="23998" /></EnvironmentSettingsPanel>}
+        connection={<SSHEnvironmentSettingsForm
         open={open()}
         i18n={i18n}
         state={state()}
+        baseline={baseline()}
         fieldErrors={errors()}
         error={error()}
         saving={false}
@@ -106,9 +117,9 @@ function Fixture() {
             return;
           }
           setSaved(JSON.stringify(state()));
-          setOpen(false);
+          setBaseline({ ...state() });
         }}
-      />
+      />} />
     </>
   );
 }

@@ -6,7 +6,9 @@ import { withFlowerWebSearchAvailability } from '../../../../internal/flower_ui/
 import { hydrateFlowerProviderCatalog, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../internal/flower_ui/src/settings/modelSelection';
 import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
 import type {
-  DesktopSettingsDraft,
+  DesktopSettingsRequest,
+  DesktopSettingsResult,
+  SaveDesktopSettingsRequest,
   SaveDesktopSettingsResult,
 } from '../../shared/settingsIPC';
 import type {
@@ -82,7 +84,8 @@ import {
 
 export type DesktopSettingsBridge = Readonly<{
   certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>;
-  save: (draft: DesktopSettingsDraft) => Promise<SaveDesktopSettingsResult>;
+  load: (request: DesktopSettingsRequest) => Promise<DesktopSettingsResult>;
+  save: (request: SaveDesktopSettingsRequest) => Promise<SaveDesktopSettingsResult>;
   requestRuntimeFlower: (request: RuntimeFlowerRequest) => Promise<RuntimeFlowerRequestResult>;
   startRuntimeFlowerStream: (request: RuntimeFlowerStreamRequest) => Promise<RuntimeFlowerStreamStartResult>;
   cancelRuntimeFlowerStream: (streamID: string) => void;

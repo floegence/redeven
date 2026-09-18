@@ -70,6 +70,8 @@ main() {
       "$SCRIPT_DIR/check_desktop_electron_test_runtime.sh" "$dir"
       npm run test
       node scripts/run-ssh-settings-check.mjs
+      node scripts/check-environment-settings.mjs
+      node scripts/check-environment-endpoints.mjs
       node scripts/check-welcome-cards.mjs
     fi
     npm run build

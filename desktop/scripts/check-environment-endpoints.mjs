@@ -21,6 +21,12 @@ const report = {
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on('pageerror', (error) => report.errors.push(error.message));
+  async function stableScreenshot(path) {
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForFunction(() => [...document.querySelectorAll('[data-floe-dialog-panel], .redeven-endpoints-popover')]
+      .every(element => getComputedStyle(element).opacity === '1'));
+    await page.screenshot({ path, animations: 'disabled' });
+  }
   await page.goto(new URL('environment-endpoints.html', report.url).href);
   for (const name of ['Local Environment', 'gzcom', 'gzlight', 'Network']) {
     const card = page.locator(`[data-environment="${name}"]`);
@@ -48,7 +54,7 @@ try {
       await popup.getByLabel('复制环境 URL').first().click();
       assert.equal(await page.locator('[data-copy-result]').innerText(), 'https://192.0.2.20:23998/');
     }
-    await page.screenshot({ path: `${output}/${name.replaceAll(' ', '-')}.png` });
+    await stableScreenshot(`${output}/${name.replaceAll(' ', '-')}.png`);
     await page.keyboard.press('Escape');
     assert.equal(await popup.count(), 0);
     assert.equal(await trigger.evaluate((element) => element === document.activeElement), true);
@@ -60,8 +66,8 @@ try {
     await dialog.waitFor();
     assert.equal(await dialog.getByLabel('分享连接').count(), name === 'Network' ? 1 : 0);
     assert.equal(await dialog.getByRole('button', { name: '在浏览器中打开' }).count(), name === 'Network' ? 1 : 0);
-    await page.screenshot({ path: `${output}/settings-${name}.png` });
-    await dialog.getByRole('button', { name: '取消' }).click();
+    await stableScreenshot(`${output}/settings-${name}.png`);
+    await dialog.getByRole('button', { name: '关闭', exact: true }).last().click();
     report.cases.push(`settings:${name}`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
@@ -70,7 +76,7 @@ try {
     const bounds = document.querySelector('.redeven-endpoints-popover')?.getBoundingClientRect();
     return bounds && bounds.x >= 0 && bounds.right <= window.innerWidth;
   }, undefined, { timeout: 3000 });
-  await page.screenshot({ path: `${output}/narrow.png` });
+  await stableScreenshot(`${output}/narrow.png`);
   await page.keyboard.press('Escape');
   await page.locator('[data-environment="Network"]').getByRole('button', { name: '环境设置' }).click();
   const settingsConnection = page.locator('.redeven-settings-connections');
@@ -78,12 +84,12 @@ try {
   await addressRow.waitFor();
   const narrowAddress = await addressRow.boundingBox();
   assert.ok(narrowAddress.x >= 0 && narrowAddress.x + narrowAddress.width <= 390);
-  await page.screenshot({ path: `${output}/narrow-settings.png` });
-  await page.getByRole('dialog').getByRole('button', { name: '取消' }).click();
+  await stableScreenshot(`${output}/narrow-settings.png`);
+  await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).last().click();
   await page.goto(new URL('environment-endpoints.html?theme=dark', report.url).href);
   await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
   await page.locator('[data-environment="gzlight"]').getByLabel('显示端点').click();
-  await page.screenshot({ path: `${output}/dark.png` });
+  await stableScreenshot(`${output}/dark.png`);
   report.cases.push('narrow', 'narrow-settings', 'dark');
   assert.deepEqual(report.errors, []);
   report.status = 'passed';

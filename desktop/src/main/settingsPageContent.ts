@@ -24,7 +24,7 @@ export { desktopAccessModeForDraft };
 type LocalEnvironmentSettingsSnapshotOptions = DesktopAccessModelOptions & Readonly<{
   environment_id: string;
   environment_label: string;
-  environment_kind: 'local' | 'controlplane' | 'runtime_target';
+  environment_kind: 'local' | 'runtime_target';
   auto_runtime_probe_configurable?: boolean;
   runtime_connection?: DesktopRuntimeConnectionContext;
   runtime_health?: DesktopRuntimeHealth;

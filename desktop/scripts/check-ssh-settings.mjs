@@ -35,9 +35,9 @@ async function motion(action = 'open') {
   const frames = await page.evaluate(async (action) => {
     const frames = [], started = performance.now();
     const sample = () => {
-      const panel = document.querySelector('.redeven-ssh-settings-dialog');
+      const panel = document.querySelector('.redeven-environment-settings-dialog');
       if (panel) {
-        const body = panel.children[1];
+        const body = panel.querySelector('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-scroll');
         frames.push({ elapsed: performance.now() - started, width: body.clientWidth, overflow: body.scrollHeight - body.clientHeight, focus: document.activeElement?.id });
       }
     };
@@ -57,7 +57,7 @@ async function motion(action = 'open') {
   }
   if (action === 'open') {
     assert.ok(frames.at(-1).elapsed >= 400);
-    assert.equal(frames.at(-1).focus, 'ssh-settings-label');
+    assert.ok(['connection', 'ssh-settings-label'].includes(frames.at(-1).focus) || frames.at(-1).focus.includes('tab'), 'focus stays in the settings dialog');
   }
 }
 async function assertFieldFocus() {
@@ -77,17 +77,17 @@ async function open(locale = 'en-US', theme = 'dark', suffix = '') {
   await page.goto(`${base}/ssh-settings.html?locale=${locale}&theme=${theme}${suffix}`);
   await page.evaluate(() => document.fonts.ready);
   await motion();
-  await page.locator('.redeven-ssh-settings-dialog').waitFor();
+  await page.locator('.redeven-environment-settings-dialog').waitFor();
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(
-    () => getComputedStyle(document.querySelector('.redeven-ssh-settings-dialog')).opacity === '1',
+    () => getComputedStyle(document.querySelector('.redeven-environment-settings-dialog')).opacity === '1',
   );
 }
 async function geometry() {
-  return page.locator('.redeven-ssh-settings-dialog').evaluate((el) => {
+  return page.locator('.redeven-environment-settings-dialog').evaluate((el) => {
     const rect = el.getBoundingClientRect();
-    const body = el.children[1];
-    const footer = el.lastElementChild.getBoundingClientRect();
+    const body = el.querySelector('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-scroll');
+    const footer = el.querySelector('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-actions').getBoundingClientRect();
     return {
       width: rect.width,
       bottom: rect.bottom,
@@ -104,7 +104,7 @@ try {
     for (const locale of ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU']) {
       await open(locale, theme, `&preset=${preset.name}`);
       const bounds = await geometry();
-      assert.equal(bounds.width, 640);
+      assert.equal(bounds.width, 768);
       assert.equal(bounds.horizontalOverflow, false, `${theme}/${locale}: horizontal overflow`);
       assert.ok(bounds.footerBottom < 800, `${theme}/${locale}: actions clipped`);
       assert.equal(bounds.scroll, 0, `${theme}/${locale}: default view scrolls`);
@@ -117,7 +117,7 @@ try {
   await open();
   await motion('close');
   await motion('open');
-  const typography = await page.locator('.redeven-ssh-settings-dialog').evaluate((el) => ({
+  const typography = await page.locator('.redeven-environment-settings-dialog').evaluate((el) => ({
     title: getComputedStyle(el.querySelector('h2')).fontSize,
     field: getComputedStyle(el.querySelector('input')).fontSize,
     radius: parseFloat(getComputedStyle(el).borderRadius),
@@ -127,7 +127,7 @@ try {
   assert.ok(typography.radius <= 6, 'shared compact Dialog radius');
   await page.addScriptTag({ path: axePath });
   const accessibility = await page.evaluate(async () => {
-    const result = await window.axe.run('.redeven-ssh-settings-dialog', { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] });
+    const result = await window.axe.run('.redeven-environment-settings-dialog', { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] });
     return result.violations.map((violation) => ({
       id: violation.id,
       nodes: violation.nodes.map((node) => node.target),
@@ -135,14 +135,14 @@ try {
   });
   assert.deepEqual(accessibility, [], 'default editor accessibility');
   await page.keyboard.press('Escape');
-  await page.locator('.redeven-ssh-settings-dialog').waitFor({ state: 'detached' });
+  await page.locator('.redeven-environment-settings-dialog').waitFor({ state: 'detached' });
   await page.waitForFunction(() => document.activeElement?.id === 'fixture-open');
   for (const action of ['backdrop', 'Close', 'Cancel', 'Escape']) {
     await page.locator('#fixture-open').click();
     await page.locator('#ssh-settings-label').fill('Discarded draft');
-    await page.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-ssh-settings-dialog')).opacity === '1');
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-environment-settings-dialog')).opacity === '1');
     const exit = await page.evaluate(async (action) => {
-      const panel = document.querySelector('.redeven-ssh-settings-dialog');
+      const panel = document.querySelector('.redeven-environment-settings-dialog');
       if (action === 'backdrop') document.querySelector('[data-floe-dialog-backdrop]').click();
       else if (action === 'Escape') document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
       else [...panel.querySelectorAll('button')].find((button) => button.textContent.trim() === action || button.getAttribute('aria-label') === action).click();
@@ -154,7 +154,7 @@ try {
     assert.equal(exit.retained, true, `${action}: must retain the panel for exit motion`);
     assert.equal(exit.draft, 'Discarded draft');
     assert.notEqual(exit.duration, '0s');
-    await page.locator('.redeven-ssh-settings-dialog').waitFor({ state: 'detached' });
+    await page.locator('.redeven-environment-settings-dialog').waitFor({ state: 'detached' });
     await page.waitForFunction(() => document.activeElement?.id === 'fixture-open');
     assert.equal(await page.locator('#fixture-saved').textContent(), '');
   }
@@ -162,11 +162,18 @@ try {
   await page.locator('#fixture-open').click();
   await page.getByRole('dialog').waitFor();
   await page.keyboard.press('Escape');
-  await page.locator('.redeven-ssh-settings-dialog').waitFor({ state: 'detached' });
+  await page.locator('.redeven-environment-settings-dialog').waitFor({ state: 'detached' });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.locator('#fixture-open').click();
   assert.equal(await page.locator('#ssh-settings-label').inputValue(), 'gzcom');
   await page.locator('#ssh-settings-label').fill('Production');
+  await page.getByRole('tab', { name: 'Access & security', exact: true }).click();
+  await page.locator('#fixture-access-draft').fill('25000');
+  await page.getByRole('tab', { name: 'Connection', exact: true }).click();
+  assert.equal(await page.locator('#ssh-settings-label').inputValue(), 'Production');
+  await page.getByRole('tab', { name: 'Access & security', exact: true }).click();
+  assert.equal(await page.locator('#fixture-access-draft').inputValue(), '25000');
+  await page.getByRole('tab', { name: 'Connection', exact: true }).click();
   await page.locator('.ssh-settings-disclosure').click();
   await page.locator('#ssh-settings-bootstrap_strategy').selectOption('remote_install');
   await page.locator('#ssh-settings-runtime_root').fill('/srv/redeven');
@@ -187,7 +194,7 @@ try {
   // Simulate enlarged text without changing the viewport or shrinking the dialog.
   await page.addStyleTag({
     content:
-      '.redeven-ssh-settings-dialog { font-size: 28px; } .redeven-ssh-settings-dialog input, .redeven-ssh-settings-dialog select, .redeven-ssh-settings-dialog button, .redeven-ssh-settings-dialog label, .redeven-ssh-settings-dialog p, .redeven-ssh-settings-dialog span { font-size: 24px !important; }',
+      '.redeven-environment-settings-dialog { font-size: 28px; } .redeven-environment-settings-dialog input, .redeven-environment-settings-dialog select, .redeven-environment-settings-dialog button, .redeven-environment-settings-dialog label, .redeven-environment-settings-dialog p, .redeven-environment-settings-dialog span { font-size: 24px !important; }',
   });
   bounds = await geometry();
   assert.equal(bounds.horizontalOverflow, false);
@@ -195,7 +202,8 @@ try {
   await page.screenshot({ path: `${output}/enlarged-text.png`, animations: 'disabled' });
   await page.locator('#ssh-settings-connect_timeout_seconds').focus();
   await page.keyboard.press('Control+Enter');
-  await page.locator('.redeven-ssh-settings-dialog').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => document.querySelector('#fixture-saved').textContent.length > 0);
+  assert.equal(await page.getByRole('dialog').count(), 1, 'saving retains the settings window');
   const saved = JSON.parse(await page.locator('#fixture-saved').textContent());
   assert.equal(saved.label, 'Production');
   assert.equal(saved.bootstrap_strategy, 'remote_install');
@@ -212,7 +220,7 @@ try {
   await page.locator('.ssh-settings-help-popover').waitFor();
   await page.keyboard.press('Escape');
   await page.locator('.ssh-settings-help-popover').waitFor({ state: 'detached' });
-  assert.equal(await page.locator('.redeven-ssh-settings-dialog').count(), 1);
+  assert.equal(await page.locator('.redeven-environment-settings-dialog').count(), 1);
   const scrollbarModes = process.platform === 'darwin' ? ['Always', 'WhenScrolling'] : ['native'];
   for (const mode of scrollbarModes) {
     if (mode === 'WhenScrolling') {
@@ -227,10 +235,10 @@ try {
     await page.getByRole('radio', { name: 'Password', exact: true }).click();
     await page.locator('#ssh-settings-release_base_url').fill(`https://mirror.example.com/${'release/'.repeat(18)}`);
     await page.setViewportSize({ width: 480, height: 640 });
-    const scrolling = await page.locator('.redeven-ssh-settings-dialog').evaluate(panel => {
-      const body = panel.children[1];
+    const scrolling = await page.locator('.redeven-environment-settings-dialog').evaluate(panel => {
+      const body = panel.querySelector('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-scroll');
       const header = panel.firstElementChild.getBoundingClientRect();
-      const footer = panel.lastElementChild.getBoundingClientRect();
+      const footer = panel.querySelector('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-actions').getBoundingClientRect();
       body.scrollTop = 0;
       body.scrollTop = body.scrollHeight;
       return {
@@ -239,7 +247,7 @@ try {
         gutter: body.offsetWidth - body.clientWidth,
         panelScroll: panel.scrollTop,
         headerStable: header.top === panel.firstElementChild.getBoundingClientRect().top,
-        footerStable: footer.bottom === panel.lastElementChild.getBoundingClientRect().bottom,
+        footerStable: footer.bottom === panel.querySelector('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-actions').getBoundingClientRect().bottom,
         actionsVisible: footer.bottom <= innerHeight,
       };
     });

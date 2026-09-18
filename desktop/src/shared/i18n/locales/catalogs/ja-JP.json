@@ -1102,7 +1102,18 @@
     "certificateRemoved": "証明書を削除しました。次の HTTPS 起動前に有効な証明書を作成またはインポートしてください。",
     "certificateServerTrustHelp": "このサーバー証明書の信頼は発行元 CA に基づきます。必要に応じてクライアントで CA を信頼してください。サーバー証明書を信頼済みルートとしてインストールすることはありません。",
     "certificateFingerprint": "SHA-256 フィンガープリント",
-    "certificateUpgradeRequired": "証明書のインポート、再生成、削除にはランタイムを更新してください。"
+    "certificateUpgradeRequired": "証明書のインポート、再生成、削除にはランタイムを更新してください。",
+    "connectionTab": "接続設定",
+    "accessTab": "アクセスとセキュリティ",
+    "discardChanges": "変更を破棄",
+    "savedNotApplied": "設定は保存されましたが、ランタイムを再起動できませんでした。適用するには再起動を再試行してください。",
+    "cloudManaged": "この環境は Redeven Cloud で管理されています。この Desktop ではアクセス設定を管理できません。",
+    "manageCloud": "Redeven Cloud で管理",
+    "resolveAccessDraft": "接続先を変更する前に、アクセス設定の変更を保存するか破棄してください。",
+    "loadingAccess": "アクセス設定を読み込み中…",
+    "loadAccessFailed": "アクセス設定を読み込めませんでした",
+    "startEnvironment": "環境を起動",
+    "wslStopped": "アクセス設定を読み取りまたは保存する前に、この WSL 環境を起動してください。"
   },
   "shell": {
     "accessibility": {
@@ -1653,11 +1664,8 @@
     "unpinEnvironment": "ピン留め解除環境",
     "pinLabel": "{label} を固定",
     "unpinLabel": "{label} の固定を解除",
-    "runtimeTargetSettings": "ランタイムターゲット設定",
     "environmentSettings": "環境設定",
-    "connectionSettings": "Connection 設定",
     "settingsForLabel": "{label} の設定",
-    "connectionSettingsForLabel": "{label} の Connection 設定",
     "removeEnvironment": "環境を削除",
     "removeLabel": "{label} の登録を解除",
     "askFlowerForLabel": "Flower に {label} について聞く",

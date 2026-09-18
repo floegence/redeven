@@ -57,7 +57,9 @@ import {
 } from '@floegence/floe-webapp-core/ui';
 
 import { LocalCertificateSettings } from './LocalCertificateSettings';
-import { SSHEnvironmentSettingsDialog } from './SSHEnvironmentSettingsDialog';
+import { SSHEnvironmentSettingsForm } from './SSHEnvironmentSettingsForm';
+import { EnvironmentSettingsDialog, EnvironmentSettingsPanel } from './EnvironmentSettingsDialog';
+import { createEnvironmentSettingsController } from './environmentSettingsSession';
 import { validateSSHEnvironmentSettings, type SSHConnectionDialogState } from './sshEnvironmentSettingsState';
 
 import {
@@ -241,19 +243,11 @@ import {
   confirmationProgressForLauncherFailure,
 } from './operationFailureDisplay';
 import {
-  syncSSHConnectionDialogAdvancedState,
-  type SSHConnectionDialogAdvancedState,
-} from './sshConnectionDialogState';
-import {
   DesktopAnchoredListbox,
   scrollDesktopListboxOptionIntoView,
 } from './DesktopAnchoredListbox';
 import { SSHDestinationCombobox } from './SSHDestinationCombobox';
-import {
-  createDesktopSettingsDraftSession,
-  reconcileDesktopSettingsDraftSession,
-  updateDesktopSettingsDraftSessionDraft,
-} from './settingsDraftSession';
+
 import {
   createDesktopThemeStorageAdapter,
   desktopStateStorageBridge,
@@ -2352,6 +2346,7 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
   const candidate = window.redevenDesktopSettings;
   if (
     !candidate
+    || typeof candidate.load !== 'function'
     || typeof candidate.save !== 'function'
     || typeof candidate.cancel !== 'function'
     || typeof candidate.requestRuntimeFlower !== 'function'
@@ -2774,8 +2769,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     setDesktopUpdateDialogOpen(true);
   }
-  const [settingsDraftSession, setSettingsDraftSession] = createSignal(createDesktopSettingsDraftSession(props.snapshot.settings_surface));
-  const [connectionDialogState, setConnectionDialogState] = createSignal<ConnectionDialogState>(null);
+  const settingsController = createEnvironmentSettingsController<ConnectionDialogState>({
+    load: environment_id => props.runtime.settings.load({ environment_id }),
+    save: request => props.runtime.settings.save(request),
+    lateError: message => showActionToast(message, 'error'),
+  });
+  const settingsSession = settingsController.session;
+  const settingsPresentation = createMemo<ReturnType<typeof settingsSession>>(previous => settingsSession() ?? previous, null);
+  const [newConnectionState, setNewConnectionState] = createSignal<ConnectionDialogState>(null);
+  const connectionDialogState = () => settingsSession()?.connection ?? newConnectionState();
+  function setConnectionDialogState(value: ConnectionDialogState | ((current: ConnectionDialogState) => ConnectionDialogState)) {
+    if (settingsSession()?.saving) return connectionDialogState();
+    const next = typeof value === 'function' ? value(connectionDialogState()) : value;
+    if (settingsSession()) settingsController.update({ connection: next });
+    else setNewConnectionState(next);
+    return next;
+  }
   const [gatewaySetupDialogState, setGatewaySetupDialogState] = createSignal<GatewaySetupDialogState | null>(null);
   const [gatewaySetupDialogError, setGatewaySetupDialogError] = createSignal('');
   const [gatewaySetupDialogFieldErrors, setGatewaySetupDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
@@ -2825,7 +2834,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   let sshConfigHostsRequestID = 0;
   let runtimeContainerOptionsRequestID = 0;
 
-  const visibleSurface = createMemo<DesktopLauncherSurface>(() => snapshot().surface);
+  const visibleSurface = createMemo<DesktopLauncherSurface>(() => settingsSession() ? 'environment_settings' : snapshot().surface);
   const i18n = createMemo(() => createDesktopI18n(languageSnapshot().resolved_locale));
   const sshConfigHostsLoadKey = createMemo(() => {
     const connectionState = connectionDialogState();
@@ -2843,15 +2852,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return '';
   });
   const headerLogoSrc = createMemo(() => theme.resolvedTheme() === 'light' ? LOGO_LIGHT_URL : LOGO_DARK_URL);
-  const settingsSurface = createMemo<DesktopSettingsSurfaceSnapshot>(() => snapshot().settings_surface);
-  const settingsBaselineSurface = createMemo<DesktopSettingsSurfaceSnapshot>(() => settingsDraftSession().baseline_surface);
-  const draft = createMemo(() => settingsDraftSession().draft);
-  const selectedSettingsEnvironmentEntry = createMemo(() => (
-    snapshot().environments.find((environment) => environment.id === snapshot().settings_surface.environment_id)
-      ?? snapshot().environments.find((environment) => environment.kind === 'local_environment')
-      ?? snapshot().environments.find((environment) => environment.kind === 'provider_environment')
-      ?? null
-  ));
+  const settingsBaselineSurface = () => settingsPresentation()!.access!.baseline_surface;
+  const draft = () => settingsPresentation()!.access!.draft;
+  const selectedSettingsEnvironmentEntry = createMemo(() => {
+    const selected = settingsPresentation()?.environment;
+    return selected ? snapshot().environments.find(environment => environment.id === selected.id) ?? selected : null;
+  });
+  const settingsSurface = (): DesktopSettingsSurfaceSnapshot => {
+    const saved = settingsBaselineSurface();
+    const environment = selectedSettingsEnvironmentEntry()!;
+    return { ...saved, runtime_health: environment.runtime_health,
+      current_runtime_url: environment.local_ui_url ?? '', current_runtime_urls: environment.local_ui_urls ?? [],
+      current_runtime_running: environment.runtime_health.status === 'online',
+      runtime_configuration_pending: environment.runtime_health.status === 'online' && saved.runtime_configuration_pending === true
+        && saved.runtime_started_at_unix_ms === environment.runtime_started_at_unix_ms,
+    };
+  };
   const settingsRuntimePresentation = createMemo(() => {
     const environment = selectedSettingsEnvironmentEntry();
     if (!environment) {
@@ -3202,12 +3218,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     onCleanup(unsubscribeActionProgress);
   }
 
+  createEffect(on(() => `${snapshot().surface}:${snapshot().settings_environment_id}`, () => {
+    if (snapshot().surface === 'environment_settings' && snapshot().settings_environment_id) {
+      openSettingsSurface(snapshot().settings_environment_id);
+    }
+  }));
   createEffect(() => {
-    setSettingsDraftSession((current) => reconcileDesktopSettingsDraftSession(
-      current,
-      snapshot().settings_surface,
-      snapshot().surface === 'environment_settings',
-    ));
+    const opening = settingsSession();
+    if (opening && !opening.saving && !snapshot().environments.some(entry => entry.id === opening.environment.id)) {
+      cancelSettings();
+      showActionToast(i18n().t('environmentCenter.environmentRegistrationUnavailable'), 'error');
+    }
   });
 
   {
@@ -3551,16 +3572,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: LauncherActionErrorTarget,
     requestEnvID?: string,
     request?: DesktopLauncherActionRequest,
+    isCurrent: () => boolean = () => true,
   ): Promise<void> {
     const presentation = launcherActionFailurePresentation(i18n(), failure);
     if (presentation.refresh_snapshot) {
       try {
         await refreshSnapshot();
       } catch (error) {
-          setErrorMessage(errorTarget, getErrorMessage(error));
+        if (isCurrent()) setErrorMessage(errorTarget, getErrorMessage(error));
+        else showActionToast(getErrorMessage(error), 'error');
         return;
       }
     }
+    if (!isCurrent()) { showActionToast(presentation.message || failure.message, 'error'); return; }
     const activeOperationKey = trimString(failure.operation_key);
     const confirmationProgress = confirmationProgressForLauncherFailure(failure, activeActionProgress());
     if (confirmationProgress) {
@@ -3751,43 +3775,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     void window.redevenDesktopShell?.openDashboard?.();
   }
 
-  function openSettingsSurface(environmentID = selectedSettingsEnvironmentEntry()?.id ?? ''): void {
-    if (environmentID === '') {
-      setSettingsError(i18n().t('settings.chooseEnvironmentFirst'));
+  function openSettingsSurface(environmentID = snapshot().environments.find(entry => entry.registration_ref?.kind === 'local_environment')?.id ?? ''): void {
+    const environment = snapshot().environments.find(entry => entry.id === environmentID);
+    if (!environment || !environment.can_edit) {
+      showActionToast(i18n().t('environmentCenter.environmentRegistrationUnavailable'), 'error');
       return;
     }
     resetMessages();
-    setConnectionDialogState(null);
+    setConnectionDialogFieldErrors({});
+    setNewConnectionState(null);
     setGatewaySetupDialogState(null);
     setControlPlaneDialogState(null);
-    setBusyState({
-      action: 'open_environment_settings',
-      environment_id: environmentID,
-      provider_origin: '',
-      provider_id: '',
-      gateway_id: '',
-      request_started_at_unix_ms: Date.now(),
-      progress: null,
-    });
-    void props.runtime.launcher.performAction({ kind: 'open_environment_settings', environment_id: environmentID })
-      .then((result) => {
-        if (isDesktopLauncherActionFailure(result)) {
-          const message = launcherActionFailurePresentation(i18n(), result).message;
-          const environment = snapshot().environments.find((entry) => entry.id === environmentID);
-          if (environment?.registration_ref?.kind === 'runtime_target') {
-            startEditingEnvironment(environment, true);
-            setConnectionDialogError(message);
-          } else {
-            showActionToast(message, 'error');
-          }
-        }
-      })
-      .catch((error) => {
-        setSettingsError(getErrorMessage(error));
-      })
-      .finally(() => {
-        setBusyState(IDLE_LAUNCHER_BUSY_STATE);
-      });
+    settingsController.open(environment, createEnvironmentConnectionDraft(environment));
   }
 
   function openLanguageSettings(): void {
@@ -3806,6 +3805,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       showConnectEnvironment(message || i18n().t('environmentCenter.addConnectionLauncherPrompt'));
       return;
     }
+    settingsController.close();
     setActiveCenterTab('environments');
     setLibrarySourceFilter('');
     if (trimString(message) !== '') {
@@ -3878,27 +3878,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       : {}));
   }
 
-  function startEditingEnvironment(environment: DesktopEnvironmentEntry, connectionOnly = false): void {
-    if (environment.kind === 'provider_environment') {
-      openSettingsSurface(environment.id);
-      return;
-    }
+  function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
+    openSettingsSurface(environment.id);
+  }
+
+  function createEnvironmentConnectionDraft(environment: DesktopEnvironmentEntry): ConnectionDialogState {
     const registrationRef = environment.registration_ref;
-    if (!registrationRef) {
-      setErrorMessage('connect', i18n().t('environmentCenter.environmentRegistrationUnavailable'));
-      return;
-    }
-    if (registrationRef.kind === 'local_environment') {
-      openSettingsSurface(environment.id);
-      return;
-    }
+    if (!registrationRef || registrationRef.kind === 'local_environment') return null;
     if (registrationRef.kind === 'runtime_target') {
-      if (!connectionOnly) {
-        openSettingsSurface(environment.id);
-        return;
-      }
+      if (environment.managed_runtime_host_access?.kind === 'wsl_host') return null;
       if (environment.managed_runtime_placement?.kind !== 'container_process' || !environment.managed_runtime_host_access) {
-        setConnectionDialogState(createSSHConnectionDialogState('edit', {
+        return createSSHConnectionDialogState('edit', {
           environment_id: registrationRef.id,
           label: environment.label,
           ssh_destination: environment.ssh_details?.ssh_destination ?? '',
@@ -3912,12 +3902,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           release_base_url: environment.ssh_details?.release_base_url ?? '',
           connect_timeout_seconds: environment.ssh_details?.connect_timeout_seconds == null ? '' : String(environment.ssh_details.connect_timeout_seconds),
           auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled === true,
-        }));
-        setConnectionDialogError('');
-        return;
+        });
       }
       const isSSHContainer = environment.managed_runtime_host_access.kind === 'ssh_host';
-      setConnectionDialogState(createRuntimeContainerConnectionDialogState('edit', isSSHContainer ? 'ssh_container_runtime' : 'local_container_runtime', {
+      return createRuntimeContainerConnectionDialogState('edit', isSSHContainer ? 'ssh_container_runtime' : 'local_container_runtime', {
         environment_id: registrationRef.id,
         label: environment.label,
         ssh_destination: isSSHContainer ? environment.managed_runtime_host_access.ssh.ssh_destination : '',
@@ -3934,30 +3922,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         runtime_root: environment.managed_runtime_placement.runtime_root,
         auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled === true,
         auto_runtime_probe_configurable: environment.auto_runtime_probe_configurable !== false,
-      }));
+      });
     } else if (registrationRef.kind === 'gateway_environment') {
       const route = environment.gateway_environment_profile_access_route;
       if (!route || route.kind !== 'url') {
         setErrorMessage('connect', i18n().t('environmentCenter.gatewayEnvironmentProfileUnavailable'));
-        return;
+        return null;
       }
-      setConnectionDialogState(createGatewayURLProfileConnectionDialogState('edit', {
+      return createGatewayURLProfileConnectionDialogState('edit', {
         environment_id: registrationRef.gateway_env_id,
         gateway_id: registrationRef.gateway_id,
         label: environment.label,
         profile_route_kind: route.kind,
         target_url: route.url ?? '',
         origin_label: route.origin_label ?? environment.gateway_environment_origin?.label ?? '',
-      }));
+      });
     } else {
-      setConnectionDialogState(createExternalURLConnectionDialogState('edit', {
+      return createExternalURLConnectionDialogState('edit', {
         environment_id: registrationRef.id,
         label: environment.label,
         external_local_ui_url: environment.local_ui_url,
         auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled === true,
-      }));
+      });
     }
-    setConnectionDialogError('');
   }
 
   function closeConnectionDialog(): void {
@@ -4214,14 +4201,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: LauncherActionErrorTarget = 'connect',
   ): Promise<Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>> | null> {
     const openingDraft = connectionDialogState();
-    const resultErrorTarget = () => errorTarget === 'dialog' && connectionDialogState() !== openingDraft ? 'connect' : errorTarget;
+    const opening = settingsSession();
+    const resultIsCurrent = () => opening ? settingsController.current(opening) : connectionDialogState() === openingDraft;
+    const resultErrorTarget = () => (errorTarget === 'dialog' || errorTarget === 'settings') && !resultIsCurrent() ? 'connect' : errorTarget;
     resetMessages();
-    setBusyState(busyStateForLauncherRequest(request));
+    const actionState = busyStateForLauncherRequest(request);
+    setBusyState(actionState);
     try {
       const result = await props.runtime.launcher.performAction(request);
       if (isDesktopLauncherActionFailure(result)) {
+        if ((errorTarget === 'dialog' || errorTarget === 'settings') && !resultIsCurrent()) {
+          showActionToast(result.message, 'error');
+          return null;
+        }
         const requestEnvID = (request as { environment_id?: string }).environment_id?.trim();
-        await handleLauncherActionFailure(result, resultErrorTarget(), requestEnvID || undefined, request);
+        await handleLauncherActionFailure(result, resultErrorTarget(), requestEnvID || undefined, request,
+          () => (errorTarget !== 'dialog' && errorTarget !== 'settings') || resultIsCurrent());
         return null;
       }
       if (isDesktopLauncherActionSuccess(result)) {
@@ -4230,10 +4225,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setErrorMessage(resultErrorTarget(), i18n().t('toast.unexpectedLauncherResult'));
       return null;
     } catch (error) {
-      setErrorMessage(resultErrorTarget(), getErrorMessage(error));
+      if ((errorTarget === 'dialog' || errorTarget === 'settings') && !resultIsCurrent()) showActionToast(getErrorMessage(error), 'error');
+      else setErrorMessage(resultErrorTarget(), getErrorMessage(error));
       return null;
     } finally {
-      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
+      setBusyState(current => current.request_started_at_unix_ms === actionState.request_started_at_unix_ms && current.action === actionState.action
+        ? IDLE_LAUNCHER_BUSY_STATE : current);
     }
   }
 
@@ -5429,7 +5426,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateSettingsDraft(updater: (current: DesktopSettingsDraft) => DesktopSettingsDraft): void {
-    setSettingsDraftSession((current) => updateDesktopSettingsDraftSessionDraft(current, updater));
+    settingsController.updateDraft(updater);
   }
 
   function updateDraftField(name: keyof DesktopSettingsDraft, value: string): void {
@@ -5471,50 +5468,28 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }));
   }
 
-	async function saveSettings(options: Readonly<{
-		restartRuntime?: boolean;
-  }> = {}): Promise<void> {
+  async function saveSettings(options: Readonly<{ restartRuntime?: boolean }> = {}): Promise<void> {
+    const opening = settingsSession();
+    if (!opening?.access || opening.saving) return;
+    const environment = selectedSettingsEnvironmentEntry()!;
+    if (options.restartRuntime && environment.runtime_operations.restart.availability !== 'available') return;
     setSettingsError('');
-    const restartEnvironment = options.restartRuntime ? selectedSettingsEnvironmentEntry() : null;
-    if (options.restartRuntime && restartEnvironment?.runtime_operations.restart.availability !== 'available') {
-      setSettingsError(i18n().t('environmentCenter.resolveRuntimeTargetError'));
-      return;
+    if (!await settingsController.saveAccess()) return;
+    showActionToast(i18n().t('toast.settingsSaved'));
+    if (options.restartRuntime) {
+      const result = await restartEnvironmentRuntime(environment, settingsController.current(opening) ? 'settings' : 'connect');
+      if (!result) {
+        if (settingsController.current(opening)) setSettingsError(i18n().t('settings.savedNotApplied'));
+        else showActionToast(i18n().t('settings.savedNotApplied'), 'error');
+      } else if (settingsController.current(opening)) await settingsController.loadAccess();
     }
-    setBusyState({
-      action: 'save_settings',
-      environment_id: '',
-      provider_origin: '',
-      provider_id: '',
-      gateway_id: '',
-      request_started_at_unix_ms: Date.now(),
-      progress: null,
-    });
-    try {
-		const result = await props.runtime.settings.save(draft());
-      if (!result.ok) {
-        setSettingsError(result.error);
-        return;
-      }
-      showActionToast(i18n().t('toast.settingsSaved'));
-      cancelSettings();
-      if (restartEnvironment) {
-        await restartEnvironmentRuntime(restartEnvironment, 'connect');
-      }
-      try {
-        const nextSnapshot = await refreshSnapshot();
-        setSettingsDraftSession(createDesktopSettingsDraftSession(nextSnapshot.settings_surface));
-      } catch (error) {
-        showActionToast(getErrorMessage(error) || i18n().t('toast.actionFailedFallback'), 'error');
-      }
-    } catch (error) {
-      setSettingsError(getErrorMessage(error));
-    } finally {
-      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
-    }
+    void refreshSnapshot();
   }
 
   function cancelSettings(): void {
+    settingsController.close();
     setSettingsError('');
+    setConnectionDialogError('');
     props.runtime.settings.cancel();
   }
 
@@ -5527,7 +5502,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       errorTarget: 'connect' | 'dialog';
       successMessage: string;
     }>,
-  ): Promise<boolean> {
+  ): Promise<string | false> {
     const normalizedTargetURL = trimString(request.external_local_ui_url);
     if (!normalizedTargetURL) {
       setErrorMessage(request.errorTarget, i18n().t('connectionDialog.validationEnvironmentUrlRequired'));
@@ -5535,15 +5510,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     setConnectionDialogError('');
-    setBusyState({
-      action: 'save_environment',
-      environment_id: trimString(request.environment_id),
-      provider_origin: '',
-      provider_id: '',
-      gateway_id: '',
-      request_started_at_unix_ms: Date.now(),
-      progress: null,
-    });
     try {
       const result = await performLauncherAction({
         kind: 'upsert_environment_registration',
@@ -5560,12 +5526,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (result?.outcome !== 'saved_environment') return false;
       await refreshSnapshot();
       showActionToast(request.successMessage);
-      return true;
+      if (!result.environment_id) throw new Error(i18n().t('toast.unexpectedLauncherResult'));
+      return result.environment_id;
     } catch (error) {
-      setErrorMessage(request.errorTarget, getErrorMessage(error));
+      showActionToast(getErrorMessage(error), 'error');
       return false;
-    } finally {
-      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
     }
   }
 
@@ -5580,18 +5545,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       errorTarget: 'connect' | 'dialog';
       successMessage: string;
     }>,
-  ): Promise<boolean> {
-    const openingDraft = connectionDialogState();
+  ): Promise<string | false> {
     setConnectionDialogError('');
-    setBusyState({
-      action: 'save_environment',
-      environment_id: trimString(request.environment_id),
-      provider_origin: '',
-      provider_id: '',
-      gateway_id: '',
-      request_started_at_unix_ms: Date.now(),
-      progress: null,
-    });
     try {
       const result = await performLauncherAction({
         kind: 'upsert_environment_registration',
@@ -5621,12 +5576,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (result?.outcome !== 'saved_environment') return false;
       await refreshSnapshot();
       showActionToast(request.successMessage);
-      return true;
+      if (!result.environment_id) throw new Error(i18n().t('toast.unexpectedLauncherResult'));
+      return result.environment_id;
     } catch (error) {
-      setErrorMessage(request.errorTarget === 'dialog' && connectionDialogState() !== openingDraft ? 'connect' : request.errorTarget, getErrorMessage(error));
+      showActionToast(getErrorMessage(error), 'error');
       return false;
-    } finally {
-      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
     }
   }
 
@@ -5638,17 +5592,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       errorTarget: 'connect' | 'dialog';
       successMessage: string;
     }>,
-  ): Promise<boolean> {
+  ): Promise<string | false> {
     setConnectionDialogError('');
-    setBusyState({
-      action: 'save_environment',
-      environment_id: trimString(request.environment_id),
-      provider_origin: '',
-      provider_id: '',
-      gateway_id: '',
-      request_started_at_unix_ms: Date.now(),
-      progress: null,
-    });
     try {
       const isSSHContainer = request.state.connection_kind === 'ssh_container_runtime';
       const result = await performLauncherAction({
@@ -5686,12 +5631,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (result?.outcome !== 'saved_environment') return false;
       await refreshSnapshot();
       showActionToast(request.successMessage);
-      return true;
+      if (!result.environment_id) throw new Error(i18n().t('toast.unexpectedLauncherResult'));
+      return result.environment_id;
     } catch (error) {
-      setErrorMessage(request.errorTarget, getErrorMessage(error));
+      showActionToast(getErrorMessage(error), 'error');
       return false;
-    } finally {
-      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
     }
   }
 
@@ -5704,7 +5648,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       errorTarget: 'connect' | 'dialog';
       successMessage: string;
     }>,
-  ): Promise<boolean> {
+  ): Promise<string | false> {
     const gatewayID = trimString(request.gateway_id);
     if (!gatewayID) {
       setErrorMessage(request.errorTarget, i18n().t('connectionDialog.validationGatewayRequired'));
@@ -5728,7 +5672,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     await refreshSnapshot();
     showActionToast(request.successMessage);
-    return true;
+    if (!result.environment_id) {
+      showActionToast(i18n().t('toast.unexpectedLauncherResult'), 'error');
+      return false;
+    }
+    return result.environment_id;
   }
 
   function validateGatewaySetupDialogFields(state: GatewaySetupDialogState): Partial<Record<string, string>> {
@@ -5909,12 +5857,57 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     };
   }
 
+  function connectionSettingsDirty(): boolean {
+    const session = settingsSession();
+    return !!session && JSON.stringify(session.connection) !== JSON.stringify(session.connection_baseline);
+  }
+  function connectionSaveBlocked(): boolean {
+    const session = settingsSession();
+    if (!session?.access?.dirty || !session.connection || !session.connection_baseline) return false;
+    const fields = ['ssh_destination', 'ssh_port', 'runtime_root', 'container_engine', 'container_id'] as const;
+    return fields.some(key => Reflect.get(session.connection!, key) !== Reflect.get(session.connection_baseline!, key));
+  }
+  function settingsAccessErrorMessage(): string {
+    const error = settingsPresentation()?.access_error;
+    if (error?.code === 'SETTINGS_WSL_STOPPED') return i18n().t('settings.wslStopped');
+    return error?.failure ? localizedOperationFailureSummary(i18n(), error.failure) : error?.error ?? '';
+  }
+  function settingsAccessDiagnostic(): string {
+    const error = settingsPresentation()?.access_error;
+    return error?.failure ? formatDesktopOperationFailureForClipboard(error.failure)
+      : [error?.code, error?.error].filter(Boolean).join(': ');
+  }
+  function wslSettingsIdentity(): string {
+    const environment = settingsPresentation()?.environment;
+    const host = environment?.managed_runtime_host_access;
+    return host?.kind === 'wsl_host' ? `${host.distribution_name} · ${host.linux_user}\n${environment?.managed_runtime_placement?.runtime_root ?? ''}` : '';
+  }
+  async function saveWSLSettingsLabel(): Promise<void> {
+    const opening = settingsSession();
+    const environment = opening?.environment;
+    if (!opening || opening.saving || environment?.registration_ref?.kind !== 'runtime_target'
+      || !environment.managed_runtime_host_access || !environment.managed_runtime_placement) return;
+    settingsController.update({ saving: 'connection' });
+    const result = await performLauncherAction({ kind: 'upsert_environment_registration', registration: {
+      registration_ref: environment.registration_ref, label: opening.metadata_label.trim(),
+      host_access: environment.managed_runtime_host_access, placement: environment.managed_runtime_placement,
+      auto_runtime_probe_enabled: true,
+    } }, 'dialog');
+    if (!settingsController.current(opening)) return;
+    settingsController.update({ saving: null });
+    if (result?.ok) {
+      await refreshSnapshot();
+      if (settingsController.current(opening)) settingsController.savedConnection(
+        snapshot().environments.find(entry => entry.id === environment.id) ?? environment, null);
+    }
+  }
+
   async function saveConnectionFromDialog(): Promise<void> {
     const state = connectionDialogState();
     if (!state) {
       return;
     }
-    const errors = state.mode === 'edit' && state.connection_kind === 'ssh_environment'
+    const errors = state.connection_kind === 'ssh_environment'
       ? validateSSHEnvironmentSettings(state, i18n())
       : validateConnectionDialogFields(state);
     setConnectionDialogFieldErrors(errors);
@@ -5922,7 +5915,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     setConnectionDialogFieldErrors({});
-    let saved = false;
+    const opening = settingsSession();
+    if (opening?.saving || connectionSaveBlocked()) return;
+    if (opening) settingsController.update({ saving: 'connection' });
+    let saved: string | false = false;
     if (state.connection_kind === 'ssh_environment') {
       saved = await upsertSSHRuntimeTarget({
         environment_id: state.environment_id,
@@ -5975,9 +5971,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         successMessage: i18n().t('toast.gatewayEnvironmentSaved'),
       });
     }
-    if (saved && connectionDialogState() === state) {
-      closeConnectionDialog();
-    }
+    if (opening && settingsController.current(opening)) {
+      if (saved) {
+        const environment = snapshot().environments.find(entry => entry.id === saved);
+        if (environment) settingsController.savedConnection(environment, createEnvironmentConnectionDraft(environment));
+        else cancelSettings();
+      } else settingsController.update({ saving: null });
+    } else if (!opening && saved && connectionDialogState() === state) closeConnectionDialog();
   }
 
   async function toggleEnvironmentPinned(environment: DesktopEnvironmentEntry): Promise<void> {
@@ -6185,6 +6185,24 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     openRedevenDashboard();
+  };
+
+  const connectionFormProps: ConnectionDialogProps = {
+    get i18n() { return i18n(); },
+    get nativeContainerRuntime() { return snapshot().platform_capabilities.native_container_runtime; },
+    get state() { return connectionDialogState(); },
+    get sshConfigHosts() { return sshConfigHosts(); }, get sshConfigHostsLoading() { return sshConfigHostsLoading(); },
+    get sshConfigHostsLoadError() { return sshConfigHostsLoadError(); },
+    get containerOptions() { return runtimeContainerOptions(); }, get containerOptionsLoading() { return runtimeContainerOptionsLoading(); },
+    get containerOptionsError() { return runtimeContainerOptionsError(); },
+    get error() { return connectionDialogError(); }, get fieldErrors() { return connectionDialogFieldErrors(); },
+    get busyState() { return busyState(); }, get gatewayProfileSources() { return writableGatewayProfileSources(); },
+    onOpenChange(open) { if (!open) { if (settingsSession()) cancelSettings(); else closeConnectionDialog(); } },
+    updateField: updateConnectionDialogField, toggleAutoRuntimeProbe: toggleConnectionRuntimeAutoProbe,
+    refreshContainerOptions() { void refreshRuntimeContainerOptions(true); }, refreshSSHConfigHosts() { void refreshSSHConfigHosts(); },
+    switchKind: switchConnectionDialogKind, switchBootstrapStrategy: switchSSHBootstrapStrategy,
+    removeSSHPassword: removeSSHPasswordFromConnectionDialog, clearFieldErrors() { setConnectionDialogFieldErrors({}); },
+    onSave: saveConnectionFromDialog,
   };
 
   return (
@@ -6516,14 +6534,88 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         perform={performDesktopUpdateAction}
       />
 
-      <LocalEnvironmentSettingsDialog
-        open={snapshot().surface === 'environment_settings'}
+      <EnvironmentSettingsDialog open={Boolean(settingsSession())} environment={settingsSession()?.environment ?? null}
+        tab={settingsPresentation()?.tab ?? 'connection'} i18n={i18n()} onClose={cancelSettings}
+        onTabChange={settingsController.selectTab}
+        connection={(
+          <Show when={settingsPresentation()?.token} keyed>{(_token) => (
+            <Show when={settingsPresentation()?.connection} fallback={(
+              <EnvironmentSettingsPanel footer={<>
+                <Button variant="ghost" onClick={cancelSettings}>{i18n().t('common.close')}</Button>
+                <Show when={settingsPresentation()?.environment.managed_runtime_host_access?.kind === 'wsl_host'}>
+                  <Button disabled={!settingsSession() || Boolean(settingsSession()?.saving) || !settingsSession()?.metadata_label.trim()
+                    || settingsSession()?.metadata_label === settingsSession()?.environment.label} onClick={() => void saveWSLSettingsLabel()}>
+                    {i18n().t('sshSettings.saveChanges')}
+                  </Button>
+                </Show>
+              </>}>
+                <Show when={settingsPresentation()?.environment.managed_runtime_host_access?.kind === 'wsl_host'} fallback={(
+                  <div class="space-y-4">
+                    <p class="text-sm text-muted-foreground">{i18n().t('settings.cloudManaged')}</p>
+                    <p class="select-text break-all font-mono text-xs">{settingsPresentation()?.environment.provider_origin}</p>
+                    <Button onClick={() => { const url = settingsPresentation()?.environment.provider_origin; if (url) void openConnectionInBrowser(url); }}>
+                      {i18n().t('settings.manageCloud')}
+                    </Button>
+                  </div>
+                )}>
+                  <div class="space-y-4">
+                    <label class="block text-sm" for="wsl-settings-name">{i18n().t('connectionDialog.name')}</label>
+                    <Input id="wsl-settings-name" disabled={Boolean(settingsSession()?.saving)} value={settingsPresentation()?.metadata_label ?? ''}
+                      onInput={event => settingsController.update({ metadata_label: event.currentTarget.value })} />
+                    <p class="select-text whitespace-pre-wrap font-mono text-xs">{wslSettingsIdentity()}</p>
+                    <Show when={connectionDialogError()}><p role="alert" class="text-xs text-destructive">{connectionDialogError()}</p></Show>
+
+                  </div>
+                </Show>
+              </EnvironmentSettingsPanel>
+            )}>
+              <div class="environment-settings-panel" inert={!settingsSession()}>
+                <Show when={connectionSaveBlocked()}><p role="status" class="px-5 pt-3 text-xs text-warning">{i18n().t('settings.resolveAccessDraft')}</p></Show>
+                <Show when={settingsPresentation()?.connection?.connection_kind === 'ssh_environment'} fallback={
+                  <ConnectionDialogForm {...connectionFormProps} state={settingsPresentation()?.connection ?? null}
+                    saveBlocked={connectionSaveBlocked() || !connectionSettingsDirty() || Boolean(settingsSession()?.saving)} />
+                }>
+                  <SSHEnvironmentSettingsForm open={Boolean(settingsSession())} i18n={i18n()}
+                    state={settingsPresentation()!.connection as SSHConnectionDialogState}
+                    baseline={settingsPresentation()!.connection_baseline as SSHConnectionDialogState}
+                    sshConfigHosts={sshConfigHosts()} sshConfigHostsLoading={sshConfigHostsLoading()}
+                    sshConfigHostsLoadError={sshConfigHostsLoadError()} fieldErrors={connectionDialogFieldErrors()}
+                    error={connectionDialogError()} saving={Boolean(settingsSession()?.saving)} saveBlocked={connectionSaveBlocked()}
+                    updateField={updateConnectionDialogField} toggleAutoRuntimeProbe={toggleConnectionRuntimeAutoProbe}
+                    switchBootstrapStrategy={switchSSHBootstrapStrategy} removeSSHPassword={removeSSHPasswordFromConnectionDialog}
+                    refreshSSHConfigHosts={() => { void refreshSSHConfigHosts(); }} onClose={cancelSettings} onSave={saveConnectionFromDialog} />
+                </Show>
+              </div>
+            </Show>
+          )}</Show>
+        )}
+        access={(
+          <Show when={settingsPresentation()?.token} keyed>{(_token) => (
+            <Show when={Boolean(settingsPresentation()?.access)} fallback={(
+              <EnvironmentSettingsPanel footer={<Button variant="ghost" onClick={cancelSettings}>{i18n().t('common.close')}</Button>}>
+                <div class="space-y-4" role={settingsPresentation()?.access_state === 'error' ? 'alert' : 'status'}>
+                  <p class="text-sm">{i18n().t(settingsPresentation()?.access_state === 'loading' ? 'settings.loadingAccess' : 'settings.loadAccessFailed')}</p>
+                  <Show when={settingsPresentation()?.access_error}>
+                    <p class="select-text break-words text-xs text-muted-foreground">{settingsAccessErrorMessage()}</p>
+                    <div class="flex gap-2">
+                      <Button onClick={() => void settingsController.loadAccess()}>{i18n().t('common.retry')}</Button>
+                      <Button variant="ghost" onClick={() => void copyEnvironmentValue(settingsAccessDiagnostic(), i18n().t('settings.loadAccessFailed'))}>{i18n().t('common.copy')}</Button>
+                      <Show when={settingsPresentation()?.access_error?.code === 'SETTINGS_WSL_STOPPED'}>
+                        <Button onClick={async () => { const opening = settingsSession(); if (!opening) return; await startEnvironmentRuntime(opening.environment, 'settings'); if (settingsController.current(opening)) await settingsController.loadAccess(); }}>{i18n().t('settings.startEnvironment')}</Button>
+                      </Show>
+                    </div>
+                  </Show>
+                </div>
+              </EnvironmentSettingsPanel>
+            )}>
+      <EnvironmentAccessSettingsForm
+        open={Boolean(settingsSession())}
         snapshot={settingsSurface()}
         baselineSnapshot={settingsBaselineSurface()}
         draft={draft()}
         i18n={i18n()}
-        busyState={busyState()}
-        settingsError={settingsError()}
+        busyState={settingsPresentation()?.saving === 'access' ? { ...IDLE_LAUNCHER_BUSY_STATE, action: 'save_settings' } : IDLE_LAUNCHER_BUSY_STATE}
+        settingsError={settingsError() || settingsAccessErrorMessage()}
         settingsErrorRef={(value) => {
           settingsErrorRef = value;
         }}
@@ -6532,12 +6624,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         applyAccessFixedPort={applyAccessFixedPort}
         toggleAutoPort={toggleAutoPort}
         saveSettings={saveSettings}
-        certificate={props.runtime.settings.certificate}
-        editConnection={settingsSurface().environment_kind === 'runtime_target' ? () => {
-          const environment = selectedSettingsEnvironmentEntry();
-          cancelSettings();
-          if (environment) startEditingEnvironment(environment, true);
+        certificate={props.runtime.settings.certificate ? async request => {
+          const opening = settingsSession();
+          const result = await props.runtime.settings.certificate!(request);
+          if (opening && settingsController.current(opening) && request.operation !== 'status') await settingsController.loadAccess();
+          return result;
         } : undefined}
+        resetAccess={settingsController.resetAccess}
         desktopOpenLabel={i18n().t(selectedSettingsEnvironmentEntry()?.window_state === 'open' ? 'environmentAction.focus' : 'environmentAction.open')}
         openInDesktop={() => {
           const environment = selectedSettingsEnvironmentEntry();
@@ -6559,39 +6652,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         clearStoredLocalUIPassword={clearStoredLocalUIPassword}
       />
 
-      <ConnectionDialog
-        i18n={i18n()}
-        nativeContainerRuntime={snapshot().platform_capabilities.native_container_runtime}
-        state={connectionDialogState()}
-        sshConfigHosts={sshConfigHosts()}
-        sshConfigHostsLoading={sshConfigHostsLoading()}
-        sshConfigHostsLoadError={sshConfigHostsLoadError()}
-        containerOptions={runtimeContainerOptions()}
-        containerOptionsLoading={runtimeContainerOptionsLoading()}
-        containerOptionsError={runtimeContainerOptionsError()}
-        error={connectionDialogError()}
-        fieldErrors={connectionDialogFieldErrors()}
-        busyState={busyState()}
-        gatewayProfileSources={writableGatewayProfileSources()}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeConnectionDialog();
-          }
-        }}
-        updateField={updateConnectionDialogField}
-        toggleAutoRuntimeProbe={toggleConnectionRuntimeAutoProbe}
-        refreshContainerOptions={() => {
-          void refreshRuntimeContainerOptions(true);
-        }}
-        refreshSSHConfigHosts={() => {
-          void refreshSSHConfigHosts();
-        }}
-        switchKind={switchConnectionDialogKind}
-        switchBootstrapStrategy={switchSSHBootstrapStrategy}
-        removeSSHPassword={removeSSHPasswordFromConnectionDialog}
-        clearFieldErrors={() => setConnectionDialogFieldErrors({})}
-        onSave={saveConnectionFromDialog}
-      />
+            </Show>
+          )}</Show>
+        )} />
+      <ConnectionDialog {...connectionFormProps} state={newConnectionState()} />
 
       <GatewaySetupDialog
         i18n={i18n()}
@@ -10413,9 +10477,6 @@ function EnvironmentConnectionCard(
       'set_environment_registration_pinned',
     ]),
   );
-  const isContainerRuntimeTarget = createMemo(
-    () => props.environment.managed_runtime_placement?.kind === 'container_process',
-  );
   const deleteTitle = createMemo(() => props.i18n.t('environmentCenter.removeEnvironment'));
   const runOpenWithPreflight = async (action: EnvironmentActionModel): Promise<void> => {
     const nextSession = startEnvironmentGuidanceIntent(
@@ -10671,20 +10732,8 @@ function EnvironmentConnectionCard(
           <Show when={props.environment.can_edit}>
             <DesktopTooltip content={props.i18n.t('common.settings')} placement="top">
               <ConsoleActionIconButton
-                title={
-                  isContainerRuntimeTarget()
-                    ? props.i18n.t('environmentCenter.runtimeTargetSettings')
-                    : props.environment.kind === 'local_environment'
-                      ? props.i18n.t('environmentCenter.environmentSettings')
-                      : props.i18n.t('environmentCenter.connectionSettings')
-                }
-                aria-label={
-                  props.environment.kind === 'local_environment' && !isContainerRuntimeTarget()
-                    ? props.i18n.t('environmentCenter.settingsForLabel', {
-                        label: props.environment.label,
-                      })
-                    : props.i18n.t('environmentCenter.connectionSettingsForLabel', { label: props.environment.label })
-                }
+                title={props.i18n.t('environmentCenter.environmentSettings')}
+                aria-label={props.i18n.t('environmentCenter.settingsForLabel', { label: props.environment.label })}
                 onClick={() => props.editEnvironment(props.environment)}
               >
                 <Settings class="h-3.5 w-3.5" />
@@ -13127,11 +13176,6 @@ function GatewayDisabledIcon(props: Readonly<{ class?: string }>) {
 
 const WELCOME_DIALOG_PANEL_CLASS = 'redeven-welcome-dialog-panel';
 
-const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
-  WELCOME_DIALOG_PANEL_CLASS,
-  'redeven-welcome-dialog-panel--settings',
-  'redeven-settings-dialog',
-);
 
 const CONNECTION_DIALOG_CLASS = cn(
   WELCOME_DIALOG_PANEL_CLASS,
@@ -13398,7 +13442,7 @@ function DesktopUpdateDialog(props: Readonly<{
   );
 }
 
-export function LocalEnvironmentSettingsDialog(props: Readonly<{
+export function EnvironmentAccessSettingsForm(props: Readonly<{
   open: boolean;
   snapshot: DesktopSettingsSurfaceSnapshot;
   baselineSnapshot: DesktopSettingsSurfaceSnapshot;
@@ -13418,7 +13462,7 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
   runtimeStatusTone: EnvironmentCardTone;
   dark: boolean;
   certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>;
-  editConnection?: () => void;
+  resetAccess?: () => void;
   desktopOpenLabel: string;
   openInDesktop: () => void;
   openInBrowser: (url: string) => Promise<void>;
@@ -13447,7 +13491,6 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
   const selectedShareAddress = createMemo(() => sharedAddress()?.environment_id === props.snapshot.environment_id
     ? connectionRows().filter(isShareableConnectionAddress).find((row) => row.id === sharedAddress()?.id) : undefined);
   const remote = () => !runtimeConnectionIsOnThisDevice(props.snapshot.runtime_connection);
-  const isOpen = createMemo(() => props.open);
   const canClearPassword = () => props.baselineSnapshot.local_ui_password_configured
     && props.draft.local_ui_password_mode !== 'clear' && !access().password_required;
 
@@ -13456,15 +13499,11 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
   });
 
   return (
-    <Dialog
-      open={isOpen()}
-      onOpenChange={(open) => { if (!open) props.cancelSettings(); }}
-      title={props.i18n.t('settings.settingsWindowTitle')}
-      description={props.i18n.t(remote() ? 'settings.remoteSettingsDescription' : 'settings.settingsWindowDescription', { label: props.baselineSnapshot.environment_label })}
-      class={LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS}
+    <EnvironmentSettingsPanel
       footer={(
         <div class="flex w-full flex-wrap items-center justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={props.cancelSettings}>{props.i18n.t('common.cancel')}</Button>
+          <Button size="sm" variant="ghost" onClick={props.cancelSettings}>{props.i18n.t('common.close')}</Button>
+          <Show when={pending() && props.resetAccess}><Button disabled={saving()} size="sm" variant="ghost" onClick={props.resetAccess}>{props.i18n.t('settings.discardChanges')}</Button></Show>
           <Button size="sm" variant={props.runtimeRestartAvailable ? 'outline' : 'default'}
             disabled={!canSave()} loading={saving()}
             onClick={() => void props.saveSettings()}>
@@ -13479,7 +13518,7 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
         </div>
       )}
     >
-      <div class="space-y-6">
+      <div class="space-y-6" inert={saving()}>
         <section aria-label={props.i18n.t('settings.currentConnection')} class="space-y-3 pb-1">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="text-sm font-semibold">{props.i18n.t('settings.currentConnection')}</h3>
@@ -13501,9 +13540,6 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
               {props.desktopOpenLabel}
             </Button>
           </div>
-          <Show when={props.editConnection}>
-            <Button size="sm" variant="ghost" onClick={() => props.editConnection?.()}>{props.i18n.t('settings.managementConnection')}</Button>
-          </Show>
           <Show when={selectedShareAddress()}>{(address) => (
             <EndpointQRCodePanel i18n={props.i18n} endpoint={address()} copyEnvironmentValue={props.copyEnvironmentValue} />
           )}</Show>
@@ -13583,7 +13619,7 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
             class="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive outline-none">{props.settingsError}</div>
         </Show>
       </div>
-    </Dialog>
+    </EnvironmentSettingsPanel>
   );
 }
 
@@ -14268,66 +14304,12 @@ type ConnectionDialogProps = Readonly<{
   removeSSHPassword: () => void;
   clearFieldErrors: () => void;
   onSave: () => Promise<void>;
+  saveBlocked?: boolean;
 }>;
 
 function ConnectionDialog(props: ConnectionDialogProps) {
-  const sshEditorOpen = createMemo(() => props.state?.mode === 'edit' && props.state.connection_kind === 'ssh_environment');
-  // Retain the last presentation while the published Dialog completes its exit.
-  // The parent remains the only editable draft owner.
-  const sshPresentation = createMemo<SSHConnectionDialogState | null>((previous) => (
-    sshEditorOpen() ? props.state as SSHConnectionDialogState : previous
-  ), null);
-  return (
-    <>
-      <ConnectionDialogForm {...props} state={sshEditorOpen() ? null : props.state} />
-      <Show when={sshPresentation()}>
-        <SSHEnvironmentSettingsDialog open={sshEditorOpen()} i18n={props.i18n} state={sshPresentation()!}
-          sshConfigHosts={props.sshConfigHosts} sshConfigHostsLoading={props.sshConfigHostsLoading}
-          sshConfigHostsLoadError={props.sshConfigHostsLoadError} fieldErrors={props.fieldErrors} error={props.error}
-          saving={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}
-          updateField={props.updateField} toggleAutoRuntimeProbe={props.toggleAutoRuntimeProbe}
-          switchBootstrapStrategy={props.switchBootstrapStrategy} removeSSHPassword={props.removeSSHPassword}
-          refreshSSHConfigHosts={props.refreshSSHConfigHosts} onClose={() => props.onOpenChange(false)} onSave={props.onSave} />
-      </Show>
-    </>
-  );
-}
-
-function ConnectionDialogForm(props: ConnectionDialogProps) {
   const isOpen = createMemo(() => props.state !== null);
-  const isCreate = createMemo(() => props.state?.mode === 'create');
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'external_local_ui');
-  const [advancedState, setAdvancedState] = createSignal<SSHConnectionDialogAdvancedState>({
-    open: false,
-    initialized_for_state_key: 'closed',
-  });
-  const isSSHBackedKind = createMemo(() => connectionKind() === 'ssh_environment' || connectionKind() === 'ssh_container_runtime');
-  const isContainerKind = createMemo(() => connectionKind() === 'local_container_runtime' || connectionKind() === 'ssh_container_runtime');
-  const showSSHAdvanced = createMemo(() => connectionKind() === 'ssh_environment' && advancedState().open);
-  const sshBootstrapStrategy = createMemo(() => (
-    props.state?.connection_kind === 'ssh_environment'
-      ? props.state.bootstrap_strategy
-      : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY
-  ));
-  const sshReleaseBaseURLLabel = createMemo(() => (
-    trimString(
-      props.state?.connection_kind === 'ssh_environment'
-        ? props.state.release_base_url
-        : '',
-    ) === ''
-      ? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL
-      : props.i18n.t('connectionDialog.customMirror')
-  ));
-  const sshBootstrapSummaryLabel = createMemo(() => {
-    switch (sshBootstrapStrategy()) {
-      case 'desktop_upload':
-        return sshReleaseBaseURLLabel();
-      case 'remote_install':
-        return props.i18n.t('connectionDialog.remoteDownloadInstall');
-      default:
-        return props.i18n.t('connectionDialog.automatic');
-    }
-  });
   const connectionKindDescription = createMemo<JSX.Element>(() => {
     switch (connectionKind()) {
       case 'external_local_ui':
@@ -14351,57 +14333,8 @@ function ConnectionDialogForm(props: ConnectionDialogProps) {
     }
   });
 
-  createEffect(() => {
-    const state = props.state;
-    setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(current, (
-      state?.connection_kind === 'ssh_environment' || state?.connection_kind === 'external_local_ui'
-        ? state
-        : null
-    )));
-  });
-
-  return (
-    <Dialog
-      open={isOpen()}
-      onOpenChange={props.onOpenChange}
-      title={isCreate() ? props.i18n.t('connectionDialog.newEnvironmentTitle') : props.i18n.t('connectionDialog.editEnvironmentTitle')}
-      class={CONNECTION_DIALOG_CLASS}
-      footer={(
-        <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
-            {props.i18n.t('common.cancel')}
-          </Button>
-          <Button
-            size="sm"
-            variant="default"
-            loading={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}
-            onClick={() => {
-              void props.onSave();
-            }}
-          >
-            <Save class="mr-1 h-3.5 w-3.5" />
-            {props.i18n.t('connectionDialog.save')}
-          </Button>
-        </div>
-      )}
-    >
-      <div
-        class="space-y-5"
-        onWheel={(event) => {
-          let el: HTMLElement | null = event.currentTarget as HTMLElement;
-          while (el) {
-            if (el.scrollHeight > el.clientHeight) {
-              const style = getComputedStyle(el);
-              if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                el.scrollTop += event.deltaY;
-                return;
-              }
-            }
-            el = el.parentElement;
-          }
-        }}
-      >
-        <Show when={isCreate()}>
+  const kindPicker = () => (
+        <Show when={props.state?.mode === 'create'}>
           <div class="space-y-1.5">
             <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.environmentType')}</label>
             <SegmentedControl
@@ -14441,6 +14374,51 @@ function ConnectionDialogForm(props: ConnectionDialogProps) {
           </div>
         </Show>
 
+  );
+  return <Dialog open={isOpen()} onOpenChange={props.onOpenChange}
+    title={props.i18n.t('connectionDialog.newEnvironmentTitle')} class={CONNECTION_DIALOG_CLASS}
+    contentClass="environment-settings-content" closeLabel={props.i18n.t('common.close')} escapeKeyPhase="bubble">
+    <Show when={props.state?.connection_kind === 'ssh_environment'} fallback={<ConnectionDialogForm {...props} beforeFields={kindPicker()} />}>
+      <SSHEnvironmentSettingsForm open={isOpen()} i18n={props.i18n}
+        state={props.state as SSHConnectionDialogState} baseline={props.state as SSHConnectionDialogState}
+        beforeFields={kindPicker()} sshConfigHosts={props.sshConfigHosts} sshConfigHostsLoading={props.sshConfigHostsLoading}
+        sshConfigHostsLoadError={props.sshConfigHostsLoadError} refreshSSHConfigHosts={props.refreshSSHConfigHosts}
+        fieldErrors={props.fieldErrors} error={props.error} saving={busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}
+        updateField={props.updateField} toggleAutoRuntimeProbe={props.toggleAutoRuntimeProbe}
+        switchBootstrapStrategy={props.switchBootstrapStrategy} removeSSHPassword={props.removeSSHPassword}
+        onClose={() => props.onOpenChange(false)} onSave={props.onSave} />
+    </Show>
+  </Dialog>;
+}
+
+function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JSX.Element }) {
+  const connectionKind = createMemo(() => props.state?.connection_kind ?? 'external_local_ui');
+  const isSSHBackedKind = createMemo(() => connectionKind() === 'ssh_container_runtime');
+  const isContainerKind = createMemo(() => connectionKind() === 'local_container_runtime' || connectionKind() === 'ssh_container_runtime');
+  return (
+    <EnvironmentSettingsPanel
+      footer={(
+        <div class="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
+            {props.i18n.t('common.cancel')}
+          </Button>
+          <Button
+            size="sm"
+            variant="default"
+            disabled={props.saveBlocked}
+            loading={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}
+            onClick={() => {
+              void props.onSave();
+            }}
+          >
+            <Save class="mr-1 h-3.5 w-3.5" />
+            {props.i18n.t('connectionDialog.save')}
+          </Button>
+        </div>
+      )}
+    >
+      <div class="space-y-5" inert={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}>
+        {props.beforeFields}
         <Show when={connectionKind() === 'gateway_url_profile'}>
           <div class="redeven-dialog-section">
             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -14558,9 +14536,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps) {
             </div>
             <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
               <div class="rounded-md border border-dashed border-border/40 bg-muted/10 px-2.5 py-2 text-[11px] leading-5 text-muted-foreground">
-                {connectionKind() === 'ssh_environment'
-                  ? props.i18n.t('connectionDialog.sshEnvironmentNotice')
-                  : props.i18n.t('connectionDialog.sshContainerNotice')}
+                {props.i18n.t('connectionDialog.sshContainerNotice')}
               </div>
               <div class="mt-3 space-y-3">
                 <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
@@ -14661,102 +14637,6 @@ function ConnectionDialogForm(props: ConnectionDialogProps) {
                     <div class="text-[11px] text-muted-foreground">{props.i18n.t('connectionDialog.storedSshPasswordWillBeRemoved')}</div>
                   </Show>
                 </div>
-              </Show>
-              <Show when={connectionKind() === 'ssh_environment'}>
-                <div class="overflow-hidden rounded-md border border-border/70 bg-background/80">
-                <button
-                  type="button"
-                  class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left"
-                  onClick={() => setAdvancedState((current) => ({ ...current, open: !current.open }))}
-                >
-                  <div>
-                    <div class="text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.advanced')}</div>
-                    <div class="mt-1 text-[11px] text-muted-foreground">
-                      {props.i18n.t('connectionDialog.advancedDescription')}
-                    </div>
-                  </div>
-                  <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                    {showSSHAdvanced() ? props.i18n.t('connectionDialog.shown') : props.i18n.t('connectionDialog.hidden')}
-                  </Tag>
-                </button>
-                <div class={cn(
-                  'redeven-dialog-collapse',
-                  showSSHAdvanced() && 'redeven-dialog-collapse--open',
-                )}>
-                  <div>
-                    <div class="border-t border-border/70 px-3 py-3">
-                    <div class="space-y-3">
-                      <Show when={connectionKind() === 'ssh_environment'}>
-                        <div class="space-y-1.5">
-                          <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.bootstrapDelivery')}</label>
-                          <SegmentedControl
-                            value={sshBootstrapStrategy()}
-                            onChange={(value) => props.switchBootstrapStrategy(value as DesktopSSHBootstrapStrategy)}
-                            options={[
-                              { value: 'auto', label: props.i18n.t('connectionDialog.automatic') },
-                              { value: 'desktop_upload', label: props.i18n.t('connectionDialog.desktopUpload') },
-                              { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteDownloadInstall') },
-                            ]}
-                            size="sm"
-                          />
-                          <div class="text-[11px] text-muted-foreground">
-                            {props.i18n.t('connectionDialog.bootstrapHelp')}{' '}
-                            <span class="font-medium text-foreground">{props.i18n.t('connectionDialog.source', { source: sshBootstrapSummaryLabel() })}</span>
-                          </div>
-                        </div>
-                      </Show>
-                      <div class="space-y-1.5">
-                        <label for="environment-ssh-runtime-root" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.runtimeRoot')}</label>
-                        <Input
-                          id="environment-ssh-runtime-root"
-                          value={props.state?.connection_kind === 'ssh_environment' || props.state?.connection_kind === 'gateway_url_profile' ? props.state.runtime_root : ''}
-                          onInput={(event) => props.updateField('runtime_root', event.currentTarget.value)}
-                          placeholder="$HOME/.redeven"
-                          size="sm"
-                          class="w-full"
-                          spellcheck={false}
-                        />
-                        <div class="text-[11px] text-muted-foreground">
-                          {props.i18n.t('connectionDialog.runtimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })}
-                        </div>
-                      </div>
-                      <Show when={connectionKind() === 'ssh_environment'}>
-                        <div class="space-y-1.5">
-                          <label for="environment-ssh-release-base-url" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.releaseBaseUrl')}</label>
-                          <Input
-                            id="environment-ssh-release-base-url"
-                            value={props.state?.connection_kind === 'ssh_environment' ? props.state.release_base_url : ''}
-                            onInput={(event) => props.updateField('release_base_url', event.currentTarget.value)}
-                            placeholder="https://github.com/floegence/redeven/releases"
-                            size="sm"
-                            class="w-full"
-                            spellcheck={false}
-                          />
-                          <div class="text-[11px] text-muted-foreground">
-                            {props.i18n.t('connectionDialog.releaseBaseUrlHelp', { url: DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL })}
-                          </div>
-                        </div>
-                        <div class="space-y-1.5">
-                          <label for="environment-ssh-connect-timeout" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.connectTimeout')}</label>
-                          <Input
-                            id="environment-ssh-connect-timeout"
-                            value={isSSHBackedKind() && props.state?.connection_kind !== 'gateway_url_profile' ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.connect_timeout_seconds ?? '' : ''}
-                            onInput={(event) => props.updateField('connect_timeout_seconds', event.currentTarget.value)}
-                            placeholder={String(DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS)}
-                            size="sm"
-                            class="w-28"
-                            spellcheck={false}
-                          />
-                          <div class="text-[11px] text-muted-foreground">
-                            {props.i18n.t('connectionDialog.connectTimeoutHelp', { seconds: DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS })}
-                          </div>
-                        </div>
-                      </Show>
-                    </div>
-                  </div>
-                  </div>
-                </div>
-              </div>
               </Show>
               </div>
             </div>
@@ -14898,7 +14778,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps) {
           </div>
         </Show>
       </div>
-    </Dialog>
+    </EnvironmentSettingsPanel>
   );
 }
 
@@ -14925,7 +14805,7 @@ function GatewaySetupDialog(props: Readonly<{
   const isOpen = createMemo(() => props.state !== null);
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'url');
   const isSSHBacked = createMemo(() => connectionKind() === 'ssh_host' || connectionKind() === 'ssh_container');
-  const [advancedState, setAdvancedState] = createSignal<SSHConnectionDialogAdvancedState>({
+  const [advancedState, setAdvancedState] = createSignal<{ open: boolean; initialized_for_state_key: string }>({
     open: false,
     initialized_for_state_key: 'closed',
   });

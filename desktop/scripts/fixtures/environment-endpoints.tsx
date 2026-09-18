@@ -1,7 +1,9 @@
 import { For, createSignal, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 import { FloeProvider, useTheme, builtInShellThemePresets } from '@floegence/floe-webapp-core';
-import { EndpointsPopover, LocalEnvironmentSettingsDialog } from '../../src/welcome/App';
+import { EndpointsPopover, EnvironmentAccessSettingsForm } from '../../src/welcome/App';
+import { EnvironmentSettingsDialog } from '../../src/welcome/EnvironmentSettingsDialog';
+import type { DesktopEnvironmentEntry } from '../../src/shared/desktopLauncherIPC';
 import { buildRuntimeConnectionRows, type DesktopRuntimeConnectionContext } from '../../src/shared/desktopEnvironmentConnection';
 import { createDesktopI18n } from '../../src/shared/i18n';
 import { buildDesktopSettingsSurfaceSnapshot } from '../../src/main/settingsPageContent';
@@ -55,12 +57,13 @@ function Fixture() {
       </article>}</For>
     </div>
     <output data-copy-result class="mt-6 block font-mono">{copied()}</output>
-    <LocalEnvironmentSettingsDialog open={Boolean(settings())} snapshot={surface()} baselineSnapshot={surface()} draft={draft}
+    <EnvironmentSettingsDialog open={Boolean(settings())} environment={{ id: settings(), label: settings(), registration_ref: { kind: 'local_environment', id: settings() } } as DesktopEnvironmentEntry}
+      tab="access" i18n={i18n} onTabChange={() => {}} onClose={() => setSettings('')} connection={null} access={<EnvironmentAccessSettingsForm open={Boolean(settings())} snapshot={surface()} baselineSnapshot={surface()} draft={draft}
       i18n={i18n} busyState={IDLE_LAUNCHER_BUSY_STATE} settingsError="" settingsErrorRef={() => {}}
       updateDraftField={() => {}} applyAccessMode={() => {}} applyAccessFixedPort={() => {}} toggleAutoPort={() => {}}
       saveSettings={async () => {}} runtimeRestartAvailable={false} runtimeRunning runtimeStatusLabel="Running" runtimeStatusTone="success" dark={theme.resolvedTheme() === 'dark'}
       desktopOpenLabel="Open Env App" openInDesktop={() => {}} openInBrowser={copy} copyEnvironmentValue={copy}
-      cancelSettings={() => setSettings('')} clearStoredLocalUIPassword={() => {}} />
+      cancelSettings={() => setSettings('')} clearStoredLocalUIPassword={() => {}} />} />
   </main>;
 }
 render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><Fixture /></FloeProvider>, document.getElementById('root')!);
