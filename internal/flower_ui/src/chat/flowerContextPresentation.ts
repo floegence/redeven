@@ -7,7 +7,6 @@ export type FlowerContextTone = 'stable' | 'warning' | 'danger' | 'estimated';
 export type FlowerComposerContextIndicatorView = Readonly<{
   ariaLabel: string;
   ariaValueText: string;
-  percentLabel: string;
   ratioValue: string;
   tone: FlowerContextTone;
   ratio: number | null;
@@ -53,10 +52,6 @@ export function contextPressureTone(pressure: string): FlowerContextTone {
   }
 }
 
-function formatCompactContextPercent(percent: number): string {
-  return `${Math.max(0, Math.min(100, Math.round(percent)))}%`;
-}
-
 export function threadCacheHitRatio(usage: FlowerContextUsage): number | null {
   const totals = usage.thread_usage;
   if (!totals) return null;
@@ -90,7 +85,6 @@ export function buildFlowerComposerContextIndicatorView(
   // input so switching measurement sources never makes usage jump backwards.
   const ratio = usage.confirmed ? contextUsageRatio(usage.confirmed) : null;
   const progressValue = ratio === null ? null : Math.round(ratio * 100);
-  const percentLabel = progressValue === null ? labels.unknownPercent : formatCompactContextPercent(progressValue);
   const ratioValue = progressValue === null ? labels.unknownPercent : labels.percent(progressValue);
   const pressure = usage.estimate ?? usage.confirmed;
   const warning = (() => {
@@ -107,7 +101,6 @@ export function buildFlowerComposerContextIndicatorView(
   return {
     ariaLabel: labels.label,
     ariaValueText: `${labels.label}: ${accessibleUsage}, ${labels.cacheHitLabel}: ${accessibleCache}${warning ? `, ${warning}` : ''}`,
-    percentLabel,
     ratioValue,
     tone: contextPressureTone(pressure?.pressure_status ?? 'estimated'),
     ratio,

@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-09-18: Context ring without an inline percentage
+
+* Keep only the ring in the composer; expose the confirmed percentage through the tooltip and accessible description.
+
 ## 2026-09-18: Compact context presentation
 
 * Show one confirmed context percentage and a two-row usage/cache tooltip; keep estimates for pressure decisions only.

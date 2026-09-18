@@ -31,8 +31,7 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
       const [usage, setUsage] = createSignal<FlowerContextUsage>(mapContextUsage({ estimate })!);
       dispose = render(() => <FlowerComposerContextIndicator usage={usage()} copy={copy} />, host);
       const progress = host.querySelector<HTMLElement>('[role="progressbar"]')!;
-      const percent = host.querySelector('.flower-composer-context-percent')!;
-      expect(percent.textContent).toBe('—');
+      expect(host.querySelector('.flower-composer-context-percent')).toBeNull();
       expect(progress.hasAttribute('aria-valuenow')).toBe(false);
       progress.focus();
       const tooltip = host.querySelector<HTMLElement>('[role="tooltip"]')!;
@@ -46,7 +45,6 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
 
       setUsage(mapContextUsage({ confirmed, estimate, thread_usage })!);
       expect(progress.getAttribute('aria-valuenow')).toBe('8');
-      expect(percent.textContent).toBe('8%');
       expect(tooltip.textContent).toBe(`${copy.chat.contextIndicator.label}8%${copy.chat.contextIndicator.cacheHitLabel}45%`);
       expect(host.querySelector('.flower-composer-context-sample-label')).toBeNull();
       const rect = tooltip.getBoundingClientRect();
@@ -61,20 +59,19 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
 
       setUsage(mapContextUsage({ confirmed, estimate: { ...estimate, input_tokens: 960000, pressure_status: 'hard_limit' } })!);
       expect(host.querySelector('[data-context-pressure]')?.getAttribute('data-context-pressure')).toBe('danger');
-      expect(percent.textContent).toBe('8%');
+      expect(progress.getAttribute('aria-valuenow')).toBe('8');
       expect(tooltip.textContent).toContain(copy.chat.contextIndicator.hardLimit);
       setUsage(mapContextUsage({ confirmed: { ...confirmed, input_tokens: 74312 }, thread_usage })!);
-      expect(percent.textContent).toBe('8%');
+      expect(progress.getAttribute('aria-valuenow')).toBe('8');
       expect(host.querySelector('.flower-composer-context-warning')).toBeNull();
       const completedText = tooltip.textContent;
       setUsage(mapContextUsage(JSON.parse(JSON.stringify(usage())))!);
       expect(tooltip.textContent).toBe(completedText);
       // Compaction and model changes invalidate the old sample without inventing a new percentage.
       setUsage(mapContextUsage({ estimate: { ...estimate, input_tokens: 1000, context_window_tokens: 100000 } })!);
-      expect(percent.textContent).toBe('—');
       expect(progress.hasAttribute('aria-valuenow')).toBe(false);
       setUsage(mapContextUsage({ confirmed: { ...confirmed, input_tokens: 1000, context_window_tokens: 100000 } })!);
-      expect(percent.textContent).toBe('1%');
+      expect(progress.getAttribute('aria-valuenow')).toBe('1');
       expect(document.activeElement).toBe(progress);
       await userEvent.keyboard('{Tab}');
       expect(tooltip.getAttribute('aria-hidden')).toBe('true');

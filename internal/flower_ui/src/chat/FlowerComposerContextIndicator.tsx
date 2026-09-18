@@ -47,7 +47,6 @@ export function FlowerComposerContextIndicator(props: {
           }
         }}
       />
-      <span class="flower-composer-context-percent" aria-hidden="true">{view().percentLabel}</span>
       <div
         id={tooltipID}
         role="tooltip"

@@ -35,7 +35,7 @@ describe('flower context presentation', () => {
       pressure_status: 'near_threshold',
     }), DEFAULT_FLOWER_SURFACE_COPY);
     expect(view).toMatchObject({
-      ariaLabel: 'Context', percentLabel: '91%', ratioValue: '91%',
+      ariaLabel: 'Context', ratioValue: '91%',
       cacheHitLabel: 'Cache hit rate', cacheHitValue: '—', tone: 'warning',
       ratio: 0.91, progressValue: 91, warning: 'Near limit',
       ariaValueText: 'Context: 91%, Cache hit rate: Not available, Near limit',
@@ -47,17 +47,16 @@ describe('flower context presentation', () => {
     expect(contextUsagePercent(usage({ input_tokens: 0, context_window_tokens: 1000 }).confirmed!)).toBe(0);
     const unknown = buildFlowerComposerContextIndicatorView(usage(), DEFAULT_FLOWER_SURFACE_COPY);
     expect(unknown.progressValue).toBeNull();
-    expect(unknown.percentLabel).toBe('—');
+    expect(unknown.ratioValue).toBe('—');
     expect(unknown.warning).toBe('');
     expect(unknown.ariaValueText).toBe('Context: Not available, Cache hit rate: Not available');
   });
 
-  it('localizes tooltip percentages while keeping the composer compact', () => {
+  it('localizes tooltip percentages and accessible usage', () => {
     const copy = { ...DEFAULT_FLOWER_SURFACE_COPY, chat: { ...DEFAULT_FLOWER_SURFACE_COPY.chat,
       contextIndicator: { ...DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator, percent: (percent: number) => `${percent}% 已用` },
     } };
     const view = buildFlowerComposerContextIndicatorView(usage({ input_tokens: 72000, context_window_tokens: 100000 }), copy);
-    expect(view.percentLabel).toBe('72%');
     expect(view.ratioValue).toBe('72% 已用');
     expect(view.ariaValueText).toBe('Context: 72% 已用, Cache hit rate: Not available');
   });
@@ -113,18 +112,18 @@ describe('flower context presentation', () => {
     const build = (snapshot: FlowerContextUsage) => buildFlowerComposerContextIndicatorView(snapshot, DEFAULT_FLOWER_SURFACE_COPY);
     expect(build({ estimate }).progressValue).toBeNull();
     const running = build({ confirmed, estimate });
-    expect(running.percentLabel).toBe('8%');
+    expect(running.ratioValue).toBe('8%');
     expect(running.warning).toBe('');
     expect(build(JSON.parse(JSON.stringify({ confirmed, estimate })))).toEqual(running);
-    expect(build({ confirmed: { ...confirmed, input_tokens: 74312 } }).percentLabel).toBe('8%');
+    expect(build({ confirmed: { ...confirmed, input_tokens: 74312 } }).ratioValue).toBe('8%');
     const risk = build({ confirmed, estimate: { ...estimate, input_tokens: 960000, pressure_status: 'hard_limit' } });
-    expect(risk.percentLabel).toBe('8%');
+    expect(risk.ratioValue).toBe('8%');
     expect(risk.tone).toBe('danger');
     expect(risk.warning).toBe('At limit');
     // Canonical invalidation clears old measurements on compaction/model changes.
     expect(build({}).progressValue).toBeNull();
     expect(build({ estimate: { ...estimate, input_tokens: 1000, context_window_tokens: 100000 } }).progressValue).toBeNull();
-    expect(build({ confirmed: { ...confirmed, input_tokens: 1000, context_window_tokens: 100000 } }).percentLabel).toBe('1%');
+    expect(build({ confirmed: { ...confirmed, input_tokens: 1000, context_window_tokens: 100000 } }).ratioValue).toBe('1%');
   });
 
   it('maps all pressure statuses into stable UI tones', () => {

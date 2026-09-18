@@ -1481,15 +1481,6 @@
   justify-content: center;
 }
 
-.flower-composer-context-percent {
-  margin-inline-start: 0.4rem;
-  min-width: 3ch;
-  color: var(--muted-foreground);
-  font-size: 0.6875rem;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
 .flower-composer-context-warning {
   margin-top: 0.35rem;
   color: var(--redeven-status-warning-foreground);
