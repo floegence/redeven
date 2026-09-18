@@ -5178,6 +5178,8 @@
       "revokeAll": "撤銷所有權限",
       "extension": "Chrome 擴充功能",
       "extensionHint": "首次使用需要安裝 Flower Browser 擴充功能，只需安裝一次。",
+      "setupUpdateTitle": "更新擴充功能",
+      "setupUpdateHint": "已安裝的擴充功能版本過舊。重新載入此處的資料夾即可更新。",
       "setupAlreadyInstalled": "已安裝，直接連線",
       "setupInstalled": "已安裝，繼續",
       "setupBack": "上一步",

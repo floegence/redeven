@@ -903,6 +903,8 @@
       "openConnection": "前往 Chrome 连接",
       "setupOpenFailed": "无法打开 Chrome 或目录。请确认运行此环境的电脑已安装 Google Chrome，然后重试。远程环境会在远程电脑上打开。",
       "retryConnection": "重新检查连接",
+      "setupUpdateTitle": "更新扩展",
+      "setupUpdateHint": "已安装的扩展版本过旧。重新加载此处的文件夹即可更新。",
       "setupAlreadyInstalled": "已安装，直接连接",
       "setupInstalled": "已安装，继续",
       "setupBack": "上一步",

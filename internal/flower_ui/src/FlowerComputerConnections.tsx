@@ -167,13 +167,13 @@ export function FlowerComputerConnections(props: {
       <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement?.listManagedProfiles && props.adapter.computerManagement.createManagedProfile && props.adapter.computerManagement.listManagedTabs}>
         <FlowerProfileConnection managed management={props.adapter.computerManagement!} connect={connectBrowser} copy={props.copy} onConnected={() => void load()} />
       </Show>
-      <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement?.openExtension && props.adapter.computerManagement.setupExtension && props.adapter.computerManagement.listExtensionProfiles && props.adapter.computerManagement.listExtensionTabs}>
+      <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement?.openExtension && props.adapter.computerManagement.setupExtension && props.adapter.computerManagement.loadExtensionStatus && props.adapter.computerManagement.listExtensionTabs}>
         <FlowerProfileConnection management={props.adapter.computerManagement!} connect={connectBrowser} copy={props.copy} onConnected={() => void load()} />
       </Show>
       <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement}><details class="rounded-md border border-border p-3"><summary class="cursor-pointer text-xs font-medium">{props.copy.advanced}</summary><div class="pt-3"><FlowerBrowserConnection copy={props.copy} listTabs={props.adapter.computerManagement!.listBrowserTabs} connect={connectBrowser} onConnected={() => void load()} /></div></details></Show>
       </Show>
       </>}>
-        <Show when={props.adapter.canMutate !== false && props.adapter.computerManagement?.listExtensionProfiles && props.adapter.computerManagement.setupExtension && props.adapter.computerManagement.openExtension} fallback={<p role="alert">{props.copy.setupRequired}</p>}>
+        <Show when={props.adapter.canMutate !== false && props.adapter.computerManagement?.loadExtensionStatus && props.adapter.computerManagement.setupExtension && props.adapter.computerManagement.openExtension} fallback={<p role="alert">{props.copy.setupRequired}</p>}>
           <FlowerProfileConnection connectionOnly management={props.adapter.computerManagement!} connect={connectBrowser} copy={props.copy} onConnected={() => undefined} onContinue={props.onContinue} />
         </Show>
       </Show>

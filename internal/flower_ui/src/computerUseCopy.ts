@@ -14,6 +14,8 @@ export const computerUseEnUS = {
   disconnect: 'Disconnect',
   extension: 'Chrome extension',
   extensionHint: "Install the Flower Browser extension once to let Flower use Chrome.",
+  setupUpdateTitle: "Update extension",
+  setupUpdateHint: "The installed extension is out of date. Load the folder shown here again to update it.",
   setupAlreadyInstalled: "Already installed",
   setupInstalled: "Installed, continue",
   setupBack: "Back",

@@ -441,11 +441,23 @@ func TestExtensionRejectsOldObservationProtocol(t *testing.T) {
 					break
 				}
 			}
-			if _, err := browserbridge.ReadMessage(peer, 1<<20); !errors.Is(err, io.EOF) {
-				t.Fatalf("old peer was not rejected immediately: %v", err)
+			raw, err := browserbridge.ReadMessage(peer, 1<<20)
+			if old == "hello" {
+				var failure struct {
+					Type string `json:"type"`
+					Code string `json:"code"`
+				}
+				if err != nil || json.Unmarshal(raw, &failure) != nil || failure.Type != "connection_error" || failure.Code != "extension_update_required" {
+					t.Fatalf("old extension did not receive actionable rejection: %s %v", raw, err)
+				}
+			} else if !errors.Is(err, io.EOF) {
+				t.Fatalf("old native host was not rejected immediately: %v", err)
 			}
 			hub.mu.Lock()
 			defer hub.mu.Unlock()
+			if old == "hello" && hub.connectionError != "extension_update_required" {
+				t.Fatal("guide lost the handshake failure")
+			}
 			if len(hub.profiles) != 1 {
 				t.Fatal("old peer changed connected profile inventory")
 			}

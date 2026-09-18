@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { installChromeExtensionThroughUI } from './installChromeExtensionThroughUI.mjs';
+import { stageBrowserExtension } from '../../../../scripts/stage_browser_extension.mjs';
 import { createComputerTask, openComputerStage } from './computerTaskQualification.mjs';
 
 // Real product carriers, Runtime, extension, Native Messaging and browser pages.
@@ -65,7 +66,7 @@ const provider = http.createServer(async (req, res) => {
 });
 await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
 const directory = await mkdtemp(path.join(os.tmpdir(), 'flower-system-browser-'));
-let personal, threadID, page = welcome;
+let personal, threadID, previousExtension, page = welcome;
 try {
   await mkdir(output, { recursive: true });
   await welcome.evaluate(() => window.redevenDesktopLanguage.setPreference('en-US'));
@@ -114,20 +115,35 @@ try {
   const profile = path.join(directory, 'profile'); await mkdir(path.join(profile, 'NativeMessagingHosts'), { recursive: true });
   await writeFile(path.join(profile, 'NativeMessagingHosts', `${nativeHost}.json`), manifest);
   personal = await chromium.launchPersistentContext(profile, { channel: 'chrome', headless: false, chromiumSandbox: true, ignoreDefaultArgs: ['--disable-extensions'] });
-  const installation = await installChromeExtensionThroughUI(personal, extension, setup.extension_id, setup.extension_home_path);
-  await installation.screenshot({ path: path.join(output, 'chrome-installed.png') });
+  previousExtension = await mkdtemp(path.join(os.homedir(), 'Redeven', 'Flower Previous Connection Test '));
+  stageBrowserExtension(previousExtension);
+  const previousManifest = JSON.parse(await readFile(path.join(previousExtension, 'manifest.json'), 'utf8'));
+  previousManifest.version = '1.0.0';
+  await writeFile(path.join(previousExtension, 'manifest.json'), JSON.stringify(previousManifest));
+  const previousWorker = (await readFile(path.join(previousExtension, 'background.mjs'), 'utf8')).replaceAll('protocol_version === 6', 'protocol_version === 5').replaceAll('protocol_version: 6', 'protocol_version: 5');
+  await writeFile(path.join(previousExtension, 'background.mjs'), previousWorker);
+  await installChromeExtensionThroughUI(personal, previousExtension, setup.extension_id, ['Redeven', path.basename(previousExtension)]);
   const existing = await personal.newPage(); await existing.goto(origin); await existing.getByRole('textbox').fill('keep my unfinished work');
   await dialog.getByRole('button', { name: 'Already installed', exact: true }).click();
   await dialog.getByRole('button', { name: 'Connect in Chrome', exact: true }).waitFor();
+  const outdatedPopup = await personal.newPage(); await outdatedPopup.goto(`chrome-extension://${setup.extension_id}/popup.html#${nativeHost}`);
+  await outdatedPopup.locator('#connect-button').click();
+  await wait(async () => (await request('GET', '/_redeven_proxy/api/ai/computer/extension/status')).error === 'extension_update_required', 'Runtime rejection of the outdated extension');
+  await dialog.getByText('Update extension', { exact: true }).waitFor();
+  assert.equal(calls, 1, 'an incompatible extension must not continue the pending task');
+  assert.equal((await request('GET', '/_redeven_proxy/api/ai/computer/extension/status')).profiles.length, 0);
+  await page.screenshot({ path: path.join(output, 'chrome-update-guide.png') });
+  const installation = await installChromeExtensionThroughUI(personal, extension, setup.extension_id, setup.extension_home_path, '1.0.0');
+  await installation.screenshot({ path: path.join(output, 'chrome-installed.png') });
   const popup = await personal.newPage(); await popup.goto(`chrome-extension://${setup.extension_id}/popup.html#${nativeHost}`);
   await popup.locator('#connect-button').click();
-  await wait(async () => (await request('GET', '/_redeven_proxy/api/ai/computer/extension/profiles')).length === 1, 'real Native Messaging connection');
+  await wait(async () => (await request('GET', '/_redeven_proxy/api/ai/computer/extension/status')).profiles.length === 1, 'real Native Messaging connection');
   await wait(() => release || providerFailure, 'task navigation'); if (providerFailure) throw providerFailure;
   const selected = (await request('GET', `/_redeven_proxy/api/ai/computer/target?thread_id=${threadID}`)).target_id;
   const target = (await request('GET', '/_redeven_proxy/api/ai/computer/targets')).find(value => value.id === selected);
   assert.equal(target.kind, 'browser.connected'); assert(!selected.startsWith('managed-'));
   assert.equal(await existing.getByRole('textbox').inputValue(), 'keep my unfinished work');
-  const tabs = await request('GET', `/_redeven_proxy/api/ai/computer/extension/tabs?profile_id=${(await request('GET', '/_redeven_proxy/api/ai/computer/extension/profiles'))[0].id}`);
+  const tabs = await request('GET', `/_redeven_proxy/api/ai/computer/extension/tabs?profile_id=${(await request('GET', '/_redeven_proxy/api/ai/computer/extension/status')).profiles[0].id}`);
   const taskTab = tabs.find(value => selected.endsWith(`-${value.id}`)); assert(taskTab && taskTab.url === origin + '/');
   await openComputerStage(page); await wait(() => page.locator('.flower-computer-stage img').evaluateAll(images => images.some(img => img.naturalWidth > 0)), 'visible system-browser pixels');
   await page.getByRole('button', { name: 'View in browser', exact: true }).click();
@@ -137,12 +153,13 @@ try {
   release();
   await wait(() => page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status').then(value => value === 'success'), 'verified completion');
   assert.equal(calls, 6); assert.equal(await existing.getByRole('textbox').inputValue(), 'keep my unfinished work');
-  await writeFile(path.join(output, 'system-browser.json'), JSON.stringify({ surface: process.env.REDEVEN_COMPUTER_SURFACE || 'desktop', source: target.kind, canonicalConnection: true, firstInstallThroughVisibleUI: true, sandboxEnabled: true, automaticContinuation: true, nativeMessaging: true, independentTaskTab: true, originalFormPreserved: true, visiblePixels: true, revealExactPage: true, completed: true }, null, 2));
+  await writeFile(path.join(output, 'system-browser.json'), JSON.stringify({ surface: process.env.REDEVEN_COMPUTER_SURFACE || 'desktop', source: target.kind, canonicalConnection: true, incompatibleExtensionRejected: true, updateGuideShown: true, oldInstallationReplaced: true, firstInstallThroughVisibleUI: true, sandboxEnabled: true, automaticContinuation: true, nativeMessaging: true, independentTaskTab: true, originalFormPreserved: true, visiblePixels: true, revealExactPage: true, completed: true }, null, 2));
   console.log('System-browser connection, independent task tab, Stage, reveal and verification passed.');
 } finally {
   release?.();
   if (threadID) await request('DELETE', `/_redeven_proxy/api/ai/threads/${threadID}?force=true`).catch(() => undefined);
   await personal?.close(); await desktop.close();
+  if (previousExtension) await rm(previousExtension, { recursive: true, force: true });
   fixture.closeAllConnections(); provider.closeAllConnections(); fixture.close(); provider.close();
   await rm(directory, { recursive: true, force: true });
 }

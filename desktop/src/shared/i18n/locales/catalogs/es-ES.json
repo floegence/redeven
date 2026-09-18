@@ -903,6 +903,8 @@
       "openConnection": "Conectar en Chrome",
       "setupOpenFailed": "No se puede abrir Chrome o la carpeta. Comprueba que Google Chrome esté instalado en el ordenador donde se ejecuta este entorno y vuelve a intentarlo. En un entorno remoto, se abre en el ordenador remoto.",
       "retryConnection": "Comprobar de nuevo",
+      "setupUpdateTitle": "Actualizar extensión",
+      "setupUpdateHint": "La extensión instalada está desactualizada. Vuelve a cargar la carpeta que se muestra aquí.",
       "setupAlreadyInstalled": "Ya está instalada",
       "setupInstalled": "Instalada, continuar",
       "setupBack": "Atrás",

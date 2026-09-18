@@ -3461,12 +3461,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true})
 		return
-	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/extension/profiles":
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/extension/status":
 		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
 		if !ok || !g.requireAIService(w, aiSvc) {
 			return
 		}
-		profiles, err := aiSvc.ComputerExtensionProfiles(r.Context(), meta)
+		profiles, err := aiSvc.ComputerExtensionConnectionStatus(r.Context(), meta)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_extension_unavailable"})
 			return

@@ -5163,6 +5163,8 @@
       "revokeAll": "Alle Zugriffsrechte widerrufen",
       "extension": "Chrome-Erweiterung",
       "extensionHint": "Installieren Sie einmalig die Erweiterung Flower Browser, damit Flower Chrome nutzen kann.",
+      "setupUpdateTitle": "Erweiterung aktualisieren",
+      "setupUpdateHint": "Die installierte Erweiterung ist veraltet. Laden Sie den hier angegebenen Ordner erneut.",
       "setupAlreadyInstalled": "Bereits installiert",
       "setupInstalled": "Installiert, weiter",
       "setupBack": "Zurück",

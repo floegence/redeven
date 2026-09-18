@@ -5163,6 +5163,8 @@
       "revokeAll": "모든 권한 취소",
       "extension": "Chrome 확장 프로그램",
       "extensionHint": "Flower가 Chrome을 사용할 수 있도록 Flower Browser 확장 프로그램을 한 번만 설치하세요.",
+      "setupUpdateTitle": "확장 프로그램 업데이트",
+      "setupUpdateHint": "설치된 확장 프로그램이 오래되었습니다. 여기에 표시된 폴더를 다시 로드하여 업데이트하세요.",
       "setupAlreadyInstalled": "이미 설치함",
       "setupInstalled": "설치 완료, 계속",
       "setupBack": "뒤로",

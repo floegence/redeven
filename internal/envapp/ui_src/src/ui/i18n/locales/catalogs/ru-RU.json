@@ -5266,6 +5266,8 @@
       "revokeAll": "Отозвать все права",
       "extension": "Расширение Chrome",
       "extensionHint": "Установите расширение Flower Browser один раз, чтобы Flower мог использовать Chrome.",
+      "setupUpdateTitle": "Обновить расширение",
+      "setupUpdateHint": "Установленное расширение устарело. Загрузите указанную здесь папку ещё раз.",
       "setupAlreadyInstalled": "Уже установлено",
       "setupInstalled": "Установлено, далее",
       "setupBack": "Назад",

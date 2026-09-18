@@ -53,5 +53,19 @@ test('reconnection drains old requests before binding and reusing native request
     ports[0].onDisconnect.emit(); await flush();
     assert.equal((await ui({ command: 'status' })).connected, true, 'old disconnect retired the new profile');
     assert.equal((await ui({ command: 'disconnect' })).connected, false);
+    const missing = connect(); await flush(); await flush();
+    chrome.runtime.lastError = { message: 'Specified native messaging host not found.' };
+    ports.at(-1).onDisconnect.emit(); delete chrome.runtime.lastError;
+    assert.equal((await missing).error, 'native_host_missing');
+    assert.equal((await ui({ command: 'status' })).error, 'native_host_missing');
+    const incompatible = connect(); await flush(); await flush();
+    ports.at(-1).onMessage.emit({ type: 'connection_error', code: 'extension_update_required' });
+    assert.equal((await incompatible).error, 'extension_update_required');
+    const recovered = connect(); await flush(); await flush();
+    ports.at(-1).onMessage.emit({ type: 'ready', protocol_version: 6 });
+    assert.equal((await recovered).connected, true);
+    assert.equal((await ui({ command: 'status' })).error, '');
+    await ui({ command: 'disconnect' });
+    assert.equal((await ui({ command: 'status' })).error, '');
   } finally { globalThis.chrome = original; await rm(directory, { recursive: true, force: true }); }
 });

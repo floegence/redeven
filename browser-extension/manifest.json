@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Flower Browser",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Let Flower work in the browser tabs you authorize.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAn6ezkRohxhDEcQW/H3jEFNSrbkhCo8oY7UxIIwq/pIGPxt4eLylAjudw8UjX/Y+FlbAwqTzjt09Ny0rxZ7J8zjewljVP0kH6P4KZ7Tg5BXYBlnkIt0iMKLhbSmhpiAH+hVhQFhwfxNWk+Nl15R5yocbGXQ13Zlc2n5uhCgFh4YXTSGwA8+Zfxg3dsxOtOL5K3OOGYDrq+nx5B0YhFZv3QQtAwNMi7vBOQHnh0lzAj/VBK+Jz9CQVmIW0M2kmQKVgggZ9RuUq7Ug3aQVdLud5VLJFJAsFDVlbmdGNZEuJvgaAJ8ARwgFaflgl/4FBi2SCSASzcjwLsV9n4WMAF8PDjwIDAQAB",
   "permissions": [

@@ -2,7 +2,7 @@ import { messages } from './messages.mjs';
 const locale = chrome.i18n.getUILanguage();
 const copy = messages[locale] || messages[Object.keys(messages).find(key => key.split('-')[0] === locale.split('-')[0])] || messages['en-US'];
 const byID = id => document.getElementById(id);
-for (const [id, key] of Object.entries({ intro: 'intro', 'profile-label': 'profile', 'connect-button': 'connect', disconnect: 'disconnect' })) byID(id).textContent = copy[key];
+for (const [id, key] of Object.entries({ intro: 'intro', 'profile-label': 'profile', 'connect-button': 'connect', disconnect: 'disconnect', repair: 'updateExtension' })) byID(id).textContent = copy[key];
 byID('profile').setAttribute('aria-label', copy.profile);
 // A Runtime-generated deep link supplies configuration, never consent. Chrome
 // keeps installation approval, and this button keeps connection approval.
@@ -13,8 +13,9 @@ let busy = false;
 function show(state) {
   if (!nativeHost && !supplied && validHost(state.nativeHost)) nativeHost = state.nativeHost;
   const connected = state.connected && state.nativeHost === nativeHost;
-  byID('status').textContent = state.error ? copy.failed : connected ? copy.connected : nativeHost ? copy.disconnected : copy.openFlower;
+  byID('status').textContent = state.error ? (copy[state.error] || copy.failed) : connected ? copy.connected : nativeHost ? copy.disconnected : copy.openFlower;
   byID('disconnect').hidden = !state.connected;
+  byID('repair').hidden = state.error !== 'extension_update_required';
   byID('connect').hidden = connected;
   byID('connect-button').disabled = busy || !nativeHost;
   if (state.profileName && !byID('profile').value) byID('profile').value = state.profileName;
@@ -28,4 +29,5 @@ byID('connect').addEventListener('submit', async event => {
   } catch { busy = false; show({ error: true }); }
 });
 byID('disconnect').addEventListener('click', async () => show(await chrome.runtime.sendMessage({ command: 'disconnect' })));
+byID('repair').addEventListener('click', () => void chrome.tabs.create({ url: 'chrome://extensions/' }));
 show(await chrome.runtime.sendMessage({ command: 'status' }));

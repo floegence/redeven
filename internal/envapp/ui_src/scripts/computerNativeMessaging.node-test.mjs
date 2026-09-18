@@ -29,9 +29,14 @@ test('native messaging launches the Runtime bridge and exchanges bounded profile
   let context, peer;
   try {
     const accepted = once(server, 'connection');
+    await rm(registration);
     context = await chromium.launchPersistentContext(path.join(directory, 'profile'), { channel: 'chromium', headless: true, chromiumSandbox: true,
       args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
     const popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html#${name}`);
+    await popup.locator('#connect-button').click();
+    await popup.waitForFunction(async () => (await chrome.runtime.sendMessage({ command: 'status' })).error === 'native_host_missing');
+    assert.equal(await popup.locator('#status').textContent().then(text => /expired|失效/u.test(text)), true, 'expired registration must have a specific recovery instruction');
+    await writeFile(registration, manifest, { flag: 'wx', mode: 0o600 });
     await popup.locator('#connect-button').click();
     let timer;
     try { [peer] = await Promise.race([accepted, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Chrome did not launch the native host')), 6000); })]); }

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -136,5 +137,73 @@ func TestExtensionStagingRejectsLinkedInstallDirectory(t *testing.T) {
 	entries, err := os.ReadDir(outside)
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("changed unrelated directory: %v %v", entries, err)
+	}
+}
+
+func TestExtensionSetupRepairsRegistrationAndAssetsAfterRestart(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", filepath.Join(root, "user"))
+	resources := filepath.Join(root, "resources")
+	if err := os.MkdirAll(filepath.Join(resources, "extension"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(resources, "extension", "manifest.json"), []byte("current-package"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	create := func() *ComputerUseRuntime {
+		registry := NewTargetRegistry()
+		if err := registry.Register(TargetDescriptor{ID: "browser-main", Kind: "browser.managed"}); err != nil {
+			t.Fatal(err)
+		}
+		host := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": NewPlaywrightTargetExecutor("/fixture/node", filepath.Join(resources, "helper.mjs"), filepath.Join(root, "profiles"))}, filepath.Join(root, "media"))
+		t.Cleanup(func() { _ = host.Close() })
+		return host
+	}
+	host := create()
+	setup, err := host.setupComputerExtension(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := host.extension.manifestPath
+	if _, err := os.Stat(manifest); err != nil {
+		t.Fatal(err)
+	}
+	// A deleted registration and a damaged package must both be repaired by the
+	// same explicit preparation path, even while the in-process hub exists.
+	if err := os.Remove(manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(setup.ExtensionPath); err != nil {
+		t.Fatal(err)
+	}
+	host.extension.mu.Lock()
+	host.extension.connectionError = "extension_update_required"
+	host.extension.mu.Unlock()
+	repaired, err := host.setupComputerExtension(context.Background())
+	if err != nil || !reflect.DeepEqual(repaired, setup) {
+		t.Fatalf("repair: %+v %v", repaired, err)
+	}
+	if body, err := os.ReadFile(filepath.Join(repaired.ExtensionPath, "manifest.json")); err != nil || string(body) != "current-package" {
+		t.Fatalf("package: %s %v", body, err)
+	}
+	if host.extensionStatus().Error != "" || len(host.extensionStatus().Profiles) != 0 {
+		t.Fatal("preparation retained failure or granted a connection")
+	}
+	if err := host.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(manifest); !os.IsNotExist(err) {
+		t.Fatalf("closed registration remains: %v", err)
+	}
+	restarted := create()
+	resumed, err := restarted.setupComputerExtension(context.Background())
+	if err != nil || !reflect.DeepEqual(resumed, setup) {
+		t.Fatalf("restart: %+v %v", resumed, err)
+	}
+	if _, err := os.Stat(restarted.extension.manifestPath); err != nil {
+		t.Fatal(err)
+	}
+	if len(restarted.extensionStatus().Profiles) != 0 {
+		t.Fatal("restart implicitly connected Chrome")
 	}
 }

@@ -13,7 +13,7 @@ export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | '
     disconnectBrowser: async targetID => { await request('POST', `${path}/disconnect`, { target_id: targetID }); },
     openExtension: action => request('POST', `${path}/extension/open`, { action }),
     setupExtension: () => request('POST', `${path}/extension/setup`),
-    listExtensionProfiles: () => request('GET', `${path}/extension/profiles`),
+    loadExtensionStatus: () => request('GET', `${path}/extension/status`),
     listExtensionTabs: (profileID) => request('GET', `${path}/extension/tabs?profile_id=${encodeURIComponent(profileID)}`),
     listTargets: () => request('GET', `${path}/targets`),
     listBrowserTabs: (cdpURL) => request('POST', `${path}/tabs`, { cdp_url: cdpURL }),

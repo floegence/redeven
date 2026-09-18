@@ -903,6 +903,8 @@
       "openConnection": "Connecter dans Chrome",
       "setupOpenFailed": "Impossible d’ouvrir Chrome ou le dossier. Vérifiez que Google Chrome est installé sur l’ordinateur qui exécute cet environnement, puis réessayez. Pour un environnement distant, l’ouverture se fait sur l’ordinateur distant.",
       "retryConnection": "Vérifier à nouveau",
+      "setupUpdateTitle": "Mettre à jour l’extension",
+      "setupUpdateHint": "L’extension installée est obsolète. Chargez à nouveau le dossier indiqué ici pour la mettre à jour.",
       "setupAlreadyInstalled": "Déjà installée",
       "setupInstalled": "Installée, continuer",
       "setupBack": "Retour",

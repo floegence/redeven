@@ -14,6 +14,7 @@ export function FlowerChromeConnection(props: {
   const [extensionsOpened, setExtensionsOpened] = createSignal(false);
   const [opening, setOpening] = createSignal(false);
   const [openFailed, setOpenFailed] = createSignal(false);
+  const [updateRequired, setUpdateRequired] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
   let pathInput: HTMLInputElement | undefined;
   let initialProfiles: Set<string> | undefined;
@@ -21,10 +22,19 @@ export function FlowerChromeConnection(props: {
   let timer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => { disposed = true; clearTimeout(timer); });
   const check = async (): Promise<boolean> => {
-    const profiles = await props.management.listExtensionProfiles!();
+    const connection = await props.management.loadExtensionStatus!();
+    const profiles = connection.profiles;
     if (disposed || completing) return true;
     if (!initialProfiles) initialProfiles = new Set(profiles.map(profile => profile.id));
-    if (!profiles.some(profile => props.reuseConnected || !initialProfiles!.has(profile.id))) return false;
+    if (connection.error === 'extension_update_required') {
+      if (!updateRequired()) {
+        setUpdateRequired(true); setStep('install'); setExtensionsOpened(false); setPhase('waiting');
+      }
+      return false;
+    }
+    if (!profiles.some(profile => props.reuseConnected || !initialProfiles!.has(profile.id))) {
+      return false;
+    }
     completing = true; setPhase('connected');
     await props.onConnected();
     return true;
@@ -53,7 +63,10 @@ export function FlowerChromeConnection(props: {
       await props.management.openExtension!(action);
       if (!disposed && !completing) {
         if (action === 'extensions') setExtensionsOpened(true);
-        if (action === 'connect') setPhase('confirming');
+        if (action === 'connect') {
+          setUpdateRequired(false); setPhase('confirming');
+          clearTimeout(timer); void poll();
+        }
       }
     } catch { if (!disposed) setOpenFailed(true); }
     finally { if (!disposed) setOpening(false); }
@@ -70,7 +83,7 @@ export function FlowerChromeConnection(props: {
     <ol class="grid grid-cols-2 gap-4 text-sm">
       <li aria-current={step() === 'install' ? 'step' : undefined}
         class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'install', 'border-border text-muted-foreground': step() !== 'install' }}>
-        <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs">1</span>{props.copy.setupInstallTitle}
+        <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs">1</span>{updateRequired() ? props.copy.setupUpdateTitle : props.copy.setupInstallTitle}
       </li>
       <li aria-current={step() === 'connect' ? 'step' : undefined}
         class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'connect', 'border-border text-muted-foreground': step() !== 'connect' }}>
@@ -86,7 +99,7 @@ export function FlowerChromeConnection(props: {
           <Button disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>
         </div>
       </>}>
-        <Show when={extensionsOpened()} fallback={<p class="text-sm leading-relaxed text-muted-foreground">{props.copy.extensionHint}</p>}>
+        <Show when={extensionsOpened()} fallback={<p class="text-sm leading-relaxed text-muted-foreground">{updateRequired() ? props.copy.setupUpdateHint : props.copy.extensionHint}</p>}>
           <ol class="list-decimal space-y-3 pl-5 text-sm leading-relaxed">
             <li>{props.copy.setupDeveloperMode}</li>
             <li>{props.copy.setupLoadUnpacked}</li>
@@ -107,7 +120,7 @@ export function FlowerChromeConnection(props: {
         </Show>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <Show when={extensionsOpened()} fallback={<>
-            <Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('connect')}>{props.copy.setupAlreadyInstalled}</Button>
+            <Show when={!updateRequired()}><Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('connect')}>{props.copy.setupAlreadyInstalled}</Button></Show>
             <Button disabled={opening()} onClick={() => void open('extensions')}>{props.copy.openExtensions}</Button>
           </>}>
             <Button size="sm" variant="ghost" disabled={opening()} onClick={() => void open('extensions')}>{props.copy.openExtensions}</Button>

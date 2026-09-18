@@ -8,7 +8,14 @@ export const messages = {
     "connected": "Connected. Return to Flower; your task continues automatically.",
     "disconnected": "Ready to connect.",
     "failed": "Unable to connect. Open Connect Chrome in Flower and try again.",
-    "openFlower": "Open Connect Chrome in Flower to prepare the connection."
+    "openFlower": "Open Connect Chrome in Flower to prepare the connection.",
+    "native_host_missing": "This connection has expired. Return to Flower and click Connect in Chrome again.",
+    "native_host_failed": "Chrome could not start the connection component. Reopen the connection guide in Flower.",
+    "native_host_forbidden": "Chrome blocked this connection. Check your browser management policy.",
+    "runtime_unavailable": "The environment connection ended. Keep the environment running, then click Connect in Chrome in Flower.",
+    "extension_update_required": "The extension needs an update. Follow Update extension in Flower to load the current folder.",
+    "connection_timeout": "The environment did not respond. Keep it running and try connecting again.",
+    "updateExtension": "Update extension"
   },
   "zh-CN": {
     "intro": "将此 Chrome 配置连接到 Flower。Flower 会使用独立任务标签页，并遵循对话中的权限设置。",
@@ -18,7 +25,14 @@ export const messages = {
     "connected": "已连接。返回 Flower 即可，任务会自动继续。",
     "disconnected": "可以连接了。",
     "failed": "无法连接。请在 Flower 中打开“连接 Chrome”后重试。",
-    "openFlower": "请在 Flower 中打开“连接 Chrome”以准备连接。"
+    "openFlower": "请在 Flower 中打开“连接 Chrome”以准备连接。",
+    "native_host_missing": "此连接已失效。返回 Flower，重新点击「前往 Chrome 连接」。",
+    "native_host_failed": "Chrome 无法启动连接组件。请在 Flower 中重新打开连接向导。",
+    "native_host_forbidden": "Chrome 阻止了此连接。请检查浏览器管理策略。",
+    "runtime_unavailable": "环境连接已断开。确保环境正在运行，再在 Flower 中点击「前往 Chrome 连接」。",
+    "extension_update_required": "扩展需要更新。请按 Flower 中「更新扩展」的步骤加载当前文件夹。",
+    "connection_timeout": "环境没有响应。确保环境正在运行后重新连接。",
+    "updateExtension": "更新扩展"
   },
   "zh-TW": {
     "intro": "將此 Chrome 設定檔連線至 Flower。Flower 會使用獨立工作分頁，並遵循對話中的權限設定。",
@@ -28,7 +42,14 @@ export const messages = {
     "connected": "已連線。返回 Flower 即可，工作會自動繼續。",
     "disconnected": "可以連線了。",
     "failed": "無法連線。請在 Flower 中開啟「連線 Chrome」後重試。",
-    "openFlower": "請在 Flower 中開啟「連線 Chrome」以準備連線。"
+    "openFlower": "請在 Flower 中開啟「連線 Chrome」以準備連線。",
+    "native_host_missing": "此連線已失效。返回 Flower，重新點選「前往 Chrome 連線」。",
+    "native_host_failed": "Chrome 無法啟動連線元件。請在 Flower 中重新開啟連線指引。",
+    "native_host_forbidden": "Chrome 已封鎖此連線。請檢查瀏覽器管理政策。",
+    "runtime_unavailable": "環境連線已中斷。確認環境正在執行，再於 Flower 中點選「前往 Chrome 連線」。",
+    "extension_update_required": "擴充功能需要更新。請依 Flower 中「更新擴充功能」的步驟載入目前的資料夾。",
+    "connection_timeout": "環境沒有回應。確認環境正在執行後重新連線。",
+    "updateExtension": "更新擴充功能"
   },
   "ja-JP": {
     "intro": "この Chrome プロファイルを Flower に接続します。Flower は専用タブを使用し、会話の権限設定に従います。",
@@ -38,7 +59,14 @@ export const messages = {
     "connected": "接続しました。Flower に戻ってください。タスクは自動で続行されます。",
     "disconnected": "接続の準備ができました。",
     "failed": "接続できません。Flower で「Chrome に接続」を開いて再試行してください。",
-    "openFlower": "Flower で「Chrome に接続」を開いて接続を準備してください。"
+    "openFlower": "Flower で「Chrome に接続」を開いて接続を準備してください。",
+    "native_host_missing": "この接続は無効になりました。Flower に戻り、「Chrome で接続」をもう一度クリックしてください。",
+    "native_host_failed": "Chrome が接続コンポーネントを起動できませんでした。Flower の接続ガイドを開き直してください。",
+    "native_host_forbidden": "Chrome がこの接続をブロックしました。ブラウザの管理ポリシーを確認してください。",
+    "runtime_unavailable": "環境との接続が切れました。環境を起動した状態で、Flower の「Chrome で接続」をクリックしてください。",
+    "extension_update_required": "拡張機能の更新が必要です。Flower の「拡張機能を更新」に従って現在のフォルダを読み込んでください。",
+    "connection_timeout": "環境が応答しませんでした。環境を起動した状態で接続し直してください。",
+    "updateExtension": "拡張機能を更新"
   },
   "ko-KR": {
     "intro": "이 Chrome 프로필을 Flower에 연결합니다. Flower는 별도 작업 탭을 사용하며 대화의 권한 설정을 따릅니다.",
@@ -48,7 +76,14 @@ export const messages = {
     "connected": "연결되었습니다. Flower로 돌아가세요. 작업은 자동으로 계속됩니다.",
     "disconnected": "연결할 준비가 되었습니다.",
     "failed": "연결할 수 없습니다. Flower에서 Chrome 연결을 열고 다시 시도하세요.",
-    "openFlower": "Flower에서 Chrome 연결을 열어 연결을 준비하세요."
+    "openFlower": "Flower에서 Chrome 연결을 열어 연결을 준비하세요.",
+    "native_host_missing": "이 연결이 만료되었습니다. Flower로 돌아가 ‘Chrome에서 연결’을 다시 클릭하세요.",
+    "native_host_failed": "Chrome이 연결 구성 요소를 시작하지 못했습니다. Flower에서 연결 안내를 다시 여세요.",
+    "native_host_forbidden": "Chrome이 이 연결을 차단했습니다. 브라우저 관리 정책을 확인하세요.",
+    "runtime_unavailable": "환경 연결이 종료되었습니다. 환경을 실행한 상태에서 Flower의 ‘Chrome에서 연결’을 클릭하세요.",
+    "extension_update_required": "확장 프로그램 업데이트가 필요합니다. Flower의 ‘확장 프로그램 업데이트’ 안내에 따라 현재 폴더를 로드하세요.",
+    "connection_timeout": "환경이 응답하지 않았습니다. 환경을 실행한 상태에서 다시 연결하세요.",
+    "updateExtension": "확장 프로그램 업데이트"
   },
   "fr-FR": {
     "intro": "Connectez ce profil Chrome à Flower. Flower utilisera un onglet dédié et respectera les autorisations de votre conversation.",
@@ -58,7 +93,14 @@ export const messages = {
     "connected": "Connecté. Revenez à Flower ; votre tâche reprend automatiquement.",
     "disconnected": "Prêt à se connecter.",
     "failed": "Connexion impossible. Ouvrez Connecter Chrome dans Flower et réessayez.",
-    "openFlower": "Ouvrez Connecter Chrome dans Flower pour préparer la connexion."
+    "openFlower": "Ouvrez Connecter Chrome dans Flower pour préparer la connexion.",
+    "native_host_missing": "Cette connexion a expiré. Revenez dans Flower et cliquez à nouveau sur « Connecter dans Chrome ».",
+    "native_host_failed": "Chrome n’a pas pu démarrer le composant de connexion. Rouvrez le guide de connexion dans Flower.",
+    "native_host_forbidden": "Chrome a bloqué cette connexion. Vérifiez la politique de gestion de votre navigateur.",
+    "runtime_unavailable": "La connexion à l’environnement est terminée. Gardez l’environnement actif, puis cliquez sur « Connecter dans Chrome » dans Flower.",
+    "extension_update_required": "L’extension doit être mise à jour. Suivez « Mettre à jour l’extension » dans Flower pour charger le dossier actuel.",
+    "connection_timeout": "L’environnement n’a pas répondu. Gardez-le actif et réessayez de vous connecter.",
+    "updateExtension": "Mettre à jour l’extension"
   },
   "de-DE": {
     "intro": "Verbinden Sie dieses Chrome-Profil mit Flower. Flower verwendet einen eigenen Tab und beachtet die Berechtigungen Ihrer Unterhaltung.",
@@ -68,7 +110,14 @@ export const messages = {
     "connected": "Verbunden. Kehren Sie zu Flower zurück; Ihre Aufgabe wird automatisch fortgesetzt.",
     "disconnected": "Bereit zum Verbinden.",
     "failed": "Verbindung fehlgeschlagen. Öffnen Sie Chrome verbinden in Flower und versuchen Sie es erneut.",
-    "openFlower": "Öffnen Sie Chrome verbinden in Flower, um die Verbindung vorzubereiten."
+    "openFlower": "Öffnen Sie Chrome verbinden in Flower, um die Verbindung vorzubereiten.",
+    "native_host_missing": "Diese Verbindung ist abgelaufen. Kehren Sie zu Flower zurück und klicken Sie erneut auf „In Chrome verbinden“.",
+    "native_host_failed": "Chrome konnte die Verbindungskomponente nicht starten. Öffnen Sie die Verbindungsanleitung in Flower erneut.",
+    "native_host_forbidden": "Chrome hat diese Verbindung blockiert. Prüfen Sie die Verwaltungsrichtlinien Ihres Browsers.",
+    "runtime_unavailable": "Die Verbindung zur Umgebung wurde beendet. Lassen Sie die Umgebung laufen und klicken Sie in Flower auf „In Chrome verbinden“.",
+    "extension_update_required": "Die Erweiterung muss aktualisiert werden. Folgen Sie „Erweiterung aktualisieren“ in Flower und laden Sie den aktuellen Ordner.",
+    "connection_timeout": "Die Umgebung antwortet nicht. Lassen Sie sie laufen und versuchen Sie die Verbindung erneut.",
+    "updateExtension": "Erweiterung aktualisieren"
   },
   "es-ES": {
     "intro": "Conecta este perfil de Chrome a Flower. Flower usará una pestaña independiente y respetará los permisos de tu conversación.",
@@ -78,7 +127,14 @@ export const messages = {
     "connected": "Conectado. Vuelve a Flower; tu tarea continuará automáticamente.",
     "disconnected": "Listo para conectar.",
     "failed": "No se puede conectar. Abre Conectar Chrome en Flower y vuelve a intentarlo.",
-    "openFlower": "Abre Conectar Chrome en Flower para preparar la conexión."
+    "openFlower": "Abre Conectar Chrome en Flower para preparar la conexión.",
+    "native_host_missing": "Esta conexión ha caducado. Vuelve a Flower y haz clic de nuevo en «Conectar en Chrome».",
+    "native_host_failed": "Chrome no pudo iniciar el componente de conexión. Abre de nuevo la guía de conexión en Flower.",
+    "native_host_forbidden": "Chrome ha bloqueado esta conexión. Comprueba la política de administración del navegador.",
+    "runtime_unavailable": "La conexión con el entorno ha finalizado. Mantén el entorno en ejecución y haz clic en «Conectar en Chrome» en Flower.",
+    "extension_update_required": "La extensión necesita una actualización. Sigue «Actualizar extensión» en Flower para cargar la carpeta actual.",
+    "connection_timeout": "El entorno no ha respondido. Mantenlo en ejecución e intenta conectar de nuevo.",
+    "updateExtension": "Actualizar extensión"
   },
   "pt-BR": {
     "intro": "Conecte este perfil do Chrome ao Flower. O Flower usará uma aba separada e seguirá as permissões da sua conversa.",
@@ -88,7 +144,14 @@ export const messages = {
     "connected": "Conectado. Volte ao Flower; sua tarefa continua automaticamente.",
     "disconnected": "Pronto para conectar.",
     "failed": "Não foi possível conectar. Abra Conectar o Chrome no Flower e tente novamente.",
-    "openFlower": "Abra Conectar o Chrome no Flower para preparar a conexão."
+    "openFlower": "Abra Conectar o Chrome no Flower para preparar a conexão.",
+    "native_host_missing": "Esta conexão expirou. Volte ao Flower e clique novamente em “Conectar no Chrome”.",
+    "native_host_failed": "O Chrome não conseguiu iniciar o componente de conexão. Abra novamente o guia de conexão no Flower.",
+    "native_host_forbidden": "O Chrome bloqueou esta conexão. Verifique a política de gerenciamento do navegador.",
+    "runtime_unavailable": "A conexão com o ambiente foi encerrada. Mantenha o ambiente em execução e clique em “Conectar no Chrome” no Flower.",
+    "extension_update_required": "A extensão precisa ser atualizada. Siga “Atualizar extensão” no Flower para carregar a pasta atual.",
+    "connection_timeout": "O ambiente não respondeu. Mantenha-o em execução e tente conectar novamente.",
+    "updateExtension": "Atualizar extensão"
   },
   "ru-RU": {
     "intro": "Подключите этот профиль Chrome к Flower. Flower будет использовать отдельную вкладку и соблюдать разрешения вашей беседы.",
@@ -98,6 +161,13 @@ export const messages = {
     "connected": "Подключено. Вернитесь в Flower — задача продолжится автоматически.",
     "disconnected": "Всё готово к подключению.",
     "failed": "Не удалось подключиться. Откройте Подключить Chrome в Flower и повторите попытку.",
-    "openFlower": "Откройте Подключить Chrome в Flower для подготовки подключения."
+    "openFlower": "Откройте Подключить Chrome в Flower для подготовки подключения.",
+    "native_host_missing": "Срок действия подключения истёк. Вернитесь в Flower и снова нажмите «Подключить в Chrome».",
+    "native_host_failed": "Chrome не смог запустить компонент подключения. Снова откройте руководство по подключению в Flower.",
+    "native_host_forbidden": "Chrome заблокировал это подключение. Проверьте политики управления браузером.",
+    "runtime_unavailable": "Соединение с окружением прервано. Оставьте окружение запущенным и нажмите «Подключить в Chrome» в Flower.",
+    "extension_update_required": "Расширение нужно обновить. Следуйте шагу «Обновить расширение» в Flower, чтобы загрузить текущую папку.",
+    "connection_timeout": "Окружение не ответило. Оставьте его запущенным и повторите подключение.",
+    "updateExtension": "Обновить расширение"
   }
 };
