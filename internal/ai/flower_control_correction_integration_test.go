@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -17,8 +19,15 @@ import (
 )
 
 func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
-	for _, exhaust := range []bool{false, true} {
-		t.Run(fmt.Sprintf("exhaust=%t", exhaust), func(t *testing.T) {
+	for _, mode := range []string{"schema", "exhaust", "mixed"} {
+		t.Run(mode, func(t *testing.T) {
+			exhaust := mode == "exhaust"
+			stateDir := t.TempDir()
+			effectFile := filepath.Join(stateDir, "ordinary-action.txt")
+			correction := "required_from_user must be an array"
+			if mode == "mixed" {
+				correction = "submit the control call separately"
+			}
 			const valid = `{"reason_code":"missing_external_input","required_from_user":["Choose a device."],"evidence_refs":["message:latest"],"questions":[{"id":"target","header":"Device","question":"Which device should I inspect?","response_mode":"write","is_secret":false,"write_label":"Device","write_placeholder":"Type a device"}]}`
 			invalid := strings.Replace(valid, `"required_from_user":["Choose a device."]`, `"required_from_user":"[\"Choose a device.\"]"`, 1)
 			var calls atomic.Int32
@@ -41,7 +50,7 @@ func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
 				count := calls.Add(1)
 				if count >= 2 {
 					raw, _ := json.Marshal(request["input"])
-					if !requestContainsPairedToolHistory(request, "ask_user") || !strings.Contains(string(raw), "required_from_user must be an array") {
+					if !requestContainsPairedToolHistory(request, "ask_user") || !strings.Contains(string(raw), correction) {
 						t.Errorf("request %d lost rejected call or validation result: %s", count, raw)
 					}
 				}
@@ -58,7 +67,7 @@ func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
 					return
 				}
 				args := invalid
-				if count == 2 && !exhaust {
+				if mode == "mixed" || count == 2 && !exhaust {
 					args = valid
 				}
 				output := []any{}
@@ -67,13 +76,16 @@ func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
 				}
 				callID := fmt.Sprintf("ask-%d", count)
 				output = append(output, map[string]any{"type": "function_call", "id": "item-" + callID, "call_id": callID, "name": "ask_user", "arguments": args})
+				if mode == "mixed" && count == 1 {
+					arguments, _ := json.Marshal(map[string]any{"command": "printf action >> '" + effectFile + "'"})
+					output = append(output, map[string]any{"type": "function_call", "id": "ordinary-item", "call_id": "ordinary-call", "name": "terminal_exec", "arguments": string(arguments)})
+				}
 				writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": fmt.Sprintf("response-%d", count), "status": "completed", "output": output}})
 			}))
 			t.Cleanup(provider.Close)
-			stateDir := t.TempDir()
 			meta := &session.Meta{EndpointID: "env_question", ChannelID: "channel", NamespacePublicID: "namespace", UserPublicID: "user", CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true}
 			svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
-				Config:         &config.AIConfig{CurrentModelID: "deepseek/deepseek-v4-flash", Providers: []config.AIProvider{{ID: "deepseek", Name: "DeepSeek", Type: "deepseek", BaseURL: provider.URL, Models: []config.AIProviderModel{{ModelName: "deepseek-v4-flash"}}}}},
+				Config:         &config.AIConfig{PermissionType: config.AIPermissionFullAccess, CurrentModelID: "deepseek/deepseek-v4-flash", Providers: []config.AIProvider{{ID: "deepseek", Name: "DeepSeek", Type: "deepseek", BaseURL: provider.URL, Models: []config.AIProviderModel{{ModelName: "deepseek-v4-flash"}}}}},
 				RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second, ResolveProviderAPIKey: func(string) (string, bool, error) { return "test-key", true, nil },
 			})
 			if err != nil {
@@ -84,13 +96,14 @@ func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ClientRequestID: "question", ThreadID: thread.ThreadID, Input: RunInput{Text: "Inspect the device."}}); err != nil {
+			if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ClientRequestID: "question", ThreadID: thread.ThreadID, Input: RunInput{Text: "Inspect the device."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
 				t.Fatal(err)
 			}
 			select {
 			case <-correctionStarted:
 			case <-time.After(5 * time.Second):
-				t.Fatal("no correction request")
+				view, viewErr := svc.GetThread(t.Context(), meta, thread.ThreadID)
+				t.Fatalf("no correction request: view=%+v err=%v", view, viewErr)
 			}
 			during, err := svc.GetThread(t.Context(), meta, thread.ThreadID)
 			if err != nil {
@@ -106,7 +119,7 @@ func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
 				t.Fatal(err)
 			}
 			raw, _ := json.Marshal(detail.Current.Items)
-			if strings.Contains(string(raw), "required_from_user must be an array") {
+			if strings.Contains(string(raw), correction) {
 				t.Fatalf("technical correction leaked into UI: %s", raw)
 			}
 			if !strings.Contains(string(raw), "I need one device detail.") {
@@ -129,6 +142,12 @@ func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
 				t.Fatal(err)
 			}
 			waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" && calls.Load() == 4 })
+			if mode == "mixed" {
+				result, err := os.ReadFile(effectFile)
+				if err != nil || string(result) != "action" {
+					t.Fatalf("ordinary action replayed or missing: %q %v", result, err)
+				}
+			}
 		})
 	}
 }

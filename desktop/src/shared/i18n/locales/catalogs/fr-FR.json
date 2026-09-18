@@ -2659,5 +2659,12 @@
     "notChecked": "L’état de l’environnement d’exécution n’a pas encore été vérifié.",
     "unconfirmed": "Impossible de confirmer l’état de l’environnement d’exécution.",
     "addressUnavailable": "L’environnement d’exécution est actif, mais n’a pas indiqué d’adresse d’accès."
+  },
+  "flowerRuntime": {
+    "runtimeTitle": "Mettez à jour le moteur d’exécution pour utiliser Flower",
+    "desktopTitle": "Mettez à jour Desktop pour utiliser Flower",
+    "runtimeDetail": "Ce moteur d’exécution est incompatible avec Desktop Flower. Mettez-le à jour pour continuer. Votre brouillon est conservé ; l’application propre à l’environnement reste disponible.",
+    "desktopDetail": "Ce moteur d’exécution nécessite une version plus récente de Desktop. Mettez à jour Desktop pour continuer. Votre brouillon est conservé ; l’application propre à l’environnement reste disponible.",
+    "connectedBuild": "Moteur d’exécution connecté : {version} · {commit}"
   }
 }

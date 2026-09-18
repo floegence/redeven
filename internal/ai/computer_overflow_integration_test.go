@@ -107,7 +107,9 @@ func testComputerDeepSeekImageOverflow(t *testing.T, longHistory bool) {
 	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "start", Model: "deepseek/deepseek-v4-flash-vision-exp", Input: RunInput{Text: "Complete eight browser steps."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
 		t.Fatal(err)
 	}
-	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "success" || v.RunStatus == "failed" })
+	// Eight image steps and compaction must fit the configured run deadline,
+	// including race instrumentation; the generic five-second UI wait is shorter.
+	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "success" || v.RunStatus == "failed" }, 20*time.Second)
 	if view.RunStatus != "success" {
 		t.Fatalf("production image overflow recovery failed: %s %s", view.RunErrorCode, view.RunError)
 	}

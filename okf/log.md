@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-18: Flower history and Desktop compatibility
+
+- Adopt published Floret v7.16.2 mixed-call correction and exact waiting-run provider state; keep history and interaction ownership upstream.
+- Gate Desktop Flower commands, streams and frames with one protocol/epoch check. Preserve drafts, expose existing updates and keep Runtime-hosted Env App access independent.
+- Record bundled and actually connected build identities in development logs; retain epoch 24 and all storage contracts.
+
 ## 2026-09-18: Context ring without an inline percentage
 
 * Keep only the ring in the composer; expose the confirmed percentage through the tooltip and accessible description.

@@ -1,0 +1,55 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { createSignal, onMount } from 'solid-js';
+import { render } from 'solid-js/web';
+import { createDesktopI18n } from '../../shared/i18n';
+import { normalizeRuntimeServiceSnapshot, RUNTIME_SERVICE_COMPATIBILITY_EPOCH as epoch, RUNTIME_SERVICE_PROTOCOL_VERSION as protocol } from '../../shared/runtimeService';
+import { createFlowerComposerDraftCoordinator } from '../../../../internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator';
+import { DesktopFlowerRuntimeBoundary } from './DesktopFlowerRuntimeBoundary';
+
+const disposers: Array<() => void> = [];
+afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); document.body.innerHTML = ''; });
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+const runtime = (compatibility_epoch: number) => normalizeRuntimeServiceSnapshot({ protocol_version: protocol, compatibility_epoch, compatibility: 'compatible', open_readiness: { state: 'openable' }, runtime_version: 'v0.0.0-dev', runtime_commit: '0123456789abcdef' });
+
+it('blocks client mounting before update and keeps the existing draft through failure and recovery', async () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  disposers.push(() => coordinator.dispose());
+  coordinator.open('').mutate(value => ({ ...value, text: 'Use my system browser' }));
+  const [snapshot, setSnapshot] = createSignal(runtime(epoch - 1));
+  const load = vi.fn();
+  let attempts = 0;
+  const recover = vi.fn(async () => { if (++attempts === 2) setSnapshot(runtime(epoch)); });
+  const back = vi.fn();
+  const Composer = () => {
+    const draft = coordinator.open('');
+    onMount(load);
+    return <textarea aria-label="Draft" value={draft.snapshot().value.text} onInput={event => draft.mutate(value => ({ ...value, text: event.currentTarget.value }))} />;
+  };
+  disposers.push(render(() => <DesktopFlowerRuntimeBoundary snapshot={snapshot()} i18n={createDesktopI18n('en-US')} onRecover={recover} onBack={back}><Composer /></DesktopFlowerRuntimeBoundary>, document.body));
+  await settle();
+  expect(load).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain('Update the runtime to use Flower');
+  expect(document.body.textContent).toContain('0123456789ab');
+  (document.querySelector('button') as HTMLButtonElement).click();
+  await settle();
+  expect(document.querySelector('[data-flower-runtime-blocker]')).not.toBeNull();
+  expect(document.querySelector('button')?.disabled).toBe(false);
+  expect(load).not.toHaveBeenCalled();
+  (document.querySelector('button') as HTMLButtonElement).click();
+  await settle();
+  expect(recover).toHaveBeenNthCalledWith(2, 'runtime_update_required');
+  expect(document.querySelector('textarea')?.value).toBe('Use my system browser');
+  const textarea = document.querySelector('textarea')!;
+  textarea.value = 'Keep this unsent draft';
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  setSnapshot(runtime(epoch + 1));
+  await settle();
+  expect(document.body.textContent).toContain('Update Desktop to use Flower');
+  expect(document.querySelector('textarea')).toBeNull();
+  expect(coordinator.read('').value.text).toBe('Keep this unsent draft');
+  (document.querySelectorAll('button')[1] as HTMLButtonElement).click();
+  expect(back).toHaveBeenCalledOnce();
+  setSnapshot(runtime(epoch));
+  await settle();
+  expect(document.querySelector('textarea')?.value).toBe('Keep this unsent draft');
+});

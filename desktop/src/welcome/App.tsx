@@ -1,3 +1,5 @@
+import { DesktopFlowerRuntimeBoundary } from './flower/DesktopFlowerRuntimeBoundary';
+import { runtimeFlowerBlocker } from '../shared/runtimeFlowerAccess';
 import { buildRuntimeConnectionRows, runtimeConnectionIsOnThisDevice, isShareableConnectionAddress, type DesktopShareableConnectionAddress } from '../shared/desktopEnvironmentConnection';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../shared/desktopCertificate';
 import { For, Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
@@ -1232,6 +1234,8 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'Restart this runtime with the current Desktop Runtime before connecting it to Redeven Cloud.': 'runtimeMessage.restartRuntimeForRuntimeControl',
     'Runtime-control is not available for this runtime.': 'runtimeMessage.runtimeControlUnavailable',
     'Open this runtime to prepare the Desktop bridge and provider connection.': 'runtimeMessage.openRuntimePrepareProviderConnection',
+    'Update Redeven Desktop before using Flower with this Runtime.': 'flowerRuntime.desktopDetail',
+    'Update this Runtime before using Desktop Flower. Your draft is kept.': 'flowerRuntime.runtimeDetail',
     'Update this runtime before continuing.': 'runtimeMessage.updateRuntimeBeforeContinuing',
     'Update this incompatible runtime before continuing.': 'runtimeMessage.updateIncompatibleRuntimeBeforeContinuing',
     'Update Redeven Desktop before continuing with this local runtime.': 'runtimeMessage.updateDesktopBeforeLocalRuntime',
@@ -3057,11 +3061,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     snapshot().environments.find((environment) => environment.kind === 'local_environment')
       ?? null
   ));
-  const flowerFilesystemScopeKey = createMemo(() => {
+  const flowerRuntimeEnvironment = createMemo(() => {
     const targetID = snapshot().default_flower_runtime_target_id;
     const environment = targetID
       ? snapshot().environments.find((entry) => entry.id === targetID || entry.managed_runtime_target_id === targetID)
       : localEnvironmentEntry();
+    return environment;
+  });
+  const flowerFilesystemScopeKey = createMemo(() => {
+    const targetID = snapshot().default_flower_runtime_target_id;
+    const environment = flowerRuntimeEnvironment();
     return JSON.stringify([targetID, environment?.id, environment?.runtime_started_at_unix_ms, environment?.runtime_health, environment?.open_session_key]);
   });
   const flowerRuntimeLifecycleProgress = createMemo(() => {
@@ -6132,6 +6141,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     anchor?: FlowerTurnLauncherAnchor,
   ): void {
+    const blocker = runtimeFlowerBlocker(environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment()));
+    if (blocker && blocker.code !== 'runtime_not_ready') {
+      void openFlowerSurface();
+      return;
+    }
     setFlowerTurnLauncherIntent(buildEnvironmentFlowerTurnLauncherIntent(environment));
     setFlowerTurnLauncherAnchor(anchor ?? null);
     setFlowerTurnLauncherOpen(true);
@@ -6454,40 +6468,52 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             />
           )}
         >
-          <FlowerSurface
-            draftCoordinator={flowerDraftCoordinator}
-            filesystemScopeKey={flowerFilesystemScopeKey()}
-            adapter={createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
-              runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment'),
-              runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
-              onSettingsChanged: refreshSnapshot,
-            })}
-            notify={(notice) => {
-              showActionToast(notice.message, notice.tone, {
-                ...(notice.title ? { title: notice.title } : {}),
-              });
+          <DesktopFlowerRuntimeBoundary
+            snapshot={environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment())}
+            i18n={i18n()}
+            onBack={() => void openEnvironmentCenterSurface()}
+            onRecover={async (code) => {
+              const environment = flowerRuntimeEnvironment();
+              if (!environment) return;
+              await triggerLocalEnvironmentAction(environment, { intent: code === 'desktop_update_required' ? 'update_desktop' : 'update_runtime', label: '', enabled: true, variant: 'default' });
+              await refreshSnapshot();
             }}
-            copy={createDesktopFlowerSurfaceCopy(i18n())}
-            warmup={flowerWarmupState()}
-            settingsFocusRequest={snapshot().flower_settings_focus_revision}
-            focusThreadRequest={flowerFocusThreadRequest()}
-            sidebarLeadingAction={(
-              <button
-                type="button"
-                class="flower-sidebar-leading-action"
-                aria-label={i18n().t('shell.backToEnvironments')}
-                title={i18n().t('shell.backToEnvironments')}
-                onClick={() => void openEnvironmentCenterSurface()}
-              >
-                <ArrowLeft class="h-4 w-4" />
-              </button>
-            )}
-            onFocusThreadRequestConsumed={(requestID) => {
-              setFlowerFocusThreadRequest((current) => (
-                current?.request_id === requestID ? null : current
-              ));
-            }}
-          />
+          >
+            <FlowerSurface
+              draftCoordinator={flowerDraftCoordinator}
+              filesystemScopeKey={flowerFilesystemScopeKey()}
+              adapter={createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment'),
+                runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
+                onSettingsChanged: refreshSnapshot,
+              })}
+              notify={(notice) => {
+                showActionToast(notice.message, notice.tone, {
+                  ...(notice.title ? { title: notice.title } : {}),
+                });
+              }}
+              copy={createDesktopFlowerSurfaceCopy(i18n())}
+              warmup={flowerWarmupState()}
+              settingsFocusRequest={snapshot().flower_settings_focus_revision}
+              focusThreadRequest={flowerFocusThreadRequest()}
+              sidebarLeadingAction={(
+                <button
+                  type="button"
+                  class="flower-sidebar-leading-action"
+                  aria-label={i18n().t('shell.backToEnvironments')}
+                  title={i18n().t('shell.backToEnvironments')}
+                  onClick={() => void openEnvironmentCenterSurface()}
+                >
+                  <ArrowLeft class="h-4 w-4" />
+                </button>
+              )}
+              onFocusThreadRequestConsumed={(requestID) => {
+                setFlowerFocusThreadRequest((current) => (
+                  current?.request_id === requestID ? null : current
+                ));
+              }}
+            />
+          </DesktopFlowerRuntimeBoundary>
         </Show>
       </DesktopLauncherShell>
 

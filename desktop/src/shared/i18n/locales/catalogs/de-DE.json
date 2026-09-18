@@ -2659,5 +2659,12 @@
     "notChecked": "Der Status der Laufzeitumgebung wurde noch nicht geprüft.",
     "unconfirmed": "Der Status der Laufzeitumgebung konnte nicht bestätigt werden.",
     "addressUnavailable": "Die Laufzeitumgebung läuft, hat aber keine Zugriffsadresse gemeldet."
+  },
+  "flowerRuntime": {
+    "runtimeTitle": "Laufzeit aktualisieren, um Flower zu nutzen",
+    "desktopTitle": "Desktop aktualisieren, um Flower zu nutzen",
+    "runtimeDetail": "Diese Laufzeit ist mit Desktop Flower nicht kompatibel. Aktualisieren Sie sie, um fortzufahren. Ihr Entwurf bleibt erhalten; die eigene App der Umgebung ist weiterhin verfügbar.",
+    "desktopDetail": "Diese Laufzeit benötigt eine neuere Desktop-Version. Aktualisieren Sie Desktop, um fortzufahren. Ihr Entwurf bleibt erhalten; die eigene App der Umgebung ist weiterhin verfügbar.",
+    "connectedBuild": "Verbundene Laufzeit: {version} · {commit}"
   }
 }

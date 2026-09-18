@@ -2,6 +2,13 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
+  flowerRuntime: {
+    "runtimeTitle": "Update the runtime to use Flower",
+    "desktopTitle": "Update Desktop to use Flower",
+    "runtimeDetail": "This runtime is incompatible with Desktop Flower. Update it to continue. Your draft is kept; the environment’s own app remains available.",
+    "desktopDetail": "This runtime requires a newer Desktop. Update Desktop to continue. Your draft is kept; the environment’s own app remains available.",
+    "connectedBuild": "Connected runtime: {version} · {commit}"
+  },
   codespaceNative: {
     openFailed: 'The CodeSpace window could not finish opening. Return to Codespaces and try again.',
     portInUse: 'The saved local port for this CodeSpace is in use. Close the application using that port, then try again.',

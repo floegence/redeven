@@ -14,6 +14,19 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
+Published Floret v7.16.2 retains every ordinary/control call in a mixed model
+response and pairs each with its result in provider order. Valid ordinary tools
+execute once; mixed controls receive bounded correction to submit separately
+after the ordinary results. Only a later valid independent control opens an
+interaction. Correction feedback is hidden only from presentation, never from
+canonical model history. Floret owns identical live and final persistence and
+resumes native reasoning/search state from the exact waiting run after Respond
+or restart. Strict DeepSeek history checks remain enabled; Redeven does not
+clear provider state, reconstruct history, or retry uncertain effects.
+Redeven derives continuation support from the restored request protocol, not
+from newly edited settings; a pending native-search Turn keeps its frozen
+Responses transport across restart. No second capability cache is retained.
+
 Published Floret v7.14.0 applies sanitized tool Activity inside the existing
 thread actor using exact thread, turn, run, and tool-call identity. Validated
 calls publish description and command while pending; dispatch alone marks

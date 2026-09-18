@@ -347,7 +347,7 @@ export function normalizeRuntimeServiceSnapshot(
     runtime_version: compact(record.runtime_version) || undefined,
     runtime_commit: compact(record.runtime_commit) || undefined,
     runtime_build_time: compact(record.runtime_build_time) || undefined,
-    protocol_version: compact(record.protocol_version) || RUNTIME_SERVICE_PROTOCOL_VERSION,
+    protocol_version: compact(record.protocol_version) || undefined,
     compatibility_epoch: observedCompatibilityEpoch,
     effective_run_mode: compact(record.effective_run_mode) || compact(fallback.effectiveRunMode) || undefined,
     remote_enabled: typeof record.remote_enabled === 'boolean'

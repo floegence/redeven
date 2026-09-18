@@ -1,5 +1,6 @@
 import { desktopEnvironmentID } from './desktopPreferences';
 import { withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, type EnvironmentAccessOwner } from './environmentAccessSettings';
+import { assertRuntimeFlowerCompatible } from '../shared/runtimeFlowerAccess';
 import { runtimeFlowerPath, runtimeFlowerMethod, runtimeFlowerMethodAllowed } from './runtimeFlowerRoutes';
 import { certificateCommandArguments, selectDesktopCertificateImport, runDesktopCertificateCommand, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart, type CertificateImport } from './desktopCertificate';
 import { DESKTOP_CERTIFICATE_CHANNEL, parseDesktopCertificateRequest, parseDesktopCertificateReport, type DesktopCertificateRequest, type DesktopCertificateReport } from '../shared/desktopCertificate';
@@ -2018,6 +2019,17 @@ function updateLocalEnvironmentRuntimeRecord(
   runtimeHandle: DesktopSessionRuntimeHandle,
 ): LocalEnvironmentRuntimeRecord {
   const record = localEnvironmentRuntimeRecordFromHandle(environment, startup, runtimeHandle);
+  if (!app.isPackaged) {
+    const runtime = startup.runtime_service;
+    console.info('[redeven:runtime-connection]', {
+      bundle_version: desktopBundleCache?.version,
+      bundle_commit: desktopBundleCache?.commit,
+      runtime_version: runtime?.runtime_version,
+      runtime_commit: runtime?.runtime_commit,
+      protocol_version: runtime?.protocol_version,
+      compatibility_epoch: runtime?.compatibility_epoch,
+    });
+  }
   localEnvironmentRuntimeRecord = record;
   localRuntimeMaintenanceByEnvironmentID.delete(environment.id);
   return record;
@@ -10069,14 +10081,6 @@ async function attachLocalEnvironmentRuntime(
   );
 }
 
-function assertRuntimeFlowerRecordOpenable(
-  record: LocalEnvironmentRuntimeRecord | RuntimePlacementBridgeRecord,
-): void {
-  if (!runtimeServiceIsOpenable(record.startup.runtime_service)) {
-    throw new Error(runtimeServiceOpenReadinessLabel(record.startup.runtime_service) || 'The selected Environment is not ready to open Flower.');
-  }
-}
-
 async function ensureWSLRuntimeFlowerTarget(
   preferences: DesktopPreferences,
 ): Promise<RuntimeFlowerTarget> {
@@ -10109,7 +10113,7 @@ async function ensureWSLRuntimeFlowerTarget(
     }
     bridgeRecord = await openRuntimePlacementBridgeForReadyRecord(readyRecord);
   }
-  assertRuntimeFlowerRecordOpenable(bridgeRecord);
+  assertRuntimeFlowerCompatible(bridgeRecord.startup.runtime_service);
   return {
     record: bridgeRecord,
     local_environment: null,
@@ -10137,7 +10141,7 @@ async function ensureRuntimeFlowerRecordUncoalesced(preferences: DesktopPreferen
     if (!runtimePlan.can_open) {
       throw new Error(runtimePlan.message || 'Local Runtime is not ready to open Flower.');
     }
-    assertRuntimeFlowerRecordOpenable(attached);
+    assertRuntimeFlowerCompatible(attached.startup.runtime_service);
     return {
       record: attached,
       local_environment: environment,
@@ -10479,6 +10483,9 @@ async function openRuntimeFlowerStreamResponse(
   url: URL,
   headers: Readonly<Record<string, string>>,
 ): Promise<IncomingMessage> {
+  if (operation.settled) {
+    throw Object.assign(new Error('Flower stream was cancelled.'), { code: 'runtime_flower_stream_cancelled' });
+  }
   const stream = openRuntimeFlowerHTTPStream(url, { headers });
   operation.request = stream.request;
   return stream.response;
@@ -10510,10 +10517,6 @@ async function startRuntimeFlowerStream(
     return { ok: false, error: runtimeFlowerError('runtime_flower_stream_limit', 'Too many Flower streams are active.', 429, 10_000) };
   }
 
-  const flowerTarget = await ensureRuntimeFlowerRecord();
-  const record = flowerTarget.record;
-  const url = new URL(path, runtimeFlowerBaseURL(record));
-  const environment = flowerTarget.local_environment;
   const operation: RuntimeFlowerStreamOperation = {
     key,
     streamID: request.stream_id,
@@ -10526,6 +10529,10 @@ async function startRuntimeFlowerStream(
   sender.once('destroyed', operation.senderDestroyedListener);
 
   try {
+    const flowerTarget = await ensureRuntimeFlowerRecord();
+    const record = flowerTarget.record;
+    const url = new URL(path, runtimeFlowerBaseURL(record));
+    const environment = flowerTarget.local_environment;
     let accessHeaders = await runtimeFlowerAccessHeaders(record, environment);
     let response = await openRuntimeFlowerStreamResponse(operation, url, accessHeaders);
     if (response.statusCode === 423) {
@@ -17308,17 +17315,20 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         try {
           await ensureRuntimeFlowerRecord();
         } catch (error) {
-          await openUtilityWindow('launcher', {
-            surface: 'connect_environment',
-            issue: null,
-            stealAppFocus: true,
-          });
-          return launcherActionFailure(
-            'runtime_not_ready',
-            'global',
-            error instanceof Error ? error.message : String(error),
-            { shouldRefreshSnapshot: true },
-          );
+          const code = runtimeFlowerErrorFromUnknown(error).code;
+          if (code !== 'runtime_update_required' && code !== 'desktop_update_required') {
+            await openUtilityWindow('launcher', {
+              surface: 'connect_environment',
+              issue: null,
+              stealAppFocus: true,
+            });
+            return launcherActionFailure(
+              'runtime_not_ready',
+              'global',
+              error instanceof Error ? error.message : String(error),
+              { shouldRefreshSnapshot: true },
+            );
+          }
         }
       }
       return openUtilityWindow('launcher', {

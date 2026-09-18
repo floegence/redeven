@@ -2659,5 +2659,12 @@
     "notChecked": "Aún no se ha comprobado el estado del entorno de ejecución.",
     "unconfirmed": "No se ha podido confirmar el estado del entorno de ejecución.",
     "addressUnavailable": "El entorno de ejecución está activo, pero no ha comunicado una dirección de acceso."
+  },
+  "flowerRuntime": {
+    "runtimeTitle": "Actualiza el entorno de ejecución para usar Flower",
+    "desktopTitle": "Actualiza Desktop para usar Flower",
+    "runtimeDetail": "Este entorno de ejecución es incompatible con Desktop Flower. Actualízalo para continuar. Tu borrador se conserva y la aplicación del entorno sigue disponible.",
+    "desktopDetail": "Este entorno de ejecución requiere una versión más reciente de Desktop. Actualiza Desktop para continuar. Tu borrador se conserva y la aplicación del entorno sigue disponible.",
+    "connectedBuild": "Entorno de ejecución conectado: {version} · {commit}"
   }
 }

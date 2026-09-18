@@ -1703,7 +1703,7 @@ describe('main routing', () => {
     expect(ensureSrc).toContain('runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(target.record));');
     expect(ensureSrc).toContain('buildDesktopLocalRuntimeOpenPlan(');
     expect(ensureSrc).toContain('if (runtimePlan.requires_restart)');
-    expect(ensureSrc).toContain('assertRuntimeFlowerRecordOpenable(attached);');
+    expect(ensureSrc).toContain('assertRuntimeFlowerCompatible(attached.startup.runtime_service);');
     expect(ensureSrc).toContain('Initialize this environment before restarting it.');
     expect(ensureSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress({');
     expect(ensureSrc).not.toContain('setTimeout(');
