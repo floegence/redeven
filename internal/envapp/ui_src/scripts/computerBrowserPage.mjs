@@ -81,7 +81,7 @@ export class BrowserComputerPage {
   async initializeSession(session) {
     if (this.sessions.has(session)) return this.sessions.get(session);
     const ready = (async () => {
-      for (const event of ['Page.frameNavigated', 'DOM.documentUpdated']) session.on(event, () => this.invalidate());
+      for (const event of ['Page.frameAttached', 'Page.frameDetached', 'Page.frameNavigated', 'DOM.documentUpdated']) session.on(event, () => this.invalidate());
       for (const event of ['DOM.childNodeRemoved', 'DOM.attributeModified', 'DOM.childNodeInserted', 'Accessibility.nodesUpdated', 'Page.lifecycleEvent']) session.on(event, () => this.changed());
       session.on('Page.windowOpen', event => {
         // Opening a page completes an action; choosing that page is the
@@ -114,7 +114,7 @@ export class BrowserComputerPage {
             this.stopped = true; this.invalidate();
             await session.send('Fetch.failRequest', { requestId: event.requestId, errorReason: 'BlockedByClient' });
           }
-        })().catch(() => { this.guardFailure = true; this.stopped = true; this.invalidate(); });
+        })().catch(() => { this.guardFailure = true; this.invalidate(); });
       });
       await session.send('Page.enable');
       await session.send('Runtime.enable');
@@ -169,7 +169,7 @@ export class BrowserComputerPage {
   async inFrame(frame, expression) {
     const { executionContextId } = await frame.session.send('Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' });
     const result = await frame.session.send('Runtime.evaluate', { contextId: executionContextId, expression, returnByValue: true });
-    if (result.exceptionDetails) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+    if (result.exceptionDetails) throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: 'semantic_read' });
     return result.result.value;
   }
 
@@ -182,7 +182,8 @@ export class BrowserComputerPage {
     const reasons = new Set();
     const checkedSessions = new Set();
     let requiredOrigin = this.requiredOrigin;
-    if (this.guardFailure) reasons.add('unknown');
+    let scanFailed = false;
+    if (this.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
     if (requiredOrigin) reasons.add('site_permission');
     if (this.stopped) reasons.add('user_control');
     let frames;
@@ -195,7 +196,7 @@ export class BrowserComputerPage {
       const url = frame.frame.url;
       if (url !== 'about:blank' && !url.startsWith('about:srcdoc')) {
         try { if (!this.allowsOrigin(new URL(url).origin)) { reasons.add('site_permission'); requiredOrigin ||= new URL(url).origin; } }
-        catch { reasons.add('unknown'); }
+        catch { scanFailed = true; }
       }
       try {
         if (!checkedSessions.has(frame.session)) {
@@ -233,13 +234,14 @@ export class BrowserComputerPage {
         // A destroyed document makes its privacy scan obsolete. The caller
         // must discard all observations; it must not turn navigation into a
         // secret-input handoff or retry the action that already completed.
-        if (revision === this.revision) reasons.add('unknown');
+        scanFailed = true;
       }
     }
-    if (this.guardFailure) reasons.add('unknown');
+    if (this.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
     if (this.requiredOrigin) { reasons.add('site_permission'); requiredOrigin = this.requiredOrigin; }
     if (this.stopped) reasons.add('user_control');
     if (!reasons.size && revision !== this.revision) throw new Error('OBSERVATION_INVALIDATED');
+    if (!reasons.size && scanFailed) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
     return { level: reasons.size ? 'takeover' : 'routine', reason_codes: [...reasons], safe_to_capture: !reasons.size, safe_to_send_to_model: !reasons.size, ...(requiredOrigin ? { required_origin: requiredOrigin } : {}) };
   }
 

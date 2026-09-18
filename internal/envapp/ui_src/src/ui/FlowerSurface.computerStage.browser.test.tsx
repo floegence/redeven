@@ -176,8 +176,12 @@ describe('Flower computer stage', () => {
     await waitFor(() => document.querySelector('.flower-computer-stage .flower-computer-state')?.getAttribute('data-session-state') === 'paused');
     expect(document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src).toBe(lastPixels);
     expect(loadComputerFrame).toHaveBeenCalledTimes(4);
+    expect(document.querySelector('.flower-computer-stage')?.textContent).not.toContain('Resume control');
+    expect(document.querySelector('.flower-computer-stage [aria-label="Resume control"]')).toBeNull();
+    const viewerCommandsBeforeRetry = setComputerViewer.mock.calls.length;
     document.querySelector<HTMLButtonElement>('.flower-computer-header-actions button')!.click();
     await waitFor(() => loadComputerFrame.mock.calls.length === 5);
+    expect(setComputerViewer.mock.calls.length).toBeGreaterThan(viewerCommandsBeforeRetry);
     // Completion retires the ephemeral sampler. A reopened viewer must load
     // the durable keyframe, never the expired last live sample.
     const completedBase = runtimeCurrentView({ ...current, status: 'success', run_progress: undefined }, 2);

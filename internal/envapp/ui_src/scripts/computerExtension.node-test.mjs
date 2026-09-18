@@ -77,7 +77,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     const popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html#dev.floegence.redeven.r123456789abcdef0`);
     await popup.locator('#connect-button').click();
     await worker.evaluate(() => fixtureWait('hello'));
-    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 5 }));
+    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 6 }));
     let sequence = 0;
     const call = async (command, args = {}) => {
       const id = String(++sequence);
@@ -113,6 +113,29 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.equal(observed.safety?.level, 'routine', JSON.stringify(observed));
     assert.equal(observed.error, undefined, JSON.stringify(observed));
     assert.equal(observed.screenshot, undefined);
+    await t.test('debugger inspection failure stays technical and permits a fresh observation', async () => {
+      await worker.evaluate(() => {
+        globalThis.fixtureSendCommand = chrome.debugger.sendCommand.bind(chrome.debugger);
+        chrome.debugger.sendCommand = async (target, method, args) => {
+          if (method === 'DOMSnapshot.captureSnapshot') throw new Error('private inspection failure');
+          return globalThis.fixtureSendCommand(target, method, args);
+        };
+      });
+      try {
+        const failed = await execute('computer.screenshot');
+        assert.equal(failed.error, 'TARGET_OBSERVATION_UNAVAILABLE');
+        assert.equal(failed.result.action_executed, false);
+        assert.equal(failed.result.observation_stage, 'safety_scan');
+        assert.equal(failed.screenshot, undefined);
+        assert.equal(failed.safety, undefined);
+        assert.equal(JSON.stringify(failed).includes('private inspection failure'), false);
+      } finally {
+        await worker.evaluate(() => { chrome.debugger.sendCommand = globalThis.fixtureSendCommand; delete globalThis.fixtureSendCommand; });
+      }
+      const fresh = await execute('computer.observe');
+      assert.equal(fresh.safety.level, 'routine', JSON.stringify(fresh));
+      assert.ok(fresh.result.observation);
+    });
     await user.bringToFront();
     const activeBeforeInput = await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id));
     assert.equal(await task.evaluate(() => document.hasFocus()), true, 'background page needs virtual focus without activating its tab: ' + JSON.stringify(observed));

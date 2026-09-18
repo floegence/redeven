@@ -3406,6 +3406,8 @@ func (e *targetToolPolicyError) Error() string {
 		return "the selected target is not allowed for this Flower thread"
 	case "target_unavailable":
 		return "target is unavailable"
+	case "target_observation_unavailable":
+		return "The page could not be inspected. Observe it again before acting; do not repeat completed actions. If inspection keeps failing, reconnect the browser."
 	case "frame_unavailable":
 		return "The screenshot is unavailable. Observe the target before continuing; do not replay the previous action."
 	case "invalid_computer_arguments":

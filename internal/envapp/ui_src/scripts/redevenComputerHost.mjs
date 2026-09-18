@@ -54,7 +54,7 @@ try {
   // CDP credentials, process environment, or application page content.
   const code = cdpURL ? 'TARGET_CONNECTION_REQUIRED' : 'TARGET_SETUP_REQUIRED';
   const reason = error?.code === 'ERR_MODULE_NOT_FOUND' ? 'browser_dependency_missing' : cdpURL ? 'browser_connection_failed' : 'browser_launch_failed';
-  process.stdout.write(JSON.stringify({ type: 'ready', protocol_version: 5, error: code, reason }) + '\n');
+  process.stdout.write(JSON.stringify({ type: 'ready', protocol_version: 6, error: code, reason }) + '\n');
   if (!browser) await context?.close().catch(() => {});
   process.exit(1);
 }
@@ -99,9 +99,8 @@ const controller = new BrowserComputerController(cdp);
 const semantic = controller.page;
 await controller.initialize();
 page.on('close', () => semantic.close());
-page.on('frameattached', () => semantic.invalidate());
-page.on('framedetached', frame => { frameSessions.get(frame)?.detach().catch(() => {}); frameSessions.delete(frame); semantic.invalidate(); });
-response({ type: 'ready', protocol_version: 5, capabilities: ['observe', 'interaction'], execution_location: executionLocation });
+page.on('framedetached', frame => { frameSessions.get(frame)?.detach().catch(() => {}); frameSessions.delete(frame); });
+response({ type: 'ready', protocol_version: 6, capabilities: ['observe', 'interaction'], execution_location: executionLocation });
 const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 rl.on('close', () => controller.cancel());
 for await (const line of rl) {

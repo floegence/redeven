@@ -73,6 +73,8 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 			errorCode = ErrorCodeTargetNotReady
 		case "interaction_takeover_required":
 			errorCode = ErrorCodeTakeoverRequired
+		case "target_observation_unavailable":
+			errorCode = ErrorCodeTargetObservationUnavailable
 		case "frame_unavailable":
 			errorCode = ErrorCodeFrameUnavailable
 		case "target_action_failed":

@@ -26,15 +26,23 @@ export class BrowserComputerController {
       opened_pages: this.page.openedPages, action_executed: executed, execution_mode: 'background' },
       safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false } };
   }
-  async readObservation(read) {
+  async readObservation(read, stage = 'semantic_read') {
     const revision = this.page.revision;
-    try {
-      const result = await read();
-      if (revision !== this.page.revision) throw new Error('OBSERVATION_INVALIDATED');
-      return result;
-    } catch (error) {
-      if (revision !== this.page.revision) throw new Error('OBSERVATION_INVALIDATED');
-      throw error;
+    // Only repeat reads, never executeOperation or an input. Do not restart the
+    // privacy observer here: a secret transition remains latched after input.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const result = await read();
+        // Confirmed privacy evidence wins over a concurrent frame change.
+        if (stage === 'safety_scan' && result.level === 'takeover') return result;
+        if (revision !== this.page.revision) throw new Error('OBSERVATION_INVALIDATED');
+        return result;
+      } catch (error) {
+        if (this.page.invalid || this.page.guardFailure) throw new Error('TARGET_CONNECTION_REQUIRED');
+        if (revision !== this.page.revision) throw new Error('OBSERVATION_INVALIDATED');
+        if (rejections.has(error.message)) throw error;
+        if (attempt === 1) throw Object.assign(new Error('TARGET_OBSERVATION_UNAVAILABLE'), { observationStage: stage });
+      }
     }
   }
   async execute(request) {
@@ -81,8 +89,8 @@ export class BrowserComputerController {
           return { result: { selected: true, action_executed: false },
             safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false } };
         }
-        await this.readObservation(() => page.beginObservation());
-        const before = await page.safety();
+        await this.readObservation(() => page.beginObservation(), 'frame_inventory');
+        const before = await this.readObservation(() => page.safety(), 'safety_scan');
         if (before.level === 'takeover') return this.pause(before, false);
       }
       if (!privateInput && page.openedPages.length) return await this.targetChange(false);
@@ -119,13 +127,13 @@ export class BrowserComputerController {
         result = await page.action(operation);
       }
       if (privateInput) return tool === 'computer.screenshot' ? { screenshot: await this.capture() } : { acknowledged: true };
-      const after = await page.safety();
+      const after = await this.readObservation(() => page.safety(), 'safety_scan');
       if (after.level === 'takeover') return this.pause(after, dispatched());
       if (page.openedPages.length) return await this.targetChange(dispatched());
       const needsFrame = tool === 'computer.screenshot' || (tool === 'computer.observe' ? args.screenshot === true : request.script_operation !== true);
       const captureRevision = page.revision;
-      const frame = needsFrame ? await this.readObservation(() => this.capture()) : undefined;
-      const captured = await page.safety();
+      const frame = needsFrame ? await this.readObservation(() => this.capture(), 'capture') : undefined;
+      const captured = await this.readObservation(() => page.safety(), 'safety_scan');
       if (captured.level === 'takeover') return this.pause(captured, dispatched());
       if (frame && captureRevision !== page.revision) {
         // A safe navigation can finish during capture. Keep the confirmed
@@ -137,13 +145,18 @@ export class BrowserComputerController {
         const { frameTree } = await this.transport.send('Page.getFrameTree');
         const title = await page.inFrame({ session: this.transport, frame: frameTree.frame }, 'document.title');
         return { url: frameTree.frame.url, title };
-      });
+      }, 'metadata');
       return { result: { ...result, summary: tool === 'computer.action' ? args.action : tool, ...metadata,
         action_executed: dispatched(), execution_mode: 'background', ...(page.downloads.size ? { downloads: [...page.downloads.values()] } : {}) }, safety: captured, ...(frame ? { screenshot: frame } : {}) };
     } catch (error) {
       if (page.uncertainEffect) return { error: 'EFFECT_OUTCOME_UNKNOWN' };
-      if (page.requiredOrigin || page.guardFailure || page.stopped) return this.pause({ level: 'takeover', reason_codes: [page.requiredOrigin ? 'site_permission' : page.guardFailure ? 'unknown' : 'user_control'],
+      if (page.guardFailure) return { error: 'TARGET_CONNECTION_REQUIRED' };
+      if (page.requiredOrigin || page.stopped) return this.pause({ level: 'takeover', reason_codes: [page.requiredOrigin ? 'site_permission' : 'user_control'],
         safe_to_capture: false, safe_to_send_to_model: false, ...(page.requiredOrigin ? { required_origin: page.requiredOrigin } : {}) }, dispatched());
+      if (error.message === 'TARGET_OBSERVATION_UNAVAILABLE') return {
+        error: 'TARGET_OBSERVATION_UNAVAILABLE',
+        result: { action_executed: dispatched(), observation_stage: error.observationStage },
+      };
       if (page.openedPages.length) return await this.targetChange(dispatched());
       if (error.message === 'OBSERVATION_INVALIDATED') return {
         result: { observation_invalidated: true, action_executed: dispatched(), execution_mode: 'background' },

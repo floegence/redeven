@@ -114,11 +114,19 @@ The shared browser controller examines visible password fields, `one-time-code` 
 semantics, CAPTCHA text and explicit instruction-override signals in each frame.
 CDP DOM snapshots include rendered password and OTP inputs inside closed shadow
 roots. Isolated-world mutation observers cover the document and open shadow roots.
-An unreadable frame is unknown. It inspects before input, after an action, and
+An unreadable frame is a technical observation failure, not a human requirement.
+The shared controller retries only a read, at most once. Frame attachment,
+detachment and navigation invalidate observations. Stable read failure returns
+`TARGET_OBSERVATION_UNAVAILABLE` with confirmed `action_executed` and a closed
+`observation_stage`; no page data or pixels survive. Runtime does not latch a
+pause or create InputRequired for this error. The next authorized observation
+may proceed. Viewer failure uses the existing unavailable/reconnect display.
+It inspects before input, after an action, and
 after capture. Secret DOM transitions are latched during observation so removing
 a field before the final check cannot expose the already captured image.
 Document changes during capture discard pixels and require a fresh observation;
-an otherwise safe navigation does not require user takeover. An unsafe result discards
+an otherwise safe navigation does not require user takeover. Confirmed secret
+evidence wins over concurrent frame invalidation. An unsafe result discards
 all captured bytes. These deterministic
 signals are bounded protections, not a claim of complete injection detection or
 atomic observation of all dynamic web content.

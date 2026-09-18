@@ -489,6 +489,9 @@ func (e *extensionTargetExecutor) execute(ctx context.Context, call TargetToolCa
 	if json.Unmarshal(raw, &response) != nil {
 		return out, errors.New("invalid extension result")
 	}
+	if response.Error == "TARGET_OBSERVATION_UNAVAILABLE" {
+		return computerObservationFailure(call, response.Result, "connected_browser")
+	}
 	if response.Error != "" {
 		return out, computerTargetFailure(call, response.Error)
 	}

@@ -130,3 +130,57 @@ func TestSystemBrowserDiscoverySeparatesOccupancyFromConnection(t *testing.T) {
 		t.Fatalf("busy browser mistaken for missing connection: %+v", inventory)
 	}
 }
+
+func TestComputerSamplingReadFailureDoesNotAcquireUserControl(t *testing.T) {
+	host, _, store, _ := computerBindingFixture(t)
+	target := TargetDescriptor{ID: "read-failure", Kind: "browser.connected", Ready: true, State: "ready"}
+	if err := host.registry.Register(target); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetComputerTarget(t.Context(), "thread-first", target.ID); err != nil {
+		t.Fatal(err)
+	}
+	host.executors[target.ID] = browserControlReadyExecutor{scriptTestExecutor{fn: func(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
+		if call.liveFrame {
+			return computerObservationFailure(call, map[string]any{"action_executed": false, "observation_stage": "safety_scan"}, "fixture")
+		}
+		return TargetToolResult{TargetID: target.ID, Result: map[string]any{"observation": "fresh normal page"}, Safety: &InteractionSafetyDecision{Level: "routine", SafeToCapture: true, SafeToSendToModel: true}}, nil
+	}}}
+	r := &run{threadID: "thread-first", targetResolver: host, targetToolExecutor: host}
+	bindTargetTestRun(t, r)
+	runID, threadID, turnID := r.floretCanonicalIdentity()
+	control := host.controlForTarget(target.ID)
+	control.threadID, control.runID, control.turnID = threadID, runID, turnID
+	frames := make(chan FlowerComputerFrame, 1)
+	stop, err := host.startComputerLiveFrames(t.Context(), computerLiveRequest{ComputerViewerRequest: ComputerViewerRequest{ThreadID: threadID, TargetID: target.ID, ObserverID: "viewer", Revision: 1}}, func(frame FlowerComputerFrame) { frames <- frame })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	select {
+	case frame := <-frames:
+		if frame.ErrorCode != "computer_view_unavailable" || frame.AssistanceKind != "" || frame.ResourceRef != "" {
+			t.Fatalf("read failure became human assistance: %+v", frame)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("missing failed frame")
+	}
+	value, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "fresh", "computer.observe"), "fresh", "computer.observe", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution, ok := value.(targetToolExecution)
+	if !ok || execution.inputRequired != nil {
+		t.Fatalf("invented human step: %#v", value)
+	}
+	control.mu.Lock()
+	paused := control.pause != nil
+	control.mu.Unlock()
+	if paused {
+		t.Fatal("sampling failure locked target for user control")
+	}
+	current, _ := host.registry.ResolveTarget(t.Context(), target.ID)
+	if !current.Ready {
+		t.Fatal("read failure disconnected healthy browser")
+	}
+}

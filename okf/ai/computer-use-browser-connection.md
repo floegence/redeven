@@ -56,7 +56,7 @@ profile ambiguity remains the Agent's responsibility through existing discovery.
 The extension's optional profile label is user content, not routing authority.
 
 Runtime Service epoch 25 requires the fixed setup/open/inventory endpoints in
-both product carriers. Native Messaging stays at protocol 5. The extension
+both product carriers. Native Messaging uses protocol 6. The extension
 connection page remains consent-gated even when the URL supplies configuration.
 No database, Floret API, tool-selection rule or authorization policy changes.
 

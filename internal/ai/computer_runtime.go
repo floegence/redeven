@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -319,6 +320,16 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		defer cancel()
 	}
 	result, err := executor.ExecuteTargetTool(captureCtx, call)
+	var observationFailure *targetToolPolicyError
+	if errors.As(err, &observationFailure) && observationFailure.code == "target_observation_unavailable" {
+		payload, _ := result.Result.(map[string]any)
+		source := "tool"
+		if call.liveFrame {
+			source = "viewer"
+		}
+		slog.Info("computer observation unavailable", "thread_id", call.ThreadID, "target_id", call.TargetID,
+			"source", source, "stage", computerObservationStage(anyToString(payload["observation_stage"])), "action_executed", payload["action_executed"] == true)
+	}
 	if takeoverResult(result, err) {
 		control.recordPause(call, result, err)
 	}

@@ -189,6 +189,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	var observationScope string
 	var fullObservation bool
 	observationInvalidated := false
+	var observationFailureStage string
 	operations := 0
 	effectCompleted := false
 	// Prefix facts survive interpreter timeout, exhaustion and broken IPC.
@@ -243,6 +244,14 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if err != nil {
 				stopped = err
+				var failure *targetToolPolicyError
+				if errors.As(err, &failure) && failure.code == "target_observation_unavailable" {
+					payload, _ := observed.Result.(map[string]any)
+					observationFailureStage = computerObservationStage(anyToString(payload["observation_stage"]))
+					lastObservation = nil
+					result.Attachments = nil
+					p.observations = computerObservationOutput{}
+				}
 			}
 			if takeoverResult(observed, err) {
 				safety := computerPauseSafety(observed, err)
@@ -325,6 +334,11 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				}
 				delete(result.Result.(map[string]any), "observation")
 				return result, nil
+			}
+			if observationFailureStage != "" {
+				result.Result.(map[string]any)["observation_stage"] = observationFailureStage
+				delete(result.Result.(map[string]any), "observation")
+				delete(result.Result.(map[string]any), "logs")
 			}
 			if stopped != nil || msg.Type == "error" {
 				code := "SCRIPT_STOPPED"
