@@ -1,3 +1,4 @@
+import { isShareableConnectionAddress } from '../shared/desktopEnvironmentConnection';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import { environmentSupportsGuidancePopover } from './environmentGuidanceSession';
 import { buildEnvironmentCardEndpointsModel } from './viewModel';
@@ -7,7 +8,7 @@ export type EnvironmentLibraryOverlayKind = 'runtime_menu' | 'primary_action_gui
 export type EnvironmentLibraryOverlayState =
   | Readonly<{ kind: 'none' }>
   | Readonly<{ kind: Exclude<EnvironmentLibraryOverlayKind, 'endpoints'>; environment_id: string }>
-  | Readonly<{ kind: 'endpoints'; environment_id: string; selected_endpoint_value?: string }>;
+  | Readonly<{ kind: 'endpoints'; environment_id: string; selected_endpoint_id?: string }>;
 
 export function closedEnvironmentLibraryOverlayState(): EnvironmentLibraryOverlayState {
   return { kind: 'none' };
@@ -43,21 +44,21 @@ export function closeEnvironmentLibraryOverlayState(
 
 export function selectEnvironmentEndpointOverlayState(
   environmentID: string,
-  endpointValue: string,
+  endpointID: string,
 ): EnvironmentLibraryOverlayState {
   return {
     kind: 'endpoints',
     environment_id: environmentID,
-    selected_endpoint_value: endpointValue,
+    selected_endpoint_id: endpointID,
   };
 }
 
-export function environmentEndpointOverlaySelectedValueFor(
+export function environmentEndpointOverlaySelectedIDFor(
   state: EnvironmentLibraryOverlayState,
   environmentID: string,
 ): string | undefined {
   return state.kind === 'endpoints' && state.environment_id === environmentID
-    ? state.selected_endpoint_value
+    ? state.selected_endpoint_id
     : undefined;
 }
 
@@ -87,8 +88,8 @@ export function reconcileEnvironmentLibraryOverlayState(
     if (endpoints.length === 0) {
       return closedEnvironmentLibraryOverlayState();
     }
-    return state.selected_endpoint_value !== undefined
-      && !endpoints.some((endpoint) => endpoint.value === state.selected_endpoint_value)
+    return state.selected_endpoint_id !== undefined
+      && !endpoints.filter(isShareableConnectionAddress).some((endpoint) => endpoint.id === state.selected_endpoint_id)
       ? {
           kind: 'endpoints',
           environment_id: state.environment_id,

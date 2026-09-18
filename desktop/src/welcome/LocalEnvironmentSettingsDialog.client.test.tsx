@@ -29,6 +29,7 @@ async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'leg
   const url = options.url ?? '';
   const snapshot = { ...buildDesktopSettingsSurfaceSnapshot('environment_settings', baseline, {
     environment_id: 'local', environment_label: 'Local Environment', environment_kind: options.remote ? 'runtime_target' : 'local',
+    runtime_connection: { host_access: options.remote ? { kind: 'ssh_host', ssh: { ssh_destination: 'gzcom', ssh_port: 22, auth_mode: 'key_agent', connect_timeout_seconds: 10 } } : { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: '' } },
     current_runtime_url: url, current_runtime_urls: options.urls ?? (url ? [url] : []), current_runtime_running: Boolean(url),
     local_ui_password_configured: true,
   }), runtime_configuration_pending: options.pending };
@@ -138,8 +139,28 @@ describe('Runtime connection settings', () => {
   it('identifies server loopback and does not open it in the client browser', async () => {
     await mount({ url: 'http://localhost:23998/', remote: true });
     expect(document.body.textContent).toContain('Only this server');
-    expect(document.body.textContent).toContain('This loopback address belongs to the server.');
+    expect(document.body.textContent).toContain('Only available on gzcom:22.');
     expect([...document.querySelectorAll('button')].some((item) => item.textContent?.trim() === 'Open in browser')).toBe(false);
+    expect(document.querySelector('[aria-label="Copy Environment URL"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Share connection"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Copy SSH host"]')).not.toBeNull();
+  });
+
+  it('shares a network address and clears sharing when its target or address changes', async () => {
+    const test = await mount({ url: 'https://192.0.2.20:23998/', remote: true });
+    button('Share connection').click();
+    await settle();
+    expect(document.querySelector('.redeven-endpoint-qr-image')).not.toBeNull();
+    test.setSnapshot((previous) => ({ ...previous, environment_id: 'another-server' }));
+    await settle();
+    expect(document.querySelector('.redeven-endpoint-qr-image')).toBeNull();
+    button('Share connection').click();
+    await settle();
+    expect(document.querySelector('.redeven-endpoint-qr-image')).not.toBeNull();
+    test.setSnapshot((previous) => ({ ...previous, current_runtime_url: 'http://localhost:23998/', current_runtime_urls: ['http://localhost:23998/'] }));
+    await settle();
+    expect(document.querySelector('.redeven-endpoint-qr-image')).toBeNull();
+    expect(document.querySelector('[aria-label="Share connection"]')).toBeNull();
   });
 
   it('uses an actual network address when a remote server also reports loopback', async () => {
@@ -167,21 +188,20 @@ describe('Runtime connection settings', () => {
 
   it('does not present a saved port as a running endpoint', async () => {
     await mount();
-    expect(document.body.textContent).toContain('Start the Runtime to see its connection address.');
+    expect(document.body.textContent).toContain('Not running');
     expect(document.body.textContent).not.toContain('http://');
     expect(document.querySelector('img')).toBeNull();
     expect([...document.querySelectorAll('button')].some((item) => item.textContent?.includes('Share connection'))).toBe(false);
     expect((document.getElementById('local-ui-port') as HTMLInputElement).value).toBe('23998');
   });
 
-  it('shares only the actual URL and explains the loopback boundary', async () => {
+  it('keeps local loopback copy and browser access without a cross-device QR code', async () => {
     const test = await mount({ url: 'https://localhost:23998/', protocol: 'https' });
     expect(test.certificate).toHaveBeenCalledWith({ environment_id: 'local', operation: 'status' });
     expect(test.certificate).not.toHaveBeenCalledWith(expect.objectContaining({ operation: 'install' }));
-    button('Share connection').click();
-    await settle();
-    expect(document.querySelector('img')?.getAttribute('src')).toMatch(/^data:image/);
-    expect(document.body.textContent).toContain('Other devices cannot use it.');
+    expect([...document.querySelectorAll('button')].some((item) => item.getAttribute('aria-label') === 'Share connection')).toBe(false);
+    expect(document.querySelector('img')).toBeNull();
+    expect(document.body.textContent).toContain('Only available on this device.');
     expect(document.body.textContent).not.toContain('bridge');
     button('Open in browser').click();
     expect(test.open).toHaveBeenCalledWith('https://localhost:23998/');

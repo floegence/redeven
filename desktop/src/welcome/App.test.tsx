@@ -1699,9 +1699,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('style={cardFactIconMaskStyle(ICON_ENDPOINTS)}');
     expect(appSrc).not.toContain('<img src={ICON_ENDPOINTS}');
     expect(appSrc).toContain('function EndpointsPopover');
-    expect(appSrc).toContain("import { endpointDisplayValue } from './endpointDisplay';");
+    expect(appSrc).toContain('title={props.endpoint.value}>{props.endpoint.value}</span>');
     expect(appSrc).toContain("openEnvironmentLibraryOverlayState('endpoints', environmentID)");
-    expect(appSrc).toContain('selectEnvironmentEndpointOverlayState(environmentID, endpointValue)');
+    expect(appSrc).toContain('selectEnvironmentEndpointOverlayState(environmentID, endpointID)');
     expect(appSrc).toContain('function EndpointQRCodePanel');
     expect(appSrc).toContain("qrcode(0, 'M')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.pinnedSection')");
@@ -1727,7 +1727,6 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-card-endpoint-row');
     expect(styles).toContain('.redeven-card-endpoint-label');
     expect(styles).toContain('.redeven-card-endpoint-value');
-    expect(styles).toContain('.redeven-card-endpoint-copy');
     expect(styles).toContain('.redeven-endpoint-qr-panel');
     expect(styles).toContain('.redeven-endpoint-qr-image');
     expect(styles).toContain('.redeven-endpoint-qr-copy-label');

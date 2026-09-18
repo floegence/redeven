@@ -1,3 +1,5 @@
+import type { DesktopRuntimeConnectionContext } from '../shared/desktopEnvironmentConnection';
+import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import { isLoopbackOnlyBind, parseLocalUIBind } from './localUIBind';
 import type {
   DesktopPageFieldModel,
@@ -24,6 +26,8 @@ type LocalEnvironmentSettingsSnapshotOptions = DesktopAccessModelOptions & Reado
   environment_label: string;
   environment_kind: 'local' | 'controlplane' | 'runtime_target';
   auto_runtime_probe_configurable?: boolean;
+  runtime_connection?: DesktopRuntimeConnectionContext;
+  runtime_health?: DesktopRuntimeHealth;
 }>;
 
 function trimString(value: unknown): string {
@@ -103,6 +107,9 @@ export function buildDesktopSettingsSurfaceSnapshot(
   draft: DesktopSettingsDraft,
   options: BuildDesktopSettingsSurfaceSnapshotOptions,
 ): DesktopSettingsSurfaceSnapshot {
+  if (options.environment_kind === 'runtime_target' && !options.runtime_connection) {
+    throw new Error('Runtime Target settings require their connection context.');
+  }
   const localUIPasswordConfigured = options.local_ui_password_configured === true;
   const accessModel = deriveDesktopAccessDraftModel(draft, options);
   const canClearLocalUIPassword = localUIPasswordConfigured
@@ -121,6 +128,14 @@ export function buildDesktopSettingsSurfaceSnapshot(
     access_mode_options: DESKTOP_ACCESS_MODE_OPTIONS,
     next_start_address_display: accessModel.next_start_address_display,
     next_start_address_kind: accessModel.next_start_address_kind,
+    runtime_connection: options.runtime_connection ?? {
+      host_access: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: '' },
+    },
+    runtime_health: options.runtime_health ?? {
+      status: accessModel.current_runtime_running ? 'online' : 'offline',
+      freshness: 'fresh', source: 'local_runtime_probe', checked_at_unix_ms: 0,
+      ...(accessModel.current_runtime_running ? {} : { offline_reason_code: 'not_started' }),
+    },
     current_runtime_url: accessModel.current_runtime_url,
     current_runtime_running: accessModel.current_runtime_running,
     current_runtime_urls: accessModel.current_runtime_urls,

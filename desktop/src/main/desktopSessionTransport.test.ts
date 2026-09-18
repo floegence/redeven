@@ -7,6 +7,8 @@ import {
 } from './desktopSessionTransport';
 import type { DesktopSessionTarget } from './desktopTarget';
 import type { StartupReport } from './startup';
+import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
+import { buildSSHDesktopTarget } from './desktopTarget';
 
 const localTarget: DesktopSessionTarget = {
   kind: 'local_environment',
@@ -27,6 +29,22 @@ const localStartup: StartupReport = {
 };
 
 describe('resolveDesktopSessionTransport', () => {
+  it('isolates SSH targets that report identical public localhost addresses', () => {
+    const transports = ['gzcom', 'gzlight'].map((host, index) => {
+      const ssh = { ssh_destination: host, ssh_port: 22, auth_mode: 'key_agent' as const, connect_timeout_seconds: 10 };
+      const placement = { kind: 'host_process' as const, runtime_root: '~/.redeven' };
+      const id = desktopRuntimeTargetID({ kind: 'ssh_host', ssh }, placement);
+      const target = buildSSHDesktopTarget({ ...ssh, runtime_root: placement.runtime_root, bootstrap_strategy: 'auto', release_base_url: '' }, { environmentID: id, label: host });
+      return resolveDesktopSessionTransport(target, {
+        ...localStartup,
+        local_ui_url: 'http://localhost:23998/', local_ui_urls: ['http://localhost:23998/'],
+        local_ui_bridge_url: `http://127.0.0.1:${43123 + index}/`,
+      });
+    });
+    expect(transports.map((transport) => transport.baseURL)).toEqual(['http://127.0.0.1:43123/', 'http://127.0.0.1:43124/']);
+    expect(transports[0]!.partition).not.toBe(transports[1]!.partition);
+    expect(transports.every((transport) => transport.kind === 'placement_bridge' && transport.proxyPolicy === 'direct')).toBe(true);
+  });
   it('uses the trusted bridge for a native Local Environment without public URL fallback', () => {
     expect(resolveDesktopSessionTransport(localTarget, localStartup)).toEqual({
       kind: 'native_local_bridge',

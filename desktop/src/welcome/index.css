@@ -912,13 +912,13 @@ html:not(.dark) .redeven-new-environment-card:hover {
 
 .redeven-endpoints-popover {
   min-width: 14rem;
-  width: min(22rem, calc(100vw - 1rem));
+  width: min(28rem, calc(100vw - 1rem));
   max-width: calc(100vw - 1rem);
   padding: 0.6rem;
 }
 
 .redeven-endpoints-popover--expanded {
-  width: min(29.5rem, calc(100vw - 1rem));
+  width: min(37rem, calc(100vw - 1rem));
 }
 
 .redeven-endpoints-popover-header {
@@ -931,11 +931,11 @@ html:not(.dark) .redeven-new-environment-card:hover {
 }
 
 .redeven-endpoints-popover-title {
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted-foreground);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--foreground);
 }
 
 .redeven-endpoints-popover-close {
@@ -1005,55 +1005,26 @@ html:not(.dark) .redeven-endpoints-section {
 
 .redeven-card-endpoint-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
   min-width: 0;
   width: 100%;
-  max-width: 100%;
-  padding: 0.32rem 0.4rem;
-  border: 0;
+  padding: 0.45rem 0.4rem;
   border-radius: 0.25rem;
-  background: transparent;
   text-align: left;
   color: inherit;
-  cursor: pointer;
-  transition:
-    color 120ms ease, background-color 120ms ease;
-}
-
-.redeven-card-endpoint-row--status {
-  cursor: default;
 }
 
 .redeven-card-endpoint-detail {
   display: block;
-  margin-top: 0.125rem;
-  color: hsl(var(--muted-foreground));
+  margin-top: 0.25rem;
+  color: var(--muted-foreground);
   font-size: 0.6875rem;
-  line-height: 1.2;
-}
-
-.redeven-card-endpoint-row--status:hover {
-  background: transparent;
-}
-
-.redeven-card-endpoint-row:hover {
-  background: color-mix(in srgb, var(--muted) 40%, transparent);
-}
-
-.redeven-card-endpoint-row:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--ring) 70%, transparent);
-  outline-offset: 1px;
+  line-height: 1.5;
 }
 
 .redeven-card-endpoint-row[data-selected] {
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-  color: var(--primary);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 30%, transparent);
-}
-
-.redeven-card-endpoint-row:hover .redeven-card-endpoint-copy {
-  opacity: 1;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
 .redeven-card-endpoint-label {
@@ -1077,44 +1048,44 @@ html:not(.dark) .redeven-endpoints-section {
 }
 
 .redeven-card-endpoint-value {
+  display: block;
   min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   font-size: 0.78rem;
   color: var(--foreground);
 }
 
-.redeven-card-endpoint-row[data-selected] .redeven-card-endpoint-value {
-  color: var(--primary);
+.redeven-settings-connections {
+  container-type: inline-size;
 }
 
-.redeven-card-endpoint-copy {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  flex-shrink: 0;
-  opacity: 0;
-  color: var(--muted-foreground);
-  transition:
-    opacity 120ms ease, color 120ms ease;
-}
+@container (max-width: 30rem) {
+  .redeven-settings-connections .redeven-card-endpoint-row[data-endpoint-kind="address"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+  }
 
-.redeven-card-endpoint-copy:hover {
-  color: var(--primary);
-}
+  .redeven-settings-connections [data-endpoint-kind="address"] > .redeven-card-endpoint-label,
+  .redeven-settings-connections [data-endpoint-kind="address"] > div {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
 
-.redeven-card-endpoint-copy--active {
-  opacity: 1;
-  color: var(--success);
-}
+  .redeven-settings-connections [data-endpoint-kind="address"] > button {
+    grid-row: 3;
+  }
 
-.redeven-card-endpoint-row[data-selected] .redeven-card-endpoint-copy {
-  opacity: 1;
-  color: var(--primary);
+  .redeven-settings-connections [data-endpoint-kind="address"] > button:nth-of-type(1) {
+    grid-column: 2;
+  }
+
+  .redeven-settings-connections [data-endpoint-kind="address"] > button:nth-of-type(2) {
+    grid-column: 3;
+  }
+
+  .redeven-settings-connections [data-endpoint-kind="address"] > button:nth-of-type(3) {
+    grid-column: 4;
+  }
 }
 
 .redeven-endpoint-qr-panel {

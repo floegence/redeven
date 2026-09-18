@@ -1170,7 +1170,8 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device', {
         endpoints: [
-          { kind: 'url', label: 'URL', value: 'http://localhost:23998/', monospace: true, copy_label: 'Copy local endpoint' },
+          expect.objectContaining({ kind: 'connection', value_key: 'environmentFacts.thisDevice' }),
+          expect.objectContaining({ kind: 'address', value: 'http://localhost:23998/', copyable: true, shareable: false }),
         ],
       }),
       defaultFact('VERSION', 'v1.4.2'),
@@ -1178,7 +1179,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
       defaultFact('RUNS ON', 'Redeven Cloud remote', {
         endpoints: [
-          { label: 'PROVIDER', value: 'https://dev.redeven.test/env/env_demo', monospace: true, copy_label: 'Copy environment URL' },
+          expect.objectContaining({ kind: 'address', value: 'https://dev.redeven.test/env/env_demo', shareable: true }),
         ],
       }),
       placeholderFact('VERSION', 'UNKNOWN'),
@@ -1189,7 +1190,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
       defaultFact('RUNS ON', 'LAN host', {
         endpoints: [
-          { label: 'URL', value: 'http://192.168.1.12:24000/', monospace: true, copy_label: 'Copy endpoint' },
+          expect.objectContaining({ kind: 'address', value: 'http://192.168.1.12:24000/', copyable: true, shareable: true }),
         ],
       }),
       defaultFact('VERSION', 'v1.4.1'),
@@ -1197,28 +1198,19 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
       defaultFact('RUNS ON', 'ops@example.internal:2222', {
         endpoints: [
-          { kind: 'url', label: 'URL', value: 'http://127.0.0.1:24111/', monospace: true, copy_label: 'Copy local endpoint' },
+          expect.objectContaining({ kind: 'connection', value: 'ops@example.internal:2222' }),
+          expect.objectContaining({ kind: 'address', value: 'http://127.0.0.1:24111/', copyable: false, shareable: false }),
         ],
       }),
       defaultFact('VERSION', 'v1.4.0'),
     ]);
 
     expect(buildEnvironmentCardEndpointsModel(providerEntry!)).toEqual([
-      {
-        label: 'PROVIDER',
-        value: 'https://dev.redeven.test/env/env_demo',
-        monospace: true,
-        copy_label: 'Copy environment URL',
-      },
+      expect.objectContaining({ kind: 'address', value: 'https://dev.redeven.test/env/env_demo', shareable: true }),
     ]);
     expect(buildEnvironmentCardEndpointsModel(sshEntry!)).toEqual([
-      {
-        kind: 'url',
-        label: 'URL',
-        value: 'http://127.0.0.1:24111/',
-        monospace: true,
-        copy_label: 'Copy local endpoint',
-      },
+      expect.objectContaining({ kind: 'connection', value: 'ops@example.internal:2222' }),
+      expect.objectContaining({ kind: 'address', value: 'http://127.0.0.1:24111/', copyable: false, shareable: false }),
     ]);
   });
 
@@ -1277,13 +1269,8 @@ describe('buildEnvironmentCardModel', () => {
       })],
     });
     const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
-    expect(buildEnvironmentCardEndpointsModel(entry!)).toEqual([{
-      kind: 'url',
-      label: 'URL',
-      value: 'http://localhost:23998/',
-      monospace: true,
-      copy_label: 'Copy local endpoint',
-    }]);
+    expect(buildEnvironmentCardEndpointsModel(entry!)).toEqual([expect.objectContaining({ kind: 'connection', value_key: 'environmentFacts.thisDevice' }),
+      expect.objectContaining({ kind: 'address', value: 'http://localhost:23998/', copyable: true, shareable: false })]);
   });
 
   it('keeps a real HTTPS Local UI URL as a copyable endpoint', () => {
@@ -1297,13 +1284,8 @@ describe('buildEnvironmentCardModel', () => {
       preferences: testDesktopPreferences({ local_environment: local }),
     });
     const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
-    expect(buildEnvironmentCardEndpointsModel(entry!)).toEqual([{
-      kind: 'url',
-      label: 'URL',
-      value: 'https://localhost:23998/',
-      monospace: true,
-      copy_label: 'Copy local endpoint',
-    }]);
+    expect(buildEnvironmentCardEndpointsModel(entry!)).toEqual([expect.objectContaining({ kind: 'connection', value_key: 'environmentFacts.thisDevice' }),
+      expect.objectContaining({ kind: 'address', value: 'https://localhost:23998/', copyable: true, shareable: false })]);
   });
 
   it('keeps runtime version in the stable card fact slot during maintenance states', () => {
@@ -1359,7 +1341,8 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device', {
         endpoints: [
-          { kind: 'url', label: 'URL', value: 'http://localhost:23998/', monospace: true, copy_label: 'Copy local endpoint' },
+          expect.objectContaining({ kind: 'connection', value_key: 'environmentFacts.thisDevice' }),
+          expect.objectContaining({ kind: 'address', value: 'http://localhost:23998/', copyable: true, shareable: false }),
         ],
       }),
       defaultFact('VERSION', 'v1.4.3'),
@@ -1478,7 +1461,8 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device', {
         endpoints: [
-          { kind: 'status', label: 'STATUS', value: 'Not running', monospace: false, copy_label: '' },
+          expect.objectContaining({ kind: 'connection', value_key: 'environmentFacts.thisDevice' }),
+          expect.objectContaining({ kind: 'status', value_key: 'environmentConnection.notChecked' }),
         ],
       }),
       placeholderFact('VERSION', 'UNKNOWN'),
@@ -1545,7 +1529,9 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual(expect.arrayContaining([
       defaultFact('RUNS ON', 'This device', {
         endpoints: [
-          { kind: 'status', label: 'STATUS', value: 'Not running', monospace: false, copy_label: '' },
+          expect.objectContaining({ kind: 'connection', value_key: 'environmentFacts.thisDevice' }),
+          expect.objectContaining({ kind: 'connection', value: 'docker · dev-container' }),
+          expect.objectContaining({ kind: 'status', value_key: 'environmentFacts.notRunning' }),
         ],
       }),
       expect.objectContaining({
