@@ -23,6 +23,16 @@ For Cloud windows, Reopen environment reloads the same-origin parent bootstrap
 that owns the connection, rather than only reloading its iframe through an
 expired proxy. Unrelated or cross-origin parents are never navigated.
 
+The Cloud bootstrap owns an opaque loading surface from its first paint until
+Env App reports an interactive surface after the existing shell paint boundary.
+The same-origin `redeven:env_app_ready` message (`v: 1`) is presentation-only:
+it carries no credentials or proxy authority. The bootstrap checks both the app
+frame window and origin, waits for document load and service-worker preparation,
+and reveals the app only while its own connection is still healthy. An
+interactive access gate or terminal connection failure also transfers presentation
+so required user action is not hidden. A 30-second stalled-app timeout shows an
+actionable failure instead of an endless loading surface.
+
 ## Mechanism
 
 Each established bridge owns one immutable transport-recovery snapshot with a monotonic `generation` and `revision`, the real `waiting`, `connecting`, `ready`, or `failed` phase, completed attempt count, known retry and recovery timestamps, a structured failure, and explicitly allowed actions. The bridge publishes interruption state before active streams fail and before the stable loopback begins returning its existing 502 response. A manual retry only wakes the current recovery delay; it does not create another recovery loop, replay a request, or acquire an alternate transport. Desktop copies the current snapshot into the owning Env App session, forwards later revisions through the session preload subscription, and resolves snapshot reads and retry commands only from the sending window's WebContents-to-session mapping. Env App cannot read another Environment's recovery state or the broader launcher operation stream.

@@ -33,6 +33,8 @@ const getEnvPublicIDFromSessionMock = vi.fn(() => '');
 const refreshLocalRuntimeMock = vi.fn();
 const reloadCurrentPageMock = vi.fn();
 const desktopAppReadyMock = vi.fn();
+const bootAppReadyMock = vi.fn();
+vi.mock('./services/envAppBootReady', () => ({ notifyEnvAppBootReady: bootAppReadyMock }));
 const registerServiceWorkerAndEnsureControlMock = vi.fn(async () => undefined);
 const registerProxyControllerWindowMock = vi.fn(() => ({ dispose: vi.fn() }));
 const commandState = vi.hoisted(() => ({
@@ -1553,6 +1555,7 @@ beforeEach(async () => {
   setSidebarCollapsedMock.mockClear();
   reloadCurrentPageMock.mockReset();
   desktopAppReadyMock.mockReset();
+  bootAppReadyMock.mockReset();
   delete window.redevenDesktopLanguage;
   accessStatusMock.mockReset();
   accessStatusMock.mockImplementation(async () => ({ passwordRequired: true, unlocked: resumeCalls.length > 0 }));
@@ -4504,6 +4507,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => desktopAppReadyMock.mock.calls.length > 0, 40);
 
       expect(host.querySelector('input[type="password"]')).toBeTruthy();
+      expect(bootAppReadyMock).toHaveBeenCalledWith(window);
       expect(desktopAppReadyMock).toHaveBeenCalledWith({
         state: 'access_gate_interactive',
         timings: expect.objectContaining({
@@ -4530,6 +4534,7 @@ describe('EnvAppShell environment entry affordances', () => {
     try {
       await flushAsync();
 
+      expect(bootAppReadyMock).not.toHaveBeenCalled();
       expect(host.textContent).toContain('Preparing secure access');
       expect(host.textContent).toContain('Checking secure access...');
       expect(host.textContent).not.toContain('Unlock local runtime');

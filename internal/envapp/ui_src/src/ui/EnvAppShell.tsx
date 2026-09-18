@@ -1,3 +1,4 @@
+import { notifyEnvAppBootReady } from './services/envAppBootReady';
 import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
 import { writeTextToClipboard } from './utils/clipboard';
 import { For, Show, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js';
@@ -2951,8 +2952,9 @@ export function EnvAppShell() {
 
   let desktopAccessReadyMs: number | undefined;
   let desktopProtocolConnectedMs: number | undefined;
-  let lastDesktopReadyState = '';
-  let desktopReadyPaintSequence = 0;
+  let lastAppReadyState = '';
+  let appReadyPaintSequence = 0;
+  onCleanup(() => { appReadyPaintSequence += 1; });
   createEffect(() => {
     if (!accessChecked()) return;
     const phase = accessGatePhase();
@@ -2973,17 +2975,19 @@ export function EnvAppShell() {
       : (
           protocol.status() === 'connected'
             ? 'runtime_connected'
-            : ''
+            : protocol.status() === 'failed' ? 'connection_failed' : ''
         );
     if (!nextReadyState) {
-      desktopReadyPaintSequence += 1;
+      appReadyPaintSequence += 1;
       return;
     }
-    if (nextReadyState === lastDesktopReadyState) return;
-    const sequence = ++desktopReadyPaintSequence;
+    if (nextReadyState === lastAppReadyState) return;
+    const sequence = ++appReadyPaintSequence;
     deferAfterPaint(() => {
-      if (sequence !== desktopReadyPaintSequence || nextReadyState === lastDesktopReadyState) return;
-      lastDesktopReadyState = nextReadyState;
+      if (sequence !== appReadyPaintSequence || nextReadyState === lastAppReadyState) return;
+      lastAppReadyState = nextReadyState;
+      notifyEnvAppBootReady(window);
+      if (nextReadyState === 'connection_failed') return;
       notifyDesktopSessionAppReady(nextReadyState, {
         bootstrap_ms: desktopBootstrapReadyMs,
         ...(desktopAccessReadyMs !== undefined ? { access_ready_ms: desktopAccessReadyMs } : {}),
