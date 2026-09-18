@@ -3,7 +3,7 @@ type: Browser Integration Contract
 title: Managed browsers and authorized Chrome tabs
 description: Bind an explicit profile and tab to the Runtime while preserving login state and unrelated user browsing.
 tags: [ai, browser-use, chrome, profiles]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 # Summary
 
@@ -20,11 +20,11 @@ also selects that target for the current conversation. Full access already permi
 HTTP/HTTPS sites; other modes use separate saved grants. Delayed connection results cannot select a different
 conversation after navigation.
 
-The connection-only guide opens from canonical conversation assistance. It lists
-verified connected profiles and rechecks the connection before continuing; it
-never creates or selects a tab. Chrome is supported through the extension; this
-connection does not automate Safari. Managed profiles are always identified as
-**Flower managed browser**; a profile named Default is not the OS default browser.
+The [Connect Chrome guide](computer-use-browser-connection.md) prepares the
+native connection, walks through installation and confirmation, and observes the
+real handshake before resuming the original Floret interaction. It never binds
+a tab or creates a second conversation lifecycle. Native opening commands use
+fixed destinations; managed Chromium launches with its sandbox enabled.
 
 **View in browser** is an authenticated user action on the current connected target.
 Runtime verifies thread ownership, selection, policy and occupancy under the target

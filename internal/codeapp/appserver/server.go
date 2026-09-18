@@ -3441,6 +3441,26 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: setup})
 		return
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/extension/open":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var input struct {
+			Action string `json:"action"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&input) != nil || dec.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid_request"})
+			return
+		}
+		if err := aiSvc.OpenComputerExtension(r.Context(), meta, input.Action); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_extension_open_failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true})
+		return
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/extension/profiles":
 		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
 		if !ok || !g.requireAIService(w, aiSvc) {

@@ -32,7 +32,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' = 'site
   const loadAccess = vi.fn(async () => ({ origins: ['https://existing.test'], apps: ['dev.Notes'], allow_foreground: false }));
   const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:step', current: { ...current, view_version: 2, activity: 'idle' as const, last_outcome: 'completed' as const, interactions: [] } }));
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput,
-    computerManagement: { listExtensionProfiles, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess, listTargets: vi.fn(async () => []), loadTarget: vi.fn(async () => ({ target_id: 'browser-main' })), selectTarget: vi.fn(), listBrowserTabs: vi.fn(async () => []) },
+    computerManagement: { openExtension: vi.fn(), listExtensionProfiles, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess, listTargets: vi.fn(async () => []), loadTarget: vi.fn(async () => ({ target_id: 'browser-main' })), selectTarget: vi.fn(), listBrowserTabs: vi.fn(async () => []) },
     listThreads: vi.fn(async () => [snapshot, other]), loadThread: vi.fn(async id => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(other)),
     connectLiveStream: async function* ({ signal }) {
       yield { schema_version: 1 as const, kind: 'ready' as const, observer_id: 'assistance-observer', summaries: [snapshot, other] };
@@ -176,16 +176,11 @@ it('keeps actual CAPTCHA instructions in full access mode', async () => {
 it('opens the system-browser connection guide and resumes the canonical request once without private control', async () => {
  const s = await setup('connection', 'full_access');
  const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
- expect(card.textContent).toContain('Connect your system browser');
+ expect(card.textContent).toContain('Connect Chrome');
  expect(card.querySelector('[data-computer-control-action="take"]')).toBeNull();
  expect(card.querySelector('[data-computer-control-action="return"]')).toBeNull();
- const button = Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect your system browser')!;
+ const button = Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect Chrome')!;
  button.click();
- await waitFor(() => !!document.querySelector('[role="dialog"]'));
- const continueButton = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find(value => value.textContent === 'Continue task')!;
- await waitFor(() => continueButton() && !continueButton().disabled);
- expect(document.querySelector('[role="dialog"] select')).toBeNull();
- continueButton().click();
  await waitFor(() => s.submitInput.mock.calls.length === 1);
  expect(s.saveAccess).not.toHaveBeenCalled();
  expect(document.querySelector('.flower-computer-stage')).toBeNull();
@@ -193,14 +188,11 @@ it('opens the system-browser connection guide and resumes the canonical request 
 
 it('closes the connection guide when its conversation changes during a connection check', async () => {
   const s = await setup('connection', 'full_access');
-  const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
-  Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect your system browser')!.click();
-  const continueButton = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find(value => value.textContent === 'Continue task');
-  await waitFor(() => Boolean(continueButton() && !continueButton()!.disabled));
   const check = deferred<{ id: string; name: string }[]>();
   s.listExtensionProfiles.mockImplementationOnce(() => check.promise);
-  continueButton()!.click();
-  await waitFor(() => s.listExtensionProfiles.mock.calls.length === 2);
+  const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
+  Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect Chrome')!.click();
+  await waitFor(() => s.listExtensionProfiles.mock.calls.length === 1);
   s.surface.querySelector<HTMLButtonElement>('[data-thread-id="other-conversation"] .flower-thread-card-select-button')!.click();
   await waitFor(() => s.surface.querySelector('[data-thread-id="other-conversation"]')?.getAttribute('data-flower-thread-active') === 'true');
   await waitFor(() => !document.querySelector('[role="dialog"]'));

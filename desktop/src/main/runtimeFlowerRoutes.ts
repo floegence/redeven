@@ -53,6 +53,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/ai/computer/access', methods: ['GET', 'PUT'], allowsQuery: runtimeFlowerIdentifierQuery('thread_id') },
   { path: '/_redeven_proxy/api/ai/computer/managed/profiles', methods: ['GET', 'POST'] },
   { path: '/_redeven_proxy/api/ai/computer/managed/tabs', methods: ['GET'], allowsQuery: runtimeFlowerIdentifierQuery('profile_id') },
+  { path: '/_redeven_proxy/api/ai/computer/extension/open', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/computer/extension/setup', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/computer/extension/profiles', methods: ['GET'] },
   { path: '/_redeven_proxy/api/ai/computer/extension/tabs', methods: ['GET'], allowsQuery: runtimeFlowerIdentifierQuery('profile_id') },

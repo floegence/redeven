@@ -24,13 +24,16 @@ test('reconnection drains old requests before binding and reusing native request
       ports.push(port); return port;
     } },
   };
-  const ui = command => new Promise(resolve => messages.emit(command, { id: 'fixture', url: chrome.runtime.getURL('popup.html') }, resolve));
+  const ui = command => new Promise(resolve => messages.emit(command, { id: 'fixture', url: chrome.runtime.getURL('popup.html') + '#dev.floegence.redeven.r123456789abcdef0' }, resolve));
   const connect = () => ui({ command: 'connect', nativeHost: 'dev.floegence.redeven.r123456789abcdef0', profileName: 'Fixture' });
   try {
     const source = (await readFile(new URL('../../../../browser-extension/background.mjs', import.meta.url), 'utf8'))
       .replace("'./computerBrowserController.mjs'", JSON.stringify(new URL('./computerBrowserController.mjs', import.meta.url).href));
     const module = path.join(directory, 'background.mjs'); await writeFile(module, source);
     await import(pathToFileURL(module).href);
+    for (const url of ['https://example.test/popup.html', chrome.runtime.getURL('popup.html') + '?host=anything', chrome.runtime.getURL('other.html')]) {
+      assert.equal(messages.listeners[0]({ command: 'connect' }, { id: 'fixture', url }, () => assert.fail('untrusted sender was admitted')), false);
+    }
     const first = connect(); await flush();
     assert.equal(ports.length, 1);
     ports[0].onMessage.emit({ type: 'ready', protocol_version: 5 });

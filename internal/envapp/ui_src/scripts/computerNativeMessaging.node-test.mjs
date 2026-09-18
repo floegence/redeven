@@ -29,10 +29,10 @@ test('native messaging launches the Runtime bridge and exchanges bounded profile
   let context, peer;
   try {
     const accepted = once(server, 'connection');
-    context = await chromium.launchPersistentContext(path.join(directory, 'profile'), { channel: 'chromium', headless: true,
+    context = await chromium.launchPersistentContext(path.join(directory, 'profile'), { channel: 'chromium', headless: true, chromiumSandbox: true,
       args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
-    const popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html`);
-    await popup.locator('#profile').fill('Native fixture'); await popup.locator('#bridge').fill(name); await popup.locator('#connect-button').click();
+    const popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html#${name}`);
+    await popup.locator('#connect-button').click();
     let timer;
     try { [peer] = await Promise.race([accepted, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Chrome did not launch the native host')), 6000); })]); }
     catch (error) {
@@ -55,7 +55,7 @@ test('native messaging launches the Runtime bridge and exchanges bounded profile
     const receive = async () => { if (!messages.length) await new Promise(resolve => waiters.push(resolve)); return messages.shift(); };
     const send = value => { const body = Buffer.from(JSON.stringify(value)), header = Buffer.alloc(4); header.writeUInt32LE(body.length); peer.write(Buffer.concat([header, body])); };
     assert.deepEqual(await receive(), { type: 'native_host', protocol_version: 5, extension_id: extensionID });
-    const hello = await receive(); assert.equal(hello.type, 'hello'); assert.equal(hello.profile_name, 'Native fixture');
+    const hello = await receive(); assert.equal(hello.type, 'hello'); assert.equal(hello.profile_name, 'Chrome');
     send({ type: 'ready', protocol_version: 5 });
     await popup.waitForFunction(async () => (await chrome.runtime.sendMessage({ command: 'status' })).connected === true);
     send({ id: '1', command: 'inventory' });

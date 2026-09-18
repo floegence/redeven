@@ -95,7 +95,11 @@ func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (Comput
 	if info, err := os.Stat(filepath.Join(resources, "manifest.json")); err != nil || !info.Mode().IsRegular() {
 		return ComputerExtensionSetup{}, errors.New("packaged browser extension unavailable")
 	}
+	installation := filepath.Join(filepath.Dir(managed.ProfileDir), "browser-extension")
 	if hub == nil {
+		if err := stageComputerExtension(resources, installation); err != nil {
+			return ComputerExtensionSetup{}, err
+		}
 		directory, err := os.MkdirTemp("/tmp", "redeven-chrome-")
 		if err != nil {
 			return ComputerExtensionSetup{}, err
@@ -145,7 +149,7 @@ func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (Comput
 	hub.mu.Lock()
 	hub.manifestPath, hub.manifestBytes = manifestPath, manifest
 	hub.mu.Unlock()
-	return ComputerExtensionSetup{NativeHost: nativeName, ExtensionID: browserbridge.ExtensionID, ExtensionPath: resources}, nil
+	return ComputerExtensionSetup{NativeHost: nativeName, ExtensionID: browserbridge.ExtensionID, ExtensionPath: installation}, nil
 }
 
 func (h *computerExtensionHub) accept() {
