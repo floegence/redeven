@@ -2683,11 +2683,8 @@
     "deviceAddress": "Endereço para o navegador deste dispositivo",
     "networkAccessAddress": "Endereço de acesso pela rede",
     "listenerDetails": "Ver endereço de escuta interno",
-    "openViaDesktop": "Neste dispositivo, selecione “{action}” no Desktop para se conectar.",
-    "loopbackHelp": "Este endereço de loopback pertence a {host}. Hosts diferentes podem usar a mesma porta. Ele não é um endereço para acessar este ambiente no navegador do seu dispositivo.",
-    "sshConnection": "O Desktop se conecta a este ambiente via SSH.",
-    "wslConnection": "O Desktop se conecta a esta distribuição WSL.",
-    "containerConnection": "O Desktop se conecta pelo host do contêiner."
+    "openViaDesktop": "Selecione “{action}” no Desktop para abrir este ambiente.",
+    "loopbackHelp": "Este endereço de loopback pertence a {host}. Hosts diferentes podem usar a mesma porta. Ele não é um endereço para acessar este ambiente no navegador do seu dispositivo."
   },
   "flowerRuntime": {
     "runtimeTitle": "Atualize o ambiente de execução para usar o Flower",

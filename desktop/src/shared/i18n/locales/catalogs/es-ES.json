@@ -2683,11 +2683,8 @@
     "deviceAddress": "Dirección para el navegador de este dispositivo",
     "networkAccessAddress": "Dirección de acceso por red",
     "listenerDetails": "Ver dirección de escucha interna",
-    "openViaDesktop": "En este dispositivo, selecciona «{action}» en Desktop para conectarte.",
-    "loopbackHelp": "Esta dirección de bucle local pertenece a {host}. Distintos hosts pueden usar el mismo puerto. No es una dirección para acceder a este entorno desde el navegador de tu dispositivo.",
-    "sshConnection": "Desktop se conecta a este entorno mediante SSH.",
-    "wslConnection": "Desktop se conecta a esta distribución WSL.",
-    "containerConnection": "Desktop se conecta a través del host del contenedor."
+    "openViaDesktop": "Selecciona «{action}» en Desktop para abrir este entorno.",
+    "loopbackHelp": "Esta dirección de bucle local pertenece a {host}. Distintos hosts pueden usar el mismo puerto. No es una dirección para acceder a este entorno desde el navegador de tu dispositivo."
   },
   "flowerRuntime": {
     "runtimeTitle": "Actualiza el entorno de ejecución para usar Flower",

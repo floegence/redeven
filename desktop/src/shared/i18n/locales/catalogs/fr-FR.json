@@ -2683,11 +2683,8 @@
     "deviceAddress": "Adresse pour le navigateur sur cet appareil",
     "networkAccessAddress": "Adresse d’accès réseau",
     "listenerDetails": "Afficher l’adresse d’écoute interne",
-    "openViaDesktop": "Sur cet appareil, choisissez « {action} » dans Desktop pour vous connecter.",
-    "loopbackHelp": "Cette adresse de bouclage appartient à {host}. Des hôtes différents peuvent utiliser le même port. Elle ne permet pas d’accéder à cet environnement dans le navigateur de votre appareil.",
-    "sshConnection": "Desktop se connecte à cet environnement via SSH.",
-    "wslConnection": "Desktop se connecte à cette distribution WSL.",
-    "containerConnection": "Desktop se connecte via l’hôte du conteneur."
+    "openViaDesktop": "Choisissez « {action} » dans Desktop pour ouvrir cet environnement.",
+    "loopbackHelp": "Cette adresse de bouclage appartient à {host}. Des hôtes différents peuvent utiliser le même port. Elle ne permet pas d’accéder à cet environnement dans le navigateur de votre appareil."
   },
   "flowerRuntime": {
     "runtimeTitle": "Mettez à jour le moteur d’exécution pour utiliser Flower",

@@ -953,11 +953,8 @@ export const enUS = {
     unavailableTrigger: '{label} is unavailable. Show recovery options.',
   },
   environmentConnection: {
-    containerConnection: "Desktop connects through the container’s host.",
-    wslConnection: "Desktop connects to this WSL distribution.",
-    sshConnection: "Desktop connects to this environment over SSH.",
     loopbackHelp: "This loopback address belongs to {host}. Different hosts can use the same port. It is not a browser entry for this environment on your device.",
-    openViaDesktop: "On this device, choose “{action}” in Desktop to connect.",
+    openViaDesktop: "Choose “{action}” in Desktop to enter this environment.",
     listenerDetails: "View internal listening address",
     networkAccessAddress: "Network access address",
     deviceAddress: "Browser address on this device",

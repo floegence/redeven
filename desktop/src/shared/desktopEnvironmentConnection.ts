@@ -52,16 +52,11 @@ export function runtimeConnectionIsOnThisDevice(context: DesktopRuntimeConnectio
 
 export function runtimeConnectionRows(context: DesktopRuntimeConnectionContext): readonly DesktopConnectionRow[] {
   const host = context.host_access;
-  const connectionHelp: DesktopTranslationKey | undefined = context.placement.kind === 'container_process'
-    ? 'environmentConnection.containerConnection'
-    : host.kind === 'ssh_host' ? 'environmentConnection.sshConnection'
-      : host.kind === 'wsl_host' ? 'environmentConnection.wslConnection' : undefined;
   const rows: DesktopConnectionRow[] = [host.kind === 'ssh_host'
     ? { id: 'host', kind: 'connection', label_key: 'environmentFacts.sshHost', value: desktopSSHAuthority(host.ssh), copyable: true }
     : host.kind === 'wsl_host'
       ? { id: 'host', kind: 'connection', label_key: 'environmentConnection.wsl', value: `${host.distribution_name} · ${host.linux_user}`, copyable: true }
       : { id: 'host', kind: 'connection', label_key: 'environmentFacts.runsOn', value: '', value_key: 'environmentFacts.thisDevice', copyable: false }];
-  if (connectionHelp) rows[0] = { ...rows[0]!, detail_key: connectionHelp };
   if (context.placement.kind === 'container_process') {
     rows.push({
       id: 'container', kind: 'connection', label_key: 'environmentFacts.container',

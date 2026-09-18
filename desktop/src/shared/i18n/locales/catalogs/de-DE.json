@@ -2683,11 +2683,8 @@
     "deviceAddress": "Browseradresse auf diesem Gerät",
     "networkAccessAddress": "Adresse für den Netzwerkzugriff",
     "listenerDetails": "Interne Listener-Adresse anzeigen",
-    "openViaDesktop": "Wählen Sie auf diesem Gerät in Desktop „{action}“, um sich zu verbinden.",
-    "loopbackHelp": "Diese Loopback-Adresse gehört zu {host}. Verschiedene Hosts können denselben Port verwenden. Sie ist kein Browserzugang zu dieser Umgebung auf Ihrem Gerät.",
-    "sshConnection": "Desktop verbindet sich per SSH mit dieser Umgebung.",
-    "wslConnection": "Desktop verbindet sich mit dieser WSL-Distribution.",
-    "containerConnection": "Desktop stellt die Verbindung über den Container-Host her."
+    "openViaDesktop": "Wählen Sie in Desktop „{action}“, um diese Umgebung zu öffnen.",
+    "loopbackHelp": "Diese Loopback-Adresse gehört zu {host}. Verschiedene Hosts können denselben Port verwenden. Sie ist kein Browserzugang zu dieser Umgebung auf Ihrem Gerät."
   },
   "flowerRuntime": {
     "runtimeTitle": "Laufzeit aktualisieren, um Flower zu nutzen",

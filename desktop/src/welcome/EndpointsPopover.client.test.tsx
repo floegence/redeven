@@ -47,8 +47,8 @@ describe('Environment connection popover', () => {
     const details = document.querySelector<HTMLDetailsElement>('.redeven-endpoint-listener')!;
     expect(details).not.toBeNull();
     expect(details.open).toBe(false);
-    expect(document.body.textContent).toContain('On this device, choose “Open Env App” in Desktop to connect.');
-    expect(document.body.textContent).toContain('Desktop connects to this environment over SSH.');
+    expect(document.body.textContent).toContain('Choose “Open Env App” in Desktop to enter this environment.');
+    expect(document.querySelector('[data-endpoint-id="host"]')?.textContent).toContain('gzcom:22');
     details.open = true;
     const summary = details.querySelector('summary')!;
     summary.focus();

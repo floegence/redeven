@@ -986,18 +986,16 @@ html:not(.dark) .redeven-new-environment-card:hover {
   align-items: center;
   gap: 0.65rem;
   min-width: 0;
-  padding: 0.65rem 0.75rem;
+  padding: 0.875rem 1rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 4%, var(--popover)), var(--popover));
 }
 
 .redeven-endpoints-popover-mark {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 1.8rem;
-  height: 1.8rem;
-  border: 1px solid color-mix(in srgb, var(--primary) 12%, transparent);
+  width: 2rem;
+  height: 2rem;
   border-radius: 0.55rem;
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 7%, transparent);
@@ -1010,7 +1008,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
 
 .redeven-endpoints-popover-heading {
   display: grid;
-  gap: 0.05rem;
+  gap: 0.125rem;
   min-width: 0;
   flex: 1;
 }
@@ -1024,7 +1022,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
 .redeven-endpoints-popover-title {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   line-height: 1.4;
   color: var(--foreground);
@@ -1057,14 +1055,13 @@ html:not(.dark) .redeven-new-environment-card:hover {
 .redeven-endpoints-popover-body {
   min-width: 0;
   min-height: 0;
-  padding: 0.5rem;
+  padding: 0 1rem 0.25rem;
   overflow: auto;
   overscroll-behavior: contain;
 }
 
 .redeven-endpoints-popover-list {
   display: grid;
-  gap: 0.25rem;
   min-width: 0;
 }
 
@@ -1095,181 +1092,101 @@ html:not(.dark) .redeven-new-environment-card:hover {
   to { opacity: 1; transform: scale(1); }
 }
 
-/* ── Card body: flat endpoint rows ── */
-
+/* One reading edge and quiet separators for connection facts and access scope. */
 .redeven-card-endpoint-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem;
   min-width: 0;
   width: 100%;
-  padding: 0.45rem 0.4rem;
-  border-radius: 0.25rem;
+  padding-block: 0.75rem;
   text-align: left;
   color: inherit;
+}
+
+.redeven-card-endpoint-row + .redeven-card-endpoint-row {
+  border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.redeven-card-endpoint-label {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 450;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.redeven-card-endpoint-content {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.redeven-card-endpoint-value,
+.redeven-endpoint-scope-title {
+  display: block;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-variant-ligatures: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
 }
 
 .redeven-card-endpoint-detail {
   display: block;
   margin-top: 0.25rem;
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
-  line-height: 1.5;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  text-wrap: pretty;
 }
 
-.redeven-card-endpoint-row[data-selected] {
-  background: color-mix(in srgb, var(--primary) 8%, transparent);
+.redeven-card-endpoint-row[data-selected] .redeven-card-endpoint-value {
+  color: var(--primary);
 }
 
-.redeven-card-endpoint-label {
-  display: inline-flex;
-  flex: 0 0 auto;
-  min-width: 2.6rem;
-  max-width: 5.4rem;
-  justify-content: center;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
-  border-radius: 0.2rem;
-  background: color-mix(in srgb, var(--foreground) 4%, transparent);
-  padding: 0.18rem 0.4rem;
-  font-size: 0.56rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted-foreground);
-}
-
-.redeven-card-endpoint-value {
-  display: block;
-  font-family: var(--font-sans);
-  font-variant-ligatures: none;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 0.78rem;
-  color: var(--foreground);
-}
-
-.redeven-endpoints-popover .redeven-card-endpoint-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+.redeven-endpoint-actions {
+  display: flex;
   align-items: center;
-  column-gap: 0.2rem;
-  row-gap: 0.2rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid transparent;
-  border-radius: 0.6rem;
-}
-
-.redeven-endpoints-popover .redeven-card-endpoint-row[data-endpoint-kind='address'],
-.redeven-endpoints-popover .redeven-card-endpoint-row[data-endpoint-kind='status'] {
-  border-color: color-mix(in srgb, var(--border) 64%, transparent);
-  background: linear-gradient(120deg, color-mix(in srgb, var(--primary) 4%, var(--popover)), color-mix(in srgb, var(--muted) 28%, var(--popover)));
-}
-
-.redeven-endpoints-popover .redeven-card-endpoint-row[data-selected] {
-  border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
-  background: color-mix(in srgb, var(--primary) 6%, var(--popover));
-}
-
-.redeven-endpoints-popover .redeven-card-endpoint-label {
-  grid-column: 1;
+  justify-self: end;
+  gap: 0.25rem;
+  grid-column: -2;
   grid-row: 1;
-  justify-content: start;
-  min-width: 0;
-  max-width: none;
+}
+
+.redeven-endpoint-action {
+  min-height: 1.5rem;
+  height: 1.5rem;
+  width: 1.5rem;
   padding: 0;
-  border: 0;
-  background: transparent;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
-  white-space: normal;
-}
-
-.redeven-endpoints-popover .redeven-card-endpoint-row > div {
-  grid-column: 1 / -1;
-  grid-row: 2;
-}
-
-.redeven-endpoints-popover .redeven-card-endpoint-value {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  line-height: 1.45;
-}
-
-.redeven-endpoints-popover .redeven-card-endpoint-row[data-endpoint-kind='connection'] {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  column-gap: 0.6rem;
-  padding-block: 0.35rem;
-}
-
-.redeven-endpoints-popover [data-endpoint-kind='connection'] > div {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.redeven-endpoints-popover [data-endpoint-kind='connection'] > .redeven-card-endpoint-label {
-  max-width: 7rem;
-}
-
-.redeven-endpoints-popover [data-endpoint-kind='connection'] .redeven-card-endpoint-value {
-  font-weight: 550;
-}
-
-.redeven-endpoints-popover .redeven-card-endpoint-detail {
-  margin-top: 0.2rem;
-  font-size: 0.6875rem;
-  line-height: 1.5;
-}
-
-.redeven-endpoints-popover .redeven-endpoint-action {
-  grid-row: 1;
-  align-self: start;
-  min-height: 1.75rem;
-  height: 1.75rem;
-  width: 1.75rem;
-  padding: 0;
-  border-radius: 0.4rem;
+  border-radius: 0.375rem;
   color: var(--muted-foreground);
   transition: color 140ms ease, background-color 140ms ease, transform 140ms ease;
 }
 
-.redeven-endpoints-popover .redeven-endpoint-action:hover,
-.redeven-endpoints-popover .redeven-endpoint-action[aria-expanded='true'] {
+.redeven-endpoint-action:hover,
+.redeven-endpoint-action[aria-expanded='true'] {
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
-.redeven-endpoints-popover .redeven-endpoint-action:active {
-  transform: scale(0.92);
-}
-
-.redeven-endpoints-popover .redeven-endpoint-action[data-copied] {
-  color: var(--success);
-  background: color-mix(in srgb, var(--success) 9%, transparent);
-}
-
-.redeven-endpoints-popover .redeven-endpoint-action[data-copied] svg {
+.redeven-endpoint-action:active { transform: scale(0.92); }
+.redeven-endpoint-action[data-copied] { color: var(--success); }
+.redeven-endpoint-action[data-copied] svg {
   animation: redeven-endpoint-copied 180ms ease-out both;
 }
 
-.redeven-endpoint-scope-title {
-  display: block;
-  color: var(--foreground);
-  font-size: 0.8125rem;
-  font-weight: 550;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
 .redeven-endpoint-listener {
-  margin-top: 0.6rem;
+  margin-top: 0.5rem;
   min-width: 0;
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   line-height: 1.6;
 }
 
@@ -1298,82 +1215,37 @@ html:not(.dark) .redeven-new-environment-card:hover {
 .redeven-endpoint-listener[open] > summary > svg { transform: rotate(90deg); }
 
 .redeven-endpoint-listener-content {
-  margin-top: 0.5rem;
-  border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
-  padding-top: 0.5rem;
+  margin-top: 0.625rem;
+  border-inline-start: 2px solid color-mix(in srgb, var(--border) 80%, transparent);
+  padding-inline-start: 0.75rem;
   overflow-wrap: anywhere;
 }
 
-.redeven-endpoint-listener-content > p { margin-top: 0.35rem; }
+.redeven-endpoint-listener-content > .redeven-card-endpoint-value { font-size: 0.8125rem; }
+.redeven-endpoint-listener-content > p { margin-top: 0.375rem; }
 
 @media (prefers-reduced-motion: reduce) {
+  .redeven-endpoint-action,
   .redeven-endpoint-listener > summary,
   .redeven-endpoint-listener > summary > svg { transition: none; }
 }
 
-.redeven-settings-connections {
-  container-type: inline-size;
-  display: grid;
-  gap: 0.4rem;
-}
+.redeven-settings-connections { container-type: inline-size; }
 
-.redeven-settings-connections .redeven-card-endpoint-row {
-  display: grid;
-  grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr) auto auto auto;
-  align-items: start;
-  padding: 0.55rem 0.65rem;
-  border-radius: 0.5rem;
-}
-
-.redeven-settings-connections .redeven-card-endpoint-row[data-endpoint-kind='address'] {
-  background: color-mix(in srgb, var(--muted) 30%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-}
-
-.redeven-settings-connections .redeven-card-endpoint-label {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  min-width: 0;
-  max-width: none;
-  justify-content: start;
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.5;
-  letter-spacing: normal;
-  text-transform: none;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.redeven-settings-connections [data-internal-listener] > div { grid-column: 2 / -1; }
-
-@container (max-width: 30rem) {
-  .redeven-settings-connections .redeven-card-endpoint-row[data-endpoint-kind="address"] {
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
+/* The wider settings surface reads as one table, without cards nested in cards. */
+@container (min-width: 30rem) {
+  .redeven-settings-connections .redeven-card-endpoint-row {
+    grid-template-columns: 8rem minmax(0, 1fr) auto;
+    align-items: start;
+    column-gap: 0.75rem;
   }
 
-  .redeven-settings-connections [data-endpoint-kind="address"] > .redeven-card-endpoint-label,
-  .redeven-settings-connections [data-endpoint-kind="address"] > div {
-    grid-column: 1 / -1;
-    justify-self: start;
-  }
-
-  .redeven-settings-connections [data-endpoint-kind="address"] > button {
-    grid-row: 3;
-  }
-
-  .redeven-settings-connections [data-endpoint-kind="address"] > button:nth-of-type(1) {
+  .redeven-settings-connections .redeven-card-endpoint-label { padding-top: 0.125rem; }
+  .redeven-settings-connections .redeven-card-endpoint-content {
     grid-column: 2;
+    grid-row: 1;
   }
-
-  .redeven-settings-connections [data-endpoint-kind="address"] > button:nth-of-type(2) {
-    grid-column: 3;
-  }
-
-  .redeven-settings-connections [data-endpoint-kind="address"] > button:nth-of-type(3) {
-    grid-column: 4;
-  }
+  .redeven-settings-connections [data-internal-listener] > .redeven-card-endpoint-content { grid-column: 2 / -1; }
 }
 
 .redeven-endpoint-qr-panel {
@@ -4426,11 +4298,8 @@ pre,
 .environment-access-overview {
   display: flex;
   flex-direction: column;
-  gap: .875rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border));
-  border-radius: .75rem;
-  background: color-mix(in srgb, var(--primary) 3%, transparent);
+  gap: .375rem;
+  padding: .25rem 1.25rem 0;
 }
 .environment-access-overview-header,
 .environment-access-overview-heading {
@@ -4528,7 +4397,7 @@ pre,
   .environment-access-control { justify-content: flex-start; }
   .environment-access-password .redeven-settings-form-row > :last-child { width: min(100%, 18rem); }
   .environment-access-network > .redeven-settings-form-row > :last-child { justify-self: start; }
-  .environment-access-overview { padding: 1rem; }
+  .environment-access-overview { padding: .25rem 1rem 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .environment-access-advanced summary svg { transition: none; }
