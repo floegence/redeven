@@ -2959,3 +2959,51 @@ describe('desktopWelcomeState', () => {
 
 
 });
+
+describe('managed Runtime address provenance', () => {
+  const target = TEST_SSH_RUNTIME_TARGET;
+  const session = {
+    session_key: target.id as `ssh:${string}`,
+    target: buildSSHDesktopTarget({
+      ssh_destination: 'devbox', ssh_port: 2222, auth_mode: 'key_agent', runtime_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload', release_base_url: '',
+    }, { environmentID: target.id, label: target.label }),
+    lifecycle: 'open' as const,
+    entry_url: 'http://127.0.0.1:44001/_redeven_proxy/env/',
+    transport_kind: 'placement_bridge' as const,
+  };
+
+  it('never promotes a managed session entry into a public Runtime address', () => {
+    for (const startup of [undefined, {
+      local_ui_url: '', local_ui_urls: [], local_ui_bridge_url: 'http://127.0.0.1:44001/',
+      local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    }]) {
+      const snapshot = buildDesktopWelcomeSnapshot({
+        preferences: testDesktopPreferences({ saved_runtime_targets: [target] }),
+        openSessions: [{ ...session, startup }],
+      });
+      const entry = snapshot.environments.find((item) => item.id === target.id)!;
+      expect(entry.local_ui_url).toBe('');
+      expect(entry.local_ui_urls).toEqual([]);
+      expect(entry.runtime_health.status).toBe('online');
+    }
+  });
+
+  it('uses one current SSH report and lets Stop override a stale open session', () => {
+    for (const running of [true, false]) {
+      const presence = sshRuntimePresence({
+        running, local_ui_url: '', local_ui_urls: running ? ['https://192.0.2.20:25000/'] : [],
+        runtime_control_status: running ? { state: 'available' } : { state: 'missing', reason_code: 'not_started', message: 'Not running' },
+      });
+      const snapshot = buildDesktopWelcomeSnapshot({
+        preferences: testDesktopPreferences({ saved_runtime_targets: [target] }),
+        openSessions: [{ ...session, startup: { local_ui_url: 'http://localhost:23998/', local_ui_urls: ['http://localhost:23998/'] } }],
+        managedRuntimePresenceByTargetID: { [presence.target_id]: presence },
+      });
+      const entry = snapshot.environments.find((item) => item.id === target.id)!;
+      expect(entry.local_ui_url).toBe(running ? 'https://192.0.2.20:25000/' : '');
+      expect(entry.local_ui_urls).toEqual(running ? ['https://192.0.2.20:25000/'] : []);
+      expect(entry.runtime_health.status).toBe(running ? 'online' : 'offline');
+    }
+  });
+});

@@ -25,6 +25,8 @@ function surface(
     access_mode_options: [],
     next_start_address_display: localUIBind,
     next_start_address_kind: 'raw',
+    runtime_connection: { host_access: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: '' } },
+    runtime_health: { status: 'offline', source: 'local_runtime_probe', freshness: 'fresh', checked_at_unix_ms: 0, offline_reason_code: 'not_started' },
     current_runtime_url: '',
     current_runtime_urls: [],
     current_runtime_running: false,

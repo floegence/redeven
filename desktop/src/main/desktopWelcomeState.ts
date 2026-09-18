@@ -1,3 +1,4 @@
+import { reportedRuntimeURLs } from '../shared/desktopEnvironmentConnection';
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import {
   desktopPreferencesToDraft,
@@ -1032,6 +1033,7 @@ function runtimeHealthFromPresence(
       : null;
     return {
       ...fallback,
+      status: 'offline',
       ...(presence.started_at_unix_ms ? { started_at_unix_ms: presence.started_at_unix_ms } : {}),
       checked_at_unix_ms: presence.checked_at_unix_ms,
       source,
@@ -1216,14 +1218,10 @@ function buildLocalEnvironmentEntry(
       localSession?.startup ? 'running' : localRuntimeState(environment), cachedRuntimeHealth,
     );
   const runtimeRunning = resolvedLocalRuntimeState === 'running';
-  const resolvedLocalRuntimeURL = runtimeRunning
-    ? (presence?.local_ui_url ?? cachedRuntimeHealth?.local_ui_url
-      ?? localSession?.startup?.local_ui_url ?? localRuntimeURL(environment))
-    : '';
-  const resolvedLocalRuntimeURLs = !runtimeRunning ? [] : presence
-    ? (presence.local_ui_urls ?? (resolvedLocalRuntimeURL ? [resolvedLocalRuntimeURL] : []))
-    : (localSession?.startup?.local_ui_urls ?? environment.local_hosting.current_runtime?.local_ui_urls
-      ?? (resolvedLocalRuntimeURL ? [resolvedLocalRuntimeURL] : []));
+  const resolvedLocalRuntimeURLs = runtimeRunning ? reportedRuntimeURLs(
+    presence ?? localSession?.startup ?? environment.local_hosting.current_runtime ?? cachedRuntimeHealth,
+  ) : [];
+  const resolvedLocalRuntimeURL = resolvedLocalRuntimeURLs[0] ?? '';
   const startedAtUnixMS = runtimeStartedAtUnixMS(
     presence?.started_at_unix_ms,
     localSession?.startup?.started_at_unix_ms,
@@ -1836,8 +1834,10 @@ function buildSavedRuntimeTargetEntry(
     runtimeService,
     redevenCloudOriginPolicy,
   });
-  const localUIURL = presence?.running === false ? '' : presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '';
-  const localUIURLs = presence?.running === false ? [] : presence?.local_ui_urls ?? openSession?.startup?.local_ui_urls ?? (localUIURL ? [localUIURL] : []);
+  const localUIURLs = presence?.running === false ? [] : reportedRuntimeURLs(
+    presence ?? openSession?.startup ?? cachedRuntimeHealth,
+  );
+  const localUIURL = localUIURLs[0] ?? '';
   const effectiveHostAccess = presence?.host_access ?? target.host_access;
   const effectivePlacement = presence?.placement ?? target.placement;
   const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
@@ -2001,6 +2001,10 @@ export function buildDesktopWelcomeSnapshot(
       environment_id: localEnvironment.id,
       environment_label: localEnvironment.label,
       environment_kind: localEnvironmentStateKind(localEnvironment),
+      runtime_connection: localEnvironmentEntry?.managed_runtime_host_access && localEnvironmentEntry.managed_runtime_placement
+        ? { host_access: localEnvironmentEntry.managed_runtime_host_access, placement: localEnvironmentEntry.managed_runtime_placement }
+        : undefined,
+      runtime_health: localEnvironmentEntry?.runtime_health,
       current_runtime_url: compact(localEnvironmentEntry?.local_ui_url),
       current_runtime_running: localEnvironmentEntry?.local_environment_runtime_state === 'running',
       current_runtime_urls: localEnvironmentEntry?.local_ui_urls ?? [],

@@ -1,3 +1,4 @@
+import { buildRuntimeConnectionRows, runtimeConnectionIsOnThisDevice, isShareableConnectionAddress, type DesktopShareableConnectionAddress } from '../shared/desktopEnvironmentConnection';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../shared/desktopCertificate';
 import { For, Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
@@ -30,6 +31,7 @@ import {
   Save,
   Search,
   Settings,
+  ShareIcon,
   MoreHorizontal,
   Shield,
   ShieldCheck,
@@ -124,7 +126,6 @@ import {
   type RuntimeServiceSnapshot,
   type RuntimeServiceWorkload,
 } from '../shared/runtimeService';
-import { endpointDisplayValue } from './endpointDisplay';
 import { createAskFlowerWindowViewportInsets } from '../shared/askFlowerWindowViewport';
 import {
   FlowerIcon,
@@ -192,7 +193,6 @@ import {
   desktopPasswordStateTranslationKey,
   desktopSettingsDraftRequiresRuntimeRestart,
   deriveDesktopAccessDraftModel,
-  isLoopbackHost,
   validateDesktopAccessDraft,
 } from '../shared/desktopAccessModel';
 import {
@@ -280,7 +280,7 @@ import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
 import {
   closeEnvironmentLibraryOverlayState,
   closedEnvironmentLibraryOverlayState,
-  environmentEndpointOverlaySelectedValueFor,
+  environmentEndpointOverlaySelectedIDFor,
   environmentLibraryOverlayOpenFor,
   openEnvironmentLibraryOverlayState,
   reconcileEnvironmentLibraryOverlayState,
@@ -795,7 +795,6 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     Open: 'environmentStatus.open',
     Running: 'progress.running',
     'Not running': 'settings.notRunning',
-    'Address pending': 'settings.addressPending',
     OPENING: 'environmentStatus.opening',
     READY: 'status.ready',
     CHECKING: 'environmentStatus.checking',
@@ -1496,7 +1495,6 @@ function localizedFactLabel(i18n: DesktopI18n, label: string): string {
     'SSH Host': 'environmentCenter.sshHostFilter',
     LOCAL: 'environmentFacts.local',
     'SSH HOST': 'environmentFacts.sshHost',
-    'FORWARDED URL': 'environmentFacts.forwardedUrl',
     DETAIL: 'environmentFacts.detail',
     STATUS: 'environmentFacts.status',
   });
@@ -1580,7 +1578,6 @@ function localizedFactValue(i18n: DesktopI18n, label: string, value: string): st
   }
   if (label === 'STATUS') {
     return localizedStringByValue(i18n, value, {
-      'Desktop only': 'environmentFacts.desktopOnly',
       'Not running': 'environmentFacts.notRunning',
     });
   }
@@ -1678,7 +1675,7 @@ function localizedFactActionLabel(i18n: DesktopI18n, label: string): string {
   if (show) {
     return i18n.t('environmentFacts.showLabel', { label: show[1] ?? '' });
   }
-  return localizedCopyLabel(i18n, label) || label;
+  return label;
 }
 
 function localizedFactActionAriaLabel(i18n: DesktopI18n, label: string): string {
@@ -1688,38 +1685,7 @@ function localizedFactActionAriaLabel(i18n: DesktopI18n, label: string): string 
       label: showLinked[1] ?? '',
     });
   }
-  return localizedCopyLabel(i18n, label) || localizedFactActionLabel(i18n, label);
-}
-
-function localizedCopyLabel(i18n: DesktopI18n, label: string): string {
-  return localizedStringByValue(i18n, label, {
-    'Copy local endpoint': 'environmentFacts.copyLocalEndpoint',
-    'Copy environment URL': 'environmentFacts.copyEnvironmentUrl',
-    'Copy endpoint': 'environmentFacts.copyEndpoint',
-    'Copy SSH host': 'environmentFacts.copySshHost',
-    'Copy forwarded URL': 'environmentFacts.copyForwardedUrl',
-  });
-}
-
-function copiedValueLabel(i18n: DesktopI18n, label: string): string {
-  const keyByLocalized = new Map<string, string>([
-    ['Copy local endpoint', i18n.t('environmentFacts.localEndpoint')],
-    ['Copy environment URL', i18n.t('environmentFacts.environmentUrl')],
-    ['Copy endpoint', i18n.t('environmentFacts.endpoint')],
-    ['Copy SSH host', i18n.t('environmentFacts.sshHostLower')],
-    ['Copy forwarded URL', i18n.t('environmentFacts.forwardedUrlLower')],
-    [i18n.t('environmentFacts.copyLocalEndpoint'), i18n.t('environmentFacts.localEndpoint')],
-    [i18n.t('environmentFacts.copyEnvironmentUrl'), i18n.t('environmentFacts.environmentUrl')],
-    [i18n.t('environmentFacts.copyEndpoint'), i18n.t('environmentFacts.endpoint')],
-    [i18n.t('environmentFacts.copySshHost'), i18n.t('environmentFacts.sshHostLower')],
-    [i18n.t('environmentFacts.copyForwardedUrl'), i18n.t('environmentFacts.forwardedUrlLower')],
-    [i18n.t('environmentFacts.localEndpoint'), i18n.t('environmentFacts.localEndpoint')],
-    [i18n.t('environmentFacts.environmentUrl'), i18n.t('environmentFacts.environmentUrl')],
-    [i18n.t('environmentFacts.endpoint'), i18n.t('environmentFacts.endpoint')],
-    [i18n.t('environmentFacts.sshHostLower'), i18n.t('environmentFacts.sshHostLower')],
-    [i18n.t('environmentFacts.forwardedUrlLower'), i18n.t('environmentFacts.forwardedUrlLower')],
-  ]);
-  return keyByLocalized.get(label) ?? label;
+  return localizedFactActionLabel(i18n, label);
 }
 
 function localizedEnvironmentFact(
@@ -1738,19 +1704,7 @@ function localizedEnvironmentFact(
           label: localizedFactActionLabel(i18n, fact.action.label),
           aria_label: localizedFactActionAriaLabel(i18n, fact.action.aria_label),
         }
-      : undefined,
-    endpoints: fact.endpoints?.map((endpoint) => ({
-      ...endpoint,
-      label: localizedFactLabel(i18n, endpoint.label),
-      ...(endpoint.detail
-        ? {
-            detail: localizedStringByValue(i18n, endpoint.detail, {
-              'Private Desktop bridge; browser access is unavailable': 'environmentFacts.desktopBridgeEndpointDetail',
-            }),
-          }
-        : {}),
-      ...(endpoint.copy_label ? { copy_label: localizedCopyLabel(i18n, endpoint.copy_label) } : {}),
-    })),
+        : undefined,
   };
 }
 
@@ -6056,9 +6010,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
+  async function openConnectionInBrowser(url: string): Promise<void> {
+    try {
+      const result = await window.redevenDesktopShell?.openExternalURL?.(url);
+      if (!result?.ok) showActionToast(result?.message || i18n().t('toast.actionFailedFallback'), 'error');
+    } catch (error) { showActionToast(getErrorMessage(error), 'error'); }
+  }
+
   async function copyEnvironmentValue(value: string, copyLabel: string): Promise<void> {
     await copyToClipboard(value);
-    const messageLabel = copiedValueLabel(i18n(), trimString(copyLabel));
+    const messageLabel = trimString(copyLabel);
     showActionToast(messageLabel ? i18n().t('toast.valueCopied', { label: messageLabel }) : i18n().t('environmentCenter.copiedToClipboard'));
   }
 
@@ -6451,6 +6412,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 }
               }}
               toggleEnvironmentPinned={toggleEnvironmentPinned}
+              openInBrowser={openConnectionInBrowser}
               copyEnvironmentValue={copyEnvironmentValue}
               editEnvironment={startEditingEnvironment}
               deleteEnvironment={setDeleteTarget}
@@ -7247,6 +7209,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
+  openInBrowser: (url: string) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -7598,7 +7561,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
                 runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                 toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                copyEnvironmentValue={props.copyEnvironmentValue}
+                openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
                 editEnvironment={props.editEnvironment}
                 deleteEnvironment={props.deleteEnvironment}
                 cancelOperation={props.cancelOperation}
@@ -7686,6 +7649,7 @@ function EnvironmentCardsPanel(
     runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
     runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
     toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
+    openInBrowser: (url: string) => Promise<void>;
     copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
     editEnvironment: (environment: DesktopEnvironmentEntry) => void;
     deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -7893,8 +7857,8 @@ function EnvironmentCardsPanel(
     );
   };
 
-  const selectEndpointForQRCode = (environmentID: string, endpointValue: string) => {
-    setActiveEnvironmentOverlayState(selectEnvironmentEndpointOverlayState(environmentID, endpointValue));
+  const selectEndpointForQRCode = (environmentID: string, endpointID: string) => {
+    setActiveEnvironmentOverlayState(selectEnvironmentEndpointOverlayState(environmentID, endpointID));
   };
 
   const projectedEnvironment = (environmentID: string): DesktopEnvironmentEntry =>
@@ -7988,11 +7952,11 @@ function EnvironmentCardsPanel(
                       environmentID,
                     )}
                     onEndpointPopoverOpenChange={(open) => setEndpointPopoverOpen(environmentID, open)}
-                    selectedEndpointValue={environmentEndpointOverlaySelectedValueFor(
+                    selectedEndpointID={environmentEndpointOverlaySelectedIDFor(
                       activeEnvironmentOverlayState(),
                       environmentID,
                     )}
-                    selectEndpointForQRCode={(endpointValue) => selectEndpointForQRCode(environmentID, endpointValue)}
+                    selectEndpointForQRCode={(endpointID) => selectEndpointForQRCode(environmentID, endpointID)}
                     guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
@@ -8002,7 +7966,7 @@ function EnvironmentCardsPanel(
                     runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
                     runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                    copyEnvironmentValue={props.copyEnvironmentValue}
+                    openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
                     cancelOperation={props.cancelOperation}
@@ -8060,11 +8024,11 @@ function EnvironmentCardsPanel(
                       environmentID,
                     )}
                     onEndpointPopoverOpenChange={(open) => setEndpointPopoverOpen(environmentID, open)}
-                    selectedEndpointValue={environmentEndpointOverlaySelectedValueFor(
+                    selectedEndpointID={environmentEndpointOverlaySelectedIDFor(
                       activeEnvironmentOverlayState(),
                       environmentID,
                     )}
-                    selectEndpointForQRCode={(endpointValue) => selectEndpointForQRCode(environmentID, endpointValue)}
+                    selectEndpointForQRCode={(endpointID) => selectEndpointForQRCode(environmentID, endpointID)}
                     guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
@@ -8074,7 +8038,7 @@ function EnvironmentCardsPanel(
                     runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
                     runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                    copyEnvironmentValue={props.copyEnvironmentValue}
+                    openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
                     cancelOperation={props.cancelOperation}
@@ -8268,13 +8232,15 @@ function qrCodeDataUrl(value: string): string {
 function EnvironmentCardFactsBlock(props: Readonly<{
   i18n: DesktopI18n;
   facts: readonly EnvironmentCardFactModel[];
+  environmentLabel: string;
   minRows?: number;
   onFactAction: (action: EnvironmentCardFactActionModel) => void;
+  openInBrowser: (url: string) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   endpointPopoverOpen: boolean;
   onEndpointPopoverOpenChange: (open: boolean) => void;
-  selectedEndpointValue?: string;
-  selectEndpointForQRCode: (endpointValue: string) => void;
+  selectedEndpointID?: string;
+  selectEndpointForQRCode: (endpointID: string) => void;
 }>) {
   return (
     <div
@@ -8350,10 +8316,11 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                     <EndpointsPopover
                       i18n={props.i18n}
                       endpoints={fact.endpoints!}
-                      copyEnvironmentValue={props.copyEnvironmentValue}
+                      environmentLabel={props.environmentLabel}
+                      openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
                       open={props.endpointPopoverOpen}
                       onOpenChange={props.onEndpointPopoverOpenChange}
-                      selectedEndpointValue={props.selectedEndpointValue}
+                      selectedEndpointID={props.selectedEndpointID}
                       selectEndpointForQRCode={props.selectEndpointForQRCode}
                     />
                   </Show>
@@ -8402,21 +8369,22 @@ function EnvironmentCardFactsBlock(props: Readonly<{
   );
 }
 
-function EndpointsPopover(props: Readonly<{
+export function EndpointsPopover(props: Readonly<{
   i18n: DesktopI18n;
   endpoints: readonly EnvironmentCardEndpointModel[];
+  environmentLabel: string;
+  openInBrowser: (url: string) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  selectedEndpointValue?: string;
-  selectEndpointForQRCode: (endpointValue: string) => void;
+  selectedEndpointID?: string;
+  selectEndpointForQRCode: (endpointID: string) => void;
 }>) {
   let anchorRef: HTMLSpanElement | undefined;
   let popoverRef: HTMLDivElement | undefined;
 
-  const selectedEndpoint = createMemo(() => (
-    props.endpoints.find((endpoint) => endpoint.value === props.selectedEndpointValue) ?? null
-  ));
+  const selectedEndpoint = createMemo(() => props.endpoints.filter(isShareableConnectionAddress)
+    .find((endpoint) => endpoint.id === props.selectedEndpointID) ?? null);
 
   const handlePointerDown = (event: MouseEvent) => {
     if (popoverRef?.contains(event.target as Node) || anchorRef?.contains(event.target as Node)) {
@@ -8491,7 +8459,7 @@ function EndpointsPopover(props: Readonly<{
             }}
           >
             <div class="redeven-endpoints-popover-header">
-              <span class="redeven-endpoints-popover-title">{props.i18n.t('environmentCenter.endpoints')}</span>
+              <span class="redeven-endpoints-popover-title">{props.environmentLabel}</span>
               <button
                 type="button"
                 class="redeven-endpoints-popover-close"
@@ -8508,17 +8476,9 @@ function EndpointsPopover(props: Readonly<{
               }}
             >
               <div class="redeven-endpoints-popover-list">
-                <For each={props.endpoints}>
-                  {(endpoint) => (
-                    endpoint.kind === 'status'
-                      ? <EndpointStatusRow endpoint={endpoint} i18n={props.i18n} />
-                      : <EndpointCopyRow
-                          endpoint={endpoint}
-                          selected={endpoint.value === selectedEndpoint()?.value}
-                          selectEndpointForQRCode={props.selectEndpointForQRCode}
-                        />
-                  )}
-                </For>
+                <EnvironmentConnectionRows rows={props.endpoints} i18n={props.i18n}
+                  selectedID={props.selectedEndpointID} selectForShare={props.selectEndpointForQRCode}
+                  openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue} />
               </div>
               <Show when={selectedEndpoint()}>
                 {(endpoint) => (
@@ -8537,54 +8497,58 @@ function EndpointsPopover(props: Readonly<{
   );
 }
 
-function EndpointCopyRow(props: Readonly<{
-  endpoint: EnvironmentCardEndpointModel;
-  selected: boolean;
-  selectEndpointForQRCode: (endpointValue: string) => void;
-}>) {
-  return (
-    <button
-      type="button"
-      class="redeven-card-endpoint-row"
-      data-selected={props.selected ? '' : undefined}
-      onClick={() => props.selectEndpointForQRCode(props.endpoint.value)}
-      title={props.endpoint.value}
-      aria-pressed={props.selected}
-    >
-      <span class="redeven-card-endpoint-label">{props.endpoint.label}</span>
-      <span class={cn(
-        'redeven-card-endpoint-value',
-        props.endpoint.monospace && 'font-mono text-[11.5px]',
-      )}>
-        {endpointDisplayValue(props.endpoint.value)}
-      </span>
-      <span class={cn('redeven-card-endpoint-copy', props.selected && 'redeven-card-endpoint-copy--active')} aria-hidden="true">
-        {props.selected ? <Check class="h-3 w-3" /> : <ChevronRight class="h-3 w-3" />}
-      </span>
-    </button>
-  );
-}
-
-function EndpointStatusRow(props: Readonly<{
+function EnvironmentConnectionRows(props: Readonly<{
+  rows: readonly EnvironmentCardEndpointModel[];
   i18n: DesktopI18n;
-  endpoint: EnvironmentCardEndpointModel;
+  selectedID?: string;
+  selectForShare: (id: string) => void;
+  openInBrowser: (url: string) => Promise<void>;
+  copyEnvironmentValue: (value: string, label: string) => Promise<void>;
 }>) {
-  return (
-    <div class="redeven-card-endpoint-row redeven-card-endpoint-row--status" role="status">
-      <span class="redeven-card-endpoint-label">{props.i18n.t('environmentFacts.status')}</span>
-      <span class="min-w-0">
-        <span class="redeven-card-endpoint-value">{localizedEnvironmentStatusLabel(props.i18n, props.endpoint.value)}</span>
-        <Show when={props.endpoint.detail}>
-          <span class="redeven-card-endpoint-detail">{props.endpoint.detail}</span>
-        </Show>
-      </span>
-    </div>
-  );
+  return <For each={props.rows}>{(row) => {
+    const [copied, setCopied] = createSignal(false);
+    let resetTimer: ReturnType<typeof setTimeout> | undefined;
+    onCleanup(() => clearTimeout(resetTimer));
+    const copyLabel = () => row.kind === 'address'
+      ? props.i18n.t('environmentFacts.copyEnvironmentUrl')
+      : props.i18n.t('environmentFacts.copyFact', { label: props.i18n.t(row.label_key) });
+    const copy = async () => {
+      await props.copyEnvironmentValue(row.value, props.i18n.t(row.kind === 'address' ? 'environmentFacts.environmentUrl' : row.label_key));
+      setCopied(true);
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => setCopied(false), 1500);
+    };
+    return <div class="redeven-card-endpoint-row" data-endpoint-id={row.id} data-endpoint-kind={row.kind}
+      data-selected={row.id === props.selectedID ? '' : undefined} role={row.kind === 'status' ? 'status' : undefined}>
+      <span class="redeven-card-endpoint-label">{props.i18n.t(row.label_key)}</span>
+      <div class="min-w-0 flex-1 select-text">
+        <span class={cn('redeven-card-endpoint-value', row.kind !== 'status' && !row.value_key && 'font-mono')}
+          title={row.value || undefined}>{row.value_key ? props.i18n.t(row.value_key) : row.value}</span>
+        <Show when={row.detail_key}>{(key) => <span class="redeven-card-endpoint-detail">{props.i18n.t(key(), row.detail_params)}</span>}</Show>
+      </div>
+      <Show when={row.kind !== 'status' && row.copyable}>
+        <Button size="sm" variant="ghost" class="shrink-0 px-1.5" aria-label={copyLabel()} title={copyLabel()}
+          onClick={() => void copy()}>{copied() ? <Check class="h-3.5 w-3.5" /> : <Copy class="h-3.5 w-3.5" />}</Button>
+      </Show>
+      <Show when={row.kind === 'address' && row.browser_openable}>
+        <Button size="sm" variant="ghost" class="shrink-0 px-1.5"
+          aria-label={props.i18n.t('webServiceBrowser.openInBrowser')} title={props.i18n.t('webServiceBrowser.openInBrowser')}
+          onClick={() => void props.openInBrowser(row.value)}><ExternalLink class="h-3.5 w-3.5" /></Button>
+      </Show>
+      <Show when={isShareableConnectionAddress(row)}>
+        <Button size="sm" variant="ghost" class="shrink-0 px-1.5"
+          aria-label={props.i18n.t('settings.shareConnection')} title={props.i18n.t('settings.shareConnection')}
+          aria-expanded={row.id === props.selectedID} onClick={() => props.selectForShare(row.id === props.selectedID ? '' : row.id)}>
+          <ShareIcon class="h-3.5 w-3.5" />
+        </Button>
+      </Show>
+    </div>;
+  }}</For>;
 }
 
 function EndpointQRCodePanel(props: Readonly<{
   i18n: DesktopI18n;
-  endpoint: EnvironmentCardEndpointModel;
+  endpoint: DesktopShareableConnectionAddress;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
 }>) {
   const [copied, setCopied] = createSignal(false);
@@ -8592,7 +8556,7 @@ function EndpointQRCodePanel(props: Readonly<{
   let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
   const handleCopy = () => {
-    void props.copyEnvironmentValue(props.endpoint.value, props.endpoint.copy_label ?? 'Copy endpoint');
+    void props.copyEnvironmentValue(props.endpoint.value, props.i18n.t('environmentFacts.environmentUrl'));
     setCopied(true);
     clearTimeout(resetTimer);
     resetTimer = setTimeout(() => setCopied(false), 1500);
@@ -8606,18 +8570,18 @@ function EndpointQRCodePanel(props: Readonly<{
         <img
           class="redeven-endpoint-qr-image"
           src={qrSrc()}
-          alt={props.endpoint.copy_label}
+          alt={props.i18n.t('environmentFacts.copyEnvironmentUrl')}
         />
       </div>
       <div class="redeven-endpoint-qr-meta">
-        <span class="redeven-endpoint-qr-label">{props.endpoint.label}</span>
-        <span class="redeven-endpoint-qr-value" title={props.endpoint.value}>{endpointDisplayValue(props.endpoint.value)}</span>
+        <span class="redeven-endpoint-qr-label">{props.i18n.t(props.endpoint.label_key)}</span>
+        <span class="redeven-endpoint-qr-value" title={props.endpoint.value}>{props.endpoint.value}</span>
       </div>
       <button
         type="button"
         class="redeven-endpoint-qr-copy-button"
-        aria-label={props.endpoint.copy_label}
-        title={props.endpoint.copy_label}
+        aria-label={props.i18n.t('environmentFacts.copyEnvironmentUrl')}
+        title={props.i18n.t('environmentFacts.copyEnvironmentUrl')}
         onClick={handleCopy}
       >
         <Show when={copied()} fallback={<Copy class="h-3 w-3" />}>
@@ -10377,8 +10341,8 @@ function EnvironmentConnectionCard(
     onLifecycleProgressOpenChange: (open: boolean) => void;
     endpointPopoverOpen: boolean;
     onEndpointPopoverOpenChange: (open: boolean) => void;
-    selectedEndpointValue?: string;
-    selectEndpointForQRCode: (endpointValue: string) => void;
+    selectedEndpointID?: string;
+    selectEndpointForQRCode: (endpointID: string) => void;
     guidanceSession: EnvironmentGuidanceSessionState;
     setGuidanceSession: (state: EnvironmentGuidanceSessionState) => void;
     beginLifecycleDisclosure: (
@@ -10413,6 +10377,7 @@ function EnvironmentConnectionCard(
     runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
     runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
     toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
+    openInBrowser: (url: string) => Promise<void>;
     copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
     editEnvironment: (environment: DesktopEnvironmentEntry) => void;
     deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -10561,12 +10526,13 @@ function EnvironmentConnectionCard(
         <EnvironmentCardFactsBlock
           i18n={props.i18n}
           facts={facts()}
+          environmentLabel={props.environment.label}
           minRows={3}
           onFactAction={props.runEnvironmentCardFactAction}
-          copyEnvironmentValue={props.copyEnvironmentValue}
+          openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
           endpointPopoverOpen={props.endpointPopoverOpen}
           onEndpointPopoverOpenChange={props.onEndpointPopoverOpenChange}
-          selectedEndpointValue={props.selectedEndpointValue}
+          selectedEndpointID={props.selectedEndpointID}
           selectEndpointForQRCode={props.selectEndpointForQRCode}
         />
       </CardContent>
@@ -13460,7 +13426,7 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
   cancelSettings: () => void;
   clearStoredLocalUIPassword: () => void;
 }>) {
-  const [sharedURL, setSharedURL] = createSignal('');
+  const [sharedAddress, setSharedAddress] = createSignal<{ environment_id: string; id: string } | null>(null);
   const accessOptions = createMemo(() => ({
     local_ui_password_configured: props.baselineSnapshot.local_ui_password_configured,
     runtime_password_required: props.baselineSnapshot.runtime_password_required,
@@ -13473,18 +13439,21 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
   const [certificateReady, setCertificateReady] = createSignal(false);
   const canApply = () => (pending() || props.snapshot.runtime_configuration_pending) && validation().valid && !saving()
     && (props.draft.local_ui_protocol !== 'https' || certificateReady());
-  const urls = createMemo(() => [...new Set([
-    ...props.snapshot.current_runtime_urls,
-    props.snapshot.current_runtime_url,
-  ].filter(Boolean))]);
-  const selectedShareURL = () => urls().includes(sharedURL()) ? sharedURL() : '';
-  const remote = () => props.snapshot.environment_kind === 'runtime_target';
-  const browserURL = () => urls().find((url) => !remote() || !isLoopbackHost(new URL(url).hostname.replace(/^\[|\]$/g, '')));
+  const connectionRows = createMemo(() => buildRuntimeConnectionRows({
+    context: props.snapshot.runtime_connection,
+    urls: props.snapshot.current_runtime_urls,
+    health: props.snapshot.runtime_health,
+  }));
+  const selectedShareAddress = createMemo(() => sharedAddress()?.environment_id === props.snapshot.environment_id
+    ? connectionRows().filter(isShareableConnectionAddress).find((row) => row.id === sharedAddress()?.id) : undefined);
+  const remote = () => !runtimeConnectionIsOnThisDevice(props.snapshot.runtime_connection);
   const isOpen = createMemo(() => props.open);
   const canClearPassword = () => props.baselineSnapshot.local_ui_password_configured
     && props.draft.local_ui_password_mode !== 'clear' && !access().password_required;
 
-  createEffect(() => { if (!props.open) setSharedURL(''); });
+  createEffect(() => {
+    if (!props.open || (sharedAddress() && !selectedShareAddress())) setSharedAddress(null);
+  });
 
   return (
     <Dialog
@@ -13521,51 +13490,22 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
               {props.runtimeStatusLabel}
             </span>
           </div>
-          <Show when={urls().length > 0} fallback={(
-            <p class="text-sm text-muted-foreground">{props.i18n.t(props.runtimeRunning ? 'settings.addressPending' : 'settings.addressAfterStart')}</p>
-          )}>
-            <div class="space-y-2">
-              <For each={urls()}>{(url) => (
-                <div class="flex min-w-0 flex-wrap items-center justify-end gap-2 rounded-md bg-muted/35 px-3 py-2 sm:flex-nowrap">
-                  <span class="w-full min-w-0 select-text break-all font-mono text-sm sm:w-auto sm:flex-1">{url}</span>
-                  <Button size="sm" variant="ghost" aria-label={props.i18n.t('environmentFacts.copyEnvironmentUrl')}
-                    onClick={() => void props.copyEnvironmentValue(url, props.i18n.t('environmentFacts.copyEnvironmentUrl'))}>
-                    <Copy class="h-3.5 w-3.5" />
-                  </Button>
-                  <Button size="sm" variant="ghost" aria-label={props.i18n.t('settings.shareConnection')}
-                    aria-expanded={selectedShareURL() === url} onClick={() => setSharedURL(sharedURL() === url ? '' : url)}>
-                    {props.i18n.t('settings.shareConnection')}
-                  </Button>
-                </div>
-              )}</For>
-            </div>
-            <p class="text-xs text-muted-foreground">{props.i18n.t('settings.supportedClients')}</p>
-          </Show>
+          <div class="redeven-settings-connections space-y-2">
+            <EnvironmentConnectionRows rows={connectionRows()} i18n={props.i18n}
+              selectedID={selectedShareAddress()?.id}
+              selectForShare={(id) => setSharedAddress(id ? { environment_id: props.snapshot.environment_id, id } : null)}
+              openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue} />
+          </div>
           <div class="flex flex-wrap gap-2">
             <Button size="sm" onClick={props.openInDesktop} disabled={saving()}>
               {props.desktopOpenLabel}
             </Button>
-            <Show when={browserURL()}>{(url) => (
-              <Button size="sm" variant="outline" onClick={() => void props.openInBrowser(url())}>
-                <ExternalLink class="mr-1.5 h-3.5 w-3.5" />{props.i18n.t('webServiceBrowser.openInBrowser')}
-              </Button>
-            )}</Show>
           </div>
-          <Show when={remote() && urls().length > 0 && !browserURL()}>
-            <p class="text-xs text-muted-foreground">{props.i18n.t('settings.serverAddressOnly')}</p>
-          </Show>
           <Show when={props.editConnection}>
             <Button size="sm" variant="ghost" onClick={() => props.editConnection?.()}>{props.i18n.t('settings.managementConnection')}</Button>
           </Show>
-          <Show when={selectedShareURL()}>{(url) => (
-            <div class="space-y-2 rounded-md bg-muted/20 p-3">
-              <EndpointQRCodePanel i18n={props.i18n}
-                endpoint={{ kind: 'url', label: props.i18n.t('settings.shareConnection'), value: url(), monospace: true, copy_label: props.i18n.t('environmentFacts.copyEnvironmentUrl') }}
-                copyEnvironmentValue={props.copyEnvironmentValue} />
-              <Show when={isLoopbackHost(new URL(url()).hostname.replace(/^\[|\]$/g, ''))}>
-                <p class="text-xs text-muted-foreground">{props.i18n.t(remote() ? 'settings.serverAddressOnly' : 'settings.localAddressOnly')}</p>
-              </Show>
-            </div>
+          <Show when={selectedShareAddress()}>{(address) => (
+            <EndpointQRCodePanel i18n={props.i18n} endpoint={address()} copyEnvironmentValue={props.copyEnvironmentValue} />
           )}</Show>
         </section>
 

@@ -1,3 +1,5 @@
+import type { DesktopRuntimeConnectionContext } from './desktopEnvironmentConnection';
+import type { DesktopRuntimeHealth } from './desktopRuntimeHealth';
 import type { DesktopSettingsDraft } from './settingsIPC';
 import type { DesktopTranslationKey } from './i18n/desktopI18n';
 
@@ -55,6 +57,8 @@ export type DesktopSettingsSurfaceSnapshot = Readonly<{
   access_mode_options: readonly DesktopAccessModeOption[];
   next_start_address_display: string;
   next_start_address_kind: DesktopNextStartAddressKind;
+  runtime_connection: DesktopRuntimeConnectionContext;
+  runtime_health: DesktopRuntimeHealth;
   current_runtime_url: string;
   current_runtime_running: boolean;
   current_runtime_urls: readonly string[];

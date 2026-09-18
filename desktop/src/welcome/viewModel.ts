@@ -1,3 +1,4 @@
+import { buildRuntimeConnectionRows, connectionAddressRows, reportedRuntimeURLs, type DesktopConnectionRow } from '../shared/desktopEnvironmentConnection';
 import type {
   DesktopEnvironmentEntry,
   DesktopLauncherSurface,
@@ -89,14 +90,7 @@ export type EnvironmentCardFactModel = Readonly<{
   copy_value?: true;
 }>;
 
-export type EnvironmentCardEndpointModel = Readonly<{
-  kind?: 'url' | 'status';
-  label: string;
-  value: string;
-  detail?: string;
-  monospace: boolean;
-  copy_label: string;
-}>;
+export type EnvironmentCardEndpointModel = DesktopConnectionRow;
 
 const DOCKER_ICON = 'data:image/svg+xml;base64,PHN2ZyByb2xlPSJpbWciIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+RG9ja2VyPC90aXRsZT48cGF0aCBkPSJNMTMuOTgzIDExLjA3OGgyLjExOWEuMTg2LjE4NiAwIDAwLjE4Ni0uMTg1VjkuMDA2YS4xODYuMTg2IDAgMDAtLjE4Ni0uMTg2aC0yLjExOWEuMTg1LjE4NSAwIDAwLS4xODUuMTg1djEuODg4YzAgLjEwMi4wODMuMTg1LjE4NS4xODVtLTIuOTU0LTUuNDNoMi4xMThhLjE4Ni4xODYgMCAwMC4xODYtLjE4NlYzLjU3NGEuMTg2LjE4NiAwIDAwLS4xODYtLjE4NWgtMi4xMThhLjE4NS4xODUgMCAwMC0uMTg1LjE4NXYxLjg4OGMwIC4xMDIuMDgyLjE4NS4xODUuMTg1bTAgMi43MTZoMi4xMThhLjE4Ny4xODcgMCAwMC4xODYtLjE4NlY2LjI5YS4xODYuMTg2IDAgMDAtLjE4Ni0uMTg1aC0yLjExOGEuMTg1LjE4NSAwIDAwLS4xODUuMTg1djEuODg3YzAgLjEwMi4wODIuMTg1LjE4NS4xODZtLTIuOTMgMGgyLjEyYS4xODYuMTg2IDAgMDAuMTg0LS4xODZWNi4yOWEuMTg1LjE4NSAwIDAwLS4xODUtLjE4NUg4LjFhLjE4NS4xODUgMCAwMC0uMTg1LjE4NXYxLjg4N2MwIC4xMDIuMDgzLjE4NS4xODUuMTg2bS0yLjk2NCAwaDIuMTE5YS4xODYuMTg2IDAgMDAuMTg1LS4xODZWNi4yOWEuMTg1LjE4NSAwIDAwLS4xODUtLjE4NUg1LjEzNmEuMTg2LjE4NiAwIDAwLS4xODYuMTg1djEuODg3YzAgLjEwMi4wODQuMTg1LjE4Ni4xODZtNS44OTMgMi43MTVoMi4xMThhLjE4Ni4xODYgMCAwMC4xODYtLjE4NVY5LjAwNmEuMTg2LjE4NiAwIDAwLS4xODYtLjE4NmgtMi4xMThhLjE4NS4xODUgMCAwMC0uMTg1LjE4NXYxLjg4OGMwIC4xMDIuMDgyLjE4NS4xODUuMTg1bS0yLjkzIDBoMi4xMmEuMTg1LjE4NSAwIDAwLjE4NC0uMTg1VjkuMDA2YS4xODUuMTg1IDAgMDAtLjE4NC0uMTg2aC0yLjEyYS4xODUuMTg1IDAgMDAtLjE4NC4xODV2MS44ODhjMCAuMTAyLjA4My4xODUuMTg1LjE4NW0tMi45NjQgMGgyLjExOWEuMTg1LjE4NSAwIDAwLjE4NS0uMTg1VjkuMDA2YS4xODUuMTg1IDAgMDAtLjE4NC0uMTg2aC0yLjEyYS4xODYuMTg2IDAgMDAtLjE4Ni4xODZ2MS44ODdjMCAuMTAyLjA4NC4xODUuMTg2LjE4NW0tMi45MiAwaDIuMTJhLjE4NS4xODUgMCAwMC4xODQtLjE4NVY5LjAwNmEuMTg1LjE4NSAwIDAwLS4xODQtLjE4NmgtMi4xMmEuMTg1LjE4NSAwIDAwLS4xODQuMTg1djEuODg4YzAgLjEwMi4wODIuMTg1LjE4NS4xODVNMjMuNzYzIDkuODljLS4wNjUtLjA1MS0uNjcyLS41MS0xLjk1NC0uNTEtLjMzOC4wMDEtLjY3Ni4wMy0xLjAxLjA4Ny0uMjQ4LTEuNy0xLjY1My0yLjUzLTEuNzE2LTIuNTY2bC0uMzQ0LS4xOTktLjIyNi4zMjdjLS4yODQuNDM4LS40OS45MjItLjYxMiAxLjQzLS4yMy45Ny0uMDkgMS44ODIuNDAzIDIuNjYxLS41OTUuMzMyLTEuNTUuNDEzLTEuNzQ0LjQySC43NTFhLjc1MS43NTEgMCAwMC0uNzUuNzQ4IDExLjM3NiAxMS4zNzYgMCAwMC42OTIgNC4wNjJjLjU0NSAxLjQyOCAxLjM1NSAyLjQ4IDIuNDEgMy4xMjQgMS4xOC43MjMgMy4xIDEuMTM3IDUuMjc1IDEuMTM3Ljk4My4wMDMgMS45NjMtLjA4NiAyLjkzLS4yNjZhMTIuMjQ4IDEyLjI0OCAwIDAwMy44MjMtMS4zODljLjk4LS41NjcgMS44Ni0xLjI4OCAyLjYxLTIuMTM2IDEuMjUyLTEuNDE4IDEuOTk4LTIuOTk3IDIuNTUzLTQuNGguMjIxYzEuMzcyIDAgMi4yMTUtLjU0OSAyLjY4LTEuMDA5LjMwOS0uMjkzLjU1LS42NS43MDctMS4wNDZsLjA5OC0uMjg4WiIvPjwvc3ZnPg==';
 
@@ -855,48 +849,31 @@ export function buildEnvironmentCardEndpointsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardEndpointModel[] {
   if (environment.kind === 'local_environment' || environment.registration_ref?.kind === 'runtime_target') {
-    const urls = [...new Set([...(environment.local_ui_urls ?? []), compact(environment.local_ui_url)].filter(Boolean))];
-    if (urls.length > 0) {
-      return urls.map((value) => ({ kind: 'url', label: 'URL', value, monospace: true, copy_label: 'Copy local endpoint' }));
+    const host = environment.managed_runtime_host_access;
+    const placement = environment.managed_runtime_placement;
+    if (!host || !placement) {
+      throw new Error('Managed Environment connection context is missing.');
     }
-    return [{ kind: 'status', label: 'STATUS', value: environment.local_environment_runtime_state === 'running' ? 'Address pending' : 'Not running', monospace: false, copy_label: '' }];
+    return buildRuntimeConnectionRows({
+      context: { host_access: host, placement },
+      urls: reportedRuntimeURLs(environment),
+      health: environment.runtime_health,
+    });
   }
-
   if (environment.kind === 'provider_environment') {
-    const remoteEndpoint = compact(environment.remote_environment_url);
-    return [
-      remoteEndpoint !== ''
-        ? {
-          label: 'PROVIDER',
-          value: remoteEndpoint,
-          monospace: shouldUseMonospaceEndpoint(remoteEndpoint),
-          copy_label: 'Copy environment URL',
-        }
-        : null,
-    ].filter((item): item is EnvironmentCardEndpointModel => item !== null);
+    return connectionAddressRows([environment.remote_environment_url ?? '']);
   }
-
-  const card = buildEnvironmentCardModel(environment);
-  const primaryLabel = environment.kind === 'ssh_environment' ? 'SSH HOST' : 'URL';
-  const secondaryLabel = environment.kind === 'ssh_environment' ? 'FORWARDED URL' : 'DETAIL';
-  return [
-    card.target_primary !== ''
-      ? {
-          label: primaryLabel,
-          value: card.target_primary,
-          monospace: card.target_primary_monospace,
-          copy_label: environment.kind === 'ssh_environment' ? 'Copy SSH host' : 'Copy endpoint',
-        }
-      : null,
-    card.target_secondary !== ''
-      ? {
-          label: secondaryLabel,
-          value: card.target_secondary,
-          monospace: card.target_secondary_monospace,
-          copy_label: environment.kind === 'ssh_environment' ? 'Copy forwarded URL' : 'Copy endpoint',
-        }
-      : null,
-  ].filter((item): item is EnvironmentCardEndpointModel => item !== null);
+  if (environment.kind === 'gateway_environment') {
+    return [{
+      id: 'gateway', kind: 'connection', label_key: 'environmentConnection.gateway',
+      value: [environment.gateway_label, environment.gateway_endpoint_label].filter(Boolean).join(' · '),
+      copyable: false,
+    }];
+  }
+  if (environment.kind === 'external_local_ui') {
+    return connectionAddressRows([environment.local_ui_url]);
+  }
+  return [];
 }
 
 export function splitPinnedEnvironmentEntries(

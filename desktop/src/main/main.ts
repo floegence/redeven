@@ -5246,6 +5246,8 @@ async function buildCurrentDesktopWelcomeSnapshot(
         environment_id: environment.id,
         environment_label: environment.label,
         environment_kind: 'runtime_target',
+        runtime_connection: { host_access: environment.managed_runtime_host_access!, placement: environment.managed_runtime_placement! },
+        runtime_health: environment.runtime_health,
         local_ui_password_configured: access.local_ui_password_configured,
         runtime_password_required: runtimePlacementBridgeRegistry.get(environment.registration_ref.id)?.startup.password_required === true,
         current_runtime_running: environment.runtime_health.status === 'online',

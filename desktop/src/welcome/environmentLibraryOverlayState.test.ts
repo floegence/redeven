@@ -11,7 +11,7 @@ import {
 import {
   closeEnvironmentLibraryOverlayState,
   closedEnvironmentLibraryOverlayState,
-  environmentEndpointOverlaySelectedValueFor,
+  environmentEndpointOverlaySelectedIDFor,
   environmentLibraryOverlayOpenFor,
   openEnvironmentLibraryOverlayState,
   reconcileEnvironmentLibraryOverlayState,
@@ -41,7 +41,7 @@ describe('environmentLibraryOverlayState', () => {
         local_environment: localServe,
       }),
       openSessions: [
-        testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
+        testLocalEnvironmentSession(localServe, 'http://192.0.2.10:24001/'),
       ],
     });
     const providerEntry = initialSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
@@ -82,7 +82,7 @@ describe('environmentLibraryOverlayState', () => {
     const local = testLocalEnvironment({
       label: 'Local Environment',
       currentRuntime: {
-        local_ui_url: 'http://127.0.0.1:24001/',
+        local_ui_url: 'http://192.0.2.10:24001/',
       },
     });
     const initialSnapshot = buildDesktopWelcomeSnapshot({
@@ -95,12 +95,12 @@ describe('environmentLibraryOverlayState', () => {
         local_environment: local,
       }),
       openSessions: [
-        testLocalEnvironmentSession(local, 'http://127.0.0.1:24001/'),
+        testLocalEnvironmentSession(local, 'http://192.0.2.10:24001/'),
       ],
     });
-    const state = selectEnvironmentEndpointOverlayState(local.id, 'http://127.0.0.1:24001/');
+    const state = selectEnvironmentEndpointOverlayState(local.id, 'address:http://192.0.2.10:24001/');
 
-    expect(environmentEndpointOverlaySelectedValueFor(state, local.id)).toBe('http://127.0.0.1:24001/');
+    expect(environmentEndpointOverlaySelectedIDFor(state, local.id)).toBe('address:http://192.0.2.10:24001/');
     expect(reconcileEnvironmentLibraryOverlayState(state, refreshedSnapshot.environments)).toEqual(state);
     expect(reconcileEnvironmentLibraryOverlayState(state, initialSnapshot.environments)).toEqual(state);
   });
@@ -109,7 +109,7 @@ describe('environmentLibraryOverlayState', () => {
     const local = testLocalEnvironment({
       label: 'Local Environment',
       currentRuntime: {
-        local_ui_url: 'http://127.0.0.1:24001/',
+        local_ui_url: 'http://192.0.2.10:24001/',
       },
     });
     const refreshedSnapshot = buildDesktopWelcomeSnapshot({
@@ -117,10 +117,10 @@ describe('environmentLibraryOverlayState', () => {
         local_environment: local,
       }),
       openSessions: [
-        testLocalEnvironmentSession(local, 'http://127.0.0.1:24002/'),
+        testLocalEnvironmentSession(local, 'http://192.0.2.10:24002/'),
       ],
     });
-    const state = selectEnvironmentEndpointOverlayState(local.id, 'http://127.0.0.1:24001/');
+    const state = selectEnvironmentEndpointOverlayState(local.id, 'address:http://192.0.2.10:24001/');
 
     expect(reconcileEnvironmentLibraryOverlayState(state, refreshedSnapshot.environments)).toEqual({
       kind: 'endpoints',
@@ -137,6 +137,7 @@ describe('environmentLibraryOverlayState', () => {
       },
     });
     const snapshot = buildDesktopWelcomeSnapshot({
+      localRuntimeHealth: { [local.id]: { status: 'offline', freshness: 'fresh', source: 'local_runtime_probe', checked_at_unix_ms: 1, offline_reason_code: 'not_started' } },
       preferences: testDesktopPreferences({
         local_environment: local,
       }),
@@ -144,7 +145,7 @@ describe('environmentLibraryOverlayState', () => {
     const state = openEnvironmentLibraryOverlayState('endpoints', local.id);
 
     expect(buildEnvironmentCardEndpointsModel(snapshot.environments.find((entry) => entry.id === local.id)!))
-      .toEqual([expect.objectContaining({ kind: 'status', value: 'Not running' })]);
+      .toContainEqual(expect.objectContaining({ kind: 'status', value_key: 'environmentFacts.notRunning' }));
     expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments)).toEqual(state);
   });
 
@@ -172,7 +173,7 @@ describe('environmentLibraryOverlayState', () => {
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment({
           currentRuntime: {
-            local_ui_url: 'http://127.0.0.1:24001/',
+            local_ui_url: 'http://192.0.2.10:24001/',
             runtime_service: {
               protocol_version: 'redeven-runtime-v1',
               effective_run_mode: 'desktop',
@@ -224,7 +225,7 @@ describe('environmentLibraryOverlayState', () => {
         local_environment: localServe,
       }),
       openSessions: [
-        testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
+        testLocalEnvironmentSession(localServe, 'http://192.0.2.10:24001/'),
       ],
     });
     const providerEntry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
