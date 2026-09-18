@@ -25,6 +25,7 @@ export interface GitPatchViewerProps {
   emptyMessage: string;
   unavailableMessage?: string | ((item: GitPatchRenderable) => string | undefined);
   class?: string;
+  fillViewport?: boolean;
   showCopyButton?: boolean;
   showMobileHint?: boolean;
   desktopPatchViewportClass?: string;
@@ -37,6 +38,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
   const notification = useNotification();
   const [patchExpanded, setPatchExpanded] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
+  let patchViewport: HTMLDivElement | undefined;
 
   const patchText = createMemo(() => String(props.item?.patchText ?? ''));
   const patchTruncated = createMemo(() => Boolean(props.item?.patchTruncated));
@@ -47,7 +49,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
   const canCopyPatch = createMemo(() => hasMeaningfulGitPatchText(patchText()));
   const showCopyButton = createMemo(() => props.showCopyButton !== false);
   const showMobileHint = createMemo(() => props.showMobileHint !== false);
-  const desktopPatchViewportClass = createMemo(() => props.desktopPatchViewportClass ?? 'max-h-[28rem]');
+  const desktopPatchViewportClass = createMemo(() => props.desktopPatchViewportClass ?? (props.fillViewport ? 'flex-1 max-h-none' : 'max-h-[28rem]'));
   const mobilePatchViewportClass = createMemo(() => props.mobilePatchViewportClass ?? 'flex-1 max-h-none');
   const unavailableMessage = createMemo(() => {
     const item = props.item;
@@ -65,6 +67,10 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
     void props.item?.newPath;
     setPatchExpanded(false);
     setCopied(false);
+    if (patchViewport) {
+      patchViewport.scrollTop = 0;
+      patchViewport.scrollLeft = 0;
+    }
   });
 
   const handleCopyPatch = async () => {
@@ -125,6 +131,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
               >
                 <Show when={visiblePatchLines().length > 0} fallback={<div class={cn('rounded-md border px-3 py-2 text-[11px] leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{i18n.t('git.patchViewer.noInlineDiffLines')}</div>}>
                   <div
+                    ref={patchViewport}
                     {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
                     class={cn(
                       'min-h-0 overflow-auto rounded-md border bg-background p-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]',
@@ -136,9 +143,9 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                       <For each={visiblePatchLines()}>
                         {(line) => (
                           <div class={cn('grid w-max min-w-full grid-cols-[2.25rem_2.25rem_minmax(max-content,1fr)] items-stretch sm:grid-cols-[2.5rem_2.5rem_minmax(max-content,1fr)]', gitPatchRenderedLineClass(line))}>
-                            <span class="px-1.5 text-right font-mono text-[10.5px] leading-[1.6] text-muted-foreground/60">{formatGitPatchLineNumber(line.oldLine)}</span>
-                            <span class={cn('border-r px-1.5 text-right font-mono text-[10.5px] leading-[1.6] text-muted-foreground/60', redevenDividerRoleClass())}>{formatGitPatchLineNumber(line.newLine)}</span>
-                            <span class={cn('block px-2 pr-3 text-[10.5px] leading-[1.6] whitespace-pre font-mono sm:px-2.5 sm:pr-4 sm:text-[11px]', gitPatchPreviewLineClass(line.text))}>{line.text}</span>
+                            <span class={cn("px-1.5 text-right font-mono text-muted-foreground/60", props.fillViewport ? "text-[11px] leading-5" : "text-[10.5px] leading-[1.6]")}>{formatGitPatchLineNumber(line.oldLine)}</span>
+                            <span class={cn('border-r px-1.5 text-right font-mono text-muted-foreground/60', props.fillViewport ? 'text-[11px] leading-5' : 'text-[10.5px] leading-[1.6]', redevenDividerRoleClass())}>{formatGitPatchLineNumber(line.newLine)}</span>
+                            <span class={cn('block px-2 pr-3 whitespace-pre font-mono sm:px-2.5 sm:pr-4', props.fillViewport ? 'text-xs leading-5' : 'text-[10.5px] leading-[1.6] sm:text-[11px]', gitPatchPreviewLineClass(line.text))}>{line.text}</span>
                           </div>
                         )}
                       </For>

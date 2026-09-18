@@ -24,7 +24,8 @@ import {
 } from '../utils/gitWorkbench';
 import { gitChangePathClass } from './GitChrome';
 import { GitCommitDialog } from './GitCommitDialog';
-import { GitDiffDialog } from './GitDiffDialog';
+import { GitDiffPanel } from './GitDiffPanel';
+import { GitDiffSplit } from './GitDiffSplit';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
   GIT_CHANGED_FILES_SECONDARY_PATH_CLASS,
@@ -246,7 +247,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
       >
         <GitVirtualTable
           items={props.items}
-          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
+          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} git-diff-file-table git-diff-file-table--actions`}
           header={(
             <tr class="hidden">
               <th>{i18n.t('git.common.path')}</th>
@@ -280,6 +281,12 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                   props.onOpenContextMenu?.(event, item);
                 }}
                 onKeyDown={(event) => {
+                  if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault();
+                    if (isGitWorkspaceDirectoryEntry(item)) props.onOpenDirectory?.(workspaceDirectoryPath(item));
+                    else props.onOpenDiff?.(item);
+                    return;
+                  }
                   if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
                   event.stopPropagation();
                   props.onOpenContextMenuFromKeyboard?.(event, item);
@@ -448,8 +455,7 @@ function parentGitPath(relativePath: string): string {
 export function GitChangesPanel(props: GitChangesPanelProps) {
   const i18n = useI18n();
   const [commitDialogOpen, setCommitDialogOpen] = createSignal(false);
-  const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
-  const [diffDialogItem, setDiffDialogItem] = createSignal<GitSeededWorkspaceChange | null>(null);
+  const [selectedDiffKey, setSelectedDiffKey] = createSignal('');
   const [discardTarget, setDiscardTarget] = createSignal<WorkspaceDiscardTarget>(null);
   const [headerElement, setHeaderElement] = createSignal<HTMLDivElement>();
   const [headerWidth, setHeaderWidth] = createSignal(0);
@@ -535,7 +541,12 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
       directoryPath,
     })
   );
-  const diffItem = () => diffDialogItem() ?? props.selectedItem ?? null;
+  const diffItem = createMemo(() => {
+    const files = filteredItems().filter((item) => !isGitWorkspaceDirectoryEntry(item));
+    return files.find((item) => workspaceEntryKey(item) === selectedDiffKey())
+      ?? files.find((item) => workspaceEntryKey(item) === workspaceEntryKey(props.selectedItem))
+      ?? files[0] ?? null;
+  });
   const selectedKey = () => workspaceEntryKey(diffItem());
   const canCommit = () => stagedCount() > 0 && String(props.commitMessage ?? '').trim().length > 0 && !props.commitBusy;
   const bulkActionLabel = () => (
@@ -636,12 +647,6 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
     }
   });
 
-  createEffect(() => {
-    if (!diffDialogOpen()) return;
-    if (diffItem()) return;
-    setDiffDialogOpen(false);
-  });
-
   const discardTitle = () => {
     const target = discardTarget();
     if (target?.kind === 'section') {
@@ -689,9 +694,8 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   };
 
   const openWorkspaceDiff = (item: GitSeededWorkspaceChange) => {
-    setDiffDialogItem(item);
+    setSelectedDiffKey(workspaceEntryKey(item));
     props.onSelectItem?.(item);
-    setDiffDialogOpen(true);
   };
 
   const sectionContextTarget = (): GitChangesContextMenuTarget => ({
@@ -1201,45 +1205,60 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
             </div>
           </div>
 
-          {/* Content area — table fills edge-to-edge, no card wrapping */}
-          <div
-            class="min-h-0 flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
-            tabIndex={0}
-            data-git-changes-context-target="section"
-            on:contextmenu={(event) => contextMenu.openFromContextMenu(event, sectionContextTarget())}
-            onKeyDown={(event) => {
-              if (event.target !== event.currentTarget) return;
-              contextMenu.openFromKeyboard(event, sectionContextTarget());
-            }}
+          <GitDiffSplit
+            detail={(
+              <GitDiffPanel
+                open={Boolean(diffItem())}
+                item={diffItem()}
+                source={diffItem() ? {
+                  kind: 'workspace',
+                  repoRootPath: exactGitPath(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath),
+                  workspaceSection: String(diffItem()?.section ?? '').trim(),
+                } : null}
+                emptyMessage={i18n.t('git.changes.workspaceDiffEmpty')}
+              />
+            )}
           >
-            <WorkspaceTable
-              section={selectedSection()}
-              items={filteredItems()}
-              totalCount={visibleItemCount()}
-              loadingState={tableLoadingState()}
-              expectedCount={visibleCount()}
-              loadingLabel={tableLoadingLabel()}
-              hasMore={selectedPageState().hasMore}
-              loadingMore={visibleLoadingMore()}
-              selectedKey={selectedKey()}
-              filtered={filterActive()}
-              filteredCount={filteredCount()}
-              onSelectItem={props.onSelectItem}
-              onOpenDiff={openWorkspaceDiff}
-              onOpenDirectory={(directoryPath) => props.onNavigateDirectory?.(directoryPath)}
-              onAction={(item) => {
-                if (item.section === 'staged') props.onUnstageSelected?.(item);
-                else props.onStageSelected?.(item);
+            {/* Content area — table fills edge-to-edge, no card wrapping */}
+            <div
+              class="min-h-0 flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+              tabIndex={0}
+              data-git-changes-context-target="section"
+              on:contextmenu={(event) => contextMenu.openFromContextMenu(event, sectionContextTarget())}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
+                contextMenu.openFromKeyboard(event, sectionContextTarget());
               }}
-              onDiscard={(item) => setDiscardTarget({ kind: 'item', item })}
-              onOpenContextMenu={(event, item) => contextMenu.openFromContextMenu(event, itemContextTarget(item))}
-              onOpenContextMenuFromKeyboard={(event, item) => contextMenu.openFromKeyboard(event, itemContextTarget(item))}
-              onLoadMore={() => props.onLoadMoreWorkspaceSection?.(selectedSection())}
-              busyWorkspaceKey={props.busyWorkspaceKey}
-              busyWorkspaceAction={props.busyWorkspaceAction}
-              sectionActionKey={sectionActionKey()}
-            />
-          </div>
+            >
+              <WorkspaceTable
+                section={selectedSection()}
+                items={filteredItems()}
+                totalCount={visibleItemCount()}
+                loadingState={tableLoadingState()}
+                expectedCount={visibleCount()}
+                loadingLabel={tableLoadingLabel()}
+                hasMore={selectedPageState().hasMore}
+                loadingMore={visibleLoadingMore()}
+                selectedKey={selectedKey()}
+                filtered={filterActive()}
+                filteredCount={filteredCount()}
+                onSelectItem={openWorkspaceDiff}
+                onOpenDiff={openWorkspaceDiff}
+                onOpenDirectory={(directoryPath) => props.onNavigateDirectory?.(directoryPath)}
+                onAction={(item) => {
+                  if (item.section === 'staged') props.onUnstageSelected?.(item);
+                  else props.onStageSelected?.(item);
+                }}
+                onDiscard={(item) => setDiscardTarget({ kind: 'item', item })}
+                onOpenContextMenu={(event, item) => contextMenu.openFromContextMenu(event, itemContextTarget(item))}
+                onOpenContextMenuFromKeyboard={(event, item) => contextMenu.openFromKeyboard(event, itemContextTarget(item))}
+                onLoadMore={() => props.onLoadMoreWorkspaceSection?.(selectedSection())}
+                busyWorkspaceKey={props.busyWorkspaceKey}
+                busyWorkspaceAction={props.busyWorkspaceAction}
+                sectionActionKey={sectionActionKey()}
+              />
+            </div>
+          </GitDiffSplit>
           </>
         );
       })()}
@@ -1263,23 +1282,6 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         onLoadMore={() => props.onLoadMoreWorkspaceSection?.('staged')}
         onClose={() => setCommitDialogOpen(false)}
         canCommit={canCommit()}
-      />
-
-      <GitDiffDialog
-        open={diffDialogOpen()}
-        onOpenChange={(open) => {
-          setDiffDialogOpen(open);
-          if (!open) setDiffDialogItem(null);
-        }}
-        item={diffItem()}
-        source={diffItem() ? {
-          kind: 'workspace',
-          repoRootPath: exactGitPath(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath),
-          workspaceSection: String(diffItem()?.section ?? '').trim(),
-        } : null}
-        title={i18n.t('git.changes.workspaceDiffTitle')}
-        description={diffItem() ? changeSecondaryPath(diffItem()) : i18n.t('git.changes.workspaceDiffDescription')}
-        emptyMessage={i18n.t('git.changes.workspaceDiffEmpty')}
       />
 
       <ConfirmDialog

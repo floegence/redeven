@@ -7,6 +7,8 @@ import {
   onCleanup,
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
+import { FileItemIcon } from "@floegence/floe-webapp-core/file-browser";
+import { extNoDot } from "./FileBrowserShared";
 import { Calendar, Copy, Eye, FileText, Folder, Hash, Terminal, User } from "@floegence/floe-webapp-core/icons";
 import { Button } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
@@ -29,7 +31,6 @@ import {
 } from "../utils/gitWorkbench";
 import {
   localizedGitCommitDiffPresentationBadge,
-  localizedGitCommitDiffPresentationDetail,
   localizedGitHeadDisplay,
 } from '../utils/localizedGitWorkbench';
 import {
@@ -40,29 +41,19 @@ import {
 } from "../utils/gitBrowserShortcuts";
 import { redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { gitChangePathClass } from "./GitChrome";
-import { GitDiffDialog } from "./GitDiffDialog";
+import { GitDiffPanel } from "./GitDiffPanel";
+import { GitDiffSplit } from "./GitDiffSplit";
 import { GitCommitMessageDialog, normalizedGitCommitBody } from './GitCommitMessageDialog';
 import {
-  GIT_CHANGED_FILES_CELL_CLASS,
-  GIT_CHANGED_FILES_HEADER_CELL_CLASS,
-  GIT_CHANGED_FILES_HEADER_ROW_CLASS,
-  GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
-  GIT_CHANGED_FILES_TABLE_CLASS,
-  GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
   GitContentSkeleton,
-  GitLabelBlock,
   GitMetaPill,
   GitPanelFrame,
   GitShortcutOrbButton,
   GitStatePane,
   GitSubtleNote,
-  GitTableFrame,
-  gitChangedFilesRowClass,
-  gitChangedFilesStickyCellClass,
 } from "./GitWorkbenchPrimitives";
-import { GitVirtualTable } from "./GitVirtualTable";
 import {
   resolveGitBranchHeaderLayout,
   type GitBranchHeaderLayout,
@@ -116,7 +107,8 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
   return (
     <div
       {...GIT_WORKBENCH_SCROLL_REGION_PROPS}
-      role="list"
+      role="listbox"
+      aria-label={i18n.t('uiCopy.git.filesInCommit')}
       class="git-table-frame min-h-0 flex-1 overflow-auto divide-y divide-[var(--git-table-gridline)]"
       data-git-commit-files-list-layout="compact"
     >
@@ -124,10 +116,14 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
         {(file) => {
           const active = () => props.selectedKey === selectedFileIdentity(file);
           const path = () => changeSecondaryPath(file);
+          const displayPath = () => file.newPath || file.path || file.displayPath || file.oldPath || '';
+          const name = () => displayPath().split('/').at(-1) || displayPath();
+          const directory = () => displayPath().slice(0, Math.max(0, displayPath().lastIndexOf('/')));
           return (
             <button
               type="button"
-              role="listitem"
+              role="option"
+              tabIndex={active() ? 0 : -1}
               aria-selected={active()}
               class={cn(
                 "git-browser-interactive grid w-full cursor-pointer gap-1.5 border-l-2 border-l-transparent px-3 py-2.5 text-left transition-colors duration-150 focus-visible:outline-none",
@@ -137,25 +133,15 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
               onContextMenu={(event) => props.onContextMenu?.(event, file)}
               onKeyDown={(event) => props.onKeyDown?.(event, file)}
             >
-              <div class="flex min-w-0 items-start justify-between gap-2">
-                <div class="min-w-0">
-                  <div
-                    class={`truncate text-xs font-medium ${gitChangePathClass(file.changeType)}`}
-                    title={path()}
-                  >
-                    {path()}
-                  </div>
-                </div>
-                <span class="shrink-0 rounded-md bg-background/70 px-2 py-1 text-[10px] font-medium text-muted-foreground">
-                  {i18n.t('shell.commandPalette.categories.view')}
-                </span>
+              <div class="flex min-w-0 items-center gap-2">
+                <FileItemIcon item={{ name: name(), type: 'file', extension: extNoDot(name()) }} class="size-3.5 shrink-0" />
+                <span class={`min-w-0 flex-1 truncate text-xs font-medium ${gitChangePathClass(file.changeType)}`} title={path()}>{name()}</span>
+                <GitChangeMetrics additions={file.additions} deletions={file.deletions} />
               </div>
-              <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+              <div class="flex min-w-0 items-center gap-1.5 pl-5">
                 <GitChangeStatusPill change={file.changeType} />
-                <GitChangeMetrics
-                  additions={file.additions}
-                  deletions={file.deletions}
-                />
+                <span class="min-w-0 truncate text-[10px] text-muted-foreground" title={path()}>{directory()}</span>
+                <span class="sr-only">{path()}</span>
               </div>
             </button>
           );
@@ -209,10 +195,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const [detailError, setDetailError] = createSignal("");
   const [commitBodyExpanded, setCommitBodyExpanded] = createSignal(false);
   const [commitMessageDialogOpen, setCommitMessageDialogOpen] = createSignal(false);
-  const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
-  const [diffDialogItem, setDiffDialogItem] =
-    createSignal<GitCommitFileSummary | null>(null);
-  const [diffDialogCommitHash, setDiffDialogCommitHash] = createSignal("");
+  const [selectedDiffKey, setSelectedDiffKey] = createSignal('');
+  const diffItem = createMemo(() => commitFiles().find((file) => selectedFileIdentity(file) === selectedDiffKey()) ?? commitFiles()[0] ?? null);
   const [commitOverviewWidth, setCommitOverviewWidth] = createSignal(0);
   const [commitOverviewElement, setCommitOverviewElement] =
     createSignal<HTMLDivElement>();
@@ -252,9 +236,6 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const commitPresentationBadge = createMemo(() =>
     localizedGitCommitDiffPresentationBadge(commitPresentation(), i18n),
   );
-  const commitPresentationDetail = createMemo(() =>
-    localizedGitCommitDiffPresentationDetail(commitPresentation(), i18n),
-  );
   const commitOverviewLayout = createMemo<GitBranchHeaderLayout>(() =>
     resolveGitBranchHeaderLayout(commitOverviewWidth()),
   );
@@ -264,9 +245,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
       commitOverviewLayout() === "inline" ? "pl-4" : "pl-0",
     );
   const openDiff = (file: GitCommitFileSummary, hash = commitHash()) => {
-    setDiffDialogCommitHash(hash);
-    setDiffDialogItem(file);
-    setDiffDialogOpen(true);
+    if (hash === commitHash()) setSelectedDiffKey(selectedFileIdentity(file));
   };
   const commitContextMenuItems = (target: CommitContextTarget): GitContextMenuActionItem[] => {
     const commit = target.commit;
@@ -389,21 +368,14 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
 
   createEffect(() => {
     repoRootPath();
-    setDiffDialogItem(null);
-    setDiffDialogCommitHash("");
-    setDiffDialogOpen(false);
+    commitHash();
+    setSelectedDiffKey('');
   });
 
   createEffect(() => {
     commitHash();
     setCommitBodyExpanded(false);
     setCommitMessageDialogOpen(false);
-  });
-
-  createEffect(() => {
-    if (!diffDialogOpen()) return;
-    if (diffDialogItem()) return;
-    setDiffDialogOpen(false);
   });
 
   createEffect(() => {
@@ -503,9 +475,10 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                 return i18n.t('uiCopy.git.switchDetachHere');
               };
               return (
-                <div class="relative flex-1 min-h-0">
-                  <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
-                    <div class="space-y-3">
+                <div class="relative flex min-h-0 flex-1 flex-col">
+                  <div class="flex min-h-0 flex-1 flex-col">
+                    <div class="flex min-h-0 flex-1 flex-col">
+                        <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="max-h-[40%] shrink-0 overflow-auto border-b border-border">
                         <GitPanelFrame as="section" class="!px-4 !py-3">
                           <div
                             ref={setCommitOverviewElement}
@@ -635,152 +608,34 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                             </Show>
                           </div>
                         </GitPanelFrame>
+                        </div>
 
-                        <GitPanelFrame as="section">
-                          <GitLabelBlock
-                            class="min-w-0"
-                            bodyClass="!pl-0"
-                            label={i18n.t('uiCopy.git.filesInCommit')}
-                            tone="info"
-                            meta={
-                              <GitMetaPill tone="neutral">
-                                {String(commitFiles().length)}
-                              </GitMetaPill>
-                            }
-                          >
-                            <div class="text-xs leading-relaxed text-muted-foreground">
-                              {i18n.t('uiCopy.git.clickFileDiff')}
-                            </div>
-                          </GitLabelBlock>
-                          <Show when={commitPresentationDetail()}>
-                            <GitSubtleNote class="mt-2">
-                              {commitPresentationDetail()}
-                            </GitSubtleNote>
-                          </Show>
-                          <Show
-                            when={commitFiles().length > 0}
-                            fallback={
-                              <GitSubtleNote>
-                                {i18n.t('uiCopy.git.noCommitFiles')}
-                              </GitSubtleNote>
-                            }
-                          >
-                            <GitTableFrame class="mt-2.5">
-                              <Show
-                                when={commitOverviewLayout() === "compact"}
-                                fallback={
-                                  <GitVirtualTable
-                                    items={commitFiles()}
-                                    tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
-                                    header={
-                                      <tr
-                                        class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}
-                                      >
-                                        <th
-                                          class={
-                                            GIT_CHANGED_FILES_HEADER_CELL_CLASS
-                                          }
-                                        >
-                                          {i18n.t('git.common.path')}
-                                        </th>
-                                        <th
-                                          class={
-                                            GIT_CHANGED_FILES_HEADER_CELL_CLASS
-                                          }
-                                        >
-                                          {i18n.t('git.common.status')}
-                                        </th>
-                                        <th
-                                          class={
-                                            GIT_CHANGED_FILES_HEADER_CELL_CLASS
-                                          }
-                                        >
-                                          {i18n.t('git.common.changes')}
-                                        </th>
-                                        <th
-                                          class={
-                                            GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS
-                                          }
-                                        >
-                                          {i18n.t('git.common.action')}
-                                        </th>
-                                      </tr>
-                                    }
-                                    renderRow={(file) => {
-                                      const active = () =>
-                                        selectedFileIdentity(diffDialogItem()) ===
-                                          selectedFileIdentity(file) &&
-                                        diffDialogOpen();
-                                      return (
-                                        <tr
-                                          aria-selected={active()}
-                                          class={gitChangedFilesRowClass(active())}
-                                          onContextMenu={(event) => openFileContextMenu(event, file)}
-                                        >
-                                          <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                                            <div class="min-w-0">
-                                              <button
-                                                type="button"
-                                                class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
-                                                title={changeSecondaryPath(file)}
-                                                onClick={() => {
-                                                  openDiff(file);
-                                                }}
-                                                onKeyDown={(event) => openFileKeyboardMenu(event, file)}
-                                              >
-                                                {changeSecondaryPath(file)}
-                                              </button>
-                                            </div>
-                                          </td>
-                                          <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                                            <GitChangeStatusPill
-                                              change={file.changeType}
-                                            />
-                                          </td>
-                                          <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                                            <GitChangeMetrics
-                                              additions={file.additions}
-                                              deletions={file.deletions}
-                                            />
-                                          </td>
-                                          <td
-                                            class={gitChangedFilesStickyCellClass(
-                                              active(),
-                                            )}
-                                          >
-                                            <GitChangedFilesActionButton
-                                              onClick={() => {
-                                                setDiffDialogCommitHash(
-                                                  commitHash(),
-                                                );
-                                                setDiffDialogItem(file);
-                                                setDiffDialogOpen(true);
-                                              }}
-                                            >
-                                              {i18n.t('files.menuViewDiff')}
-                                            </GitChangedFilesActionButton>
-                                          </td>
-                                        </tr>
-                                      );
-                                    }}
-                                  />
-                                }
-                              >
-                                <CommitFilesCompactList
-                                  items={commitFiles()}
-                                  selectedKey={selectedFileIdentity(
-                                    diffDialogItem(),
-                                  )}
-                                  onOpenDiff={(file) => {
-                                    openDiff(file);
-                                  }}
-                                  onContextMenu={openFileContextMenu}
-                                  onKeyDown={openFileKeyboardMenu}
-                                />
-                              </Show>
-                            </GitTableFrame>
-                          </Show>
-                        </GitPanelFrame>
+                        <GitDiffSplit
+                          detail={(
+                            <GitDiffPanel
+                              open={Boolean(diffItem())}
+                              item={diffItem()}
+                              source={diffItem() ? {
+                                kind: 'commit',
+                                repoRootPath: repoRootPath(),
+                                commit: commitHash(),
+                                presentation: commitPresentation() ?? undefined,
+                              } : null}
+                              emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
+                            />
+                          )}
+                        >
+                          <div class="shrink-0 border-b border-border px-3 py-2 text-[11px] font-medium text-muted-foreground">
+                            {i18n.t('uiCopy.git.filesInCommit')} · {commitFiles().length}
+                          </div>
+                          <CommitFilesCompactList
+                            items={commitFiles()}
+                            selectedKey={selectedFileIdentity(diffItem())}
+                            onOpenDiff={(file) => openDiff(file)}
+                            onContextMenu={openFileContextMenu}
+                            onKeyDown={openFileKeyboardMenu}
+                          />
+                        </GitDiffSplit>
                       </div>
                     </div>
                     </div>
@@ -798,40 +653,6 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
       />
       <GitEntityContextMenu controller={commitContextMenu} items={commitContextMenuItems} />
       <GitEntityContextMenu controller={fileContextMenu} items={fileContextMenuItems} />
-
-      <GitDiffDialog
-        open={diffDialogOpen()}
-        onOpenChange={(open) => {
-          setDiffDialogOpen(open);
-          if (!open) {
-            setDiffDialogItem(null);
-            setDiffDialogCommitHash("");
-          }
-        }}
-        item={diffDialogItem()}
-        source={
-          diffDialogItem()
-            ? {
-                kind: "commit",
-                repoRootPath: repoRootPath(),
-                commit: diffDialogCommitHash(),
-                presentation: commitPresentation() ?? undefined,
-              }
-            : null
-        }
-        title={i18n.t('uiCopy.git.commitDiff')}
-        description={
-          diffDialogItem()
-            ? changeSecondaryPath(diffDialogItem())
-            : i18n.t('uiCopy.git.reviewSelectedFileDiff')
-        }
-        emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
-        unavailableMessage={(file) =>
-          file.isBinary
-            ? i18n.t('git.patchViewer.binaryDiffUnavailable')
-            : undefined
-        }
-      />
     </div>
   );
 }

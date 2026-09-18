@@ -6,6 +6,7 @@ import {
 } from '@floegence/floe-webapp-core';
 import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { createSignal } from 'solid-js';
+import type { GitGetDiffContentRequest } from '../protocol/redeven_v1';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -23,7 +24,11 @@ vi.mock('../protocol/redeven_v1', async () => {
       git: {
         getBranchCompare: vi.fn(),
         getCommitDetail: vi.fn(),
-        getDiffContent: vi.fn(),
+        getDiffContent: vi.fn(async (request: GitGetDiffContentRequest) => ({
+          repoRootPath: request.repoRootPath,
+          mode: request.mode,
+          file: { ...request.file, changeType: 'modified', patchText: '@@ -1 +1 @@\n-before\n+after' },
+        })),
         listWorkspacePage: rpcMocks.listWorkspacePage,
       },
     }),

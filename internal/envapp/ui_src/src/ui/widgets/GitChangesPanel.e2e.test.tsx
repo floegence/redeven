@@ -535,7 +535,7 @@ describe('GitChangesPanel interactions', () => {
       expect(host.textContent).toContain('Modified');
       expect(host.textContent).toContain('src/next.ts');
       expect(host.textContent).toContain('+ Stage');
-      expect(host.textContent).not.toContain('Patch');
+      expect(host.querySelector('[data-git-diff-panel]')).toBeTruthy();
       expect(host.textContent).not.toContain('Ready to Commit');
       expect(host.querySelector('tbody tr td:nth-child(2) .rounded-full')).toBeNull();
     } finally {
@@ -1016,7 +1016,7 @@ describe('GitChangesPanel interactions', () => {
       expect(host.textContent).toContain('src/app.ts');
       expect(host.querySelector('.git-changes-table-refresh-row')).toBeNull();
       expect(host.querySelector('.git-changes-table-pending')).toBeNull();
-      expect(host.querySelector('[data-git-content-skeleton]')).toBeNull();
+      expect(host.querySelector('.git-diff-split__files [data-git-content-skeleton]')).toBeNull();
       expect(host.querySelector('.git-inline-loading-status')).toBeNull();
       expect(host.textContent).not.toContain('No staged files yet.');
     } finally {
@@ -1721,7 +1721,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('opens the diff dialog when the file name is clicked', async () => {
+  it('shows the selected file diff beside the file list without a dialog', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1766,15 +1766,11 @@ describe('GitChangesPanel interactions', () => {
       fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(document.body.textContent).toContain('Workspace Diff');
-      expect(document.body.textContent).toContain('src/next.ts');
-      expect(document.body.textContent).toContain('newLine();');
-      const dialogRoot = document.querySelector('[role="dialog"]') as HTMLDivElement | null;
-      expect(dialogRoot).toBeTruthy();
-      const closeButton = dialogRoot?.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null;
-      expect(closeButton).toBeTruthy();
-      expect(closeButton?.className).toContain('hover:bg-error');
-      expect(closeButton?.className).not.toContain('hover:bg-muted/80');
+      expect(host.textContent).toContain('src/next.ts');
+      expect(host.textContent).toContain('newLine();');
+      expect(host.querySelector('[data-git-diff-split]')).toBeTruthy();
+      expect(host.querySelector('[data-git-diff-panel]')).toBeTruthy();
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
     } finally {
       dispose();
     }
@@ -1828,7 +1824,7 @@ describe('GitChangesPanel interactions', () => {
       fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(document.body.textContent).toContain('Workspace Diff');
+      expect(host.querySelector('[data-git-diff-panel]')).toBeTruthy();
       expect(document.body.textContent).toContain('Control Plane');
       expect(document.body.textContent).toContain('More details');
     } finally {

@@ -4033,7 +4033,8 @@ describe("GitBranchesPanel interactions", () => {
       diffButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
       await Promise.resolve();
-      expect(document.body.textContent).toContain("Commit Diff");
+      expect(historyPanel!.querySelector('[data-git-diff-panel]')).toBeTruthy();
+      expect(Array.from(document.querySelectorAll('[role="dialog"]')).some((dialog) => dialog.textContent?.includes('Commit Diff'))).toBe(false);
       expect(document.body.textContent).toContain("Merge Commit");
       expect(document.body.textContent).toContain("history updated");
 
