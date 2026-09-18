@@ -227,7 +227,7 @@ it('keeps the current page after a stale selection and supports keyboard switchi
   } finally { await page.viewport(1280, 720); }
 });
 
-it('guides connection without selecting a tab and rechecks the browser before continuing', async () => {
+it('prepares Chrome automatically and continues only after a real connection', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const connected = vi.fn().mockResolvedValue([]);
   const connect = vi.fn(), continued = vi.fn().mockResolvedValue(undefined);
@@ -235,27 +235,82 @@ it('guides connection without selecting a tab and rechecks the browser before co
     listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
     listTargets: vi.fn(), listBrowserTabs: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(),
     setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/extension', native_host: 'fixture.host', extension_id: 'fixture' }),
-    listExtensionProfiles: connected, listExtensionTabs: vi.fn(),
+    openExtension: vi.fn().mockResolvedValue(undefined), listExtensionProfiles: connected, listExtensionTabs: vi.fn(),
   };
   const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open connectionOnly onContinue={continued} onOpenChange={() => undefined} threadID="thread"
     adapter={{ ...adapter(true), connectComputerBrowser: connect, computerManagement: management }} copy={computerUseEnUS} /></LayoutProvider></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
   const button = (text: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(item => item.textContent === text)!;
-  await waitFor(() => connected.mock.calls.length === 1 && !button(computerUseEnUS.refresh).disabled);
-  expect(button(computerUseEnUS.continueTask).disabled).toBe(true);
-  expect(document.querySelector('details')?.open).toBe(true);
-  connected.mockResolvedValue([{ id: 'profile', name: 'Personal' }]);
-  button(computerUseEnUS.refresh).click();
-  await waitFor(() => !button(computerUseEnUS.continueTask).disabled);
+  await waitFor(() => management.setupExtension.mock.calls.length === 1);
+  await waitFor(() => !!button('Open extensions'));
+  expect(document.body.textContent).toContain('Developer mode');
+  expect(document.body.textContent).toContain('Load unpacked');
+  expect(document.body.textContent).not.toContain('fixture.host');
   expect(document.querySelector('select')).toBeNull();
-  connected.mockResolvedValueOnce([]);
-  button(computerUseEnUS.continueTask).click();
-  await waitFor(() => !!document.querySelector('[role="alert"]'));
   expect(continued).not.toHaveBeenCalled();
-  button(computerUseEnUS.refresh).click();
-  await waitFor(() => !button(computerUseEnUS.continueTask).disabled);
-  button(computerUseEnUS.continueTask).click();
+  button('Open extensions').click();
+  await waitFor(() => management.openExtension.mock.calls.length === 1);
+  expect(management.openExtension).toHaveBeenCalledWith('extensions');
+  connected.mockResolvedValue([{ id: 'profile', name: 'Chrome' }]);
   await waitFor(() => continued.mock.calls.length === 1);
   expect(connect).not.toHaveBeenCalled(); expect(management.selectTarget).not.toHaveBeenCalled();
   expect(management.listCandidates).not.toHaveBeenCalled(); expect(management.loadAccess).not.toHaveBeenCalled();
+});
+
+it('does not continue a closed guide when profile discovery finishes late', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  let resolve!: (value: {id:string;name:string}[]) => void;
+  const continued = vi.fn();
+  const management = {
+    listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+    listTargets: vi.fn(), listBrowserTabs: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(),
+    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/extension', native_host: 'fixture.host', extension_id: 'fixture' }),
+    openExtension: vi.fn(), listExtensionProfiles: vi.fn(() => new Promise<{id:string;name:string}[]>(done => { resolve = done; })),
+  };
+  const stop = render(() => <FloeConfigProvider><FlowerProfileConnection connectionOnly onContinue={continued}
+    management={management} connect={vi.fn()} copy={computerUseEnUS} onConnected={() => undefined} /></FloeConfigProvider>, host);
+  await waitFor(() => !!resolve);
+  stop(); host.remove();
+  resolve([{ id: 'profile', name: 'Chrome' }]);
+  await new Promise(done => setTimeout(done, 50));
+  expect(continued).not.toHaveBeenCalled();
+});
+
+it('allows adding a second Chrome profile without treating the existing connection as completion', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const profiles = vi.fn().mockResolvedValue([{ id: 'first', name: 'Personal' }]);
+  const management = {
+    listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+    listTargets: vi.fn(), listBrowserTabs: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(),
+    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/extension', native_host: 'fixture.host', extension_id: 'fixture' }),
+    openExtension: vi.fn(), listExtensionProfiles: profiles, listExtensionTabs: vi.fn(),
+  };
+  const stop = render(() => <FloeConfigProvider><FlowerProfileConnection management={management} connect={vi.fn()} copy={computerUseEnUS} onConnected={() => undefined} /></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  await waitFor(() => !!host.querySelector('select'));
+  Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === 'Connect Chrome')!.click();
+  await waitFor(() => management.setupExtension.mock.calls.length === 1);
+  expect(host.querySelector('[data-flower-chrome-connection]')).not.toBeNull();
+  profiles.mockResolvedValue([{ id: 'first', name: 'Personal' }, { id: 'second', name: 'Work' }]);
+  await waitFor(() => !host.querySelector('[data-flower-chrome-connection]'));
+  expect(host.querySelector('select')?.textContent).toContain('Work');
+});
+
+it('stops after a failed automatic continuation and exposes explicit retry without leaking errors', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const continued = vi.fn().mockRejectedValue(new Error('private adapter details'));
+  const management = {
+    listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+    listTargets: vi.fn(), listBrowserTabs: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(),
+    listExtensionProfiles: vi.fn().mockResolvedValue([{ id: 'first', name: 'Personal' }]),
+  };
+  const stop = render(() => <FloeConfigProvider><FlowerProfileConnection connectionOnly onContinue={continued} management={management} connect={vi.fn()} copy={computerUseEnUS} onConnected={() => undefined} /></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  await waitFor(() => !!host.querySelector('[role="alert"]'));
+  expect(continued).toHaveBeenCalledTimes(1);
+  expect(host.textContent).not.toContain('private adapter details');
+  expect(management.listExtensionProfiles).toHaveBeenCalledTimes(1);
+  continued.mockResolvedValue(undefined);
+  Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === computerUseEnUS.retryConnection)!.click();
+  await waitFor(() => continued.mock.calls.length === 2);
 });

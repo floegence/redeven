@@ -11,6 +11,7 @@ export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | '
     createManagedProfile: name => request('POST', `${path}/managed/profiles`, { name }),
     listManagedTabs: profileID => request('GET', `${path}/managed/tabs?profile_id=${encodeURIComponent(profileID)}`),
     disconnectBrowser: async targetID => { await request('POST', `${path}/disconnect`, { target_id: targetID }); },
+    openExtension: action => request('POST', `${path}/extension/open`, { action }),
     setupExtension: () => request('POST', `${path}/extension/setup`),
     listExtensionProfiles: () => request('GET', `${path}/extension/profiles`),
     listExtensionTabs: (profileID) => request('GET', `${path}/extension/tabs?profile_id=${encodeURIComponent(profileID)}`),

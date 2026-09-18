@@ -211,7 +211,7 @@ async function connect(name, label) {
 }
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   // Only this extension's own UI can set up or disconnect its native port.
-  if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('popup.html')) return false;
+  if (sender.id !== chrome.runtime.id || sender.url?.split('#')[0] !== chrome.runtime.getURL('popup.html')) return false;
   const run = async () => {
     if (message.command === 'connect') await connect(message.nativeHost, message.profileName);
     else if (message.command === 'disconnect') await disconnect();

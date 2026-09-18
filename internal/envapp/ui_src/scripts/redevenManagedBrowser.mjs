@@ -16,7 +16,7 @@ try {
     executablePath = path.resolve(resources, JSON.parse(readFileSync(path.join(resources, 'browser.json'), 'utf8')).executable);
     if (!executablePath.startsWith(resources + path.sep)) throw new Error('invalid executable');
   }
-  context = await chromium.launchPersistentContext(profile, { executablePath, headless: true, viewport: { width: 1280, height: 800 }, args: ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1'] });
+  context = await chromium.launchPersistentContext(profile, { executablePath, chromiumSandbox: true, headless: true, viewport: { width: 1280, height: 800 }, args: ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1'] });
   const [port] = readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf8').split('\n');
   if (!/^\d+$/u.test(port)) throw new Error('invalid endpoint');
   const session = await context.browser().newBrowserCDPSession();

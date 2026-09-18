@@ -1,5 +1,17 @@
 # Redeven OKF Update Log
 
+## 2026-09-18 — Guided Chrome connection
+
+- Replaced manual native-host setup with one Runtime-backed installation and
+  confirmation guide shared by Desktop and Env App, automatic handshake
+  detection, cancellation-safe continuation and explicit retry.
+- Kept Native Messaging protocol 5 and Floret InputRequired/Respond ownership;
+  Runtime Service epoch 25 adds fixed native opening actions and a stable
+  extension installation directory. No database migration or upstream API change.
+- Added clean Chrome installation acceptance through the visible extensions UI
+  and native folder picker; browser sandboxing remains enabled.
+
+
 ## 2026-09-18: Flower history and Desktop compatibility
 
 - Adopt published Floret v7.16.2 mixed-call correction and exact waiting-run provider state; keep history and interaction ownership upstream.

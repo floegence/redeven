@@ -19,7 +19,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
   const extension = path.join(directory, 'extension'); stageBrowserExtension(extension);
   // Attach without Playwright's page defaults: real user Chrome has no
   // pre-existing focus emulation from a second automation owner.
-  const chromeProcess = spawn(chromium.executablePath(), ['--headless=new', '--no-sandbox', '--no-first-run', '--remote-debugging-port=0',
+  const chromeProcess = spawn(chromium.executablePath(), ['--headless=new', '--no-first-run', '--remote-debugging-port=0',
     `--user-data-dir=${path.join(directory, 'profile')}`, `--disable-extensions-except=${extension}`, `--load-extension=${extension}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   const chromeExited = once(chromeProcess, 'exit');
   t.after(async () => { chromeProcess.kill('SIGTERM'); await chromeExited; await rm(directory, { recursive: true, force: true }); });
@@ -74,8 +74,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     const user = await context.newPage(); await user.goto(origin + '/user');
     const task = await context.newPage(); await task.goto(origin + '/task');
     await context.addCookies([{ name: 'login', value: 'present', url: origin }]);
-    const popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html`);
-    await popup.locator('#profile').fill('Fixture profile'); await popup.locator('#bridge').fill('dev.floegence.redeven.r123456789abcdef0');
+    const popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html#dev.floegence.redeven.r123456789abcdef0`);
     await popup.locator('#connect-button').click();
     await worker.evaluate(() => fixtureWait('hello'));
     await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 5 }));

@@ -74,3 +74,18 @@ func TestComputerRevealRejectsForgedBrowserCommands(t *testing.T) {
 		t.Fatalf("reveal authority leaked: %s", response.Body.String())
 	}
 }
+
+func TestChromeOnboardingRejectsArbitraryNativeDestinations(t *testing.T) {
+	srv, origin, _ := newUploadRouteServer(t)
+	for _, body := range []string{
+		`{"action":"connect","url":"https://untrusted.test"}`,
+		`{"action":"folder","path":"/arbitrary"}`,
+		`{"action":"connect"}{}`,
+		`{"action":"--no-sandbox"}`,
+	} {
+		response := performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/computer/extension/open", origin, body)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("native destination accepted: %d", response.Code)
+		}
+	}
+}

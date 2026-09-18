@@ -1,4 +1,4 @@
-/* global window, chrome */
+/* global window, chrome, document, getComputedStyle */
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { installChromeExtensionThroughUI } from './installChromeExtensionThroughUI.mjs';
 import { createComputerTask, openComputerStage } from './computerTaskQualification.mjs';
 
 // Real product carriers, Runtime, extension, Native Messaging and browser pages.
@@ -85,29 +86,40 @@ try {
   threadID = await createComputerTask({ page, request, origin });
   await page.locator('.flower-surface textarea').first().fill('Use my system browser to open the fixture and verify it.');
   await page.locator('.flower-surface textarea').first().press('Enter');
-  await page.getByRole('button', { name: 'Connect your system browser', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Connect Chrome', exact: true }).waitFor();
   assert.equal(calls, 1); assert.equal((await request('GET', `/_redeven_proxy/api/ai/computer/target?thread_id=${threadID}`)).target_id, '');
-  await page.getByRole('button', { name: 'Connect your system browser', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Connect your system browser', exact: true });
-  await dialog.getByRole('button', { name: 'Set up this computer', exact: true }).click();
-  await dialog.getByRole('textbox', { name: 'Connection name', exact: true }).waitFor();
-  const nativeHost = await dialog.getByRole('textbox', { name: 'Connection name', exact: true }).inputValue();
+  await page.getByRole('button', { name: 'Connect Chrome', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Connect Chrome', exact: true });
+  await dialog.getByRole('textbox', { name: 'Extension folder', exact: true }).waitFor();
+  assert.equal(await dialog.getByRole('textbox').count(), 1, 'no internal native-host field');
   const extension = await dialog.getByRole('textbox', { name: 'Extension folder', exact: true }).inputValue();
+  await page.waitForFunction(() => {
+    const dialog = document.querySelector('[role="dialog"]');
+    return dialog && Number(getComputedStyle(dialog).opacity) > 0.99 && dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running');
+  });
+  await page.screenshot({ path: path.join(output, 'chrome-connection-guide.png'), animations: 'disabled' });
+  if (page === welcome) {
+    await welcome.evaluate(() => window.redevenDesktopLanguage.setPreference('zh-CN'));
+    await page.getByRole('dialog', { name: '连接 Chrome', exact: true }).waitFor();
+    await page.screenshot({ path: path.join(output, 'chrome-connection-guide-zh-CN.png'), animations: 'disabled' });
+    await welcome.evaluate(() => window.redevenDesktopLanguage.setPreference('en-US'));
+    await dialog.waitFor();
+  }
   const setup = await request('POST', '/_redeven_proxy/api/ai/computer/extension/setup');
-  assert.equal(setup.native_host, nativeHost);
+  const nativeHost = setup.native_host;
   // Chrome's isolated user-data directory can hold the exact Runtime-generated
   // registration, leaving other profiles and their native hosts untouched.
   const manifestRoot = process.platform === 'darwin' ? path.join(os.homedir(), 'Library/Application Support/Google/Chrome/NativeMessagingHosts') : path.join(os.homedir(), '.config/google-chrome/NativeMessagingHosts');
   const manifest = await readFile(path.join(manifestRoot, `${nativeHost}.json`));
   const profile = path.join(directory, 'profile'); await mkdir(path.join(profile, 'NativeMessagingHosts'), { recursive: true });
   await writeFile(path.join(profile, 'NativeMessagingHosts', `${nativeHost}.json`), manifest);
-  personal = await chromium.launchPersistentContext(profile, { channel: 'chromium', headless: false, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
+  personal = await chromium.launchPersistentContext(profile, { channel: 'chrome', headless: false, chromiumSandbox: true, ignoreDefaultArgs: ['--disable-extensions'] });
+  const installation = await installChromeExtensionThroughUI(personal, extension, setup.extension_id);
+  await installation.screenshot({ path: path.join(output, 'chrome-installed.png') });
   const existing = await personal.newPage(); await existing.goto(origin); await existing.getByRole('textbox').fill('keep my unfinished work');
-  const popup = await personal.newPage(); await popup.goto(`chrome-extension://${setup.extension_id}/popup.html`);
-  await popup.locator('#profile').fill('Personal acceptance profile'); await popup.locator('#bridge').fill(nativeHost); await popup.locator('#connect-button').click();
+  const popup = await personal.newPage(); await popup.goto(`chrome-extension://${setup.extension_id}/popup.html#${nativeHost}`);
+  await popup.locator('#connect-button').click();
   await wait(async () => (await request('GET', '/_redeven_proxy/api/ai/computer/extension/profiles')).length === 1, 'real Native Messaging connection');
-  await dialog.getByRole('button', { name: 'Refresh', exact: true }).click();
-  await dialog.getByRole('button', { name: 'Continue task', exact: true }).click();
   await wait(() => release || providerFailure, 'task navigation'); if (providerFailure) throw providerFailure;
   const selected = (await request('GET', `/_redeven_proxy/api/ai/computer/target?thread_id=${threadID}`)).target_id;
   const target = (await request('GET', '/_redeven_proxy/api/ai/computer/targets')).find(value => value.id === selected);
@@ -123,7 +135,7 @@ try {
   release();
   await wait(() => page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status').then(value => value === 'success'), 'verified completion');
   assert.equal(calls, 6); assert.equal(await existing.getByRole('textbox').inputValue(), 'keep my unfinished work');
-  await writeFile(path.join(output, 'system-browser.json'), JSON.stringify({ surface: process.env.REDEVEN_COMPUTER_SURFACE || 'desktop', source: target.kind, canonicalConnection: true, nativeMessaging: true, independentTaskTab: true, originalFormPreserved: true, visiblePixels: true, revealExactPage: true, completed: true }, null, 2));
+  await writeFile(path.join(output, 'system-browser.json'), JSON.stringify({ surface: process.env.REDEVEN_COMPUTER_SURFACE || 'desktop', source: target.kind, canonicalConnection: true, firstInstallThroughVisibleUI: true, sandboxEnabled: true, automaticContinuation: true, nativeMessaging: true, independentTaskTab: true, originalFormPreserved: true, visiblePixels: true, revealExactPage: true, completed: true }, null, 2));
   console.log('System-browser connection, independent task tab, Stage, reveal and verification passed.');
 } finally {
   release?.();

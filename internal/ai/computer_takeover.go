@@ -50,7 +50,7 @@ func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, saf
 func computerConnectionExecution() targetToolExecution {
 	return targetToolExecution{Payload: map[string]any{"browser_source": "system", "connection_required": true}, inputRequired: &fltools.InputRequest{
 		Summary:   "Connect your system browser",
-		Questions: []fltools.InputQuestion{{ID: "browser_connection", Kind: "select", Prompt: "Connect Flower Browser in Chrome using the connection guide, then continue. Flower will create its own task tab. Safari browser automation is not supported by this connection. No managed browser or desktop automation will be substituted.", Options: []string{"Continue with connected browser"}}},
+		Questions: []fltools.InputQuestion{{ID: "browser_connection", Kind: "select", Prompt: "Open Connect Chrome in Flower and follow the installation and confirmation steps. Flower resumes automatically after the connection is verified and creates its own task tab. Safari browser automation is not supported by this connection. No managed browser or desktop automation will be substituted.", Options: []string{"Continue with connected browser"}}},
 	}}
 }
 
