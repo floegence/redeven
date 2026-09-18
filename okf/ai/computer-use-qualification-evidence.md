@@ -22,6 +22,25 @@ one adapter or from a model request returning HTTP 200.
 
 # Evidence
 
+## Observation recovery
+
+The 2026-09-18 observation repair reproduced a normal page losing an iframe
+between isolated-world creation and its safety read. Before the fix this became
+`TAKEOVER_REQUIRED`; after the fix the read is invalidated and a fresh observation
+succeeds. The reported user's sampling log recorded `inspection`, but did not
+retain the underlying CDP exception, so that historical event cannot be attributed
+to frame removal with certainty.
+
+Task-owned Chromium and real extension debugger checks cover bounded read
+recovery, stable failures before/after input, one confirmed click, and secret
+evidence surviving simultaneous frame changes. Go adapter, Runtime sampler and
+script tests verify closed results, completed prefixes and no false interaction.
+The browser/controller/script/extension suite passed 35 tests; the existing
+Stage, assistance and connection browser suites passed 32. Native Messaging
+also passed against a binary built from this worktree. These are isolated
+browser and component checks, not a new live Desktop qualification or a replay
+of the user's task. The user's Runtime and pending interaction were untouched.
+
 ## System-browser and control repair
 
 The 2026-09-18 repair qualification uses task-owned built Desktop and Runtime,

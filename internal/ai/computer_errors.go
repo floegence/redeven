@@ -27,6 +27,8 @@ func computerTargetFailure(call TargetToolCall, wireCode string) error {
 		failure.code, failure.targetState = "target_not_ready", "stopped"
 	case "TAKEOVER_REQUIRED":
 		failure.code = "interaction_takeover_required"
+	case "TARGET_OBSERVATION_UNAVAILABLE":
+		failure.code, failure.repairAction = "target_observation_unavailable", "observe_target"
 	case "FRAME_UNAVAILABLE":
 		failure.code, failure.repairAction = "frame_unavailable", "observe_target"
 	case "STALE_REFERENCE", "AMBIGUOUS_ELEMENT", "ELEMENT_NOT_FOUND", "CONDITION_TIMEOUT", "TARGET_CAPABILITY_UNAVAILABLE":
@@ -92,7 +94,7 @@ func computerKnownRejection(err error) bool {
 		return false
 	}
 	switch failure.code {
-	case "stale_reference", "ambiguous_element", "element_not_found", "condition_timeout", "target_capability_unavailable", "invalid_computer_arguments", "target_not_allowed", "interaction_takeover_required", "target_permission_required":
+	case "target_observation_unavailable", "stale_reference", "ambiguous_element", "element_not_found", "condition_timeout", "target_capability_unavailable", "invalid_computer_arguments", "target_not_allowed", "interaction_takeover_required", "target_permission_required":
 		return true
 	default:
 		return false
@@ -120,4 +122,25 @@ func ComputerSelectionErrorCode(err error) string {
 		return "target_selection_stale"
 	}
 	return "computer_target_selection_failed"
+}
+
+// A failed read is not an unknown effect. Only the helper's closed, confirmed
+// progress facts may survive; never retain its raw data, exception or pixels.
+func computerObservationFailure(call TargetToolCall, payload map[string]any, location string) (TargetToolResult, error) {
+	executed, confirmed := payload["action_executed"].(bool)
+	stage, _ := payload["observation_stage"].(string)
+	if !confirmed || computerObservationStage(stage) == "unknown" {
+		return TargetToolResult{}, errors.New("invalid browser observation failure")
+	}
+	return TargetToolResult{TargetID: call.TargetID, ExecutionLocation: location,
+		Result: map[string]any{"action_executed": executed, "observation_stage": stage}}, computerTargetFailure(call, "TARGET_OBSERVATION_UNAVAILABLE")
+}
+
+func computerObservationStage(stage string) string {
+	switch stage {
+	case "frame_inventory", "safety_scan", "semantic_read", "capture", "metadata":
+		return stage
+	default:
+		return "unknown"
+	}
 }

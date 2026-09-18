@@ -36,7 +36,7 @@ test('reconnection drains old requests before binding and reusing native request
     }
     const first = connect(); await flush();
     assert.equal(ports.length, 1);
-    ports[0].onMessage.emit({ type: 'ready', protocol_version: 5 });
+    ports[0].onMessage.emit({ type: 'ready', protocol_version: 6 });
     assert.equal((await first).connected, true);
     ports[0].onMessage.emit({ id: '1', command: 'inventory' }); await flush();
     const next = connect(); await flush();
@@ -44,7 +44,7 @@ test('reconnection drains old requests before binding and reusing native request
     assert.equal(ports.length, 1, 'a new connection must wait for the retired request cleanup');
     releaseInventory([]); await flush(); await flush();
     assert.equal(ports.length, 2);
-    ports[1].onMessage.emit({ type: 'ready', protocol_version: 5 });
+    ports[1].onMessage.emit({ type: 'ready', protocol_version: 6 });
     assert.equal((await next).connected, true);
     ports[1].onMessage.emit({ id: '1', command: 'inventory' }); await flush();
     releaseInventory([{ id: 7, title: 'Selected', url: 'https://example.test' }]); await flush();

@@ -60,7 +60,7 @@ a later authorized file/command tool handles data processing.
 
 The MV3 extension uses Native Messaging and `chrome.debugger` bound to an exact
 tab. Setup registers a native host for the current machine; the relay forwards
-framed protocol-5 messages over a private local Unix socket to the Runtime.
+framed protocol-6 messages over a private local Unix socket to the Runtime.
 Only the packaged extension origin and its own popup UI may establish this
 connection. Setup does not create a thread grant or attach any tab.
 
@@ -88,6 +88,17 @@ explicit takeover, revoked access and lost targets still stop subsequent work.
 Injected key/button presses are balanced on cancellation; unconfirmed cleanup
 is an unknown effect. The isolated-world observer tracks sensitive-field
 transitions, including fields inserted and removed during one action.
+
+Read failures use one shared controller for managed and connected browsers.
+A changed frame invalidates the observation; a stable failure permits one
+readonly retry before returning `TARGET_OBSERVATION_UNAVAILABLE`. Both adapters
+retain only confirmed effect progress and the closed inspection stage, never
+raw exceptions, semantic content or pixels. Runtime logs these non-secret facts
+with the target identity and viewer/tool source. Read failure does not acquire
+user control. Lost navigation interception requires reconnection and cannot
+masquerade as the user taking control. Older helper/extension protocols are
+rejected; Runtime Service epoch 25 is unchanged because its wire shapes and
+existing unavailable-frame UI contract are unchanged.
 
 Initial CDP connection requires authenticated endpoint, profile and tab selection.
 Thereafter Agent discovery can choose existing tabs or create independent task

@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/floegence/redeven/internal/browserbridge"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/floegence/redeven/internal/browserbridge"
 )
 
 func extensionFixture(t *testing.T, owners ...*ComputerUseRuntime) (*computerExtensionHub, *computerExtensionClient, net.Conn) {
@@ -36,8 +38,8 @@ func extensionFixture(t *testing.T, owners ...*ComputerUseRuntime) (*computerExt
 	}
 	t.Cleanup(func() { _ = peer.Close() })
 	for _, message := range []map[string]any{
-		{"type": "native_host", "protocol_version": 5, "extension_id": browserbridge.ExtensionID},
-		{"type": "hello", "protocol_version": 5, "profile_id": "12345678-1234-1234-1234-123456789abc", "profile_name": "Work"},
+		{"type": "native_host", "protocol_version": 6, "extension_id": browserbridge.ExtensionID},
+		{"type": "hello", "protocol_version": 6, "profile_id": "12345678-1234-1234-1234-123456789abc", "profile_name": "Work"},
 	} {
 		if err := browserbridge.WriteMessage(peer, message, 1<<20); err != nil {
 			t.Fatal(err)
@@ -364,5 +366,89 @@ func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *test
 	<-done
 	if created != 2 {
 		t.Fatalf("created %d task tabs", created)
+	}
+}
+
+func TestExtensionObservationFailurePreservesOnlyConfirmedProgress(t *testing.T) {
+	for _, executed := range []any{false, true, "unconfirmed"} {
+		t.Run(fmt.Sprint(executed), func(t *testing.T) {
+			_, client, peer := extensionFixture(t)
+			done := make(chan error, 1)
+			go func() {
+				raw, err := browserbridge.ReadMessage(peer, 1<<20)
+				if err != nil {
+					done <- err
+					return
+				}
+				var request struct {
+					ID string `json:"id"`
+				}
+				if err = json.Unmarshal(raw, &request); err != nil {
+					done <- err
+					return
+				}
+				done <- browserbridge.WriteMessage(peer, map[string]any{"id": request.ID, "result": map[string]any{
+					"error": "TARGET_OBSERVATION_UNAVAILABLE", "result": map[string]any{"action_executed": executed, "observation_stage": "safety_scan", "observation": "private"},
+					"screenshot": map[string]any{"mime": "image/png", "data": "private"}}}, 1<<20)
+			}()
+			executor := &extensionTargetExecutor{client: client, tabID: "7"}
+			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "chrome-task", ToolName: "computer.click"})
+			if peerErr := <-done; peerErr != nil {
+				t.Fatal(peerErr)
+			}
+			if _, ok := executed.(bool); !ok {
+				if !errors.Is(err, errComputerEffectUnknown) {
+					t.Fatalf("malformed progress weakened effect barrier: %v", err)
+				}
+				return
+			}
+			var failure *targetToolPolicyError
+			if !errors.As(err, &failure) || failure.code != "target_observation_unavailable" {
+				t.Fatalf("read failure misclassified: %v", err)
+			}
+			payload := result.Result.(map[string]any)
+			if len(payload) != 2 || payload["action_executed"] != executed || len(result.Attachments) != 0 || len(result.frameBytes) != 0 {
+				t.Fatalf("unsafe failure payload: %+v", result)
+			}
+		})
+	}
+}
+
+func TestExtensionRejectsOldObservationProtocol(t *testing.T) {
+	for _, old := range []string{"native_host", "hello"} {
+		t.Run(old, func(t *testing.T) {
+			hub, _, _ := extensionFixture(t)
+			peer, err := net.Dial("unix", hub.listener.Addr().String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer peer.Close()
+			if err := peer.SetDeadline(time.Now().Add(time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			messages := []map[string]any{
+				{"type": "native_host", "protocol_version": browserbridge.ProtocolVersion, "extension_id": browserbridge.ExtensionID},
+				{"type": "hello", "protocol_version": browserbridge.ProtocolVersion, "profile_id": "12345678-1234-1234-1234-123456789abc", "profile_name": "Old"},
+			}
+			for _, message := range messages {
+				if message["type"] == old {
+					message["protocol_version"] = 5
+				}
+				if err := browserbridge.WriteMessage(peer, message, 1<<20); err != nil {
+					t.Fatal(err)
+				}
+				if message["type"] == old {
+					break
+				}
+			}
+			if _, err := browserbridge.ReadMessage(peer, 1<<20); !errors.Is(err, io.EOF) {
+				t.Fatalf("old peer was not rejected immediately: %v", err)
+			}
+			hub.mu.Lock()
+			defer hub.mu.Unlock()
+			if len(hub.profiles) != 1 {
+				t.Fatal("old peer changed connected profile inventory")
+			}
+		})
 	}
 }

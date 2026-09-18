@@ -1,5 +1,17 @@
 # Redeven OKF Update Log
 
+## 2026-09-18 — Browser observation recovery
+
+- Separate frame invalidation and bounded readonly inspection failure from
+  real CAPTCHA, login, permission and user-control requirements. Runtime alone
+  owns pause state; Floret still owns formal interactions.
+- Preserve confirmed action progress without replay; discard semantic content,
+  logs and pixels when inspection cannot establish safety. Native Messaging and
+  browser JSONL advance to protocol 6; Runtime Service epoch 25 is unchanged.
+- Cover detached frames, real Chromium and extension debugging, adapter
+  sanitization, script prefixes and Stage resubscription. Published Floret
+  v7.16.2 supplies the existing contracts; no upstream API change is needed.
+
 ## 2026-09-18 — Guided Chrome connection
 
 - Replaced manual native-host setup with one Runtime-backed installation and

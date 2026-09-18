@@ -307,3 +307,27 @@ func TestComputerScriptCannotSupplyHostAuthorization(t *testing.T) {
 		})
 	}
 }
+
+func TestComputerScriptReadFailurePreservesConfirmedPrefixWithoutContentOrReplay(t *testing.T) {
+	calls := 0
+	host, call := scriptRuntimeFixture(t, func(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
+		calls++
+		if calls == 1 {
+			return TargetToolResult{Result: map[string]any{"observation": "previous page content"}}, nil
+		}
+		return computerObservationFailure(call, map[string]any{"action_executed": true, "observation_stage": "safety_scan"}, "fixture")
+	})
+	result, err := executeTestScript(t.Context(), host, call, `await ui.observe(); log('previous page content'); await ui.click(1,2); await ui.click(3,4);`)
+	var failure *computerScriptExecutionError
+	if !errors.As(err, &failure) || failure.code != "TARGET_OBSERVATION_UNAVAILABLE" || calls != 2 || result.Safety != nil {
+		t.Fatalf("unsafe read result: %+v %v calls=%d", result, err, calls)
+	}
+	payload := result.Result.(map[string]any)
+	if payload["action_executed"] != true || payload["observation"] != nil || payload["logs"] != nil || len(result.Attachments) != 0 {
+		t.Fatalf("lost progress or exposed stale content: %+v", payload)
+	}
+	actions := payload["completed_actions"].([]string)
+	if len(actions) != 2 || actions[1] != "pointer_click" {
+		t.Fatalf("confirmed click lost: %+v", payload)
+	}
+}

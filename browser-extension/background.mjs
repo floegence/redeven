@@ -184,7 +184,7 @@ async function connect(name, label) {
   port.onDisconnect.addListener(() => rejected(new Error('disconnected')));
   port.onMessage.addListener(message => {
     if (native !== port) return;
-    if (message.type === 'ready' && message.protocol_version === 5 && !ready) { ready = true; accepted(); return; }
+    if (message.type === 'ready' && message.protocol_version === 6 && !ready) { ready = true; accepted(); return; }
     if (!ready || typeof message.id !== 'string' || !message.id || message.id.length > 64) { void disconnectPort(); return; }
     if (message.type === 'cancel') {
       const task = requests.get(message.id);
@@ -203,7 +203,7 @@ async function connect(name, label) {
       if (native === port) port.postMessage(response);
     })();
   });
-  port.postMessage({ type: 'hello', protocol_version: 5, profile_id: profile.id, profile_name: profile.name });
+  port.postMessage({ type: 'hello', protocol_version: 6, profile_id: profile.id, profile_name: profile.name });
   try { await handshake; }
   catch (error) { if (native === port) await disconnect(); throw error; }
   finally { clearTimeout(timeout); }

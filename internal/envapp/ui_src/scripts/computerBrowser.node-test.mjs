@@ -47,7 +47,7 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
   };
   try {
     const ready = await next();
-    assert.equal(ready.protocol_version, 5);
+    assert.equal(ready.protocol_version, 6);
     assert.equal(ready.error, undefined, JSON.stringify(ready));
     assert.ok((await send('browser.navigate', { url: origin })).screenshot);
     const observed = await send('computer.observe');
@@ -134,7 +134,7 @@ test('inventory and explicit tab attachment preserve the browser, other tabs and
       try { return JSON.parse((await Promise.race([lines.next(), new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('helper timed out')), 10000); })])).value); }
       finally { clearTimeout(timeout); }
     };
-    assert.equal((await next()).protocol_version, 5);
+    assert.equal((await next()).protocol_version, 6);
     helper.stdin.write(JSON.stringify({ id: 'observe', target_id: 'connected', tool_name: 'computer.observe', args: {}, allowed_origins: [origin] }) + '\n');
     const observed = await next();
     assert.equal(observed.result.title, 'Signed-in task');
@@ -269,7 +269,7 @@ test('nested cross-site frames use semantic actions and downloads survive helper
     assert.equal(result.safety?.level, 'routine', JSON.stringify(result)); return result.result;
   };
   try {
-    assert.equal((await next()).protocol_version, 5);
+    assert.equal((await next()).protocol_version, 6);
     await call('browser.navigate', { url: origins[0] });
     const selector = { role: 'textbox', name: 'Deep entry' };
     assert.equal((await call('computer.action', { action: 'wait', selector, timeout_ms: 5000 })).state, 'visible');
@@ -417,14 +417,14 @@ test('navigation during a safety read preserves the confirmed action without exp
     session.send = send;
     const fresh = await controller.execute({ tool_name: 'computer.observe', allowed_origins: [origin] });
     assert.ok(fresh.result.observation.nodes.some(node => node.name === 'Saved'), JSON.stringify(fresh));
-    // A privacy read failure without navigation remains a real unknown state.
+    // A persistent read failure withholds content without inventing a human step.
     session.send = async (method, parameters) => {
       if (method === 'DOMSnapshot.captureSnapshot') throw new Error('privacy scan unavailable');
       return send(method, parameters);
     };
     const failed = await controller.execute({ tool_name: 'computer.observe', allowed_origins: [origin] });
-    assert.equal(failed.safety.level, 'takeover');
-    assert.ok(failed.safety.reason_codes.includes('unknown'));
+    assert.equal(failed.error, 'TARGET_OBSERVATION_UNAVAILABLE');
+    assert.equal(failed.safety, undefined);
     assert.equal(failed.result.action_executed, false);
     assert.equal(failed.screenshot, undefined);
   } finally { await browser.close(); server.close(); }
@@ -467,4 +467,136 @@ test('full access permits new sites and redirects while preserving private input
     assert.equal(revoked.safety.required_origin, destinationOrigin);
     assert.equal(revoked.result.observation, undefined);
   } finally { await browser.close(); source.close(); destination.close(); }
+});
+
+test('a detached iframe invalidates a sampled view without inventing user takeover', async () => {
+  const { chromium } = await import('playwright');
+  const { BrowserComputerController } = await import('./computerBrowserController.mjs');
+  const browser = await chromium.launch({ headless: true, chromiumSandbox: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<h1>Normal results</h1><iframe srcdoc="<p>Supplemental content</p>"></iframe>');
+    const session = await page.context().newCDPSession(page);
+    const controller = new BrowserComputerController(session); await controller.initialize();
+    assert.equal((await controller.execute({ tool_name: 'computer.observe', full_access: true })).safety.level, 'routine');
+    const { frameTree } = await session.send('Page.getFrameTree');
+    const child = frameTree.childFrames[0].frame.id;
+    const send = session.send.bind(session);
+    let childContext, removed = false;
+    session.send = async (method, parameters) => {
+      if (method === 'Runtime.evaluate' && parameters.expression.includes('document.body?.innerText') && parameters.contextId === childContext && !removed) {
+        removed = true;
+        await page.evaluate(() => document.querySelector('iframe').remove());
+      }
+      const response = await send(method, parameters);
+      if (method === 'Page.createIsolatedWorld' && parameters.frameId === child) childContext = response.executionContextId;
+      return response;
+    };
+    const sample = await controller.execute({ tool_name: 'computer.screenshot', full_access: true });
+    assert.equal(removed, true);
+    assert.equal(sample.error, undefined);
+    assert.equal(sample.safety.level, 'routine', JSON.stringify(sample));
+    assert.equal(sample.result.observation_invalidated, true);
+    assert.equal(sample.screenshot, undefined);
+    session.send = send;
+    const fresh = await controller.execute({ tool_name: 'computer.observe', full_access: true });
+    assert.equal(fresh.safety.level, 'routine');
+    assert.ok(fresh.result.observation.nodes.some(node => node.name === 'Normal results'));
+  } finally { await browser.close(); }
+});
+
+test('safety reads recover once and persistent failure preserves effects without requesting human input', async () => {
+  const { chromium } = await import('playwright');
+  const { BrowserComputerController } = await import('./computerBrowserController.mjs');
+  const browser = await chromium.launch({ headless: true, chromiumSandbox: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<button onclick="window.clicks=(window.clicks||0)+1">Submit</button>');
+    const session = await page.context().newCDPSession(page);
+    const controller = new BrowserComputerController(session); await controller.initialize();
+    const send = session.send.bind(session);
+    let failures = 1, scans = 0, effects = 0, failAfterEffect = false;
+    session.send = async (method, parameters) => {
+      if (method === 'DOMSnapshot.captureSnapshot') {
+        scans++;
+        if (failures-- > 0 || (failAfterEffect && effects > 0)) throw new Error('private scan exception');
+      }
+      const response = await send(method, parameters);
+      if (method === 'Input.dispatchMouseEvent' && parameters.type === 'mouseReleased') effects++;
+      return response;
+    };
+    const recovered = await controller.execute({ tool_name: 'computer.screenshot' });
+    assert.equal(recovered.error, undefined);
+    assert.equal(recovered.safety.level, 'routine', JSON.stringify(recovered));
+    assert.ok(recovered.screenshot);
+    failures = Infinity; scans = 0;
+    const action = { tool_name: 'computer.action', script_operation: true, args: { action: 'click', selector: { role: 'button', name: 'Submit' } } };
+    const blocked = await controller.execute(action);
+    assert.equal(blocked.error, 'TARGET_OBSERVATION_UNAVAILABLE');
+    assert.equal(blocked.result.action_executed, false);
+    assert.equal(blocked.safety, undefined); assert.equal(blocked.screenshot, undefined);
+    assert.equal(effects, 0); assert.equal(scans, 2, 'read recovery is bounded');
+    failures = 0; failAfterEffect = true; scans = 0;
+    const completed = await controller.execute(action);
+    assert.equal(completed.error, 'TARGET_OBSERVATION_UNAVAILABLE', JSON.stringify(completed));
+    assert.equal(completed.result.action_executed, true);
+    assert.equal(completed.result.observation_stage, 'safety_scan');
+    assert.equal(completed.safety, undefined); assert.equal(completed.screenshot, undefined);
+    assert.equal(JSON.stringify(completed).includes('private scan exception'), false);
+    assert.equal(await page.evaluate(() => globalThis.clicks), 1);
+    session.send = send;
+    await page.evaluate(() => { document.body.insertAdjacentHTML('beforeend', '<input type="password" value="private-value">'); });
+    const secret = await controller.execute({ tool_name: 'computer.observe' });
+    assert.equal(secret.safety.level, 'takeover');
+    assert.ok(secret.safety.reason_codes.includes('secret_input'));
+    assert.equal(JSON.stringify(secret).includes('private-value'), false);
+    await page.evaluate(() => document.querySelector('input').remove());
+    const fresh = await controller.execute({ tool_name: 'computer.observe' });
+    assert.equal(fresh.safety.level, 'routine');
+    assert.equal(await page.evaluate(() => globalThis.clicks), 1, 'read recovery never replays the click');
+    // A readonly focus lookup inside an input operation uses the same closed
+    // progress contract, even though the input itself must never be retried.
+    await page.setContent('<input aria-label="Query">');
+    await page.locator('input').focus();
+    session.send = async (method, parameters) => {
+      if (method === 'Runtime.evaluate' && parameters.expression.startsWith('document.hasFocus()')) {
+        return { exceptionDetails: { text: 'private focus exception' } };
+      }
+      return send(method, parameters);
+    };
+    const focusFailure = await controller.execute({ tool_name: 'computer.type', args: { text: 'Unsent' } });
+    assert.deepEqual(focusFailure, { error: 'TARGET_OBSERVATION_UNAVAILABLE', result: { action_executed: false, observation_stage: 'semantic_read' } });
+    assert.equal(await page.locator('input').inputValue(), '');
+  } finally { await browser.close(); }
+});
+
+test('confirmed private input still requires takeover when a frame changes during inspection', async () => {
+  const { chromium } = await import('playwright');
+  const { BrowserComputerController } = await import('./computerBrowserController.mjs');
+  const browser = await chromium.launch({ headless: true, chromiumSandbox: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<input type="password" value="private-value"><iframe srcdoc="normal"></iframe>');
+    const session = await page.context().newCDPSession(page);
+    const controller = new BrowserComputerController(session); await controller.initialize();
+    const send = session.send.bind(session);
+    let changed = false;
+    session.send = async (method, parameters) => {
+      const response = await send(method, parameters);
+      if (method === 'DOMSnapshot.captureSnapshot' && !changed) {
+        changed = true;
+        const detached = new Promise(resolve => session.once('Page.frameDetached', resolve));
+        await page.evaluate(() => { document.querySelector('input').remove(); document.querySelector('iframe').remove(); });
+        await detached;
+      }
+      return response;
+    };
+    const result = await controller.execute({ tool_name: 'computer.screenshot', full_access: true });
+    assert.equal(changed, true);
+    assert.equal(result.safety.level, 'takeover', JSON.stringify(result));
+    assert.ok(result.safety.reason_codes.includes('secret_input'));
+    assert.equal(result.result.action_executed, false);
+    assert.equal(result.screenshot, undefined);
+    assert.equal(JSON.stringify(result).includes('private-value'), false);
+  } finally { await browser.close(); }
 });

@@ -19,6 +19,7 @@ func TestComputerFailurePreservesLayerAndReadiness(t *testing.T) {
 		wire, code, state string
 		ready             bool
 	}{
+		{"TARGET_OBSERVATION_UNAVAILABLE", "TARGET_OBSERVATION_UNAVAILABLE", "ready", true},
 		{"FRAME_UNAVAILABLE", "FRAME_UNAVAILABLE", "ready", true},
 		{"TAKEOVER_REQUIRED", "TAKEOVER_REQUIRED", "ready", true},
 		{"TARGET_PERMISSION_REQUIRED", "TARGET_PERMISSION_REQUIRED", "permission_required", false},

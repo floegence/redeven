@@ -199,6 +199,11 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 	if response.ID != requestID || response.TargetID != targetID {
 		return TargetToolResult{}, errors.New("browser helper response provenance mismatch")
 	}
+	if response.Error == "TARGET_OBSERVATION_UNAVAILABLE" {
+		result, err := computerObservationFailure(call, response.Result, response.Location)
+		healthy = computerKnownRejection(err)
+		return result, err
+	}
 	if strings.TrimSpace(response.Error) != "" {
 		healthy = true
 		return TargetToolResult{}, computerTargetFailure(call, response.Error)
@@ -322,7 +327,7 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 		return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_handshake_missing"}
 	case line := <-readyCh:
 		var handshake playwrightTargetReady
-		if err := json.Unmarshal(line, &handshake); err != nil || handshake.Type != "ready" || handshake.ProtocolVersion != 5 {
+		if err := json.Unmarshal(line, &handshake); err != nil || handshake.Type != "ready" || handshake.ProtocolVersion != 6 {
 			return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_handshake_invalid"}
 		}
 		if handshake.Error != "" {

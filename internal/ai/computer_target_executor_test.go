@@ -26,7 +26,7 @@ func newPlaywrightProtocolFixture(t *testing.T) *PlaywrightTargetExecutor {
 		t.Skip("JSONL shell fixture requires POSIX")
 	}
 	helper := filepath.Join(t.TempDir(), "helper.sh")
-	content := `printf '{"type":"ready","protocol_version":5}\n'
+	content := `printf '{"type":"ready","protocol_version":6}\n'
 while IFS= read -r line; do
   id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
   target=$(printf '%s' "$line" | sed -n 's/.*"target_id":"\([^"]*\)".*/\1/p')
@@ -167,7 +167,10 @@ func TestPlaywrightTargetExecutorFixture(t *testing.T) {
 <script>function report(value){fetch('/event?value='+encodeURIComponent(value))}addEventListener('scroll',()=>report('scroll'));report('load:'+location.pathname)</script>`)
 	}))
 	defer server.Close()
-	helper := filepath.Join("..", "envapp", "ui_src", "scripts", "redevenComputerHost.mjs")
+	helper, err := filepath.Abs(filepath.Join("..", "envapp", "ui_src", "scripts", "redevenComputerHost.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Fatal(err)
@@ -180,7 +183,7 @@ func TestPlaywrightTargetExecutorFixture(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: tool, TargetID: "fixture", ToolName: tool, Arguments: raw})
+		result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: tool, TargetID: "fixture", ToolName: tool, Arguments: raw, fullAccess: true})
 		if err != nil {
 			t.Fatalf("%s: %v", tool, err)
 		}
@@ -244,7 +247,7 @@ func TestPlaywrightTargetExecutorFixture(t *testing.T) {
 	// the next observation to establish a fresh session without manual cleanup.
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	_, err = executor.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "fixture", ToolName: "computer.wait", Arguments: json.RawMessage(`{"milliseconds":30000}`)})
+	_, err = executor.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "fixture", ToolName: "computer.wait", Arguments: json.RawMessage(`{"milliseconds":30000}`), fullAccess: true})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("cancel actual helper: %v", err)
 	}
@@ -266,7 +269,7 @@ func TestPlaywrightSafetyResponseDropsImageBeforeDecoding(t *testing.T) {
 	executor := newPlaywrightProtocolFixture(t)
 	// Deliberately invalid image text proves the safety boundary runs before
 	// decode, storage, and model attachment construction, without logging bytes.
-	helper := `printf '{"type":"ready","protocol_version":5}\n'
+	helper := `printf '{"type":"ready","protocol_version":6}\n'
 while IFS= read -r line; do
  id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
  target=$(printf '%s' "$line" | sed -n 's/.*"target_id":"\([^"]*\)".*/\1/p')
@@ -288,5 +291,43 @@ done
 	}
 	if len(executor.clients) != 1 {
 		t.Fatal("safety pause retired healthy helper")
+	}
+}
+
+func TestPlaywrightObservationFailurePreservesOnlyConfirmedProgress(t *testing.T) {
+	for _, executed := range []any{false, true, "unconfirmed"} {
+		t.Run(fmt.Sprint(executed), func(t *testing.T) {
+			executor := newPlaywrightProtocolFixture(t)
+			source, err := os.ReadFile(executor.HelperPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			payload, err := json.Marshal(map[string]any{"action_executed": executed, "observation_stage": "safety_scan", "observation": "private"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			script := strings.Replace(string(source), `"result":{"summary":"fixture"}`, `"error":"TARGET_OBSERVATION_UNAVAILABLE","result":`+string(payload)+`,"screenshot":{"mime":"image/png","data":"private"}`, 1)
+			if err := os.WriteFile(executor.HelperPath, []byte(script), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "computer.click"})
+			if _, ok := executed.(bool); !ok {
+				if !errors.Is(err, errComputerEffectUnknown) || len(executor.clients) != 0 {
+					t.Fatalf("malformed progress weakened effect barrier: %v", err)
+				}
+				return
+			}
+			var failure *targetToolPolicyError
+			if !errors.As(err, &failure) || failure.code != "target_observation_unavailable" {
+				t.Fatalf("read failure misclassified: %v", err)
+			}
+			progress := result.Result.(map[string]any)
+			if len(progress) != 2 || progress["action_executed"] != executed || len(result.Attachments) != 0 || len(result.frameBytes) != 0 || len(executor.media) != 0 {
+				t.Fatalf("unsafe failure payload: %+v", result)
+			}
+			if len(executor.clients) != 1 {
+				t.Fatal("read failure disconnected healthy helper")
+			}
+		})
 	}
 }
