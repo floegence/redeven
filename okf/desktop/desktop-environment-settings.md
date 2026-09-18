@@ -16,7 +16,9 @@ preserves input and reports its real diagnostic; an obsolete response cannot
 change a newer opening. Cloud, URL and Gateway registrations cannot read or save
 Local access settings.
 
-# Sections and authority
+# Contract
+
+## Sections and authority
 
 Local opens Access & security and has no connection editor. SSH and container
 registrations open Connection and load Access & security on its first visit.
@@ -41,7 +43,7 @@ can be read through the bundled authority, while saving requires stopping or
 updating that Runtime. Current process password constraints remain distinct from
 saved next-start configuration.
 
-# Opening, drafts and saves
+## Opening, drafts and saves
 
 One opening owns the committed connection baseline, connection draft and lazily
 loaded access baseline and draft. There is no access-settings cache in Welcome
@@ -67,7 +69,7 @@ saves, certificate refreshes and connection failures are scoped to opening and
 target identity. Starting a save invalidates older reads; late failure from a
 closed opening is a notification, never an error in the next editor.
 
-# Presentation and recovery
+## Presentation and recovery
 
 The window uses released Floe Dialog, Tabs and retained TabPanel components.
 Multiple sections expose tabs; a single section omits the tab bar. The responsive
@@ -91,7 +93,11 @@ blanks the closing panel.
 Access loading and failures remain inside the access section. Failures show their
 structured summary or original diagnostic with Copy and Retry. Missing or invalid
 responses never become fabricated defaults or a generic claim that Runtime is
-preparing. Address namespace and copy/browser/QR policy are owned by
+preparing.
+
+# Boundaries
+
+Address namespace and copy/browser/QR policy are owned by
 [Environment connections](desktop-environment-connections.md); certificate
 operations are owned by [Local UI certificates](../security/local-ui-certificates.md).
 SSH field and secret details are owned by
