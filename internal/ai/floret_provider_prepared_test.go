@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 
+	flidentity "github.com/floegence/floret/v7/identity"
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
@@ -77,10 +78,10 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 		t.Fatal(err)
 	}
 	estimate := prepared.TokenEstimate()
-	if estimate.EstimatedInputTokens != int64(len(payload)) ||
+	if estimate.EstimatedInputTokens <= 0 ||
 		estimate.PrefixTokens+estimate.MessageTokens+estimate.ToolDefinitionTokens != estimate.EstimatedInputTokens ||
 		estimate.Coverage != "complete_request" ||
-		estimate.Confidence != "conservative" || estimate.Method != "provider_rendered_payload_estimate" {
+		estimate.Confidence != "conservative" || estimate.Method != "generic_payload_estimate" {
 		t.Fatalf("prepared estimate = %#v, payload bytes = %d", estimate, len(payload))
 	}
 	if !strings.HasPrefix(prepared.RenderedPayloadFingerprint(), "sha256:") || len(prepared.RenderedPayloadFingerprint()) != len("sha256:")+64 {
@@ -234,5 +235,26 @@ func TestDeepSeekPreparedDesktopImageUsesUpstreamBudgetAndExactBody(t *testing.T
 	}
 	if _, err := prepared.Stream(t.Context()); err == nil {
 		t.Fatal("allowed prepared request replay")
+	}
+}
+
+func TestPreparedEstimateExcludesHostMetadata(t *testing.T) {
+	adapter := newFloretProviderAdapter(&recordingPreparedGateway{}, "openai", "gpt-4o", ProviderControls{}, TurnBudgets{}, "")
+	count := func(runID flidentity.RunID) int64 {
+		t.Helper()
+		p, err := adapter.Prepare(context.Background(), flprovider.Request{RunID: runID,
+			Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: strings.Repeat("Review the source code and explain the changes.\n", 100)}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer p.Close()
+		return p.TokenEstimate().EstimatedInputTokens
+	}
+	short, long := count("run-a"), count(flidentity.RunID(strings.Repeat("host-only-id", 10)))
+	if short != long {
+		t.Fatalf("host metadata changed model estimate: %d -> %d", short, long)
+	}
+	if short >= 2300 {
+		t.Fatalf("text estimate still inflated: %d", short)
 	}
 }

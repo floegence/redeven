@@ -13,6 +13,7 @@ import (
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
+	flprovider "github.com/floegence/floret/v7/provider"
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go"
 	ooption "github.com/openai/openai-go/option"
@@ -83,6 +84,7 @@ func resolveProviderWebSearchCapability(provider config.AIProvider, modelName st
 }
 
 type openAIProvider struct {
+	providerType     string
 	client           openai.Client
 	strictToolSchema bool
 	forceChat        bool
@@ -110,11 +112,20 @@ func applyChatParallelToolCalls(params *openai.ChatCompletionNewParams, mode par
 }
 
 func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	prepared, err := p.prepareTurn(ctx, req)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
+	defer prepared.Close()
+	return prepared.StreamTurn(ctx, onEvent)
+}
+
+func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
 	if p == nil {
-		return ModelGatewayResult{}, errors.New("nil provider")
+		return nil, errors.New("nil provider")
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return ModelGatewayResult{}, errors.New("missing model")
+		return nil, errors.New("missing model")
 	}
 	useChat := p.forceChat
 	switch req.Protocol {
@@ -124,17 +135,17 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	case "openai-responses":
 		useChat = false
 	default:
-		return ModelGatewayResult{}, fmt.Errorf("unsupported OpenAI-compatible protocol %q", req.Protocol)
+		return nil, fmt.Errorf("unsupported OpenAI-compatible protocol %q", req.Protocol)
 	}
 	route := "openai-responses"
 	if useChat {
 		route = "openai-chat"
 	}
 	if err := validateGatewayAttachmentParts(req.Messages, route); err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	if useChat {
-		return p.streamChatTurn(ctx, req, onEvent)
+		return p.prepareChatTurn(ctx, req)
 	}
 
 	params := oresponses.ResponseNewParams{
@@ -173,11 +184,11 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 
 	aliases, err := newOpenAIProviderToolAliases(req.Tools)
 	if err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	inputItems, instructions, err := buildOpenAIInput(req.Messages, aliases)
 	if err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	if len(inputItems) == 0 {
 		inputItems = append(inputItems, oresponses.ResponseInputItemParamOfMessage("Continue.", oresponses.EasyInputMessageRoleUser))
@@ -188,14 +199,20 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	}
 	tools := buildOpenAITools(req.Tools, p.strictToolSchema, aliases)
 	if err := applyResponsesReasoning(&params, req.ProviderControls); err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	decorateResponsesParams(&params, req.WebSearchMode, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
 
-	stream := p.client.Responses.NewStreaming(ctx, params)
+	return newPreparedModelWire(p.providerType, req.Model, flprovider.RequestFormatOpenAIResponses, params, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+		return p.streamResponsesTurn(ctx, aliases, payload, onEvent)
+	})
+}
+
+func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	stream := p.client.Responses.NewStreaming(ctx, oresponses.ResponseNewParams{}, ooption.WithRequestBody("application/json", payload))
 	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
 	var completed oresponses.Response
@@ -489,22 +506,22 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	return result, nil
 }
 
-func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
 	if p == nil {
-		return ModelGatewayResult{}, errors.New("nil provider")
+		return nil, errors.New("nil provider")
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return ModelGatewayResult{}, errors.New("missing model")
+		return nil, errors.New("missing model")
 	}
 
 	aliases, err := newOpenAIProviderToolAliases(req.Tools)
 	if err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	capability := req.ProviderControls.ReasoningCapability.Normalize()
 	messages, err := buildOpenAIChatMessagesWithCapability(req.Messages, capability, aliases)
 	if err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	if len(messages) == 0 {
 		messages = append(messages, openai.UserMessage("Continue."))
@@ -514,7 +531,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 	if p.gemini {
 		messages, signatures, err = restoreGeminiSignatures(req, messages)
 		if err != nil {
-			return ModelGatewayResult{}, err
+			return nil, err
 		}
 	}
 	params := openai.ChatCompletionNewParams{
@@ -544,14 +561,21 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 
 	tools := buildOpenAIChatTools(req.Tools, p.strictToolSchema, aliases)
 	if err := applyChatReasoning(&params, req.ProviderControls); err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	decorateChatCompletionParams(&params, req.WebSearchMode, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
 
-	stream := p.client.Chat.Completions.NewStreaming(ctx, params)
+	model := req.Model
+	return newPreparedModelWire(p.providerType, model, flprovider.RequestFormatOpenAIChat, params, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+		return p.streamPreparedChatTurn(ctx, model, capability, aliases, signatures, payload, onEvent)
+	})
+}
+
+func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model string, capability config.AIReasoningCapability, aliases providerToolAliases, signatures map[string]geminiToolSignature, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload))
 	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
 	var reasoningBuf strings.Builder
@@ -729,7 +753,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 		if err != nil {
 			return ModelGatewayResult{}, err
 		}
-		result.ProviderState = &ModelGatewayState{Kind: geminiStateKind, ID: req.Model, Attributes: map[string]string{"tool_signatures": string(raw)}}
+		result.ProviderState = &ModelGatewayState{Kind: geminiStateKind, ID: model, Attributes: map[string]string{"tool_signatures": string(raw)}}
 	}
 	return result, nil
 }
@@ -740,20 +764,29 @@ type moonshotProvider struct {
 }
 
 func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	prepared, err := p.prepareTurn(ctx, req)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
+	defer prepared.Close()
+	return prepared.StreamTurn(ctx, onEvent)
+}
+
+func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
 	if p == nil {
-		return ModelGatewayResult{}, errors.New("nil provider")
+		return nil, errors.New("nil provider")
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return ModelGatewayResult{}, errors.New("missing model")
+		return nil, errors.New("missing model")
 	}
 
 	aliases, err := newOpenAIProviderToolAliases(req.Tools)
 	if err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	messages, err := buildOpenAIChatMessagesWithCapability(req.Messages, req.ProviderControls.ReasoningCapability, aliases)
 	if err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	if len(messages) == 0 {
 		messages = append(messages, openai.UserMessage("Continue."))
@@ -792,14 +825,20 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 
 	tools := buildOpenAIChatTools(req.Tools, p.strictToolSchema, aliases)
 	if err := applyChatReasoning(&params, req.ProviderControls); err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	decorateChatCompletionParams(&params, req.WebSearchMode, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
 
-	stream := p.client.Chat.Completions.NewStreaming(ctx, params)
+	return newPreparedModelWire("moonshot", req.Model, flprovider.RequestFormatOpenAIChat, params, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+		return p.streamPreparedTurn(ctx, aliases, payload, onEvent)
+	})
+}
+
+func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload))
 	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
 	var reasoningBuf strings.Builder
@@ -1746,14 +1785,23 @@ type anthropicProvider struct {
 }
 
 func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	prepared, err := p.prepareTurn(ctx, req)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
+	defer prepared.Close()
+	return prepared.StreamTurn(ctx, onEvent)
+}
+
+func (p *anthropicProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
 	if p == nil {
-		return ModelGatewayResult{}, errors.New("nil provider")
+		return nil, errors.New("nil provider")
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return ModelGatewayResult{}, errors.New("missing model")
+		return nil, errors.New("missing model")
 	}
 	if err := validateGatewayAttachmentParts(req.Messages, "anthropic"); err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	tools := buildAnthropicTools(req.Tools)
 	params := anthropic.MessageNewParams{
@@ -1772,13 +1820,19 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 		params.TopP = anthropic.Float(*req.ProviderControls.TopP)
 	}
 	if err := applyAnthropicReasoning(&params, req.ProviderControls); err != nil {
-		return ModelGatewayResult{}, err
+		return nil, err
 	}
 	if system := collectSystemPrompt(req.Messages); strings.TrimSpace(system) != "" {
 		params.System = []anthropic.TextBlockParam{{Text: strings.TrimSpace(system)}}
 	}
 
-	stream := p.client.Messages.NewStreaming(ctx, params)
+	return newPreparedModelWire("anthropic", req.Model, flprovider.RequestFormatAnthropic, params, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+		return p.streamPreparedTurn(ctx, payload, onEvent)
+	})
+}
+
+func (p *anthropicProvider) streamPreparedTurn(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	stream := p.client.Messages.NewStreaming(ctx, anthropic.MessageNewParams{}, aoption.WithRequestBody("application/json", payload))
 	defer func() { _ = stream.Close() }()
 	msg := anthropic.Message{}
 	var textBuf strings.Builder
@@ -2206,6 +2260,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
+			providerType:     providerType,
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
 			parallelTools:    parallelTools,
@@ -2219,6 +2274,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
+			providerType:     providerType,
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
 			forceChat:        true,
@@ -2233,6 +2289,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
+			providerType:     providerType,
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
 			forceChat:        true,
@@ -2244,6 +2301,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
+			providerType:     providerType,
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
 			forceChat:        true,

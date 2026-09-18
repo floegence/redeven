@@ -796,13 +796,13 @@ function renderTerminalFontLicenses() {
   }).join('\n\n');
 }
 
-function renderDeepSeekTokenizerNotice() {
+function renderTokenizerNotice(relativePath, expectedDigest) {
   const requirement = goModRequirements().filter((item) => item.Path === 'github.com/floegence/floret/v7');
   const [moduleInfo] = downloadGoModules(requirement);
-  const license = fs.readFileSync(path.join(moduleInfo.Dir, 'internal/deepseektokenizer/LICENSE'), 'utf8');
+  const license = fs.readFileSync(path.join(moduleInfo.Dir, relativePath), 'utf8');
   const digest = crypto.createHash('sha256').update(license).digest('hex');
-  if (digest !== 'f2c6c602815669d292889e5be8c802f2ed950653b77999b1584e8e6aed25d040') {
-    throw new Error('Bundled DeepSeek tokenizer license changed; review the published source notice.');
+  if (digest !== expectedDigest) {
+    throw new Error('Bundled tokenizer license changed; review the published source notice.');
   }
   return license.replace(/\r\n/gu, '\n').trim();
 }
@@ -840,7 +840,13 @@ ${fs.readFileSync(path.join(repoRoot, 'scripts/model-catalog/models-dev.LICENSE'
 
 Published Floret includes the offline DeepSeek V4 tokenizer vocabulary from the official API tokenizer archive, under MIT. Its source tokenizer.json SHA-256 is 89085f12ef79460ac5f66d1119325ddfc694b4ab209d80bbd81d35f081dc9614. Notice generation reads and verifies the license from the exact published Go module.
 
-${renderDeepSeekTokenizerNotice()}
+${renderTokenizerNotice('internal/deepseektokenizer/LICENSE', 'f2c6c602815669d292889e5be8c802f2ed950653b77999b1584e8e6aed25d040')}
+
+## Bundled OpenAI Text Vocabularies
+
+Published Floret includes the official cl100k_base and o200k_base vocabularies from OpenAI tiktoken, with pinned source SHA-256 checksums and offline reference fixtures. Notice generation verifies their license from the exact published module.
+
+${renderTokenizerNotice('internal/openaitokenizer/LICENSE', '418cb499b436128d653d79941333a5437b7be2ea9213dcc2f04d15d5d2c51d86')}
 
 ## Go Modules
 

@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-09-18: Model-aware input estimation
+
+* Consume published Floret v7.16.1 offline estimation across model transports, freeze the actual wire input before counting, and preserve distinct opaque-source estimates.
+* Retain epoch 23 and the confirmed/estimated context UI, canonical calibration and storage contracts; consume the upstream Ask User ordering fix without a host lifecycle workaround.
+
 ## 2026-09-17 — Autonomous browser and application selection
 
 - Add thread-scoped Runtime candidates and shared UI/Agent selection, personal
