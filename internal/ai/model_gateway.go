@@ -162,8 +162,11 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	if req.ProviderControls.TopP != nil {
 		params.TopP = openai.Float(*req.ProviderControls.TopP)
 	}
-	if previousResponseID := strings.TrimSpace(req.ProviderControls.PreviousResponseID); previousResponseID != "" {
-		params.PreviousResponseID = openai.String(previousResponseID)
+	if state := req.PreviousState; state != nil {
+		if state.Kind != providerContinuationKindOpenAIResponses || strings.TrimSpace(state.ID) == "" || len(state.Attributes) != 0 {
+			return nil, errors.New("invalid OpenAI Responses continuation state")
+		}
+		params.PreviousResponseID = openai.String(strings.TrimSpace(state.ID))
 	}
 	switch strings.ToLower(strings.TrimSpace(req.ProviderControls.ResponseFormat)) {
 	case "":
@@ -510,6 +513,9 @@ func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRe
 	if p == nil {
 		return nil, errors.New("nil provider")
 	}
+	if !p.gemini && req.PreviousState != nil {
+		return nil, errors.New("OpenAI Chat does not support opaque continuation state")
+	}
 	if strings.TrimSpace(req.Model) == "" {
 		return nil, errors.New("missing model")
 	}
@@ -775,6 +781,9 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
 	if p == nil {
 		return nil, errors.New("nil provider")
+	}
+	if req.PreviousState != nil {
+		return nil, errors.New("Moonshot does not support opaque continuation state")
 	}
 	if strings.TrimSpace(req.Model) == "" {
 		return nil, errors.New("missing model")
@@ -1796,6 +1805,9 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 func (p *anthropicProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
 	if p == nil {
 		return nil, errors.New("nil provider")
+	}
+	if req.PreviousState != nil {
+		return nil, errors.New("Anthropic does not support opaque continuation state")
 	}
 	if strings.TrimSpace(req.Model) == "" {
 		return nil, errors.New("missing model")

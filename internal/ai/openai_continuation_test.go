@@ -215,7 +215,7 @@ func TestOpenAIProviderStreamTurnUsesPreviousResponseIDAndReturnsProviderState(t
 			Role:    "user",
 			Content: []ContentPart{{Type: "text", Text: "hello"}},
 		}},
-		ProviderControls: ProviderControls{PreviousResponseID: "resp_prev"},
+		PreviousState: &ModelGatewayState{Kind: providerContinuationKindOpenAIResponses, ID: "resp_prev"},
 	}, nil)
 	if err != nil {
 		t.Fatalf("StreamTurn: %v", err)

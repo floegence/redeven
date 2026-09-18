@@ -88,7 +88,7 @@ func TestGeminiOpaqueStateCrossesFloretAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if request.PreviousState == nil || request.PreviousState.Kind != geminiStateKind || request.ProviderControls.PreviousResponseID != "" {
+	if request.PreviousState == nil || request.PreviousState.Kind != geminiStateKind {
 		t.Fatalf("state mapping: %+v", request)
 	}
 }
