@@ -15,7 +15,7 @@ import { changeDisplayPath, changeMetricsText } from '../utils/gitWorkbench';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { gitToneActionButtonClass } from './GitChrome';
-import { GitChangeStatusPill, GitMetaPill } from './GitWorkbenchPrimitives';
+import { GitChangeMetrics, GitChangeStatusPill, GitMetaPill } from './GitWorkbenchPrimitives';
 import { useI18n } from '../i18n';
 
 export type GitPatchRenderable = GitDiffFileContent;
@@ -89,18 +89,22 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
     <div class={cn('min-h-0', props.class)}>
       <Show when={props.item} fallback={<div class={cn('rounded-md border px-3 py-2 text-xs leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{props.emptyMessage}</div>}>
         {(fileAccessor) => {
-          const file = fileAccessor();
+          const file = fileAccessor;
           return (
-            <div class="flex h-full min-h-0 flex-col gap-3 rounded-md bg-muted/[0.08] p-3">
-              <div class="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div class={cn("flex h-full min-h-0 flex-col gap-3 rounded-md bg-muted/[0.08] p-3", props.fillViewport && "git-patch-viewer--embedded")}>
+              <div class="git-patch-viewer__toolbar flex shrink-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0 flex-1 space-y-1">
                   <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-                    <GitChangeStatusPill change={file.changeType} />
-                    <GitMetaPill tone="neutral">{changeMetricsText(file)}</GitMetaPill>
-                    <span class="min-w-0 max-w-full truncate font-mono text-[11px] text-foreground/90" title={changeDisplayPath(file)}>
-                      {changeDisplayPath(file)}
-                    </span>
-                    <Show when={file.isBinary}>
+                    <GitChangeStatusPill change={file().changeType} />
+                    <Show when={props.fillViewport} fallback={<GitMetaPill tone="neutral">{changeMetricsText(file())}</GitMetaPill>}>
+                      <GitChangeMetrics compact additions={file().additions} deletions={file().deletions} />
+                    </Show>
+                    <Show when={!props.fillViewport}>
+                      <span class="min-w-0 max-w-full truncate font-mono text-[11px] text-foreground/90" title={changeDisplayPath(file())}>
+                        {changeDisplayPath(file())}
+                      </span>
+                    </Show>
+                    <Show when={file().isBinary}>
                       <GitMetaPill tone="warning">{i18n.t('git.patchViewer.binaryBadge')}</GitMetaPill>
                     </Show>
                   </div>
@@ -113,11 +117,11 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                 </Show>
               </div>
 
-              <Show when={file.oldPath && file.newPath && file.oldPath !== file.newPath}>
+              <Show when={file().oldPath && file().newPath && file().oldPath !== file().newPath}>
                 <div class={cn('flex min-w-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] text-muted-foreground', redevenSurfaceRoleClass('inset'))}>
-                  <span class="min-w-0 truncate font-mono" title={file.oldPath}>{file.oldPath}</span>
+                  <span class="min-w-0 truncate font-mono" title={file().oldPath}>{file().oldPath}</span>
                   <span aria-hidden="true" class="text-muted-foreground/60">→</span>
-                  <span class="min-w-0 truncate font-mono" title={file.newPath}>{file.newPath}</span>
+                  <span class="min-w-0 truncate font-mono" title={file().newPath}>{file().newPath}</span>
                 </div>
               </Show>
 
@@ -126,7 +130,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
               </Show>
 
               <Show
-                when={!file.isBinary && !patchUnavailableMessage()}
+                when={!file().isBinary && !patchUnavailableMessage()}
                 fallback={<div class={cn('rounded-md border px-3 py-2 text-[11px] leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{patchUnavailableMessage()}</div>}
               >
                 <Show when={visiblePatchLines().length > 0} fallback={<div class={cn('rounded-md border px-3 py-2 text-[11px] leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{i18n.t('git.patchViewer.noInlineDiffLines')}</div>}>
@@ -134,7 +138,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                     ref={patchViewport}
                     {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
                     class={cn(
-                      'min-h-0 overflow-auto rounded-md border bg-background p-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]',
+                      'git-patch-viewer__viewport min-h-0 overflow-auto rounded-md border bg-background p-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]',
                       redevenSurfaceRoleClass('control'),
                       layout.isMobile() ? mobilePatchViewportClass() : desktopPatchViewportClass()
                     )}

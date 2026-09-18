@@ -112,7 +112,7 @@ describe('GitPatchViewer', () => {
       expect(host.textContent).toContain('+export const first = "new";');
 
       setItem({
-        changeType: 'modified',
+        changeType: 'added',
         path: 'src/second.ts',
         displayPath: 'src/second.ts',
         additions: 1,
@@ -131,6 +131,8 @@ describe('GitPatchViewer', () => {
       expect(host.textContent).toContain('src/second.ts');
       expect(host.textContent).toContain('+export const second = "new";');
       expect(host.textContent).not.toContain('+export const first = "new";');
+      expect(host.querySelector('.git-patch-viewer__toolbar')?.textContent).toContain('Added');
+      expect(host.querySelector('.git-patch-viewer__toolbar')?.textContent).not.toContain('Modified');
     } finally {
       dispose();
     }

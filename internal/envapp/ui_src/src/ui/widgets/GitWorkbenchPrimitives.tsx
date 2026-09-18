@@ -689,14 +689,40 @@ export function GitMetaPill(props: GitMetaPillProps) {
 export interface GitChangeStatusPillProps {
   change?: string | null;
   class?: string;
+  compact?: boolean;
 }
+
+// Git status codes are fixed technical notation, with localized accessible names.
+const gitStatusCodes: Record<string, string> = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R', copied: 'C', untracked: '?', conflicted: 'U' };
 
 export function GitChangeStatusPill(props: GitChangeStatusPillProps) {
   const i18n = useI18n();
   return (
-    <GitMetaPill tone={gitChangeTone(props.change ?? undefined)} class={cn('whitespace-nowrap', props.class)}>
-      {localizedGitChangeLabel(props.change, i18n)}
-    </GitMetaPill>
+    <Show when={props.compact} fallback={
+      <GitMetaPill tone={gitChangeTone(props.change ?? undefined)} class={cn('whitespace-nowrap', props.class)}>
+        {localizedGitChangeLabel(props.change, i18n)}
+      </GitMetaPill>
+    }>
+      <span class={cn('git-file-status', props.class)} data-change={props.change} title={localizedGitChangeLabel(props.change, i18n)}>
+        <span aria-hidden="true">{gitStatusCodes[props.change ?? ''] ?? '•'}</span>
+        <span class="sr-only">{localizedGitChangeLabel(props.change, i18n)}</span>
+      </span>
+    </Show>
+  );
+}
+
+export function GitDirectoryStatus(props: { unstaged?: boolean; untracked?: boolean }) {
+  const i18n = useI18n();
+  return (
+    <span class="inline-flex items-center" title={[
+      i18n.t('git.common.folder'),
+      props.unstaged && i18n.t('git.common.unstaged'),
+      props.untracked && i18n.t('git.common.untracked'),
+    ].filter(Boolean).join(' · ')}>
+      <span class="sr-only">{i18n.t('git.common.folder')}</span>
+      <Show when={props.unstaged}><span class="git-file-status" data-change="modified"><span aria-hidden="true">{gitStatusCodes.modified}</span><span class="sr-only">{i18n.t('git.common.unstaged')}</span></span></Show>
+      <Show when={props.untracked}><span class="git-file-status" data-change="untracked"><span aria-hidden="true">{gitStatusCodes.untracked}</span><span class="sr-only">{i18n.t('git.common.untracked')}</span></span></Show>
+    </span>
   );
 }
 
@@ -706,6 +732,7 @@ export interface GitChangedFilesActionButtonProps {
   type?: 'button' | 'submit' | 'reset';
   disabled?: boolean;
   busy?: boolean;
+  title?: string;
   onClick?: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>;
 }
 
@@ -715,6 +742,7 @@ export function GitChangedFilesActionButton(props: GitChangedFilesActionButtonPr
       type={props.type ?? 'button'}
       disabled={Boolean(props.disabled || props.busy)}
       aria-busy={props.busy || undefined}
+      title={props.title}
       class={cn(GIT_CHANGED_FILES_ACTION_BUTTON_CLASS, props.class)}
       onClick={props.onClick}
     >
@@ -845,17 +873,17 @@ export interface GitChangeMetricsProps {
   additions?: number | null;
   deletions?: number | null;
   class?: string;
+  compact?: boolean;
 }
 
 export function GitChangeMetrics(props: GitChangeMetricsProps) {
-  const additions = Number(props.additions ?? 0);
-  const deletions = Number(props.deletions ?? 0);
-
   return (
-    <span class={cn('inline-flex items-center gap-1.5 font-medium tabular-nums', props.class)}>
-      <span class="text-success">+{additions}</span>
-      <span class="text-muted-foreground/65">/</span>
-      <span class="text-error">-{deletions}</span>
-    </span>
+    <Show when={props.additions != null || props.deletions != null}>
+      <span class={cn('inline-flex items-center gap-1.5 font-medium tabular-nums', props.compact && 'git-file-metrics', props.class)}>
+        <span class="text-success">+{Number(props.additions ?? 0)}</span>
+        <Show when={!props.compact}><span class="text-muted-foreground/65">/</span></Show>
+        <span class="text-error">-{Number(props.deletions ?? 0)}</span>
+      </span>
+    </Show>
   );
 }

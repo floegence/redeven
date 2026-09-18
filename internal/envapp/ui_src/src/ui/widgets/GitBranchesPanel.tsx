@@ -84,7 +84,6 @@ import {
   localizedGitCommitDiffPresentationBadge,
   localizedGitCommitDiffPresentationDetail,
   localizedGitBranchSubviewLabel,
-  localizedGitChangeLabel,
   localizedGitHeadDisplay,
   localizedWorkspaceViewSectionLabel,
 } from '../utils/localizedGitWorkbench';
@@ -102,8 +101,6 @@ import {
   type GitFileShortcutTarget,
 } from "../utils/gitBrowserShortcuts";
 import {
-  gitChangePathClass,
-  gitChangeTone,
   gitToneAccentColor,
   gitToneActionButtonClass,
   gitToneDotClass,
@@ -112,6 +109,7 @@ import {
 import { GitChangesBreadcrumb } from "./GitChangesBreadcrumb";
 import { GitDiffPanel } from "./GitDiffPanel";
 import { GitDiffSplit } from "./GitDiffSplit";
+import { GitFileLabel } from "./GitFileLabel";
 import { GitCommitGraph } from './GitCommitGraph';
 import { GitCommitMessageDialog } from './GitCommitMessageDialog';
 import { GitVirtualTable } from "./GitVirtualTable";
@@ -122,11 +120,12 @@ import {
   GIT_CHANGED_FILES_CELL_MIDDLE_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_HEADER_ROW_CLASS,
-  GIT_CHANGED_FILES_SECONDARY_PATH_CLASS,
   GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_TABLE_CLASS,
   GitChangedFilesActionButton,
   GitChangeMetrics,
+  GitChangeStatusPill,
+  GitDirectoryStatus,
   GitContentSkeleton,
   GitLabelBlock,
   GitInlineLoadingStatus,
@@ -137,7 +136,6 @@ import {
   GitShortcutOrbDock,
   GitStatePane,
   GitSubtleNote,
-  GitTableBadge,
   GitTableFrame,
   type GitShortcutOrbTone,
   gitChangedFilesRowClass,
@@ -280,14 +278,6 @@ function worktreeFilePath(item: GitWorkspaceChange, unknownPath: string): string
   return exactGitPath(
     item.displayPath || item.path || item.newPath || item.oldPath,
   ) || unknownPath;
-}
-
-function branchStatusPrimaryLabel(item: GitWorkspaceChange, unknownPath: string): string {
-  const pathValue = isGitWorkspaceDirectoryEntry(item)
-    ? workspaceDirectoryPath(item)
-    : worktreeFilePath(item, unknownPath);
-  const parts = pathValue.split("/").filter(Boolean);
-  return parts[parts.length - 1] || pathValue || unknownPath;
 }
 
 function branchStatusDirectorySummary(item: GitWorkspaceChange, i18n: ReturnType<typeof useI18n>): string {
@@ -709,31 +699,19 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
                   <div class="min-w-0">
                     <button
                       type="button"
-                      class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
+                      class="git-file-open"
                       title={changeSecondaryPath(item)}
-                      onClick={() => props.onOpenDiff?.(item, props.context)}
+                      onClick={(event) => { event.stopPropagation(); props.onOpenDiff?.(item, props.context); }}
                     >
-                      {compareFilePath(item, i18n.t('filePreview.unknownPath'))}
+                      <GitFileLabel path={compareFilePath(item, i18n.t('filePreview.unknownPath'))} secondaryPath={changeSecondaryPath(item)} />
                     </button>
-                    <Show
-                      when={changeSecondaryPath(item) !== compareFilePath(item, i18n.t('filePreview.unknownPath'))}
-                    >
-                      <div
-                        class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS}
-                        title={changeSecondaryPath(item)}
-                      >
-                        {changeSecondaryPath(item)}
-                      </div>
-                    </Show>
                   </div>
                 </td>
                 <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
-                  <GitTableBadge tone={gitChangeTone(item.changeType ?? undefined)}>
-                    {localizedGitChangeLabel(item.changeType, i18n)}
-                  </GitTableBadge>
+                  <GitChangeStatusPill compact change={item.changeType} />
                 </td>
                 <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
-                  <GitChangeMetrics
+                  <GitChangeMetrics compact
                     additions={item.additions}
                     deletions={item.deletions}
                   />
@@ -1155,7 +1133,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                   <div class="min-w-0">
                     <button
                       type="button"
-                      class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
+                      class="git-file-open"
                       title={
                         isGitWorkspaceDirectoryEntry(item)
                           ? workspaceDirectoryPath(item)
@@ -1173,39 +1151,12 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                         props.onOpenDiff?.(item, menuTarget(item));
                       }}
                     >
-                      <Show
-                        when={isGitWorkspaceDirectoryEntry(item)}
-                        fallback={worktreeFilePath(item, i18n.t('filePreview.unknownPath'))}
-                      >
-                        <span class="inline-flex items-center gap-1.5">
-                          <Folder class="size-3.5 shrink-0" />
-                          <span class="truncate">
-                            {branchStatusPrimaryLabel(item, i18n.t('filePreview.unknownPath'))}
-                          </span>
-                        </span>
-                      </Show>
+                      <GitFileLabel
+                        path={isGitWorkspaceDirectoryEntry(item) ? workspaceDirectoryPath(item) : worktreeFilePath(item, i18n.t('filePreview.unknownPath'))}
+                        secondaryPath={changeSecondaryPath(item)}
+                        directory={isGitWorkspaceDirectoryEntry(item)}
+                      />
                     </button>
-                    <Show when={isGitWorkspaceDirectoryEntry(item)}>
-                      <div
-                        class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS}
-                        title={workspaceDirectoryPath(item)}
-                      >
-                        {workspaceDirectoryPath(item)}
-                      </div>
-                    </Show>
-                    <Show
-                      when={
-                        !isGitWorkspaceDirectoryEntry(item)
-                        && changeSecondaryPath(item) !== worktreeFilePath(item, i18n.t('filePreview.unknownPath'))
-                      }
-                    >
-                      <div
-                        class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS}
-                        title={changeSecondaryPath(item)}
-                      >
-                        {changeSecondaryPath(item)}
-                      </div>
-                    </Show>
                   </div>
                 </td>
                 <td class={`${GIT_CHANGED_FILES_CELL_MIDDLE_CLASS} text-muted-foreground`}>
@@ -1223,27 +1174,17 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                   <Show
                     when={isGitWorkspaceDirectoryEntry(item)}
                     fallback={
-                      <GitTableBadge tone={gitChangeTone(item.changeType ?? undefined)}>
-                        {localizedGitChangeLabel(item.changeType, i18n)}
-                      </GitTableBadge>
+                      <GitChangeStatusPill compact change={item.changeType} />
                     }
                   >
-                    <div class="flex flex-wrap items-center gap-1.5">
-                      <GitTableBadge tone="neutral">{i18n.t('git.common.folder')}</GitTableBadge>
-                      <Show when={item.containsUnstaged}>
-                        <GitTableBadge tone="warning">{i18n.t('git.common.unstaged')}</GitTableBadge>
-                      </Show>
-                      <Show when={item.containsUntracked}>
-                        <GitTableBadge tone="brand">{i18n.t('git.common.untracked')}</GitTableBadge>
-                      </Show>
-                    </div>
+                    <GitDirectoryStatus unstaged={item.containsUnstaged} untracked={item.containsUntracked} />
                   </Show>
                 </td>
                 <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
                   <Show
                     when={isGitWorkspaceDirectoryEntry(item)}
                     fallback={
-                      <GitChangeMetrics
+                      <GitChangeMetrics compact
                         additions={item.additions}
                         deletions={item.deletions}
                       />
@@ -1478,11 +1419,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                     </GitShortcutOrbDock>
                   </Show>
                 </div>
-                <Show when={props.files.length > 0}>
-                  <div class="git-branch-history-hint">
-                    {i18n.t('uiCopy.git.selectFileDiff')}
-                  </div>
-                </Show>
+
               </div>
 
               <Show when={presentationDetail()}>
@@ -1717,7 +1654,7 @@ function HistoryList(
                   />
                 }
               >
-                <div class="flex min-h-0 flex-1 overflow-hidden">
+                <div class="git-branch-history-layout-frame flex min-h-0 flex-1 overflow-hidden">
                   <Show
                     when={(props.commits?.length ?? 0) > 0}
                     fallback={
@@ -1727,7 +1664,7 @@ function HistoryList(
                     }
                   >
                     <div
-                      class="grid min-h-0 flex-1 grid-cols-1 grid-rows-2 gap-3 xl:grid-cols-[minmax(19rem,0.85fr)_minmax(26rem,1.15fr)] xl:grid-rows-1"
+                      class="git-branch-history-layout"
                       data-git-branch-history-layout="graph-detail"
                     >
                       <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="min-h-0 overflow-auto">

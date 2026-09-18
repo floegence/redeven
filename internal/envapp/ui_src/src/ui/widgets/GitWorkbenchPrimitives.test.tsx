@@ -1,15 +1,31 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { GitContentSkeleton, GitInlineLoadingStatus, GitMetaPill, GitPagedTableFooter, GitPanelFrame, GitShortcutOrbButton, GitStatePane, GitTableFrame } from './GitWorkbenchPrimitives';
+import { GitChangeMetrics, GitContentSkeleton, GitInlineLoadingStatus, GitMetaPill, GitPagedTableFooter, GitPanelFrame, GitShortcutOrbButton, GitStatePane, GitTableFrame } from './GitWorkbenchPrimitives';
 
 afterEach(() => {
   document.body.innerHTML = '';
 });
 
 describe('GitWorkbenchPrimitives shared panel frames', () => {
+  it('distinguishes unavailable file statistics from a measured zero and follows refreshed counts', () => {
+    const host = document.createElement('div');
+    const [counts, setCounts] = createSignal<{ additions?: number; deletions?: number }>({});
+    const dispose = render(() => <GitChangeMetrics compact {...counts()} />, host);
+    try {
+      expect(host.textContent).toBe('');
+      setCounts({ additions: 0, deletions: 0 });
+      expect(host.textContent).toBe('+0-0');
+      setCounts({ additions: 8, deletions: 3 });
+      expect(host.textContent).toBe('+8-3');
+      setCounts({});
+      expect(host.textContent).toBe('');
+    } finally { dispose(); }
+  });
+
   it('maps shortcut orbs to theme-owned categorical and status colors', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

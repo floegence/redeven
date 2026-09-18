@@ -1,3 +1,4 @@
+import { GitFileLabel } from './GitFileLabel';
 import {
   Match,
   Show,
@@ -618,19 +619,6 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
       ? i18n.t('gitDiff.loadingFullContext')
       : i18n.t('gitDiff.loadingPatch'),
   );
-  const headerHintMessage = createMemo(() => {
-    if (selectionSession().directoryUnavailableItem) {
-      return i18n.t('gitDiff.directoryNoSingleFile');
-    }
-    if (activeMode() === "full-context") {
-      return fullContextLoading()
-        ? i18n.t('gitDiff.loadingFullContextShort')
-        : i18n.t('gitDiff.fullContextDescription');
-    }
-    return previewBodyState().kind === "loading"
-      ? i18n.t('gitDiff.loadingPatch')
-      : i18n.t('gitDiff.patchDescription');
-  });
   const activeBodyEmptyMessage = createMemo(() =>
     activeMode() === "patch"
       ? props.emptyMessage
@@ -884,10 +872,15 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
 
   const dialogContent = () => (
     <div data-git-diff-panel class={cn("git-diff-panel flex h-full min-h-0 min-w-0 flex-col", props.class)}>
-      <div class="flex shrink-0 flex-col gap-2 pb-2 sm:flex-row sm:items-start sm:justify-between">
+      <div class="git-diff-panel__toolbar">
+        <div class="git-diff-panel__identity">
+          <Show when={props.item}>
+            <GitFileLabel path={props.item?.newPath || props.item?.path || props.item?.oldPath || ''} />
+          </Show>
+        </div>
         <div
           class={cn(
-            "inline-flex items-center gap-1 rounded-md border p-1",
+            "git-diff-panel__modes",
             redevenSurfaceRoleClass("segmented"),
           )}
         >
@@ -922,24 +915,13 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
           </button>
         </div>
 
-        <div class="flex min-w-0 flex-col items-start gap-1 sm:items-end sm:text-right">
-          <Show when={commitPresentationBadge()}>
-            <div class="flex flex-wrap items-center gap-1 sm:justify-end">
-              <GitMetaPill tone="violet">
-                {commitPresentationBadge()}
-              </GitMetaPill>
-            </div>
-          </Show>
-          <Show when={commitPresentationDetail()}>
-            <div class="text-[11px] text-muted-foreground">
-              {commitPresentationDetail()}
-            </div>
-          </Show>
-          <div class="text-[11px] text-muted-foreground">
-            {headerHintMessage()}
-          </div>
-        </div>
       </div>
+      <Show when={commitPresentationBadge() || commitPresentationDetail()}>
+        <div class="flex shrink-0 flex-wrap items-center gap-2 border-b px-2.5 py-1 text-[11px] text-muted-foreground">
+          <Show when={commitPresentationBadge()}><GitMetaPill tone="violet">{commitPresentationBadge()}</GitMetaPill></Show>
+          <Show when={commitPresentationDetail()}><span>{commitPresentationDetail()}</span></Show>
+        </div>
+      </Show>
 
       <div class="relative min-h-0 flex-1">
         <Switch>

@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { AlertTriangle, CheckCircle, Copy, Eye, FileText, Folder, Minus, MoreHorizontal, Package, Plus, Search, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
-import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
+import { GitFileLabel } from './GitFileLabel';
 import { Button, Dropdown, SegmentedControl, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog } from '../primitives/EnvAppModal';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -22,19 +22,17 @@ import {
   type GitStashWindowRequest,
   type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
-import { gitChangePathClass } from './GitChrome';
 import { GitCommitDialog } from './GitCommitDialog';
 import { GitDiffPanel } from './GitDiffPanel';
 import { GitDiffSplit } from './GitDiffSplit';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
-  GIT_CHANGED_FILES_SECONDARY_PATH_CLASS,
   GIT_CHANGED_FILES_TABLE_CLASS,
   GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
+  GitDirectoryStatus,
   GitContentSkeleton,
-  GitMetaPill,
   GitPagedTableFooter,
   GitShortcutOrbButton,
   GitShortcutOrbDock,
@@ -60,7 +58,6 @@ import {
   type GitChangesHeaderActionId,
 } from './gitChangesHeaderLayout';
 import { useI18n, type I18nHelpers } from '../i18n';
-import { extNoDot } from './FileBrowserShared';
 import {
   GitEntityContextMenu,
   createGitEntityContextMenuController,
@@ -100,23 +97,6 @@ export interface GitChangesPanelProps {
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
   onPreviewCurrentFile?: (target: GitFileShortcutTarget) => void;
   onCopyText?: (value: string) => void;
-}
-
-function workspaceChangeFileName(item: GitSeededWorkspaceChange): string {
-  const pathValue = isGitWorkspaceDirectoryEntry(item)
-    ? workspaceDirectoryPath(item)
-    : itemPath(item);
-  const parts = pathValue.split('/').filter(Boolean);
-  return parts[parts.length - 1] || pathValue || '(unknown path)';
-}
-
-function buildFileItemForIcon(item: GitSeededWorkspaceChange): { name: string; type: 'file' | 'folder'; extension?: string } {
-  const name = workspaceChangeFileName(item);
-  return {
-    name,
-    type: isGitWorkspaceDirectoryEntry(item) ? 'folder' : 'file',
-    extension: isGitWorkspaceDirectoryEntry(item) ? undefined : extNoDot(name),
-  };
 }
 
 function itemPath(item: GitSeededWorkspaceChange): string {
@@ -296,7 +276,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                   <div class="min-w-0">
                     <button
                       type="button"
-                      class={`inline-flex max-w-full cursor-pointer items-center gap-1.5 text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
+                      class="git-file-open"
                       title={isGitWorkspaceDirectoryEntry(item) ? workspaceDirectoryPath(item) : changeSecondaryPath(item)}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -308,55 +288,42 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                         props.onOpenDiff?.(item);
                       }}
                     >
-                      <FileItemIcon item={buildFileItemForIcon(item)} class="h-3.5 w-3.5 shrink-0" />
-                      <span class="truncate">{workspaceChangeFileName(item)}</span>
-                      <Show when={!isGitWorkspaceDirectoryEntry(item) && changeSecondaryPath(item) !== workspaceChangeFileName(item)}>
-                        <span class="sr-only">{changeSecondaryPath(item)}</span>
-                      </Show>
+                      <GitFileLabel
+                        path={isGitWorkspaceDirectoryEntry(item) ? workspaceDirectoryPath(item) : itemPath(item)}
+                        secondaryPath={changeSecondaryPath(item)}
+                        directory={isGitWorkspaceDirectoryEntry(item)}
+                      />
                     </button>
-                    <Show when={isGitWorkspaceDirectoryEntry(item)}>
-                      <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={workspaceDirectoryPath(item)}>{workspaceDirectoryPath(item)}</div>
-                    </Show>
-                    <Show when={!isGitWorkspaceDirectoryEntry(item) && changeSecondaryPath(item) !== itemPath(item)}>
-                      <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
-                    </Show>
                   </div>
                 </td>
                 <td class={GIT_CHANGED_FILES_CELL_CLASS}>
                   <Show
                     when={isGitWorkspaceDirectoryEntry(item)}
-                    fallback={<GitChangeStatusPill change={item.changeType} />}
+                    fallback={<GitChangeStatusPill compact change={item.changeType} />}
                   >
-                    <div class="flex flex-wrap items-center gap-1.5">
-                      <GitMetaPill tone="neutral">{i18n.t('git.common.folder')}</GitMetaPill>
-                      <Show when={item.containsUnstaged}>
-                        <GitMetaPill tone="warning">{i18n.t('git.common.unstaged')}</GitMetaPill>
-                      </Show>
-                      <Show when={item.containsUntracked}>
-                        <GitMetaPill tone="brand">{i18n.t('git.common.untracked')}</GitMetaPill>
-                      </Show>
-                    </div>
+                    <GitDirectoryStatus unstaged={item.containsUnstaged} untracked={item.containsUntracked} />
                   </Show>
                 </td>
                 <td class={GIT_CHANGED_FILES_CELL_CLASS}>
                   <Show
                     when={isGitWorkspaceDirectoryEntry(item)}
-                    fallback={<GitChangeMetrics additions={item.additions} deletions={item.deletions} />}
+                    fallback={<GitChangeMetrics compact additions={item.additions} deletions={item.deletions} />}
                   >
                     <div class="text-[11px] font-medium text-muted-foreground">{itemDirectorySummary(item, i18n)}</div>
                   </Show>
                 </td>
                 <td class={gitChangedFilesStickyCellClass(active())}>
-                  <div class="flex items-center justify-end gap-3 whitespace-nowrap">
+                  <div class="git-file-actions">
                     <GitChangedFilesActionButton
                       onClick={(event) => {
                         event.stopPropagation();
                         props.onAction?.(item);
                       }}
+                      title={action() === 'unstage' ? i18n.t('git.changes.unstage') : i18n.t('git.changes.stageWithPlus')}
                       busy={busy(action())}
                       disabled={actionsDisabled()}
                     >
-                      <Plus class="size-3.5" />
+                      <Show when={action() === 'stage'} fallback={<Minus class="size-3.5" />}><Plus class="size-3.5" /></Show>
                       <span class="sr-only">{action() === 'unstage' ? i18n.t('git.changes.unstage') : i18n.t('git.changes.stageWithPlus')}</span>
                     </GitChangedFilesActionButton>
                     <Show when={isDiscardableWorkspaceItem(item)}>
@@ -366,6 +333,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                           event.stopPropagation();
                           props.onDiscard?.(item);
                         }}
+                        title={i18n.t('git.changes.discard')}
                         busy={busy('discard')}
                         disabled={actionsDisabled()}
                       >

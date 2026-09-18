@@ -31,6 +31,12 @@ The active page or commit owns the available files. Selection resolves against t
 
 The file rail and patch have independent constrained scroll viewports. At container widths of 680 CSS pixels or less, the file rail moves above the diff; this decision uses the actual component width, including a narrow Workbench widget. Patch scrolling and text selection use the existing Workbench ownership contracts. Selecting another file resets patch scroll position and expansion state without resetting file-list scroll.
 
+Changed-file inventories use dense single-line rows, never spaced cards or repeated two-line metadata blocks. Desktop rows are 30 CSS pixels high; coarse-pointer rows are 38 pixels with larger action targets. File names have priority over inline muted parent paths. Exact paths and rename identities remain available through titles, accessible text, and the selected diff. Compact Git status codes retain localized accessible names; aligned addition/deletion counts appear only when the inventory provides statistics. Workspace actions remain directly reachable on the same row, with distinct stage and unstage icons. Status, path, and metrics must all update when the selected file changes.
+
+Branch history gives the majority of its width to inspection. Its commit navigation takes 24% with a 14rem minimum; below 1000 CSS pixels of available container width it moves above the selected commit. The nested file/diff split still follows its own available width, independently of the browser viewport or Workbench canvas scale.
+
+Diff chrome keeps file identity and Patch/Full Context controls in one compact toolbar, followed by status, counts, and copy. Permanent implementation descriptions and nested panel padding do not displace code. Selection and hover use short color transitions without changing row geometry; a newly mounted patch uses a restrained opacity reveal. Reduced-motion preferences disable these effects. File navigation must remain immediate and must not wait for animation completion.
+
 One shared diff panel owns preview and full-context requests for both inline inspection and the remaining dialog adapter. Preview loading starts when an inline panel mounts. Full context loads only on explicit selection of that mode. A changed source, file, or refreshed file summary invalidates prior request ownership, including a refresh at the same path; disposal invalidates outstanding results. Binary, directory, unavailable, truncated, and failed diff states remain explicit. Commit first-parent presentation comes from the existing runtime contract.
 
 ## Theme and accessibility
@@ -43,7 +49,7 @@ Inline inspection changes local presentation and file navigation only. It does n
 
 # Evidence
 
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffSplit.browser.test.tsx - Verifies responsive containment, independent scrolling, keyboard selection, and removal of the selected file in a real browser.
+- redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffSplit.browser.test.tsx - Verifies row density, stable commit-file navigation, responsive containment, independent scrolling, keyboard selection, and removal of the selected file in a real browser.
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx - Verifies initial loading, late-response isolation, and fresh content after a same-path inventory refresh.
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitHistoryBrowser.e2e.test.tsx - Verifies commit navigation clears obsolete diff ownership and preserves commit actions.
 - redeven:internal/envapp/ui_src/src/styles/redeven.css - Defines the shared light, dark, and forced-colors Git interaction tokens and state classes.
