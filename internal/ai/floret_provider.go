@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	flconfig "github.com/floegence/floret/v7/config"
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
@@ -167,7 +166,7 @@ func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Requ
 	if err := json.Unmarshal(payload, &frozen); err != nil {
 		return nil, fmt.Errorf("freeze prepared model request: %w", err)
 	}
-	estimate, err := conservativeRenderedGatewayRequestEstimate(payload, frozen)
+	estimate, err := estimateGatewayInput(p.providerType, frozen)
 	if err != nil {
 		return nil, err
 	}
@@ -177,33 +176,26 @@ func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Requ
 	}, nil
 }
 
-func conservativeRenderedGatewayRequestEstimate(payload []byte, req ModelGatewayRequest) (flprovider.TokenEstimate, error) {
-	if len(payload) == 0 {
-		return flprovider.TokenEstimate{}, errors.New("prepared model request payload is empty")
+// Remote/custom gateways expose model input but do not expose their final server
+// rendering. Keep that limitation explicit in upstream estimate provenance.
+func estimateGatewayInput(providerType string, req ModelGatewayRequest) (flprovider.TokenEstimate, error) {
+	type modelTool struct {
+		Name        string          `json:"name"`
+		Description string          `json:"description,omitempty"`
+		InputSchema json.RawMessage `json:"input_schema,omitempty"`
 	}
-	messages, err := json.Marshal(req.Messages)
+	definitions := make([]modelTool, 0, len(req.Tools))
+	for _, tool := range req.Tools {
+		definitions = append(definitions, modelTool{Name: tool.Name, Description: tool.Description, InputSchema: tool.InputSchema})
+	}
+	payload, err := json.Marshal(struct {
+		Messages []Message   `json:"messages"`
+		Tools    []modelTool `json:"tools"`
+	}{req.Messages, definitions})
 	if err != nil {
-		return flprovider.TokenEstimate{}, fmt.Errorf("marshal prepared model gateway messages: %w", err)
+		return flprovider.TokenEstimate{}, err
 	}
-	tools, err := json.Marshal(req.Tools)
-	if err != nil {
-		return flprovider.TokenEstimate{}, fmt.Errorf("marshal prepared model gateway tools: %w", err)
-	}
-	total := int64(len(payload))
-	messageTokens := int64(len(messages))
-	toolTokens := int64(len(tools))
-	prefixTokens := total - messageTokens - toolTokens
-	if prefixTokens < 0 {
-		prefixTokens = total
-		messageTokens = 0
-		toolTokens = 0
-	}
-	return flprovider.TokenEstimate{
-		PrefixTokens: prefixTokens, MessageTokens: messageTokens, ToolDefinitionTokens: toolTokens,
-		EstimatedInputTokens: total, Source: "redeven_gateway_rendered_json_utf8_bytes_v1",
-		Method: string(flconfig.EstimateMethodProviderRenderedPayload), Confidence: "conservative",
-		Coverage: "complete_request",
-	}, nil
+	return flprovider.EstimateRenderedRequest(flprovider.RenderedRequest{Provider: providerType, Model: req.Model, Format: flprovider.RequestFormatJSON, Payload: payload})
 }
 
 func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, providerReq flprovider.Request, execute func(context.Context, func(StreamEvent)) (ModelGatewayResult, error)) <-chan flprovider.Event {
