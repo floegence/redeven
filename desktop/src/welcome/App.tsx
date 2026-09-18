@@ -13280,26 +13280,6 @@ function SettingsHelpBadge(props: Readonly<{
   );
 }
 
-function SettingsSectionHeader(props: Readonly<{
-  label: string;
-  hint?: string;
-  accessory?: JSX.Element;
-}>) {
-  return (
-    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-      <div class="flex items-baseline gap-2">
-        <h3 class="text-xs font-semibold text-foreground">
-          {props.label}
-        </h3>
-        <Show when={props.hint}>
-          <span class="text-[11px] text-muted-foreground">{props.hint}</span>
-        </Show>
-      </div>
-      {props.accessory}
-    </div>
-  );
-}
-
 function SettingsFormRow(props: Readonly<{
   controlID: string;
   label: string;
@@ -13569,8 +13549,8 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
   return (
     <EnvironmentSettingsPanel
       footer={(
-        <div class="flex w-full flex-wrap items-center justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={props.cancelSettings}>{props.i18n.t('common.close')}</Button>
+        <div class="environment-access-actions">
+          <Button class="environment-access-close" size="sm" variant="ghost" onClick={props.cancelSettings}>{props.i18n.t('common.close')}</Button>
           <Show when={pending() && props.resetAccess}><Button disabled={saving()} size="sm" variant="ghost" onClick={props.resetAccess}>{props.i18n.t('settings.discardChanges')}</Button></Show>
           <Button size="sm" variant={props.runtimeRestartAvailable ? 'outline' : 'default'}
             disabled={!canSave()} loading={saving()}
@@ -13586,100 +13566,113 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
         </div>
       )}
     >
-      <div class="space-y-6" inert={saving()}>
-        <section aria-label={props.i18n.t('settings.currentConnection')} class="space-y-3 pb-1">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class="text-sm font-semibold">{props.i18n.t('settings.currentConnection')}</h3>
-            <span class="flex items-center gap-2 text-xs text-muted-foreground" role="status" data-status-tone={props.runtimeStatusTone}>
-              <span class="relative flex h-5 w-5 items-center justify-center" aria-hidden="true">
-                <RuntimeStatusOrb running={props.runtimeRunning} dark={props.dark} />
+      <div class="environment-access-form" inert={saving()}>
+        <section aria-label={props.i18n.t('settings.currentConnection')} class="environment-access-overview">
+          <div class="environment-access-overview-header">
+            <div class="environment-access-overview-heading">
+              <h3>{props.i18n.t('settings.currentConnection')}</h3>
+              <span class="environment-access-status" role="status" data-status-tone={props.runtimeStatusTone}>
+                <span class="relative flex h-5 w-5 items-center justify-center" aria-hidden="true">
+                  <RuntimeStatusOrb running={props.runtimeRunning} dark={props.dark} />
+                </span>
+                {props.runtimeStatusLabel}
               </span>
-              {props.runtimeStatusLabel}
-            </span>
+            </div>
+            <Button size="sm" variant="outline" onClick={props.openInDesktop} disabled={saving()}>
+              {props.desktopOpenLabel}<ChevronRight class="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
           </div>
-          <div class="redeven-settings-connections space-y-2">
+          <div class="redeven-settings-connections">
             <EnvironmentConnectionRows rows={connectionRows()} i18n={props.i18n}
               selectedID={selectedShareAddress()?.id}
               selectForShare={(id) => setSharedAddress(id ? { environment_id: props.snapshot.environment_id, id } : null)}
               openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue} />
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <Button size="sm" onClick={props.openInDesktop} disabled={saving()}>
-              {props.desktopOpenLabel}
-            </Button>
           </div>
           <Show when={selectedShareAddress()}>{(address) => (
             <EndpointQRCodePanel i18n={props.i18n} endpoint={address()} copyEnvironmentValue={props.copyEnvironmentValue} />
           )}</Show>
         </section>
 
-        <section class="space-y-3 border-t border-border/60 pt-5">
-          <SettingsSectionHeader label={props.i18n.t('settings.visibilityTitle')} />
-          <SegmentedControl size="sm" value={access().network_exposure ? 'shared_local_network' : 'local_only'}
-            options={[
-              { value: 'local_only', label: props.i18n.t(remote() ? 'settings.serverOnlyLabel' : 'settings.localOnlyLabel') },
-              { value: 'shared_local_network', label: props.i18n.t('settings.sharedLocalNetworkLabel') },
-            ]}
-            onChange={(value) => props.applyAccessMode(value as DesktopAccessMode)} />
-          <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t(access().network_exposure ? 'settings.sharedLocalNetworkDescription' : remote() ? 'settings.serverOnlyDescription' : 'settings.localOnlyDescription')}</p>
-        </section>
-
-        <section class="border-t border-border/60 pt-5">
-          <LocalUIPasswordField snapshot={props.baselineSnapshot} draft={props.draft} i18n={props.i18n}
-            passwordStateID={access().password_state_id} passwordStateTone={access().password_state_tone}
-            passwordRequired={access().password_required} passwordInvalid={Boolean(validation().password_error_key)}
-            passwordErrorKey={validation().password_error_key}
-            localUIPasswordCanClear={canClearPassword()} updateDraftField={props.updateDraftField}
-            clearStoredLocalUIPassword={props.clearStoredLocalUIPassword} />
-        </section>
-
-        <section class="space-y-3 border-t border-border/60 pt-5">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <SettingsSectionHeader label={props.i18n.t('settings.connectionSecurity')} />
-            <SegmentedControl size="sm" aria-label={props.i18n.t('settings.connectionSecurity')} value={props.draft.local_ui_protocol ?? 'http'}
-              options={[
-                { value: 'http', label: props.i18n.t('settings.httpLabel') },
-                { value: 'https', label: props.i18n.t('settings.httpsLabel') },
-              ]}
-              onChange={(value) => props.updateDraftField('local_ui_protocol', value)} />
-          </div>
-          <Show when={validation().protocol_error_key}>
-            <p role="alert" class="text-xs text-destructive">{props.i18n.t('settings.protocolRequired')}</p>
-          </Show>
-          <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t(props.draft.local_ui_protocol === 'https' ? 'settings.httpsHelp' : 'settings.httpNotice')}</p>
-          <Show when={props.open && props.draft.local_ui_protocol === 'https' && props.certificate}>
-            <LocalCertificateSettings environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.certificate!} remote={remote()} onReadiness={setCertificateReady} copyText={props.copyEnvironmentValue} />
-          </Show>
-        </section>
-
-        <section class="space-y-4 border-t border-border/60 pt-5">
-          <SettingsFormRow controlID="local-ui-port" label={props.i18n.t('settings.portTitle')} i18n={props.i18n}>
-            <Input id="local-ui-port" value={access().bind_port_text} inputMode="numeric" size="sm"
-              disabled={access().port_mode === 'auto'} aria-invalid={Boolean(validation().address_error_key)}
-              aria-describedby={validation().address_error_key ? 'local-ui-bind-error' : undefined}
-              onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)} />
-          </SettingsFormRow>
-          <details class="group" open={access().access_mode === 'custom_exposure' || access().port_mode === 'auto'}>
-            <summary class="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">{props.i18n.t('settings.advancedNetwork')}</summary>
-            <div class="mt-4 space-y-3">
-              <SettingsFieldInput field={props.baselineSnapshot.host_fields[0]!} value={props.draft.local_ui_bind}
-                updateDraftField={props.updateDraftField} i18n={props.i18n} />
-              <Show when={!access().network_exposure}>
-                <Checkbox checked={access().port_mode === 'auto'} onChange={props.toggleAutoPort}
-                  label={props.i18n.t('settings.autoSelectPort')} size="sm" />
-              </Show>
-              <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t('settings.listenAddressHelp')}</p>
+        <div class="environment-access-preferences">
+          <section class="environment-access-row">
+            <div class="environment-access-description">
+              <h3>{props.i18n.t('settings.visibilityTitle')}</h3>
+              <p>{props.i18n.t(access().network_exposure ? 'settings.sharedLocalNetworkDescription' : remote() ? 'settings.serverOnlyDescription' : 'settings.localOnlyDescription')}</p>
             </div>
-          </details>
-          <Show when={validation().address_error_key}>
-            <p id="local-ui-bind-error" role="alert" class="text-xs text-destructive">{props.i18n.t(validation().address_error_key!)}</p>
-          </Show>
-        </section>
+            <div class="environment-access-control">
+              <SegmentedControl size="sm" aria-label={props.i18n.t('settings.visibilityTitle')} value={access().network_exposure ? 'shared_local_network' : 'local_only'}
+                options={[
+                  { value: 'local_only', label: props.i18n.t(remote() ? 'settings.serverOnlyLabel' : 'settings.localOnlyLabel') },
+                  { value: 'shared_local_network', label: props.i18n.t('settings.sharedLocalNetworkLabel') },
+                ]}
+                onChange={(value) => props.applyAccessMode(value as DesktopAccessMode)} />
+            </div>
+          </section>
+
+          <section class="environment-access-password">
+            <LocalUIPasswordField snapshot={props.baselineSnapshot} draft={props.draft} i18n={props.i18n}
+              passwordStateID={access().password_state_id} passwordStateTone={access().password_state_tone}
+              passwordRequired={access().password_required} passwordInvalid={Boolean(validation().password_error_key)}
+              passwordErrorKey={validation().password_error_key}
+              localUIPasswordCanClear={canClearPassword()} updateDraftField={props.updateDraftField}
+              clearStoredLocalUIPassword={props.clearStoredLocalUIPassword} />
+          </section>
+
+          <section class="environment-access-row">
+            <div class="environment-access-description">
+              <h3>{props.i18n.t('settings.connectionSecurity')}</h3>
+              <p>{props.i18n.t(props.draft.local_ui_protocol === 'https' ? 'settings.httpsHelp' : 'settings.httpNotice')}</p>
+            </div>
+            <div class="environment-access-control">
+              <SegmentedControl size="sm" aria-label={props.i18n.t('settings.connectionSecurity')} value={props.draft.local_ui_protocol ?? 'http'}
+                options={[
+                  { value: 'http', label: props.i18n.t('settings.httpLabel') },
+                  { value: 'https', label: props.i18n.t('settings.httpsLabel') },
+                ]}
+                onChange={(value) => props.updateDraftField('local_ui_protocol', value)} />
+            </div>
+            <Show when={validation().protocol_error_key}>
+              <p role="alert" class="environment-access-full text-xs text-destructive">{props.i18n.t('settings.protocolRequired')}</p>
+            </Show>
+            <Show when={props.open && props.draft.local_ui_protocol === 'https' && props.certificate}>
+              <div class="environment-access-full">
+                <LocalCertificateSettings environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.certificate!} remote={remote()} onReadiness={setCertificateReady} copyText={props.copyEnvironmentValue} />
+              </div>
+            </Show>
+          </section>
+
+          <section class="environment-access-network">
+            <SettingsFormRow controlID="local-ui-port" label={props.i18n.t('settings.portTitle')} i18n={props.i18n}>
+              <Input id="local-ui-port" value={access().bind_port_text} inputMode="numeric" size="sm"
+                disabled={access().port_mode === 'auto'} aria-invalid={Boolean(validation().address_error_key)}
+                aria-describedby={validation().address_error_key ? 'local-ui-bind-error' : undefined}
+                onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)} />
+            </SettingsFormRow>
+            <details class="environment-access-advanced" open={access().access_mode === 'custom_exposure' || access().port_mode === 'auto'}>
+              <summary><ChevronRight class="h-3.5 w-3.5" aria-hidden="true" />{props.i18n.t('settings.advancedNetwork')}</summary>
+              <div class="environment-access-advanced-content">
+                <SettingsFieldInput field={props.baselineSnapshot.host_fields[0]!} value={props.draft.local_ui_bind}
+                  updateDraftField={props.updateDraftField} i18n={props.i18n} />
+                <Show when={!access().network_exposure}>
+                  <Checkbox checked={access().port_mode === 'auto'} onChange={props.toggleAutoPort}
+                    label={props.i18n.t('settings.autoSelectPort')} size="sm" />
+                </Show>
+                <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t('settings.listenAddressHelp')}</p>
+              </div>
+            </details>
+            <Show when={validation().address_error_key}>
+              <p id="local-ui-bind-error" role="alert" class="text-xs text-destructive">{props.i18n.t(validation().address_error_key!)}</p>
+            </Show>
+          </section>
+        </div>
 
         <Show when={pending() || props.snapshot.runtime_configuration_pending}>
-          <div role="status" class="border-t border-border/60 pt-4 text-xs text-muted-foreground">
-            <p class="font-medium text-foreground">{props.i18n.t('settings.pendingChanges')}</p>
-            <p class="mt-1">{props.i18n.t(props.runtimeRestartAvailable ? 'settings.applyTimingHelp' : 'settings.applyNextStartHelp')}</p>
+          <div role="status" class="environment-access-pending">
+            <Clock class="h-4 w-4 shrink-0" aria-hidden="true" />
+            <div>
+              <p class="font-medium text-foreground">{props.i18n.t('settings.pendingChanges')}</p>
+              <p class="mt-1">{props.i18n.t(props.runtimeRestartAvailable ? 'settings.applyTimingHelp' : 'settings.applyNextStartHelp')}</p>
+            </div>
           </div>
         </Show>
         <Show when={props.settingsError}>

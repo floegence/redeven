@@ -24,8 +24,8 @@ for customized registrations. A wrapping summary names package delivery, default
 or custom directory, release source, and connection timeout. Expanding preserves
 the draft. Invalid advanced fields expand on Save and the first invalid field
 receives focus. Creation and editing use the same canonical SSH normalizers.
-Editing one field clears only its error. The title is 14px, fields and controls
-are 13px, and supporting text is 12px; modal material remains owned by Floe.
+Editing one field clears only its error. Fields and controls are 13px, and
+supporting text is 12px; modal material remains owned by Floe.
 
 Cmd/Ctrl+Enter saves unless composition or a nested selector owns the key.
 Collapsed fields stay outside the tab order. Nested help and destination selectors

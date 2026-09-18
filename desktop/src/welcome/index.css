@@ -4156,12 +4156,12 @@ pre,
   height: min(42rem, var(--redeven-welcome-dialog-panel-max-height));
 }
 .redeven-environment-settings-dialog > div:first-child {
-  padding: 20px 20px 16px;
+  padding: 20px 20px 12px;
   border-bottom: 0;
   flex-shrink: 0;
 }
 .redeven-environment-settings-dialog > div:first-child > div { min-width: 0; }
-.redeven-environment-settings-dialog h2 { font-size: 14px; line-height: 1.3; font-weight: 600; }
+.redeven-environment-settings-dialog h2 { font-size: 16px; line-height: 1.3; font-weight: 600; }
 .redeven-environment-settings-dialog > div:first-child p {
   margin-top: 4px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere;
 }
@@ -4209,7 +4209,6 @@ pre,
 .ssh-settings-form [role='radiogroup'] { width: fit-content; max-width: 100%; border: 0; background: color-mix(in srgb, var(--foreground) 5%, var(--background)); border-radius: var(--radius-md); padding: 3px; }
 .ssh-settings-form [role='radio'] { min-height: 28px; padding: 4px 10px; font-size: 13px; border: 0; box-shadow: none; }
 @media (max-width: 480px) {
-  .redeven-environment-settings-dialog > div:first-child { padding: 20px 20px 16px; }
   .ssh-settings-endpoint { grid-template-columns: minmax(0, 1fr) 80px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -4290,6 +4289,151 @@ pre,
 .environment-settings-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .environment-settings-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 1.25rem; }
 .environment-settings-actions { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; padding: .875rem 1.25rem; border-top: 1px solid var(--border); }
+.environment-settings-actions button,
+.environment-access-overview-header > button {
+  height: auto;
+  min-height: 1.75rem;
+  max-width: 100%;
+  padding-block: .25rem;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+/* Runtime facts are a quiet overview; editable preferences share one alignment. */
+.environment-access-form {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.environment-access-overview {
+  display: flex;
+  flex-direction: column;
+  gap: .875rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border));
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--primary) 3%, transparent);
+}
+.environment-access-overview-header,
+.environment-access-overview-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem .75rem;
+}
+.environment-access-overview-header { justify-content: space-between; }
+.environment-access-overview h3 { font-size: 13px; font-weight: 600; }
+.environment-access-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .125rem;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.environment-access-status[data-status-tone='success'] { color: var(--success); }
+.environment-access-status[data-status-tone='warning'] { color: var(--warning); }
+.environment-access-overview .redeven-card-endpoint-row { padding: .375rem 0; gap: .75rem; }
+.environment-access-overview .redeven-card-endpoint-label {
+  justify-content: flex-start;
+  min-width: 4rem;
+  max-width: 6rem;
+  padding: .125rem 0;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.environment-access-overview [data-endpoint-kind='address'] .redeven-card-endpoint-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.75;
+}
+.environment-access-preferences {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: .75rem;
+}
+.environment-access-preferences > section { padding: 1.125rem 1.25rem; }
+.environment-access-preferences > section + section {
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.environment-access-row,
+.environment-access-preferences .redeven-settings-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18rem);
+  align-items: start;
+  gap: .875rem 1.5rem;
+}
+.environment-access-description { min-width: 0; }
+.environment-access-description h3,
+.environment-access-preferences .redeven-settings-form-row label { font-size: 13px; font-weight: 500; }
+.environment-access-description p {
+  margin-top: .375rem;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+.environment-access-control { display: flex; justify-content: flex-end; min-width: 0; }
+.environment-access-control > * { max-width: 100%; }
+.environment-access-control button { height: auto; min-height: 1.75rem; white-space: normal; }
+.environment-access-full { grid-column: 1 / -1; min-width: 0; }
+.environment-access-preferences input:not([type='checkbox']) {
+  height: 2.125rem;
+  font-size: 13px;
+  background: color-mix(in srgb, var(--foreground) 3%, var(--background));
+}
+.environment-access-network > .redeven-settings-form-row > :last-child { justify-self: end; }
+.environment-access-network #local-ui-port {
+  width: 7rem;
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.environment-access-advanced { margin-top: .875rem; }
+.environment-access-advanced summary {
+  display: flex;
+  align-items: center;
+  gap: .375rem;
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.environment-access-advanced summary::-webkit-details-marker { display: none; }
+.environment-access-advanced summary:hover { color: var(--foreground); }
+.environment-access-advanced summary svg { flex-shrink: 0; transition: transform 160ms ease-out; }
+.environment-access-advanced[open] summary svg { transform: rotate(90deg); }
+.environment-access-advanced-content { display: grid; gap: .875rem; padding-top: 1rem; }
+.environment-access-pending {
+  display: flex;
+  align-items: flex-start;
+  gap: .625rem;
+  padding-inline: .25rem;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.environment-access-pending > svg { margin-top: .125rem; }
+.environment-access-actions { display: flex; width: 100%; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; }
+.environment-access-actions .environment-access-close { margin-inline-end: auto; }
+
+@container (max-width: 36rem) {
+  .environment-access-preferences > section { padding: 1rem; }
+  .environment-access-row,
+  .environment-access-preferences .redeven-settings-form-row { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+  .environment-access-control { justify-content: flex-start; }
+  .environment-access-password .redeven-settings-form-row > :last-child { width: min(100%, 18rem); }
+  .environment-access-network > .redeven-settings-form-row > :last-child { justify-self: start; }
+  .environment-access-overview { padding: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .environment-access-advanced summary svg { transition: none; }
+}
 
 .environment-settings-tab[aria-hidden="true"] { display: none; }
 

@@ -122,7 +122,7 @@ try {
     field: getComputedStyle(el.querySelector('input')).fontSize,
     radius: parseFloat(getComputedStyle(el).borderRadius),
   }));
-  assert.equal(typography.title, '14px');
+  assert.equal(typography.title, '16px');
   assert.equal(typography.field, '13px');
   assert.ok(typography.radius <= 6, 'shared compact Dialog radius');
   await page.addScriptTag({ path: axePath });
