@@ -42,6 +42,13 @@ Downgrades and unknown-order switches use the Manager's existing stopped-state r
 
 The explicit update click submits the exact current plan once. Repeated submission is disabled while awaiting admission. Rejection keeps the drawer, chosen version, and still-valid confirmations available with a localized inline error. Expired plans, changed targets, or changed notices prepare again and require another explicit submit. Accepted updates close the drawer and transfer presentation to the service row. [Operation progress](managed-service-operation-progress.md) owns observation, completion, failure retention, and controller cleanup; the drawer adds no polling or parallel progress owner.
 
+# Boundaries
+
+Redeven owns candidate selection, drawer presentation, and explicit submit intent.
+The Manager owns exact update plans and operation admission; the existing service
+operation controller owns execution and progress after admission. Preparation
+never executes an update or creates another operation lifecycle.
+
 # Validation
 
 Browser acceptance must inspect screenshots of wide and narrow layouts in light and dark themes, plus required notices, stopped-state guidance, preparation, rejection, and long translated version labels. Verify one scroll owner, reachable actions, keyboard selection, and retained context. A real projected Workbench fixture must exercise local wheel scrolling and pointer submission while preserving the canvas viewport. Screenshots supplement assertions and must be opened and visually reviewed before delivery.
