@@ -5181,7 +5181,7 @@
       "copyConnection": "Copier le nom de connexion",
       "newTab": "Nouvel onglet en arrière-plan",
       "disconnect": "Déconnecter",
-      "managed": "Navigateur géré",
+      "managed": "Navigateur géré par Flower",
       "profileName": "Nom du profil",
       "createProfile": "Créer un profil",
       "allowContinue": "Autoriser et continuer",
@@ -5218,7 +5218,16 @@
       "applicationWindows": "Fenêtres des applications",
       "inUse": "Utilisé par une autre tâche",
       "disconnected": "Non connecté",
-      "selectionStale": "Cette page ou fenêtre a changé. Actualisez la liste et sélectionnez-la à nouveau."
+      "selectionStale": "Cette page ou fenêtre a changé. Actualisez la liste et sélectionnez-la à nouveau.",
+      "system": "Navigateur système connecté",
+      "connectionTitle": "Connecter le navigateur système",
+      "connectionHint": "Connectez Flower Browser dans Chrome sur cet ordinateur, puis actualisez et continuez. Flower crée un onglet dédié à la tâche. Cette connexion ne prend pas en charge Safari.",
+      "noFrame": "Aucune capture disponible",
+      "frameConnecting": "Connexion à la vue…",
+      "frameDisconnected": "Connexion à la vue interrompue",
+      "frameStale": "Dernière capture · pas en direct",
+      "reveal": "Afficher dans le navigateur",
+      "revealFailed": "Impossible d’afficher l’onglet. Vérifiez la connexion du navigateur."
     }
   },
   "uiCopy": {

@@ -50,6 +50,15 @@ never restores viewing or sends remote input. Hidden launchers do not accept
 pointer interaction or keyboard navigation. Published Floe owns gesture
 cancellation, focus, geometry, snapping and animation details.
 
+Stage displays a loading indicator only while an actual viewer subscription or
+frame decode is pending. The existing ten-second viewer watchdog bounds first-frame
+and stream failures. Without a subscription and screenshot it shows an explicit
+empty state; a classified safety stop instead names the required assistance and
+clears public pixels. A retained public frame is scoped to the same Thread, Run
+and target and marked non-live during ordinary waiting. Private interaction changes
+clear pixels and never fall back to a public keyframe. Target and source facts in
+Activity identify the actual browser; previews do not require extra model screenshots.
+
 Both components remain mounted across visibility changes, preserving the
 window's position, size, and maximization and the launcher's relative placement.
 Floe keeps preferred geometry separate from viewport constraints, so composer

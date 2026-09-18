@@ -245,10 +245,8 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				stopped = err
 			}
 			if takeoverResult(observed, err) {
-				pause = observed.Safety
-				if pause == nil {
-					pause = &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"user_control"}}
-				}
+				safety := computerPauseSafety(observed, err)
+				pause = &safety
 				stopped = ErrInteractionTakeoverRequired
 			}
 			if payload, ok := observed.Result.(map[string]any); ok {

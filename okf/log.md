@@ -1,5 +1,13 @@
 # Redeven OKF Update Log
 
+## 2026-09-18 — System browser intent and canonical computer assistance
+
+- Require explicit browser sources and connection-only assistance without managed fallback.
+- Preserve viewer-detected safety through the Runtime-owned pause and Floret InputRequired/Respond path; remove helper takeover state and per-turn blank navigation.
+- Classify stopped frames, bound loading, preserve scoped non-live public previews and reveal the actual connected tab.
+- Require Runtime/Desktop epoch 24 and browser/Native Messaging protocol 5. Published Floret v7.16.1, native protocol 3 and product schema 9 remain unchanged.
+- See [browser routing](ai/computer-use-target-selection.md), [assistance](ai/computer-use-takeover.md) and [Stage media](ai/computer-use-media.md).
+
 ## 2026-09-18: Model-aware input estimation
 
 * Consume published Floret v7.16.1 offline estimation across model transports, freeze the actual wire input before counting, and preserve distinct opaque-source estimates.

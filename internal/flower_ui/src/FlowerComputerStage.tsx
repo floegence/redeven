@@ -41,6 +41,12 @@ export type FlowerComputerStageSessionState = 'running' | 'awaiting_user' | 'com
 export type FlowerComputerStageProps = Readonly<{
   snapshot: FlowerComputerStageSnapshot;
   frame?: FlowerComputerFrameSource;
+  loading?: boolean;
+  blocked?: boolean;
+  emptyMessage?: string;
+  staleLabel?: string;
+  onReveal?: () => void;
+  revealLabel?: string;
   retainLiveFrame?: boolean;
   privateInteractionID?: string;
   frameRate?: number;
@@ -74,6 +80,8 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   let currentFrame: FlowerComputerFrameSource | undefined;
   let currentThread = '';
   let currentTarget = '';
+  let currentRun = '';
+  const [decoding, setDecoding] = createSignal(false);
   let keyboard: HTMLTextAreaElement | undefined;
   let composing = false;
   let launcher: HTMLButtonElement | undefined;
@@ -103,7 +111,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   let lastOfferedFrame = '';
   const pumpFrames = async () => {
     if (loading) return;
-    loading = true;
+    loading = true; setDecoding(true);
     try {
       while (pendingFrame) {
         const frame = pendingFrame;
@@ -111,6 +119,10 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
         const generation = frameGeneration;
         const request = new AbortController();
         controller = request;
+        const timeout = setTimeout(() => {
+          if (generation !== frameGeneration) return;
+          request.abort(); setFailed(true); props.onFrameError?.();
+        }, 10000);
         try {
           const blob = await props.loadFrame!({ ...frame, signal: request.signal });
           if (request.signal.aborted || generation !== frameGeneration) continue;
@@ -127,9 +139,9 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
           props.onFrameReady?.(frame);
         } catch {
           if (!request.signal.aborted && generation === frameGeneration && !pendingFrame) { setFailed(true); props.onFrameError?.(); }
-        }
+        } finally { clearTimeout(timeout); }
       }
-    } finally { loading = false; }
+    } finally { loading = false; setDecoding(false); }
   };
   onCleanup(() => {
     frameGeneration++; pendingFrame = undefined; controller?.abort();
@@ -137,15 +149,16 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   });
   createEffect(() => {
     retry();
-    const thread = threadID(), target = targetID(), privacy = props.privateInteractionID ?? '';
-    if (thread !== currentThread || target !== currentTarget || privacy !== currentPrivacy) {
-      currentThread = thread; currentTarget = target; currentPrivacy = privacy; lastOfferedFrame = '';
+    const thread = threadID(), target = targetID(), run = props.snapshot.runID ?? '', privacy = props.blocked ? 'blocked' : props.privateInteractionID ?? '';
+    if (thread !== currentThread || target !== currentTarget || run !== currentRun || privacy !== currentPrivacy) {
+      currentThread = thread; currentTarget = target; currentRun = run; currentPrivacy = privacy; lastOfferedFrame = '';
       currentFrame = undefined;
       frameGeneration++; pendingFrame = undefined; controller?.abort();
-      setResolvedURL(undefined);
+      setResolvedURL(undefined); setFailed(false);
       if (currentURL) URL.revokeObjectURL(currentURL);
       currentURL = '';
     }
+    if (props.blocked) { setFailed(false); return; }
     if (!props.open) { currentFrame = undefined; lastOfferedFrame = ''; frameGeneration++; pendingFrame = undefined; controller?.abort(); return; }
     const frame = props.frame;
     if (!frame || !props.loadFrame) { frameGeneration++; pendingFrame = undefined; controller?.abort(); return; }
@@ -163,7 +176,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
     untrack(() => { void pumpFrames(); });
   });
   const retryFrames = () => {
-    lastOfferedFrame = '';
+    lastOfferedFrame = ''; setFailed(false);
     props.onRetry?.();
     setRetry(value => value + 1);
   };
@@ -179,10 +192,11 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
             (visible ? source : launcher)?.focus({ preventScroll: true });
           });
         }
-      }} title={props.copy.title} draggable resizable defaultSize={{ width: 600, height: 425 }} minSize={{ width: 280, height: 200 }}
+      }} title={props.snapshot.target ? `${props.copy.title} · ${props.snapshot.target}` : props.copy.title} draggable resizable defaultSize={{ width: 600, height: 425 }} minSize={{ width: 280, height: 200 }}
         boundary={props.boundary} compactBelow={560} viewportInsets={{ top: 12, right: 12, bottom: 12, left: 12 }}
         labels={{ close: props.copy.close, maximize: props.copy.maximize, restore: props.copy.restoreSize }}
         headerActions={<div class="flower-computer-header-actions">
+          <Show when={props.onReveal}><button type="button" title={props.revealLabel} aria-label={props.revealLabel} onClick={() => props.onReveal?.()}><MonitorPointer class="h-4 w-4" /></button></Show>
           <Show when={props.sessionState !== 'historical'}><span class="flower-computer-state" data-session-state={props.sessionState}>{props.copy.state[props.sessionState]}</span></Show>
           <Show when={!props.historical}><label class="flower-computer-frame-rate" title={`${props.copy.frameRateHint}\n${props.copy.receivedFrameRate.replace('{fps}', String(props.receivedFrameRate ?? 0))}`}>
             <span class="sr-only">{props.copy.frameRate}</span>
@@ -224,7 +238,9 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
         />
       </Show>
       <Show when={resolvedURL()} fallback={<div class="flower-computer-stage-no-frame">
-        <Show when={failed()} fallback={<Refresh class="h-5 w-5 animate-spin" role="status" aria-label={props.copy.noFrame} />}>
+        <p role="status">{props.emptyMessage || props.copy.noFrame}</p>
+        <Show when={!props.blocked && (props.loading || decoding()) && !failed()}><Refresh class="h-5 w-5 animate-spin" aria-hidden="true" /></Show>
+        <Show when={failed()}>
           <button type="button" aria-label={props.copy.retry} title={props.copy.retry} onClick={retryFrames}><Refresh class="h-5 w-5" aria-hidden="true" /></button>
         </Show>
       </div>}>
@@ -260,6 +276,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
         )}
       </Show>
     </div>
+    <Show when={resolvedURL() && props.staleLabel}><p class="px-3 py-1 text-xs text-muted-foreground" role="status">{props.staleLabel}</p></Show>
     </FloatingWindow>
       <Show when={!props.historical}><SurfaceFloatingPanel
         boundary={props.boundary}

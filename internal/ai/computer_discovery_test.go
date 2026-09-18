@@ -252,7 +252,8 @@ func TestComputerSelectionRechecksQueuedAuthorityAndCannotBypassPrivateControl(t
 			if reason == "private_control" {
 				control := host.controlForTarget("browser-main")
 				control.mu.Lock()
-				control.threadID, control.user = "thread-first", true
+				control.threadID = "thread-first"
+				control.pauseForUser()
 				control.mu.Unlock()
 			}
 			<-gate.gate

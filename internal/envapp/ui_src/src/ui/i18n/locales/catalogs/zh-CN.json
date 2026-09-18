@@ -5196,7 +5196,7 @@
       "copyConnection": "复制连接名称",
       "newTab": "新建后台标签页",
       "disconnect": "断开连接",
-      "managed": "托管浏览器",
+      "managed": "Flower 托管浏览器",
       "profileName": "配置名称",
       "createProfile": "创建配置",
       "allowContinue": "允许并继续",
@@ -5233,7 +5233,16 @@
       "applicationWindows": "应用窗口",
       "inUse": "其他任务正在使用",
       "disconnected": "未连接",
-      "selectionStale": "页面或窗口已发生变化，请刷新列表后重新选择。"
+      "selectionStale": "页面或窗口已发生变化，请刷新列表后重新选择。",
+      "system": "已连接的系统浏览器",
+      "connectionTitle": "连接系统浏览器",
+      "connectionHint": "在这台电脑的 Chrome 中连接 Flower Browser，然后刷新并继续。Flower 会创建独立的任务标签页。此连接不支持 Safari。",
+      "noFrame": "暂无截图",
+      "frameConnecting": "正在连接画面…",
+      "frameDisconnected": "画面连接已中断",
+      "frameStale": "最后拍摄的画面 · 非实时",
+      "reveal": "在浏览器中查看",
+      "revealFailed": "无法显示浏览器标签页，请检查浏览器连接。"
     }
   },
   "uiCopy": {

@@ -52,8 +52,9 @@ incidental focus changes do not fail capability acceptance. See
 measurement limits and current evidence. Deterministic fixtures cannot stand in
 for model-based paired evidence.
 
-Product UI fixtures choose the target and save site/application access through
-Computer connections before model work. They open Stage through its visible
+New browser UI fixtures exercise automatic target selection. Explicit native
+fixtures select their isolated application through Computer connections;
+restricted tasks save only the required access. They open Stage through its visible
 entry and verify that a fork inherits no site grant. Native protocol coverage
 checks short and split JSONL responses with stdin still open, without capture
 or system input.
@@ -139,6 +140,15 @@ qualify.
 
 ## Private preview and handback
 
+`checkDesktopSystemBrowser.mjs` runs a deterministic provider against the real
+built Desktop, Runtime, Chrome extension and Native Messaging. With
+`REDEVEN_COMPUTER_SURFACE=env`, it uses the real Env App opened by Desktop.
+Both carriers must show canonical connection assistance with no target bound,
+then continue after a verified extension connection. The Agent creates an
+independent background tab, preserves an existing unsaved form, renders actual
+Stage pixels and reveals the exact task tab. The runner owns its temporary
+browser profile and removes it and its test conversation on exit.
+
 `checkDesktopPrivateComputer.mjs` runs against an explicitly identified,
 task-owned Desktop built from the current checkout. Its provider is deterministic;
 the Runtime, managed browser helper, workspace stream, private IPC and decoder
@@ -146,6 +156,12 @@ remain production implementations. It verifies ordinary preview after unchanged
 samples, a 600ms delayed private page change at default 3 FPS, all FPS choices,
 client persistence, narrow header placement, native text insertion and Chromium
 IME, rejected handback and one safe continuation without navigation replay.
+`REDEVEN_COMPUTER_SAMPLED_CAPTCHA=1` exposes a verification challenge between
+tool calls, holds the next provider response until the real sampler classifies
+it, and requires public pixels to disappear before any canonical input exists.
+The next observation must create the formal CAPTCHA card and support the same
+private-input and safe-handback flow. The actual transport decoder must preserve
+the closed assistance classification.
 Resize checks wait for the visible control's actual bounds after the native
 window updates. Failed route and immediate-layout assertions are not passing
 product evidence.
@@ -170,6 +186,9 @@ Restart and history checks use a task-owned built Desktop and Runtime with a
 local verification fixture. Cover fresh-client waiting, explicit takeover,
 Runtime disconnect and resume after new decoded pixels, terminal collapse,
 historical entry and narrow layout. Restart must not navigate or replay input.
+The separate `REDEVEN_COMPUTER_RESTART_CASE=1` fixture verifies that a closed
+managed task page fails explicitly after restart: no recreated page, no private
+input, no provider continuation and the original canonical wait remains.
 Browser tests separately inject late decoding, expired interactions and queued
 commands to verify close, selection and connection boundaries deterministically.
 
@@ -177,5 +196,6 @@ commands to verify close, selection and connection boundaries deterministically.
 
 - `redeven:internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs` - Built Desktop and Linux scenarios with actual provider and pixel evidence.
 - `redeven:internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs` - Deterministic provider with real Desktop takeover, frames and handback.
+- `redeven:internal/envapp/ui_src/scripts/checkDesktopSystemBrowser.mjs` - Real Desktop/Env App connection guide, extension, task tab and Stage with a deterministic provider.
 - `redeven:scripts/check_computer_use_webtop.sh` - Isolated Linux product qualification and cleanup.
 - `redeven:internal/envapp/ui_src/scripts/computerViewerInteraction.mjs` - Published floating window and launcher interaction checks.

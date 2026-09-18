@@ -3,7 +3,7 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import type { FlowerBrowserTab, FlowerComputerExtensionSetup, FlowerComputerManagement, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 
-export function FlowerProfileConnection(props: { managed?: boolean; management: FlowerComputerManagement; connect: NonNullable<FlowerSurfaceAdapter['connectComputerBrowser']>; copy: FlowerComputerCopy; onConnected: () => void }) {
+export function FlowerProfileConnection(props: { connectionOnly?: boolean; onContinue?: () => Promise<void>; managed?: boolean; management: FlowerComputerManagement; connect: NonNullable<FlowerSurfaceAdapter['connectComputerBrowser']>; copy: FlowerComputerCopy; onConnected: () => void }) {
   const [setup, setSetup] = createSignal<FlowerComputerExtensionSetup>();
   const [profiles, setProfiles] = createSignal<readonly { id: string; name: string }[]>([]);
   const [profile, setProfile] = createSignal('');
@@ -45,7 +45,19 @@ export function FlowerProfileConnection(props: { managed?: boolean; management: 
   };
   return <section class="space-y-3 rounded-md border border-border p-3">
     <div class="flex items-center justify-between gap-2"><span class="font-medium">{props.managed ? props.copy.managed : props.copy.extension}</span><Button size="sm" variant="ghost" disabled={busy()} onClick={() => void action(refresh)}>{props.copy.refresh}</Button></div>
-    <Show when={profiles().length > 0}>
+    <Show when={props.connectionOnly}>
+      <p class="text-xs text-muted-foreground">{props.copy.connectionHint}</p>
+      <For each={profiles()}>{value => <p class="text-xs" role="status">{value.name} · {props.copy.connected}</p>}</For>
+      <Button size="sm" disabled={busy() || !profiles().length} onClick={() => void action(async () => {
+        const current = generation;
+        const connected = await props.management.listExtensionProfiles!();
+        if (current !== generation) return;
+        setProfiles(connected);
+        if (!connected.length) throw new Error('browser disconnected');
+        await props.onContinue?.();
+      })}>{props.copy.continueTask}</Button>
+    </Show>
+    <Show when={!props.connectionOnly && profiles().length > 0}>
       <label class="block space-y-1 text-xs">{props.copy.profile}<select class="flower-settings-text-input w-full cursor-pointer disabled:cursor-not-allowed" disabled={busy()} value={profile()} onChange={event => { const id = event.currentTarget.value; void action(() => selectProfile(id)); }}>
         <option value="" selected={!profile()}>{props.copy.chooseProfile}</option><For each={profiles()}>{value => <option value={value.id} selected={value.id === profile()}>{value.name}</option>}</For>
       </select></label>
@@ -59,7 +71,7 @@ export function FlowerProfileConnection(props: { managed?: boolean; management: 
       const current = generation; const result = await props.management.createManagedProfile!(profileName().trim());
       if (current === generation) { setProfiles(result); setProfileName(''); }
     }); }}><input class="flower-settings-text-input min-w-0 flex-1" aria-label={props.copy.profileName} placeholder={props.copy.profileName} maxlength={120} disabled={busy()} value={profileName()} onInput={event => setProfileName(event.currentTarget.value)} /><Button size="sm" type="submit" disabled={busy() || !profileName().trim()}>{props.copy.createProfile}</Button></form></Show>
-    <Show when={!props.managed}><details><summary class="cursor-pointer text-xs">{props.copy.setupExtension}</summary><div class="space-y-3 pt-3">
+    <Show when={!props.managed}><details open={props.connectionOnly}><summary class="cursor-pointer text-xs">{props.copy.setupExtension}</summary><div class="space-y-3 pt-3">
       <p class="text-xs text-muted-foreground">{props.copy.extensionHint}</p><Button size="sm" variant="outline" disabled={busy()} onClick={() => void action(async () => { const current = generation; const result = await props.management.setupExtension!(); if (current === generation) setSetup(result); })}>{props.copy.setupExtension}</Button>
       <Show when={setup()}>{value => <div class="space-y-2 text-xs">
         <label class="block">{props.copy.extensionPath}<input class="flower-settings-text-input mt-1 w-full" readOnly value={value().extension_path} /></label>

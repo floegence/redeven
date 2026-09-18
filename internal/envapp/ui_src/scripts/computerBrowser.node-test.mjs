@@ -40,14 +40,14 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
   };
   const send = async (tool_name, args = {}, fields = {}) => {
     const id = String(++nextID);
-    child.stdin.write(JSON.stringify({ id, target_id: 'fixture', session_id: 'test-turn', allowed_origins: [origin], tool_name, args, ...fields }) + '\n');
+    child.stdin.write(JSON.stringify({ id, target_id: 'fixture', allowed_origins: [origin], tool_name, args, ...fields }) + '\n');
     const result = await next();
     assert.equal(result.id, id);
     return result;
   };
   try {
     const ready = await next();
-    assert.equal(ready.protocol_version, 4);
+    assert.equal(ready.protocol_version, 5);
     assert.equal(ready.error, undefined, JSON.stringify(ready));
     assert.ok((await send('browser.navigate', { url: origin })).screenshot);
     const observed = await send('computer.observe');
@@ -134,8 +134,8 @@ test('inventory and explicit tab attachment preserve the browser, other tabs and
       try { return JSON.parse((await Promise.race([lines.next(), new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('helper timed out')), 10000); })])).value); }
       finally { clearTimeout(timeout); }
     };
-    assert.equal((await next()).protocol_version, 4);
-    helper.stdin.write(JSON.stringify({ id: 'observe', target_id: 'connected', session_id: 'turn', tool_name: 'computer.observe', args: {}, allowed_origins: [origin] }) + '\n');
+    assert.equal((await next()).protocol_version, 5);
+    helper.stdin.write(JSON.stringify({ id: 'observe', target_id: 'connected', tool_name: 'computer.observe', args: {}, allowed_origins: [origin] }) + '\n');
     const observed = await next();
     assert.equal(observed.result.title, 'Signed-in task');
     assert.ok(observed.result.observation.nodes.some(node => node.name === 'Search'));
@@ -269,7 +269,7 @@ test('nested cross-site frames use semantic actions and downloads survive helper
     assert.equal(result.safety?.level, 'routine', JSON.stringify(result)); return result.result;
   };
   try {
-    assert.equal((await next()).protocol_version, 4);
+    assert.equal((await next()).protocol_version, 5);
     await call('browser.navigate', { url: origins[0] });
     const selector = { role: 'textbox', name: 'Deep entry' };
     assert.equal((await call('computer.action', { action: 'wait', selector, timeout_ms: 5000 })).state, 'visible');
@@ -414,7 +414,6 @@ test('navigation during a safety read preserves the confirmed action without exp
     assert.equal(result.safety.level, 'routine', JSON.stringify(result));
     assert.deepEqual(result.result, { observation_invalidated: true, action_executed: true, execution_mode: 'background' });
     assert.equal(result.screenshot, undefined);
-    assert.equal(controller.userInControl, false);
     session.send = send;
     const fresh = await controller.execute({ tool_name: 'computer.observe', allowed_origins: [origin] });
     assert.ok(fresh.result.observation.nodes.some(node => node.name === 'Saved'), JSON.stringify(fresh));
@@ -462,7 +461,7 @@ test('full access permits new sites and redirects while preserving private input
     assert.equal(sensitive.screenshot, undefined);
     assert.equal(JSON.stringify(sensitive).includes('private-fixture'), false);
     await page.setContent('<h1>Signed in</h1>');
-    assert.equal((await execute('computer.observe')).safety.level, 'takeover', 'full access must not reclaim explicit user control');
+    assert.equal((await execute('computer.observe')).safety.level, 'routine', 'the helper reports current safety; Runtime owns the control barrier');
     assert.equal((await execute('computer.screenshot', {}, { return_control: true })).safety.level, 'routine');
     const revoked = await execute('computer.observe', {}, { full_access: false });
     assert.equal(revoked.safety.required_origin, destinationOrigin);

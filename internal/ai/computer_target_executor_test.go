@@ -26,7 +26,7 @@ func newPlaywrightProtocolFixture(t *testing.T) *PlaywrightTargetExecutor {
 		t.Skip("JSONL shell fixture requires POSIX")
 	}
 	helper := filepath.Join(t.TempDir(), "helper.sh")
-	content := `printf '{"type":"ready","protocol_version":4}\n'
+	content := `printf '{"type":"ready","protocol_version":5}\n'
 while IFS= read -r line; do
   id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
   target=$(printf '%s' "$line" | sed -n 's/.*"target_id":"\([^"]*\)".*/\1/p')
@@ -78,7 +78,7 @@ func TestPlaywrightTargetExecutorInterruptedSessionIsReaped(t *testing.T) {
 	}
 }
 
-func TestPlaywrightPrivateSessionUsesCanonicalTurnNotRunOrArguments(t *testing.T) {
+func TestPlaywrightHelperCannotOwnTurnControl(t *testing.T) {
 	executor := newPlaywrightProtocolFixture(t)
 	record := filepath.Join(t.TempDir(), "requests.jsonl")
 	source, err := os.ReadFile(executor.HelperPath)
@@ -99,19 +99,22 @@ func TestPlaywrightPrivateSessionUsesCanonicalTurnNotRunOrArguments(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	var sessions []string
+	var count int
 	for _, line := range bytes.Split(bytes.TrimSpace(body), []byte("\n")) {
-		var wire playwrightTargetRequest
+		var wire map[string]any
 		if err := json.Unmarshal(line, &wire); err != nil {
 			t.Fatal(err)
 		}
-		if len(wire.SessionID) != 64 || wire.SessionID == wire.Args["session_id"] {
-			t.Fatal("private browser session was absent or selected by tool arguments")
+		if _, exists := wire["session_id"]; exists {
+			t.Fatal("helper received a second turn-control identity")
 		}
-		sessions = append(sessions, wire.SessionID)
+		if wire["user_control"] == true || wire["return_control"] == true {
+			t.Fatal("model arguments changed trusted control fields")
+		}
+		count++
 	}
-	if len(sessions) != 4 || sessions[0] != sessions[1] || sessions[1] == sessions[2] || sessions[2] == sessions[3] {
-		t.Fatalf("private session identity did not follow canonical turns: %v", sessions)
+	if count != 4 {
+		t.Fatalf("expected four independently dispatched observations: %d", count)
 	}
 }
 
@@ -263,7 +266,7 @@ func TestPlaywrightSafetyResponseDropsImageBeforeDecoding(t *testing.T) {
 	executor := newPlaywrightProtocolFixture(t)
 	// Deliberately invalid image text proves the safety boundary runs before
 	// decode, storage, and model attachment construction, without logging bytes.
-	helper := `printf '{"type":"ready","protocol_version":4}\n'
+	helper := `printf '{"type":"ready","protocol_version":5}\n'
 while IFS= read -r line; do
  id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
  target=$(printf '%s' "$line" | sed -n 's/.*"target_id":"\([^"]*\)".*/\1/p')

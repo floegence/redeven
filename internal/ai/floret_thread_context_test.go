@@ -17,7 +17,7 @@ import (
 
 func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing.T) {
 	liveUsage := make(chan FlowerContextUsage, 8)
-	liveSnapshots := make(chan FlowerContextUsage, 16)
+	contextUsageSnapshots := make(chan FlowerContextUsage, 16)
 	release := make(chan struct{})
 	gateway := florettest.NewScriptedGateway(
 		flprovider.Identity{Provider: "test", Model: "cache-usage", StateCompatibilityKey: "test:cache-usage:v1"},
@@ -51,7 +51,7 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
 	service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(_ context.Context, request flruntime.AgentRequest) (*flruntime.Agent, error) {
 		adapterRun := &run{threadID: request.ThreadID.String(), host: runHostCapabilities{publishContextUsage: func(usage FlowerContextUsage) {
-			liveSnapshots <- usage
+			contextUsageSnapshots <- usage
 			if usage.ThreadUsage != nil {
 				liveUsage <- usage
 			}
@@ -99,8 +99,8 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 		t.Fatalf("pending context=%+v", projected.Usage)
 	}
 	var latest FlowerContextUsage
-	for len(liveSnapshots) > 0 {
-		latest = <-liveSnapshots
+	for len(contextUsageSnapshots) > 0 {
+		latest = <-contextUsageSnapshots
 	}
 	canonicalJSON, _ := json.Marshal([]*FlowerContextSample{projected.Usage.Confirmed, projected.Usage.Estimate})
 	liveJSON, _ := json.Marshal([]*FlowerContextSample{latest.Confirmed, latest.Estimate})

@@ -5181,7 +5181,7 @@
       "copyConnection": "接続名をコピー",
       "newTab": "新しいバックグラウンドタブ",
       "disconnect": "接続を解除",
-      "managed": "管理対象ブラウザー",
+      "managed": "Flower 管理ブラウザー",
       "profileName": "プロファイル名",
       "createProfile": "プロファイルを作成",
       "allowContinue": "許可して続行",
@@ -5218,7 +5218,16 @@
       "applicationWindows": "アプリのウィンドウ",
       "inUse": "別のタスクが使用中",
       "disconnected": "未接続",
-      "selectionStale": "ページまたはウィンドウが変更されました。一覧を更新して、もう一度選択してください。"
+      "selectionStale": "ページまたはウィンドウが変更されました。一覧を更新して、もう一度選択してください。",
+      "system": "接続済みのシステムブラウザー",
+      "connectionTitle": "システムブラウザーを接続",
+      "connectionHint": "このコンピューターの Chrome で Flower Browser を接続し、更新してから続行してください。Flower はタスク専用のタブを作成します。この接続では Safari を使用できません。",
+      "noFrame": "スクリーンショットはありません",
+      "frameConnecting": "画面に接続中…",
+      "frameDisconnected": "画面の接続が中断されました",
+      "frameStale": "最後に取得した画面 · ライブではありません",
+      "reveal": "ブラウザーで表示",
+      "revealFailed": "ブラウザーのタブを表示できません。接続を確認してください。"
     }
   },
   "uiCopy": {

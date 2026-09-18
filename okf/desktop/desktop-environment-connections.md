@@ -9,7 +9,9 @@ timestamp: 2026-09-18T00:00:00Z
 
 Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure model; presentation never chooses or changes a transport. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.
 
-# Connection information and address actions
+# Contract
+
+## Connection information and address actions
 
 Connection details identify the selected Environment before listing access addresses. Native host connections identify this device; SSH connections show the saved authority and explicit port when configured; WSL shows the distribution and Linux user; container placement additionally names its engine and container reference. Desktop never substitutes an SSH alias for a Runtime URL host or relies on WSL localhost forwarding.
 
@@ -21,7 +23,9 @@ An explicitly present public-address list, including an empty list, is authorita
 
 Popover sharing is keyed by Environment and address-row identity. Snapshot refresh preserves the open popover and removes only an absent or no-longer-shareable selection. Settings also clear sharing when their Environment changes. Keyboard dismissal restores trigger focus; explanatory rows retain native text selection.
 
-# Access settings and independent clients
+# Boundaries
+
+## Access settings and independent clients
 
 Public Runtime addressing is independent from Desktop bridge use: other Desktops and browsers may connect concurrently through an address usable from their own network namespace. Saved bind and protocol are next-start settings and never synthesize an online URL. Settings put the current connection and Desktop/browser actions above scope, password, protocol, port, and advanced listening controls. Editing a draft leaves the current address intact until a new Runtime report arrives. Private bridge URLs and tokens are excluded from every displayed endpoint, clipboard value, QR payload, and system-browser target.
 

@@ -293,11 +293,8 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	}
 	if call.controlReturn {
 		control.mu.Lock()
-		missing := !call.fullAccess && ((control.requiredOrigin != "" && !slices.Contains(call.allowedOrigins, control.requiredOrigin)) || (control.requiredApp != "" && !slices.Contains(call.allowedApps, control.requiredApp)) || (control.requireForeground && !call.allowForeground))
-		safety := &InteractionSafetyDecision{Level: "takeover", RequiredOrigin: control.requiredOrigin, RequiredApp: control.requiredApp}
-		if control.requireForeground {
-			safety.ReasonCodes = []string{"foreground_permission"}
-		}
+		safety := control.pause
+		missing := safety != nil && !call.fullAccess && ((safety.RequiredOrigin != "" && !slices.Contains(call.allowedOrigins, safety.RequiredOrigin)) || (safety.RequiredApp != "" && !slices.Contains(call.allowedApps, safety.RequiredApp)) || (slices.Contains(safety.ReasonCodes, "foreground_permission") && !call.allowForeground))
 		control.mu.Unlock()
 		if missing {
 			return TargetToolResult{}, &targetToolPolicyError{code: "interaction_takeover_required", tool: call.ToolName, target: call.TargetID, safety: safety}
@@ -323,16 +320,9 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	}
 	result, err := executor.ExecuteTargetTool(captureCtx, call)
 	if takeoverResult(result, err) {
-		control.mu.Lock()
-		if control.threadID == call.ThreadID && (call.liveFrame || control.runID == call.RunID) {
-			control.user = true
-			if result.Safety != nil {
-				control.requiredOrigin, control.requiredApp = result.Safety.RequiredOrigin, result.Safety.RequiredApp
-				control.requireForeground = slices.Contains(result.Safety.ReasonCodes, "foreground_permission")
-			}
-		}
-		control.mu.Unlock()
+		control.recordPause(call, result, err)
 	}
+
 	if err != nil {
 		if target, resolveErr := r.registry.ResolveTarget(ctx, call.TargetID); resolveErr == nil {
 			var failure *targetToolPolicyError
@@ -383,8 +373,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			control.mu.Unlock()
 			return TargetToolResult{}, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
 		}
-		control.user = false
-		control.requiredOrigin, control.requiredApp, control.requireForeground = "", "", false
+		control.pause = nil
 		control.mu.Unlock()
 	}
 	return result, err

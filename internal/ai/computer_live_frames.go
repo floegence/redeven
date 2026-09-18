@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strconv"
 	"time"
 )
@@ -136,11 +137,23 @@ func (r *ComputerUseRuntime) startComputerLiveFrames(ctx context.Context, reques
 					captureCtx, done := context.WithTimeout(context.WithoutCancel(liveCtx), 5*time.Second)
 					if private {
 						control.mu.Lock()
-						control.threadID, control.turnID, control.runID, control.user = call.ThreadID, call.TurnID, call.RunID, true
+						control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, call.RunID
+						control.pauseForUser()
 						control.mu.Unlock()
 						body, err = r.executeComputerUserInputLocked(captureCtx, call)
 					} else {
 						result, err = r.executeComputerToolLocked(captureCtx, call, control)
+						if err == nil && result.Safety != nil && result.Safety.Level == "takeover" {
+							err = &targetToolPolicyError{code: "interaction_takeover_required", tool: call.ToolName, target: call.TargetID, safety: result.Safety}
+						}
+						if err == nil && len(result.Attachments) == 0 {
+							payload, _ := result.Result.(map[string]any)
+							if payload["observation_invalidated"] == true || payload["target_changed"] == true {
+								done()
+								unlock()
+								return true
+							}
+						}
 						if err == nil && len(result.Attachments) != 1 {
 							err = errors.New("computer observation unavailable")
 						}
@@ -160,6 +173,12 @@ func (r *ComputerUseRuntime) startComputerLiveFrames(ctx context.Context, reques
 			frame := FlowerComputerFrame{ThreadID: request.ThreadID, SessionID: request.ObserverID, TargetID: request.TargetID, ViewerRevision: request.Revision, InteractionID: request.InteractionID, MIMEType: "image/png", Sequence: sequence, CapturedAtMS: time.Now().UnixMilli()}
 			if err != nil {
 				frame.ErrorCode = "computer_view_unavailable"
+				var failure *targetToolPolicyError
+				if errors.As(err, &failure) && failure.code == "interaction_takeover_required" {
+					frame.ErrorCode = "computer_control_required"
+					frame.AssistanceKind = computerAssistanceKind(computerPauseSafety(result, err))
+				}
+				slog.Info("computer viewer stopped", "thread_id", request.ThreadID, "target_id", request.TargetID, "reason", frame.ErrorCode, "assistance", frame.AssistanceKind)
 				publish(frame)
 				return false
 			}

@@ -68,6 +68,7 @@ type FlowerLiveStreamEnvelope struct {
 }
 
 type FlowerComputerFrame struct {
+	AssistanceKind string `json:"assistance_kind,omitempty"`
 	ViewerRevision uint64 `json:"viewer_revision"`
 	InteractionID  string `json:"interaction_id,omitempty"`
 	FrameID        string `json:"frame_id,omitempty"`

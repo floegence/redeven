@@ -131,3 +131,18 @@ it('returns focus to each restore entry and offers actual-size viewing without c
     expect(input).not.toHaveBeenCalled();
   } finally { dispose(); host.remove(); }
 });
+
+it('does not show endless loading when a waiting conversation has no frame subscription', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const dispose = render(() => <FloeConfigProvider><LayoutProvider>
+    <FlowerComputerStage threadID="waiting-thread" open sessionState="awaiting_user"
+      snapshot={{ item: { item_id: 'observe', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'success', targetID: 'task-page', target: 'Flower managed browser', action: 'Read results' }}
+      onClose={() => {}} onRestore={() => {}}
+      copy={{ frameRate: 'Frame rate', frameRateHint: 'Preview rate', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'No screenshot available', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
+  </LayoutProvider></FloeConfigProvider>, host);
+  try {
+    await waitFor(() => Boolean(document.querySelector('.flower-computer-stage')));
+    expect(document.querySelector('.flower-computer-stage-no-frame .animate-spin')).toBeNull();
+    expect(document.querySelector('.flower-computer-stage-no-frame')?.textContent).toContain('No screenshot available');
+  } finally { dispose(); host.remove(); }
+});

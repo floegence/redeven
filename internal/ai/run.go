@@ -3095,11 +3095,32 @@ func (r *run) shouldRouteTargetTool(toolName string) bool {
 	return toolRequiresTarget(name) && r.toolTargetPolicy.requiresExplicitTarget()
 }
 
-func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string, args map[string]any) (any, error) {
+func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string, args map[string]any) (output any, outputErr error) {
 	runID, threadID, turnID := r.floretCanonicalIdentity()
 	if runID == "" || threadID == "" || turnID == "" || strings.TrimSpace(toolID) == "" {
 		return nil, errors.New("target tool canonical execution identity is unavailable")
 	}
+	// Every admitted computer operation uses this one pause boundary, including
+	// discovery/selection and pre-dispatch checks after a viewer detected safety.
+	defer func() {
+		var failure *targetToolPolicyError
+		if !errors.As(outputErr, &failure) || failure.code != "interaction_takeover_required" {
+			return
+		}
+		target := TargetDescriptor{ID: failure.target}
+		if r.targetResolver != nil {
+			if observed, err := r.targetResolver.ResolveTarget(ctx, failure.target); err == nil {
+				target = observed
+			}
+		}
+		call := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: toolID, ToolName: toolName, TargetID: target.ID}
+		var completed []TargetToolResult
+		if prior, ok := output.(targetToolExecution); ok {
+			completed = []TargetToolResult{{TargetID: prior.TargetID, Result: prior.Payload}}
+		}
+		output = computerTakeoverExecution(call, target, computerPauseSafety(TargetToolResult{}, outputErr), completed...)
+		outputErr = nil
+	}()
 	if isComputerManagementTool(toolName) {
 		return r.execComputerManagement(ctx, toolID, toolName, args)
 	}
@@ -3216,19 +3237,11 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 
 	result, err := r.targetToolExecutor.ExecuteTargetTool(ctx, call)
 	if err != nil {
-		var failure *targetToolPolicyError
-		if errors.As(err, &failure) && failure.code == "interaction_takeover_required" {
-			decision := InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"user_control_required"}}
-			if failure.safety != nil {
-				decision = *failure.safety
-			}
-			return computerTakeoverExecution(call, target, decision), nil
-		}
 		if result.Result != nil {
 			if result.TargetName == "" {
 				result.TargetName = target.DisplayName
 			}
-			return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID), Attachments: toolAttachmentsFromTarget(result.Attachments)}, err
+			return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID, target), Attachments: toolAttachmentsFromTarget(result.Attachments)}, err
 		}
 		return nil, err
 	}
@@ -3244,7 +3257,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if result.TargetName == "" {
 		result.TargetName = target.DisplayName
 	}
-	return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID), Attachments: toolAttachmentsFromTarget(result.Attachments)}, nil
+	return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID, target), Attachments: toolAttachmentsFromTarget(result.Attachments)}, nil
 }
 
 func toolAttachmentsFromTarget(source []TargetToolAttachment) []ToolAttachment {
@@ -3259,7 +3272,14 @@ func toolAttachmentsFromTarget(source []TargetToolAttachment) []ToolAttachment {
 	return attachments
 }
 
-func targetToolResultPayload(result TargetToolResult, requestedTargetID string) any {
+func targetToolResultPayload(result TargetToolResult, requestedTargetID string, target ...TargetDescriptor) (payloadOut any) {
+	defer func() {
+		if len(target) == 1 {
+			if payload, ok := payloadOut.(map[string]any); ok {
+				payload["target_kind"] = target[0].Kind
+			}
+		}
+	}()
 	targetID := strings.TrimSpace(result.TargetID)
 	if targetID == "" {
 		targetID = strings.TrimSpace(requestedTargetID)

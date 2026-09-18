@@ -19,23 +19,28 @@ assert(page, 'CDP must identify this checkout Desktop');
 await page.evaluate(() => window.redevenDesktopLanguage.setPreference('en-US'));
 await page.waitForFunction(() => document.documentElement.lang === 'en-US');
 let navigations = 0, providerCalls = 0, changedAt = 0, privateText = '';
+const sampledCaptcha = process.env.REDEVEN_COMPUTER_SAMPLED_CAPTCHA === '1';
+let showCaptcha = false, releaseObservation;
 const marker = 'private-fixture-\u79c1\u5bc6'; // Deliberately exercises native IME.
+const verificationContent = `<style>body{margin:0;background:#ac2030;font:24px system-ui}button,input{position:absolute;left:40px;top:140px;font:24px;padding:20px}input{top:240px}</style>
+  <h1>CAPTCHA verification</h1><button onclick="setTimeout(()=>{document.body.style.background='#20ac40';fetch('/changed')},600)">Change page</button><input autofocus oninput="fetch('/input',{method:'POST',body:this.value});this.value=''">
+  <button style="top:340px" onclick="document.querySelector('h1').textContent='Complete';document.title='Complete'">Finish</button>`;
 const fixture = http.createServer(async (req, res) => {
+  if (req.url === '/safety') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(showCaptcha)); return; }
   if (req.url === '/changed') { changedAt = Date.now(); res.end('ok'); return; }
   if (req.url === '/input') {
     for await (const chunk of req) privateText += chunk;
     res.end('ok'); return;
   }
   if (req.url === '/public') {
+    if (sampledCaptcha) navigations++;
     res.setHeader('Content-Type', 'text/html');
-    res.end("<!doctype html><title>Ordinary preview</title><body style='margin:0;background:#ac2030'><script>setTimeout(()=>document.body.style.background='#20ac40',1100)</script>"); return;
+    res.end(`<!doctype html><title>Ordinary preview</title><body style='margin:0;background:#ac2030'><script>setTimeout(()=>document.body.style.background='#20ac40',1100);const timer=setInterval(async()=>{if(await fetch('/safety').then(r=>r.json())){clearInterval(timer);document.body.innerHTML=${JSON.stringify(verificationContent)};document.body.style.background='#ac2030';document.title='Verification fixture'}},100)</script>`); return;
   }
   if (req.url === '/favicon.ico') { res.writeHead(204); res.end(); return; }
   navigations++;
   res.setHeader('Content-Type', 'text/html');
-  res.end(`<!doctype html><title>Verification fixture</title><style>body{margin:0;background:#ac2030;font:24px system-ui}button,input{position:absolute;left:40px;top:140px;font:24px;padding:20px}input{top:240px}</style>
-  <h1>CAPTCHA verification</h1><button onclick="setTimeout(()=>{document.body.style.background='#20ac40';fetch('/changed')},600)">Change page</button><input autofocus oninput="fetch('/input',{method:'POST',body:this.value});this.value=''">
-  <button style="top:340px" onclick="document.querySelector('h1').textContent='Complete';document.title='Complete'">Finish</button>`);
+  res.end(`<!doctype html><title>Verification fixture</title>${verificationContent}`);
 });
 await new Promise(resolve => fixture.listen(0, '127.0.0.1', resolve));
 const fixtureURL = `http://127.0.0.1:${fixture.address().port}`;
@@ -48,8 +53,9 @@ const provider = http.createServer(async (req, res) => {
   const active = body.tools?.length > 0;
   if (active) providerCalls++;
   if (active && providerCalls <= 2) {
-    if (providerCalls === 2) await new Promise(resolve => setTimeout(resolve, 3000));
-    const item = { type: 'function_call', id: `fc_fixture_${providerCalls}`, call_id: `navigate-fixture-${providerCalls}`, name: 'browser_navigate', arguments: JSON.stringify({ url: providerCalls === 1 ? `${fixtureURL}/public` : fixtureURL }) };
+    if (providerCalls === 2) await new Promise(resolve => { if (sampledCaptcha) releaseObservation = resolve; else setTimeout(resolve, 3000); });
+    const observe = sampledCaptcha && providerCalls === 2;
+    const item = { type: 'function_call', id: `fc_fixture_${providerCalls}`, call_id: `fixture-${providerCalls}`, name: observe ? 'computer_observe' : 'browser_navigate', arguments: JSON.stringify(observe ? {} : { url: providerCalls === 1 ? `${fixtureURL}/public` : fixtureURL }) };
     send({ type: 'response.output_item.added', output_index: 0, item });
     send({ type: 'response.output_item.done', output_index: 0, item });
     send({ type: 'response.completed', response: { id: 'fixture-pause', status: 'completed', output: [item] } });
@@ -95,6 +101,14 @@ try {
     const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
     return r === 32 && g === 172 && b === 64;
   })), 'ordinary preview after unchanged samples');
+  if (sampledCaptcha) {
+    await wait(() => Boolean(releaseObservation), 'provider awaiting next observation');
+    showCaptcha = true;
+    await wait(async () => (await page.locator('.flower-computer-stage').innerText()).includes('Complete the CAPTCHA'), 'sampler-first CAPTCHA classification');
+    assert.equal(await page.locator('.flower-computer-stage img').count(), 0, 'sampler safety retained public pixels');
+    assert.equal(await page.locator('.flower-computer-control-heading').count(), 0, 'sampler invented a canonical interaction');
+    releaseObservation();
+  }
   const take = page.locator('[data-computer-control-action="take"]');
   await take.waitFor({ timeout: 60000 });
   threadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id');
@@ -121,7 +135,9 @@ try {
   const delayMS = Date.now() - changedAt;
   const handback = page.locator('[data-computer-control-action="return"]');
   await handback.click();
-  await wait(() => page.locator('.flower-surface [role="alert"]').count().then(Boolean), 'structured handback feedback');
+  await wait(() => handback.isEnabled(), 'structured handback feedback');
+  assert.equal(await page.locator('.flower-computer-control-title').innerText(), 'Complete the CAPTCHA');
+  assert.equal(providerCalls, 2, 'unsafe handback resumed the provider');
   assert.equal(await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status'), 'waiting_user');
   await wait(() => page.locator('.flower-computer-stage .flower-computer-state').getAttribute('data-session-state').then(value => value === 'user_control'), 'private control retained');
   await page.locator('.flower-composer').screenshot({ animations: 'disabled', path: path.join(output, 'takeover-card.png') });
@@ -136,7 +152,7 @@ try {
   await take.waitFor();
   assert.equal(await page.locator('.flower-computer-stage textarea').count(), 0);
   assert.equal(await page.locator('.flower-computer-stage').count(), 0);
-  assert.equal(await page.locator('.flower-computer-control-title').innerText(), 'Sign in on the page');
+  assert.equal(await page.locator('.flower-computer-control-title').innerText(), 'Complete the CAPTCHA');
   await take.click();
   await wait(() => page.locator('.flower-computer-stage textarea').count().then(Boolean), 'new client explicit takeover');
   await clickPixel(100, 270);
@@ -157,47 +173,54 @@ try {
   await page.screenshot({ animations: 'disabled', path: path.join(output, 'narrow-live-viewer.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   assert(await image.evaluate(img => img.naturalWidth >= 640));
-  const beforeRestart = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
-  console.log(JSON.stringify({ beforeRestart: { version: beforeRestart.current?.view_version, status: beforeRestart.thread?.run_status } }));
-  const restart = page.evaluate(() => window.redevenDesktopLauncher.performAction({ kind: 'restart_environment_runtime', environment_id: 'local' }));
-  await wait(() => page.locator('.flower-computer-stage .flower-computer-state').getAttribute('data-session-state').then(value => value === 'disconnected').catch(() => false), 'Runtime disconnect feedback');
-  assert.equal(await page.locator('.flower-computer-stage textarea').count(), 0);
-  const pixelsAtDisconnect = await image.getAttribute('src');
-  await page.screenshot({ animations: 'disabled', path: path.join(output, 'runtime-disconnected.png') });
-  const restartResult = await restart;
-  assert(restartResult.ok, `Runtime restart failed: ${restartResult.code}`);
-  const afterRestart = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
-  console.log(JSON.stringify({ afterRestart: { version: afterRestart.current?.view_version, status: afterRestart.thread?.run_status } }));
-  await wait(() => take.isEnabled(), 'reconnected workspace');
-  assert.equal(await take.innerText(), 'Resume control');
-  assert.equal(await image.getAttribute('src'), pixelsAtDisconnect);
-  assert.equal(await page.locator('.flower-computer-stage textarea').count(), 0);
-  await take.click();
-  await wait(() => page.locator('.flower-computer-stage textarea').count().then(Boolean), 'explicit control after Runtime restart');
-  assert.notEqual(await image.getAttribute('src'), pixelsAtDisconnect);
-  assert.equal(navigations, 1, 'Runtime restart must not replay navigation');
-  await handback.click();
-  await wait(() => page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status').then(value => value === 'success'), 'safe handback');
-  assert.equal(navigations, 1); assert.equal(providerCalls, 3);
-  await wait(() => page.locator('.flower-computer-stage').count().then(count => count === 0), 'terminal automatic collapse');
-  assert.equal(await page.locator('.flower-computer-stage-ball').count(), 0);
-  await page.reload();
-  await page.locator(`[data-thread-id="${threadID}"] .flower-thread-card-select-button`).click();
-  await page.locator('.flower-computer-entry').waitFor();
-  assert.equal(await page.locator('.flower-computer-stage').count(), 0);
-  assert.equal(await page.locator('.flower-computer-stage-ball').count(), 0);
-  await page.locator('.flower-computer-entry').click();
-  await wait(() => page.locator('.flower-computer-stage img').evaluateAll(images => images.some(img => img.naturalWidth >= 640)), 'explicit historical pixels');
-  assert.equal(await page.locator('.flower-computer-frame-rate').count(), 0);
-  assert.equal(await page.locator('.flower-computer-stage textarea').count(), 0);
-  assert((await page.locator('.flower-computer-stage').innerText()).includes('Historical screenshot'));
-  await page.screenshot({ animations: 'disabled', path: path.join(output, 'historical-viewer.png') });
-  await page.locator('[data-floe-floating-window-control="close"]').click();
-  await wait(() => page.locator('.flower-computer-stage').count().then(count => count === 0), 'history close');
-  await wait(() => page.locator('.flower-computer-entry').evaluate(entry => entry === document.activeElement), 'historical entry focus restoration');
-  assert.equal(await page.evaluate(() => window.redevenDesktopStateStorage.getItem('flower.computer-viewer.fps')), '15');
-  await writeFile(path.join(output, 'private-viewer.json'), JSON.stringify({ ordinaryPreviewContinued: true, freshClientRequiresTakeover: true, runtimeRestartRequiresRecovery: true, terminalCollapses: true, historyRequiresExplicitOpen: true, historyHasNoFPSOrInputs: true, historyRestoresFocus: true, viewVersionBeforeRestart: beforeRestart.current.view_version, viewVersionAfterRestart: afterRestart.current.view_version, delayMS, rates: [3,5,10,15,30], nativeTextInsertion: true, nativeIME: true, rejectedHandbackRetained: true, safeHandbackOnce: true, navigationOnce: true, narrowHeader: true, persisted: true, threadID }, null, 2));
-  console.log(`Private Desktop qualification passed: delayed pixels visible in ${delayMS}ms; all FPS, handback, native text insertion and IME passed.`);
+  if (process.env.REDEVEN_COMPUTER_RESTART_CASE === '1') {
+    const beforeRestart = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
+    console.log(JSON.stringify({ beforeRestart: { version: beforeRestart.current?.view_version, status: beforeRestart.thread?.run_status } }));
+    const restart = page.evaluate(() => window.redevenDesktopLauncher.performAction({ kind: 'restart_environment_runtime', environment_id: 'local' }));
+    await wait(() => page.locator('.flower-computer-stage .flower-computer-state').getAttribute('data-session-state').then(value => value === 'disconnected').catch(() => false), 'Runtime disconnect feedback');
+    assert.equal(await page.locator('.flower-computer-stage textarea').count(), 0);
+    const pixelsAtDisconnect = await image.getAttribute('src');
+    await page.screenshot({ animations: 'disabled', path: path.join(output, 'runtime-disconnected.png') });
+    const restartResult = await restart;
+    assert(restartResult.ok, `Runtime restart failed: ${restartResult.code}`);
+    const afterRestart = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
+    console.log(JSON.stringify({ afterRestart: { version: afterRestart.current?.view_version, status: afterRestart.thread?.run_status } }));
+    await wait(() => take.isEnabled(), 'reconnected workspace');
+    assert.equal(await take.innerText(), 'Resume control');
+    assert.equal(await image.getAttribute('src'), pixelsAtDisconnect);
+    assert.equal(await page.locator('.flower-computer-stage textarea').count(), 0);
+    await take.click();
+    await wait(() => page.locator('.flower-computer-stage .flower-computer-state').getAttribute('data-session-state').then(value => value === 'paused'), 'closed task page fails explicitly');
+    assert.equal(await page.locator('.flower-computer-stage textarea').count(), 0);
+    assert.equal(navigations, 1, 'Runtime restart must not recreate or replay the task page');
+    assert.equal(providerCalls, 2, 'unavailable task page resumed the provider');
+    assert.equal((await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`)).thread.run_status, 'waiting_user');
+    await writeFile(path.join(output, 'restart-boundary.json'), JSON.stringify({ navigationOnce: true, missingPageFailsClosed: true, noPrivateControl: true, canonicalWaitPreserved: true, beforeVersion: beforeRestart.current.view_version, afterVersion: afterRestart.current.view_version }, null, 2));
+  } else {
+    await clickPixel(100, 380);
+    await handback.click();
+    await wait(() => page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status').then(value => value === 'success'), 'safe handback');
+    assert.equal(navigations, 1); assert.equal(providerCalls, 3);
+    await wait(() => page.locator('.flower-computer-stage').count().then(count => count === 0), 'terminal automatic collapse');
+    assert.equal(await page.locator('.flower-computer-stage-ball').count(), 0);
+    await page.reload();
+    await page.locator(`[data-thread-id="${threadID}"] .flower-thread-card-select-button`).click();
+    await page.locator('.flower-computer-entry').waitFor();
+    assert.equal(await page.locator('.flower-computer-stage').count(), 0);
+    assert.equal(await page.locator('.flower-computer-stage-ball').count(), 0);
+    await page.locator('.flower-computer-entry').click();
+    await wait(() => page.locator('.flower-computer-stage img').evaluateAll(images => images.some(img => img.naturalWidth >= 640)), 'explicit historical pixels');
+    assert.equal(await page.locator('.flower-computer-frame-rate').count(), 0);
+    assert.equal(await page.locator('.flower-computer-stage textarea').count(), 0);
+    assert((await page.locator('.flower-computer-stage').innerText()).includes('Historical screenshot'));
+    await page.screenshot({ animations: 'disabled', path: path.join(output, 'historical-viewer.png') });
+    await page.locator('[data-floe-floating-window-control="close"]').click();
+    await wait(() => page.locator('.flower-computer-stage').count().then(count => count === 0), 'history close');
+    await wait(() => page.locator('.flower-computer-entry').evaluate(entry => entry === document.activeElement), 'historical entry focus restoration');
+    assert.equal(await page.evaluate(() => window.redevenDesktopStateStorage.getItem('flower.computer-viewer.fps')), '15');
+    await writeFile(path.join(output, 'private-viewer.json'), JSON.stringify({ sampledCaptcha, ordinaryPreviewContinued: true, freshClientRequiresTakeover: true, terminalCollapses: true, historyRequiresExplicitOpen: true, historyHasNoFPSOrInputs: true, historyRestoresFocus: true, delayMS, rates: [3,5,10,15,30], nativeTextInsertion: true, nativeIME: true, rejectedHandbackRetained: true, safeHandbackOnce: true, navigationOnce: true, narrowHeader: true, persisted: true, threadID }, null, 2));
+    console.log(`Private Desktop qualification passed: delayed pixels visible in ${delayMS}ms; all FPS, handback, native text insertion and IME passed.`);
+  }
 } catch (error) {
   await page.screenshot({ animations: 'disabled', path: path.join(output, 'failure.png') });
   const presentation = await page.evaluate(() => ({
@@ -211,6 +234,7 @@ try {
   console.error(JSON.stringify({ providerCalls, navigations, presentation, version: detail.current?.view_version, canonical: { activity: detail.current?.activity, outcome: detail.current?.last_outcome, pending: detail.current?.interactions?.filter(i => !i.resolved).length }, code: detail.thread?.run_error_code, error: detail.thread?.run_error }));
   throw error;
 } finally {
+  releaseObservation?.();
   threadID ||= await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id').catch(() => undefined);
   if (threadID) await request('DELETE', `/_redeven_proxy/api/ai/threads/${threadID}?force=true`).catch(() => undefined);
   await browser.close(); fixture.closeAllConnections(); provider.closeAllConnections();

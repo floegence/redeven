@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -28,6 +30,8 @@ type ComputerCandidate struct {
 }
 
 type ComputerTargetInventory struct {
+	BrowserSource       string              `json:"browser_source"`
+	ConnectionRequired  bool                `json:"connection_required,omitempty"`
 	CurrentTargetID     string              `json:"current_target_id"`
 	DefaultCandidateRef string              `json:"default_candidate_ref,omitempty"`
 	Candidates          []ComputerCandidate `json:"candidates"`
@@ -124,7 +128,7 @@ func (r *ComputerUseRuntime) computerTargetState(target TargetDescriptor, thread
 	if control != nil {
 		control.mu.Lock()
 		busy := control.threadID != "" && control.threadID != threadID
-		paused := control.threadID == threadID && control.user
+		paused := control.threadID == threadID && control.pause != nil
 		control.mu.Unlock()
 		if busy {
 			return "in_use"
@@ -209,9 +213,27 @@ func (r *ComputerUseRuntime) candidateBrowserTabs(ctx context.Context, connectio
 }
 
 func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToolCall, policy ToolTargetPolicy) (ComputerTargetInventory, error) {
-	inventory := ComputerTargetInventory{Candidates: []ComputerCandidate{}}
+	inventory := ComputerTargetInventory{Candidates: []ComputerCandidate{}, BrowserSource: "auto"}
+	var options struct {
+		BrowserSource string `json:"browser_source"`
+	}
+	if len(call.Arguments) > 0 && json.Unmarshal(call.Arguments, &options) != nil {
+		return inventory, errors.New("invalid browser source")
+	}
+	if options.BrowserSource != "" {
+		inventory.BrowserSource = options.BrowserSource
+	}
+	source := inventory.BrowserSource
+	if source != "auto" && source != "system" && source != "managed" {
+		return inventory, errors.New("invalid browser source")
+	}
 	if err := r.authorizeComputerCall(ctx, &call); err != nil {
 		return inventory, err
+	}
+	if call.RunID != "" {
+		if err := r.requireComputerSelectionOpen(call); err != nil {
+			return inventory, err
+		}
 	}
 	if call.ThreadID == "" || r.targetBindings() == nil {
 		return inventory, errors.New("computer discovery requires a thread")
@@ -221,7 +243,10 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 		return inventory, err
 	}
 	inventory.CurrentTargetID = selected
-	targets, err := r.ListComputerTargets(ctx)
+	targets := r.registry.Snapshot()
+	if source == "auto" {
+		targets, err = r.ListComputerTargets(ctx)
+	}
 	if err != nil {
 		return inventory, err
 	}
@@ -242,7 +267,7 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 		return err
 	}
 	for _, target := range targets {
-		if !targetAllowedByPolicy(policy, target.ID) || target.ID == "browser-main" {
+		if !targetAllowedByPolicy(policy, target.ID) || target.ID == "browser-main" || (source == "system" && target.Kind != "browser.connected") || (source == "managed" && target.Kind != "browser.managed") {
 			continue
 		}
 		if err := appendCandidate(ComputerCandidate{TargetID: target.ID, Kind: target.Kind, DisplayName: target.DisplayName, URL: target.CurrentURL, AppBundleID: target.AppBundleID, State: r.computerTargetState(target, call.ThreadID)}, nil); err != nil {
@@ -250,30 +275,36 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 		}
 	}
 	if len(normalizeToolTargetPolicy(policy).AllowedTargetIDs) == 0 {
-		profiles := r.personalBrowserProfiles()
-		personalCount := len(profiles)
-		r.connectMu.Lock()
-		managed, managedErr := r.managedProfilesLocked()
-		r.connectMu.Unlock()
-		if managedErr != nil {
-			if err := appendCandidate(ComputerCandidate{Kind: "browser.managed", DisplayName: "Flower browser", State: "setup_required"}, nil); err != nil {
-				return inventory, err
+		profiles := []computerBrowserProfile{}
+		if source != "managed" {
+			profiles = r.personalBrowserProfiles()
+		}
+		if source != "system" {
+			r.connectMu.Lock()
+			managed, managedErr := r.managedProfilesLocked()
+			r.connectMu.Unlock()
+			if managedErr != nil {
+				if err := appendCandidate(ComputerCandidate{Kind: "browser.managed", DisplayName: "Flower managed browser", State: "setup_required"}, nil); err != nil {
+					return inventory, err
+				}
+			}
+			for _, profile := range managed {
+				profiles = append(profiles, computerBrowserProfile{name: profile.Name, kind: "browser.managed", connection: ComputerBrowserConnection{ManagedProfileID: profile.ID, NewTab: true}})
 			}
 		}
-		for _, profile := range managed {
-			profiles = append(profiles, computerBrowserProfile{name: profile.Name, kind: "browser.managed", connection: ComputerBrowserConnection{ManagedProfileID: profile.ID, NewTab: true}})
-		}
-		for index, profile := range profiles {
+		defaultProfile, _ := defaultComputerBrowserProfile(profiles)
+
+		for _, profile := range profiles {
 			connection := profile.connection
 			tabs, tabsErr := r.candidateBrowserTabs(ctx, connection)
 			state := "ready"
 			if tabsErr != nil {
 				state = "connection_required"
 			}
-			if err := appendCandidate(ComputerCandidate{Kind: profile.kind, DisplayName: profile.name, ProfileName: profile.name, NewTab: true, State: state}, &connection); err != nil {
+			if err := appendCandidate(ComputerCandidate{Kind: profile.kind, DisplayName: computerBrowserDisplayName(profile), ProfileName: profile.name, NewTab: true, State: state}, &connection); err != nil {
 				return inventory, err
 			}
-			if state == "ready" && (personalCount == 1 && index == 0 || personalCount == 0 && connection.ManagedProfileID == "browser-main") {
+			if state == "ready" && computerProfileIdentity(connection) == computerProfileIdentity(defaultProfile.connection) {
 				inventory.DefaultCandidateRef = inventory.Candidates[len(inventory.Candidates)-1].CandidateRef
 			}
 			for _, tab := range tabs {
@@ -292,7 +323,7 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 					targetID = r.managedTabTargetID(endpoint, tab.ID)
 				}
 				target := TargetDescriptor{ID: targetID, Ready: true}
-				view := ComputerCandidate{TargetID: targetID, Kind: profile.kind, DisplayName: profile.name, ProfileName: profile.name, Title: tab.Title, URL: tab.URL, OpenerTabID: tab.OpenerTabID, State: r.computerTargetState(target, call.ThreadID)}
+				view := ComputerCandidate{TargetID: targetID, Kind: profile.kind, DisplayName: computerBrowserDisplayName(profile), ProfileName: profile.name, Title: tab.Title, URL: tab.URL, OpenerTabID: tab.OpenerTabID, State: r.computerTargetState(target, call.ThreadID)}
 				tabConnection := connection
 				tabConnection.NewTab, tabConnection.TabID, tabConnection.TabTitle, tabConnection.TabURL = false, tab.ID, tab.Title, tab.URL
 				if err := appendCandidate(view, &tabConnection); err != nil {
@@ -305,6 +336,18 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 		if candidate.TargetID == selected && strings.HasPrefix(candidate.Kind, "browser.") && candidate.State == "ready" {
 			inventory.DefaultCandidateRef = candidate.CandidateRef
 			break
+		}
+	}
+	if source == "system" {
+		if len(normalizeToolTargetPolicy(policy).AllowedTargetIDs) > 0 && len(inventory.Candidates) == 0 {
+			return inventory, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
+		}
+		inventory.ConnectionRequired = true
+		for _, candidate := range inventory.Candidates {
+			if candidate.Kind == "browser.connected" && (candidate.State == "ready" || candidate.State == "in_use" || candidate.State == "user_control") {
+				inventory.ConnectionRequired = false
+				break
+			}
 		}
 	}
 	return inventory, ctx.Err()
@@ -428,13 +471,13 @@ func (r *ComputerUseRuntime) selectComputerTarget(ctx context.Context, call Targ
 	defer func() { <-control.gate }()
 	control.mu.Lock()
 	busy := control.threadID != "" && (control.threadID != call.ThreadID || call.RunID == "" || control.runID != "" && control.runID != call.RunID)
-	paused := control.user
+	pauseErr := control.pauseError(call)
 	control.mu.Unlock()
 	if busy {
 		return target, computerTargetFailure(call, "TARGET_IN_USE")
 	}
-	if paused {
-		return target, computerTargetFailure(call, "TAKEOVER_REQUIRED")
+	if pauseErr != nil {
+		return target, pauseErr
 	}
 	if err = r.authorizeComputerCall(ctx, &call); err != nil {
 		return target, err
@@ -457,7 +500,8 @@ func (r *ComputerUseRuntime) selectComputerTarget(ctx context.Context, call Targ
 			return target, selectErr
 		}
 		if takeoverResult(result, nil) {
-			return target, computerTargetFailure(call, "TAKEOVER_REQUIRED")
+			control.recordPause(call, result, nil)
+			return target, &targetToolPolicyError{code: "interaction_takeover_required", target: target.ID, safety: result.Safety}
 		}
 	}
 	if err = r.BindThreadTarget(ctx, call.ThreadID, target.ID); err != nil {
@@ -469,6 +513,7 @@ func (r *ComputerUseRuntime) selectComputerTarget(ctx context.Context, call Targ
 		control.mu.Unlock()
 	}
 	r.releasePreviousComputerTarget(call)
+	slog.Info("computer target selected", "thread_id", call.ThreadID, "target_id", target.ID, "source", target.Kind)
 	return target, nil
 }
 
@@ -480,7 +525,15 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 	runID, threadID, turnID := r.floretCanonicalIdentity()
 	call := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: toolID, ToolName: toolName, revalidate: r.computerToolRevalidator(toolID, toolName)}
 	if toolName == "computer.targets" {
-		return host.ComputerTargets(ctx, call, r.toolTargetPolicy)
+		call.Arguments, _ = json.Marshal(args)
+		inventory, err := host.ComputerTargets(ctx, call, r.toolTargetPolicy)
+		if err != nil {
+			return nil, err
+		}
+		if inventory.ConnectionRequired {
+			return computerConnectionExecution(), nil
+		}
+		return inventory, nil
 	}
 	ref := strings.TrimSpace(anyToString(args["candidate_ref"]))
 	if frozen, ok := ctx.Value(computerAuthorizedCandidateKey{}).(string); ok && ref != frozen {
@@ -497,16 +550,14 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 // profile participates in the identity, so a changed connection cannot replace
 // an already authorized resource between planning and execution.
 func (r *ComputerUseRuntime) defaultThreadBrowser(threadID string) (TargetDescriptor, error) {
-	profiles := r.personalBrowserProfiles()
-	if len(profiles) > 1 {
-		return TargetDescriptor{}, &targetToolPolicyError{code: "target_ambiguous"}
+	profiles := append(r.personalBrowserProfiles(), computerBrowserProfile{name: "Default", kind: "browser.managed", connection: ComputerBrowserConnection{ManagedProfileID: "browser-main", NewTab: true}})
+	selected, err := defaultComputerBrowserProfile(profiles)
+	if err != nil {
+		return TargetDescriptor{}, err
 	}
-	connection := ComputerBrowserConnection{ManagedProfileID: "browser-main", NewTab: true}
-	kind, name, profile := "browser.managed", "Flower browser", "managed:browser-main"
-	if len(profiles) == 1 {
-		connection = profiles[0].connection
-		kind, name, profile = "browser.connected", profiles[0].name, computerProfileIdentity(connection)
-	}
+	connection := selected.connection
+	kind, name, profile := selected.kind, computerBrowserDisplayName(selected), computerProfileIdentity(connection)
+
 	digest := sha256.Sum256([]byte(threadID + "\x00" + profile))
 	return TargetDescriptor{ID: "task-browser-" + hex.EncodeToString(digest[:16]), Kind: kind, DisplayName: name, Locality: "local", State: "stopped", Capabilities: []string{"observe", "interaction"}, connection: &connection}, nil
 }
@@ -514,13 +565,49 @@ func (r *ComputerUseRuntime) defaultThreadBrowser(threadID string) (TargetDescri
 func (r *ComputerUseRuntime) requireComputerSelectionOpen(call TargetToolCall) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	for _, control := range r.controls {
+	for targetID, control := range r.controls {
 		control.mu.Lock()
-		paused := control.threadID == call.ThreadID && control.user
+		var err error
+		if control.threadID == call.ThreadID {
+			blocked := call
+			blocked.TargetID = targetID
+			err = control.pauseError(blocked)
+		}
 		control.mu.Unlock()
-		if paused {
-			return computerTargetFailure(call, "TAKEOVER_REQUIRED")
+		if err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func computerBrowserDisplayName(profile computerBrowserProfile) string {
+	if profile.kind == "browser.managed" {
+		return "Flower managed browser — " + profile.name
+	}
+	return "Connected browser — " + profile.name
+}
+
+// One rule for both discovery and direct first-use planning.
+func defaultComputerBrowserProfile(profiles []computerBrowserProfile) (computerBrowserProfile, error) {
+	var personal []computerBrowserProfile
+	var managed computerBrowserProfile
+	for _, profile := range profiles {
+		if profile.kind == "browser.connected" {
+			personal = append(personal, profile)
+		}
+		if profile.connection.ManagedProfileID == "browser-main" {
+			managed = profile
+		}
+	}
+	if len(personal) > 1 {
+		return computerBrowserProfile{}, &targetToolPolicyError{code: "target_ambiguous"}
+	}
+	if len(personal) == 1 {
+		return personal[0], nil
+	}
+	if managed.kind != "" {
+		return managed, nil
+	}
+	return computerBrowserProfile{}, &targetToolPolicyError{code: "target_connection_required"}
 }

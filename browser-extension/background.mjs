@@ -119,6 +119,14 @@ async function execute(message, task) {
       if (!binding || binding.controller.page.invalid) throw new Error('tab unavailable');
       await chrome.tabs.get(Number(args.tab_id)); return {};
     }
+    case 'reveal': {
+      const tabId = Number(args.tab_id);
+      if (!bindings.has(tabId)) throw new Error('tab unavailable');
+      const tab = await chrome.tabs.get(tabId);
+      await chrome.tabs.update(tabId, { active: true });
+      await chrome.windows.update(tab.windowId, { focused: true });
+      return {};
+    }
     case 'inventory': {
       const tabs = (await chrome.tabs.query({})).filter(tab => !tab.incognito && /^(https?:\/\/|about:blank$)/u.test(tab.url || ''));
       if (tabs.length > 128) throw new Error('inventory limit');
@@ -176,7 +184,7 @@ async function connect(name, label) {
   port.onDisconnect.addListener(() => rejected(new Error('disconnected')));
   port.onMessage.addListener(message => {
     if (native !== port) return;
-    if (message.type === 'ready' && message.protocol_version === 4 && !ready) { ready = true; accepted(); return; }
+    if (message.type === 'ready' && message.protocol_version === 5 && !ready) { ready = true; accepted(); return; }
     if (!ready || typeof message.id !== 'string' || !message.id || message.id.length > 64) { void disconnectPort(); return; }
     if (message.type === 'cancel') {
       const task = requests.get(message.id);
@@ -195,7 +203,7 @@ async function connect(name, label) {
       if (native === port) port.postMessage(response);
     })();
   });
-  port.postMessage({ type: 'hello', protocol_version: 4, profile_id: profile.id, profile_name: profile.name });
+  port.postMessage({ type: 'hello', protocol_version: 5, profile_id: profile.id, profile_name: profile.name });
   try { await handshake; }
   catch (error) { if (native === port) await disconnect(); throw error; }
   finally { clearTimeout(timeout); }

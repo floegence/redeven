@@ -18,7 +18,12 @@ occupied resources fail explicitly without changing the previous selection.
 ## Discovery and selection
 
 `computer.targets` lists browser profiles/pages and application windows without
-a preselected target. It returns bounded Runtime-issued `candidate_ref` values,
+a preselected target. `browser_source` is `auto`, `system`, or `managed`. Explicit
+system/personal-browser tasks use `system`, which excludes managed and native
+window candidates and never starts a managed profile. Missing connections produce
+formal connection assistance. `auto` retains the current-page, unique-personal,
+managed-default policy; one shared profile rule serves discovery and direct use.
+It returns bounded Runtime-issued `candidate_ref` values,
 page titles, URLs, profile names, actual opener identities and availability.
 References are thread-scoped, expire after ten minutes and exist only in bounded
 Runtime memory. A native Chrome window is a desktop window, not a browser page.
@@ -64,7 +69,7 @@ in the conversation. Full access hides redundant per-resource grant controls.
 The migrated product store remains the only selection store. No schema change,
 Agent lifecycle mirror or durable candidate cache is introduced. The existing
 version 6-to-7 selection, 7-to-8 pin ranking and 8-to-9 access migrations remain
-intact. Floret storage is opaque and its published v7.14.0 authorization, results,
+intact. Floret storage is opaque and its published v7.16.1 authorization, results,
 Activity and interaction contracts require no upstream API expansion.
 
 Restart restores selection identity, not helper liveness or control. A lost task

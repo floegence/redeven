@@ -3,12 +3,16 @@ import type { FlowerComputerCopy } from './computerUseCopy';
 
 export type ComputerAssistanceObservation = Readonly<{ kind: string; origin?: string; app?: string; foreground?: boolean }>;
 
+export function isComputerSafetyAssistanceKind(value: unknown): value is string {
+  return typeof value === 'string' && ['access', 'target', 'captcha', 'verification', 'login', 'private_input', 'inspection', 'untrusted_content', 'paused'].includes(value);
+}
+
 export function computerAssistanceFromError(error: unknown): ComputerAssistanceObservation | undefined {
   if (!error || typeof error !== 'object') return;
   const response = error as { code?: unknown; data?: { computer_assistance?: ComputerAssistanceObservation } };
   const observed = response.data?.computer_assistance;
   if (response.code !== 'computer_control_not_ready' || !observed || typeof observed !== 'object'
-    || !['access', 'target', 'captcha', 'verification', 'login', 'private_input', 'inspection', 'untrusted_content', 'paused'].includes(observed.kind)) return;
+    || !isComputerSafetyAssistanceKind(observed.kind)) return;
   let origin: string | undefined;
   if (typeof observed.origin === 'string') {
     try {
@@ -35,6 +39,7 @@ export function computerAssistance(item: FlowerActivityItem | undefined, copy: F
   const reasonKind = reason === 'target' ? 'target' : requested.origin || requested.app || requested.foreground ? 'access' : reason ?? 'inspection';
   const kind = reasonKind === 'access' && fullAccess ? 'authorized' : reasonKind;
   const messages: Record<string, readonly [string, string]> = {
+    connection: [copy.connectionTitle, copy.connectionHint],
     authorized: [copy.fullAccessTitle, copy.authorizedHint],
     access: [requested.origin ? copy.siteTitle : copy.accessTitle, copy.accessHint],
     target: [copy.targetTitle, copy.targetHint],

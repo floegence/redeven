@@ -3478,6 +3478,27 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: inventory})
 		return
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/reveal":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var body struct {
+			ThreadID string `json:"thread_id"`
+			TargetID string `json:"target_id"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := aiSvc.RevealComputerTarget(r.Context(), meta, body.ThreadID, body.TargetID); err != nil {
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "computer_reveal_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true})
+		return
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/select":
 		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
 		if !ok || !g.requireAIService(w, aiSvc) {

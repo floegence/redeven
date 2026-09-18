@@ -18,7 +18,7 @@ describe('Flower context usage contract', () => {
     expect(mapContextUsage(wire)).toEqual(wire);
     expect(mapContextUsage(JSON.parse(JSON.stringify(wire)))).toEqual(mapContextUsage(wire));
   });
-  it('retains canonical cache totals when a live snapshot omits them', () => {
+  it('retains canonical cache totals when a live usage update omits them', () => {
     const previous = mapContextUsage({ confirmed, thread_usage })!;
     const incoming = mapContextUsage({ confirmed, estimate })!;
     expect(mergeFlowerContextUsage(previous, incoming)).toEqual({ ...incoming, thread_usage });

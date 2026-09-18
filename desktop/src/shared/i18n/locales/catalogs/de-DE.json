@@ -856,7 +856,7 @@
       "copyConnection": "Verbindungsnamen kopieren",
       "newTab": "Neuer Tab im Hintergrund",
       "disconnect": "Trennen",
-      "managed": "Verwalteter Browser",
+      "managed": "Von Flower verwalteter Browser",
       "profileName": "Profilname",
       "createProfile": "Profil erstellen",
       "allowContinue": "Erlauben und fortfahren",
@@ -893,7 +893,16 @@
       "applicationWindows": "Anwendungsfenster",
       "inUse": "Von einer anderen Aufgabe verwendet",
       "disconnected": "Nicht verbunden",
-      "selectionStale": "Diese Seite oder dieses Fenster hat sich geändert. Aktualisiere die Liste und wähle es erneut aus."
+      "selectionStale": "Diese Seite oder dieses Fenster hat sich geändert. Aktualisiere die Liste und wähle es erneut aus.",
+      "system": "Verbundener Systembrowser",
+      "connectionTitle": "Systembrowser verbinden",
+      "connectionHint": "Verbinden Sie Flower Browser in Chrome auf diesem Computer, aktualisieren Sie die Liste und fahren Sie fort. Flower erstellt einen eigenen Tab für die Aufgabe. Diese Verbindung unterstützt Safari nicht.",
+      "noFrame": "Kein Screenshot verfügbar",
+      "frameConnecting": "Verbindung zur Ansicht wird hergestellt…",
+      "frameDisconnected": "Verbindung zur Ansicht unterbrochen",
+      "frameStale": "Zuletzt erfasste Ansicht · nicht live",
+      "reveal": "Im Browser anzeigen",
+      "revealFailed": "Der Browser-Tab kann nicht angezeigt werden. Prüfen Sie die Browserverbindung."
     }
   },
   "common": {

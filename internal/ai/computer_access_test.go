@@ -76,8 +76,9 @@ func TestComputerFullAccessRechecksAnExistingPermissionPause(t *testing.T) {
 				}
 			}
 			control := runtime.controlForTarget("browser-main")
-			control.threadID, control.turnID, control.runID, control.user = "thread-first", "turn", "run", true
-			control.requiredOrigin, control.requiredApp, control.requireForeground = "https://example.test", "dev.Notes", true
+			control.threadID, control.turnID, control.runID = "thread-first", "turn", "run"
+			control.pauseForUser()
+			control.pause = &InteractionSafetyDecision{Level: "takeover", RequiredOrigin: "https://example.test", RequiredApp: "dev.Notes", ReasonCodes: []string{"foreground_permission"}}
 			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "computer.screenshot", controlReturn: true}
 			_, err := runtime.ExecuteTargetTool(t.Context(), call)
 			if full {

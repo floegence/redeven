@@ -333,6 +333,8 @@ func TestComputerActivityPublicReferencesWithoutScreenshots(t *testing.T) {
 	}{
 		{"computer_target", "browser-main", true},
 		{"computer_control", "macos-window-1234", true},
+		{"computer_browser_source", "system", true},
+		{"computer_browser_source", "managed", false},
 		{"computer_origin", "https://example.com", true},
 		{"computer_origin", "http://localhost:1234", true},
 		{"computer_app", "dev.floegence.fixture", true},

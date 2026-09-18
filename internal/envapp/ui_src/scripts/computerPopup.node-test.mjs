@@ -66,7 +66,6 @@ test('native popup workflows preserve effects and require separate target author
             assert.equal(releases, 1);
             assert.equal(result.result.action_executed, true);
             assert.equal(result.result.target_changed, true);
-            assert.equal(controller.userInControl, false);
             assert.equal(result.result.opened_pages[0].url.endsWith(childPath), true);
             assert.equal(result.safety.required_origin, undefined, 'child access is checked after selection, without inventing user takeover on the opener');
             // Returning partial progress never implicitly follows a popup or

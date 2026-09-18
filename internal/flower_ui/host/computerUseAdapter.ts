@@ -4,6 +4,7 @@ import type { FlowerComputerManagement } from '../src/contracts/flowerSurfaceCon
 export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown) => Promise<T>): FlowerComputerManagement {
   const path = '/_redeven_proxy/api/ai/computer';
   return {
+    revealTarget: async (threadID, targetID) => { await request('POST', `${path}/reveal`, { thread_id: threadID, target_id: targetID }); },
     listCandidates: threadID => request('GET', `${path}/candidates?thread_id=${encodeURIComponent(threadID)}`),
     selectCandidate: (threadID, candidateRef) => request('POST', `${path}/select`, { thread_id: threadID, candidate_ref: candidateRef }),
     listManagedProfiles: () => request('GET', `${path}/managed/profiles`),

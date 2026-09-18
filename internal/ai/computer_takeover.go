@@ -2,7 +2,9 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -15,6 +17,7 @@ import (
 // not a failed action that the model should retry. External control remains
 // host-owned; Floret owns the durable waiting interaction and continuation.
 func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, safety InteractionSafetyDecision, observed ...TargetToolResult) targetToolExecution {
+	slog.Info("computer assistance requested", "thread_id", call.ThreadID, "target_id", target.ID, "reason", computerAssistanceKind(safety))
 	safety.ActionID = call.ToolCallID
 	safety.Level = "takeover"
 	safety.SafeToCapture, safety.SafeToSendToModel = false, false
@@ -38,10 +41,35 @@ func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, saf
 	}
 	summary, prompt := computerAssistanceInstructions(safety)
 	result.ActionSummary = summary
-	return targetToolExecution{TargetID: target.ID, Payload: targetToolResultPayload(result, target.ID), inputRequired: &fltools.InputRequest{
+	return targetToolExecution{TargetID: target.ID, Payload: targetToolResultPayload(result, target.ID, target), inputRequired: &fltools.InputRequest{
 		Summary:   summary,
 		Questions: []fltools.InputQuestion{{ID: "computer_control", Prompt: prompt, Kind: "select", Options: []string{"Return control to Flower"}}},
 	}}
+}
+
+func computerConnectionExecution() targetToolExecution {
+	return targetToolExecution{Payload: map[string]any{"browser_source": "system", "connection_required": true}, inputRequired: &fltools.InputRequest{
+		Summary:   "Connect your system browser",
+		Questions: []fltools.InputQuestion{{ID: "browser_connection", Kind: "select", Prompt: "Connect Flower Browser in Chrome using the connection guide, then continue. Flower will create its own task tab. Safari browser automation is not supported by this connection. No managed browser or desktop automation will be substituted.", Options: []string{"Continue with connected browser"}}},
+	}}
+}
+
+func computerConnectionInteraction(view flruntime.ThreadView, interaction flruntime.ThreadInteraction) bool {
+	if interaction.Input == nil || len(interaction.Input.Questions) != 1 || interaction.Input.Questions[0].ID != "browser_connection" {
+		return false
+	}
+	for _, item := range view.Items {
+		activity := item.Activity
+		if item.TurnID != interaction.TurnID || item.RunID != interaction.RunID || activity == nil || activity.ToolID != interaction.ToolCallID || activity.ToolName != "computer.targets" || activity.Presentation == nil {
+			continue
+		}
+		for _, ref := range activity.Presentation.TargetRefs {
+			if ref.Kind == "computer_browser_source" && ref.ResourceRef == "system" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // These closed display facts describe a completed tool's blocking condition.
@@ -101,6 +129,9 @@ func computerAssistanceInstructions(safety InteractionSafetyDecision) (string, s
 // Re-observation is a host control command, never replay of the paused model
 // action. Canonical tool provenance selects the target even if current changed.
 func computerControlCall(view flruntime.ThreadView, interaction flruntime.ThreadInteraction) (TargetToolCall, bool, error) {
+	if computerConnectionInteraction(view, interaction) {
+		return TargetToolCall{}, false, nil
+	}
 	for _, item := range view.Items {
 		activity := item.Activity
 		if item.TurnID != interaction.TurnID || item.RunID != interaction.RunID || activity == nil || activity.ToolID != interaction.ToolCallID || !isComputerUseTool(activity.ToolName) {
@@ -126,6 +157,26 @@ func computerControlCall(view flruntime.ThreadView, interaction flruntime.Thread
 }
 
 func (s *Service) respondComputerControl(ctx context.Context, meta *session.Meta, view flruntime.ThreadView, interaction flruntime.ThreadInteraction, answers map[string]string, respond func() (flruntime.ThreadView, error)) (flruntime.ThreadView, error) {
+	if computerConnectionInteraction(view, interaction) {
+		if err := requireRWX(meta); err != nil {
+			return flruntime.ThreadView{}, err
+		}
+		if len(answers) != 1 || answers["browser_connection"] != "Continue with connected browser" {
+			return flruntime.ThreadView{}, errors.New("invalid browser connection acknowledgement")
+		}
+		host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
+		if !ok {
+			return flruntime.ThreadView{}, errors.New("computer runtime is unavailable")
+		}
+		inventory, err := host.ComputerTargets(ctx, TargetToolCall{ThreadID: string(view.ThreadID), ToolName: "computer.targets", Arguments: json.RawMessage(`{"browser_source":"system"}`)}, s.ToolTargetPolicy())
+		if err != nil {
+			return flruntime.ThreadView{}, err
+		}
+		if inventory.ConnectionRequired {
+			return flruntime.ThreadView{}, &targetToolPolicyError{code: "target_connection_required"}
+		}
+		return respond()
+	}
 	call, computer, err := computerControlCall(view, interaction)
 	if err != nil {
 		return flruntime.ThreadView{}, err
@@ -158,7 +209,7 @@ func (s *Service) respondComputerControl(ctx context.Context, meta *session.Meta
 	if err != nil {
 		control.mu.Lock()
 		if control.threadID == call.ThreadID && control.runID == call.RunID {
-			control.user = true
+			control.pauseForUser()
 		}
 		control.mu.Unlock()
 	}

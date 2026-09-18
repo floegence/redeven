@@ -313,3 +313,19 @@ it('rejects a delayed HTTP current from the previous Runtime connection', async 
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
   expect(f.surface.querySelector('.flower-computer-entry')?.textContent).toContain('Computer task stopped');
 });
+
+it('clears public pixels on a sampled CAPTCHA and waits for canonical assistance without an endless spinner', async () => {
+  const f = fixture(current());
+  await openStage(f.surface);
+  const viewer = f.setComputerViewer.mock.calls.at(-1)![0];
+  f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: {
+    session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', sequence: 2, mime_type: 'image/png',
+    error_code: 'computer_control_required', assistance_kind: 'captcha',
+  } });
+  await waitFor(() => document.querySelector('.flower-computer-stage img') === null);
+  expect(document.querySelector('.flower-computer-stage-no-frame')?.textContent).toContain('Complete the CAPTCHA');
+  expect(document.querySelector('.flower-computer-stage-no-frame .animate-spin')).toBeNull();
+  expect(document.querySelector('.flower-computer-stage textarea')).toBeNull();
+  expect(f.submitInput).not.toHaveBeenCalled();
+  expect(f.inputComputerControl).not.toHaveBeenCalled();
+});
