@@ -1,6 +1,7 @@
 import { Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup } from 'solid-js';
 import { AlertCircle, Check, ChevronDown, Copy, FileText, Info, Lock, Refresh, ShieldCheck, Trash, Upload } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
+import { EnvironmentSettingsReveal } from './EnvironmentSettingsDialog';
 import { desktopCertificateIdentity, isCertificateReplacement, type DesktopCertificateOperation, type DesktopCertificateReport, type DesktopCertificateRequest } from '../shared/desktopCertificate';
 import type { DesktopI18n, DesktopTranslationKey } from '../shared/i18n';
 
@@ -168,7 +169,7 @@ export function LocalCertificateSettings(props: Readonly<{
           </Show>
         </div>
 
-        <Show when={managing()}>
+        <EnvironmentSettingsReveal open={managing()}>
           <div id={managementID} class="space-y-3 rounded-md bg-background/70 p-3" onKeyDown={(event) => {
             if (event.key === 'Escape' && !operation()) { event.preventDefault(); event.stopPropagation(); cancelConfirmation(); setManaging(false); }
           }}>
@@ -195,7 +196,7 @@ export function LocalCertificateSettings(props: Readonly<{
               <p class="text-xs leading-relaxed text-muted-foreground">{props.i18n.t('settings.certificateManageHelp')}</p>
             </Show>
           </div>
-        </Show>
+        </EnvironmentSettingsReveal>
         <Show when={report()?.status === 'updated' && !operation()}>
           <p role="status" class="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><Check class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{props.i18n.t(identity() === 'missing' ? 'settings.certificateRemoved' : 'settings.certificateChanged')}</p>
         </Show>

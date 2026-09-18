@@ -4148,12 +4148,10 @@ pre,
   --redeven-welcome-dialog-panel-max-height: min(88dvh, var(--redeven-welcome-dialog-available-height));
   width: min(48rem, calc(100vw - 2rem));
   max-width: 48rem;
+  height: min(44rem, var(--redeven-welcome-dialog-panel-max-height));
   max-height: var(--redeven-welcome-dialog-panel-max-height);
   overflow: hidden;
   font-size: 13px;
-}
-.redeven-environment-settings-dialog.environment-settings-with-tabs {
-  height: min(42rem, var(--redeven-welcome-dialog-panel-max-height));
 }
 .redeven-environment-settings-dialog > div:first-child {
   padding: 20px 20px 12px;
@@ -4188,6 +4186,7 @@ pre,
 .ssh-settings-form select { padding-right: 28px; }
 .ssh-settings-form input::placeholder { color: var(--muted-foreground); opacity: 1; }
 .ssh-settings-form .ssh-settings-field--invalid input { border-color: var(--destructive); }
+.ssh-settings-field--invalid { scroll-margin-block: 1rem; }
 .ssh-settings-help { font-size: 12px; line-height: 1.6; color: var(--muted-foreground); overflow-wrap: anywhere; }
 .ssh-settings-help-link { color: var(--muted-foreground); font-size: 12px; text-align: left; width: fit-content; }
 .ssh-settings-help-link:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
@@ -4287,7 +4286,34 @@ pre,
 .environment-settings-tab:not([aria-hidden="true"]) {
   flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
 .environment-settings-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-.environment-settings-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 1.25rem; }
+.environment-settings-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; overflow-anchor: none; padding: 1.25rem; }
+
+/* Native details and Floe-retained sections expand inside the fixed viewport. */
+.redeven-environment-settings-dialog details::details-content {
+  interpolate-size: allow-keywords;
+  block-size: 0;
+  opacity: 0;
+  overflow: clip;
+  transition: block-size 180ms ease-out, opacity 180ms ease-out, content-visibility 180ms allow-discrete;
+}
+.redeven-environment-settings-dialog details[open]::details-content { block-size: auto; opacity: 1; }
+.redeven-environment-settings-dialog details:not([open]) > :not(summary) { interactivity: inert; }
+[data-settings-reveal] {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 180ms ease-out, opacity 180ms ease-out;
+}
+[data-settings-reveal][data-state='open'] { grid-template-rows: 1fr; opacity: 1; }
+@starting-style {
+  [data-settings-reveal][data-state='open'] { grid-template-rows: 0fr; opacity: 0; }
+}
+.environment-settings-reveal-content { min-height: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .redeven-environment-settings-dialog details::details-content,
+  [data-settings-reveal] { transition: none; }
+  [data-settings-reveal][data-state='entering'] { grid-template-rows: 1fr; opacity: 1; }
+}
 .environment-settings-actions { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; padding: .875rem 1.25rem; border-top: 1px solid var(--border); }
 .environment-settings-actions button,
 .environment-access-overview-header > button {

@@ -1,4 +1,4 @@
-import { EnvironmentSettingsPanel } from './EnvironmentSettingsDialog';
+import { EnvironmentSettingsPanel, EnvironmentSettingsReveal } from './EnvironmentSettingsDialog';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, SegmentedControl, Switch } from '@floegence/floe-webapp-core/ui';
@@ -96,6 +96,11 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
   }
   onCleanup(() => cancelAnimationFrame(focusFrame));
 
+  function scrollFocusedErrorIntoView() {
+    form?.querySelector<HTMLElement>('[aria-invalid="true"]:focus')
+      ?.closest('.ssh-settings-field')?.scrollIntoView({ block: 'nearest' });
+  }
+
   function revealErrors() {
     const fields = Object.keys(props.fieldErrors).filter((key) => !!props.fieldErrors[key]);
     if (!fields.length) return;
@@ -104,7 +109,7 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
     focusAfterLayout(() => {
       const first = form?.querySelector<HTMLElement>('[aria-invalid="true"]');
       first?.focus();
-      first?.scrollIntoView({ block: 'nearest' });
+      scrollFocusedErrorIntoView();
     });
   }
 
@@ -310,7 +315,11 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
           />
         </div>
 
-        <section class="ssh-settings-advanced">
+        <section class="ssh-settings-advanced" onTransitionEnd={(event) => {
+          if (event.propertyName !== 'grid-template-rows' || !advanced()) return;
+          // Validation focuses immediately; expanding content can outgrow that first scroll position.
+          scrollFocusedErrorIntoView();
+        }}>
           <button
             type="button"
             class="ssh-settings-disclosure"
@@ -324,7 +333,7 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
               <span class="ssh-settings-help ssh-settings-summary">{summary()}</span>
             </span>
           </button>
-          <Show when={advanced()}>
+          <EnvironmentSettingsReveal open={advanced()}>
             <div id="ssh-settings-advanced-fields" class="ssh-settings-advanced-fields">
               <Field
                 name="bootstrap_strategy"
@@ -397,7 +406,7 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
                 </div>
               </Field>
             </div>
-          </Show>
+          </EnvironmentSettingsReveal>
         </section>
         <Show when={props.error}>
           <p class="ssh-settings-error" role="alert">

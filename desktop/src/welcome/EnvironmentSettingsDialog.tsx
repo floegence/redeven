@@ -1,5 +1,5 @@
 import { Show, createMemo, type JSX } from 'solid-js';
-import { Dialog, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
+import { Dialog, Tabs, TabPanel, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import { environmentHasAccessSettings, type EnvironmentSettingsTab } from './environmentSettingsSession';
@@ -10,6 +10,16 @@ export function EnvironmentSettingsPanel(props: { children: JSX.Element; footer?
     <div class="environment-settings-scroll">{props.children}</div>
     <Show when={props.footer}><div class="environment-settings-actions">{props.footer}</div></Show>
   </div>;
+}
+
+/** Floe retains exiting settings content; product CSS only animates its layout. */
+export function EnvironmentSettingsReveal(props: { open: boolean; children: JSX.Element }) {
+  const presence = createFloatingPresence({ open: () => props.open, exitDurationMs: 180 });
+  return <Show when={presence.mounted()}>
+    <div data-settings-reveal data-state={presence.state()} inert={!props.open} aria-hidden={!props.open || undefined}>
+      <div class="environment-settings-reveal-content">{props.children}</div>
+    </div>
+  </Show>;
 }
 
 export function EnvironmentSettingsDialog(props: {

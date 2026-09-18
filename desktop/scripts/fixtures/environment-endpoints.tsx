@@ -82,7 +82,8 @@ function Fixture() {
         if (query.has('save-error')) { setSaveError('Fixture: unable to save access settings.'); return; }
         setBaseline(draft()); setPending(!options?.restartRuntime);
       }}
-      certificate={async () => ({ status: 'ready', code: 'local_ui_device_ca_ready', identity: 'ready', trust: 'trusted' })}
+      certificate={async () => ({ status: 'ready', code: 'local_ui_device_ca_ready', identity: 'ready', trust: 'trusted',
+        can_manage: true, certificate_path: '/fixture/certificates/device-ca.pem' })}
       runtimeRestartAvailable runtimeRunning runtimeStatusLabel={i18n.t('environmentStatus.open')} runtimeStatusTone="success" dark={theme.resolvedTheme() === 'dark'}
       desktopOpenLabel={i18n.t('environmentAction.open')} openInDesktop={() => {}} openInBrowser={copy} copyEnvironmentValue={copy}
       cancelSettings={() => setSettings('')} clearStoredLocalUIPassword={() => setDraft(previous => ({ ...previous, local_ui_password: '', local_ui_password_mode: 'clear' }))} />} />

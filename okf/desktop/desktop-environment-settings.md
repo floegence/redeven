@@ -74,11 +74,13 @@ closed opening is a notification, never an error in the next editor.
 The window uses released Floe Dialog, Tabs and retained TabPanel components.
 Multiple sections expose tabs; a single section omits the tab bar. The responsive
 panel is at most 48rem wide, respects the Desktop titlebar and viewport, and keeps
-title, tabs and actions fixed while each body scrolls. Multi-section windows use
-a stable 42rem height capped by the available viewport; changing tabs or resolving
-an access read must not move the window or its action baseline. Single-section
-windows retain content-driven height. A stable native scrollbar gutter prevents
-horizontal field shifts when a section becomes scrollable.
+title, tabs and actions fixed while each body scrolls. All settings windows use
+one stable 44rem height capped by the available viewport, including Local and
+other single-section windows. Expanding settings, showing certificates, changing
+tabs or resolving an access read must not resize or recenter the window or move
+its action baseline. Viewport resizing may change the cap. A stable native
+scrollbar gutter prevents horizontal field shifts when content becomes
+scrollable; automatic scroll anchoring cannot move the body during expansion.
 
 Access settings distinguish live connection facts from editable next-start
 preferences. A lightly tinted overview groups the Runtime status, actual
@@ -102,6 +104,18 @@ and Floe's slider transition. Floe owns modal material, focus trapping, nested
 Escape, focus restoration and exit motion. Retained exit presentation never
 blanks the closing panel.
 
+Advanced settings and certificate disclosures expand and collapse over 180ms,
+animating only content height and opacity inside the body. Native details retain
+browser disclosure ownership; closed content becomes inert immediately while its
+visual exit completes. Conditional SSH and certificate-management sections use
+released Floe presence to retain their exiting DOM, with immediate inert and
+accessibility-hidden state. Rapid reversal follows the existing open state and
+keeps drafts. Reduced motion switches these sections immediately. These visual
+transitions add no settings, certificate, request or save lifecycle owner.
+SSH validation focuses an invalid field immediately and checks its scroll
+position again after expansion, keeping both the field and its error message
+visible in the body.
+
 Access loading and failures remain inside the access section. Failures show their
 structured summary or original diagnostic with Copy and Retry. Control HTTP 401
 and 403 retain their status, code and original diagnostic across settings IPC;
@@ -122,6 +136,7 @@ SSH field and secret details are owned by
 
 # Evidence
 
+- `redeven:desktop/scripts/check-settings-expansion.mjs` - Per-frame window, footer and disclosure measurements, rapid reversals, immediate focus exclusion and reduced motion.
 - `redeven:desktop/scripts/check-access-settings.mjs` - Browser evidence for control proportions, all shipped themes and locales, narrow panels, enlarged text, real scrolling, certificate presentation and save recovery.
 - `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - Published modal and tabs with retained, independently scrolling panels.
 - `redeven:desktop/src/welcome/environmentSettingsSession.ts` - Opening identity, independent drafts and asynchronous result isolation.
