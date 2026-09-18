@@ -77,6 +77,37 @@ describe('Environment connection popover', () => {
     expect(test.open()).toBe(true);
   });
 
+  it('preserves row identity and copy feedback when equivalent addresses refresh or reorder', async () => {
+    const test = await mount();
+    const urls = ['https://192.0.2.20:23998/', 'http://localhost:23998/'];
+    test.setURLs(urls); await settle();
+    const copy = document.querySelector<HTMLButtonElement>('[aria-label="Copy Environment URL"]')!;
+    const address = copy.closest('.redeven-card-endpoint-row')!;
+    const text = address.querySelector('.redeven-card-endpoint-value')!;
+    copy.click(); copy.focus(); await settle();
+    const range = document.createRange(); range.selectNodeContents(text);
+    window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
+    for (const next of [[...urls], [...urls].reverse()]) {
+      test.setURLs(next); await settle();
+      expect(document.querySelector('[aria-label="Copy Environment URL"]')).toBe(copy);
+      expect(copy.closest('.redeven-card-endpoint-row')).toBe(address);
+      expect(document.activeElement).toBe(copy);
+      expect(copy.dataset.copied).toBe('true');
+      expect(window.getSelection()!.toString()).toBe(urls[0]);
+    }
+  });
+
+  it('does not carry copied feedback to a different shared address', async () => {
+    const test = await mount();
+    const urls = ['https://192.0.2.20:23998/', 'https://192.0.2.21:23998/'];
+    test.setURLs(urls); test.setSelected(`address:${urls[0]}`); await settle();
+    (document.querySelector('.redeven-endpoint-qr-copy-button') as HTMLButtonElement).click(); await settle();
+    expect(document.querySelector('.redeven-endpoint-qr-copy-label')?.textContent).toBe('Copied');
+    test.setSelected(`address:${urls[1]}`); await settle();
+    expect(document.querySelector('.redeven-endpoint-qr-value')?.textContent).toBe(urls[1]);
+    expect(document.querySelector('.redeven-endpoint-qr-copy-label')?.textContent).toBe('Copy');
+  });
+
   it('never renders a QR code for a selected connection or host-only address', async () => {
     const test = await mount('gzlight');
     for (const id of ['host', 'address:http://localhost:23998/']) {

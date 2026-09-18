@@ -8,14 +8,18 @@ import '../../src/welcome/index.css';
 declare global {
   interface Window {
     settingsFixtureSnapshot: DesktopWelcomeSnapshot;
-    settingsFixture: { loads: number; resolveOld: () => void };
+    settingsFixture: { loads: number; resolveOld: () => void; publish: (value: DesktopWelcomeSnapshot) => void };
   }
 }
 document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '40px');
-const snapshot = window.settingsFixtureSnapshot;
+let snapshot = window.settingsFixtureSnapshot;
 const denyAccess = new URLSearchParams(location.search).has('deny-access');
+let receiveSnapshot: ((value: DesktopWelcomeSnapshot) => void) | undefined;
 let resolveOld: () => void = () => {};
-window.settingsFixture = { loads: 0, resolveOld: () => resolveOld() };
+window.settingsFixture = { loads: 0, resolveOld: () => resolveOld(), publish(value) {
+  snapshot = value;
+  receiveSnapshot?.(value);
+} };
 const settings: DesktopWelcomeRuntime['settings'] = {
   async load({ environment_id }) {
     const environment = snapshot.environments.find(entry => entry.id === environment_id)!;
@@ -37,6 +41,6 @@ const settings: DesktopWelcomeRuntime['settings'] = {
   async requestRuntimeFlower() { return { ok: false, error: { message: 'Fixture has no Flower runtime.' } }; },
 };
 render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{ settings, launcher: {
-  getSnapshot: async () => snapshot, subscribeSnapshot: () => () => {}, getSSHConfigHosts: async () => [],
+  getSnapshot: async () => snapshot, subscribeSnapshot: listener => { receiveSnapshot = listener; return () => { receiveSnapshot = undefined; }; }, getSSHConfigHosts: async () => [],
   performAction: async () => ({ ok: true, outcome: 'saved_environment' }),
 } }} />, document.getElementById('root')!);

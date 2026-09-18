@@ -29,6 +29,12 @@ function ssh(label: string, overrides: Partial<DesktopEnvironmentEntry> = {}): D
 }
 
 describe('Environment endpoint ownership', () => {
+  it('keeps address identity and order independent of Runtime enumeration order', () => {
+    const urls = ['https://192.0.2.20:23998/', 'http://localhost:23998/', 'http://[::1]:23998/'];
+    expect(connectionAddressRows([...urls].reverse())).toEqual(connectionAddressRows(urls));
+    expect(connectionAddressRows([...urls, urls[0]])).toEqual(connectionAddressRows(urls));
+  });
+
   it('identifies each SSH host before its host-only listener', () => {
     for (const host of ['gzcom', 'gzlight']) {
       const rows = buildEnvironmentCardEndpointsModel(ssh(host));

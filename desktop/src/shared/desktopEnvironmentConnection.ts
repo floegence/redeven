@@ -106,7 +106,8 @@ export function connectionAddressRows(
       } }),
     });
   }
-  return rows;
+  // Runtime enumeration order is not presentation identity. Keep existing URLs stationary on refresh.
+  return rows.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
 }
 
 export function runtimeAddressStatus(health: DesktopRuntimeHealth): DesktopConnectionRow {

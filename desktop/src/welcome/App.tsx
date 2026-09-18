@@ -8333,6 +8333,9 @@ function EnvironmentCardFactsBlock(props: Readonly<{
   selectedEndpointID?: string;
   selectEndpointForQRCode: (endpointID: string) => void;
 }>) {
+  // Fact identity survives both snapshot replacement and localization. Values stay live.
+  const factsByID = createMemo(() => new Map(props.facts.map(fact => [fact.id, fact])));
+  const factIDs = createMemo(() => props.facts.map(fact => fact.id));
   return (
     <div
       class="space-y-0 redeven-card-facts-block"
@@ -8340,16 +8343,18 @@ function EnvironmentCardFactsBlock(props: Readonly<{
         ? { 'min-height': `calc(${props.minRows} * var(--redeven-card-fact-row-min-height))` }
         : undefined}
     >
-      <For each={props.facts}>
-        {(fact) => {
-          const [copied, setCopied] = createSignal(false);
+      <For each={factIDs()}>
+        {(id) => {
+          const fact = () => factsByID().get(id)!;
+          const [copiedValue, setCopiedValue] = createSignal<string | null>(null);
+          const copied = () => copiedValue() === fact().value;
           let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
           const handleCopy = () => {
-            void props.copyEnvironmentValue(fact.value, fact.label);
-            setCopied(true);
+            void props.copyEnvironmentValue(fact().value, fact().label);
+            setCopiedValue(fact().value);
             clearTimeout(resetTimer);
-            resetTimer = setTimeout(() => setCopied(false), 1500);
+            resetTimer = setTimeout(() => setCopiedValue(null), 1500);
           };
 
           onCleanup(() => clearTimeout(resetTimer));
@@ -8357,7 +8362,7 @@ function EnvironmentCardFactsBlock(props: Readonly<{
           return (
           <div class="redeven-card-fact-row">
             <div class="redeven-card-fact-label">
-              <Show when={fact.label_icon}>
+              <Show when={fact().label_icon}>
                 {(icon) => (
                   <span
                     class="redeven-card-fact-label-icon"
@@ -8366,30 +8371,30 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   />
                 )}
               </Show>
-              {fact.label}
+              {fact().label}
             </div>
-            <Show
-              when={fact.action}
-              fallback={(
+            {/* The render callback keeps this subtree owned by visibility, not snapshot reads. */}
+            <Show when={!fact().action}>
+              {(_visible) => (
                 <div
                   class={cn(
                     'redeven-card-fact-value',
-                    fact.value_tone === 'placeholder' && 'redeven-card-fact-value--placeholder',
-                    fact.copy_value && 'redeven-card-fact-value--copyable',
+                    fact().value_tone === 'placeholder' && 'redeven-card-fact-value--placeholder',
+                    fact().copy_value && 'redeven-card-fact-value--copyable',
                   )}
-                  title={fact.value}
-                  role={fact.copy_value ? 'button' : undefined}
-                  tabIndex={fact.copy_value ? 0 : undefined}
-                  aria-label={fact.copy_value ? props.i18n.t('environmentFacts.copyFact', { label: fact.label }) : undefined}
-                  onClick={fact.copy_value ? handleCopy : undefined}
-                  onKeyDown={fact.copy_value ? (e: KeyboardEvent) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
+                  title={fact().value}
+                  role={fact().copy_value ? 'button' : undefined}
+                  tabIndex={fact().copy_value ? 0 : undefined}
+                  aria-label={fact().copy_value ? props.i18n.t('environmentFacts.copyFact', { label: fact().label }) : undefined}
+                  onClick={() => { if (fact().copy_value) handleCopy(); }}
+                  onKeyDown={(e: KeyboardEvent) => {
+                    if (fact().copy_value && (e.key === 'Enter' || e.key === ' ')) {
                       e.preventDefault();
                       handleCopy();
                     }
-                  } : undefined}
+                  }}
                 >
-                  <Show when={fact.leading_icon}>
+                  <Show when={fact().leading_icon}>
                     {(icon) => (
                       <span
                         class="redeven-card-fact-leading-icon"
@@ -8398,15 +8403,15 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                       />
                     )}
                   </Show>
-                  {fact.copy_value ? (
-                    <span class="redeven-card-fact-value__text">{fact.value}</span>
+                  {fact().copy_value ? (
+                    <span class="redeven-card-fact-value__text">{fact().value}</span>
                   ) : (
-                    fact.value
+                    fact().value
                   )}
-                  <Show when={fact.endpoints && fact.endpoints.length > 0}>
+                  <Show when={fact().endpoints && fact().endpoints!.length > 0}>
                     <EndpointsPopover
                       i18n={props.i18n}
-                      endpoints={fact.endpoints!}
+                      endpoints={fact().endpoints!}
                       environmentLabel={props.environmentLabel}
                       openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
                       open={props.endpointPopoverOpen}
@@ -8415,7 +8420,7 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                       selectEndpointForQRCode={props.selectEndpointForQRCode}
                     />
                   </Show>
-                  <Show when={fact.copy_value}>
+                  <Show when={fact().copy_value}>
                     <span
                       class={cn('redeven-card-fact-copy-icon', copied() && 'redeven-card-fact-copy-icon--active')}
                       aria-hidden="true"
@@ -8429,7 +8434,8 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   </Show>
                 </div>
               )}
-            >
+            </Show>
+            <Show when={fact().action}>
               {(action) => (
                 <button
                   type="button"
@@ -8438,7 +8444,7 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   aria-label={action().aria_label}
                   onClick={() => props.onFactAction(action())}
                 >
-                  <Show when={fact.leading_icon}>
+                  <Show when={fact().leading_icon}>
                     {(icon) => (
                       <span
                         class="redeven-card-fact-leading-icon"
@@ -8447,7 +8453,7 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                       />
                     )}
                   </Show>
-                  <span class="redeven-card-fact-value__text">{fact.value}</span>
+                  <span class="redeven-card-fact-value__text">{fact().value}</span>
                   <ChevronRight class="redeven-card-fact-value__icon h-3 w-3" aria-hidden="true" />
                 </button>
               )}
@@ -8621,41 +8627,49 @@ function EnvironmentConnectionRows(props: Readonly<{
   openInBrowser: (url: string) => Promise<void>;
   copyEnvironmentValue: (value: string, label: string) => Promise<void>;
 }>) {
-  return <For each={props.rows}>{(row) => {
-    const [copied, setCopied] = createSignal(false);
+  // Key by semantic row ID, never by freshly projected snapshot objects.
+  const rowsByID = createMemo(() => new Map(props.rows.map(row => [row.id, row])));
+  const rowIDs = createMemo(() => props.rows.map(row => row.id));
+  return <For each={rowIDs()}>{(id) => {
+    const row = () => rowsByID().get(id)!;
+    const copyable = () => { const value = row(); return value.kind !== 'status' && value.copyable; };
+    const browserOpenable = () => { const value = row(); return value.kind === 'address' && value.browser_openable; };
+    const [copiedValue, setCopiedValue] = createSignal<string | null>(null);
+    const copied = () => copiedValue() === row().value;
     let resetTimer: ReturnType<typeof setTimeout> | undefined;
     onCleanup(() => clearTimeout(resetTimer));
-    const copyLabel = () => row.kind === 'address'
+    const copyLabel = () => row().kind === 'address'
       ? props.i18n.t('environmentFacts.copyEnvironmentUrl')
-      : props.i18n.t('environmentFacts.copyFact', { label: props.i18n.t(row.label_key) });
+      : props.i18n.t('environmentFacts.copyFact', { label: props.i18n.t(row().label_key) });
     const copy = async () => {
-      await props.copyEnvironmentValue(row.value, props.i18n.t(row.kind === 'address' ? 'environmentFacts.environmentUrl' : row.label_key));
-      setCopied(true);
+      const value = row().value;
+      await props.copyEnvironmentValue(value, props.i18n.t(row().kind === 'address' ? 'environmentFacts.environmentUrl' : row().label_key));
+      setCopiedValue(value);
       clearTimeout(resetTimer);
-      resetTimer = setTimeout(() => setCopied(false), 1500);
+      resetTimer = setTimeout(() => setCopiedValue(null), 1500);
     };
-    return <div class="redeven-card-endpoint-row" data-endpoint-id={row.id} data-endpoint-kind={row.kind}
-      data-selected={row.id === props.selectedID ? '' : undefined} role={row.kind === 'status' ? 'status' : undefined}>
-      <span class="redeven-card-endpoint-label">{props.i18n.t(row.label_key)}</span>
+    return <div class="redeven-card-endpoint-row" data-endpoint-id={row().id} data-endpoint-kind={row().kind}
+      data-selected={row().id === props.selectedID ? '' : undefined} role={row().kind === 'status' ? 'status' : undefined}>
+      <span class="redeven-card-endpoint-label">{props.i18n.t(row().label_key)}</span>
       <div class="min-w-0 flex-1 select-text">
-        <span class={cn('redeven-card-endpoint-value', row.kind !== 'status' && !row.value_key && 'font-mono')}
-          title={row.value || undefined}>{row.value_key ? props.i18n.t(row.value_key) : row.value}</span>
-        <Show when={row.detail_key}>{(key) => <span class="redeven-card-endpoint-detail">{props.i18n.t(key(), row.detail_params)}</span>}</Show>
+        <span class="redeven-card-endpoint-value"
+          title={row().value || undefined}>{row().value_key ? props.i18n.t(row().value_key!) : row().value}</span>
+        <Show when={row().detail_key}>{(key) => <span class="redeven-card-endpoint-detail">{props.i18n.t(key(), row().detail_params)}</span>}</Show>
       </div>
-      <Show when={row.kind !== 'status' && row.copyable}>
+      <Show when={copyable()}>
         <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0 px-1.5" aria-label={copyLabel()}
           title={copied() ? props.i18n.t('environmentCenter.copied') : copyLabel()} data-copied={copied() || undefined}
           onClick={() => void copy()}>{copied() ? <Check class="h-3.5 w-3.5" /> : <Copy class="h-3.5 w-3.5" />}</Button>
       </Show>
-      <Show when={row.kind === 'address' && row.browser_openable}>
+      <Show when={browserOpenable()}>
         <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0 px-1.5"
           aria-label={props.i18n.t('webServiceBrowser.openInBrowser')} title={props.i18n.t('webServiceBrowser.openInBrowser')}
-          onClick={() => void props.openInBrowser(row.value)}><ExternalLink class="h-3.5 w-3.5" /></Button>
+          onClick={() => void props.openInBrowser(row().value)}><ExternalLink class="h-3.5 w-3.5" /></Button>
       </Show>
-      <Show when={isShareableConnectionAddress(row)}>
+      <Show when={isShareableConnectionAddress(row())}>
         <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0 px-1.5"
           aria-label={props.i18n.t('settings.shareConnection')} title={props.i18n.t('settings.shareConnection')}
-          aria-expanded={row.id === props.selectedID} onClick={() => props.selectForShare(row.id === props.selectedID ? '' : row.id)}>
+          aria-expanded={row().id === props.selectedID} onClick={() => props.selectForShare(row().id === props.selectedID ? '' : row().id)}>
           <ShareIcon class="h-3.5 w-3.5" />
         </Button>
       </Show>
@@ -8668,15 +8682,16 @@ function EndpointQRCodePanel(props: Readonly<{
   endpoint: DesktopShareableConnectionAddress;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
 }>) {
-  const [copied, setCopied] = createSignal(false);
+  const [copiedValue, setCopiedValue] = createSignal<string | null>(null);
+  const copied = () => copiedValue() === props.endpoint.value;
   const qrSrc = createMemo(() => qrCodeDataUrl(props.endpoint.value));
   let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
   const handleCopy = () => {
     void props.copyEnvironmentValue(props.endpoint.value, props.i18n.t('environmentFacts.environmentUrl'));
-    setCopied(true);
+    setCopiedValue(props.endpoint.value);
     clearTimeout(resetTimer);
-    resetTimer = setTimeout(() => setCopied(false), 1500);
+    resetTimer = setTimeout(() => setCopiedValue(null), 1500);
   };
 
   onCleanup(() => clearTimeout(resetTimer));
