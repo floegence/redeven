@@ -2664,6 +2664,16 @@
     "passwordHelp": "密碼僅儲存在此裝置，供自動偵測使用。連線時臨時輸入的密碼不會儲存。"
   },
   "environmentConnection": {
+    "filterAddresses": "篩選位址",
+    "clearAddressFilter": "清除位址篩選",
+    "noMatchingAddresses": "沒有符合的位址",
+    "filteredAddressCount": "顯示 {shown} / {total} 個位址",
+    "addressCount": {
+      "kind": "plural",
+      "forms": {
+        "other": "{count} 個位址"
+      }
+    },
     "wsl": "WSL 發行版",
     "gateway": "閘道連線",
     "networkAddress": "網路位址，能否存取取決於你的網路連線。",

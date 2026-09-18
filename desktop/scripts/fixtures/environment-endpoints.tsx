@@ -25,6 +25,15 @@ const context = (name: string): DesktopRuntimeConnectionContext => ({
     : { kind: 'host_process', runtime_root: '~/.redeven' },
 });
 const address = (name: string) => name === 'Network' ? 'https://192.0.2.20:23998/' : 'http://localhost:23998/';
+const addresses = (name: string): string[] => {
+  if (name === 'Network' && query.has('addresses')) {
+    const count = Math.min(1000, Math.max(1, Number(query.get('addresses')) || 1));
+    return [...Array.from({ length: count }, (_, index) => `https://192.0.${Math.floor(index / 250)}.${index % 250 + 1}:23998/`),
+      'https://[2001:db8:1234:5678:90ab:cdef:1234:5678]:23998/'];
+  }
+  return name === 'Network' && query.has('multiple')
+    ? ['https://development.environment.example.invalid:23998/a-long-environment-path?workspace=shared', 'https://192.0.2.20:23998/', 'http://[::1]:23998/'] : [address(name)];
+};
 const initialDraft: DesktopSettingsDraft = { local_ui_bind: 'localhost:23998', local_ui_protocol: 'http', local_ui_password: '', local_ui_password_mode: 'keep', auto_runtime_probe_enabled: true };
 
 function Fixture() {
@@ -49,7 +58,7 @@ function Fixture() {
   const surface = createMemo(() => ({ ...buildDesktopSettingsSurfaceSnapshot('environment_settings', baseline(), {
     environment_id: settings(), environment_label: settings(), environment_kind: settings() === 'Local Environment' ? 'local' : 'runtime_target',
     runtime_connection: context(settings()),
-    current_runtime_running: true, current_runtime_url: address(settings()), current_runtime_urls: [address(settings())],
+    current_runtime_running: true, current_runtime_url: address(settings()), current_runtime_urls: addresses(settings()),
   }), runtime_configuration_pending: pending() }));
   return <main style={{ padding: '32px', 'min-height': '100vh' }}>
     <h1 style={{ 'font-size': '20px', 'margin-bottom': '24px' }}>Environment connection acceptance</h1>
@@ -58,9 +67,8 @@ function Fixture() {
         <h2 class="mb-4 font-semibold">{name}</h2>
         <div class="flex items-center justify-between gap-3">
           <span>{i18n.t('environmentFacts.runsOn')}</span>
-          <EndpointsPopover environmentLabel={query.get('label') || name} i18n={i18n}
-            endpoints={buildRuntimeConnectionRows({ context: context(name), urls: name === 'Network' && query.has('multiple')
-              ? ['https://development.environment.example.invalid:23998/a-long-environment-path?workspace=shared', 'https://192.0.2.20:23998/', 'http://[::1]:23998/'] : [address(name)],
+          <EndpointsPopover environmentID={name} environmentLabel={query.get('label') || name} i18n={i18n}
+            endpoints={buildRuntimeConnectionRows({ context: context(name), urls: addresses(name),
               health: { status: 'online', freshness: 'fresh', source: 'ssh_runtime_probe', checked_at_unix_ms: 1 } })}
             open={active() === name} onOpenChange={(open) => {
               setActive(open ? name : '');

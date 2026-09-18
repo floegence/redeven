@@ -5,6 +5,8 @@ import { desktopSSHAuthority } from './desktopSSH';
 import { isLoopbackHost, isWildcardHost } from './desktopAccessModel';
 import type { DesktopTranslationKey } from './i18n';
 
+const addressOrder = new Intl.Collator('en', { numeric: true });
+
 export type DesktopRuntimeConnectionContext = Readonly<{
   host_access: DesktopRuntimeHostAccess;
   placement: DesktopRuntimePlacement;
@@ -113,6 +115,7 @@ export function connectionAddressRows(
   }
   // Runtime enumeration order is not presentation identity. Keep existing URLs stationary on refresh.
   return rows.sort((left, right) => Number(!left.browser_openable) - Number(!right.browser_openable)
+    || addressOrder.compare(left.value, right.value)
     || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
 }
 

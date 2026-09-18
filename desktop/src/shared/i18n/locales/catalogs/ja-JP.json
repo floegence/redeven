@@ -2664,6 +2664,16 @@
     "passwordHelp": "自動確認用のパスワードは、このデバイスにのみ保存されます。接続時のプロンプトで入力したパスワードは保存されません。"
   },
   "environmentConnection": {
+    "filterAddresses": "アドレスを絞り込む",
+    "clearAddressFilter": "アドレスの絞り込みを解除",
+    "noMatchingAddresses": "一致するアドレスがありません",
+    "filteredAddressCount": "全 {total} 件中 {shown} 件のアドレス",
+    "addressCount": {
+      "kind": "plural",
+      "forms": {
+        "other": "{count} 件のアドレス"
+      }
+    },
     "wsl": "WSL ディストリビューション",
     "gateway": "ゲートウェイ接続",
     "networkAddress": "ネットワークアドレスです。アクセスできるかどうかはネットワーク接続によります。",

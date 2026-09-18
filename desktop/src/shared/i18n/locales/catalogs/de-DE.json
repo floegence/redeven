@@ -2668,6 +2668,17 @@
     "passwordHelp": "Wird nur auf diesem Gerät für automatische Prüfungen gespeichert. Bei Verbindungsabfragen eingegebene Passwörter werden nicht gespeichert."
   },
   "environmentConnection": {
+    "filterAddresses": "Adressen filtern",
+    "clearAddressFilter": "Adressfilter löschen",
+    "noMatchingAddresses": "Keine passenden Adressen",
+    "filteredAddressCount": "Adressen: {shown} von {total}",
+    "addressCount": {
+      "kind": "plural",
+      "forms": {
+        "one": "{count} Adresse",
+        "other": "{count} Adressen"
+      }
+    },
     "wsl": "WSL-Distribution",
     "gateway": "Gateway-Verbindung",
     "networkAddress": "Netzwerkadresse. Die Erreichbarkeit hängt von Ihrer Netzwerkverbindung ab.",

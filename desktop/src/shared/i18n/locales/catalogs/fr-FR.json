@@ -2668,6 +2668,18 @@
     "passwordHelp": "Enregistré uniquement sur cet appareil pour les vérifications automatiques. Les mots de passe saisis à la demande lors de la connexion ne sont pas enregistrés."
   },
   "environmentConnection": {
+    "filterAddresses": "Filtrer les adresses",
+    "clearAddressFilter": "Effacer le filtre des adresses",
+    "noMatchingAddresses": "Aucune adresse correspondante",
+    "filteredAddressCount": "Adresses : {shown} sur {total}",
+    "addressCount": {
+      "kind": "plural",
+      "forms": {
+        "one": "{count} adresse",
+        "many": "{count} adresses",
+        "other": "{count} adresses"
+      }
+    },
     "wsl": "Distribution WSL",
     "gateway": "Connexion à la passerelle",
     "networkAddress": "Adresse réseau. Son accessibilité dépend de votre connexion réseau.",

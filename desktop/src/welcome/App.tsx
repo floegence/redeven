@@ -1,3 +1,4 @@
+import { EnvironmentConnectionRows } from './EnvironmentConnectionRows';
 import { DesktopFlowerRuntimeBoundary } from './flower/DesktopFlowerRuntimeBoundary';
 import { runtimeFlowerBlocker } from '../shared/runtimeFlowerAccess';
 import { buildRuntimeConnectionRows, runtimeConnectionIsOnThisDevice, isShareableConnectionAddress, type DesktopShareableConnectionAddress } from '../shared/desktopEnvironmentConnection';
@@ -35,7 +36,6 @@ import {
   Save,
   Search,
   Settings,
-  ShareIcon,
   MoreHorizontal,
   Shield,
   ShieldCheck,
@@ -8326,6 +8326,7 @@ function qrCodeDataUrl(value: string): string {
 function EnvironmentCardFactsBlock(props: Readonly<{
   i18n: DesktopI18n;
   facts: readonly EnvironmentCardFactModel[];
+  environmentID: string;
   environmentLabel: string;
   minRows?: number;
   onFactAction: (action: EnvironmentCardFactActionModel) => void;
@@ -8413,6 +8414,7 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   )}
                   <Show when={fact().endpoints && fact().endpoints!.length > 0}>
                     <EndpointsPopover
+                      environmentID={props.environmentID}
                       i18n={props.i18n}
                       endpoints={fact().endpoints!}
                       environmentLabel={props.environmentLabel}
@@ -8472,6 +8474,7 @@ function EnvironmentCardFactsBlock(props: Readonly<{
 export function EndpointsPopover(props: Readonly<{
   i18n: DesktopI18n;
   endpoints: readonly EnvironmentCardEndpointModel[];
+  environmentID: string;
   environmentLabel: string;
   openInBrowser: (url: string) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
@@ -8596,7 +8599,7 @@ export function EndpointsPopover(props: Readonly<{
             </div>
             <div class="redeven-endpoints-popover-body">
               <div class="redeven-endpoints-popover-list">
-                <EnvironmentConnectionRows rows={props.endpoints} i18n={props.i18n}
+                <EnvironmentConnectionRows environmentID={props.environmentID} rows={props.endpoints} i18n={props.i18n}
                   selectedID={presentedSelection()} selectForShare={props.selectEndpointForQRCode}
                   openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue} />
               </div>
@@ -8620,85 +8623,6 @@ export function EndpointsPopover(props: Readonly<{
       </Show>
     </>
   );
-}
-
-function EnvironmentConnectionRows(props: Readonly<{
-  rows: readonly EnvironmentCardEndpointModel[];
-  i18n: DesktopI18n;
-  selectedID?: string;
-  selectForShare: (id: string) => void;
-  openInBrowser: (url: string) => Promise<void>;
-  copyEnvironmentValue: (value: string, label: string) => Promise<void>;
-}>) {
-  // Key by semantic row ID, never by freshly projected snapshot objects.
-  const rowsByID = createMemo(() => new Map(props.rows.map(row => [row.id, row])));
-  const rowIDs = createMemo(() => props.rows.map(row => row.id));
-  return <For each={rowIDs()}>{(id) => {
-    const row = () => rowsByID().get(id)!;
-    const internalAddress = () => { const value = row(); return value.kind === 'address' && value.access_scope === 'environment_only' ? value : undefined; };
-    const copyable = () => { const value = row(); return value.kind !== 'status' && value.copyable; };
-    const browserOpenable = () => { const value = row(); return value.kind === 'address' && value.browser_openable; };
-    const [copiedValue, setCopiedValue] = createSignal<string | null>(null);
-    const copied = () => copiedValue() === row().value;
-    let resetTimer: ReturnType<typeof setTimeout> | undefined;
-    onCleanup(() => clearTimeout(resetTimer));
-    const copyLabel = () => row().kind === 'address'
-      ? props.i18n.t('environmentFacts.copyEnvironmentUrl')
-      : props.i18n.t('environmentFacts.copyFact', { label: props.i18n.t(row().label_key) });
-    const copy = async () => {
-      const value = row().value;
-      await props.copyEnvironmentValue(value, props.i18n.t(row().kind === 'address' ? 'environmentFacts.environmentUrl' : row().label_key));
-      setCopiedValue(value);
-      clearTimeout(resetTimer);
-      resetTimer = setTimeout(() => setCopiedValue(null), 1500);
-    };
-    return <>
-      <Show when={internalAddress()}>{(address) => (
-        <div class="redeven-card-endpoint-row" data-endpoint-id={address().id} data-endpoint-kind="address" data-internal-listener>
-          <span class="redeven-card-endpoint-label">{props.i18n.t(address().label_key)}</span>
-          <div class="redeven-card-endpoint-content min-w-0 select-text">
-            <span class="redeven-endpoint-scope-title">{props.i18n.t(address().detail_key, address().detail_params)}</span>
-            <span class="redeven-card-endpoint-detail">{props.i18n.t('environmentConnection.openViaDesktop', { action: props.i18n.t('environmentAction.open') })}</span>
-            <details class="redeven-endpoint-listener">
-              <summary><ChevronRight class="h-3 w-3" aria-hidden="true" />{props.i18n.t('environmentConnection.listenerDetails')}</summary>
-              <div class="redeven-endpoint-listener-content">
-                <span class="redeven-card-endpoint-value">{address().value}</span>
-                <p>{props.i18n.t('environmentConnection.loopbackHelp', address().detail_params)}</p>
-              </div>
-            </details>
-          </div>
-        </div>
-      )}</Show>
-      <Show when={!internalAddress()}>{(_visible) => <div class="redeven-card-endpoint-row" data-endpoint-id={row().id} data-endpoint-kind={row().kind}
-      data-selected={row().id === props.selectedID ? '' : undefined} role={row().kind === 'status' ? 'status' : undefined}>
-      <span class="redeven-card-endpoint-label">{props.i18n.t(row().label_key)}</span>
-      <div class="redeven-card-endpoint-content min-w-0 select-text">
-        <span class="redeven-card-endpoint-value"
-          title={row().value || undefined}>{row().value_key ? props.i18n.t(row().value_key!) : row().value}</span>
-        <Show when={row().detail_key}>{(key) => <span class="redeven-card-endpoint-detail">{props.i18n.t(key(), row().detail_params)}</span>}</Show>
-      </div>
-      <div class="redeven-endpoint-actions">
-        <Show when={copyable()}>
-          <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0" aria-label={copyLabel()}
-            title={copied() ? props.i18n.t('environmentCenter.copied') : copyLabel()} data-copied={copied() || undefined}
-            onClick={() => void copy()}>{copied() ? <Check class="h-3.5 w-3.5" /> : <Copy class="h-3.5 w-3.5" />}</Button>
-        </Show>
-        <Show when={browserOpenable()}>
-          <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0"
-            aria-label={props.i18n.t('webServiceBrowser.openInBrowser')} title={props.i18n.t('webServiceBrowser.openInBrowser')}
-            onClick={() => void props.openInBrowser(row().value)}><ExternalLink class="h-3.5 w-3.5" /></Button>
-        </Show>
-        <Show when={isShareableConnectionAddress(row())}>
-          <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0"
-            aria-label={props.i18n.t('settings.shareConnection')} title={props.i18n.t('settings.shareConnection')}
-            aria-expanded={row().id === props.selectedID} onClick={() => props.selectForShare(row().id === props.selectedID ? '' : row().id)}>
-            <ShareIcon class="h-3.5 w-3.5" />
-          </Button>
-        </Show>
-      </div>
-    </div>}</Show>
-    </>;
-  }}</For>;
 }
 
 function EndpointQRCodePanel(props: Readonly<{
@@ -10674,6 +10598,7 @@ function EnvironmentConnectionCard(
       </CardHeader>
       <CardContent class="flex flex-1 flex-col px-4 pb-3">
         <EnvironmentCardFactsBlock
+          environmentID={props.environment.id}
           i18n={props.i18n}
           facts={facts()}
           environmentLabel={props.environment.label}
@@ -13604,7 +13529,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
             </Button>
           </div>
           <div class="redeven-settings-connections">
-            <EnvironmentConnectionRows rows={connectionRows()} i18n={props.i18n}
+            <EnvironmentConnectionRows environmentID={props.snapshot.environment_id} rows={connectionRows()} i18n={props.i18n}
               selectedID={selectedShareAddress()?.id}
               selectForShare={(id) => setSharedAddress(id ? { environment_id: props.snapshot.environment_id, id } : null)}
               openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue} />

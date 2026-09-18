@@ -29,6 +29,13 @@ function ssh(label: string, overrides: Partial<DesktopEnvironmentEntry> = {}): D
 }
 
 describe('Environment endpoint ownership', () => {
+  it('orders address numbers naturally and keeps equal numeric text deterministic', () => {
+    const urls = ['https://192.0.2.100:23998/', 'https://192.0.2.2:23998/', 'https://192.0.2.10:23998/'];
+    expect(connectionAddressRows(urls).map(row => row.value)).toEqual([urls[1], urls[2], urls[0]]);
+    const paths = ['https://example.test/path1', 'https://example.test/path01'];
+    expect(connectionAddressRows(paths)).toEqual(connectionAddressRows([...paths].reverse()));
+  });
+
   it('keeps address identity and order independent of Runtime enumeration order', () => {
     const urls = ['https://192.0.2.20:23998/', 'http://localhost:23998/', 'http://[::1]:23998/'];
     expect(connectionAddressRows([...urls].reverse())).toEqual(connectionAddressRows(urls));

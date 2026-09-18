@@ -2668,6 +2668,18 @@
     "passwordHelp": "Se guarda solo en este dispositivo para las comprobaciones automáticas. Las contraseñas introducidas cuando se solicitan al conectar no se guardan."
   },
   "environmentConnection": {
+    "filterAddresses": "Filtrar direcciones",
+    "clearAddressFilter": "Borrar filtro de direcciones",
+    "noMatchingAddresses": "No hay direcciones coincidentes",
+    "filteredAddressCount": "Direcciones: {shown} de {total}",
+    "addressCount": {
+      "kind": "plural",
+      "forms": {
+        "one": "{count} dirección",
+        "many": "{count} direcciones",
+        "other": "{count} direcciones"
+      }
+    },
     "wsl": "Distribución de WSL",
     "gateway": "Conexión a la puerta de enlace",
     "networkAddress": "Dirección de red. Su disponibilidad depende de tu conexión de red.",

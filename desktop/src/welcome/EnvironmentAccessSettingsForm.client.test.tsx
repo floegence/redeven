@@ -69,6 +69,24 @@ afterEach(() => {
 });
 
 describe('Runtime connection settings', () => {
+  it('keeps a large address list separate from settings drafts and scopes filtering to the environment', async () => {
+    const urls = Array.from({ length: 100 }, (_, n) => `https://192.0.2.${n + 1}:23998/`);
+    const test = await mount({ remote: true, url: urls[0], urls });
+    const group = document.querySelector('[data-address-scope="network"]')!;
+    expect(group).not.toBeNull();
+    const filter = group.querySelector<HTMLInputElement>('[aria-label="Filter addresses"]')!;
+    filter.value = '.100:'; filter.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    test.setDraft(previous => ({ ...previous, local_ui_bind: 'localhost:25000' }));
+    test.setSnapshot(previous => ({ ...structuredClone(previous), current_runtime_urls: [...urls].reverse() })); await settle();
+    expect(filter.value).toBe('.100:');
+    expect(group.querySelectorAll('[data-endpoint-kind="address"]')).toHaveLength(1);
+    expect(test.draft().local_ui_bind).toBe('localhost:25000');
+    group.querySelector<HTMLButtonElement>('[aria-label="Copy Environment URL"]')!.click();
+    expect(test.copy).toHaveBeenCalledWith(urls[99], 'Environment URL');
+    test.setSnapshot(previous => ({ ...previous, environment_id: 'another-environment' })); await settle();
+    expect((document.querySelector('[aria-label="Filter addresses"]') as HTMLInputElement).value).toBe('');
+  });
+
   it('separates remote internal listeners from browser access without disrupting settings edits', async () => {
     const test = await mount({ remote: true, url: 'http://localhost:23998/' });
     const overview = document.querySelector('.environment-access-overview')!;

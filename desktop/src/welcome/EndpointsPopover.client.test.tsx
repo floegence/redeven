@@ -24,7 +24,7 @@ async function mount(host = 'gzcom') {
     urls: urls(),
     health: { status: 'online', freshness: 'fresh', source: 'ssh_runtime_probe', checked_at_unix_ms: 1 },
   });
-  disposers.push(render(() => <EndpointsPopover i18n={createDesktopI18n('en-US')} environmentLabel={host}
+  disposers.push(render(() => <EndpointsPopover environmentID={host} i18n={createDesktopI18n('en-US')} environmentLabel={host}
     endpoints={rows()} open={open()} onOpenChange={next => batch(() => {
       setOpen(next); if (!next) setSelected('');
     })} selectedEndpointID={selected()}
@@ -42,6 +42,52 @@ afterEach(() => {
 });
 
 describe('Environment connection popover', () => {
+  it('keeps multiple internal listeners in one disclosure without address actions', async () => {
+    const test = await mount();
+    test.setURLs(['http://localhost:23998/', 'http://[::1]:23998/']); await settle();
+    const group = document.querySelector('[data-address-scope="environment_only"]')!;
+    expect(group.querySelectorAll('details')).toHaveLength(1);
+    expect(group.querySelectorAll('[data-endpoint-kind="address"]')).toHaveLength(2);
+    expect(group.querySelectorAll('button')).toHaveLength(0);
+    expect(group.textContent?.match(/Choose “Open Env App”/g)).toHaveLength(1);
+  });
+
+  it('groups and filters many addresses while preserving sharing and input state across refresh', async () => {
+    const test = await mount();
+    const ipv6 = 'https://[2001:db8::42]:23998/';
+    const urls = [...Array.from({ length: 200 }, (_, n) => `https://192.0.2.${n + 1}:23998/`), ipv6];
+    test.setURLs(urls); await settle();
+    const group = document.querySelector('[data-address-scope="network"]')!;
+    expect(group).not.toBeNull();
+    expect(group.textContent?.match(/Availability depends on your network connection/g)).toHaveLength(1);
+    const filter = group.querySelector<HTMLInputElement>('[aria-label="Filter addresses"]')!;
+    filter.value = '2001:db8'; filter.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    const viewport = group.querySelector('.redeven-address-viewport')!;
+    expect(viewport.querySelectorAll('[data-endpoint-id]')).toHaveLength(1);
+    const share = viewport.querySelector<HTMLButtonElement>('[aria-label="Share connection"]')!;
+    share.click(); await settle();
+    expect(document.querySelector('.redeven-endpoint-qr-value')?.textContent).toBe(ipv6);
+    filter.focus(); filter.setSelectionRange(0, 4);
+    test.setURLs([...urls].reverse()); await settle();
+    expect(document.querySelector('[aria-label="Filter addresses"]')).toBe(filter);
+    expect(document.activeElement).toBe(filter);
+    expect(filter.value).toBe('2001:db8');
+    expect(filter.selectionEnd).toBe(4);
+    expect(group.querySelector('.redeven-address-viewport')).toBe(viewport);
+    expect(viewport.querySelector('[aria-label="Share connection"]')).toBe(share);
+    filter.value = 'missing'; filter.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    expect(group.textContent).toContain('No matching addresses');
+    expect(document.querySelector('.redeven-endpoint-qr-value')?.textContent).toBe(ipv6);
+    test.setURLs(urls.filter(url => url !== ipv6)); await settle();
+    expect(document.querySelector('.redeven-endpoint-qr-image')).toBeNull();
+    group.querySelector<HTMLButtonElement>('[aria-label="Clear address filter"]')!.click(); await settle();
+    expect(filter.value).toBe('');
+    expect(viewport.querySelectorAll('[data-endpoint-id]')).toHaveLength(200);
+    filter.focus(); test.setURLs([urls[0]!]); await settle();
+    expect(document.querySelector('[aria-label="Filter addresses"]')).toBe(filter);
+    expect(document.activeElement).toBe(filter);
+  });
+
   it('presents remote loopback as internal listener details and preserves the disclosure on refresh', async () => {
     const test = await mount();
     const details = document.querySelector<HTMLDetailsElement>('.redeven-endpoint-listener')!;
