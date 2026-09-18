@@ -21,6 +21,8 @@ type ConnectionRowBase = Readonly<{
 
 export type DesktopConnectionAddress = ConnectionRowBase & Readonly<{
   kind: 'address';
+  detail_key: DesktopTranslationKey;
+  access_scope: 'this_device' | 'network' | 'environment_only';
   copyable: boolean;
   browser_openable: boolean;
   shareable: boolean;
@@ -50,11 +52,16 @@ export function runtimeConnectionIsOnThisDevice(context: DesktopRuntimeConnectio
 
 export function runtimeConnectionRows(context: DesktopRuntimeConnectionContext): readonly DesktopConnectionRow[] {
   const host = context.host_access;
+  const connectionHelp: DesktopTranslationKey | undefined = context.placement.kind === 'container_process'
+    ? 'environmentConnection.containerConnection'
+    : host.kind === 'ssh_host' ? 'environmentConnection.sshConnection'
+      : host.kind === 'wsl_host' ? 'environmentConnection.wslConnection' : undefined;
   const rows: DesktopConnectionRow[] = [host.kind === 'ssh_host'
     ? { id: 'host', kind: 'connection', label_key: 'environmentFacts.sshHost', value: desktopSSHAuthority(host.ssh), copyable: true }
     : host.kind === 'wsl_host'
       ? { id: 'host', kind: 'connection', label_key: 'environmentConnection.wsl', value: `${host.distribution_name} · ${host.linux_user}`, copyable: true }
       : { id: 'host', kind: 'connection', label_key: 'environmentFacts.runsOn', value: '', value_key: 'environmentFacts.thisDevice', copyable: false }];
+  if (connectionHelp) rows[0] = { ...rows[0]!, detail_key: connectionHelp };
   if (context.placement.kind === 'container_process') {
     rows.push({
       id: 'container', kind: 'connection', label_key: 'environmentFacts.container',
@@ -95,19 +102,23 @@ export function connectionAddressRows(
             ? 'environmentConnection.wslOnly'
             : 'environmentConnection.hostOnly';
     rows.push({
-      id: `address:${value}`, kind: 'address', label_key: 'environmentFacts.url', value,
+      id: `address:${value}`, kind: 'address', value,
+      access_scope: !loopback ? 'network' : onThisDevice ? 'this_device' : 'environment_only',
+      label_key: !loopback ? 'environmentConnection.networkAccessAddress'
+        : onThisDevice ? 'environmentConnection.deviceAddress' : 'environmentConnection.browserAccess',
       copyable: usable, browser_openable: usable, shareable: !loopback,
       detail_key: detailKey,
       ...(!loopback || onThisDevice ? {} : { detail_params: {
         host: placement?.kind === 'container_process'
           ? desktopRuntimeContainerReference(placement)
           : host?.kind === 'wsl_host' ? host.distribution_name
-            : host?.kind === 'ssh_host' ? desktopSSHAuthority(host.ssh) : '',
+            : host?.kind === 'ssh_host' ? host.ssh.ssh_destination : '',
       } }),
     });
   }
   // Runtime enumeration order is not presentation identity. Keep existing URLs stationary on refresh.
-  return rows.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+  return rows.sort((left, right) => Number(!left.browser_openable) - Number(!right.browser_openable)
+    || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
 }
 
 export function runtimeAddressStatus(health: DesktopRuntimeHealth): DesktopConnectionRow {

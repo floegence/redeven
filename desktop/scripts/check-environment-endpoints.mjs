@@ -25,6 +25,13 @@ const report = {
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on('pageerror', (error) => report.errors.push(error.message));
+  async function settleDisclosure() {
+    await page.evaluate(async () => {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await Promise.all(document.getAnimations().filter(animation => animation.effect.getTiming().iterations !== Infinity)
+        .map(animation => animation.finished.catch(() => {})));
+    });
+  }
   async function stableScreenshot(path) {
     await page.evaluate(() => document.fonts.ready);
     await page.waitForFunction(() => [...document.querySelectorAll('[data-floe-dialog-panel], .redeven-endpoints-popover')]
@@ -34,7 +41,7 @@ try {
   await page.goto(new URL('environment-endpoints.html', report.url).href);
   for (const name of ['Local Environment', 'gzcom', 'gzlight', 'Network']) {
     const card = page.locator(`[data-environment="${name}"]`);
-    const trigger = card.getByLabel('显示端点');
+    const trigger = card.getByLabel('查看连接方式');
     await trigger.click();
     const popup = page.locator('.redeven-endpoints-popover');
     await popup.waitFor();
@@ -44,11 +51,14 @@ try {
     assert.equal(await popup.getByLabel('复制环境 URL').count(), network || name === 'Local Environment' ? 1 : 0);
     assert.equal(await popup.getByLabel('在浏览器中打开').count(), network || name === 'Local Environment' ? 1 : 0);
     if (network || name === 'Local Environment') {
+      assert.ok((await popup.innerText()).includes(network ? '网络访问地址' : '此设备的浏览器地址'));
       await popup.getByLabel('在浏览器中打开').click();
       assert.equal(await page.locator('[data-copy-result]').innerText(), network ? 'https://192.0.2.20:23998/' : 'http://localhost:23998/');
     }
     if (name === 'gzcom' || name === 'gzlight') {
-      assert.ok((await popup.innerText()).includes(`仅在 ${name}:22 上可用。`));
+      assert.ok((await popup.innerText()).includes(`仅限 ${name} 内部`));
+      assert.equal(await popup.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').isVisible(), false);
+      assert.ok((await popup.innerText()).includes('在此设备上，请在 Desktop 中点击“打开 Env App”进入环境。'));
       await popup.getByRole('button', { name: /复制 SSH/ }).click();
       assert.equal(await page.locator('[data-copy-result]').innerText(), `${name}:22`);
     }
@@ -59,23 +69,56 @@ try {
       assert.equal(await page.locator('[data-copy-result]').innerText(), 'https://192.0.2.20:23998/');
     }
     await stableScreenshot(`${output}/${name.replaceAll(' ', '-')}.png`);
+    if (name === 'gzcom') {
+      await popup.locator('.redeven-endpoint-listener summary').click();
+      await settleDisclosure();
+      assert.equal(await popup.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').innerText(), 'http://localhost:23998/');
+      assert.ok((await popup.innerText()).includes('不同主机可以使用相同端口'));
+      assert.equal(await popup.locator('.redeven-endpoint-listener button').count(), 0);
+      await stableScreenshot(`${output}/gzcom-listener-details.png`);
+    }
     await page.keyboard.press('Escape');
     await popup.waitFor({ state: 'detached' });
     assert.equal(await trigger.evaluate((element) => element === document.activeElement), true);
     report.cases.push(`popover:${name}`);
   }
-  for (const name of ['gzcom', 'Network']) {
+  for (const name of ['Local Environment', 'gzcom', 'Network']) {
     await page.locator(`[data-environment="${name}"]`).getByRole('button', { name: '环境设置' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.waitFor();
     assert.equal(await dialog.getByLabel('分享连接').count(), name === 'Network' ? 1 : 0);
-    assert.equal(await dialog.getByRole('button', { name: '在浏览器中打开' }).count(), name === 'Network' ? 1 : 0);
+    assert.equal(await dialog.getByRole('button', { name: '在浏览器中打开' }).count(), name !== 'gzcom' ? 1 : 0);
+    if (name === 'gzcom') {
+      assert.equal(await dialog.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').isVisible(), false);
+      assert.ok((await dialog.innerText()).includes('仅限 gzcom 内部'));
+    }
+    const settingsFonts = await dialog.locator('.redeven-card-endpoint-value').evaluateAll(elements => elements.map(el => getComputedStyle(el).fontFamily));
+    assert.ok(settingsFonts.every(font => font.includes('Inter') && !font.includes('Iosevka')), 'settings and connection details share product typography');
     await stableScreenshot(`${output}/settings-${name}.png`);
+    if (name === 'gzcom') {
+      const panel = page.locator('[data-floe-dialog-panel]');
+      const before = await panel.boundingBox();
+      const summary = dialog.locator('.redeven-endpoint-listener summary');
+      await summary.focus(); await page.keyboard.press('Enter');
+      await page.waitForTimeout(220);
+      const after = await panel.boundingBox();
+      assert.ok(Math.abs(before.height - after.height) < 1 && Math.abs(before.y - after.y) < 1, 'listener details expand inside the fixed settings viewport');
+      assert.equal(await summary.evaluate(el => el === document.activeElement), true);
+      assert.equal(await dialog.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').isVisible(), true);
+      await stableScreenshot(`${output}/settings-listener-details.png`);
+      await dialog.locator('#local-ui-port').fill('25000');
+      await dialog.getByText('网络可达设备', { exact: true }).click();
+      assert.equal(await dialog.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').innerText(), 'http://localhost:23998/');
+      assert.equal(await dialog.locator('.redeven-endpoint-listener').evaluate(el => el.open), true);
+      assert.equal(await dialog.getByRole('button', { name: '在浏览器中打开' }).count(), 0);
+      report.cases.push('settings-listener-disclosure-and-draft-isolation');
+    }
+
     await dialog.getByRole('button', { name: '关闭', exact: true }).last().click();
     report.cases.push(`settings:${name}`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.locator('[data-environment="gzlight"]').getByLabel('显示端点').click();
+  await page.locator('[data-environment="gzlight"]').getByLabel('查看连接方式').click();
   await page.waitForFunction(() => {
     const bounds = document.querySelector('.redeven-endpoints-popover')?.getBoundingClientRect();
     return bounds && bounds.x >= 0 && bounds.right <= window.innerWidth;
@@ -92,7 +135,7 @@ try {
   await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).last().click();
   await page.goto(new URL('environment-endpoints.html?theme=dark', report.url).href);
   await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
-  await page.locator('[data-environment="gzlight"]').getByLabel('显示端点').click();
+  await page.locator('[data-environment="gzlight"]').getByLabel('查看连接方式').click();
   await stableScreenshot(`${output}/dark.png`);
   report.cases.push('narrow', 'narrow-settings', 'dark');
 
@@ -177,6 +220,36 @@ try {
     await page.locator('[data-environment="Network"] [aria-haspopup="dialog"]').click();
     await page.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-popover')).opacity === '1');
     assert.equal(await page.locator('.redeven-endpoints-popover').evaluate(el => el.scrollWidth > el.clientWidth), false);
+    await page.keyboard.press('Escape'); await page.locator('.redeven-endpoints-popover').waitFor({ state: 'detached' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('[data-environment="gzcom"] [aria-haspopup="dialog"]').click();
+    await page.locator('.redeven-endpoint-listener summary').click();
+    await settleDisclosure();
+    assert.equal(await page.locator('.redeven-endpoints-popover').evaluate(el => el.scrollWidth > el.clientWidth), false);
+    await page.keyboard.press('Escape'); await page.locator('.redeven-endpoints-popover').waitFor({ state: 'detached' });
+    await page.locator('[data-environment="gzcom"] > button').click();
+    await page.locator('.redeven-endpoint-listener summary').click();
+    await settleDisclosure();
+    assert.equal(await page.locator('.environment-settings-scroll').evaluate(el => el.scrollWidth > el.clientWidth), false);
+  }
+  for (const placement of ['wsl', 'local-container', 'ssh-container']) {
+    await page.goto(new URL(`environment-endpoints.html?placement=${placement}`, report.url).href);
+    await page.locator('[data-environment="gzcom"] [aria-haspopup="dialog"]').click();
+    const popup = page.locator('.redeven-endpoints-popover');
+    const expected = placement === 'wsl' ? '仅限 WSL 分发 Ubuntu-24.04 内部' : '仅限容器 dev-box 内部';
+    assert.ok((await popup.innerText()).includes(expected));
+    assert.equal(await popup.locator('[aria-label="在浏览器中打开"]').count(), 0);
+    assert.equal(await popup.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').isVisible(), false);
+    await popup.locator('.redeven-endpoint-listener summary').click();
+    await settleDisclosure();
+    assert.equal(await popup.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').innerText(), 'http://localhost:23998/');
+    await page.keyboard.press('Escape'); await popup.waitFor({ state: 'detached' });
+    await page.locator('[data-environment="gzcom"]').getByRole('button', { name: '环境设置' }).click();
+    const overview = page.locator('.environment-access-overview');
+    assert.ok((await overview.innerText()).includes(expected));
+    assert.equal(await overview.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').isVisible(), false);
+    assert.equal(await overview.locator('[aria-label="在浏览器中打开"]').count(), 0);
+    report.cases.push(`scoped-listener:${placement}`);
   }
   report.themes = builtInShellThemePresets.length;
   report.locales = 10;
@@ -209,7 +282,7 @@ try {
   await card('gzcom').waitFor();
   await cardPage.evaluate(() => document.fonts.ready);
   for (let attempt = 0; attempt < 2; attempt++) {
-    await card('gzcom').getByLabel('显示端点').click();
+    await card('gzcom').getByLabel('查看连接方式').click();
     await cardPage.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-popover')).opacity === '1');
     await cardPage.getByRole('button', { name: /复制 SSH/ }).click();
     assert.equal(await cardPage.evaluate(() => navigator.clipboard.readText()), 'gzcom:22');
@@ -223,26 +296,28 @@ try {
     await cardPage.locator('.redeven-endpoints-popover').waitFor({ state: 'detached' });
     await cardPage.waitForTimeout(350);
   }
-  await card('gzcom').getByLabel('显示端点').click();
-  await card('gzlight').getByLabel('显示端点').click();
+  await card('gzcom').getByLabel('查看连接方式').click();
+  await card('gzlight').getByLabel('查看连接方式').click();
   assert.equal(await cardPage.getByRole('dialog').count(), 1, 'only the selected Environment remains interactive');
   assert.ok((await cardPage.getByRole('dialog').innerText()).includes('gzlight'));
   await cardPage.keyboard.press('Escape');
   await cardPage.waitForFunction(() => !document.querySelector('.redeven-endpoints-popover'));
   // Exercise the real snapshot subscription, not only a directly mounted popover.
-  await card('gzcom').getByLabel('显示端点').click();
+  await card('gzcom').getByLabel('查看连接方式').click();
   await cardPage.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-popover')).opacity === '1');
   const compact = await cardPage.locator('.redeven-endpoints-popover').evaluate(panel => ({
     height: panel.getBoundingClientRect().height,
     fonts: [...panel.querySelectorAll('.redeven-card-endpoint-value')].map(el => getComputedStyle(el).fontFamily),
   }));
-  assert.ok(compact.height < 205, 'the two-row host-only panel stays compact');
+  assert.ok(compact.height < 285, 'connection guidance and internal listener stay compact');
   assert.ok(compact.fonts.every(font => font.includes('Inter') && !font.includes('Iosevka')), 'host and URL use product text typography');
   await cardPage.getByRole('button', { name: /复制 SSH/ }).click();
   await cardPage.locator('[data-endpoint-id="host"] [data-copied="true"]').waitFor();
+  await cardPage.locator('.redeven-endpoint-listener summary').click();
   const refreshEvidence = await cardPage.evaluate(async initial => {
     const panel = document.querySelector('.redeven-endpoints-popover');
     const trigger = document.querySelector('[aria-haspopup="dialog"][aria-expanded="true"]');
+    const listener = panel.querySelector('.redeven-endpoint-listener');
     const host = panel.querySelector('[data-endpoint-id="host"]');
     const copy = host.querySelector('button');
     const value = host.querySelector('.redeven-card-endpoint-value');
@@ -259,6 +334,7 @@ try {
       await new Promise(resolve => requestAnimationFrame(resolve));
       samples.push({ samePanel: document.querySelector('.redeven-endpoints-popover') === panel,
         sameTrigger: document.querySelector('[aria-haspopup="dialog"][aria-expanded="true"]') === trigger,
+        sameListener: panel.querySelector('.redeven-endpoint-listener') === listener && listener.open,
         sameRow: panel.querySelector('[data-endpoint-id="host"]') === host,
         focused: document.activeElement === copy, selected: selection.toString(), copied: copy.dataset.copied,
         opacity: Number(getComputedStyle(panel).opacity), state: panel.dataset.state, elapsed: performance.now() - started });
@@ -268,7 +344,7 @@ try {
   }, snapshot);
   for (const sample of refreshEvidence) {
     const { copied, elapsed, ...continuity } = sample;
-    assert.deepEqual(continuity, { samePanel: true, sameTrigger: true, sameRow: true, focused: true,
+    assert.deepEqual(continuity, { samePanel: true, sameTrigger: true, sameRow: true, sameListener: true, focused: true,
       selected: 'gzcom:22', opacity: 1, state: 'open' });
     if (elapsed < 1000) assert.equal(copied, 'true', 'refresh preserves feedback until its normal timeout');
   }
@@ -282,7 +358,7 @@ try {
   target.local_ui_urls = Array.from({ length: 12 }, (_, index) => `https://192.0.2.${index + 10}:23998/`);
   target.local_ui_url = target.local_ui_urls[0];
   await cardPage.evaluate(value => window.settingsFixture.publish(value), networkSnapshot);
-  await card('gzcom').getByLabel('显示端点').click();
+  await card('gzcom').getByLabel('查看连接方式').click();
   await cardPage.getByRole('button', { name: '分享连接', exact: true }).first().click();
   await cardPage.locator('.redeven-endpoint-qr-image').waitFor();
   await cardPage.waitForTimeout(250);

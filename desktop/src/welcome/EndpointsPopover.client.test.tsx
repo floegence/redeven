@@ -42,10 +42,33 @@ afterEach(() => {
 });
 
 describe('Environment connection popover', () => {
+  it('presents remote loopback as internal listener details and preserves the disclosure on refresh', async () => {
+    const test = await mount();
+    const details = document.querySelector<HTMLDetailsElement>('.redeven-endpoint-listener')!;
+    expect(details).not.toBeNull();
+    expect(details.open).toBe(false);
+    expect(document.body.textContent).toContain('On this device, choose “Open Env App” in Desktop to connect.');
+    expect(document.body.textContent).toContain('Desktop connects to this environment over SSH.');
+    details.open = true;
+    const summary = details.querySelector('summary')!;
+    summary.focus();
+    test.setURLs(['http://localhost:23998/']); await settle();
+    expect(document.querySelector('.redeven-endpoint-listener')).toBe(details);
+    expect(details.open).toBe(true);
+    expect(document.activeElement).toBe(summary);
+    expect(details.textContent).toContain('http://localhost:23998/');
+    expect(details.textContent).toContain('gzcom');
+    expect(details.querySelector('button')).toBeNull();
+    test.setURLs(['https://192.0.2.20:23998/']); await settle();
+    expect(document.querySelector('.redeven-endpoint-listener')).toBeNull();
+    expect(document.body.textContent).toContain('Network access address');
+    expect(document.querySelector('[aria-label="Open in browser"]')).not.toBeNull();
+  });
+
   it('shows remote host context and permits only management copy for host-only addresses', async () => {
     const test = await mount();
     expect(document.body.textContent).toContain('gzcom:22');
-    expect(document.body.textContent).toContain('Only available on gzcom:22.');
+    expect(document.body.textContent).toContain('Only inside gzcom');
     expect(document.querySelector('[aria-label="Share connection"]')).toBeNull();
     expect(document.querySelector('[aria-label="Copy Environment URL"]')).toBeNull();
     expect(document.querySelector('[aria-label="Open in browser"]')).toBeNull();
@@ -140,7 +163,7 @@ describe('Environment connection popover', () => {
 
   it('moves focus into the panel and restores it when its close control is used', async () => {
     const test = await mount();
-    const close = document.querySelector('[aria-label="Close endpoints"]') as HTMLButtonElement;
+    const close = document.querySelector('[aria-label="Close connection details"]') as HTMLButtonElement;
     expect(document.activeElement).toBe(close);
     close.click();
     expect(test.open()).toBe(false);
@@ -153,7 +176,7 @@ describe('Environment connection popover', () => {
     test.setURLs(['https://192.0.2.20:23998/']);
     test.setSelected('address:https://192.0.2.20:23998/');
     await settle();
-    (document.querySelector('[aria-label="Close endpoints"]') as HTMLButtonElement).click();
+    (document.querySelector('[aria-label="Close connection details"]') as HTMLButtonElement).click();
     await settle();
     expect(document.querySelector('.redeven-endpoints-share')?.getAttribute('data-expanded')).toBe('true');
     expect(document.querySelector('.redeven-endpoint-qr-image')).not.toBeNull();

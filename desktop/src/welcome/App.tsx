@@ -8635,6 +8635,7 @@ function EnvironmentConnectionRows(props: Readonly<{
   const rowIDs = createMemo(() => props.rows.map(row => row.id));
   return <For each={rowIDs()}>{(id) => {
     const row = () => rowsByID().get(id)!;
+    const internalAddress = () => { const value = row(); return value.kind === 'address' && value.access_scope === 'environment_only' ? value : undefined; };
     const copyable = () => { const value = row(); return value.kind !== 'status' && value.copyable; };
     const browserOpenable = () => { const value = row(); return value.kind === 'address' && value.browser_openable; };
     const [copiedValue, setCopiedValue] = createSignal<string | null>(null);
@@ -8651,7 +8652,24 @@ function EnvironmentConnectionRows(props: Readonly<{
       clearTimeout(resetTimer);
       resetTimer = setTimeout(() => setCopiedValue(null), 1500);
     };
-    return <div class="redeven-card-endpoint-row" data-endpoint-id={row().id} data-endpoint-kind={row().kind}
+    return <>
+      <Show when={internalAddress()}>{(address) => (
+        <div class="redeven-card-endpoint-row" data-endpoint-id={address().id} data-endpoint-kind="address" data-internal-listener>
+          <span class="redeven-card-endpoint-label">{props.i18n.t(address().label_key)}</span>
+          <div class="min-w-0 flex-1 select-text">
+            <span class="redeven-endpoint-scope-title">{props.i18n.t(address().detail_key, address().detail_params)}</span>
+            <span class="redeven-card-endpoint-detail">{props.i18n.t('environmentConnection.openViaDesktop', { action: props.i18n.t('environmentAction.open') })}</span>
+            <details class="redeven-endpoint-listener">
+              <summary><ChevronRight class="h-3 w-3" aria-hidden="true" />{props.i18n.t('environmentConnection.listenerDetails')}</summary>
+              <div class="redeven-endpoint-listener-content">
+                <span class="redeven-card-endpoint-value">{address().value}</span>
+                <p>{props.i18n.t('environmentConnection.loopbackHelp', address().detail_params)}</p>
+              </div>
+            </details>
+          </div>
+        </div>
+      )}</Show>
+      <Show when={!internalAddress()}>{(_visible) => <div class="redeven-card-endpoint-row" data-endpoint-id={row().id} data-endpoint-kind={row().kind}
       data-selected={row().id === props.selectedID ? '' : undefined} role={row().kind === 'status' ? 'status' : undefined}>
       <span class="redeven-card-endpoint-label">{props.i18n.t(row().label_key)}</span>
       <div class="min-w-0 flex-1 select-text">
@@ -8676,7 +8694,8 @@ function EnvironmentConnectionRows(props: Readonly<{
           <ShareIcon class="h-3.5 w-3.5" />
         </Button>
       </Show>
-    </div>;
+    </div>}</Show>
+    </>;
   }}</For>;
 }
 
@@ -13597,12 +13616,12 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
           <section class="environment-access-row">
             <div class="environment-access-description">
               <h3>{props.i18n.t('settings.visibilityTitle')}</h3>
-              <p>{props.i18n.t(access().network_exposure ? 'settings.sharedLocalNetworkDescription' : remote() ? 'settings.serverOnlyDescription' : 'settings.localOnlyDescription')}</p>
+              <p>{props.i18n.t(access().network_exposure ? 'settings.sharedLocalNetworkDescription' : remote() ? 'settings.environmentOnlyDescription' : 'settings.localOnlyDescription')}</p>
             </div>
             <div class="environment-access-control">
               <SegmentedControl size="sm" aria-label={props.i18n.t('settings.visibilityTitle')} value={access().network_exposure ? 'shared_local_network' : 'local_only'}
                 options={[
-                  { value: 'local_only', label: props.i18n.t(remote() ? 'settings.serverOnlyLabel' : 'settings.localOnlyLabel') },
+                  { value: 'local_only', label: props.i18n.t(remote() ? 'settings.environmentOnlyLabel' : 'settings.localOnlyLabel') },
                   { value: 'shared_local_network', label: props.i18n.t('settings.sharedLocalNetworkLabel') },
                 ]}
                 onChange={(value) => props.applyAccessMode(value as DesktopAccessMode)} />

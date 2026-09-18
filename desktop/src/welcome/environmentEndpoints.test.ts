@@ -35,14 +35,19 @@ describe('Environment endpoint ownership', () => {
     expect(connectionAddressRows([...urls, urls[0]])).toEqual(connectionAddressRows(urls));
   });
 
+  it('presents usable browser addresses before internal listeners regardless of protocol', () => {
+    const rows = buildEnvironmentCardEndpointsModel(ssh('gzcom', { local_ui_urls: ['http://localhost:23998/', 'https://192.0.2.20:23998/'] }));
+    expect(rows.map(row => row.kind === 'address' ? row.access_scope : row.kind)).toEqual(['connection', 'network', 'environment_only']);
+  });
+
   it('identifies each SSH host before its host-only listener', () => {
     for (const host of ['gzcom', 'gzlight']) {
       const rows = buildEnvironmentCardEndpointsModel(ssh(host));
       expect(rows[0]).toMatchObject({ kind: 'connection', value: `${host}:22` });
       expect(rows[1]).toMatchObject({
-        kind: 'address', value: 'http://localhost:23998/',
+        kind: 'address', value: 'http://localhost:23998/', access_scope: 'environment_only', label_key: 'environmentConnection.browserAccess',
         copyable: false, browser_openable: false, shareable: false,
-        detail_params: { host: `${host}:22` },
+        detail_params: { host },
       });
     }
   });
@@ -63,9 +68,9 @@ describe('Environment endpoint ownership', () => {
   it.each(['http://localhost:23998/', 'https://127.0.0.1:23998/', 'http://[::1]:23998/', 'http://preview.localhost:23998/'])(
     'keeps loopback in its own namespace: %s', (url) => {
       const remoteRows = buildEnvironmentCardEndpointsModel(ssh('gzcom', { local_ui_urls: [url] }));
-      expect(remoteRows).toContainEqual(expect.objectContaining({ value: url, copyable: false, browser_openable: false, shareable: false }));
+      expect(remoteRows).toContainEqual(expect.objectContaining({ value: url, access_scope: 'environment_only', copyable: false, browser_openable: false, shareable: false }));
       const localRows = buildEnvironmentCardEndpointsModel({ ...local, local_ui_urls: [url] });
-      expect(localRows).toContainEqual(expect.objectContaining({ value: url, copyable: true, browser_openable: true, shareable: false }));
+      expect(localRows).toContainEqual(expect.objectContaining({ value: url, access_scope: 'this_device', label_key: 'environmentConnection.deviceAddress', copyable: true, browser_openable: true, shareable: false }));
     },
   );
 
@@ -74,7 +79,7 @@ describe('Environment endpoint ownership', () => {
       local_ui_urls: ['http://192.0.2.20:23998/', 'https://[2001:db8::2]:25000/', 'http://192.0.2.20:23998/'],
     }));
     expect(rows.filter((row) => row.kind === 'address')).toEqual([
-      expect.objectContaining({ value: 'http://192.0.2.20:23998/', copyable: true, browser_openable: true, shareable: true }),
+      expect.objectContaining({ value: 'http://192.0.2.20:23998/', access_scope: 'network', label_key: 'environmentConnection.networkAccessAddress', copyable: true, browser_openable: true, shareable: true }),
       expect.objectContaining({ value: 'https://[2001:db8::2]:25000/', copyable: true, browser_openable: true, shareable: true }),
     ]);
   });
