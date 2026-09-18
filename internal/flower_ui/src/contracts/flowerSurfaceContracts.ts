@@ -1207,7 +1207,7 @@ export type FlowerComputerAccess = Readonly<{
 }>;
 export type FlowerBrowserConnection = Readonly<{ managed_profile_id?: string; cdp_url?: string; tab_id?: string; tab_title?: string; tab_url?: string; profile_id?: string; extension_profile_id?: string; new_tab?: boolean }>;
 export type FlowerBrowserTab = Readonly<{ id: string; profile_id: string; title: string; url: string }>;
-export type FlowerComputerExtensionSetup = Readonly<{ native_host: string; extension_id: string; extension_path: string }>;
+export type FlowerComputerExtensionSetup = Readonly<{ native_host: string; extension_id: string; extension_path: string; extension_home_path: readonly string[]; platform: 'darwin' | 'linux' }>;
 export type FlowerComputerManagement = Readonly<{
   revealTarget?: (threadID: string, targetID: string) => Promise<void>;
   listCandidates: (threadID: string) => Promise<FlowerComputerInventory>;

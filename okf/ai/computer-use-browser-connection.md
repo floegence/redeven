@@ -18,14 +18,23 @@ prepares the native connection automatically, shows the unpacked-extension
 installation steps and offers fixed actions to open Chrome extensions, the
 installation folder, or the extension's confirmation page. The package has no
 store listing: users enable Developer mode and use Load unpacked in Chrome.
-The stable installation directory belongs to the Runtime state root, so a new
-Runtime build does not change the folder Chrome registered. Staging validates a
-complete bundle before replacing it and removes retired assets.
+The stable installation lives under the user's visible `Redeven` home folder.
+Its `Flower Browser <identity>` name derives from the Runtime profile root, so
+different Runtimes cannot overwrite each other and rebuilding preserves the
+registered location. Runtime returns the absolute `extension_path`, exact
+`extension_home_path` components and host `platform` from one location mapping.
+Staging rejects linked destination directories, validates a complete bundle
+before replacement and removes retired assets. Users retain this folder after
+installation; it is not a temporary unpacking directory.
 
 Installation and connection appear as two separate steps, with one primary
 action at a time. The initial screen opens Chrome extensions or lets an existing
-installation skip ahead. Opening extensions reveals the two installation
-instructions and folder actions; acknowledging installation advances only the
+installation skip ahead. Opening extensions reveals developer mode, the load
+button and a visible home-to-folder route. Host-specific Home shortcuts assist
+normal picker navigation; hidden-file toggles and absolute path entry are not
+required. Show folder reveals the installation in Finder or opens its visible
+parent on Linux; it never selects a folder in Chrome's picker. Copying an absolute
+path remains optional inside help. Acknowledging installation advances only the
 guide. It does not establish a connection or resume the task. Long paths and
 host/browser limitations remain available in collapsed help. Users can return to
 installation from the connection step. Conversation assistance uses one short
@@ -55,7 +64,7 @@ assistance may reuse already connected profiles and resume immediately. Genuine
 profile ambiguity remains the Agent's responsibility through existing discovery.
 The extension's optional profile label is user content, not routing authority.
 
-Runtime Service epoch 25 requires the fixed setup/open/inventory endpoints in
+Runtime Service epoch 26 pairs the setup route and host-platform facts with
 both product carriers. Native Messaging uses protocol 6. The extension
 connection page remains consent-gated even when the URL supplies configuration.
 No database, Floret API, tool-selection rule or authorization policy changes.
@@ -68,6 +77,18 @@ after Respond. A failed or cancelled guide leaves the task paused. Uncertain
 tool effects, private pixels and explicit Stop keep their existing boundaries.
 
 # Evidence
+
+Chrome labels were checked on 2026-09-18 against Chromium's
+[extension messages](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/app/extensions_strings.grdp)
+and the `generated_resources_<locale>.xtb` translations under
+[chrome/app/resources](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/app/resources/).
+The shipped English, German, Spanish, French, Japanese, Korean, Brazilian
+Portuguese, Russian, Simplified Chinese and Traditional Chinese catalogs use
+the actual Developer mode and Load unpacked labels. Simplified Chinese also
+names the earlier label from
+[Chromium 120](https://chromium.googlesource.com/chromium/src/+/refs/tags/120.0.6099.109/chrome/app/resources/generated_resources_zh-CN.xtb).
+This locale-specific alternate is intentional. Chrome language and version may
+differ from Redeven; collapsed help includes the English labels.
 
 - `redeven:internal/ai/computer_extension_onboarding.go` - fixed native destinations and stable package staging.
 - `redeven:internal/ai/computer_extension_onboarding_test.go` - destination rejection, sandbox arguments and installation replacement.

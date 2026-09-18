@@ -897,7 +897,7 @@
       "setupConfirmTitle": "Chrome に接続",
       "setupConfirmHint": "Chrome で開いたページの「接続」をクリックしてください。タスクが自動的に再開します。",
       "openExtensions": "Chrome の拡張機能を開く",
-      "openExtensionFolder": "フォルダーを開く",
+      "openExtensionFolder": "フォルダを表示",
       "copyExtensionPath": "フォルダーのパスをコピー",
       "pathCopied": "パスをコピーしました",
       "openConnection": "Chrome で接続",
@@ -909,7 +909,11 @@
       "setupHelp": "お困りですか？",
       "setupHostHint": "この環境を実行しているパソコンの Google Chrome を使用してください。Safari などのブラウザには未対応です。",
       "setupDeveloperMode": "右上の「デベロッパー モード」をオンにします。",
-      "setupLoadUnpacked": "「パッケージ化されていない拡張機能を読み込む」をクリックし、拡張機能のフォルダを選択します。"
+      "setupLoadUnpacked": "左上の「パッケージ化されていない拡張機能を読み込む」をクリックします。",
+      "setupChooseFolder": "フォルダ選択画面で、ホームフォルダから順に開きます：",
+      "setupHome": "ホーム",
+      "setupFolderHint": "最後のフォルダを選択して確定します。インストール後もこの場所に残してください。",
+      "setupLabelsHint": "ボタン名は Chrome の言語やバージョンによって異なります。英語では Developer mode と Load unpacked です。"
     }
   },
   "common": {

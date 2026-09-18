@@ -906,7 +906,7 @@
       "setupConfirmTitle": "Подключение Chrome",
       "setupConfirmHint": "На открывшейся в Chrome странице нажмите «Подключить». Задача продолжится автоматически.",
       "openExtensions": "Открыть расширения Chrome",
-      "openExtensionFolder": "Открыть папку",
+      "openExtensionFolder": "Показать папку",
       "copyExtensionPath": "Копировать путь к папке",
       "pathCopied": "Путь скопирован",
       "openConnection": "Подключить в Chrome",
@@ -918,7 +918,11 @@
       "setupHelp": "Нужна помощь?",
       "setupHostHint": "Используйте Google Chrome на компьютере, где запущено это окружение. Safari и другие браузеры пока не поддерживаются.",
       "setupDeveloperMode": "Включите «Режим разработчика» в правом верхнем углу.",
-      "setupLoadUnpacked": "Нажмите «Загрузить распакованное расширение» и выберите папку расширения."
+      "setupLoadUnpacked": "Нажмите «Загрузить распакованное расширение» в левом верхнем углу.",
+      "setupChooseFolder": "В окне выбора папки начните с домашней папки:",
+      "setupHome": "Домашняя папка",
+      "setupFolderHint": "Выберите последнюю папку и подтвердите выбор. После установки оставьте её на этом месте.",
+      "setupLabelsHint": "Названия кнопок зависят от языка и версии Chrome. На английском это Developer mode и Load unpacked."
     }
   },
   "common": {

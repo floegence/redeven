@@ -897,7 +897,7 @@
       "setupConfirmTitle": "Chrome verbinden",
       "setupConfirmHint": "Klicken Sie auf der in Chrome geöffneten Seite auf Verbinden. Ihre Aufgabe wird automatisch fortgesetzt.",
       "openExtensions": "Chrome-Erweiterungen öffnen",
-      "openExtensionFolder": "Ordner öffnen",
+      "openExtensionFolder": "Ordner anzeigen",
       "copyExtensionPath": "Ordnerpfad kopieren",
       "pathCopied": "Pfad kopiert",
       "openConnection": "In Chrome verbinden",
@@ -908,8 +908,12 @@
       "setupBack": "Zurück",
       "setupHelp": "Brauchen Sie Hilfe?",
       "setupHostHint": "Verwenden Sie Google Chrome auf dem Computer, auf dem diese Umgebung läuft. Safari und andere Browser werden noch nicht unterstützt.",
-      "setupDeveloperMode": "Aktivieren Sie oben rechts den Entwicklermodus.",
-      "setupLoadUnpacked": "Klicken Sie auf Entpackte Erweiterung laden und wählen Sie den Erweiterungsordner aus."
+      "setupDeveloperMode": "Aktivieren Sie oben rechts den „Entwicklermodus“.",
+      "setupLoadUnpacked": "Klicken Sie oben links auf „Entpackte Erweiterung laden“.",
+      "setupChooseFolder": "Öffnen Sie im Ordnerdialog ausgehend von Ihrem persönlichen Ordner:",
+      "setupHome": "Persönlicher Ordner",
+      "setupFolderHint": "Wählen Sie den letzten Ordner und bestätigen Sie. Behalten Sie ihn nach der Installation an diesem Ort.",
+      "setupLabelsHint": "Die Schaltflächen hängen von der Sprache und Version von Chrome ab. Auf Englisch heißen sie Developer mode und Load unpacked."
     }
   },
   "common": {

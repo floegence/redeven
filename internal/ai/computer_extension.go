@@ -23,9 +23,11 @@ import (
 )
 
 type ComputerExtensionSetup struct {
-	NativeHost    string `json:"native_host"`
-	ExtensionID   string `json:"extension_id"`
-	ExtensionPath string `json:"extension_path"`
+	NativeHost        string   `json:"native_host"`
+	ExtensionID       string   `json:"extension_id"`
+	ExtensionPath     string   `json:"extension_path"`
+	ExtensionHomePath []string `json:"extension_home_path"`
+	Platform          string   `json:"platform"`
 }
 type ComputerExtensionProfile struct {
 	ID   string `json:"id"`
@@ -95,9 +97,13 @@ func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (Comput
 	if info, err := os.Stat(filepath.Join(resources, "manifest.json")); err != nil || !info.Mode().IsRegular() {
 		return ComputerExtensionSetup{}, errors.New("packaged browser extension unavailable")
 	}
-	installation := filepath.Join(filepath.Dir(managed.ProfileDir), "browser-extension")
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		return ComputerExtensionSetup{}, err
+	}
+	setup := computerExtensionInstallLocation(userHome, managed.ProfileDir)
 	if hub == nil {
-		if err := stageComputerExtension(resources, installation); err != nil {
+		if err := stageComputerExtension(resources, setup.ExtensionPath); err != nil {
 			return ComputerExtensionSetup{}, err
 		}
 		directory, err := os.MkdirTemp("/tmp", "redeven-chrome-")
@@ -121,27 +127,21 @@ func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (Comput
 	if err != nil {
 		return ComputerExtensionSetup{}, err
 	}
-	userHome, err := os.UserHomeDir()
-	if err != nil {
-		return ComputerExtensionSetup{}, err
-	}
 	manifestDirectory := filepath.Join(userHome, ".config", "google-chrome", "NativeMessagingHosts")
 	if runtime.GOOS == "darwin" {
 		manifestDirectory = filepath.Join(userHome, "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts")
 	}
-	digest := sha256.Sum256([]byte(managed.ProfileDir))
-	nativeName := "dev.floegence.redeven.r" + hex.EncodeToString(digest[:8])
 	wrapper := filepath.Join(hub.directory, "native-host")
 	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'" }
 	script := "#!/bin/sh\nexec " + quote(executable) + " browser-bridge " + quote(filepath.Join(hub.directory, "bridge")) + " \"$@\"\n"
 	if err := os.WriteFile(wrapper, []byte(script), 0700); err != nil {
 		return ComputerExtensionSetup{}, err
 	}
-	manifest, _ := json.MarshalIndent(map[string]any{"name": nativeName, "description": "Flower browser connection", "path": wrapper, "type": "stdio", "allowed_origins": []string{"chrome-extension://" + browserbridge.ExtensionID + "/"}}, "", "  ")
+	manifest, _ := json.MarshalIndent(map[string]any{"name": setup.NativeHost, "description": "Flower browser connection", "path": wrapper, "type": "stdio", "allowed_origins": []string{"chrome-extension://" + browserbridge.ExtensionID + "/"}}, "", "  ")
 	if err := os.MkdirAll(manifestDirectory, 0700); err != nil {
 		return ComputerExtensionSetup{}, err
 	}
-	manifestPath := filepath.Join(manifestDirectory, nativeName+".json")
+	manifestPath := filepath.Join(manifestDirectory, setup.NativeHost+".json")
 	manifest = append(manifest, '\n')
 	if err := os.WriteFile(manifestPath, manifest, 0600); err != nil {
 		return ComputerExtensionSetup{}, err
@@ -149,7 +149,16 @@ func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (Comput
 	hub.mu.Lock()
 	hub.manifestPath, hub.manifestBytes = manifestPath, manifest
 	hub.mu.Unlock()
-	return ComputerExtensionSetup{NativeHost: nativeName, ExtensionID: browserbridge.ExtensionID, ExtensionPath: installation}, nil
+	return setup, nil
+}
+
+func computerExtensionInstallLocation(userHome, profileDir string) ComputerExtensionSetup {
+	digest := sha256.Sum256([]byte(profileDir))
+	identity := hex.EncodeToString(digest[:8])
+	parts := []string{"Redeven", "Flower Browser " + identity}
+	return ComputerExtensionSetup{NativeHost: "dev.floegence.redeven.r" + identity,
+		ExtensionID: browserbridge.ExtensionID, ExtensionPath: filepath.Join(userHome, parts[0], parts[1]),
+		ExtensionHomePath: parts, Platform: runtime.GOOS}
 }
 
 func (h *computerExtensionHub) accept() {

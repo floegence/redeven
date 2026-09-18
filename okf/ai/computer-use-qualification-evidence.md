@@ -22,6 +22,26 @@ one adapter or from a model request returning HTTP 200.
 
 # Evidence
 
+## Visible installation folders
+
+The 2026-09-18 guide refinement installed the packaged extension in an isolated
+real Google Chrome profile on macOS. The native picker used Home followed by
+visible `Redeven` and task-owned extension folders, then confirmed selection.
+No absolute path entry, hidden-file toggle, preloaded extension or sandbox
+override was used. The actual Chrome control read
+“加载未打包的扩展程序”. The test removes its exact profile and extension folder.
+The picker driver binds accessibility and input to the test Chrome PID.
+The opt-in runner is
+`redeven:internal/envapp/ui_src/scripts/computerExtensionInstall.node-test.mjs`
+with `REDEVEN_CHROME_INSTALL_QUALIFICATION=1`.
+
+English, Simplified Chinese, German and Japanese guide browser tests cover
+the visible route, host-specific shortcut, narrow layouts, optional path help,
+back/skip and handshake-only continuation. Both product catalogs are checked
+for parity across all ten locales. Linux staging and fixed reveal commands
+pass deterministic tests on the current host; Linux native GTK, Qt and portal
+pickers were not exercised on this macOS machine.
+
 ## Observation recovery
 
 The 2026-09-18 observation repair reproduced a normal page losing an iframe

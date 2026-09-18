@@ -8,6 +8,8 @@ import type { FlowerComputerAccess } from '../../../../flower_ui/src/contracts/f
 import { FlowerComputerConnections } from '../../../../flower_ui/src/FlowerComputerConnections';
 import { FlowerProfileConnection } from '../../../../flower_ui/src/FlowerProfileConnection';
 import zhCN from './i18n/locales/catalogs/zh-CN.json';
+import deDE from './i18n/locales/catalogs/de-DE.json';
+import jaJP from './i18n/locales/catalogs/ja-JP.json';
 import { computerUseEnUS } from '../../../../flower_ui/src/computerUseCopy';
 import { adapter, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -235,7 +237,7 @@ it('prepares Chrome automatically and continues only after a real connection', a
   const management = {
     listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
     listTargets: vi.fn(), listBrowserTabs: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(),
-    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/extension', native_host: 'fixture.host', extension_id: 'fixture' }),
+    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/Redeven/Flower Browser fixture', platform: 'darwin', extension_home_path: ['Redeven', 'Flower Browser fixture'], native_host: 'fixture.host', extension_id: 'fixture' }),
     openExtension: vi.fn().mockResolvedValue(undefined), listExtensionProfiles: connected, listExtensionTabs: vi.fn(),
   };
   const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open connectionOnly onContinue={continued} onOpenChange={() => undefined} threadID="thread"
@@ -274,7 +276,7 @@ it('does not continue a closed guide when profile discovery finishes late', asyn
   const management = {
     listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
     listTargets: vi.fn(), listBrowserTabs: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(),
-    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/extension', native_host: 'fixture.host', extension_id: 'fixture' }),
+    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/Redeven/Flower Browser fixture', platform: 'darwin', extension_home_path: ['Redeven', 'Flower Browser fixture'], native_host: 'fixture.host', extension_id: 'fixture' }),
     openExtension: vi.fn(), listExtensionProfiles: vi.fn(() => new Promise<{id:string;name:string}[]>(done => { resolve = done; })),
   };
   const stop = render(() => <FloeConfigProvider><FlowerProfileConnection connectionOnly onContinue={continued}
@@ -292,7 +294,7 @@ it('allows adding a second Chrome profile without treating the existing connecti
   const management = {
     listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
     listTargets: vi.fn(), listBrowserTabs: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(),
-    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/extension', native_host: 'fixture.host', extension_id: 'fixture' }),
+    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/Redeven/Flower Browser fixture', platform: 'darwin', extension_home_path: ['Redeven', 'Flower Browser fixture'], native_host: 'fixture.host', extension_id: 'fixture' }),
     openExtension: vi.fn(), listExtensionProfiles: profiles, listExtensionTabs: vi.fn(),
   };
   const stop = render(() => <FloeConfigProvider><FlowerProfileConnection management={management} connect={vi.fn()} copy={computerUseEnUS} onConnected={() => undefined} /></FloeConfigProvider>, host);
@@ -325,7 +327,7 @@ it('stops after a failed automatic continuation and exposes explicit retry witho
   await waitFor(() => continued.mock.calls.length === 2);
 });
 
-for (const [locale, copy] of [['en-US', computerUseEnUS], ['zh-CN', zhCN.flowerSurface.computer]] as const) {
+for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['zh-CN', zhCN.flowerSurface.computer, 'darwin'], ['de-DE', deDE.flowerSurface.computer, 'linux'], ['ja-JP', jaJP.flowerSurface.computer, 'darwin']] as const) {
   it(`keeps Chrome guidance focused and supports skip, back, help and open failure in ${locale}`, async () => {
     const { page, userEvent } = await import('vitest/browser');
     const host = document.createElement('div'); document.body.append(host);
@@ -333,7 +335,7 @@ for (const [locale, copy] of [['en-US', computerUseEnUS], ['zh-CN', zhCN.flowerS
     const management = {
       listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
       listTargets: vi.fn(), listBrowserTabs: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(),
-      setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/a-very-long-runtime-state-directory/computer/browser-extension', native_host: 'fixture.host', extension_id: 'fixture' }),
+      setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/Redeven/Flower Browser 123456789abcdef0', platform, extension_home_path: ['Redeven', 'Flower Browser 123456789abcdef0'], native_host: 'fixture.host', extension_id: 'fixture' }),
       openExtension: vi.fn().mockRejectedValueOnce(new Error('private open details')).mockResolvedValue(undefined),
       listExtensionProfiles: vi.fn().mockResolvedValue([]),
     };
@@ -367,6 +369,11 @@ for (const [locale, copy] of [['en-US', computerUseEnUS], ['zh-CN', zhCN.flowerS
       expect(primary()).toHaveLength(1);
       expect(dialog().innerText).toContain(copy.setupDeveloperMode);
       expect(dialog().innerText).toContain(copy.setupLoadUnpacked);
+      expect(dialog().querySelector('[data-extension-folder-route]')?.textContent).toContain('Redeven');
+      expect(dialog().querySelector('[data-extension-folder-route]')?.textContent).toContain('Flower Browser 123456789abcdef0');
+      expect(dialog().querySelector('[data-extension-folder-route] kbd')?.textContent).toBe(platform === 'darwin' ? '⌘⇧H' : 'Alt+Home');
+      expect(button(copy.copyExtensionPath).checkVisibility()).toBe(false);
+      expect(dialog().innerText).toContain(copy.setupFolderHint);
       if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-install.png` });
       const summary = dialog().querySelector('summary')!;
       summary.focus(); await userEvent.keyboard('{Enter}');
