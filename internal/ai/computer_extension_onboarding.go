@@ -63,12 +63,12 @@ func computerExtensionOpenCommand(platform, action string, setup ComputerExtensi
 	switch platform {
 	case "darwin":
 		if action == "folder" {
-			return "/usr/bin/open", []string{destination}, nil
+			return "/usr/bin/open", []string{"-R", destination}, nil
 		}
 		return "/usr/bin/open", []string{"-b", "com.google.Chrome", destination}, nil
 	case "linux":
 		if action == "folder" {
-			return "xdg-open", []string{destination}, nil
+			return "xdg-open", []string{filepath.Dir(destination)}, nil
 		}
 		return "google-chrome", []string{destination}, nil
 	default:
@@ -92,6 +92,20 @@ func stageComputerExtension(source, destination string) error {
 	}
 	if err := os.MkdirAll(filepath.Dir(destination), 0700); err != nil {
 		return err
+	}
+	// Installation is visible in the user's home. A pre-existing shortcut must
+	// not redirect package writes into an unrelated directory.
+	for _, path := range []string{filepath.Dir(destination), destination} {
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) && path == destination {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("invalid browser extension installation directory")
+		}
 	}
 	staged, err := os.MkdirTemp(filepath.Dir(destination), ".extension-")
 	if err != nil {

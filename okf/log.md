@@ -1,5 +1,15 @@
 # Redeven OKF Update Log
 
+## 2026-09-18 — Visible Chrome installation
+
+- Align all shipped Chrome guide locales with actual Chromium toolbar labels,
+  including the Simplified Chinese name used by older Chrome versions.
+- Install into a visible, stable, per-Runtime directory beneath the user's home;
+  show its exact route and host-specific Home shortcut. Keep path copying in
+  help and distinguish revealing a folder from selecting it inside Chrome.
+- Advance the Runtime Service window to epoch 26 for the setup route/platform
+  facts. Browser protocol 6 and the published upstream APIs remain unchanged.
+
 ## 2026-09-18 — Desktop model continuation
 
 - Forward opaque provider state across Desktop RPC and interpret it only at the

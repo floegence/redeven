@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -17,11 +18,18 @@ func TestExtensionOnboardingOpensOnlyFixedDestinations(t *testing.T) {
 		if action == "extensions" && !reflect.DeepEqual(args, []string{"-b", "com.google.Chrome", "chrome://extensions/"}) {
 			t.Fatal(args)
 		}
+		if action == "folder" && !reflect.DeepEqual(args, []string{"-R", setup.ExtensionPath}) {
+			t.Fatal(args)
+		}
 		for _, arg := range args {
 			if arg == "--no-sandbox" {
 				t.Fatal("browser sandbox disabled")
 			}
 		}
+	}
+	name, args, err := computerExtensionOpenCommand("linux", "folder", setup)
+	if err != nil || name != "xdg-open" || !reflect.DeepEqual(args, []string{filepath.Dir(setup.ExtensionPath)}) {
+		t.Fatalf("linux reveal: %s %v %v", name, args, err)
 	}
 	for _, action := range []string{"", "https://example.com", "../folder", "--args", "file:///tmp"} {
 		if _, _, err := computerExtensionOpenCommand("darwin", action, setup); err == nil {
@@ -30,6 +38,39 @@ func TestExtensionOnboardingOpensOnlyFixedDestinations(t *testing.T) {
 	}
 	if _, _, err := computerExtensionOpenCommand("windows", "connect", setup); err == nil {
 		t.Fatal("unsupported platform accepted")
+	}
+}
+
+func TestExtensionInstallLocationIsVisibleAndRuntimeScoped(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "Personal Files")
+	first := computerExtensionInstallLocation(home, filepath.Join(root, ".runtime-one", "profiles"))
+	second := computerExtensionInstallLocation(home, filepath.Join(root, ".runtime-two", "profiles"))
+	if first.ExtensionPath == second.ExtensionPath || first.NativeHost == second.NativeHost {
+		t.Fatal("runtime installations overlap")
+	}
+	for _, setup := range []ComputerExtensionSetup{first, second} {
+		for _, part := range setup.ExtensionHomePath {
+			if strings.HasPrefix(part, ".") || strings.ContainsAny(part, `/\\`) {
+				t.Fatalf("unbrowsable folder: %q", part)
+			}
+		}
+		if filepath.Join(append([]string{home}, setup.ExtensionHomePath...)...) != setup.ExtensionPath {
+			t.Fatal("displayed route differs from installation")
+		}
+		source := t.TempDir()
+		if err := os.WriteFile(filepath.Join(source, "manifest.json"), []byte("fixture"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := stageComputerExtension(source, setup.ExtensionPath); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(filepath.Join(setup.ExtensionPath, "manifest.json")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !reflect.DeepEqual(first, computerExtensionInstallLocation(home, filepath.Join(root, ".runtime-one", "profiles"))) {
+		t.Fatal("installation changed across setup calls")
 	}
 }
 
@@ -71,5 +112,29 @@ func TestExtensionInstallPathSurvivesBuildChangesAndRemovesRetiredAssets(t *test
 	raw, _ = os.ReadFile(filepath.Join(target, "manifest.json"))
 	if string(raw) != "second" {
 		t.Fatal("failed staging changed installed bytes")
+	}
+}
+
+func TestExtensionStagingRejectsLinkedInstallDirectory(t *testing.T) {
+	root := t.TempDir()
+	source, outside := filepath.Join(root, "bundle"), filepath.Join(root, "outside")
+	for _, directory := range []string{source, outside} {
+		if err := os.Mkdir(directory, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(source, "manifest.json"), []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	linked := filepath.Join(root, "Redeven")
+	if err := os.Symlink(outside, linked); err != nil {
+		t.Fatal(err)
+	}
+	if err := stageComputerExtension(source, filepath.Join(linked, "Flower")); err == nil {
+		t.Fatal("followed linked installation directory")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("changed unrelated directory: %v %v", entries, err)
 	}
 }

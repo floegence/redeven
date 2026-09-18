@@ -81,7 +81,7 @@ selection, reveal, popup progress and confirmed progress on observation failure.
 Only readonly inspection is retried; actions and scripts are never replayed.
 Native execution remains protocol 3. All carry
 host-owned `full_access` authorization. Inventory and isolated JavaScript helpers
-retain protocol 2. Desktop and Runtime negotiate compatibility epoch 25 and
+retain protocol 2. Desktop and Runtime negotiate compatibility epoch 26 and
 minimum version v0.13.0. Older execution helpers and
 resource inventories are rejected instead of used as a silent substitute. The
 compatibility JSON remains the release authority, independently of this document.

@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import type { FlowerComputerExtensionSetup, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
@@ -15,6 +15,7 @@ export function FlowerChromeConnection(props: {
   const [opening, setOpening] = createSignal(false);
   const [openFailed, setOpenFailed] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
+  let pathInput: HTMLInputElement | undefined;
   let initialProfiles: Set<string> | undefined;
   let disposed = false, completing = false, deadline = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -88,12 +89,18 @@ export function FlowerChromeConnection(props: {
         <Show when={extensionsOpened()} fallback={<p class="text-sm leading-relaxed text-muted-foreground">{props.copy.extensionHint}</p>}>
           <ol class="list-decimal space-y-3 pl-5 text-sm leading-relaxed">
             <li>{props.copy.setupDeveloperMode}</li>
-            <li>{props.copy.setupLoadUnpacked}
-              <div class="mt-2 flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" disabled={opening()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button>
-                <Button size="sm" variant="ghost" onClick={() => {
-                  void navigator.clipboard.writeText(setup()!.extension_path).then(() => { if (!disposed) setCopied(true); }, () => { if (!disposed) setOpenFailed(true); });
-                }}>{copied() ? props.copy.pathCopied : props.copy.copyExtensionPath}</Button>
+            <li>{props.copy.setupLoadUnpacked}</li>
+            <li>{props.copy.setupChooseFolder}
+              <div class="mt-2 rounded-md border border-border bg-muted/30 p-3" role="group" aria-label={props.copy.extensionPath}>
+                <ol class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-extension-folder-route>
+                  <li class="flex items-center gap-1.5 text-muted-foreground">{props.copy.setupHome}<kbd class="rounded border border-border px-1 py-0.5 text-[10px]">{setup()!.platform === 'darwin' ? '⌘⇧H' : 'Alt+Home'}</kbd></li>
+                  <For each={setup()!.extension_home_path}>{(part, index) => <li class="flex min-w-0 items-center gap-2">
+                    <span aria-hidden="true" class="text-muted-foreground">›</span>
+                    <span class="break-all" classList={{ 'font-medium': index() === setup()!.extension_home_path.length - 1 }}>{part}</span>
+                  </li>}</For>
+                </ol>
+                <p class="mt-2 text-xs leading-relaxed text-muted-foreground">{props.copy.setupFolderHint}</p>
+                <Button class="mt-2" size="sm" variant="outline" disabled={opening()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button>
               </div>
             </li>
           </ol>
@@ -116,7 +123,13 @@ export function FlowerChromeConnection(props: {
         <summary class="w-fit cursor-pointer">{props.copy.setupHelp}</summary>
         <div class="mt-3 space-y-3 leading-relaxed">
           <p>{props.copy.setupHostHint}</p>
-          <label class="block space-y-1">{props.copy.extensionPath}<input class="flower-settings-text-input w-full" readOnly value={setup()!.extension_path} /></label>
+          <p>{props.copy.setupLabelsHint}</p>
+          <label class="block space-y-1">{props.copy.extensionPath}<input ref={pathInput} class="flower-settings-text-input w-full" readOnly value={setup()!.extension_path} onFocus={event => event.currentTarget.select()} /></label>
+          <Button size="sm" variant="ghost" onClick={() => {
+            void navigator.clipboard.writeText(setup()!.extension_path).then(() => { if (!disposed) setCopied(true); }, () => {
+              if (!disposed) { pathInput?.focus(); pathInput?.select(); }
+            });
+          }}>{copied() ? props.copy.pathCopied : props.copy.copyExtensionPath}</Button>
         </div>
       </details>
     </Show>

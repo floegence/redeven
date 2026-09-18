@@ -897,7 +897,7 @@
       "setupConfirmTitle": "Conectar Chrome",
       "setupConfirmHint": "Na página aberta no Chrome, clique em Conectar. Sua tarefa continuará automaticamente.",
       "openExtensions": "Abrir extensões do Chrome",
-      "openExtensionFolder": "Abrir pasta",
+      "openExtensionFolder": "Mostrar pasta",
       "copyExtensionPath": "Copiar caminho da pasta",
       "pathCopied": "Caminho copiado",
       "openConnection": "Conectar no Chrome",
@@ -908,8 +908,12 @@
       "setupBack": "Voltar",
       "setupHelp": "Precisa de ajuda?",
       "setupHostHint": "Use o Google Chrome no computador que executa este ambiente. Safari e outros navegadores ainda não são compatíveis.",
-      "setupDeveloperMode": "Ative o Modo do desenvolvedor no canto superior direito.",
-      "setupLoadUnpacked": "Clique em Carregar sem compactação e selecione a pasta da extensão."
+      "setupDeveloperMode": "Ative “Modo do desenvolvedor” no canto superior direito.",
+      "setupLoadUnpacked": "Clique em “Carregar sem compactação” no canto superior esquerdo.",
+      "setupChooseFolder": "No seletor de pastas, comece pela sua pasta pessoal:",
+      "setupHome": "Pasta pessoal",
+      "setupFolderHint": "Selecione a última pasta e confirme. Mantenha-a aqui após a instalação.",
+      "setupLabelsHint": "Os nomes dos botões variam conforme o idioma e a versão do Chrome. Em inglês, são Developer mode e Load unpacked."
     }
   },
   "common": {

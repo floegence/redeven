@@ -897,7 +897,7 @@
       "setupConfirmTitle": "連線至 Chrome",
       "setupConfirmHint": "在 Chrome 開啟的頁面中點選「連線」，任務會自動繼續。",
       "openExtensions": "開啟 Chrome 擴充功能頁面",
-      "openExtensionFolder": "開啟資料夾",
+      "openExtensionFolder": "顯示資料夾",
       "copyExtensionPath": "複製資料夾路徑",
       "pathCopied": "已複製路徑",
       "openConnection": "前往 Chrome 連線",
@@ -909,7 +909,11 @@
       "setupHelp": "需要協助？",
       "setupHostHint": "請使用執行此環境的電腦上的 Google Chrome。目前不支援 Safari 等其他瀏覽器。",
       "setupDeveloperMode": "開啟右上角的「開發人員模式」。",
-      "setupLoadUnpacked": "點選「載入未封裝項目」，選取擴充功能資料夾。"
+      "setupLoadUnpacked": "點選左上角的「載入未封裝項目」。",
+      "setupChooseFolder": "在資料夾選擇視窗中，從個人資料夾依序開啟：",
+      "setupHome": "個人資料夾",
+      "setupFolderHint": "選取最後一個資料夾並確認。安裝後請保留此資料夾。",
+      "setupLabelsHint": "按鈕名稱會隨 Chrome 的語言與版本而變更。英文介面對應 Developer mode 和 Load unpacked。"
     }
   },
   "common": {

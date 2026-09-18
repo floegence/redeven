@@ -114,7 +114,7 @@ try {
   const profile = path.join(directory, 'profile'); await mkdir(path.join(profile, 'NativeMessagingHosts'), { recursive: true });
   await writeFile(path.join(profile, 'NativeMessagingHosts', `${nativeHost}.json`), manifest);
   personal = await chromium.launchPersistentContext(profile, { channel: 'chrome', headless: false, chromiumSandbox: true, ignoreDefaultArgs: ['--disable-extensions'] });
-  const installation = await installChromeExtensionThroughUI(personal, extension, setup.extension_id);
+  const installation = await installChromeExtensionThroughUI(personal, extension, setup.extension_id, setup.extension_home_path);
   await installation.screenshot({ path: path.join(output, 'chrome-installed.png') });
   const existing = await personal.newPage(); await existing.goto(origin); await existing.getByRole('textbox').fill('keep my unfinished work');
   await dialog.getByRole('button', { name: 'Already installed', exact: true }).click();
