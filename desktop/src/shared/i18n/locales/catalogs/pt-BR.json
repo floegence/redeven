@@ -1112,6 +1112,7 @@
     "resolveAccessDraft": "Salve ou descarte as alterações de acesso antes de mudar o destino da conexão.",
     "loadingAccess": "Carregando configurações de acesso…",
     "loadAccessFailed": "Não foi possível carregar as configurações de acesso",
+    "accessAuthorizationFailed": "Este ambiente não autorizou o Desktop a gerenciar estas configurações. Tente novamente ou copie as informações de diagnóstico para investigar o problema.",
     "startEnvironment": "Iniciar ambiente",
     "wslStopped": "Inicie este ambiente WSL antes de ler ou salvar suas configurações de acesso."
   },

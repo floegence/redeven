@@ -1112,6 +1112,7 @@
     "resolveAccessDraft": "更改连接目标前，请先保存或放弃访问设置中的修改。",
     "loadingAccess": "正在加载访问设置…",
     "loadAccessFailed": "无法加载访问设置",
+    "accessAuthorizationFailed": "此环境未授权 Desktop 管理这些设置。请重试，或复制诊断信息以便排查。",
     "startEnvironment": "启动环境",
     "wslStopped": "请先启动此 WSL 环境，再读取或保存其访问设置。"
   },

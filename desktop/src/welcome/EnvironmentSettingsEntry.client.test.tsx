@@ -73,6 +73,27 @@ describe('environment card settings entry', () => {
     expect(name.value).toBe('Unsaved name');
     expect(h.performAction).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'open_environment_settings' }));
   });
+  it.each([401, 403])('explains denied access %s, retains diagnostics for Copy, and retries in the same window', async status => {
+    const diagnostic = `Runtime control returned HTTP ${status}: Desktop-only Local UI bridge; open this Environment from Desktop`;
+    const load = vi.fn().mockResolvedValueOnce({ ok: false, error: diagnostic, code: 'RUNTIME_CONTROL_HTTP_ERROR', status_code: status }).mockResolvedValue(success);
+    await mount(load);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText }, userAgent: navigator.userAgent });
+    button('Settings for Fixture SSH').click(); await settle();
+    input('ssh-settings-label', 'Retained draft');
+    const dialog = document.querySelector('[role="dialog"]');
+    button('Access & security').click(); await settle();
+    expect(dialog?.textContent).toContain('The environment did not authorize Desktop to manage these settings.');
+    expect(dialog?.textContent).not.toContain('open this Environment from Desktop');
+    button('Copy').click(); await settle();
+    expect(writeText).toHaveBeenCalledWith(`RUNTIME_CONTROL_HTTP_ERROR: ${diagnostic}`);
+    button('Retry').click(); await settle();
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+    expect(dialog?.textContent).toContain('Current connection');
+    button('Connection').click(); await settle();
+    expect((document.getElementById('ssh-settings-label') as HTMLInputElement).value).toBe('Retained draft');
+  });
   it('opens Cloud information without Local access controls or requests', async () => {
     const h = await mount(async () => success);
     button('Settings for cloud-fixture').click(); await settle();

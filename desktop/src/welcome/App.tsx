@@ -2777,7 +2777,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const settingsController = createEnvironmentSettingsController<ConnectionDialogState>({
     load: environment_id => props.runtime.settings.load({ environment_id }),
     save: request => props.runtime.settings.save(request),
-    lateError: message => showActionToast(message, 'error'),
+    lateError: error => showActionToast(settingsAccessErrorMessage(error), 'error'),
   });
   const settingsSession = settingsController.session;
   const settingsPresentation = createMemo<ReturnType<typeof settingsSession>>(previous => settingsSession() ?? previous, null);
@@ -5877,8 +5877,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const fields = ['ssh_destination', 'ssh_port', 'runtime_root', 'container_engine', 'container_id'] as const;
     return fields.some(key => Reflect.get(session.connection!, key) !== Reflect.get(session.connection_baseline!, key));
   }
-  function settingsAccessErrorMessage(): string {
-    const error = settingsPresentation()?.access_error;
+  function settingsAccessErrorMessage(error = settingsPresentation()?.access_error): string {
+    if (error?.status_code === 401 || error?.status_code === 403) return i18n().t('settings.accessAuthorizationFailed');
     if (error?.code === 'SETTINGS_WSL_STOPPED') return i18n().t('settings.wslStopped');
     return error?.failure ? localizedOperationFailureSummary(i18n(), error.failure) : error?.error ?? '';
   }

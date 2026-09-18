@@ -4,9 +4,20 @@ import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { describe, expect, it, vi } from 'vitest';
 import { testDesktopPreferences, testProviderEnvironment } from '../testSupport/desktopTestHelpers';
-import { resolveEnvironmentAccessOwner, withEnvironmentAccessOwner, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, buildEnvironmentAccessSnapshot } from './environmentAccessSettings';
+import { RuntimeControlError } from './runtimeControlClient';
+import { environmentSettingsFailure, resolveEnvironmentAccessOwner, withEnvironmentAccessOwner, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, buildEnvironmentAccessSnapshot } from './environmentAccessSettings';
 
 describe('environment access settings authority', () => {
+  it.each([401, 403])('preserves authorization status %s and the original diagnostic across settings IPC', status => {
+    const diagnostic = 'Runtime control returned HTTP ' + status + ': private transport rejected';
+    expect(environmentSettingsFailure(new RuntimeControlError('RUNTIME_CONTROL_HTTP_ERROR', diagnostic, status)))
+      .toEqual({ ok: false, code: 'RUNTIME_CONTROL_HTTP_ERROR', status_code: status, error: diagnostic });
+  });
+  it('does not turn connection or unknown failures into authorization errors', () => {
+    expect(environmentSettingsFailure(new RuntimeControlError('RUNTIME_CONTROL_UNREACHABLE', 'Connection refused')))
+      .toEqual({ ok: false, code: 'RUNTIME_CONTROL_UNREACHABLE', error: 'Connection refused' });
+    expect(environmentSettingsFailure(new Error('Unknown failure'))).toEqual({ ok: false, error: 'Unknown failure' });
+  });
   it('rejects Cloud and missing targets before any local or remote write', async () => {
     const cloud = testProviderEnvironment('https://provider.example.invalid', 'cloud');
     const preferences = testDesktopPreferences({ provider_environments: [cloud] });

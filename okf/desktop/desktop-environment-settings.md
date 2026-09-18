@@ -91,7 +91,12 @@ Escape, focus restoration and exit motion. Retained exit presentation never
 blanks the closing panel.
 
 Access loading and failures remain inside the access section. Failures show their
-structured summary or original diagnostic with Copy and Retry. Missing or invalid
+structured summary or original diagnostic with Copy and Retry. Control HTTP 401
+and 403 retain their status, code and original diagnostic across settings IPC;
+the visible message explains in the selected language that this Environment
+rejected Desktop's settings authority. Copy retains the original diagnostic.
+The same message projection applies to a save failure delivered after dismissal.
+Retry keeps the current window and connection draft. Missing or invalid
 responses never become fabricated defaults or a generic claim that Runtime is
 preparing.
 

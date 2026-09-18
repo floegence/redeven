@@ -1,3 +1,5 @@
+import type { DesktopSettingsResult } from '../shared/settingsIPC';
+import { isDesktopOperationFailureError } from './desktopOperationFailure';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
 import type { RuntimeAccessSettings } from './runtimeControlClient';
@@ -6,6 +8,17 @@ import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import type { StartupReport } from './startup';
 import type { DesktopWSLDiscoverySnapshot } from '../shared/desktopWSL';
 import type { DesktopPreferences, DesktopSavedRuntimeTarget } from './desktopPreferences';
+
+export function environmentSettingsFailure(error: unknown): Extract<DesktopSettingsResult, { ok: false }> {
+  return {
+    ok: false, error: error instanceof Error ? error.message : String(error),
+    ...(error instanceof RuntimeControlError ? {
+      code: error.code,
+      ...(error.statusCode !== null ? { status_code: error.statusCode } : {}),
+    } : {}),
+    ...(isDesktopOperationFailureError(error) ? { failure: error.presentation } : {}),
+  };
+}
 
 export type EnvironmentAccessOwner =
   | Readonly<{ kind: 'local'; environment_id: string; label: string }>

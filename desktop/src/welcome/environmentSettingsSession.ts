@@ -34,7 +34,7 @@ export type EnvironmentSettingsSession<C> = Readonly<{
 export function createEnvironmentSettingsController<C>(io: {
   load: (environmentID: string) => Promise<DesktopSettingsResult>;
   save: (request: SaveDesktopSettingsRequest) => Promise<DesktopSettingsResult>;
-  lateError: (message: string) => void;
+  lateError: (error: Extract<DesktopSettingsResult, { ok: false }>) => void;
 }) {
   const [session, setSession] = createSignal<EnvironmentSettingsSession<C> | null>(null);
   let sequence = 0;
@@ -70,7 +70,7 @@ export function createEnvironmentSettingsController<C>(io: {
     let result: DesktopSettingsResult;
     try { result = await io.save({ environment_id: opening.environment.id, draft: opening.access.draft }); }
     catch (error) { result = { ok: false, error: error instanceof Error ? error.message : String(error) }; }
-    if (!current(opening)) { if (!result.ok) io.lateError(result.error); return result.ok; }
+    if (!current(opening)) { if (!result.ok) io.lateError(result); return result.ok; }
     update({ saving: null, access_state: 'ready' });
     if (!result.ok) { update({ access_error: result }); return false; }
     ++readSequence;

@@ -1112,6 +1112,7 @@
     "resolveAccessDraft": "接続先を変更する前に、アクセス設定の変更を保存するか破棄してください。",
     "loadingAccess": "アクセス設定を読み込み中…",
     "loadAccessFailed": "アクセス設定を読み込めませんでした",
+    "accessAuthorizationFailed": "この環境の設定を管理する権限が Desktop に付与されていません。再試行するか、診断情報をコピーして問題の調査にお使いください。",
     "startEnvironment": "環境を起動",
     "wslStopped": "アクセス設定を読み取りまたは保存する前に、この WSL 環境を起動してください。"
   },

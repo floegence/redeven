@@ -130,6 +130,7 @@ export const enUS = {
     resolveAccessDraft: "Save or discard your access changes before changing the connection target.",
     loadingAccess: "Loading access settings…",
     loadAccessFailed: "Could not load access settings",
+    accessAuthorizationFailed: "The environment did not authorize Desktop to manage these settings. Retry, or copy the diagnostic details for troubleshooting.",
     startEnvironment: "Start environment",
     wslStopped: "Start this WSL environment before reading or saving its access settings.",
 

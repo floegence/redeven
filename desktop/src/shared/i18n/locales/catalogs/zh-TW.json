@@ -1112,6 +1112,7 @@
     "resolveAccessDraft": "變更連線目標前，請先儲存或捨棄存取設定中的變更。",
     "loadingAccess": "正在載入存取設定…",
     "loadAccessFailed": "無法載入存取設定",
+    "accessAuthorizationFailed": "此環境未授權 Desktop 管理這些設定。請重試，或複製診斷資訊以便排查。",
     "startEnvironment": "啟動環境",
     "wslStopped": "請先啟動此 WSL 環境，再讀取或儲存其存取設定。"
   },

@@ -65,10 +65,10 @@ describe('unified environment settings session', () => {
     h.open(environment(), {}); h.selectTab('access'); await settle();
     const save = h.saveAccess();
     h.close(); h.open(environment('ssh:other'), {});
-    pending.resolve({ ok: false, error: 'Save failed on original target' }); await save;
+    pending.resolve({ ok: false, error: 'Save failed on original target', status_code: 401 }); await save;
     expect(h.session()?.environment.id).toBe('ssh:other');
     expect(h.session()?.access_state).toBe('idle');
-    expect(h.lateError).toHaveBeenCalledWith('Save failed on original target');
+    expect(h.lateError).toHaveBeenCalledWith({ ok: false, error: 'Save failed on original target', status_code: 401 });
   });
   it('invalidates old access only after a target identity change, not a rename', async () => {
     const h = harness(); h.open(environment(), {}); h.selectTab('access'); await settle();
