@@ -37,9 +37,6 @@ func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 	if req.WebSearchMode != "" && req.WebSearchMode != providerWebSearchModeDisabled {
 		return nil, fmt.Errorf("DeepSeek Responses does not support hosted web search: mode %q", req.WebSearchMode)
 	}
-	if req.ProviderControls.PreviousResponseID != "" {
-		return nil, errors.New("DeepSeek Responses requires full history, not previous_response_id")
-	}
 	aliases, err := newOpenAIProviderToolAliases(req.Tools)
 	if err != nil {
 		return nil, err

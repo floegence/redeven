@@ -62,6 +62,9 @@ func (p *platformGatewayProvider) StreamTurn(ctx context.Context, req ModelGatew
 	if p == nil || p.httpClient == nil {
 		return ModelGatewayResult{}, errors.New("platform AI gateway provider is not configured")
 	}
+	if req.PreviousState != nil {
+		return ModelGatewayResult{}, errors.New("platform gateway does not support opaque continuation state")
+	}
 	attemptID, err := randomPlatformAttemptID()
 	if err != nil {
 		return ModelGatewayResult{}, err

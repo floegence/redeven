@@ -398,7 +398,6 @@ func flowerSourcesToFloret(in []SourceRef) []flprovider.Source {
 
 func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.Request) (ModelGatewayRequest, error) {
 	controls := p.controls
-	previous := cloneFloretModelState(req.PreviousState)
 	// Floret request-level reasoning is authoritative, including an explicit
 	// zero selection used by short requests such as automatic titles.
 	controls.ReasoningSelection = config.NormalizeAIReasoningSelection(req.Reasoning)
@@ -427,7 +426,8 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 		return ModelGatewayRequest{}, err
 	}
 	var previousState *ModelGatewayState
-	if (p.providerType == "deepseek" || p.providerType == "google") && previous != nil {
+	// The actual provider owns state interpretation, including across Desktop RPC.
+	if previous := req.PreviousState; previous != nil {
 		previousState = &ModelGatewayState{Kind: previous.Kind, ID: previous.ID, Attributes: cloneStringMap(previous.Attributes)}
 	}
 	protocol := p.stateCompatibilityRoute()
@@ -441,14 +441,6 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 		// The Desktop executor owns the actual provider and its transport.
 		protocol = ""
 	}
-	if p.providerType != "deepseek" && p.providerType != "google" {
-		// The restored Turn surface owns protocol selection, including after
-		// settings change while input is pending. Do not cache this capability.
-		controls.PreviousResponseID, err = previousResponseID(previous, protocol)
-		if err != nil {
-			return ModelGatewayRequest{}, err
-		}
-	}
 	return ModelGatewayRequest{
 		RunID: req.RunID, PromptScopeID: req.PromptScopeID, PreviousState: previousState,
 		Model:            p.modelName,
@@ -459,19 +451,6 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 		WebSearchMode:    webSearch,
 		Protocol:         protocol,
 	}, nil
-}
-
-func previousResponseID(state *flprovider.State, protocol string) (string, error) {
-	if state == nil {
-		return "", nil
-	}
-	if protocol != "openai-responses" {
-		return "", errors.New("floret provided continuation state to a gateway without continuation support")
-	}
-	if strings.TrimSpace(state.Kind) != providerContinuationKindOpenAIResponses || strings.TrimSpace(state.ID) == "" {
-		return "", errors.New("floret provided invalid OpenAI Responses continuation state")
-	}
-	return strings.TrimSpace(state.ID), nil
 }
 
 func (p *floretProviderAdapter) stateCompatibilityRoute() string {
@@ -685,23 +664,6 @@ func floretUsageFromFlower(usage TurnUsage) flprovider.Usage {
 		CacheWriteTokens: usage.CacheWriteTokens,
 	}
 	return normalizeFloretUsage(out)
-}
-
-func cloneFloretModelState(state *flprovider.State) *flprovider.State {
-	if state == nil {
-		return nil
-	}
-	out := &flprovider.State{
-		Kind: strings.TrimSpace(state.Kind),
-		ID:   strings.TrimSpace(state.ID),
-	}
-	if len(state.Attributes) > 0 {
-		out.Attributes = make(map[string]string, len(state.Attributes))
-		for key, value := range state.Attributes {
-			out.Attributes[key] = value
-		}
-	}
-	return out
 }
 
 func cloneStringMap(in map[string]string) map[string]string {

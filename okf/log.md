@@ -1,5 +1,14 @@
 # Redeven OKF Update Log
 
+## 2026-09-18 — Desktop model continuation
+
+- Forward opaque provider state across Desktop RPC and interpret it only at the
+  actual provider transport. Remove the duplicate response-ID control channel.
+- Keep published Floret v7.16.2 as the canonical history and state owner; no
+  public API or domain-schema change is needed.
+- Cover tool and image continuation, restart, canonical retry, immutable prepared
+  state, and rejection before HTTP across DeepSeek, OpenAI, and Gemini.
+
 ## 2026-09-18 — Browser observation recovery
 
 - Separate frame invalidation and bounded readonly inspection failure from

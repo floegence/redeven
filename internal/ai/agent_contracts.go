@@ -71,7 +71,6 @@ type ProviderControls struct {
 	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
 	CacheControl        string                       `json:"cache_control,omitempty"`
 	ResponseFormat      string                       `json:"response_format,omitempty"`
-	PreviousResponseID  string                       `json:"previous_response_id,omitempty"`
 	Temperature         *float64                     `json:"temperature,omitempty"`
 	TopP                *float64                     `json:"top_p,omitempty"`
 }
