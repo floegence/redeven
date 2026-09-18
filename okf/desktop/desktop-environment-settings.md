@@ -72,9 +72,21 @@ closed opening is a notification, never an error in the next editor.
 The window uses released Floe Dialog, Tabs and retained TabPanel components.
 Multiple sections expose tabs; a single section omits the tab bar. The responsive
 panel is at most 48rem wide, respects the Desktop titlebar and viewport, and keeps
-title, tabs and actions fixed while each body scrolls. Floe owns modal material,
-focus trapping, nested Escape, focus restoration and exit motion. Retained exit
-presentation never blanks the closing panel.
+title, tabs and actions fixed while each body scrolls. Multi-section windows use
+a stable 42rem height capped by the available viewport; changing tabs or resolving
+an access read must not move the window or its action baseline. Single-section
+windows retain content-driven height. A stable native scrollbar gutter prevents
+horizontal field shifts when a section becomes scrollable.
+
+The released Floe slider provides the active tab's 200ms underline transition.
+Product styling uses a restrained 160ms opacity entrance for section content and
+actions, without translating fields or delaying selection. Retained inactive
+panels remain hidden from pointer, keyboard and accessibility navigation. Rapid
+switching follows the latest selection immediately; animation has no separate
+selection state, timer or request owner. Reduced motion disables the content fade
+and Floe's slider transition. Floe owns modal material, focus trapping, nested
+Escape, focus restoration and exit motion. Retained exit presentation never
+blanks the closing panel.
 
 Access loading and failures remain inside the access section. Failures show their
 structured summary or original diagnostic with Copy and Retry. Missing or invalid
@@ -93,5 +105,5 @@ SSH field and secret details are owned by
 - `redeven:desktop/src/welcome/environmentSettingsSession.test.ts` - Read/write ordering, manual revert, tab drafts and target rebinding.
 - `redeven:desktop/src/main/environmentAccessSettings.ts` - Explicit owner, WSL guard, compatibility and Runtime configuration projection.
 - `redeven:desktop/src/main/environmentAccessSettings.test.ts` - Cloud write rejection, no implicit WSL start and process-bound pending state.
-- `redeven:desktop/scripts/check-environment-settings.mjs` - Browser acceptance of repeated real card openings with successful, failed and delayed access reads.
+- `redeven:desktop/scripts/check-environment-settings.mjs` - Actual card openings, per-frame tab geometry and motion, successful/failed/delayed reads, rapid keyboard switching, reduced motion and retained drafts/scroll positions.
 - `redeven:scripts/check_desktop.sh` - Full Desktop validation includes settings and endpoint browser acceptance; ordinary source checks do not launch browsers.

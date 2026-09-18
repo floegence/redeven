@@ -12069,7 +12069,7 @@
         "title": "Desktop environment settings",
         "type": "Desktop Contract"
       },
-      "body_length": 5967,
+      "body_length": 6871,
       "summary": "Desktop owns one settings window and one opening session per Environment. Opening\nnever waits for a Runtime access read and a failed read never selects another\neditor. Registration ownership determines available sections; every access read\nand write carries an explicit Environment ID and resolves its registered\nmanagement authority. Runtime owns access configuration. A failed operation\npreserves input and reports its real diagnostic; an obsolete response cannot\nchange a newer opening. Cloud, URL and Gateway registrations cannot read or save\nLocal access settings.",
       "sections": [
         {
@@ -12090,8 +12090,8 @@
           "id": "presentation-and-recovery",
           "title": "Presentation and recovery",
           "level": 1,
-          "body": "The window uses released Floe Dialog, Tabs and retained TabPanel components.\nMultiple sections expose tabs; a single section omits the tab bar. The responsive\npanel is at most 48rem wide, respects the Desktop titlebar and viewport, and keeps\ntitle, tabs and actions fixed while each body scrolls. Floe owns modal material,\nfocus trapping, nested Escape, focus restoration and exit motion. Retained exit\npresentation never blanks the closing panel.\n\nAccess loading and failures remain inside the access section. Failures show their\nstructured summary or original diagnostic with Copy and Retry. Missing or invalid\nresponses never become fabricated defaults or a generic claim that Runtime is\npreparing. Address namespace and copy/browser/QR policy are owned by\n[Environment connections](desktop-environment-connections.md); certificate\noperations are owned by [Local UI certificates](../security/local-ui-certificates.md).\nSSH field and secret details are owned by\n[SSH environment settings](desktop-ssh-environment-settings.md).",
-          "char_count": 1028
+          "body": "The window uses released Floe Dialog, Tabs and retained TabPanel components.\nMultiple sections expose tabs; a single section omits the tab bar. The responsive\npanel is at most 48rem wide, respects the Desktop titlebar and viewport, and keeps\ntitle, tabs and actions fixed while each body scrolls. Multi-section windows use\na stable 42rem height capped by the available viewport; changing tabs or resolving\nan access read must not move the window or its action baseline. Single-section\nwindows retain content-driven height. A stable native scrollbar gutter prevents\nhorizontal field shifts when a section becomes scrollable.\n\nThe released Floe slider provides the active tab's 200ms underline transition.\nProduct styling uses a restrained 160ms opacity entrance for section content and\nactions, without translating fields or delaying selection. Retained inactive\npanels remain hidden from pointer, keyboard and accessibility navigation. Rapid\nswitching follows the latest selection immediately; animation has no separate\nselection state, timer or request owner. Reduced motion disables the content fade\nand Floe's slider transition. Floe owns modal material, focus trapping, nested\nEscape, focus restoration and exit motion. Retained exit presentation never\nblanks the closing panel.\n\nAccess loading and failures remain inside the access section. Failures show their\nstructured summary or original diagnostic with Copy and Retry. Missing or invalid\nresponses never become fabricated defaults or a generic claim that Runtime is\npreparing. Address namespace and copy/browser/QR policy are owned by\n[Environment connections](desktop-environment-connections.md); certificate\noperations are owned by [Local UI certificates](../security/local-ui-certificates.md).\nSSH field and secret details are owned by\n[SSH environment settings](desktop-ssh-environment-settings.md).",
+          "char_count": 1863
         }
       ],
       "evidence": [
@@ -12126,9 +12126,9 @@
           "description": "Cloud write rejection, no implicit WSL start and process-bound pending state."
         },
         {
-          "id": "redeven:desktop/scripts/check-environment-settings.mjs:0:browser acceptance of repeated real card openings with successful, failed and delayed access reads.",
+          "id": "redeven:desktop/scripts/check-environment-settings.mjs:0:actual card openings, per-frame tab geometry and motion, successful/failed/delayed reads, rapid keyboard switching, reduced motion and retained drafts/scroll positions.",
           "source": "redeven:desktop/scripts/check-environment-settings.mjs",
-          "description": "Browser acceptance of repeated real card openings with successful, failed and delayed access reads."
+          "description": "Actual card openings, per-frame tab geometry and motion, successful/failed/delayed reads, rapid keyboard switching, reduced motion and retained drafts/scroll positions."
         },
         {
           "id": "redeven:scripts/check_desktop.sh:0:full desktop validation includes settings and endpoint browser acceptance; ordinary source checks do not launch browsers.",
@@ -20021,5 +20021,5 @@
       ]
     }
   ],
-  "source_sha256": "59a497661cdf8a9e8a15a2c2cf7810283fa80759287e764dbe516737468da0b8"
+  "source_sha256": "632a959717c72ee6c6d4a2f8826dd06b0a0cb4dfb163bf8d64fb8674050ab667"
 }

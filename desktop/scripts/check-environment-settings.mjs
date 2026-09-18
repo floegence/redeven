@@ -10,7 +10,7 @@ await mkdir(output, { recursive: true });
 const server = await createSSHSettingsPreviewServer(0);
 const browser = await chromium.launch({ headless: true });
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-  pid: process.pid, url: server.resolvedUrls.local[0], output, cases: [], errors: [], status: 'running' };
+  pid: process.pid, url: server.resolvedUrls.local[0], output, cases: [], switches: [], errors: [], status: 'running' };
 try {
   const { buildDesktopWelcomeSnapshot } = await server.ssrLoadModule(fileURLToPath(new URL('../src/main/desktopWelcomeState.ts', import.meta.url)));
   const { testDesktopPreferences } = await server.ssrLoadModule(fileURLToPath(new URL('../src/testSupport/desktopTestHelpers.ts', import.meta.url)));
@@ -28,6 +28,13 @@ try {
   await page.goto(new URL('environment-settings.html', report.url).href);
   const dialog = page.getByRole('dialog');
   const tab = name => page.getByRole('tab', { name, exact: true });
+  async function settleMotion() {
+    await page.evaluate(async () => {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const panel = document.querySelector('.redeven-environment-settings-dialog');
+      await Promise.all(panel.getAnimations({ subtree: true }).filter(animation => animation.effect.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {})));
+    });
+  }
   async function capture(name) {
     await page.evaluate(() => document.fonts.ready);
     await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-floe-dialog-panel]')).opacity === '1');
@@ -38,6 +45,49 @@ try {
     await dialog.waitFor();
     assert.equal(await dialog.count(), 1);
     await page.locator('#ssh-settings-label').waitFor();
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-floe-dialog-panel]')).opacity === '1');
+    await settleMotion();
+  }
+  async function switchTab(name, { reducedMotion = false } = {}) {
+    const frames = await page.evaluate(async name => {
+      const dialog = document.querySelector('.redeven-environment-settings-dialog');
+      const frames = [], start = performance.now();
+      const sample = () => {
+        const rect = dialog.getBoundingClientRect();
+        const active = dialog.querySelector('.environment-settings-tab:not([aria-hidden="true"])');
+        const body = active.querySelector('.environment-settings-scroll');
+        const footer = active.querySelector('.environment-settings-actions').getBoundingClientRect();
+        const indicator = dialog.querySelector('.environment-settings-indicator')?.getBoundingClientRect();
+        frames.push({ elapsed: performance.now() - start, top: rect.top, height: rect.height,
+          footerBottom: footer.bottom, bodyWidth: body.clientWidth, opacity: Number(getComputedStyle(body).opacity),
+          indicatorX: indicator?.x, activePanels: dialog.querySelectorAll('[role="tabpanel"]:not([aria-hidden="true"])').length });
+      };
+      sample();
+      [...dialog.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.trim() === name).click();
+      await new Promise(resolve => {
+        const next = () => { sample(); if (performance.now() - start >= 320) resolve(); else requestAnimationFrame(next); };
+        requestAnimationFrame(next);
+      });
+      return frames;
+    }, name);
+    report.switches.push({ name, reducedMotion, frames });
+    const before = frames[0], after = frames.at(-1);
+    for (const frame of frames) {
+      assert.ok(Math.abs(frame.top - before.top) < 0.5 && Math.abs(frame.height - before.height) < 0.5,
+        `${name}: window jumped from top=${before.top}, height=${before.height} to top=${frame.top}, height=${frame.height}`);
+      assert.ok(Math.abs(frame.footerBottom - before.footerBottom) < 0.5, `${name}: actions moved vertically`);
+      assert.equal(frame.bodyWidth, before.bodyWidth, `${name}: content width changed`);
+      assert.equal(frame.activePanels, 1, `${name}: only one panel can be interactive`);
+    }
+    assert.equal(after.opacity, 1, `${name}: content must settle`);
+    assert.ok(Number.isFinite(after.indicatorX), `${name}: visible active indicator`);
+    if (reducedMotion) {
+      assert.ok(frames.slice(1).every(frame => frame.opacity === 1 && frame.indicatorX === after.indicatorX), 'reduced motion switches immediately');
+    } else {
+      assert.ok(frames.some(frame => frame.opacity > 0 && frame.opacity < 1), `${name}: content enters gently`);
+      assert.ok(frames.some(frame => frame.indicatorX > Math.min(before.indicatorX, after.indicatorX) + 0.5
+        && frame.indicatorX < Math.max(before.indicatorX, after.indicatorX) - 0.5), `${name}: indicator travels between tabs`);
+    }
   }
   async function close() {
     await dialog.getByRole('button', { name: 'Close', exact: true }).first().click();
@@ -47,30 +97,71 @@ try {
   assert.equal(await page.evaluate(() => window.settingsFixture.loads), 0);
   await capture('card-first-connection');
   await page.locator('#ssh-settings-label').fill('Unsaved orange');
-  await tab('Access & security').click();
+  await switchTab('Access & security');
   await dialog.getByText('Current connection', { exact: true }).waitFor();
   await capture('card-first-access-success');
-  await tab('Connection').click();
+  await switchTab('Connection');
   assert.equal(await page.locator('#ssh-settings-label').inputValue(), 'Unsaved orange');
   report.cases.push('first-open-success-retains-connection-draft');
   await close(); await open('orange'); await capture('card-second-connection');
   assert.equal(await page.locator('#ssh-settings-label').inputValue(), 'orange');
-  await tab('Access & security').click();
+  await switchTab('Access & security');
   await dialog.getByText('SSH connection refused: orange:22', { exact: true }).waitFor();
   await capture('card-second-access-failure');
   assert.equal(await dialog.count(), 1);
-  await tab('Connection').click(); await page.locator('#ssh-settings-label').waitFor();
+  await switchTab('Connection'); await page.locator('#ssh-settings-label').waitFor();
   report.cases.push('second-open-failure-same-window-and-tabs');
-  await close(); await open('orange'); await tab('Access & security').click();
+  await close(); await open('orange'); await switchTab('Access & security');
   await dialog.getByText('Loading access settings…', { exact: true }).waitFor();
   await capture('card-third-access-loading');
   await close(); await open('other');
   await page.evaluate(() => window.settingsFixture.resolveOld());
   assert.equal(await page.locator('#ssh-settings-label').inputValue(), 'other');
-  await tab('Access & security').click();
+  await switchTab('Access & security');
   await dialog.getByText('Current connection', { exact: true }).waitFor();
   await capture('card-other-after-late-response');
   report.cases.push('late-response-cannot-replace-other-environment');
+  await page.setViewportSize({ width: 480, height: 640 });
+  await settleMotion();
+  await page.locator('#local-ui-port').fill('25000');
+  const accessScroll = await page.locator('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-scroll').evaluate(body => {
+    body.scrollTop = 140; return body.scrollTop;
+  });
+  assert.ok(accessScroll > 0, 'access section really scrolls');
+  await switchTab('Connection');
+  await page.locator('#ssh-settings-label').fill('Retained connection');
+  await page.locator('.ssh-settings-disclosure').click();
+  const connectionScroll = await page.locator('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-scroll').evaluate(body => {
+    body.scrollTop = 160; return body.scrollTop;
+  });
+  assert.ok(connectionScroll > 0, 'expanded connection section really scrolls');
+  await switchTab('Access & security');
+  assert.equal(await page.locator('#local-ui-port').inputValue(), '25000');
+  assert.equal(await page.locator('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-scroll').evaluate(body => body.scrollTop), accessScroll);
+  await switchTab('Connection');
+  assert.equal(await page.locator('#ssh-settings-label').inputValue(), 'Retained connection');
+  assert.equal(await page.locator('.ssh-settings-disclosure').getAttribute('aria-expanded'), 'true');
+  assert.equal(await page.locator('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-scroll').evaluate(body => body.scrollTop), connectionScroll);
+  await capture('narrow-retained-connection');
+  report.cases.push('narrow-switch-retains-drafts-expansion-and-independent-scroll');
+
+  await tab('Connection').focus();
+  for (const key of ['ArrowRight', 'ArrowLeft', 'End', 'Home', 'ArrowRight']) await page.keyboard.press(key);
+  await settleMotion();
+  assert.equal(await tab('Access & security').getAttribute('aria-selected'), 'true');
+  assert.equal(await tab('Access & security').evaluate(element => element === document.activeElement), true);
+  assert.equal(await page.getByRole('tabpanel').count(), 1);
+  assert.equal(await page.locator('#local-ui-port').inputValue(), '25000');
+  assert.equal(await page.evaluate(() => window.settingsFixture.loads), 4, 'switching never reloads the access draft');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.locator('.environment-settings-tab[aria-hidden="true"]').evaluate(element => element.contains(document.activeElement)), false, 'hidden section stays outside keyboard navigation');
+  report.cases.push('rapid-keyboard-switches-settle-on-final-selection');
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await switchTab('Connection', { reducedMotion: true });
+  await switchTab('Access & security', { reducedMotion: true });
+  await capture('narrow-access-reduced-motion');
+  report.cases.push('reduced-motion-has-stable-instant-switches');
   assert.deepEqual(report.errors, []);
   report.status = 'passed';
   console.log(`Environment card settings passed: ${report.cases.length} browser scenarios. Evidence: ${output}`);
