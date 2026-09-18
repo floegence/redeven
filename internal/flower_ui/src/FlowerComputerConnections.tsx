@@ -103,8 +103,8 @@ export function FlowerComputerConnections(props: {
     } catch { setFailed(true); }
   };
   const requested = () => Boolean(props.requested?.origin || props.requested?.app || props.requested?.foreground);
-  return <Dialog open={props.open} onOpenChange={props.onOpenChange} title={props.connectionOnly ? props.copy.connectionTitle : props.copy.title} class="w-[min(42rem,94vw)]"
-    footer={<div class="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => props.onOpenChange(false)}>{props.copy.close}</Button>
+  return <Dialog open={props.open} onOpenChange={props.onOpenChange} title={props.connectionOnly ? props.copy.connectionTitle : props.copy.title} class={props.connectionOnly ? "w-[min(30rem,94vw)]" : "w-[min(42rem,94vw)]"}
+    footer={props.connectionOnly ? undefined : <div class="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => props.onOpenChange(false)}>{props.copy.close}</Button>
       <Show when={!props.connectionOnly && !props.fullAccess}><Button size="sm" disabled={!available()} onClick={() => void save()}>{saving() ? props.copy.saving : props.copy.save}</Button></Show></div>}>
     <div class="space-y-5 text-sm" aria-busy={loading() || saving()}>
       <Show when={props.connectionOnly} fallback={<>

@@ -90,9 +90,8 @@ try {
   assert.equal(calls, 1); assert.equal((await request('GET', `/_redeven_proxy/api/ai/computer/target?thread_id=${threadID}`)).target_id, '');
   await page.getByRole('button', { name: 'Connect Chrome', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Connect Chrome', exact: true });
-  await dialog.getByRole('textbox', { name: 'Extension folder', exact: true }).waitFor();
-  assert.equal(await dialog.getByRole('textbox').count(), 1, 'no internal native-host field');
-  const extension = await dialog.getByRole('textbox', { name: 'Extension folder', exact: true }).inputValue();
+  await dialog.getByRole('button', { name: 'Open Chrome extensions', exact: true }).waitFor();
+  assert.equal(await dialog.getByRole('textbox').count(), 0, 'technical paths stay collapsed');
   await page.waitForFunction(() => {
     const dialog = document.querySelector('[role="dialog"]');
     return dialog && Number(getComputedStyle(dialog).opacity) > 0.99 && dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running');
@@ -107,6 +106,7 @@ try {
   }
   const setup = await request('POST', '/_redeven_proxy/api/ai/computer/extension/setup');
   const nativeHost = setup.native_host;
+  const extension = setup.extension_path;
   // Chrome's isolated user-data directory can hold the exact Runtime-generated
   // registration, leaving other profiles and their native hosts untouched.
   const manifestRoot = process.platform === 'darwin' ? path.join(os.homedir(), 'Library/Application Support/Google/Chrome/NativeMessagingHosts') : path.join(os.homedir(), '.config/google-chrome/NativeMessagingHosts');
@@ -117,6 +117,8 @@ try {
   const installation = await installChromeExtensionThroughUI(personal, extension, setup.extension_id);
   await installation.screenshot({ path: path.join(output, 'chrome-installed.png') });
   const existing = await personal.newPage(); await existing.goto(origin); await existing.getByRole('textbox').fill('keep my unfinished work');
+  await dialog.getByRole('button', { name: 'Already installed', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Connect in Chrome', exact: true }).waitFor();
   const popup = await personal.newPage(); await popup.goto(`chrome-extension://${setup.extension_id}/popup.html#${nativeHost}`);
   await popup.locator('#connect-button').click();
   await wait(async () => (await request('GET', '/_redeven_proxy/api/ai/computer/extension/profiles')).length === 1, 'real Native Messaging connection');
