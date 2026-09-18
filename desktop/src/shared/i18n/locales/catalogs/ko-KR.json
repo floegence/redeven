@@ -2664,6 +2664,16 @@
     "passwordHelp": "자동 확인을 위해 이 기기에만 저장됩니다. 연결할 때 입력 창에 입력한 비밀번호는 저장되지 않습니다."
   },
   "environmentConnection": {
+    "filterAddresses": "주소 필터링",
+    "clearAddressFilter": "주소 필터 지우기",
+    "noMatchingAddresses": "일치하는 주소가 없습니다",
+    "filteredAddressCount": "전체 주소 {total}개 중 {shown}개",
+    "addressCount": {
+      "kind": "plural",
+      "forms": {
+        "other": "주소 {count}개"
+      }
+    },
     "wsl": "WSL 배포판",
     "gateway": "게이트웨이 연결",
     "networkAddress": "네트워크 주소입니다. 접근 가능 여부는 네트워크 연결에 따라 달라집니다.",

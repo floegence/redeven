@@ -53,7 +53,7 @@ try {
     const popup = page.locator('.redeven-endpoints-popover');
     await popup.waitFor();
     await assertActionAlignment(popup);
-    const readingAlignment = await popup.locator('.redeven-card-endpoint-row').evaluateAll(rows => rows.map(row => {
+    const readingAlignment = await popup.locator('.redeven-card-endpoint-row:not([data-endpoint-kind="address"])').evaluateAll(rows => rows.map(row => {
       const label = row.querySelector('.redeven-card-endpoint-label');
       const value = row.querySelector('.redeven-endpoint-scope-title, .redeven-card-endpoint-value');
       return Math.abs(label.getBoundingClientRect().left - value.getBoundingClientRect().left);
@@ -269,6 +269,66 @@ try {
   report.themes = builtInShellThemePresets.length;
   report.locales = 10;
 
+  for (const [mode, width, count] of [['light', 1440, 1000], ['dark', 1440, 240], ['light', 390, 240], ['dark', 390, 240]]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(new URL(`environment-endpoints.html?theme=${mode}&addresses=${count}`, report.url).href);
+    await page.locator('[data-environment="Network"] [aria-haspopup="dialog"]').click();
+    const popup = page.locator('.redeven-endpoints-popover');
+    const group = popup.locator('[data-address-scope="network"]');
+    const viewport = group.locator('.redeven-address-viewport');
+    await viewport.waitFor();
+    const dimensions = await viewport.evaluate(el => ({ height: el.clientHeight, content: el.scrollHeight, overflow: el.scrollWidth - el.clientWidth }));
+    assert.ok(dimensions.height <= 192 && dimensions.content > dimensions.height * 10, 'many addresses use a bounded list');
+    assert.equal(dimensions.overflow, 0);
+    assert.equal(await viewport.locator('[data-endpoint-id]').count(), count + 1, 'all addresses remain available');
+    assert.equal(await group.getByText('网络地址，能否访问取决于你的网络连接。', { exact: true }).count(), 1);
+    assert.ok((await popup.boundingBox()).height < 600, 'large inventories leave the surrounding panel compact');
+    await stableScreenshot(`${output}/many-${mode}-${width}.png`);
+    const filter = group.getByRole('searchbox', { name: '筛选地址' });
+    const filterGeometry = await filter.evaluate(input => ({
+      width: input.getBoundingClientRect().width,
+      surfaceWidth: input.closest('[data-floe-input-surface]').getBoundingClientRect().width,
+      background: getComputedStyle(input).backgroundColor,
+    }));
+    assert.ok(filterGeometry.width >= filterGeometry.surfaceWidth - 48, 'the editable field fills its available width');
+    assert.equal(filterGeometry.background, 'rgba(0, 0, 0, 0)', 'the filter has one visible input surface');
+    await filter.fill('2001:db8');
+    assert.equal(await viewport.locator('[data-endpoint-id]').count(), 1);
+    const ipv6 = 'https://[2001:db8:1234:5678:90ab:cdef:1234:5678]:23998/';
+    await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+    const filterAccessibility = await page.evaluate(async () => window.axe.run('.redeven-endpoints-surface'));
+    assert.deepEqual(filterAccessibility.violations.map(item => item.id), [], 'address filtering remains accessible');
+    await viewport.getByLabel('复制环境 URL').click();
+    assert.equal(await page.locator('[data-copy-result]').innerText(), ipv6);
+    await viewport.getByLabel('分享连接').click();
+    assert.equal(await popup.locator('.redeven-endpoint-qr-value').innerText(), ipv6);
+    await filter.fill('no-matching-address');
+    assert.equal(await group.getByRole('status').innerText(), '没有匹配的地址');
+    assert.equal(await popup.locator('.redeven-endpoint-qr-value').innerText(), ipv6, 'filtering does not invalidate a real selected address');
+    await group.getByLabel('清除地址筛选').click();
+    assert.equal(await viewport.locator('[data-endpoint-id]').count(), count + 1);
+    await page.keyboard.press('Escape'); await popup.waitFor({ state: 'detached' });
+    await page.locator('[data-environment="Network"]').getByRole('button', { name: '环境设置' }).click();
+    const dialog = page.getByRole('dialog');
+    const settingsGroup = dialog.locator('[data-address-scope="network"]');
+    const settingsViewport = settingsGroup.locator('.redeven-address-viewport');
+    await settleDisclosure();
+    const bounds = await dialog.boundingBox();
+    assert.ok((await settingsViewport.boundingBox()).height <= 192);
+    await stableScreenshot(`${output}/many-settings-${mode}-${width}.png`);
+    await settingsGroup.getByRole('searchbox', { name: '筛选地址' }).fill('2001:db8');
+    await settingsViewport.getByLabel('在浏览器中打开').click();
+    assert.equal(await page.locator('[data-copy-result]').innerText(), ipv6);
+    await dialog.locator('#local-ui-port').fill('25000');
+    assert.equal(await settingsViewport.locator('.redeven-card-endpoint-value').innerText(), ipv6);
+    const after = await dialog.boundingBox();
+    assert.ok(Math.abs(after.height - bounds.height) < 0.5, 'filtering never resizes settings');
+    assert.ok(Math.abs(after.y - bounds.y) < 0.5);
+    await dialog.getByRole('button', { name: '关闭', exact: true }).last().click();
+    report.cases.push(`many-addresses:${mode}:${width}:${count}`);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+
   const { buildDesktopWelcomeSnapshot } = await server.ssrLoadModule(fileURLToPath(new URL('../src/main/desktopWelcomeState.ts', import.meta.url)));
   const { testDesktopPreferences } = await server.ssrLoadModule(fileURLToPath(new URL('../src/testSupport/desktopTestHelpers.ts', import.meta.url)));
   const { desktopRuntimeTargetID } = await server.ssrLoadModule(fileURLToPath(new URL('../src/shared/desktopRuntimePlacement.ts', import.meta.url)));
@@ -370,7 +430,7 @@ try {
   // Exercise sharing and scroll continuity with overflowing, newly allocated address lists.
   const networkSnapshot = structuredClone(snapshot);
   const target = networkSnapshot.environments.find(entry => entry.label === 'gzcom');
-  target.local_ui_urls = Array.from({ length: 12 }, (_, index) => `https://192.0.2.${index + 10}:23998/`);
+  target.local_ui_urls = Array.from({ length: 128 }, (_, index) => `https://192.0.2.${index + 10}:23998/`);
   target.local_ui_url = target.local_ui_urls[0];
   await cardPage.evaluate(value => window.settingsFixture.publish(value), networkSnapshot);
   await card('gzcom').getByLabel('查看连接方式').click();
@@ -379,7 +439,7 @@ try {
   await cardPage.waitForTimeout(250);
   const sharingEvidence = await cardPage.evaluate(async initial => {
     const panel = document.querySelector('.redeven-endpoints-popover');
-    const viewport = panel.querySelector('.redeven-endpoints-popover-body');
+    const viewport = panel.querySelector('.redeven-address-viewport');
     const qr = panel.querySelector('img');
     const action = panel.querySelector('[aria-expanded="true"]');
     action.focus({ preventScroll: true }); viewport.scrollTop = 120;
@@ -401,6 +461,21 @@ try {
   for (const sample of sharingEvidence.samples) assert.deepEqual(sample, {
     samePanel: true, sameQR: true, focused: true, scroll: sharingEvidence.top, titleUpdated: true,
   });
+  const addressFilter = cardPage.getByRole('searchbox', { name: '筛选地址' });
+  await addressFilter.fill('.70:');
+  const filterContinuity = await cardPage.evaluate(async initial => {
+    const field = document.querySelector('.redeven-address-filter input');
+    field.focus();
+    const next = structuredClone(initial);
+    next.environments.find(entry => entry.label === 'gzcom').local_ui_urls.reverse();
+    window.settingsFixture.publish(next);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    return { sameField: document.querySelector('.redeven-address-filter input') === field,
+      focused: document.activeElement === field, value: field.value };
+  }, networkSnapshot);
+  assert.deepEqual(filterContinuity, { sameField: true, focused: true, value: '.70:' });
+  assert.equal(await cardPage.locator('.redeven-address-viewport [data-endpoint-id]').count(), 1);
+  report.cases.push('many-addresses-filter-refresh');
   // New authoritative scope invalidates sharing without closing the panel.
   await cardPage.evaluate(value => window.settingsFixture.publish(value), snapshot);
   await cardPage.locator('.redeven-endpoint-qr-image').waitFor({ state: 'detached' });

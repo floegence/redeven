@@ -2668,6 +2668,18 @@
     "passwordHelp": "Salva apenas neste dispositivo para verificações automáticas. As senhas solicitadas durante a conexão não são salvas."
   },
   "environmentConnection": {
+    "filterAddresses": "Filtrar endereços",
+    "clearAddressFilter": "Limpar filtro de endereços",
+    "noMatchingAddresses": "Nenhum endereço correspondente",
+    "filteredAddressCount": "Endereços: {shown} de {total}",
+    "addressCount": {
+      "kind": "plural",
+      "forms": {
+        "one": "{count} endereço",
+        "many": "{count} endereços",
+        "other": "{count} endereços"
+      }
+    },
     "wsl": "Distribuição WSL",
     "gateway": "Conexão com o gateway",
     "networkAddress": "Endereço de rede. A disponibilidade depende da sua conexão de rede.",

@@ -2664,6 +2664,16 @@
     "passwordHelp": "密码仅保存在此设备，供自动检测使用。连接时临时输入的密码不会保存。"
   },
   "environmentConnection": {
+    "filterAddresses": "筛选地址",
+    "clearAddressFilter": "清除地址筛选",
+    "noMatchingAddresses": "没有匹配的地址",
+    "filteredAddressCount": "显示 {shown} / {total} 个地址",
+    "addressCount": {
+      "kind": "plural",
+      "forms": {
+        "other": "{count} 个地址"
+      }
+    },
     "wsl": "WSL 分发",
     "gateway": "网关连接",
     "networkAddress": "网络地址，能否访问取决于你的网络连接。",

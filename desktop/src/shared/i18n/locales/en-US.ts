@@ -953,6 +953,11 @@ export const enUS = {
     unavailableTrigger: '{label} is unavailable. Show recovery options.',
   },
   environmentConnection: {
+    filterAddresses: "Filter addresses",
+    clearAddressFilter: "Clear address filter",
+    noMatchingAddresses: "No matching addresses",
+    filteredAddressCount: "Addresses: {shown} of {total}",
+    addressCount: plural({"one": "{count} address", "other": "{count} addresses"}),
     loopbackHelp: "This loopback address belongs to {host}. Different hosts can use the same port. It is not a browser entry for this environment on your device.",
     openViaDesktop: "Choose “{action}” in Desktop to enter this environment.",
     listenerDetails: "View internal listening address",

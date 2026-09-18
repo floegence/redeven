@@ -2697,6 +2697,19 @@
     "passwordHelp": "Сохраняется только на этом устройстве для автоматических проверок. Пароли, введённые по запросу при подключении, не сохраняются."
   },
   "environmentConnection": {
+    "filterAddresses": "Фильтр адресов",
+    "clearAddressFilter": "Очистить фильтр адресов",
+    "noMatchingAddresses": "Нет подходящих адресов",
+    "filteredAddressCount": "Адресов: {shown} из {total}",
+    "addressCount": {
+      "kind": "plural",
+      "forms": {
+        "one": "{count} адрес",
+        "few": "{count} адреса",
+        "many": "{count} адресов",
+        "other": "{count} адреса"
+      }
+    },
     "wsl": "Дистрибутив WSL",
     "gateway": "Подключение к шлюзу",
     "networkAddress": "Сетевой адрес. Доступность зависит от подключения к сети.",

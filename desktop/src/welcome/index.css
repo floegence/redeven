@@ -1221,7 +1221,6 @@ html:not(.dark) .redeven-new-environment-card:hover {
   overflow-wrap: anywhere;
 }
 
-.redeven-endpoint-listener-content > .redeven-card-endpoint-value { font-size: 0.8125rem; }
 .redeven-endpoint-listener-content > p { margin-top: 0.375rem; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1245,8 +1244,80 @@ html:not(.dark) .redeven-new-environment-card:hover {
     grid-column: 2;
     grid-row: 1;
   }
-  .redeven-settings-connections [data-internal-listener] > .redeven-card-endpoint-content { grid-column: 2 / -1; }
 }
+
+/* Address counts change list content, never the size of the surrounding form. */
+.redeven-address-group {
+  min-width: 0;
+  padding-block: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+.redeven-address-group:first-child { border-top: 0; }
+.redeven-address-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.redeven-address-heading + .redeven-endpoint-scope-title { margin-top: 0.25rem; }
+.redeven-address-count {
+  flex-shrink: 0;
+  padding: 0.05rem 0.4rem;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--muted) 65%, transparent);
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+.redeven-address-list { min-width: 0; margin-top: 0.5rem; }
+.redeven-address-viewport {
+  min-width: 0;
+  max-block-size: min(12rem, 30dvh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+}
+.redeven-address-viewport:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 0.25rem; }
+.redeven-address-group .redeven-card-endpoint-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  padding-block: 0.5rem;
+  align-items: center;
+}
+.redeven-address-group .redeven-card-endpoint-content { grid-column: 1; grid-row: 1; }
+.redeven-address-group .redeven-card-endpoint-value { font-size: 0.8125rem; font-weight: 450; }
+.redeven-address-empty { padding-block: 0.75rem; font-size: 0.75rem; color: var(--muted-foreground); }
+.redeven-address-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.375rem;
+  padding-inline: 0.5rem;
+  border: 1px solid var(--input);
+  border-radius: 0.375rem;
+  color: var(--muted-foreground);
+  background: var(--background);
+}
+.redeven-address-filter input {
+  flex: 1;
+  min-width: 0;
+  height: 1.875rem;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--foreground);
+  box-shadow: none;
+  font-size: 0.75rem;
+}
+.redeven-address-filter input::placeholder { color: var(--muted-foreground); }
+.redeven-address-filter input::-webkit-search-cancel-button { display: none; }
+.redeven-address-filter button {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+.redeven-address-filter button:hover { color: var(--foreground); background: var(--muted); }
 
 .redeven-endpoint-qr-panel {
   display: grid;
