@@ -171,6 +171,9 @@ function requestRuntimeControl(
     }
     const req = requestImpl(url, {
       method: options.method,
+      // Placement proxy sockets bind one surface. The shared agent may hold a
+      // Local UI socket at this same origin; each control request needs its own.
+      agent: false,
       timeout: Math.max(1, Math.floor(options.timeoutMs ?? 20_000)),
       headers: {
         Accept: 'application/json',

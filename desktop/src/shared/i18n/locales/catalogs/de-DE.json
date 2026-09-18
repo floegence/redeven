@@ -1112,6 +1112,7 @@
     "resolveAccessDraft": "Speichern oder verwerfen Sie Ihre Zugriffsänderungen, bevor Sie das Verbindungsziel ändern.",
     "loadingAccess": "Zugriffseinstellungen werden geladen…",
     "loadAccessFailed": "Zugriffseinstellungen konnten nicht geladen werden",
+    "accessAuthorizationFailed": "Diese Umgebung hat Desktop nicht zum Verwalten dieser Einstellungen autorisiert. Versuchen Sie es erneut oder kopieren Sie die Diagnosedaten zur Fehlerbehebung.",
     "startEnvironment": "Umgebung starten",
     "wslStopped": "Starten Sie diese WSL-Umgebung, bevor Sie ihre Zugriffseinstellungen lesen oder speichern."
   },

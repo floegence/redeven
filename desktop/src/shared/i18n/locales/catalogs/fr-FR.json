@@ -1112,6 +1112,7 @@
     "resolveAccessDraft": "Enregistrez ou abandonnez vos modifications d’accès avant de changer la cible de connexion.",
     "loadingAccess": "Chargement des paramètres d’accès…",
     "loadAccessFailed": "Impossible de charger les paramètres d’accès",
+    "accessAuthorizationFailed": "Cet environnement n’a pas autorisé Desktop à gérer ces paramètres. Réessayez ou copiez les informations de diagnostic pour résoudre le problème.",
     "startEnvironment": "Démarrer l’environnement",
     "wslStopped": "Démarrez cet environnement WSL avant de lire ou d’enregistrer ses paramètres d’accès."
   },

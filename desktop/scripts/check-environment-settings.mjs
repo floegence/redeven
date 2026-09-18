@@ -162,6 +162,30 @@ try {
   await switchTab('Access & security', { reducedMotion: true });
   await capture('narrow-access-reduced-motion');
   report.cases.push('reduced-motion-has-stable-instant-switches');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.addInitScript(() => {
+    const locale = new URLSearchParams(location.search).get('locale') || 'en-US';
+    const language = { preference: locale, resolved_locale: locale, source: 'preference', system_candidates: [] };
+    window.redevenDesktopLanguage = { getSnapshot: () => language, setPreference: () => language, subscribe: () => () => {} };
+  });
+  for (const locale of ['en-US', 'zh-CN']) {
+    await page.setViewportSize({ width: locale === 'zh-CN' ? 480 : 1280, height: locale === 'zh-CN' ? 640 : 900 });
+    await page.goto(new URL(`environment-settings.html?deny-access=1&locale=${locale}`, report.url).href);
+    await page.getByRole('button', { name: locale === 'zh-CN' ? 'orange 的设置' : 'Settings for orange', exact: true }).click();
+    await page.locator('#ssh-settings-label').waitFor();
+    await settleMotion();
+    await switchTab(locale === 'zh-CN' ? '访问与安全' : 'Access & security');
+    const alert = dialog.getByRole('alert');
+    assert.ok((await alert.textContent()).includes(locale === 'zh-CN' ? '此环境未授权 Desktop 管理这些设置' : 'The environment did not authorize Desktop'));
+    assert.equal((await alert.textContent()).includes('open this Environment from Desktop'), false);
+    assert.equal(await dialog.evaluate(panel => panel.scrollWidth > panel.clientWidth), false);
+    await capture(`authorization-${locale}`);
+    await dialog.getByRole('button', { name: locale === 'zh-CN' ? '重试' : 'Retry', exact: true }).click();
+    await page.locator('#local-ui-port').waitFor();
+    assert.equal(await dialog.count(), 1);
+    assert.equal(await page.evaluate(() => window.settingsFixture.loads), 2);
+    report.cases.push(`authorization-guidance-and-retry-${locale}`);
+  }
   assert.deepEqual(report.errors, []);
   report.status = 'passed';
   console.log(`Environment card settings passed: ${report.cases.length} browser scenarios. Evidence: ${output}`);

@@ -1,4 +1,7 @@
 import http from 'node:http';
+import net from 'node:net';
+import { startRuntimePlacementLoopbackProxy } from './runtimePlacementLoopbackProxy';
+import { requestRuntimeFlowerHTTP } from './runtimeFlowerHTTP';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -124,6 +127,58 @@ describe('runtimeControlClient', () => {
     expect(JSON.parse(server.bodies[1]!)).toEqual({local_ui_bind: saved.local_ui_bind, local_ui_protocol: 'http', local_ui_password_mode: 'replace', local_ui_password: 'new-secret'});
   });
 
+  it('isolates access reads and writes from pooled Local UI bridge connections on the same origin', async () => {
+    const saved = { local_ui_bind: 'localhost:23998', local_ui_protocol: 'http' as const, local_ui_password_configured: false };
+    const localUI = await startServer((request, _body, response) => {
+      if (request.headers['x-redeven-desktop-bridge-token'] !== 'private-ui-token') {
+        response.writeHead(401, { 'Content-Type': 'text/plain' });
+        response.end('Desktop-only Local UI bridge; open this Environment from Desktop');
+        return;
+      }
+      response.end(JSON.stringify({ ok: true }));
+    });
+    const control = await startServer((request, _body, response) => {
+      expect(request.headers.authorization).toBe('Bearer runtime-control-token');
+      expect(request.headers['x-redeven-desktop-bridge-token']).toBeUndefined();
+      response.end(JSON.stringify({ ok: true, data: saved }));
+    });
+    const surfaces: string[] = [];
+    const proxy = await startRuntimePlacementLoopbackProxy({
+      openStream(surface) {
+        surfaces.push(surface);
+        const origin = new URL(surface === 'runtime_control' ? control.origin : localUI.origin);
+        const socket = net.createConnection(Number(origin.port), origin.hostname);
+        return {
+          id: `${surface}-${surfaces.length}`,
+          onData: listener => { socket.on('data', listener); },
+          onClose: listener => { socket.once('end', listener); },
+          onError: listener => { socket.on('error', listener); },
+          write: chunk => new Promise<void>((resolve, reject) => socket.write(chunk, error => error ? reject(error) : resolve())),
+          closeWrite: async () => { socket.end(); },
+          close: async () => { socket.destroy(); },
+        };
+      },
+    });
+    const requestLocalUI = () => requestRuntimeFlowerHTTP(new URL('/api/local/runtime/health', proxy.url),
+      { method: 'GET', path: '/api/local/runtime/health' }, { headers: { 'X-Redeven-Desktop-Bridge-Token': 'private-ui-token' } });
+    try {
+      expect((await requestLocalUI()).status).toBe(200);
+      // Let Node return this socket to its real shared keep-alive pool.
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(Object.values(http.globalAgent.freeSockets).some(sockets => sockets?.some(socket => socket.remotePort === proxy.port))).toBe(true);
+      const managed = endpoint(new URL('__redeven_runtime_control/', proxy.url).href);
+      expect(await getRuntimeAccessSettings(managed)).toEqual(saved);
+      expect(await saveRuntimeAccessSettings(managed, { ...saved, local_ui_password: '', local_ui_password_mode: 'keep', auto_runtime_probe_enabled: true })).toEqual(saved);
+      expect((await requestLocalUI()).status).toBe(200);
+      expect(await getRuntimeAccessSettings(managed)).toEqual(saved);
+      expect(control.requests.map(request => [request.method, request.url])).toEqual([
+        ['GET', '/v2/runtime/access'], ['PUT', '/v2/runtime/access'], ['GET', '/v2/runtime/access'],
+      ]);
+      expect(localUI.requests.map(request => request.url)).toEqual(['/api/local/runtime/health', '/api/local/runtime/health']);
+      expect(surfaces).toContain('runtime_control');
+    } finally { await proxy.close(); }
+  });
+
   it('defaults missing protocols to HTTP, preserves HTTPS, and rejects unknown protocols', () => {
     expect(parseRuntimeAccessSettings({local_ui_bind: 'localhost:23998', local_ui_password_configured: false}).local_ui_protocol).toBe('http');
     expect(parseRuntimeAccessSettings({local_ui_bind: 'localhost:23998', local_ui_password_configured: false, local_ui_protocol: 'https'}).local_ui_protocol).toBe('https');
@@ -180,6 +235,19 @@ describe('runtimeControlClient', () => {
       endpoint('http://127.0.0.1:43124/__redeven_runtime_control/'),
       'https://example.invalid/v2/provider-link' as never,
     )).toThrow(RuntimeControlError);
+  });
+
+  it.each([401, 403])('keeps genuine control authorization failure %s without retrying another surface', async status => {
+    const server = await startServer((_request, _body, response) => {
+      response.writeHead(status, { 'Content-Type': 'text/plain' });
+      response.end('Control credential rejected');
+    });
+    await expect(getRuntimeAccessSettings(endpoint(server.origin))).rejects.toMatchObject({
+      statusCode: status, code: 'RUNTIME_CONTROL_HTTP_ERROR',
+      message: `Runtime control returned HTTP ${status}: Control credential rejected`,
+    });
+    expect(server.requests).toHaveLength(1);
+    expect(server.requests[0]?.url).toBe('/v2/runtime/access');
   });
 
   it('returns a structured HTTP error when runtime-control responds with non-JSON failure text', async () => {

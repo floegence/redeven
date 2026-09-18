@@ -1,5 +1,5 @@
 import { desktopEnvironmentID } from './desktopPreferences';
-import { withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, type EnvironmentAccessOwner } from './environmentAccessSettings';
+import { environmentSettingsFailure, withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, type EnvironmentAccessOwner } from './environmentAccessSettings';
 import { assertRuntimeFlowerCompatible } from '../shared/runtimeFlowerAccess';
 import { runtimeFlowerPath, runtimeFlowerMethod, runtimeFlowerMethodAllowed } from './runtimeFlowerRoutes';
 import { certificateCommandArguments, selectDesktopCertificateImport, runDesktopCertificateCommand, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart, type CertificateImport } from './desktopCertificate';
@@ -5147,14 +5147,6 @@ async function runNativeRuntimeAuthority(command: readonly string[], input?: unk
     });
     return parseRuntimeAccessSettings(JSON.parse(result.stdout));
   } finally { await executor.release(); }
-}
-
-function environmentSettingsFailure(error: unknown): Extract<DesktopSettingsResult, { ok: false }> {
-  return {
-    ok: false, error: error instanceof Error ? error.message : String(error),
-    ...(error instanceof RuntimeControlError ? { code: error.code } : {}),
-    ...(isDesktopOperationFailureError(error) ? { failure: error.presentation } : {}),
-  };
 }
 
 async function readEnvironmentAccess(owner: EnvironmentAccessOwner): Promise<{ access: RuntimeAccessSettings; startup: StartupReport | null }> {

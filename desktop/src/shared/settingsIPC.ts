@@ -34,7 +34,7 @@ export type DesktopSettingsRequest = Readonly<{ environment_id: string }>;
 export type SaveDesktopSettingsRequest = DesktopSettingsRequest & Readonly<{ draft: DesktopSettingsDraft }>;
 export type DesktopSettingsResult = Readonly<
   | { ok: true; snapshot: DesktopSettingsSurfaceSnapshot }
-  | { ok: false; error: string; code?: string; failure?: DesktopOperationFailurePresentation }
+  | { ok: false; error: string; code?: string; status_code?: number; failure?: DesktopOperationFailurePresentation }
 >;
 export type SaveDesktopSettingsResult = DesktopSettingsResult;
 

@@ -13,6 +13,7 @@ declare global {
 }
 document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '40px');
 const snapshot = window.settingsFixtureSnapshot;
+const denyAccess = new URLSearchParams(location.search).has('deny-access');
 let resolveOld: () => void = () => {};
 window.settingsFixture = { loads: 0, resolveOld: () => resolveOld() };
 const settings: DesktopWelcomeRuntime['settings'] = {
@@ -24,6 +25,10 @@ const settings: DesktopWelcomeRuntime['settings'] = {
       runtime_connection: { host_access: environment.managed_runtime_host_access!, placement: environment.managed_runtime_placement! },
       current_runtime_running: true, current_runtime_urls: ['http://localhost:23998/'], current_runtime_url: 'http://localhost:23998/' }) };
     const attempt = ++window.settingsFixture.loads;
+    if (denyAccess) return attempt === 1 ? {
+      ok: false, status_code: 401, code: 'RUNTIME_CONTROL_HTTP_ERROR',
+      error: 'Runtime control returned HTTP 401: Desktop-only Local UI bridge; open this Environment from Desktop',
+    } : result;
     if (attempt === 2) return { ok: false, error: 'SSH connection refused: orange:22', code: 'SSH_CONNECTION_REFUSED' };
     if (attempt === 3) return new Promise(resolve => { resolveOld = () => resolve(result); });
     return result;
