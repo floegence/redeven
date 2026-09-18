@@ -7,8 +7,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
-import { FileItemIcon } from "@floegence/floe-webapp-core/file-browser";
-import { extNoDot } from "./FileBrowserShared";
+import { GitFileLabel } from "./GitFileLabel";
 import { Calendar, Copy, Eye, FileText, Folder, Hash, Terminal, User } from "@floegence/floe-webapp-core/icons";
 import { Button } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
@@ -40,7 +39,6 @@ import {
   type GitFileShortcutTarget,
 } from "../utils/gitBrowserShortcuts";
 import { redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
-import { gitChangePathClass } from "./GitChrome";
 import { GitDiffPanel } from "./GitDiffPanel";
 import { GitDiffSplit } from "./GitDiffSplit";
 import { GitCommitMessageDialog, normalizedGitCommitBody } from './GitCommitMessageDialog';
@@ -109,7 +107,7 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
       {...GIT_WORKBENCH_SCROLL_REGION_PROPS}
       role="listbox"
       aria-label={i18n.t('uiCopy.git.filesInCommit')}
-      class="git-table-frame min-h-0 flex-1 overflow-auto divide-y divide-[var(--git-table-gridline)]"
+      class="git-table-frame min-h-0 flex-1 overflow-auto"
       data-git-commit-files-list-layout="compact"
     >
       <For each={props.items}>
@@ -117,8 +115,6 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
           const active = () => props.selectedKey === selectedFileIdentity(file);
           const path = () => changeSecondaryPath(file);
           const displayPath = () => file.newPath || file.path || file.displayPath || file.oldPath || '';
-          const name = () => displayPath().split('/').at(-1) || displayPath();
-          const directory = () => displayPath().slice(0, Math.max(0, displayPath().lastIndexOf('/')));
           return (
             <button
               type="button"
@@ -126,23 +122,16 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
               tabIndex={active() ? 0 : -1}
               aria-selected={active()}
               class={cn(
-                "git-browser-interactive grid w-full cursor-pointer gap-1.5 border-l-2 border-l-transparent px-3 py-2.5 text-left transition-colors duration-150 focus-visible:outline-none",
+                "git-browser-interactive git-file-row w-full cursor-pointer text-left focus-visible:outline-none",
                 active() && "git-browser-selection-row",
               )}
               onClick={() => props.onOpenDiff?.(file)}
               onContextMenu={(event) => props.onContextMenu?.(event, file)}
               onKeyDown={(event) => props.onKeyDown?.(event, file)}
             >
-              <div class="flex min-w-0 items-center gap-2">
-                <FileItemIcon item={{ name: name(), type: 'file', extension: extNoDot(name()) }} class="size-3.5 shrink-0" />
-                <span class={`min-w-0 flex-1 truncate text-xs font-medium ${gitChangePathClass(file.changeType)}`} title={path()}>{name()}</span>
-                <GitChangeMetrics additions={file.additions} deletions={file.deletions} />
-              </div>
-              <div class="flex min-w-0 items-center gap-1.5 pl-5">
-                <GitChangeStatusPill change={file.changeType} />
-                <span class="min-w-0 truncate text-[10px] text-muted-foreground" title={path()}>{directory()}</span>
-                <span class="sr-only">{path()}</span>
-              </div>
+              <GitFileLabel path={displayPath()} secondaryPath={path()} />
+              <GitChangeStatusPill compact change={file.changeType} />
+              <GitChangeMetrics compact additions={file.additions} deletions={file.deletions} />
             </button>
           );
         }}

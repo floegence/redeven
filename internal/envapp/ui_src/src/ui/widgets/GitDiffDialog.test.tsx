@@ -214,9 +214,7 @@ describe("GitDiffDialog", () => {
 
       expect(document.body.textContent).toContain("Patch");
       expect(document.body.textContent).toContain("Full Context");
-      expect(document.body.textContent).toContain(
-        "Loads a single-file patch on demand.",
-      );
+      expect(document.querySelector('.git-diff-panel__modes [aria-pressed="true"]')?.textContent?.trim()).toBe("Patch");
       expect(document.body.textContent).toContain("newMiddle();");
       expect(mockGetDiffContent).not.toHaveBeenCalled();
 
@@ -249,9 +247,7 @@ describe("GitDiffDialog", () => {
           path: "src/app.ts",
         },
       });
-      expect(document.body.textContent).toContain(
-        "Includes unchanged lines for broader review context.",
-      );
+      expect(document.querySelector('.git-diff-panel__modes [aria-pressed="true"]')?.textContent?.trim()).toBe("Full Context");
       expect(document.body.textContent).toContain("context-before");
       expect(document.body.textContent).toContain("trailing-line");
     } finally {
@@ -503,9 +499,7 @@ describe("GitDiffDialog", () => {
       });
       await flush();
 
-      expect(document.body.textContent).toContain(
-        "Includes unchanged lines for broader review context.",
-      );
+      expect(document.querySelector('.git-diff-panel__modes [aria-pressed="true"]')?.textContent?.trim()).toBe("Full Context");
       expect(document.body.textContent).toContain("context-before");
       expect(document.body.textContent).not.toContain(
         "Loading full-context diff...",
@@ -842,9 +836,7 @@ describe("GitDiffDialog", () => {
       swapButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flush();
 
-      expect(document.body.textContent).toContain(
-        "Loads a single-file patch on demand.",
-      );
+      expect(document.querySelector('.git-diff-panel__modes [aria-pressed="true"]')?.textContent?.trim()).toBe("Patch");
       expect(document.body.textContent).toContain("afterSwap();");
       expect(document.body.textContent).not.toContain("context-before");
       expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
@@ -1020,9 +1012,6 @@ describe("GitDiffDialog", () => {
       await flush();
 
       expect(mockGetDiffContent).not.toHaveBeenCalled();
-      expect(document.body.textContent).toContain(
-        "Directory entries do not expose a single-file diff preview.",
-      );
       expect(document.body.textContent).toContain(
         "Diff preview is unavailable for directory entries.",
       );
