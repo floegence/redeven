@@ -28,11 +28,11 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' = 'site
   const gate = deferred<void>();
   const other = thread({ thread_id: 'other-conversation' });
   const saveAccess = vi.fn(() => gate.promise);
-  const listExtensionProfiles = vi.fn(async () => [{ id: 'personal', name: 'Personal' }]);
+  const loadExtensionStatus = vi.fn(async () => ({ profiles: [{ id: 'personal', name: 'Personal' }] }));
   const loadAccess = vi.fn(async () => ({ origins: ['https://existing.test'], apps: ['dev.Notes'], allow_foreground: false }));
   const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:step', current: { ...current, view_version: 2, activity: 'idle' as const, last_outcome: 'completed' as const, interactions: [] } }));
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput,
-    computerManagement: { openExtension: vi.fn(), listExtensionProfiles, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess, listTargets: vi.fn(async () => []), loadTarget: vi.fn(async () => ({ target_id: 'browser-main' })), selectTarget: vi.fn(), listBrowserTabs: vi.fn(async () => []) },
+    computerManagement: { openExtension: vi.fn(), loadExtensionStatus, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess, listTargets: vi.fn(async () => []), loadTarget: vi.fn(async () => ({ target_id: 'browser-main' })), selectTarget: vi.fn(), listBrowserTabs: vi.fn(async () => []) },
     listThreads: vi.fn(async () => [snapshot, other]), loadThread: vi.fn(async id => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(other)),
     connectLiveStream: async function* ({ signal }) {
       yield { schema_version: 1 as const, kind: 'ready' as const, observer_id: 'assistance-observer', summaries: [snapshot, other] };
@@ -40,7 +40,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' = 'site
     },
   }, { focusThreadRequest: { request_id: 'select-assistance', thread_id: threadID }, layout: true });
   await waitFor(() => !!surface.querySelector('.flower-computer-control-heading'));
-  return { surface, gate, saveAccess, loadAccess, submitInput, listExtensionProfiles };
+  return { surface, gate, saveAccess, loadAccess, submitInput, loadExtensionStatus };
 }
 
 it('explains the exact site grant and grants it once before continuing without manual browser control', async () => {
@@ -188,15 +188,15 @@ it('opens the system-browser connection guide and resumes the canonical request 
 
 it('closes the connection guide when its conversation changes during a connection check', async () => {
   const s = await setup('connection', 'full_access');
-  const check = deferred<{ id: string; name: string }[]>();
-  s.listExtensionProfiles.mockImplementationOnce(() => check.promise);
+  const check = deferred<{ profiles: { id: string; name: string }[] }>();
+  s.loadExtensionStatus.mockImplementationOnce(() => check.promise);
   const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
   Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect Chrome')!.click();
-  await waitFor(() => s.listExtensionProfiles.mock.calls.length === 1);
+  await waitFor(() => s.loadExtensionStatus.mock.calls.length === 1);
   s.surface.querySelector<HTMLButtonElement>('[data-thread-id="other-conversation"] .flower-thread-card-select-button')!.click();
   await waitFor(() => s.surface.querySelector('[data-thread-id="other-conversation"]')?.getAttribute('data-flower-thread-active') === 'true');
   await waitFor(() => !document.querySelector('[role="dialog"]'));
-  check.resolve([{ id: 'personal', name: 'Personal' }]);
+  check.resolve({ profiles: [{ id: 'personal', name: 'Personal' }] });
   await new Promise(resolve => setTimeout(resolve, 30));
   expect(s.submitInput).not.toHaveBeenCalled();
 });

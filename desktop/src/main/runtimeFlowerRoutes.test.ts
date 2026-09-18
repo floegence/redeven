@@ -11,7 +11,7 @@ describe('Desktop computer management routes', () => {
     ['/target?thread_id=thread-1', ['GET']], ['/target', ['PUT']],
     ['/access?thread_id=thread-1', ['GET', 'PUT']],
     ['/managed/profiles', ['GET', 'POST']], ['/managed/tabs?profile_id=profile-1', ['GET']],
-    ['/extension/setup', ['POST']], ['/extension/open', ['POST']], ['/extension/profiles', ['GET']],
+    ['/extension/setup', ['POST']], ['/extension/open', ['POST']], ['/extension/status', ['GET']],
     ['/extension/tabs?profile_id=profile-1', ['GET']],
   ])('admits %s only through its declared methods', (suffix, methods) => {
     const path = base + suffix;

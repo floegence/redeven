@@ -64,10 +64,28 @@ assistance may reuse already connected profiles and resume immediately. Genuine
 profile ambiguity remains the Agent's responsibility through existing discovery.
 The extension's optional profile label is user content, not routing authority.
 
-Runtime Service epoch 26 pairs the setup route and host-platform facts with
-both product carriers. Native Messaging uses protocol 6. The extension
+Runtime Service epoch 27 pairs the connection status snapshot with both product
+carriers. `extension/status` replaces the removed profile-list route. Native Messaging uses protocol 6. The extension
 connection page remains consent-gated even when the URL supplies configuration.
 No database, Floret API, tool-selection rule or authorization policy changes.
+
+The Runtime hub owns one bounded, non-sensitive handshake failure alongside its
+connected profiles. A valid extension hello with an incompatible protocol records
+`extension_update_required` and returns a rejection before admitting a profile.
+The shared guide observes that same snapshot and opens the update workflow,
+even when an older extension cannot explain its rejection. It never continues a
+conversation from an installation acknowledgement. Successful handshake or
+explicit setup clears the diagnostic; no failure or pending connection is stored.
+
+Chrome's native-host error is read only during its disconnect callback and mapped
+to a closed reason for expired registration, blocked or failed host startup,
+unavailable Runtime, or timeout. Raw platform errors and paths do not enter the
+popup. Reopening the guide or its connection action uses the same explicit setup
+path to repair package files and registration, including after Runtime restart.
+Shutdown removes only the exact owned registration and active socket. A stale
+page cannot silently attach to another Runtime, downgrade the protocol or bypass
+Chrome consent. Updating an unpacked extension loads the current visible folder
+with the same extension key; it does not require clearing browser profiles.
 
 # Boundaries
 

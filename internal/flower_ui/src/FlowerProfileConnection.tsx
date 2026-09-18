@@ -24,7 +24,7 @@ export function FlowerProfileConnection(props: { connectionOnly?: boolean; onCon
   };
   const refresh = async () => {
     const current = generation;
-    const result = await (props.managed ? props.management.listManagedProfiles!() : props.management.listExtensionProfiles!());
+    const result = props.managed ? await props.management.listManagedProfiles!() : (await props.management.loadExtensionStatus!()).profiles;
     if (current !== generation) return;
     setProfiles(result); setProfile(''); setTabs([]); setTab('');
   };

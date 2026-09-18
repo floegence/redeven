@@ -9,10 +9,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,16 +35,22 @@ type ComputerExtensionProfile struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
+type ComputerExtensionStatus struct {
+	Profiles []ComputerExtensionProfile `json:"profiles"`
+	Error    string                     `json:"error,omitempty"`
+}
+
 type computerExtensionHub struct {
-	owner         *ComputerUseRuntime
-	mu            sync.Mutex
-	listener      net.Listener
-	directory     string
-	profiles      map[string]*computerExtensionClient
-	closed        bool
-	manifestPath  string
-	manifestBytes []byte
-	wait          sync.WaitGroup
+	connectionError string
+	owner           *ComputerUseRuntime
+	mu              sync.Mutex
+	listener        net.Listener
+	directory       string
+	profiles        map[string]*computerExtensionClient
+	closed          bool
+	manifestPath    string
+	manifestBytes   []byte
+	wait            sync.WaitGroup
 }
 type computerExtensionClient struct {
 	hub      *computerExtensionHub
@@ -102,10 +110,10 @@ func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (Comput
 		return ComputerExtensionSetup{}, err
 	}
 	setup := computerExtensionInstallLocation(userHome, managed.ProfileDir)
+	if err := stageComputerExtension(resources, setup.ExtensionPath); err != nil {
+		return ComputerExtensionSetup{}, err
+	}
 	if hub == nil {
-		if err := stageComputerExtension(resources, setup.ExtensionPath); err != nil {
-			return ComputerExtensionSetup{}, err
-		}
 		directory, err := os.MkdirTemp("/tmp", "redeven-chrome-")
 		if err != nil {
 			return ComputerExtensionSetup{}, err
@@ -148,6 +156,7 @@ func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (Comput
 	}
 	hub.mu.Lock()
 	hub.manifestPath, hub.manifestBytes = manifestPath, manifest
+	hub.connectionError = ""
 	hub.mu.Unlock()
 	return setup, nil
 }
@@ -202,7 +211,15 @@ func (h *computerExtensionHub) admit(conn net.Conn) {
 		ProfileID string `json:"profile_id"`
 		Name      string `json:"profile_name"`
 	}
-	if json.Unmarshal(raw, &hello) != nil || hello.Type != "hello" || hello.Protocol != browserbridge.ProtocolVersion || len(hello.ProfileID) != 36 || len(hello.Name) == 0 || len(hello.Name) > 120 {
+	if json.Unmarshal(raw, &hello) != nil || hello.Type != "hello" || len(hello.ProfileID) != 36 || len(hello.Name) == 0 || len(hello.Name) > 120 {
+		return
+	}
+	if hello.Protocol != browserbridge.ProtocolVersion {
+		h.mu.Lock()
+		h.connectionError = "extension_update_required"
+		h.mu.Unlock()
+		slog.Info("browser extension connection rejected", "reason", "extension_update_required", "protocol", hello.Protocol, "required_protocol", browserbridge.ProtocolVersion)
+		_ = browserbridge.WriteMessage(conn, map[string]any{"type": "connection_error", "code": "extension_update_required"}, 1<<20)
 		return
 	}
 	token := make([]byte, 16)
@@ -220,6 +237,7 @@ func (h *computerExtensionHub) admit(conn net.Conn) {
 	}
 	_ = conn.SetDeadline(time.Time{})
 	h.profiles[client.profile.ID] = client
+	h.connectionError = ""
 	admitted = true
 	h.wait.Add(1)
 	go client.read()
@@ -382,16 +400,36 @@ func (r *ComputerUseRuntime) extensionClient(profileID string) (*computerExtensi
 	}
 	return client, nil
 }
-func (s *Service) ComputerExtensionProfiles(ctx context.Context, meta *session.Meta) ([]ComputerExtensionProfile, error) {
+func (s *Service) ComputerExtensionConnectionStatus(ctx context.Context, meta *session.Meta) (ComputerExtensionStatus, error) {
 	if err := requireRWX(meta); err != nil {
-		return nil, err
+		return ComputerExtensionStatus{}, err
 	}
 	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
 	if !ok {
-		return nil, errors.New("computer runtime unavailable")
+		return ComputerExtensionStatus{}, errors.New("computer runtime unavailable")
 	}
-	return host.extensionProfiles(), nil
+	return host.extensionStatus(), nil
 }
+
+// One bounded Runtime snapshot owns connection inventory and handshake failure.
+// It contains no browser content and does not create a conversation interaction.
+func (r *ComputerUseRuntime) extensionStatus() ComputerExtensionStatus {
+	r.mu.RLock()
+	hub := r.extension
+	r.mu.RUnlock()
+	status := ComputerExtensionStatus{Profiles: []ComputerExtensionProfile{}}
+	if hub != nil {
+		hub.mu.Lock()
+		status.Error = hub.connectionError
+		for _, client := range hub.profiles {
+			status.Profiles = append(status.Profiles, client.profile)
+		}
+		hub.mu.Unlock()
+	}
+	sort.Slice(status.Profiles, func(i, j int) bool { return status.Profiles[i].ID < status.Profiles[j].ID })
+	return status
+}
+
 func (s *Service) ComputerExtensionTabs(ctx context.Context, meta *session.Meta, profileID string) ([]ComputerBrowserTab, error) {
 	if err := requireRWX(meta); err != nil {
 		return nil, err

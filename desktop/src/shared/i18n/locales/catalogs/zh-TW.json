@@ -903,6 +903,8 @@
       "openConnection": "前往 Chrome 連線",
       "setupOpenFailed": "無法開啟 Chrome 或資料夾。請確認執行此環境的電腦已安裝 Google Chrome，然後重試。遠端環境會在遠端電腦上開啟。",
       "retryConnection": "重新檢查連線",
+      "setupUpdateTitle": "更新擴充功能",
+      "setupUpdateHint": "已安裝的擴充功能版本過舊。重新載入此處的資料夾即可更新。",
       "setupAlreadyInstalled": "已安裝，直接連線",
       "setupInstalled": "已安裝，繼續",
       "setupBack": "上一步",

@@ -98,19 +98,7 @@ func (r *ComputerUseRuntime) computerCandidate(threadID, ref string) (computerCa
 }
 
 func (r *ComputerUseRuntime) extensionProfiles() []ComputerExtensionProfile {
-	r.mu.RLock()
-	hub := r.extension
-	r.mu.RUnlock()
-	profiles := []ComputerExtensionProfile{}
-	if hub != nil {
-		hub.mu.Lock()
-		for _, client := range hub.profiles {
-			profiles = append(profiles, client.profile)
-		}
-		hub.mu.Unlock()
-	}
-	sort.Slice(profiles, func(i, j int) bool { return profiles[i].ID < profiles[j].ID })
-	return profiles
+	return r.extensionStatus().Profiles
 }
 
 func (r *ComputerUseRuntime) extensionTabs(ctx context.Context, profileID string) ([]ComputerBrowserTab, error) {

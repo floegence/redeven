@@ -903,6 +903,8 @@
       "openConnection": "Chrome で接続",
       "setupOpenFailed": "Chrome またはフォルダーを開けません。この環境を実行しているコンピューターに Google Chrome がインストールされていることを確認し、再試行してください。リモート環境の場合はリモート側で開きます。",
       "retryConnection": "接続を再確認",
+      "setupUpdateTitle": "拡張機能を更新",
+      "setupUpdateHint": "インストール済みの拡張機能が古くなっています。ここに表示されたフォルダを再度読み込んで更新してください。",
       "setupAlreadyInstalled": "インストール済み",
       "setupInstalled": "インストール完了、次へ",
       "setupBack": "戻る",

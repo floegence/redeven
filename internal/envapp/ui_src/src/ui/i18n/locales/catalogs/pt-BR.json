@@ -5163,6 +5163,8 @@
       "revokeAll": "Revogar todas as permissões",
       "extension": "Extensão do Chrome",
       "extensionHint": "Instale a extensão Flower Browser uma única vez para que o Flower possa usar o Chrome.",
+      "setupUpdateTitle": "Atualizar extensão",
+      "setupUpdateHint": "A extensão instalada está desatualizada. Carregue novamente a pasta indicada aqui.",
       "setupAlreadyInstalled": "Já instalada",
       "setupInstalled": "Instalada, continuar",
       "setupBack": "Voltar",

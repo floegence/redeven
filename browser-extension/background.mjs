@@ -175,15 +175,28 @@ async function connect(name, label) {
   const port = chrome.runtime.connectNative(name); native = port;
   const requests = new Map(); pending = requests;
   const disconnectPort = () => schedule(() => native === port ? disconnect() : undefined);
-  port.onDisconnect.addListener(() => {
-    if (native === port) { lastError = 'disconnected'; void disconnectPort(); }
-  });
   let accepted, rejected;
   const handshake = new Promise((resolve, reject) => { accepted = resolve; rejected = reject; });
-  const timeout = setTimeout(() => rejected(new Error('connection timeout')), 5000);
-  port.onDisconnect.addListener(() => rejected(new Error('disconnected')));
+  const failure = code => Object.assign(new Error(code), { code });
+  const timeout = setTimeout(() => rejected(failure('connection_timeout')), 5000);
+  port.onDisconnect.addListener(() => {
+    // Chrome only exposes lastError during this callback. Keep a closed reason,
+    // never its raw text (which can contain local paths), in the UI snapshot.
+    const message = chrome.runtime.lastError?.message || '';
+    if (native !== port) return;
+    lastError = message === 'Specified native messaging host not found.' ? 'native_host_missing'
+      : message === 'Access to the specified native messaging host is forbidden.' ? 'native_host_forbidden'
+      : message === 'Failed to start native messaging host.' ? 'native_host_failed' : 'runtime_unavailable';
+    rejected(failure(lastError)); void disconnectPort();
+  });
   port.onMessage.addListener(message => {
     if (native !== port) return;
+    if (!ready && message.type === 'connection_error' && message.code === 'extension_update_required') {
+      rejected(failure(message.code)); return;
+    }
+    if (!ready && message.type === 'ready' && message.protocol_version !== 6) {
+      rejected(failure('extension_update_required')); return;
+    }
     if (message.type === 'ready' && message.protocol_version === 6 && !ready) { ready = true; accepted(); return; }
     if (!ready || typeof message.id !== 'string' || !message.id || message.id.length > 64) { void disconnectPort(); return; }
     if (message.type === 'cancel') {
@@ -205,7 +218,7 @@ async function connect(name, label) {
   });
   port.postMessage({ type: 'hello', protocol_version: 6, profile_id: profile.id, profile_name: profile.name });
   try { await handshake; }
-  catch (error) { if (native === port) await disconnect(); throw error; }
+  catch (error) { lastError = error.code || 'connection_failed'; if (native === port) await disconnect(); throw error; }
   finally { clearTimeout(timeout); }
 
 }
@@ -214,11 +227,11 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || sender.url?.split('#')[0] !== chrome.runtime.getURL('popup.html')) return false;
   const run = async () => {
     if (message.command === 'connect') await connect(message.nativeHost, message.profileName);
-    else if (message.command === 'disconnect') await disconnect();
+    else if (message.command === 'disconnect') { await disconnect(); lastError = ''; }
     else if (message.command !== 'status') throw new Error('invalid command');
     const saved = await chrome.storage.local.get(['profile', 'nativeName']);
     return { connected: Boolean(native) && ready, nativeHost: nativeName || saved.nativeName || '', profileName: profile?.name || saved.profile?.name || '', tabs: bindings.size, error: lastError };
   };
-  void schedule(run).then(respond, () => respond({ error: 'connection_failed' }));
+  void schedule(run).then(respond, () => respond({ connected: false, nativeHost: nativeName, error: lastError || 'connection_failed' }));
   return true;
 });

@@ -5163,6 +5163,8 @@
       "revokeAll": "すべてのアクセス権を取り消す",
       "extension": "Chrome 拡張機能",
       "extensionHint": "Flower が Chrome を操作できるよう、初回のみ Flower Browser 拡張機能をインストールします。",
+      "setupUpdateTitle": "拡張機能を更新",
+      "setupUpdateHint": "インストール済みの拡張機能が古くなっています。ここに表示されたフォルダを再度読み込んで更新してください。",
       "setupAlreadyInstalled": "インストール済み",
       "setupInstalled": "インストール完了、次へ",
       "setupBack": "戻る",

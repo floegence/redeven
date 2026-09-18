@@ -1,5 +1,16 @@
 # Redeven OKF Update Log
 
+## 2026-09-18 — Chrome connection recovery
+
+- Keep native-host error categories through the extension and show specific
+  recovery actions instead of a generic retry message.
+- Expose one Runtime connection snapshot and route rejected older extensions
+  into the shared update guide; registration repair grants no browser authority.
+- Repair current package files on every explicit setup and cover restart,
+  missing registration, exact native messaging and replacement installation.
+- Advance Runtime Service to epoch 27 for the replacement status endpoint.
+  Protocol 6 continues to reject incompatible peers; Floret remains unchanged.
+
 ## 2026-09-18 — Visible Chrome installation
 
 - Align all shipped Chrome guide locales with actual Chromium toolbar labels,

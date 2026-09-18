@@ -1,3 +1,4 @@
+/* global document */
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -8,7 +9,7 @@ const execute = promisify(execFile);
 
 // First-install acceptance uses Chrome's visible controls and the native folder
 // picker. No load-extension flag, developerPrivate call or preinstalled profile.
-export async function installChromeExtensionThroughUI(context, extension, extensionID, homePath) {
+export async function installChromeExtensionThroughUI(context, extension, extensionID, homePath, previousVersion) {
   assert.equal(process.platform, 'darwin', 'native folder-picker acceptance currently requires macOS');
   assert(Array.isArray(homePath) && homePath.length > 0 && homePath.every(part => typeof part === 'string' && part && !part.startsWith('.') && !part.includes('/')));
   assert.equal(path.join(os.homedir(), ...homePath), extension, 'visible route must locate the exact installation');
@@ -20,7 +21,8 @@ export async function installChromeExtensionThroughUI(context, extension, extens
   assert(!args.includes('--no-sandbox') && !args.includes('--load-extension'), 'installation must start with sandbox enabled and no preloaded extension');
   const page = await context.newPage(); await page.goto('chrome://extensions/');
   const card = page.locator(`extensions-item[id="${extensionID}"]`);
-  assert.equal(await card.count(), 0, 'Flower must not be installed before the visible workflow');
+  assert.equal(await card.count(), previousVersion ? 1 : 0, 'verify the exact starting installation');
+  if (previousVersion) assert.equal((await card.locator('#version').textContent()).trim(), previousVersion);
   const developer = page.locator('extensions-toolbar #devMode');
   if (await developer.getAttribute('aria-pressed') !== 'true') await developer.click();
   await page.locator('extensions-toolbar #loadUnpacked').click();
@@ -31,5 +33,9 @@ export async function installChromeExtensionThroughUI(context, extension, extens
     const errors = await page.locator('extensions-load-error').locator('cr-dialog').allInnerTexts();
     throw new Error('Chrome did not accept the selected folder: ' + errors.join(' '), { cause: error });
   }
+  if (previousVersion) await page.waitForFunction(({ extensionID, previousVersion }) => {
+    const version = document.querySelector('extensions-manager')?.shadowRoot?.querySelector('extensions-item-list')?.shadowRoot?.querySelector(`extensions-item[id="${extensionID}"]`)?.shadowRoot?.querySelector('#version')?.textContent?.trim();
+    return version && version !== previousVersion;
+  }, { extensionID, previousVersion });
   return page;
 }

@@ -903,6 +903,8 @@
       "openConnection": "Chrome에서 연결",
       "setupOpenFailed": "Chrome 또는 폴더를 열 수 없습니다. 이 환경을 실행하는 컴퓨터에 Google Chrome이 설치되어 있는지 확인하고 다시 시도하세요. 원격 환경에서는 원격 컴퓨터에서 열립니다.",
       "retryConnection": "연결 다시 확인",
+      "setupUpdateTitle": "확장 프로그램 업데이트",
+      "setupUpdateHint": "설치된 확장 프로그램이 오래되었습니다. 여기에 표시된 폴더를 다시 로드하여 업데이트하세요.",
       "setupAlreadyInstalled": "이미 설치함",
       "setupInstalled": "설치 완료, 계속",
       "setupBack": "뒤로",

@@ -902,6 +902,8 @@
     "openConnection": "Connect in Chrome",
     "setupOpenFailed": "Unable to open Chrome or the folder. Make sure Google Chrome is installed on the computer running this environment and try again. Remote environments open it on that computer.",
     "retryConnection": "Check connection again",
+    "setupUpdateTitle": "Update extension",
+    "setupUpdateHint": "The installed extension is out of date. Load the folder shown here again to update it.",
     "setupAlreadyInstalled": "Already installed",
     "setupInstalled": "Installed, continue",
     "setupBack": "Back",

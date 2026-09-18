@@ -903,6 +903,8 @@
       "openConnection": "In Chrome verbinden",
       "setupOpenFailed": "Chrome oder der Ordner konnte nicht geöffnet werden. Prüfen Sie, ob Google Chrome auf dem Computer dieser Umgebung installiert ist, und versuchen Sie es erneut. Bei einer Remote-Umgebung erfolgt das Öffnen auf dem Remote-Computer.",
       "retryConnection": "Verbindung erneut prüfen",
+      "setupUpdateTitle": "Erweiterung aktualisieren",
+      "setupUpdateHint": "Die installierte Erweiterung ist veraltet. Laden Sie den hier angegebenen Ordner erneut.",
       "setupAlreadyInstalled": "Bereits installiert",
       "setupInstalled": "Installiert, weiter",
       "setupBack": "Zurück",
