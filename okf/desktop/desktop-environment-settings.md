@@ -80,6 +80,18 @@ an access read must not move the window or its action baseline. Single-section
 windows retain content-driven height. A stable native scrollbar gutter prevents
 horizontal field shifts when a section becomes scrollable.
 
+Access settings distinguish live connection facts from editable next-start
+preferences. A lightly tinted overview groups the Runtime status, actual
+addresses and Env App action. Preferences share one bordered group and one
+trailing control alignment: explanations stay beside their controls, the password
+field has a bounded reading width, and the numeric port stays compact. Narrow
+panels stack labels and controls without horizontal scrolling. Colors follow the
+active Floe theme, the window title establishes the primary hierarchy, and Close
+is separated from the save actions. Certificate details and pending-application
+feedback remain in the scrolling body; the action footer stays fixed.
+Action buttons grow with wrapped text so enlarged fonts and long translations
+never overlap adjacent actions.
+
 The released Floe slider provides the active tab's 200ms underline transition.
 Product styling uses a restrained 160ms opacity entrance for section content and
 actions, without translating fields or delaying selection. Retained inactive
@@ -110,6 +122,7 @@ SSH field and secret details are owned by
 
 # Evidence
 
+- `redeven:desktop/scripts/check-access-settings.mjs` - Browser evidence for control proportions, all shipped themes and locales, narrow panels, enlarged text, real scrolling, certificate presentation and save recovery.
 - `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - Published modal and tabs with retained, independently scrolling panels.
 - `redeven:desktop/src/welcome/environmentSettingsSession.ts` - Opening identity, independent drafts and asynchronous result isolation.
 - `redeven:desktop/src/welcome/EnvironmentSettingsEntry.client.test.tsx` - Actual card entry, read failures, reopening, deletion and late save behavior.
