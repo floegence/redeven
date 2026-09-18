@@ -23,6 +23,8 @@ An explicitly present public-address list, including an empty list, is authorita
 
 Popover sharing is keyed by Environment and address-row identity. Snapshot refresh preserves the open popover and removes only an absent or no-longer-shareable selection. Settings also clear sharing when their Environment changes. Keyboard dismissal restores trigger focus; explanatory rows retain native text selection.
 
+The endpoint popover presents an Environment heading, management connection and scoped access addresses in one bounded panel. Opening, closing and QR disclosure use brief transitions; reduced-motion preferences remove movement. The panel retains one width when sharing expands, and motion never changes the dimensions used to anchor it. Closing content is immediately non-interactive, remains visible only for its exit transition, and can be reopened without a stale dismissal removing it. Opening moves focus into the panel; Escape and its Close control restore the trigger. Retained QR presentation may reference only an address that is still public and shareable in the current model.
+
 # Boundaries
 
 ## Access settings and independent clients

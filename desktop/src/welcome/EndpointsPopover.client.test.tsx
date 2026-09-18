@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createSignal } from 'solid-js';
+import { batch, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { EndpointsPopover } from './App';
 import { buildRuntimeConnectionRows } from '../shared/desktopEnvironmentConnection';
@@ -25,12 +25,14 @@ async function mount(host = 'gzcom') {
     health: { status: 'online', freshness: 'fresh', source: 'ssh_runtime_probe', checked_at_unix_ms: 1 },
   });
   disposers.push(render(() => <EndpointsPopover i18n={createDesktopI18n('en-US')} environmentLabel={host}
-    endpoints={rows()} open={open()} onOpenChange={setOpen} selectedEndpointID={selected()}
+    endpoints={rows()} open={open()} onOpenChange={next => batch(() => {
+      setOpen(next); if (!next) setSelected('');
+    })} selectedEndpointID={selected()}
     selectEndpointForQRCode={setSelected} openInBrowser={browser} copyEnvironmentValue={copy} />, root));
   const trigger = root.querySelector('[aria-haspopup="dialog"]') as HTMLElement;
   trigger.click();
   await settle();
-  return { setURLs, setSelected, open, copy, browser, trigger };
+  return { setURLs, setSelected, setOpen, open, copy, browser, trigger };
 }
 
 afterEach(() => {
@@ -85,4 +87,48 @@ describe('Environment connection popover', () => {
     document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     expect(test.open()).toBe(false);
   });
+
+  it('retains a non-interactive closing panel and cancels dismissal on a rapid reopen', async () => {
+    const test = await mount();
+    const panel = document.querySelector('.redeven-endpoints-popover');
+    test.setOpen(false);
+    await settle();
+    expect(document.querySelector('.redeven-endpoints-popover')).toBe(panel);
+    expect((panel as HTMLElement).inert).toBe(true);
+    test.setOpen(true);
+    await settle();
+    expect(document.querySelector('.redeven-endpoints-popover')).toBe(panel);
+    expect((panel as HTMLElement).inert).toBe(false);
+    await new Promise(resolve => setTimeout(resolve, 220));
+    expect(test.open()).toBe(true);
+    expect(document.querySelectorAll('.redeven-endpoints-popover')).toHaveLength(1);
+    test.setOpen(false);
+    await new Promise(resolve => setTimeout(resolve, 240));
+    expect(document.querySelector('.redeven-endpoints-popover')).toBeNull();
+  });
+
+  it('moves focus into the panel and restores it when its close control is used', async () => {
+    const test = await mount();
+    const close = document.querySelector('[aria-label="Close endpoints"]') as HTMLButtonElement;
+    expect(document.activeElement).toBe(close);
+    close.click();
+    expect(test.open()).toBe(false);
+    expect(document.activeElement).toBe(test.trigger);
+  });
+
+
+  it('retains sharing during dismissal without retaining an invalidated address', async () => {
+    const test = await mount();
+    test.setURLs(['https://192.0.2.20:23998/']);
+    test.setSelected('address:https://192.0.2.20:23998/');
+    await settle();
+    (document.querySelector('[aria-label="Close endpoints"]') as HTMLButtonElement).click();
+    await settle();
+    expect(document.querySelector('.redeven-endpoints-share')?.getAttribute('data-expanded')).toBe('true');
+    expect(document.querySelector('.redeven-endpoint-qr-image')).not.toBeNull();
+    test.setURLs(['http://localhost:23998/']);
+    await settle();
+    expect(document.querySelector('.redeven-endpoint-qr-image')).toBeNull();
+  });
+
 });
