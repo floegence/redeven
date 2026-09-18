@@ -753,7 +753,24 @@ describe("GitDiffDialog", () => {
     }
   });
 
-  it("resets back to patch mode when the selected file changes", async () => {
+  it("keeps the selected context mode when the selected file changes", async () => {
+    mockGetDiffContent.mockImplementation(async (request: { file?: { path?: string } }) => {
+      const otherFile = request.file?.path === "src/other.ts";
+      return {
+        repoRootPath: "/workspace/repo",
+        mode: "full",
+        file: {
+          changeType: "modified",
+          path: otherFile ? "src/other.ts" : "src/app.ts",
+          displayPath: otherFile ? "src/other.ts" : "src/app.ts",
+          additions: 1,
+          deletions: 1,
+          patchText: otherFile
+            ? "@@ -2,3 +2,3 @@\\n context-before-other\\n-beforeSwap();\\n+afterSwap();"
+            : "@@ -4,3 +4,3 @@\\n context-before\\n-oldMiddle();\\n+newMiddle();",
+        },
+      };
+    });
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -836,10 +853,14 @@ describe("GitDiffDialog", () => {
       swapButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flush();
 
-      expect(document.querySelector('.git-diff-panel__modes [aria-pressed="true"]')?.textContent?.trim()).toBe("Patch");
+      expect(document.querySelector('.git-diff-panel__modes [aria-pressed="true"]')?.textContent?.trim()).toBe("Full Context");
       expect(document.body.textContent).toContain("afterSwap();");
-      expect(document.body.textContent).not.toContain("context-before");
-      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
+      expect(document.body.textContent).toContain("context-before-other");
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(2);
+      expect(mockGetDiffContent.mock.calls[1]?.[0]).toMatchObject({
+        mode: "full",
+        file: { path: "src/other.ts" },
+      });
     } finally {
       dispose();
     }
