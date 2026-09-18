@@ -48,12 +48,12 @@ describe('bootstrapDesktopSettingsBridge', () => {
     expect(typeof bridge.subscribeRuntimeFlowerAttachmentProgress).toBe('function');
     expect(typeof bridge.cancel).toBe('function');
 
-    await bridge.save({
+    await bridge.save({ environment_id: 'ssh:fixture', draft: {
       local_ui_bind: 'localhost:23998',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
       auto_runtime_probe_enabled: true,
-    });
+    } });
     await bridge.requestRuntimeFlower({
       method: 'GET',
       path: '/_redeven_proxy/api/settings',
@@ -79,12 +79,12 @@ describe('bootstrapDesktopSettingsBridge', () => {
     });
     bridge.cancel();
 
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:save-settings', {
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:save-settings', { environment_id: 'ssh:fixture', draft: {
       local_ui_bind: 'localhost:23998',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
       auto_runtime_probe_enabled: true,
-    });
+    } });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(2, 'redeven-desktop:runtime-flower-request', {
       method: 'GET',
       path: '/_redeven_proxy/api/settings',
@@ -112,6 +112,7 @@ describe('bootstrapDesktopSettingsBridge', () => {
       'cancelRuntimeFlowerStream',
       'certificate',
       'commitRuntimeFlowerAttachment',
+      'load',
       'prepareRuntimeFlowerAttachment',
       'previewRuntimeFlowerAttachment',
       'requestRuntimeFlower',
@@ -121,6 +122,16 @@ describe('bootstrapDesktopSettingsBridge', () => {
       'subscribeRuntimeFlowerStream',
       'writeRuntimeFlowerAttachmentChunk',
     ]);
+  });
+
+  it('requires an explicit target for access reads and writes', async () => {
+    const { bootstrapDesktopSettingsBridge } = await import('./desktopSettingsBridge');
+    bootstrapDesktopSettingsBridge();
+    const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
+    await bridge.load({ environment_id: ' ssh:fixture ' });
+    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:load-settings', { environment_id: 'ssh:fixture' });
+    expect(() => bridge.load({})).toThrow();
+    expect(() => bridge.save({ draft: {} })).toThrow();
   });
 
   it('binds certificate setup to an explicit environment and rejects invalid requests', async () => {

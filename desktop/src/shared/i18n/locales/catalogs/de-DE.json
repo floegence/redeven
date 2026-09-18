@@ -1102,7 +1102,18 @@
     "certificateRemoved": "Zertifikat entfernt. Erstellen oder importieren Sie vor dem nächsten HTTPS-Start ein gültiges Zertifikat.",
     "certificateServerTrustHelp": "Dieses Serverzertifikat wird über seine ausstellende CA als vertrauenswürdig eingestuft. Richten Sie bei Bedarf das Vertrauen in diese CA auf den Clients ein. Serverzertifikate werden niemals als vertrauenswürdige Stammzertifikate installiert.",
     "certificateFingerprint": "SHA-256-Fingerabdruck",
-    "certificateUpgradeRequired": "Aktualisieren Sie die Laufzeit, um Zertifikate zu importieren, neu zu erstellen oder zu entfernen."
+    "certificateUpgradeRequired": "Aktualisieren Sie die Laufzeit, um Zertifikate zu importieren, neu zu erstellen oder zu entfernen.",
+    "connectionTab": "Verbindung",
+    "accessTab": "Zugriff und Sicherheit",
+    "discardChanges": "Änderungen verwerfen",
+    "savedNotApplied": "Die Einstellungen wurden gespeichert, aber die Laufzeitumgebung konnte nicht neu gestartet werden. Wiederholen Sie den Neustart, um sie anzuwenden.",
+    "cloudManaged": "Diese Umgebung wird von Redeven Cloud verwaltet. Ihre Zugriffseinstellungen werden nicht von diesem Desktop verwaltet.",
+    "manageCloud": "In Redeven Cloud verwalten",
+    "resolveAccessDraft": "Speichern oder verwerfen Sie Ihre Zugriffsänderungen, bevor Sie das Verbindungsziel ändern.",
+    "loadingAccess": "Zugriffseinstellungen werden geladen…",
+    "loadAccessFailed": "Zugriffseinstellungen konnten nicht geladen werden",
+    "startEnvironment": "Umgebung starten",
+    "wslStopped": "Starten Sie diese WSL-Umgebung, bevor Sie ihre Zugriffseinstellungen lesen oder speichern."
   },
   "shell": {
     "accessibility": {
@@ -1653,11 +1664,8 @@
     "unpinEnvironment": "Umgebung entfernen",
     "pinLabel": "{label} anheften",
     "unpinLabel": "{label} lösen",
-    "runtimeTargetSettings": "Laufzeitzieleinstellungen",
     "environmentSettings": "Umgebungseinstellungen",
-    "connectionSettings": "Verbindungseinstellungen",
     "settingsForLabel": "Einstellungen für {label}",
-    "connectionSettingsForLabel": "Verbindungseinstellungen für {label}",
     "removeEnvironment": "Umgebung entfernen",
     "removeLabel": "{label} entfernen",
     "askFlowerForLabel": "Flower zu {label} fragen",

@@ -1,0 +1,241 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render } from 'solid-js/web';
+import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from './App';
+import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
+import { buildDesktopSettingsSurfaceSnapshot } from '../main/settingsPageContent';
+import { testDesktopPreferences, testProviderEnvironment } from '../testSupport/desktopTestHelpers';
+import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
+import type { DesktopWelcomeSnapshot, DesktopLauncherActionRequest, DesktopLauncherActionResult, DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
+import type { DesktopSettingsResult } from '../shared/settingsIPC';
+
+const disposers: Array<() => void> = [];
+const settle = () => new Promise(resolve => setTimeout(resolve, 40));
+function button(label: string) {
+  const found = [...document.querySelectorAll<HTMLElement>('button, [role=tab]')].find(el => el.textContent?.trim() === label || el.getAttribute('aria-label') === label || el.title === label);
+  if (!found) throw new Error(`Missing button: ${label}`);
+  return found;
+}
+const hostAccess = { kind: 'ssh_host' as const, ssh: { ssh_destination: 'fixture-host', ssh_port: 22, auth_mode: 'key_agent' as const, connect_timeout_seconds: 10 } };
+const placement = { kind: 'host_process' as const, runtime_root: '/srv/redeven', bootstrap_strategy: 'auto' as const, release_base_url: '' };
+const id = desktopRuntimeTargetID(hostAccess, placement);
+const success: DesktopSettingsResult = { ok: true, snapshot: buildDesktopSettingsSurfaceSnapshot('environment_settings', {
+  local_ui_bind: 'localhost:23998', local_ui_protocol: 'http', local_ui_password: '', local_ui_password_mode: 'keep', auto_runtime_probe_enabled: true,
+}, { environment_id: id, environment_label: 'Fixture SSH', environment_kind: 'runtime_target', runtime_connection: { host_access: hostAccess, placement } }) };
+async function mount(load: (request: { environment_id: string }) => Promise<DesktopSettingsResult>, action?: (request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>) {
+  document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '40px');
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })));
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} });
+  const storage = new Map<string, string>();
+  vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key), clear: () => storage.clear() });
+  vi.stubGlobal('CSS', { escape: (value: string) => value });
+  const cloud = testProviderEnvironment('https://provider.example.invalid', 'cloud-fixture');
+  let snapshot = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences({
+    provider_environments: [cloud],
+    saved_runtime_targets: [{ schema_version: 2, id, label: 'Fixture SSH', host_access: hostAccess, placement,
+      pinned: false, auto_runtime_probe_enabled: true, ssh_password: '', ssh_password_configured: false,
+      created_at_ms: 1, updated_at_ms: 1, last_used_at_ms: 1 }],
+  }) });
+  const other = { ...structuredClone(snapshot.environments.find(entry => entry.id === id)!),
+    id: 'runtime:other', label: 'Other SSH', registration_ref: { kind: 'runtime_target' as const, id: 'runtime:other' as never } };
+  snapshot = { ...snapshot, environments: [...snapshot.environments, other] };
+  let receive: ((value: DesktopWelcomeSnapshot) => void) | undefined;
+  const performAction = vi.fn<(request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>>(action ?? (async () => ({ ok: true, outcome: 'saved_environment', environment_id: id })));
+  const settings = { load: vi.fn(load), save: vi.fn(async () => success), cancel: vi.fn(),
+    requestRuntimeFlower: vi.fn(async () => ({ ok: false, error: { message: 'Fixture has no Flower runtime' } })),
+  } as unknown as DesktopWelcomeRuntime['settings'];
+  const host = document.createElement('div'); document.body.append(host);
+  disposers.push(render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{
+    launcher: { getSnapshot: async () => snapshot, performAction, subscribeSnapshot: listener => { receive = listener; return () => {}; }, getSSHConfigHosts: async () => [] }, settings,
+  }} />, host));
+  await settle();
+  return { settings, performAction, cloud, snapshot, publish: (value: DesktopWelcomeSnapshot) => { snapshot = value; receive?.(value); } };
+}
+afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+describe('environment card settings entry', () => {
+  it.each([true, false])('keeps one window and connection drafts when access load succeeds=%s', async ok => {
+    const h = await mount(async () => ok ? success : { ok: false, error: 'SSH connection refused' });
+    button('Settings for Fixture SSH').click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    expect(h.settings.load).not.toHaveBeenCalled();
+    const name = document.getElementById('ssh-settings-label') as HTMLInputElement;
+    name.value = 'Unsaved name'; name.dispatchEvent(new Event('input', { bubbles: true }));
+    button('Access & security').click(); await settle();
+    expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(h.settings.load).toHaveBeenCalledWith({ environment_id: id });
+    if (!ok) expect(dialog?.textContent).toContain('SSH connection refused');
+    button('Connection').click(); await settle();
+    expect(document.getElementById('ssh-settings-label')).toBe(name);
+    expect(name.value).toBe('Unsaved name');
+    expect(h.performAction).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'open_environment_settings' }));
+  });
+  it('opens Cloud information without Local access controls or requests', async () => {
+    const h = await mount(async () => success);
+    button('Settings for cloud-fixture').click(); await settle();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('managed by Redeven Cloud');
+    expect(document.getElementById('local-ui-port')).toBeNull();
+    expect(h.settings.load).not.toHaveBeenCalled();
+    expect(h.settings.save).not.toHaveBeenCalled();
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
+function input(id: string, value: string) {
+  const field = document.getElementById(id) as HTMLInputElement;
+  field.value = value; field.dispatchEvent(new Event('input', { bubbles: true }));
+}
+async function closeEditor() {
+  document.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')!.click();
+  await new Promise(resolve => setTimeout(resolve, 250));
+}
+
+describe('settings entry asynchronous isolation', () => {
+  it.each(['Fixture SSH', 'Other SSH'])('ignores a delayed response after reopening %s from its card', async label => {
+    const old = deferred<DesktopSettingsResult>();
+    const load = vi.fn().mockReturnValueOnce(old.promise).mockResolvedValue({ ok: false, error: 'Current target diagnostic' });
+    await mount(load);
+    button('Settings for Fixture SSH').click(); await settle();
+    button('Access & security').click(); await settle();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Loading access settings');
+    await closeEditor();
+    button(`Settings for ${label}`).click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]');
+    button('Access & security').click(); await settle();
+    old.resolve(success); await settle();
+    expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+    expect(dialog?.textContent).toContain('Current target diagnostic');
+    expect(dialog?.textContent).not.toContain('Current connection');
+    button('Connection').click(); await settle();
+    expect((document.getElementById('ssh-settings-label') as HTMLInputElement).value).toBe(label);
+  });
+  it('does not deliver a closed connection save failure into the next editor', async () => {
+    const old = deferred<DesktopLauncherActionResult>();
+    await mount(async () => success, () => old.promise);
+    button('Settings for Fixture SSH').click(); await settle();
+    input('ssh-settings-label', 'Renamed'); button('Save changes').click(); await settle();
+    await closeEditor(); button('Settings for Other SSH').click(); await settle();
+    old.resolve({ ok: false, code: 'action_invalid', scope: 'dialog', message: 'Old save rejected' } as DesktopLauncherActionResult);
+    await settle();
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Old save rejected');
+    expect((document.getElementById('ssh-settings-label') as HTMLInputElement).value).toBe('Other SSH');
+  });
+  it('closes a deleted target and ignores its pending access response', async () => {
+    const old = deferred<DesktopSettingsResult>();
+    const h = await mount(() => old.promise);
+    button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click();
+    h.publish({ ...h.snapshot, environments: h.snapshot.environments.filter(entry => entry.id !== id) });
+    await new Promise(resolve => setTimeout(resolve, 250));
+    old.resolve(success); await settle();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+  it('blocks a connection identity edit only while access changes remain, then rebinds the committed ID', async () => {
+    const h = await mount(async request => success.ok ? { ...success, snapshot: { ...success.snapshot, environment_id: request.environment_id } } : success);
+    button('Settings for Fixture SSH').click(); await settle();
+    button('Access & security').click(); await settle(); input('local-ui-port', '25000');
+    button('Connection').click(); await settle(); input('ssh-settings-ssh_destination', 'new-host');
+    expect((button('Save changes') as HTMLButtonElement).disabled).toBe(true);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Save or discard');
+    button('Access & security').click(); await settle(); input('local-ui-port', '23998');
+    button('Connection').click(); await settle();
+    expect((button('Save changes') as HTMLButtonElement).disabled).toBe(false);
+    const target = h.snapshot.environments.find(entry => entry.id === id)!;
+    const committedID = 'runtime:committed';
+    h.performAction.mockImplementation(async () => {
+      h.publish({ ...h.snapshot, environments: h.snapshot.environments.map(entry => entry.id === id ? {
+        ...target, id: committedID, registration_ref: { kind: 'runtime_target', id: committedID as never },
+        ssh_details: { ...target.ssh_details!, ssh_destination: 'new-host' },
+      } : entry) });
+      return { ok: true, outcome: 'saved_environment', environment_id: committedID };
+    });
+    button('Save changes').click(); await settle();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect((document.getElementById('ssh-settings-ssh_destination') as HTMLInputElement).value).toBe('new-host');
+    button('Access & security').click(); await settle();
+    expect(h.settings.load).toHaveBeenLastCalledWith({ environment_id: committedID });
+  });
+  it('preserves an access draft while saving only a connection name', async () => {
+    const h = await mount(async () => success);
+    button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await settle();
+    input('local-ui-port', '25000'); button('Connection').click(); await settle(); input('ssh-settings-label', 'Renamed');
+    h.performAction.mockImplementation(async () => {
+      h.publish({ ...h.snapshot, environments: h.snapshot.environments.map(entry => entry.id === id ? { ...entry, label: 'Renamed' } : entry) });
+      return { ok: true, outcome: 'saved_environment', environment_id: id };
+    });
+    button('Save changes').click(); await settle(); button('Access & security').click(); await settle();
+    expect((document.getElementById('local-ui-port') as HTMLInputElement).value).toBe('25000');
+    expect(h.settings.save).not.toHaveBeenCalled(); expect(h.settings.load).toHaveBeenCalledTimes(1);
+  });
+  it('uses the shared SSH form and validation for creation', async () => {
+    const h = await mount(async () => success);
+    button('SSH').click(); await settle();
+    input('ssh-settings-ssh_destination', 'new-host'); input('ssh-settings-label', 'Created');
+    button('Save changes').click(); await settle();
+    expect(h.performAction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'upsert_environment_registration', registration: expect.objectContaining({ label: 'Created' }) }));
+  });
+
+  it('opens Local directly in access settings without a connection tab', async () => {
+    const h = await mount(async request => success.ok ? { ...success, snapshot: { ...success.snapshot, environment_id: request.environment_id, environment_kind: 'local' } } : success);
+    const local = h.snapshot.environments.find(entry => entry.registration_ref?.kind === 'local_environment')!;
+    button(`Settings for ${local.label}`).click(); await settle();
+    expect(h.settings.load).toHaveBeenCalledWith({ environment_id: local.id });
+    expect(document.querySelector('[role="dialog"] [role="tablist"]')).toBeNull();
+    expect(document.getElementById('local-ui-port')).not.toBeNull();
+  });
+  it.each(['wsl', 'container', 'url', 'gateway'] as const)('opens the %s connection section without access I/O', async kind => {
+    const h = await mount(async () => ({ ok: false, code: 'SETTINGS_WSL_STOPPED', error: 'WSL stopped' }));
+    const original = h.snapshot.environments.find(entry => entry.id === id)!;
+    const entry: DesktopEnvironmentEntry = { ...original, id: `fixture-${kind}`, label: `Fixture ${kind}`,
+      ...(kind === 'wsl' ? { kind: 'wsl_environment', managed_runtime_host_access: { kind: 'wsl_host', distribution_name: 'Ubuntu', linux_user: 'dev' } } : {}),
+      ...(kind === 'container' ? { managed_runtime_host_access: { kind: 'local_host' }, managed_runtime_placement: {
+        kind: 'container_process', container_engine: 'docker', container_id: 'fixture-container', container_ref: 'fixture-container', container_label: 'Container', runtime_root: '/root/.redeven', bridge_strategy: 'exec_stream',
+      } } : {}),
+      ...(kind === 'url' ? { kind: 'external_local_ui', registration_ref: { kind: 'saved_environment', id: 'fixture-url' }, local_ui_url: 'https://example.invalid/' } : {}),
+      ...(kind === 'gateway' ? { kind: 'gateway_environment', registration_ref: { kind: 'gateway_environment', gateway_id: 'fixture-gateway', gateway_env_id: 'fixture-profile' }, gateway_environment_profile_access_route: { kind: 'url', url: 'https://example.invalid/' } } : {}),
+    };
+    h.publish({ ...h.snapshot, environments: [...h.snapshot.environments, entry] }); await settle();
+    button(`Settings for Fixture ${kind}`).click(); await settle();
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(h.settings.load).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="dialog"] [role="tablist"]') !== null).toBe(kind === 'wsl' || kind === 'container');
+    if (kind === 'wsl') {
+      expect(document.getElementById('wsl-settings-name')).not.toBeNull();
+      button('Access & security').click(); await settle();
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Start this WSL');
+      expect(h.performAction).not.toHaveBeenCalled();
+      button('Connection').click(); await settle(); input('wsl-settings-name', 'Renamed WSL');
+      h.performAction.mockResolvedValue({ ok: false, code: 'action_invalid', scope: 'dialog', message: 'WSL name save failed' } as DesktopLauncherActionResult);
+      button('Save changes').click(); await settle();
+      expect(document.querySelector('[role="dialog"] [role="alert"]')?.textContent).toBe('WSL name save failed');
+      expect((document.getElementById('wsl-settings-name') as HTMLInputElement).value).toBe('Renamed WSL');
+    }
+    if (kind === 'gateway') {
+      await closeEditor(); h.publish({ ...h.snapshot, environments: [...h.snapshot.environments, { ...entry, can_edit: false }] }); await settle();
+      expect([...document.querySelectorAll('button')].some(el => el.getAttribute('aria-label') === 'Settings for Fixture gateway')).toBe(false);
+    }
+  });
+
+  it('finishes a submitted save-and-restart for its original target after the window closes', async () => {
+    const h = await mount(async () => success);
+    const saved = deferred<DesktopSettingsResult>();
+    vi.mocked(h.settings.save).mockReturnValue(saved.promise);
+    h.publish({ ...h.snapshot, environments: h.snapshot.environments.map(entry => entry.id === id ? {
+      ...entry, runtime_operations: { ...entry.runtime_operations, restart: { ...entry.runtime_operations.restart, availability: 'available' } },
+    } : entry) });
+    button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await settle();
+    input('local-ui-port', '25000'); button('Save and restart').click(); await settle();
+    await closeEditor(); button('Settings for Other SSH').click(); await settle();
+    saved.resolve(success); await settle();
+    expect(h.performAction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'restart_environment_runtime', environment_id: id }));
+    expect((document.getElementById('ssh-settings-label') as HTMLInputElement).value).toBe('Other SSH');
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('could not restart');
+  });
+
+});

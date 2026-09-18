@@ -119,6 +119,7 @@ function bridgeFor(handler: (request: RuntimeFlowerRequest) => unknown | Promise
 
 function attachmentBridgeStubs() {
   return {
+    load: vi.fn(async () => ({ ok: false as const, error: 'No access fixture' })),
     startRuntimeFlowerStream: vi.fn(async () => ({ ok: true as const, status: 200, content_type: 'text/event-stream' })),
     cancelRuntimeFlowerStream: vi.fn(),
     subscribeRuntimeFlowerStream: vi.fn(() => () => undefined),

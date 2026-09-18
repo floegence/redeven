@@ -421,26 +421,6 @@ function defaultDesktopCatalogPaths(stateRootOverride?: string): DesktopCatalogP
   };
 }
 
-export function desktopPreferencesToDraft(
-  preferences: DesktopPreferences,
-  environmentID?: string,
-): DesktopSettingsDraft {
-  const localEnvironment = preferences.local_environment;
-  const selectedLocalEnvironment = environmentID ? findLocalEnvironmentByID(preferences, environmentID) : null;
-  const access = (() => {
-    if (selectedLocalEnvironment) {
-      return localEnvironmentAccess(selectedLocalEnvironment);
-    }
-    return localEnvironmentAccess(localEnvironment);
-  })();
-  return {
-		local_ui_bind: access.local_ui_bind,
-      local_ui_protocol: access.local_ui_protocol,
-		local_ui_password: '',
-		local_ui_password_mode: access.local_ui_password_configured ? 'keep' : 'replace',
-    auto_runtime_probe_enabled: (selectedLocalEnvironment ?? localEnvironment).auto_runtime_probe_enabled,
-  };
-}
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();

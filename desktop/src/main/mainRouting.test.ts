@@ -264,7 +264,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain("case 'stop_environment_runtime':");
     expect(mainSrc).toContain("case 'refresh_environment_runtime':");
     expect(mainSrc).toContain("case 'refresh_all_environment_runtimes':");
-    expect(mainSrc).toContain("case 'save_local_environment_settings':");
+    expect(mainSrc).toContain('ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL');
+    expect(mainSrc).not.toContain("case 'save_local_environment_settings':");
     expect(mainSrc).toContain("case 'focus_environment_window':");
     expect(mainSrc).toContain("case 'close_launcher_or_quit':");
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
@@ -325,7 +326,7 @@ describe('main routing', () => {
   it('scopes transport recovery IPC to the sending Desktop session', () => {
     const mainSrc = readMainSource();
     const handlerStart = mainSrc.indexOf('ipcMain.on(DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL');
-    const handlerEnd = mainSrc.indexOf('ipcMain.on(DESKTOP_THEME_GET_SNAPSHOT_CHANNEL', handlerStart);
+    const handlerEnd = mainSrc.indexOf('ipcMain.handle(DESKTOP_PROVIDER_SESSION_RENEW_CHANNEL', handlerStart);
 
     expect(handlerStart).toBeGreaterThanOrEqual(0);
     expect(handlerEnd).toBeGreaterThan(handlerStart);
@@ -1901,7 +1902,8 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('async function saveLocalEnvironmentSettingsFromWelcome(');
-    expect(mainSrc).toContain("case 'save_local_environment_settings':");
+    expect(mainSrc).toContain('ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL');
+    expect(mainSrc).not.toContain("case 'save_local_environment_settings':");
     expect(mainSrc).toContain('mutateDesktopPreferences((current) => updateLocalEnvironmentSettings(current, {');
     expect(mainSrc).not.toContain('autoRuntimeProbeEnabled: draft.auto_runtime_probe_enabled');
     expect(mainSrc).toContain("'action_invalid',");

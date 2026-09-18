@@ -1102,7 +1102,18 @@
     "certificateRemoved": "Certificat supprimé. Créez ou importez un certificat valide avant le prochain démarrage HTTPS.",
     "certificateServerTrustHelp": "La confiance de ce certificat serveur repose sur son autorité de certification (CA). Configurez cette CA sur les clients si nécessaire. Un certificat serveur n’est jamais installé comme racine de confiance.",
     "certificateFingerprint": "Empreinte SHA-256",
-    "certificateUpgradeRequired": "Mettez à jour le moteur d’exécution pour importer, régénérer ou supprimer des certificats."
+    "certificateUpgradeRequired": "Mettez à jour le moteur d’exécution pour importer, régénérer ou supprimer des certificats.",
+    "connectionTab": "Connexion",
+    "accessTab": "Accès et sécurité",
+    "discardChanges": "Abandonner les modifications",
+    "savedNotApplied": "Les paramètres ont été enregistrés, mais l’environnement d’exécution n’a pas pu redémarrer. Réessayez de le redémarrer pour les appliquer.",
+    "cloudManaged": "Cet environnement est géré par Redeven Cloud. Ses paramètres d’accès ne sont pas gérés par ce Desktop.",
+    "manageCloud": "Gérer dans Redeven Cloud",
+    "resolveAccessDraft": "Enregistrez ou abandonnez vos modifications d’accès avant de changer la cible de connexion.",
+    "loadingAccess": "Chargement des paramètres d’accès…",
+    "loadAccessFailed": "Impossible de charger les paramètres d’accès",
+    "startEnvironment": "Démarrer l’environnement",
+    "wslStopped": "Démarrez cet environnement WSL avant de lire ou d’enregistrer ses paramètres d’accès."
   },
   "shell": {
     "accessibility": {
@@ -1653,11 +1664,8 @@
     "unpinEnvironment": "Environnement de désépinglage",
     "pinLabel": "Épingler {label}",
     "unpinLabel": "Détacher {label}",
-    "runtimeTargetSettings": "Paramètres cibles d'exécution",
     "environmentSettings": "Paramètres d'environnement",
-    "connectionSettings": "Paramètres de connexion",
     "settingsForLabel": "Paramètres de {label}",
-    "connectionSettingsForLabel": "Paramètres de connexion de {label}",
     "removeEnvironment": "Supprimer l’environnement",
     "removeLabel": "Retirer {label}",
     "askFlowerForLabel": "Demander à Flower pour {label}",

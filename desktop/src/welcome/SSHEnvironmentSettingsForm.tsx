@@ -1,6 +1,7 @@
+import { EnvironmentSettingsPanel } from './EnvironmentSettingsDialog';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog, Input, SegmentedControl, Switch } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, SegmentedControl, Switch } from '@floegence/floe-webapp-core/ui';
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import { DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS, type DesktopSSHBootstrapStrategy } from '../shared/desktopSSH';
 import type { DesktopI18n } from '../shared/i18n';
@@ -12,10 +13,13 @@ import {
   type SSHConnectionDialogState,
 } from './sshEnvironmentSettingsState';
 
-export type SSHEnvironmentSettingsDialogProps = Readonly<{
+export type SSHEnvironmentSettingsFormProps = Readonly<{
   open: boolean;
   i18n: DesktopI18n;
   state: SSHConnectionDialogState;
+  baseline: SSHConnectionDialogState;
+  saveBlocked?: boolean;
+  beforeFields?: JSX.Element;
   sshConfigHosts: readonly DesktopSSHConfigHost[];
   sshConfigHostsLoading: boolean;
   sshConfigHostsLoadError: boolean;
@@ -42,15 +46,15 @@ export type SSHEnvironmentSettingsDialogProps = Readonly<{
   onSave: () => Promise<void>;
 }>;
 
-export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialogProps) {
-  const [baseline, setBaseline] = createSignal(props.state);
+export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProps) {
+  const baseline = () => props.baseline;
   const [advanced, setAdvanced] = createSignal(false);
   const [helpOpen, setHelpOpen] = createSignal(false);
   const [submitting, setSubmitting] = createSignal(false);
   let form: HTMLDivElement | undefined;
   let focusFrame = 0;
   const busy = () => submitting() || props.saving;
-  const dirty = createMemo(() => sshEnvironmentSettingsDirty(baseline(), props.state));
+  const dirty = createMemo(() => props.state.mode === 'create' || sshEnvironmentSettingsDirty(baseline(), props.state));
   const t = (key: Parameters<DesktopI18n['t']>[0], params?: Parameters<DesktopI18n['t']>[1]) =>
     props.i18n.t(key, params);
   const strategyLabel = () => {
@@ -81,7 +85,6 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
   createEffect(
     on(identity, () => {
       if (!props.open) return;
-      setBaseline(props.state);
       setAdvanced(false);
       setHelpOpen(false);
     }),
@@ -109,7 +112,7 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
     if (props.open) props.onClose();
   }
   async function save() {
-    if (!props.open || busy() || !dirty()) return;
+    if (!props.open || props.saveBlocked || busy() || !dirty()) return;
     const openingBaseline = baseline();
     setSubmitting(true);
     try {
@@ -164,29 +167,21 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
   });
 
   return (
-    <Dialog
-      open={props.open}
-      onOpenChange={(open) => {
-        if (!open) requestClose();
-      }}
-      title={t('sshSettings.title')}
-      description={`${baseline().label} · ${t('connectionDialog.sshHost')}`}
-      closeLabel={t('common.close')}
-      escapeKeyPhase="bubble"
+    <EnvironmentSettingsPanel
       onKeyDown={handleKeyDown}
-      class="redeven-ssh-settings-dialog"
       footer={
         <>
           <Button variant="ghost" onClick={requestClose}>
             {t('common.cancel')}
           </Button>
-          <Button disabled={!dirty() || busy()} loading={busy()} onClick={() => void save()}>
+          <Button disabled={props.saveBlocked || !dirty() || busy()} loading={busy()} onClick={() => void save()}>
             {t('sshSettings.saveChanges')}
           </Button>
         </>
       }
     >
       <div ref={form} class="ssh-settings-form redeven-dialog-section" inert={!props.open || busy()}>
+        {props.beforeFields}
         <Field name="label" label={t('connectionDialog.name')}>
           <Input
             id="ssh-settings-label"
@@ -410,6 +405,6 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
           </p>
         </Show>
       </div>
-    </Dialog>
+    </EnvironmentSettingsPanel>
   );
 }

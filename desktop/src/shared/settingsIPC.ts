@@ -1,3 +1,7 @@
+import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
+import type { DesktopOperationFailurePresentation } from './desktopOperationFailure';
+
+export const LOAD_DESKTOP_SETTINGS_CHANNEL = 'redeven-desktop:load-settings';
 export const SAVE_DESKTOP_SETTINGS_CHANNEL = 'redeven-desktop:save-settings';
 export const CANCEL_DESKTOP_SETTINGS_CHANNEL = 'redeven-desktop:cancel-settings';
 
@@ -26,12 +30,16 @@ export type DesktopSettingsDraft = Readonly<{
   auto_runtime_probe_enabled: boolean;
 }>;
 
-export type SaveDesktopSettingsResult = Readonly<
-  | {
-      ok: true;
-    }
-  | {
-      ok: false;
-      error: string;
-    }
+export type DesktopSettingsRequest = Readonly<{ environment_id: string }>;
+export type SaveDesktopSettingsRequest = DesktopSettingsRequest & Readonly<{ draft: DesktopSettingsDraft }>;
+export type DesktopSettingsResult = Readonly<
+  | { ok: true; snapshot: DesktopSettingsSurfaceSnapshot }
+  | { ok: false; error: string; code?: string; failure?: DesktopOperationFailurePresentation }
 >;
+export type SaveDesktopSettingsResult = DesktopSettingsResult;
+
+export function parseDesktopSettingsRequest(value: unknown): DesktopSettingsRequest {
+  const id = (value as Partial<DesktopSettingsRequest> | null)?.environment_id;
+  if (typeof id !== 'string' || !id.trim()) throw new Error('Choose an Environment to manage.');
+  return { environment_id: id.trim() };
+}

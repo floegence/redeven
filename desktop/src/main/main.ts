@@ -1,3 +1,5 @@
+import { desktopEnvironmentID } from './desktopPreferences';
+import { withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, type EnvironmentAccessOwner } from './environmentAccessSettings';
 import { runtimeFlowerPath, runtimeFlowerMethod, runtimeFlowerMethodAllowed } from './runtimeFlowerRoutes';
 import { certificateCommandArguments, selectDesktopCertificateImport, runDesktopCertificateCommand, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart, type CertificateImport } from './desktopCertificate';
 import { DESKTOP_CERTIFICATE_CHANNEL, parseDesktopCertificateRequest, parseDesktopCertificateReport, type DesktopCertificateRequest, type DesktopCertificateReport } from '../shared/desktopCertificate';
@@ -302,7 +304,6 @@ import {
   parseRuntimeAccessSettings,
   type RuntimeAccessSettings,
 } from './runtimeControlClient';
-import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
 import { desktopSessionRuntimeHandleFromManagedRuntime, type DesktopSessionRuntimeHandle } from './sessionRuntime';
 import {
   parseManagedSSHRuntimeProbeResult,
@@ -453,6 +454,10 @@ import {
 import { performDesktopShellWindowCommand } from './desktopShellWindowCommands';
 import {
   CANCEL_DESKTOP_SETTINGS_CHANNEL,
+  LOAD_DESKTOP_SETTINGS_CHANNEL,
+  parseDesktopSettingsRequest,
+  type DesktopSettingsResult,
+  type SaveDesktopSettingsRequest,
   SAVE_DESKTOP_SETTINGS_CHANNEL,
   type DesktopSettingsDraft,
   type SaveDesktopSettingsResult,
@@ -654,6 +659,7 @@ import {
 } from '../shared/controlPlaneProvider';
 import {
   desktopGatewayCanManageService,
+  desktopGatewayEnvironmentEntryID,
   type DesktopGatewayDiagnosis,
   type DesktopGatewayDiagnosisProbeResult,
   type DesktopGatewayManagedProbe,
@@ -2883,6 +2889,7 @@ function clearPendingControlPlaneAuthorizations(providerOrigin: string): void {
 function launcherActionSuccess(
   outcome: DesktopLauncherActionSuccess['outcome'],
   options: Readonly<{
+    environmentID?: string;
     operationKey?: string;
     operationStartedAtUnixMS?: number;
     sessionKey?: string;
@@ -2893,6 +2900,7 @@ function launcherActionSuccess(
   return {
     ok: true,
     outcome,
+    environment_id: options.environmentID,
     operation_key: compact(options.operationKey) || undefined,
     operation_started_at_unix_ms: Number.isFinite(options.operationStartedAtUnixMS)
       && Number(options.operationStartedAtUnixMS) > 0
@@ -4963,7 +4971,6 @@ function launcherActionRefreshScope(request: DesktopLauncherActionRequest): Read
     case 'disconnect_provider_runtime':
     case 'stop_environment_runtime':
       return { force: true, mode: 'manual', targetEnvironmentIDs: targetScope };
-    case 'save_local_environment_settings':
     case 'upsert_environment_registration':
     case 'delete_environment_registration':
     case 'upsert_gateway':
@@ -5063,7 +5070,6 @@ function scheduleGatewaySyncAfterLauncherAction(
   }
 }
 
-const runtimeAccessSettingsByTargetID = new Map<string, RuntimeAccessSettings>();
 
 const certificateOperations = new Map<string, Promise<DesktopCertificateReport>>();
 
@@ -5108,12 +5114,7 @@ async function manageEnvironmentCertificate(request: DesktopCertificateRequest, 
   certificateOperations.set(request.environment_id, operation);
   try {
     const result = await operation;
-    // The Runtime owns whether saved certificate material differs from its active TLS identity.
-    try {
-      const startup = managed ? (await managedAccessSettingsRecord(request.environment_id))?.startup : await nativeAccessSettingsStartup();
-      if (startup?.runtime_control) runtimeAccessSettingsByTargetID.set(request.environment_id, await getRuntimeAccessSettings(startup.runtime_control));
-      broadcastDesktopWelcomeSnapshots();
-    } catch { /* A stopped or unreachable Runtime refreshes its state on the next settings open. */ }
+    broadcastDesktopWelcomeSnapshots();
     return result;
   }
   finally { if (certificateOperations.get(request.environment_id) === operation) certificateOperations.delete(request.environment_id); }
@@ -5134,6 +5135,33 @@ async function runNativeRuntimeAuthority(command: readonly string[], input?: unk
     });
     return parseRuntimeAccessSettings(JSON.parse(result.stdout));
   } finally { await executor.release(); }
+}
+
+function environmentSettingsFailure(error: unknown): Extract<DesktopSettingsResult, { ok: false }> {
+  return {
+    ok: false, error: error instanceof Error ? error.message : String(error),
+    ...(error instanceof RuntimeControlError ? { code: error.code } : {}),
+    ...(isDesktopOperationFailureError(error) ? { failure: error.presentation } : {}),
+  };
+}
+
+async function readEnvironmentAccess(owner: EnvironmentAccessOwner): Promise<{ access: RuntimeAccessSettings; startup: StartupReport | null }> {
+  if (owner.kind === 'local') {
+    const startup = await nativeAccessSettingsStartup();
+    const control = startup?.runtime_control && (startup.runtime_service?.compatibility_epoch ?? 0) >= RUNTIME_SERVICE_COMPATIBILITY_EPOCH
+      ? startup.runtime_control : null;
+    return { access: await (control ? getRuntimeAccessSettings(control) : runNativeRuntimeAuthority(['access', 'get'])), startup };
+  }
+  const record = await managedAccessSettingsRecord(owner.environment_id);
+  return { access: record ? await getRuntimeAccessSettings(record.startup.runtime_control!)
+    : parseRuntimeAccessSettings(await runManagedRuntimeAuthority(owner.environment_id, ['access', 'get'])), startup: record?.startup ?? null };
+}
+
+async function environmentAccessSnapshot(owner: EnvironmentAccessOwner, { access, startup }: { access: RuntimeAccessSettings; startup: StartupReport | null }) {
+  const snapshot = await buildCurrentDesktopWelcomeSnapshot('launcher');
+  const environment = snapshot.environments.find((entry) => entry.id === owner.environment_id);
+  if (!environment) throw new Error('This Environment registration no longer exists.');
+  return buildEnvironmentAccessSnapshot(owner, environment, access, startup);
 }
 
 async function managedAccessSettingsRecord(environmentID: string): Promise<RuntimePlacementBridgeRecord | null> {
@@ -5226,37 +5254,6 @@ async function buildCurrentDesktopWelcomeSnapshot(
   });
   return {
     ...snapshot,
-    ...(() => {
-      const access = runtimeAccessSettingsByTargetID.get(state.selectedEnvironmentID ?? '');
-      const environment = snapshot.environments.find((entry) => entry.id === state.selectedEnvironmentID);
-      if (access && environment?.registration_ref?.kind === 'local_environment') {
-        return { settings_surface: { ...snapshot.settings_surface,
-          runtime_configuration_pending: environment.runtime_health.status === 'online' && access.restart_required === true
-            && access.runtime_started_at_unix_ms === environment.runtime_started_at_unix_ms,
-        } };
-      }
-      if (!access || !environment || environment.registration_ref?.kind !== 'runtime_target') return {};
-      return { settings_surface: { ...buildDesktopSettingsSurfaceSnapshot('environment_settings', {
-        local_ui_bind: access.local_ui_bind,
-        local_ui_protocol: access.local_ui_protocol,
-        local_ui_password: '',
-        local_ui_password_mode: 'keep',
-        auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled === true,
-      }, {
-        environment_id: environment.id,
-        environment_label: environment.label,
-        environment_kind: 'runtime_target',
-        runtime_connection: { host_access: environment.managed_runtime_host_access!, placement: environment.managed_runtime_placement! },
-        runtime_health: environment.runtime_health,
-        local_ui_password_configured: access.local_ui_password_configured,
-        runtime_password_required: runtimePlacementBridgeRegistry.get(environment.registration_ref.id)?.startup.password_required === true,
-        current_runtime_running: environment.runtime_health.status === 'online',
-        current_runtime_url: environment.local_ui_url ?? '',
-        current_runtime_urls: environment.local_ui_urls ?? [],
-        auto_runtime_probe_configurable: false,
-      }), runtime_configuration_pending: environment.runtime_health.status === 'online' && access.restart_required === true
-        && access.runtime_started_at_unix_ms === environment.runtime_started_at_unix_ms } };
-    })(),
     environments: snapshot.environments.map((environment) => {
       const descriptor = reinstallDescriptors.find((candidate) => candidate.environment_id === environment.id);
       if (!descriptor) {
@@ -6241,7 +6238,7 @@ async function upsertGatewayEnvironmentProfileFromLauncher(
     if (capabilityFailure) {
       return capabilityFailure;
     }
-    await gatewayLifecycleManager().upsertEnvironmentProfile(record, {
+    const saved = await gatewayLifecycleManager().upsertEnvironmentProfile(record, {
       gateway_env_id: request.registration_ref.gateway_env_id || undefined,
       display_name: request.display_name,
       access_route: {
@@ -6257,7 +6254,9 @@ async function upsertGatewayEnvironmentProfileFromLauncher(
       mode: 'refresh_catalog',
       startPolicy: actionStartPolicy,
     }).catch(() => undefined);
-    return launcherActionSuccess('saved_gateway_environment');
+    return launcherActionSuccess('saved_gateway_environment', {
+      environmentID: desktopGatewayEnvironmentEntryID(record.gateway_id, saved.environment.gateway_env_id),
+    });
   } catch (error) {
     return launcherActionFailure(
       gatewayServiceFailureCode(error),
@@ -16985,36 +16984,32 @@ async function setDefaultDesktopWSLTarget(runtimeTargetID: unknown): Promise<Des
 
 async function saveLocalEnvironmentSettingsFromWelcome(
   draft: DesktopSettingsDraft,
-): Promise<DesktopLocalEnvironmentState> {
+): Promise<{ access: RuntimeAccessSettings; startup: StartupReport | null }> {
   const preferences = await loadDesktopPreferencesCached();
   const existing = preferences.local_environment;
   const existingAccess = localEnvironmentAccess(existing);
+  const startup = await nativeAccessSettingsStartup();
+  requireEnvironmentAccessCompatible(startup);
+  const baseline = startup?.runtime_control ? await getRuntimeAccessSettings(startup.runtime_control) : await runNativeRuntimeAuthority(['access', 'get']);
   const access = validateDesktopSettingsDraft(draft, {
     currentLocalUIPassword: existingAccess?.local_ui_password ?? '',
-    currentLocalUIPasswordConfigured: existingAccess?.local_ui_password_configured === true,
+    currentLocalUIPasswordConfigured: baseline.local_ui_password_configured,
   });
-  if (desktopPlatformCapabilities.native_host_runtime) {
-    const startup = await nativeAccessSettingsStartup();
-    if (startup && (startup.runtime_service?.compatibility_epoch ?? 0) < RUNTIME_SERVICE_COMPATIBILITY_EPOCH) {
-      throw new Error('Stop or update this older Runtime before saving its access settings.');
-    }
-    const passwordMode = !access.local_ui_password_configured ? 'clear' as const
+  const passwordMode = !access.local_ui_password_configured ? 'clear' as const
       : draft.local_ui_password_mode === 'replace' ? 'replace' as const : 'keep' as const;
-    const update = {
+  const update = {
       local_ui_bind: access.local_ui_bind, local_ui_protocol: access.local_ui_protocol,
       local_ui_password_mode: passwordMode,
       local_ui_password: passwordMode === 'replace' || (passwordMode === 'keep' && !startup) ? access.local_ui_password : '',
     };
-    const saved = startup?.runtime_control
-      ? await saveRuntimeAccessSettings(startup.runtime_control, { ...draft, ...update })
-      : await runNativeRuntimeAuthority(['access', 'set'], update);
-    runtimeAccessSettingsByTargetID.set(existing.id, saved);
-  }
-  const next = await mutateDesktopPreferences((current) => updateLocalEnvironmentSettings(current, {
+  const saved = await (startup?.runtime_control
+    ? saveRuntimeAccessSettings(startup.runtime_control, { ...draft, ...update })
+    : runNativeRuntimeAuthority(['access', 'set'], update));
+  await mutateDesktopPreferences((current) => updateLocalEnvironmentSettings(current, {
     environmentID: current.local_environment.id,
     access,
   }));
-  return next.local_environment;
+  return { access: saved, startup };
 }
 
 async function setLocalEnvironmentPinnedFromWelcome(
@@ -17072,7 +17067,7 @@ async function setEnvironmentRegistrationPinnedFromWelcome(
 
 async function upsertSavedRuntimeTargetFromWelcome(
   request: Extract<DesktopEnvironmentRegistrationUpsert, { registration_ref: { kind: 'runtime_target' } }>,
-): Promise<void> {
+): Promise<string> {
   let placement = request.placement;
   if (request.placement.kind === 'container_process') {
     placement = await assertRuntimeTargetContainerRunning(
@@ -17100,6 +17095,7 @@ async function upsertSavedRuntimeTargetFromWelcome(
       last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
     });
   });
+  return desktopRuntimeTargetID(request.host_access, placement);
 }
 
 async function deleteSavedEnvironmentFromWelcome(environmentID: string): Promise<void> {
@@ -17160,15 +17156,15 @@ async function upsertEnvironmentRegistrationFromWelcome(
       saved.external_local_ui_url,
       saved.auto_runtime_probe_enabled,
     );
-    return launcherActionSuccess('saved_environment');
+    return launcherActionSuccess('saved_environment', { environmentID: saved.registration_ref.id || desktopEnvironmentID(saved.external_local_ui_url) });
   }
   case 'runtime_target': {
     const runtimeTarget = registration as Extract<DesktopEnvironmentRegistrationUpsert, { registration_ref: { kind: 'runtime_target' } }>;
     if (!desktopPlatformCapabilities.native_host_runtime && runtimeTarget.host_access.kind === 'local_host') {
       throw new Error('Windows Desktop does not provide a native Local Runtime target. Register a WSL Environment instead.');
     }
-    await upsertSavedRuntimeTargetFromWelcome(runtimeTarget);
-    return launcherActionSuccess('saved_environment');
+    const environmentID = await upsertSavedRuntimeTargetFromWelcome(runtimeTarget);
+    return launcherActionSuccess('saved_environment', { environmentID });
   }
   case 'gateway_environment': {
     const gatewayEnvironment = registration as Extract<DesktopEnvironmentRegistrationUpsert, { registration_ref: { kind: 'gateway_environment' } }>;
@@ -17301,25 +17297,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       await setEnvironmentRegistrationPinnedFromWelcome(request.registration_ref, request.pinned);
       return launcherActionSuccess('saved_environment');
     case 'open_environment_settings': {
-      const preferences = await loadDesktopPreferencesCached();
-      if (desktopPlatformCapabilities.native_host_runtime && request.environment_id === preferences.local_environment.id) {
-        const startup = await nativeAccessSettingsStartup();
-        if (startup?.runtime_control && (startup.runtime_service?.compatibility_epoch ?? 0) >= RUNTIME_SERVICE_COMPATIBILITY_EPOCH) {
-          runtimeAccessSettingsByTargetID.set(request.environment_id, await getRuntimeAccessSettings(startup.runtime_control));
-        } else {
-          runtimeAccessSettingsByTargetID.delete(request.environment_id);
-        }
-      }
-      if (preferences.saved_runtime_targets.some((target) => target.id === request.environment_id)) {
-        try {
-          const record = await managedAccessSettingsRecord(request.environment_id);
-          runtimeAccessSettingsByTargetID.set(request.environment_id, record
-            ? await getRuntimeAccessSettings(record.startup.runtime_control!)
-            : parseRuntimeAccessSettings(await runManagedRuntimeAuthority(request.environment_id, ['access', 'get'])));
-        } catch (error) {
-          return launcherActionFailure('runtime_not_ready', 'dialog', error instanceof Error ? error.message : String(error));
-        }
-      }
       return openUtilityWindow('launcher', {
         surface: 'environment_settings',
         selectedEnvironmentID: request.environment_id,
@@ -17423,23 +17400,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       }
     case 'delete_environment_registration':
       return deleteEnvironmentRegistrationFromWelcome(request.registration_ref);
-    case 'save_local_environment_settings':
-      try {
-        await saveLocalEnvironmentSettingsFromWelcome({
-          local_ui_bind: request.local_ui_bind,
-          local_ui_protocol: request.local_ui_protocol,
-          local_ui_password: request.local_ui_password,
-          local_ui_password_mode: request.local_ui_password_mode,
-          auto_runtime_probe_enabled: request.auto_runtime_probe_enabled,
-        });
-        return launcherActionSuccess('saved_environment');
-      } catch (error) {
-        return launcherActionFailure(
-          'action_invalid',
-          'dialog',
-          error instanceof Error ? error.message : String(error),
-        );
-      }
     case 'close_launcher_or_quit':
       if (openSessionSummaries().length <= 0) {
         await requestQuit();
@@ -18133,39 +18093,45 @@ if (!app.requestSingleInstanceLock()) {
     }
     return manageEnvironmentCertificate(parseDesktopCertificateRequest(request), BrowserWindow.fromWebContents(event.sender) ?? undefined);
   });
-  ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {
+  ipcMain.handle(LOAD_DESKTOP_SETTINGS_CHANNEL, async (event, request): Promise<DesktopSettingsResult> => {
     try {
       if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) {
         throw new Error('Access settings require the Desktop settings window.');
       }
-      const previous = await loadDesktopPreferencesCached();
-      const selectedEnvironmentID = currentUtilityWindowState('launcher').selectedEnvironmentID || preferredEnvironmentID(previous);
-      if (previous.saved_runtime_targets.some((target) => target.id === selectedEnvironmentID)) {
-        const record = await managedAccessSettingsRecord(selectedEnvironmentID);
-        const access = record ? await saveRuntimeAccessSettings(record.startup.runtime_control!, draft)
-          : parseRuntimeAccessSettings(await runManagedRuntimeAuthority(selectedEnvironmentID, ['access', 'set'], {
-            local_ui_bind: draft.local_ui_bind, local_ui_protocol: draft.local_ui_protocol,
-            local_ui_password_mode: draft.local_ui_password_mode, local_ui_password: draft.local_ui_password,
-          }));
-        runtimeAccessSettingsByTargetID.set(selectedEnvironmentID, access);
-        broadcastDesktopWelcomeSnapshots();
-        return { ok: true };
+      const { environment_id } = parseDesktopSettingsRequest(request);
+      return await withEnvironmentAccessOwner(await loadDesktopPreferencesCached(), environment_id,
+        desktopPlatformCapabilities.native_host_runtime, async (owner) => {
+          await requireEnvironmentAccessHostAvailable(owner, refreshDesktopWSLDiscovery);
+          return { ok: true, snapshot: await environmentAccessSnapshot(owner, await readEnvironmentAccess(owner)) };
+        });
+    } catch (error) { return environmentSettingsFailure(error); }
+  });
+  ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (event, request: SaveDesktopSettingsRequest): Promise<SaveDesktopSettingsResult> => {
+    try {
+      if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) {
+        throw new Error('Access settings require the Desktop settings window.');
       }
-      const selectedLocalEnvironment = findLocalEnvironmentByID(previous, selectedEnvironmentID);
-      const selectedProviderEnvironment = selectedLocalEnvironment
-        ? null
-        : findProviderEnvironmentByID(previous, selectedEnvironmentID);
-      if (!selectedLocalEnvironment && !selectedProviderEnvironment) {
-        throw new Error('Desktop could not resolve the selected environment.');
-      }
-      await saveLocalEnvironmentSettingsFromWelcome(draft);
-      return { ok: true };
-    } catch (error) {
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
+      const { environment_id } = parseDesktopSettingsRequest(request);
+      if (!request.draft || typeof request.draft !== 'object') throw new Error('Access settings are missing.');
+      return await withEnvironmentAccessOwner(await loadDesktopPreferencesCached(), environment_id,
+        desktopPlatformCapabilities.native_host_runtime, async (owner) => {
+          await requireEnvironmentAccessHostAvailable(owner, refreshDesktopWSLDiscovery);
+          let saved: { access: RuntimeAccessSettings; startup: StartupReport | null };
+          if (owner.kind === 'local') {
+            saved = await saveLocalEnvironmentSettingsFromWelcome(request.draft);
+          } else {
+            const record = await managedAccessSettingsRecord(owner.environment_id);
+            const access = record ? await saveRuntimeAccessSettings(record.startup.runtime_control!, request.draft)
+              : parseRuntimeAccessSettings(await runManagedRuntimeAuthority(owner.environment_id, ['access', 'set'], {
+                local_ui_bind: request.draft.local_ui_bind, local_ui_protocol: request.draft.local_ui_protocol,
+                local_ui_password_mode: request.draft.local_ui_password_mode, local_ui_password: request.draft.local_ui_password,
+              }));
+            saved = { access, startup: record?.startup ?? null };
+          }
+          broadcastDesktopWelcomeSnapshots();
+          return { ok: true, snapshot: await environmentAccessSnapshot(owner, saved) };
+        });
+    } catch (error) { return environmentSettingsFailure(error); }
   });
   ipcMain.handle(REQUEST_RUNTIME_FLOWER_CHANNEL, async (_event, request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> => {
     try {

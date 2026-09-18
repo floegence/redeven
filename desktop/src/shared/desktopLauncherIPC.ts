@@ -1,5 +1,3 @@
-import { parseLocalUIProtocol, type LocalUIProtocol } from './settingsIPC';
-import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import {
@@ -240,7 +238,6 @@ export type DesktopLauncherActionKind =
   | 'delete_gateway'
   | 'upsert_environment_registration'
   | 'delete_environment_registration'
-  | 'save_local_environment_settings'
   | 'cancel_launcher_operation'
   | 'dismiss_launcher_operation'
   | 'close_launcher_or_quit';
@@ -467,7 +464,7 @@ export type DesktopWelcomeSnapshot = Readonly<{
   operations: readonly DesktopLauncherOperationSnapshot[];
   suggested_remote_url: string;
   issue: DesktopWelcomeIssue | null;
-  settings_surface: DesktopSettingsSurfaceSnapshot;
+  settings_environment_id: string;
 }>;
 
 export function desktopWelcomeSnapshotIsAtLeastGeneration(
@@ -859,14 +856,6 @@ export type DesktopLauncherActionRequest = Readonly<
       gateway_id: string;
     }
   | {
-      kind: 'save_local_environment_settings';
-      local_ui_bind: string;
-      local_ui_protocol: LocalUIProtocol;
-      local_ui_password: string;
-      local_ui_password_mode: 'keep' | 'replace' | 'clear';
-      auto_runtime_probe_enabled: boolean;
-    }
-  | {
       kind: 'cancel_launcher_operation';
       operation_key: string;
     }
@@ -882,6 +871,7 @@ export type DesktopLauncherActionRequest = Readonly<
 export type DesktopLauncherActionSuccess = Readonly<{
   ok: true;
   outcome: DesktopLauncherActionOutcome;
+  environment_id?: string;
   operation_key?: string;
   operation_started_at_unix_ms?: number;
   session_key?: string;
@@ -1345,18 +1335,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         kind,
         registration_ref: registrationRef,
         pinned: (candidate as { pinned?: unknown }).pinned === true,
-      };
-    }
-    case 'save_local_environment_settings': {
-      return {
-        kind,
-        local_ui_bind: compact((candidate as { local_ui_bind?: unknown }).local_ui_bind),
-        local_ui_protocol: parseLocalUIProtocol((candidate as { local_ui_protocol?: unknown }).local_ui_protocol),
-        local_ui_password: String((candidate as { local_ui_password?: unknown }).local_ui_password ?? ''),
-        local_ui_password_mode: compact(
-          (candidate as { local_ui_password_mode?: unknown }).local_ui_password_mode,
-        ) as 'keep' | 'replace' | 'clear',
-        auto_runtime_probe_enabled: (candidate as { auto_runtime_probe_enabled?: unknown }).auto_runtime_probe_enabled === true,
       };
     }
     case 'focus_environment_window': {

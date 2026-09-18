@@ -54,7 +54,6 @@ export type BusyAction =
   | 'cancel_launcher_operation'
   | 'dismiss_launcher_operation'
   | 'close_launcher_or_quit'
-  | 'save_local_environment_settings'
   | 'save_settings'
   | 'save_environment'
   | 'delete_environment';
@@ -118,15 +117,6 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
     request_started_at_unix_ms: requestStartedAt,
   });
   switch (request.kind) {
-    case 'save_local_environment_settings':
-      return withRequestTimestamp({
-        action: 'save_settings',
-        environment_id: '',
-        provider_origin: '',
-        provider_id: '',
-        gateway_id: '',
-        progress: null,
-      });
     case 'upsert_environment_registration':
       return withRequestTimestamp({
         action: 'save_environment',

@@ -1,16 +1,12 @@
 import { reportedRuntimeURLs } from '../shared/desktopEnvironmentConnection';
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import {
-  desktopPreferencesToDraft,
-  findLocalEnvironmentByID,
-  findProviderEnvironmentByID,
   type DesktopSavedEnvironment,
   type DesktopSavedRuntimeTarget,
   type DesktopPreferences,
 } from './desktopPreferences';
 import type { DesktopSessionLifecycle, DesktopSessionSummary } from './desktopTarget';
 import type { GatewayDesktopTarget } from './desktopTarget';
-import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
 import type {
   DesktopEnvironmentEntry,
   DesktopLauncherSurface,
@@ -37,7 +33,6 @@ import {
 import {
   localEnvironmentStateKind,
   localEnvironmentAccess,
-  localEnvironmentDefaultOpenRoute,
   localEnvironmentProviderID,
   localEnvironmentProviderOrigin,
   localEnvironmentPublicID,
@@ -1961,58 +1956,6 @@ export function buildDesktopWelcomeSnapshot(
     localLabel: snapshotPreferences.local_environment.label,
   }));
   const selectedEnvironmentID = args.selectedEnvironmentID ?? '';
-  const selectedLocalEnvironment = findLocalEnvironmentByID(snapshotPreferences, selectedEnvironmentID);
-  const selectedProviderEnvironment = selectedLocalEnvironment
-    ? null
-    : findProviderEnvironmentByID(snapshotPreferences, selectedEnvironmentID);
-  const selectedSettingsState = (() => {
-    if (selectedProviderEnvironment) {
-      const localEnvironment = snapshotPreferences.local_environment;
-      const providerSessions = openSessionsByProviderEnvironment(openSessions, selectedProviderEnvironment);
-      const providerSession = providerSessions.remote_desktop ?? null;
-      const providerRoute = providerEnvironmentRouteDetails(selectedProviderEnvironment, controlPlanes);
-      return {
-        environment_id: selectedProviderEnvironment.id,
-        environment_label: selectedProviderEnvironment.label,
-        environment_kind: 'controlplane' as const,
-        current_runtime_url: providerSession?.entry_url
-          ?? providerSession?.startup?.local_ui_url
-          ?? compact(providerRoute.providerEnvironment?.environment_url)
-          ?? compact(selectedProviderEnvironment.remote_catalog_entry?.environment_url),
-        current_runtime_running: Boolean(providerSession),
-        current_runtime_urls: providerSession?.startup?.local_ui_urls ?? [],
-        local_ui_password_configured: localEnvironmentAccess(localEnvironment).local_ui_password_configured,
-        runtime_password_required: providerSession?.startup?.password_required === true,
-        auto_runtime_probe_configurable: false,
-      };
-    }
-    const localEnvironment = (
-      selectedLocalEnvironment
-      ?? snapshotPreferences.local_environment
-    );
-    const managedSessions = openSessionsByLocalEnvironment(openSessions, localEnvironment);
-    const managedSession = (
-      localEnvironmentDefaultOpenRoute(localEnvironment) === 'remote_desktop'
-        ? managedSessions.remote_desktop ?? managedSessions.local_host
-        : managedSessions.local_host ?? managedSessions.remote_desktop
-    ) ?? null;
-    const localEnvironmentEntry = environments.find((environment) => environment.id === localEnvironment.id);
-    return {
-      environment_id: localEnvironment.id,
-      environment_label: localEnvironment.label,
-      environment_kind: localEnvironmentStateKind(localEnvironment),
-      runtime_connection: localEnvironmentEntry?.managed_runtime_host_access && localEnvironmentEntry.managed_runtime_placement
-        ? { host_access: localEnvironmentEntry.managed_runtime_host_access, placement: localEnvironmentEntry.managed_runtime_placement }
-        : undefined,
-      runtime_health: localEnvironmentEntry?.runtime_health,
-      current_runtime_url: compact(localEnvironmentEntry?.local_ui_url),
-      current_runtime_running: localEnvironmentEntry?.local_environment_runtime_state === 'running',
-      current_runtime_urls: localEnvironmentEntry?.local_ui_urls ?? [],
-      local_ui_password_configured: localEnvironmentAccess(localEnvironment).local_ui_password_configured,
-      runtime_password_required: managedSession?.startup?.password_required === true,
-      auto_runtime_probe_configurable: false,
-    };
-  })();
 
   return {
     surface,
@@ -2031,6 +1974,6 @@ export function buildDesktopWelcomeSnapshot(
     operations: args.operations ?? [],
     suggested_remote_url: suggestedRemoteURL(issue, openSessions, environments),
     issue,
-    settings_surface: buildDesktopSettingsSurfaceSnapshot('environment_settings', desktopPreferencesToDraft(snapshotPreferences, selectedSettingsState.environment_id), selectedSettingsState),
+    settings_environment_id: selectedEnvironmentID,
   };
 }

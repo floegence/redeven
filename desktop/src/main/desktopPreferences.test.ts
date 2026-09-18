@@ -29,7 +29,6 @@ import {
   deleteSavedEnvironment,
   deleteSavedRuntimeTarget,
   desktopEnvironmentID,
-  desktopPreferencesToDraft,
   findLocalEnvironmentByID,
   loadDesktopPreferences,
   localEnvironmentDesktopLaunchKey,
@@ -870,10 +869,10 @@ describe('desktopPreferences', () => {
       expect(args[args.indexOf('--local-ui-protocol') + 1]).toBe('http');
       expect(args[args.indexOf('--local-ui-bind') + 1]).toBe('localhost:23998');
       expect(await fs.readFile(catalogPath, 'utf8')).toBe(before);
-      expect(validateDesktopSettingsDraft(desktopPreferencesToDraft(loaded)).local_ui_protocol).toBe('http');
+      expect(validateDesktopSettingsDraft(draft({ local_ui_protocol: localEnvironmentAccess(loaded.local_environment).local_ui_protocol })).local_ui_protocol).toBe('http');
       const updated = updateLocalEnvironmentSettings(loaded, {
         environmentID: loaded.local_environment.id,
-        access: validateDesktopSettingsDraft({...desktopPreferencesToDraft(loaded), local_ui_protocol: 'https'}),
+        access: validateDesktopSettingsDraft({...draft({ local_ui_bind: localEnvironmentAccess(loaded.local_environment).local_ui_bind }), local_ui_protocol: 'https'}),
       });
       await saveDesktopPreferences(paths, updated, codec);
       const reread = await loadDesktopPreferences(paths, codec);
@@ -1953,24 +1952,6 @@ describe('desktopPreferences', () => {
     ]);
   });
 
-  it('serializes local-environment settings into a settings draft', () => {
-    expect(desktopPreferencesToDraft(testDesktopPreferences({
-      local_environment: testLocalEnvironment({
-          autoRuntimeProbeEnabled: true,
-          access: {
-            local_ui_bind: '0.0.0.0:23998',
-            local_ui_password: 'secret',
-            local_ui_password_configured: true,
-          },
-        }),
-    }))).toEqual({
-      local_ui_protocol: 'http',
-      local_ui_bind: '0.0.0.0:23998',
-      local_ui_password: '',
-      local_ui_password_mode: 'keep',
-      auto_runtime_probe_enabled: true,
-    });
-  });
 
   it('includes local-environment startup inputs in the managed launch key', () => {
     const left = localEnvironmentDesktopLaunchKey(testDesktopPreferences({

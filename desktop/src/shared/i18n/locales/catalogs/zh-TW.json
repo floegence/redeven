@@ -1102,7 +1102,18 @@
     "certificateRemoved": "憑證已移除。下次啟動 HTTPS 前，請建立或匯入有效憑證。",
     "certificateServerTrustHelp": "此伺服器憑證透過其簽發 CA 建立信任；必要時請在用戶端設定信任該 CA。系統不會將伺服器憑證安裝為受信任的根憑證。",
     "certificateFingerprint": "SHA-256 指紋",
-    "certificateUpgradeRequired": "更新執行階段後，即可匯入、重新產生或移除憑證。"
+    "certificateUpgradeRequired": "更新執行階段後，即可匯入、重新產生或移除憑證。",
+    "connectionTab": "連線設定",
+    "accessTab": "存取與安全性",
+    "discardChanges": "捨棄變更",
+    "savedNotApplied": "設定已儲存，但執行階段無法重新啟動。請重試重新啟動以套用設定。",
+    "cloudManaged": "此環境由 Redeven Cloud 管理，其存取設定不由目前的 Desktop 管理。",
+    "manageCloud": "在 Redeven Cloud 中管理",
+    "resolveAccessDraft": "變更連線目標前，請先儲存或捨棄存取設定中的變更。",
+    "loadingAccess": "正在載入存取設定…",
+    "loadAccessFailed": "無法載入存取設定",
+    "startEnvironment": "啟動環境",
+    "wslStopped": "請先啟動此 WSL 環境，再讀取或儲存其存取設定。"
   },
   "shell": {
     "accessibility": {
@@ -1653,11 +1664,8 @@
     "unpinEnvironment": "取消固定環境",
     "pinLabel": "固定 {label}",
     "unpinLabel": "取消固定 {label}",
-    "runtimeTargetSettings": "運行時目標設定",
     "environmentSettings": "環境設定",
-    "connectionSettings": "Connection 設定",
     "settingsForLabel": "{label} 的設定",
-    "connectionSettingsForLabel": "{label} 的 Connection 設定",
     "removeEnvironment": "移除環境",
     "removeLabel": "移除 {label}",
     "askFlowerForLabel": "詢問 Flower：{label}",

@@ -1102,7 +1102,18 @@
     "certificateRemoved": "Certificado eliminado. Crea o importa un certificado válido antes del próximo inicio de HTTPS.",
     "certificateServerTrustHelp": "La confianza de este certificado de servidor depende de su CA emisora. Configura esa CA en los clientes si es necesario. Nunca se instala un certificado de servidor como raíz de confianza.",
     "certificateFingerprint": "Huella SHA-256",
-    "certificateUpgradeRequired": "Actualiza el entorno de ejecución para importar, regenerar o eliminar certificados."
+    "certificateUpgradeRequired": "Actualiza el entorno de ejecución para importar, regenerar o eliminar certificados.",
+    "connectionTab": "Conexión",
+    "accessTab": "Acceso y seguridad",
+    "discardChanges": "Descartar cambios",
+    "savedNotApplied": "La configuración se ha guardado, pero el entorno de ejecución no pudo reiniciarse. Vuelva a intentar el reinicio para aplicarla.",
+    "cloudManaged": "Este entorno se gestiona en Redeven Cloud. Este Desktop no gestiona su configuración de acceso.",
+    "manageCloud": "Gestionar en Redeven Cloud",
+    "resolveAccessDraft": "Guarde o descarte los cambios de acceso antes de cambiar el destino de conexión.",
+    "loadingAccess": "Cargando la configuración de acceso…",
+    "loadAccessFailed": "No se pudo cargar la configuración de acceso",
+    "startEnvironment": "Iniciar entorno",
+    "wslStopped": "Inicie este entorno WSL antes de leer o guardar su configuración de acceso."
   },
   "shell": {
     "accessibility": {
@@ -1653,11 +1664,8 @@
     "unpinEnvironment": "Desanclar entorno",
     "pinLabel": "Fijar {label}",
     "unpinLabel": "Quitar fijación de {label}",
-    "runtimeTargetSettings": "Configuración de destino de tiempo de ejecución",
     "environmentSettings": "Configuración de entorno",
-    "connectionSettings": "Ajustes de conexión",
     "settingsForLabel": "Ajustes de {label}",
-    "connectionSettingsForLabel": "Ajustes de conexión de {label}",
     "removeEnvironment": "Eliminar entorno",
     "removeLabel": "Quitar {label}",
     "askFlowerForLabel": "Preguntar a Flower sobre {label}",
