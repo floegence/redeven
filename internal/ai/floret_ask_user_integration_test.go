@@ -637,9 +637,13 @@ func writeDeepSeekIntegrationNaturalResponse(w http.ResponseWriter, flusher http
 	writeDeepSeekIntegrationResponse(w, flusher, responseID, "Check receipt", text)
 }
 
-func waitForAskUserIntegrationThread(t *testing.T, svc *Service, meta *session.Meta, threadID string, ready func(*ThreadView) bool) *ThreadView {
+func waitForAskUserIntegrationThread(t *testing.T, svc *Service, meta *session.Meta, threadID string, ready func(*ThreadView) bool, timeout ...time.Duration) *ThreadView {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	duration := 5 * time.Second
+	if len(timeout) > 0 {
+		duration = timeout[0]
+	}
+	deadline := time.Now().Add(duration)
 	for time.Now().Before(deadline) {
 		view, err := svc.GetThread(context.Background(), meta, threadID)
 		if err == nil && view != nil && ready(view) {

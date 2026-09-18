@@ -2655,5 +2655,12 @@
     "notChecked": "ランタイムの状態は未確認です。",
     "unconfirmed": "ランタイムの状態を確認できませんでした。",
     "addressUnavailable": "ランタイムは起動していますが、アクセス用アドレスは報告されていません。"
+  },
+  "flowerRuntime": {
+    "runtimeTitle": "Flower を使うにはランタイムを更新してください",
+    "desktopTitle": "Flower を使うには Desktop を更新してください",
+    "runtimeDetail": "このランタイムは Desktop Flower と互換性がありません。ランタイムを更新して続行してください。下書きは保持され、環境に付属するアプリは引き続き利用できます。",
+    "desktopDetail": "このランタイムには新しい Desktop が必要です。Desktop を更新して続行してください。下書きは保持され、環境に付属するアプリは引き続き利用できます。",
+    "connectedBuild": "接続中のランタイム：{version} · {commit}"
   }
 }

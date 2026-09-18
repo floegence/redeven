@@ -56,6 +56,26 @@ All operation labels, details, errors, recovery actions, tooltips, and accessibi
 
 Read-only health probes do not start, stop, repair, or reconnect Runtime. Access endpoints are not management channels. Runtime handles its internal sessions and graceful signal cleanup, but it exposes no Provider/Gateway lifecycle authority. Desktop is the only component that decides and executes a managed Runtime recovery.
 
+## Desktop Flower compatibility
+
+Desktop's bundled Flower client uses
+[one protocol check](../../desktop/src/shared/runtimeFlowerAccess.ts) for HTTP
+commands, workspace subscriptions, computer frames and attachment entrypoints.
+The actual Runtime must report the supported protocol and compatibility epoch.
+Missing or malformed identity blocks before submission; a newer epoch requires
+Desktop update. Different commits within the supported window remain usable.
+The Runtime's own Env App, terminals and files retain their independent opening
+boundary. A missing protocol is never normalized into a compatible claim.
+
+The Flower entry displays the connected version/commit and an update action.
+The existing Desktop lifecycle coordinator retains workload confirmation and
+re-probes the replacement process. Failed updates leave the action available;
+success re-evaluates the observed Runtime snapshot. Composer drafts remain in
+the existing composer draft coordinator while the incompatible client is unmounted.
+WSL uses the same check and update presentation. Development attachment logs
+report both the validated bundle identity and actual connected Runtime identity.
+Desktop restart alone is not evidence that the background Runtime changed.
+
 # Evidence
 
 - `redeven:desktop/src/main/desktopBundle.ts:1` - Runtime-only bundle identity and file validation.

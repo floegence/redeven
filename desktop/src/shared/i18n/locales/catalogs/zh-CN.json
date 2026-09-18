@@ -2655,5 +2655,12 @@
     "notChecked": "尚未检查运行时状态。",
     "unconfirmed": "无法确认运行时状态。",
     "addressUnavailable": "运行时正在运行，但尚未提供访问地址。"
+  },
+  "flowerRuntime": {
+    "runtimeTitle": "更新运行时后使用 Flower",
+    "desktopTitle": "更新 Desktop 后使用 Flower",
+    "runtimeDetail": "此运行时与 Desktop Flower 不兼容。请更新运行时后继续。草稿已保留，仍可使用环境自带的应用。",
+    "desktopDetail": "此运行时需要较新版本的 Desktop。请更新 Desktop 后继续。草稿已保留，仍可使用环境自带的应用。",
+    "connectedBuild": "已连接的运行时：{version} · {commit}"
   }
 }

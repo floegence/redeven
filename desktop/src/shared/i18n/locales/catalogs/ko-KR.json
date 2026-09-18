@@ -2655,5 +2655,12 @@
     "notChecked": "런타임 상태를 아직 확인하지 않았습니다.",
     "unconfirmed": "런타임 상태를 확인할 수 없습니다.",
     "addressUnavailable": "런타임이 실행 중이지만 접근 주소를 보고하지 않았습니다."
+  },
+  "flowerRuntime": {
+    "runtimeTitle": "Flower를 사용하려면 런타임을 업데이트하세요",
+    "desktopTitle": "Flower를 사용하려면 Desktop을 업데이트하세요",
+    "runtimeDetail": "이 런타임은 Desktop Flower와 호환되지 않습니다. 런타임을 업데이트한 후 계속하세요. 초안은 보존되며 환경에 포함된 앱은 계속 사용할 수 있습니다.",
+    "desktopDetail": "이 런타임에는 최신 Desktop이 필요합니다. Desktop을 업데이트한 후 계속하세요. 초안은 보존되며 환경에 포함된 앱은 계속 사용할 수 있습니다.",
+    "connectedBuild": "연결된 런타임: {version} · {commit}"
   }
 }

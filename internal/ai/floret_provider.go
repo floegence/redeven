@@ -25,7 +25,6 @@ type floretProviderAdapter struct {
 
 	controls                   ProviderControls
 	budgets                    TurnBudgets
-	continuationSupported      bool
 	attachmentResolver         func(context.Context, flprovider.Attachment) (ContentPart, error)
 	requestAttachmentResolver  func(context.Context, flprovider.Request, flprovider.Attachment) (ContentPart, error)
 	supportsImageInput         bool
@@ -75,7 +74,6 @@ func newFloretProviderAdapter(base ModelGateway, providerType string, modelName 
 			option(adapter)
 		}
 	}
-	adapter.continuationSupported = adapter.stateCompatibilityRoute() == "openai-responses" || adapter.providerType == "deepseek" || adapter.providerType == "google"
 	return adapter
 }
 
@@ -401,15 +399,6 @@ func flowerSourcesToFloret(in []SourceRef) []flprovider.Source {
 func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.Request) (ModelGatewayRequest, error) {
 	controls := p.controls
 	previous := cloneFloretModelState(req.PreviousState)
-	previousResponseID := ""
-	if p.providerType != "deepseek" && p.providerType != "google" {
-		var err error
-		previousResponseID, err = p.previousResponseID(previous)
-		if err != nil {
-			return ModelGatewayRequest{}, err
-		}
-	}
-	controls.PreviousResponseID = previousResponseID
 	// Floret request-level reasoning is authoritative, including an explicit
 	// zero selection used by short requests such as automatic titles.
 	controls.ReasoningSelection = config.NormalizeAIReasoningSelection(req.Reasoning)
@@ -452,6 +441,14 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 		// The Desktop executor owns the actual provider and its transport.
 		protocol = ""
 	}
+	if p.providerType != "deepseek" && p.providerType != "google" {
+		// The restored Turn surface owns protocol selection, including after
+		// settings change while input is pending. Do not cache this capability.
+		controls.PreviousResponseID, err = previousResponseID(previous, protocol)
+		if err != nil {
+			return ModelGatewayRequest{}, err
+		}
+	}
 	return ModelGatewayRequest{
 		RunID: req.RunID, PromptScopeID: req.PromptScopeID, PreviousState: previousState,
 		Model:            p.modelName,
@@ -464,11 +461,11 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 	}, nil
 }
 
-func (p *floretProviderAdapter) previousResponseID(state *flprovider.State) (string, error) {
+func previousResponseID(state *flprovider.State, protocol string) (string, error) {
 	if state == nil {
 		return "", nil
 	}
-	if p == nil || !p.continuationSupported {
+	if protocol != "openai-responses" {
 		return "", errors.New("floret provided continuation state to a gateway without continuation support")
 	}
 	if strings.TrimSpace(state.Kind) != providerContinuationKindOpenAIResponses || strings.TrimSpace(state.ID) == "" {

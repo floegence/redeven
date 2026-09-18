@@ -2655,5 +2655,12 @@
     "notChecked": "尚未檢查執行階段狀態。",
     "unconfirmed": "無法確認執行階段狀態。",
     "addressUnavailable": "執行階段正在執行，但尚未提供存取位址。"
+  },
+  "flowerRuntime": {
+    "runtimeTitle": "更新執行階段後使用 Flower",
+    "desktopTitle": "更新 Desktop 後使用 Flower",
+    "runtimeDetail": "此執行階段與 Desktop Flower 不相容。請更新執行階段後繼續。草稿已保留，仍可使用環境內建的應用程式。",
+    "desktopDetail": "此執行階段需要較新版本的 Desktop。請更新 Desktop 後繼續。草稿已保留，仍可使用環境內建的應用程式。",
+    "connectedBuild": "已連線的執行階段：{version} · {commit}"
   }
 }
