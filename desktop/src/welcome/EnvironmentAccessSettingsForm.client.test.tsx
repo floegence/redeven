@@ -69,6 +69,27 @@ afterEach(() => {
 });
 
 describe('Runtime connection settings', () => {
+  it('separates remote internal listeners from browser access without disrupting settings edits', async () => {
+    const test = await mount({ remote: true, url: 'http://localhost:23998/' });
+    const overview = document.querySelector('.environment-access-overview')!;
+    const listener = overview.querySelector<HTMLDetailsElement>('.redeven-endpoint-listener')!;
+    expect(listener).not.toBeNull();
+    expect(listener.open).toBe(false);
+    expect(overview.textContent).toContain('On this device, choose “Open Env App” in Desktop to connect.');
+    expect(overview.querySelector('[aria-label="Open in browser"]')).toBeNull();
+    listener.open = true;
+    const port = document.getElementById('local-ui-port') as HTMLInputElement;
+    port.focus(); port.setSelectionRange(1, 3);
+    test.setDraft(previous => ({ ...previous, local_ui_bind: 'localhost:25000' }));
+    test.setSnapshot(previous => structuredClone(previous)); await settle();
+    expect(overview.querySelector('.redeven-endpoint-listener')).toBe(listener);
+    expect(listener.open).toBe(true);
+    expect(document.activeElement).toBe(port);
+    expect(listener.textContent).toContain('http://localhost:23998/');
+    expect(listener.textContent).not.toContain('25000');
+    expect(document.body.textContent).toContain('Browser access');
+  });
+
   it.each([false, true])('preserves dialog interaction state across Runtime snapshots (edited: %s)', async (edited) => {
     const test = await mount({ url: 'http://localhost:23998/', protocol: 'https', certificate: async () => ({
       status: 'ready', code: 'local_ui_device_ca_untrusted', identity: 'ready', trust: 'untrusted',
@@ -143,8 +164,8 @@ describe('Runtime connection settings', () => {
   });
   it('identifies server loopback and does not open it in the client browser', async () => {
     await mount({ url: 'http://localhost:23998/', remote: true });
-    expect(document.body.textContent).toContain('Only this server');
-    expect(document.body.textContent).toContain('Only available on gzcom:22.');
+    expect(document.body.textContent).toContain('Environment only');
+    expect(document.body.textContent).toContain('Only inside gzcom');
     expect([...document.querySelectorAll('button')].some((item) => item.textContent?.trim() === 'Open in browser')).toBe(false);
     expect(document.querySelector('[aria-label="Copy Environment URL"]')).toBeNull();
     expect(document.querySelector('[aria-label="Share connection"]')).toBeNull();
@@ -206,7 +227,7 @@ describe('Runtime connection settings', () => {
     expect(test.certificate).not.toHaveBeenCalledWith(expect.objectContaining({ operation: 'install' }));
     expect([...document.querySelectorAll('button')].some((item) => item.getAttribute('aria-label') === 'Share connection')).toBe(false);
     expect(document.querySelector('img')).toBeNull();
-    expect(document.body.textContent).toContain('Only available on this device.');
+    expect(document.body.textContent).toContain('Open in a browser on this device. Other devices cannot use this address.');
     expect(document.body.textContent).not.toContain('bridge');
     button('Open in browser').click();
     expect(test.open).toHaveBeenCalledWith('https://localhost:23998/');

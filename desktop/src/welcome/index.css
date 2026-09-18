@@ -1256,13 +1256,100 @@ html:not(.dark) .redeven-new-environment-card:hover {
   animation: redeven-endpoint-copied 180ms ease-out both;
 }
 
+.redeven-endpoint-scope-title {
+  display: block;
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  font-weight: 550;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.redeven-endpoint-listener {
+  margin-top: 0.6rem;
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.6;
+}
+
+.redeven-endpoint-listener > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  list-style: none;
+  transition: color 140ms ease;
+}
+
+.redeven-endpoint-listener > summary::-webkit-details-marker { display: none; }
+.redeven-endpoint-listener > summary:hover { color: var(--foreground); }
+.redeven-endpoint-listener > summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.redeven-endpoint-listener > summary > svg {
+  flex-shrink: 0;
+  transition: transform 160ms ease;
+}
+.redeven-endpoint-listener[open] > summary > svg { transform: rotate(90deg); }
+
+.redeven-endpoint-listener-content {
+  margin-top: 0.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  padding-top: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.redeven-endpoint-listener-content > p { margin-top: 0.35rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-endpoint-listener > summary,
+  .redeven-endpoint-listener > summary > svg { transition: none; }
+}
+
 .redeven-settings-connections {
   container-type: inline-size;
+  display: grid;
+  gap: 0.4rem;
 }
+
+.redeven-settings-connections .redeven-card-endpoint-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr) auto auto auto;
+  align-items: start;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.5rem;
+}
+
+.redeven-settings-connections .redeven-card-endpoint-row[data-endpoint-kind='address'] {
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.redeven-settings-connections .redeven-card-endpoint-label {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  min-width: 0;
+  max-width: none;
+  justify-content: start;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.redeven-settings-connections [data-internal-listener] > div { grid-column: 2 / -1; }
 
 @container (max-width: 30rem) {
   .redeven-settings-connections .redeven-card-endpoint-row[data-endpoint-kind="address"] {
-    display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto auto;
   }
 
@@ -4289,15 +4376,18 @@ pre,
 .environment-settings-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; overflow-anchor: none; padding: 1.25rem; }
 
 /* Native details and Floe-retained sections expand inside the fixed viewport. */
-.redeven-environment-settings-dialog details::details-content {
+.redeven-environment-settings-dialog details::details-content,
+.redeven-endpoint-listener::details-content {
   interpolate-size: allow-keywords;
   block-size: 0;
   opacity: 0;
   overflow: clip;
   transition: block-size 180ms ease-out, opacity 180ms ease-out, content-visibility 180ms allow-discrete;
 }
-.redeven-environment-settings-dialog details[open]::details-content { block-size: auto; opacity: 1; }
-.redeven-environment-settings-dialog details:not([open]) > :not(summary) { interactivity: inert; }
+.redeven-environment-settings-dialog details[open]::details-content,
+.redeven-endpoint-listener[open]::details-content { block-size: auto; opacity: 1; }
+.redeven-environment-settings-dialog details:not([open]) > :not(summary),
+.redeven-endpoint-listener:not([open]) > :not(summary) { interactivity: inert; }
 [data-settings-reveal] {
   display: grid;
   grid-template-rows: 0fr;
@@ -4311,6 +4401,7 @@ pre,
 .environment-settings-reveal-content { min-height: 0; overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .redeven-environment-settings-dialog details::details-content,
+  .redeven-endpoint-listener::details-content,
   [data-settings-reveal] { transition: none; }
   [data-settings-reveal][data-state='entering'] { grid-template-rows: 1fr; opacity: 1; }
 }
@@ -4359,24 +4450,6 @@ pre,
 }
 .environment-access-status[data-status-tone='success'] { color: var(--success); }
 .environment-access-status[data-status-tone='warning'] { color: var(--warning); }
-.environment-access-overview .redeven-card-endpoint-row { padding: .375rem 0; gap: .75rem; }
-.environment-access-overview .redeven-card-endpoint-label {
-  justify-content: flex-start;
-  min-width: 4rem;
-  max-width: 6rem;
-  padding: .125rem 0;
-  border: 0;
-  background: transparent;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
-}
-.environment-access-overview [data-endpoint-kind='address'] .redeven-card-endpoint-value {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.75;
-}
 .environment-access-preferences {
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: .75rem;

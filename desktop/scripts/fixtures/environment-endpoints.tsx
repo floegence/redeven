@@ -16,10 +16,13 @@ document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', 
 const query = new URLSearchParams(location.search);
 const names = ['Local Environment', 'gzcom', 'gzlight', 'Network'];
 const context = (name: string): DesktopRuntimeConnectionContext => ({
-  host_access: !name || name === 'Local Environment' ? { kind: 'local_host' } : {
+  host_access: query.get('placement') === 'wsl' ? { kind: 'wsl_host', distribution_name: 'Ubuntu-24.04', linux_user: 'dev' }
+    : !name || name === 'Local Environment' || query.get('placement') === 'local-container' ? { kind: 'local_host' } : {
     kind: 'ssh_host', ssh: { ssh_destination: name === 'Network' ? 'gzcom' : name, ssh_port: 22, auth_mode: 'key_agent', connect_timeout_seconds: 10 },
   },
-  placement: { kind: 'host_process', runtime_root: '~/.redeven' },
+  placement: query.get('placement')?.endsWith('container')
+    ? { kind: 'container_process', container_engine: 'docker', container_id: 'dev-container', container_ref: 'dev-box', runtime_root: '~/.redeven', bridge_strategy: 'exec_stream' }
+    : { kind: 'host_process', runtime_root: '~/.redeven' },
 });
 const address = (name: string) => name === 'Network' ? 'https://192.0.2.20:23998/' : 'http://localhost:23998/';
 const initialDraft: DesktopSettingsDraft = { local_ui_bind: 'localhost:23998', local_ui_protocol: 'http', local_ui_password: '', local_ui_password_mode: 'keep', auto_runtime_probe_enabled: true };
