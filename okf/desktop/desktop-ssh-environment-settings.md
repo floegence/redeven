@@ -14,7 +14,9 @@ secret authority remain with [Environment registrations](desktop-environment-reg
 The window, tab, draft lifetime and asynchronous recovery contract belongs to
 [Environment settings](desktop-environment-settings.md).
 
-# SSH fields and validation
+# Contract
+
+## SSH fields and validation
 
 The form presents name, connection and authentication, automatic status detection,
 and advanced configuration in that order. Advanced settings start collapsed even
@@ -25,17 +27,19 @@ receives focus. Creation and editing use the same canonical SSH normalizers.
 Editing one field clears only its error. The title is 14px, fields and controls
 are 13px, and supporting text is 12px; modal material remains owned by Floe.
 
-Password retention, replacement and removal continue through the existing secret
-draft and registration APIs. Local storage and deferred-removal notices remain
-visible when relevant. SSH configuration aliases remain selectable, and changing
-the destination or authentication context preserves the established secret-scope
-rules. These fields do not add another Runtime deployment or persistence owner.
-
 Cmd/Ctrl+Enter saves unless composition or a nested selector owns the key.
 Collapsed fields stay outside the tab order. Nested help and destination selectors
 handle Escape before the surrounding settings window. Successful editing saves
 stay open and establish the new connection baseline. New registrations use the
 same fields inside the existing creation dialog.
+
+# Boundaries
+
+Password retention, replacement and removal continue through the existing secret
+draft and registration APIs. Local storage and deferred-removal notices remain
+visible when relevant. SSH configuration aliases remain selectable, and changing
+the destination or authentication context preserves the established secret-scope
+rules. These fields do not add another Runtime deployment or persistence owner.
 
 # Evidence
 

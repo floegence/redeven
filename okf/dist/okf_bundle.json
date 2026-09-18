@@ -781,7 +781,7 @@
               "settings"
             ],
             "summary": "Desktop owns one settings window and one opening session per Environment. Opening\nnever waits for a Runtime access read and a failed read never selects another\neditor. Registration ownership determines available sections; every access read\nand write carries an explicit Environment ID and resolves its registered\nmanagement authority. Runtime owns access configuration. A failed operation\npreserves input and reports its real diagnostic; an obsolete response cannot\nchange a newer opening. Cloud, URL and Gateway registrations cannot read or save\nLocal access settings.",
-            "section_count": 3
+            "section_count": 2
           },
           {
             "concept_id": "desktop.desktop-ssh-environment-settings",
@@ -797,7 +797,7 @@
               "ssh"
             ],
             "summary": "SSH creation and editing share one form and the existing registration save API.\nCommon fields remain visible ahead of advanced settings; custom configuration\nstays discoverable in a summary. Failed saves preserve input. Connection and\nsecret authority remain with [Environment registrations](desktop-environment-registrations.md).\nThe window, tab, draft lifetime and asynchronous recovery contract belongs to\n[Environment settings](desktop-environment-settings.md).",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "desktop.desktop-runtime-process-lifecycle",
@@ -12069,29 +12069,22 @@
         "title": "Desktop environment settings",
         "type": "Desktop Contract"
       },
-      "body_length": 6871,
+      "body_length": 6901,
       "summary": "Desktop owns one settings window and one opening session per Environment. Opening\nnever waits for a Runtime access read and a failed read never selects another\neditor. Registration ownership determines available sections; every access read\nand write carries an explicit Environment ID and resolves its registered\nmanagement authority. Runtime owns access configuration. A failed operation\npreserves input and reports its real diagnostic; an obsolete response cannot\nchange a newer opening. Cloud, URL and Gateway registrations cannot read or save\nLocal access settings.",
       "sections": [
         {
-          "id": "sections-and-authority",
-          "title": "Sections and authority",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
-          "body": "Local opens Access \u0026 security and has no connection editor. SSH and container\nregistrations open Connection and load Access \u0026 security on its first visit.\nWSL opens Connection with an editable name and its registered distribution,\nLinux user and Runtime directory as identity information. Access management uses\nexisting WSL authority only after discovery confirms that exact distribution is\nrunning; opening settings or automatic loading never starts a stopped distro.\nThe error surface offers the existing explicit Start action.\n\nURL registrations edit their name, address and automatic status detection.\nGateway Environment profiles retain their existing Gateway write permissions and\nconnection fields. Neither provides Runtime access management. Cloud shows its\nconnection information and the existing Redeven Cloud management entry. None of\nthese sections grants additional lifecycle or access authority.\n\nThe main-frame Desktop settings bridge resolves each requested ID against the\nregistration catalog before invoking any management operation. There is no\nselected-Environment or Local fallback and no legacy launcher save action.\nRunning compatible Runtimes use private control; stopped Runtimes use the same\nregistered host's authorized CLI. An older native Runtime's saved configuration\ncan be read through the bundled authority, while saving requires stopping or\nupdating that Runtime. Current process password constraints remain distinct from\nsaved next-start configuration.",
-          "char_count": 1488
+          "body": "## Sections and authority\n\nLocal opens Access \u0026 security and has no connection editor. SSH and container\nregistrations open Connection and load Access \u0026 security on its first visit.\nWSL opens Connection with an editable name and its registered distribution,\nLinux user and Runtime directory as identity information. Access management uses\nexisting WSL authority only after discovery confirms that exact distribution is\nrunning; opening settings or automatic loading never starts a stopped distro.\nThe error surface offers the existing explicit Start action.\n\nURL registrations edit their name, address and automatic status detection.\nGateway Environment profiles retain their existing Gateway write permissions and\nconnection fields. Neither provides Runtime access management. Cloud shows its\nconnection information and the existing Redeven Cloud management entry. None of\nthese sections grants additional lifecycle or access authority.\n\nThe main-frame Desktop settings bridge resolves each requested ID against the\nregistration catalog before invoking any management operation. There is no\nselected-Environment or Local fallback and no legacy launcher save action.\nRunning compatible Runtimes use private control; stopped Runtimes use the same\nregistered host's authorized CLI. An older native Runtime's saved configuration\ncan be read through the bundled authority, while saving requires stopping or\nupdating that Runtime. Current process password constraints remain distinct from\nsaved next-start configuration.\n\n## Opening, drafts and saves\n\nOne opening owns the committed connection baseline, connection draft and lazily\nloaded access baseline and draft. There is no access-settings cache in Welcome\nsnapshots. Live snapshots update health and actual addresses without replacing\ninputs. Access dirty state and save/discard availability use the same comparison;\nmanually restoring the baseline clears the dirty state.\n\nSwitching tabs keeps both forms mounted, preserving drafts, expanded controls and\nscroll positions. Save submits only the active tab and stays in the window.\nSubmitted forms reject further edits and duplicate saves until completion.\nFailure retains the draft. Close, Cancel, Escape and backdrop dismissal discard\nunsaved changes directly; they do not cancel an already submitted save. A\nrequested save-and-restart continues for its original target after dismissal.\nIf persistence succeeds but restart fails, the result is explicitly saved but\nnot applied, recoverable through the existing Restart action.\n\nConnection saves return the committed canonical target ID. A change of host,\nport, container or Runtime directory cannot submit while access edits remain;\nthe user first saves or discards them. Successful identity changes invalidate old\naccess data and the next Access visit reads the new registered target. A rename\nretains the access draft. Removed registrations close their session. Reads,\nsaves, certificate refreshes and connection failures are scoped to opening and\ntarget identity. Starting a save invalidates older reads; late failure from a\nclosed opening is a notification, never an error in the next editor.\n\n## Presentation and recovery\n\nThe window uses released Floe Dialog, Tabs and retained TabPanel components.\nMultiple sections expose tabs; a single section omits the tab bar. The responsive\npanel is at most 48rem wide, respects the Desktop titlebar and viewport, and keeps\ntitle, tabs and actions fixed while each body scrolls. Multi-section windows use\na stable 42rem height capped by the available viewport; changing tabs or resolving\nan access read must not move the window or its action baseline. Single-section\nwindows retain content-driven height. A stable native scrollbar gutter prevents\nhorizontal field shifts when a section becomes scrollable.\n\nThe released Floe slider provides the active tab's 200ms underline transition.\nProduct styling uses a restrained 160ms opacity entrance for section content and\nactions, without translating fields or delaying selection. Retained inactive\npanels remain hidden from pointer, keyboard and accessibility navigation. Rapid\nswitching follows the latest selection immediately; animation has no separate\nselection state, timer or request owner. Reduced motion disables the content fade\nand Floe's slider transition. Floe owns modal material, focus trapping, nested\nEscape, focus restoration and exit motion. Retained exit presentation never\nblanks the closing panel.\n\nAccess loading and failures remain inside the access section. Failures show their\nstructured summary or original diagnostic with Copy and Retry. Missing or invalid\nresponses never become fabricated defaults or a generic claim that Runtime is\npreparing.",
+          "char_count": 4716
         },
         {
-          "id": "opening-drafts-and-saves",
-          "title": "Opening, drafts and saves",
+          "id": "boundaries",
+          "title": "Boundaries",
           "level": 1,
-          "body": "One opening owns the committed connection baseline, connection draft and lazily\nloaded access baseline and draft. There is no access-settings cache in Welcome\nsnapshots. Live snapshots update health and actual addresses without replacing\ninputs. Access dirty state and save/discard availability use the same comparison;\nmanually restoring the baseline clears the dirty state.\n\nSwitching tabs keeps both forms mounted, preserving drafts, expanded controls and\nscroll positions. Save submits only the active tab and stays in the window.\nSubmitted forms reject further edits and duplicate saves until completion.\nFailure retains the draft. Close, Cancel, Escape and backdrop dismissal discard\nunsaved changes directly; they do not cancel an already submitted save. A\nrequested save-and-restart continues for its original target after dismissal.\nIf persistence succeeds but restart fails, the result is explicitly saved but\nnot applied, recoverable through the existing Restart action.\n\nConnection saves return the committed canonical target ID. A change of host,\nport, container or Runtime directory cannot submit while access edits remain;\nthe user first saves or discards them. Successful identity changes invalidate old\naccess data and the next Access visit reads the new registered target. A rename\nretains the access draft. Removed registrations close their session. Reads,\nsaves, certificate refreshes and connection failures are scoped to opening and\ntarget identity. Starting a save invalidates older reads; late failure from a\nclosed opening is a notification, never an error in the next editor.",
-          "char_count": 1601
-        },
-        {
-          "id": "presentation-and-recovery",
-          "title": "Presentation and recovery",
-          "level": 1,
-          "body": "The window uses released Floe Dialog, Tabs and retained TabPanel components.\nMultiple sections expose tabs; a single section omits the tab bar. The responsive\npanel is at most 48rem wide, respects the Desktop titlebar and viewport, and keeps\ntitle, tabs and actions fixed while each body scrolls. Multi-section windows use\na stable 42rem height capped by the available viewport; changing tabs or resolving\nan access read must not move the window or its action baseline. Single-section\nwindows retain content-driven height. A stable native scrollbar gutter prevents\nhorizontal field shifts when a section becomes scrollable.\n\nThe released Floe slider provides the active tab's 200ms underline transition.\nProduct styling uses a restrained 160ms opacity entrance for section content and\nactions, without translating fields or delaying selection. Retained inactive\npanels remain hidden from pointer, keyboard and accessibility navigation. Rapid\nswitching follows the latest selection immediately; animation has no separate\nselection state, timer or request owner. Reduced motion disables the content fade\nand Floe's slider transition. Floe owns modal material, focus trapping, nested\nEscape, focus restoration and exit motion. Retained exit presentation never\nblanks the closing panel.\n\nAccess loading and failures remain inside the access section. Failures show their\nstructured summary or original diagnostic with Copy and Retry. Missing or invalid\nresponses never become fabricated defaults or a generic claim that Runtime is\npreparing. Address namespace and copy/browser/QR policy are owned by\n[Environment connections](desktop-environment-connections.md); certificate\noperations are owned by [Local UI certificates](../security/local-ui-certificates.md).\nSSH field and secret details are owned by\n[SSH environment settings](desktop-ssh-environment-settings.md).",
-          "char_count": 1863
+          "body": "Address namespace and copy/browser/QR policy are owned by\n[Environment connections](desktop-environment-connections.md); certificate\noperations are owned by [Local UI certificates](../security/local-ui-certificates.md).\nSSH field and secret details are owned by\n[SSH environment settings](desktop-ssh-environment-settings.md).",
+          "char_count": 326
         }
       ],
       "evidence": [
@@ -13075,15 +13068,22 @@
         "title": "Desktop SSH environment settings",
         "type": "Desktop Contract"
       },
-      "body_length": 2480,
+      "body_length": 2507,
       "summary": "SSH creation and editing share one form and the existing registration save API.\nCommon fields remain visible ahead of advanced settings; custom configuration\nstays discoverable in a summary. Failed saves preserve input. Connection and\nsecret authority remain with [Environment registrations](desktop-environment-registrations.md).\nThe window, tab, draft lifetime and asynchronous recovery contract belongs to\n[Environment settings](desktop-environment-settings.md).",
       "sections": [
         {
-          "id": "ssh-fields-and-validation",
-          "title": "SSH fields and validation",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
-          "body": "The form presents name, connection and authentication, automatic status detection,\nand advanced configuration in that order. Advanced settings start collapsed even\nfor customized registrations. A wrapping summary names package delivery, default\nor custom directory, release source, and connection timeout. Expanding preserves\nthe draft. Invalid advanced fields expand on Save and the first invalid field\nreceives focus. Creation and editing use the same canonical SSH normalizers.\nEditing one field clears only its error. The title is 14px, fields and controls\nare 13px, and supporting text is 12px; modal material remains owned by Floe.\n\nPassword retention, replacement and removal continue through the existing secret\ndraft and registration APIs. Local storage and deferred-removal notices remain\nvisible when relevant. SSH configuration aliases remain selectable, and changing\nthe destination or authentication context preserves the established secret-scope\nrules. These fields do not add another Runtime deployment or persistence owner.\n\nCmd/Ctrl+Enter saves unless composition or a nested selector owns the key.\nCollapsed fields stay outside the tab order. Nested help and destination selectors\nhandle Escape before the surrounding settings window. Successful editing saves\nstay open and establish the new connection baseline. New registrations use the\nsame fields inside the existing creation dialog.",
-          "char_count": 1406
+          "body": "## SSH fields and validation\n\nThe form presents name, connection and authentication, automatic status detection,\nand advanced configuration in that order. Advanced settings start collapsed even\nfor customized registrations. A wrapping summary names package delivery, default\nor custom directory, release source, and connection timeout. Expanding preserves\nthe draft. Invalid advanced fields expand on Save and the first invalid field\nreceives focus. Creation and editing use the same canonical SSH normalizers.\nEditing one field clears only its error. The title is 14px, fields and controls\nare 13px, and supporting text is 12px; modal material remains owned by Floe.\n\nCmd/Ctrl+Enter saves unless composition or a nested selector owns the key.\nCollapsed fields stay outside the tab order. Nested help and destination selectors\nhandle Escape before the surrounding settings window. Successful editing saves\nstay open and establish the new connection baseline. New registrations use the\nsame fields inside the existing creation dialog.",
+          "char_count": 1033
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Password retention, replacement and removal continue through the existing secret\ndraft and registration APIs. Local storage and deferred-removal notices remain\nvisible when relevant. SSH configuration aliases remain selectable, and changing\nthe destination or authentication context preserves the established secret-scope\nrules. These fields do not add another Runtime deployment or persistence owner.",
+          "char_count": 401
         }
       ],
       "evidence": [
@@ -20021,5 +20021,5 @@
       ]
     }
   ],
-  "source_sha256": "95fd5ff24dfcf01fb9d8ba493d0532032ff39dc790138c8b5d45152d3c29c218"
+  "source_sha256": "dcca83165c32b1378251ee8f862a77819e146ebfaf5ddd260f8e82f31dd02a65"
 }
