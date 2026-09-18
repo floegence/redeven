@@ -91,7 +91,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('fallback={statusIcon(displayStatus())}');
     expect(src).toContain("item().renderer === 'web_fetch' || trimString(item().tool_name) === 'web_fetch'");
     expect(src).not.toContain('flower-activity-inline-status-${displayStatus()}');
-    expect(src).toContain('copy().chat.toolStatuses[item.status]');
+    expect(src).toContain("copy().chat.toolStatuses[activityWaitingForComputer(item, timeline) ? 'waiting' : item.status]");
     expect(src).not.toContain('payload.status');
     expect(src).not.toContain("payload['status']");
   });
@@ -156,8 +156,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain('flower-live-progress-placeholder');
     expect(src).not.toContain('data-flower-composer-more-item="context"');
     expect(src).toContain('<Show when={selectedContextUsage()}>');
-    expect(src).toContain('usage={contextUsage().usage}');
-    expect(src).toContain('freshness={contextUsage().freshness}');
+    expect(src).toContain('usage={contextUsage()}');
     expect(src).toContain('copy().chat.modelStatus');
     expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');
     expect(src).toContain('const thinking = createMemo(() => block().block_type === \'thinking\')');

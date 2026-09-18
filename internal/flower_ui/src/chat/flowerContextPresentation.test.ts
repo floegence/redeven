@@ -8,7 +8,6 @@ import {
   compactionDividerLabel,
   contextPressureTone,
   contextUsagePercent,
-  formatFullContextTokenCount,
   formatContextTokenCount,
   formatThreadCacheHitPercent,
   threadCacheHitRatio,
@@ -30,90 +29,37 @@ function compaction(overrides: Partial<FlowerContextCompaction> = {}): FlowerCon
 }
 
 describe('flower context presentation', () => {
-  it('builds percent and token detail from direct context usage ratios', () => {
+  it('shows one confirmed ratio and only actionable pressure', () => {
     const view = buildFlowerComposerContextIndicatorView(usage({
-      input_tokens: 182_000,
-      context_window_tokens: 200_000,
-      threshold_tokens: 180_000,
-      request_safe_limit_tokens: 190_000,
-      used_ratio: 0.91,
-      threshold_ratio: 0.9,
+      input_tokens: 182_000, context_window_tokens: 200_000, used_ratio: 0.91,
       pressure_status: 'near_threshold',
     }), DEFAULT_FLOWER_SURFACE_COPY);
-
     expect(view).toMatchObject({
-      ariaLabel: 'Context',
-      percentLabel: '91%',
-      usedValue: '182,000 of 200,000',
-      cacheHitLabel: 'Conversation cache hit rate',
-      cacheHitValue: 'Not available',
-      thresholdValue: '180,000',
-      safeLimitValue: '190,000',
-      tone: 'warning',
-      ratio: 0.91,
-      progressValue: 91,
-      ariaValueText: 'Context: 91%, 182,000 of 200,000, Conversation cache hit rate: Not available',
+      ariaLabel: 'Context', percentLabel: '91%', ratioValue: '91%',
+      cacheHitLabel: 'Cache hit rate', cacheHitValue: '—', tone: 'warning',
+      ratio: 0.91, progressValue: 91, warning: 'Near limit',
+      ariaValueText: 'Context: 91%, Cache hit rate: Not available, Near limit',
     });
   });
 
-  it('falls back to input over window tokens when used ratio is absent', () => {
-    expect(contextUsagePercent(usage({
-      input_tokens: 500,
-      context_window_tokens: 1000,
-      pressure_status: 'stable',
-    }).confirmed!)).toBe(50);
+  it('uses confirmed tokens when the ratio is absent and distinguishes zero from unknown', () => {
+    expect(contextUsagePercent(usage({ input_tokens: 500, context_window_tokens: 1000 }).confirmed!)).toBe(50);
+    expect(contextUsagePercent(usage({ input_tokens: 0, context_window_tokens: 1000 }).confirmed!)).toBe(0);
+    const unknown = buildFlowerComposerContextIndicatorView(usage(), DEFAULT_FLOWER_SURFACE_COPY);
+    expect(unknown.progressValue).toBeNull();
+    expect(unknown.percentLabel).toBe('—');
+    expect(unknown.warning).toBe('');
+    expect(unknown.ariaValueText).toBe('Context: Not available, Cache hit rate: Not available');
   });
 
-  it('keeps unknown ratios text-only instead of fabricating zero percent', () => {
-    const view = buildFlowerComposerContextIndicatorView(usage({
-      pressure_status: 'estimated',
-    }), DEFAULT_FLOWER_SURFACE_COPY);
-
-    expect(view.ratio).toBeNull();
-    expect(view.progressValue).toBeNull();
-    expect(view.percentLabel).toBe('--%');
-    expect(view.usedValue).toBe('Not available');
-    expect(view.statusValue).toBe('Estimated');
-    expect(view.statusLabel).toBe('Status');
-    expect(view.ariaValueText).toBe('Context: --%, Conversation cache hit rate: Not available');
-    expect(view.tone).toBe('estimated');
-  });
-
-  it('labels last known composer context usage without changing the ratio', () => {
-    const view = buildFlowerComposerContextIndicatorView(usage({
-      input_tokens: 900,
-      context_window_tokens: 1000,
-      used_ratio: 0.9,
-      pressure_status: 'near_threshold',
-    }), DEFAULT_FLOWER_SURFACE_COPY, 'last_known');
-
-    expect(view.ariaLabel).toBe('Context · Previous request');
-    expect(view.tooltipTitle).toBe('Context');
-    expect(view.percentLabel).toBe('90%');
-    expect(view.ariaValueText).toBe('Context · Previous request: 90%, 900 of 1,000, Conversation cache hit rate: Not available');
-  });
-
-  it('keeps the circular label compact while localizing tooltip ratio text', () => {
-    const copy = {
-      ...DEFAULT_FLOWER_SURFACE_COPY,
-      chat: {
-        ...DEFAULT_FLOWER_SURFACE_COPY.chat,
-        contextIndicator: {
-          ...DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator,
-          percent: (percent: number) => `${percent}% 已用`,
-        },
-      },
-    };
-    const view = buildFlowerComposerContextIndicatorView(usage({
-      input_tokens: 72_000,
-      context_window_tokens: 100_000,
-      used_ratio: 0.72,
-      pressure_status: 'stable',
-    }), copy);
-
+  it('localizes tooltip percentages while keeping the composer compact', () => {
+    const copy = { ...DEFAULT_FLOWER_SURFACE_COPY, chat: { ...DEFAULT_FLOWER_SURFACE_COPY.chat,
+      contextIndicator: { ...DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator, percent: (percent: number) => `${percent}% 已用` },
+    } };
+    const view = buildFlowerComposerContextIndicatorView(usage({ input_tokens: 72000, context_window_tokens: 100000 }), copy);
     expect(view.percentLabel).toBe('72%');
     expect(view.ratioValue).toBe('72% 已用');
-    expect(view.ariaValueText).toBe('Context: 72% 已用, 72,000 of 100,000, Conversation cache hit rate: Not available');
+    expect(view.ariaValueText).toBe('Context: 72% 已用, Cache hit rate: Not available');
   });
 
   it('calculates the whole-conversation cache hit rate from disjoint input buckets', () => {
@@ -129,7 +75,7 @@ describe('flower context presentation', () => {
 
     expect(threadCacheHitRatio(current)).toBe(0.45);
     expect(view.cacheHitValue).toBe('45%');
-    expect(view.ariaValueText).toContain('Conversation cache hit rate: 45%');
+    expect(view.ariaValueText).toContain('Cache hit rate: 45%');
   });
 
   it('shows the first live cache hit rate without waiting for a refresh', () => {
@@ -161,24 +107,24 @@ describe('flower context presentation', () => {
     }), 'Not available')).toBe('Not available');
   });
 
-  it('keeps the screenshot measurement stable while estimating the next request', () => {
+  it('never substitutes inflated estimates for confirmed usage across requests and reconnect', () => {
     const confirmed: FlowerContextSample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 71872, context_window_tokens: 950000 };
-    const estimate: FlowerContextSample = { ...confirmed, phase: 'projected_request', input_tokens: 82346, updated_at_ms: 2 };
-    const running = buildFlowerComposerContextIndicatorView({ confirmed, estimate }, DEFAULT_FLOWER_SURFACE_COPY);
+    const estimate: FlowerContextSample = { ...confirmed, phase: 'projected_request', input_tokens: 291336, updated_at_ms: 2 };
+    const build = (snapshot: FlowerContextUsage) => buildFlowerComposerContextIndicatorView(snapshot, DEFAULT_FLOWER_SURFACE_COPY);
+    expect(build({ estimate }).progressValue).toBeNull();
+    const running = build({ confirmed, estimate });
     expect(running.percentLabel).toBe('8%');
-    expect(running.usedValue).toBe('71,872 of 950,000');
-    expect(running.estimateValue).toBe('82,346 of 950,000');
-    expect(running.sampleLabel).toBe('Previous request');
-    const done = buildFlowerComposerContextIndicatorView({ confirmed: { ...confirmed, input_tokens: 74312 } }, DEFAULT_FLOWER_SURFACE_COPY);
-    expect(done.usedValue).toBe('74,312 of 950,000');
-    expect(done.estimateValue).toBe('');
-    const first = buildFlowerComposerContextIndicatorView({ estimate }, DEFAULT_FLOWER_SURFACE_COPY);
-    expect(first.sampleLabel).toBe('Estimated');
-    expect(first.usedValue).toBe('Not available');
-    const risk = buildFlowerComposerContextIndicatorView({ confirmed, estimate: { ...estimate, input_tokens: 960000, pressure_status: 'hard_limit' } }, DEFAULT_FLOWER_SURFACE_COPY);
+    expect(running.warning).toBe('');
+    expect(build(JSON.parse(JSON.stringify({ confirmed, estimate })))).toEqual(running);
+    expect(build({ confirmed: { ...confirmed, input_tokens: 74312 } }).percentLabel).toBe('8%');
+    const risk = build({ confirmed, estimate: { ...estimate, input_tokens: 960000, pressure_status: 'hard_limit' } });
     expect(risk.percentLabel).toBe('8%');
     expect(risk.tone).toBe('danger');
-    expect(risk.statusValue).toBe('At limit');
+    expect(risk.warning).toBe('At limit');
+    // Canonical invalidation clears old measurements on compaction/model changes.
+    expect(build({}).progressValue).toBeNull();
+    expect(build({ estimate: { ...estimate, input_tokens: 1000, context_window_tokens: 100000 } }).progressValue).toBeNull();
+    expect(build({ confirmed: { ...confirmed, input_tokens: 1000, context_window_tokens: 100000 } }).percentLabel).toBe('1%');
   });
 
   it('maps all pressure statuses into stable UI tones', () => {
@@ -196,8 +142,6 @@ describe('flower context presentation', () => {
     expect(formatContextTokenCount(10_200)).toBe('10k');
     expect(formatContextTokenCount(1_250_000)).toBe('1.3M');
     expect(formatContextTokenCount(0)).toBe('');
-    expect(formatFullContextTokenCount(182_000)).toBe('182,000');
-    expect(formatFullContextTokenCount(0)).toBe('');
   });
 
   it('labels compaction lifecycle states without deriving run lifecycle state', () => {
