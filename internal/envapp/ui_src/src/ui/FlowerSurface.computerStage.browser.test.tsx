@@ -532,7 +532,9 @@ it.each([false, true])('retires semantic viewing at completion and reopens only 
   expect(document.querySelector('.flower-computer-entry')?.textContent).toContain('Running in background');
   document.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
   await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
-  expect(view).toHaveBeenCalledWith(expect.objectContaining({ target_id: 'browser-main', resource_ref: undefined }));
+  expect(view).toHaveBeenCalledWith(expect.objectContaining({ target_id: 'browser-main', resource_ref: savedCapture ? earlierCapture : undefined }));
+  const initialFrames = savedCapture ? 2 : 1;
+  await waitFor(() => loadComputerFrame.mock.calls.length === initialFrames);
   const finished = runtimeCurrentView({ ...current, status: 'success', run_progress: undefined }, 2);
   deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...finished, items: finished.items?.map(item => {
     if (!item.activity) return item;
@@ -542,13 +544,13 @@ it.each([false, true])('retires semantic viewing at completion and reopens only 
   await waitFor(() => document.querySelector('.flower-surface')?.getAttribute('data-flower-selected-thread-status') === 'success');
   await waitFor(() => !view.mock.calls.at(-1)?.[0].target_id);
   await new Promise(resolve => requestAnimationFrame(resolve));
-  expect(loadComputerFrame).toHaveBeenCalledTimes(1);
+  expect(loadComputerFrame).toHaveBeenCalledTimes(initialFrames);
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
   expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
   if (savedCapture) {
     expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
     document.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
-    await waitFor(() => loadComputerFrame.mock.calls.length === 2);
+    await waitFor(() => loadComputerFrame.mock.calls.length === initialFrames + 1);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: earlierCapture }));
   } else {
     expect(document.querySelector('.flower-computer-entry')).toBeNull();

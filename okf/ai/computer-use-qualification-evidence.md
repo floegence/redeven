@@ -22,6 +22,34 @@ one adapter or from a model request returning HTTP 200.
 
 # Evidence
 
+## System-browser and control repair
+
+The 2026-09-18 repair qualification uses task-owned built Desktop and Runtime,
+an isolated headful Chromium profile, the production extension and Native
+Messaging, and deterministic model responses. Desktop and Env App both pass
+connection assistance, independent task-tab creation, preservation of an
+unsaved form, decoded Stage pixels, exact-tab reveal and verified completion.
+It does not establish Safari support or a real model's browser-source choice.
+
+The private Desktop fixture passes all frame rates, delayed pixels (376ms),
+native text and IME, rejected handback, one safe continuation, one navigation,
+reload, narrow layout and historical viewing. A separate Runtime restart run
+preserves the canonical wait while a lost task tab fails closed, with no input,
+page recreation or provider continuation. Go/Floret integration verifies the
+sampler-first CAPTCHA path produces formal assistance with its original reason;
+browser tests verify public pixels are cleared and idle Stage has no spinner.
+The built Desktop sampler-first fixture also passes: a challenge appears on the
+existing page between tools, public pixels stop before a canonical interaction,
+the next tool produces the exact CAPTCHA card and private handback completes
+once. This caught and corrected a dropped assistance field in the shared live
+transport decoder; direct Surface fixtures alone had not covered that boundary.
+The macOS application fixture passes discovery, AX actions, double-click, Enter
+and scrolling with original application, window and pointer restored. The
+background fixture also passes occluded target-only pixels, excluded-owner
+filtering and unchanged foreground and pointer. These
+fixtures supplement the historical evidence below; they do not replace the
+exact-main push gate or qualify arbitrary sites and applications.
+
 ## Real model product flows
 
 | Tested scope | Model requests | Decoded frames by turn | Distinct images by turn |

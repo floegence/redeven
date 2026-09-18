@@ -17,6 +17,7 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/browserbridge"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -305,3 +306,201 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 		})
 	}
 }
+
+// A real Floret provider loop must stop at the completed tool's canonical
+// interaction even when the viewer, rather than the tool, first saw CAPTCHA.
+func TestSampledCaptchaStopsProductionProviderLoop(t *testing.T) {
+	var calls atomic.Int32
+	var host *ComputerUseRuntime
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		var body map[string]any
+		if json.NewDecoder(req.Body).Decode(&body) != nil {
+			http.Error(w, "bad request", 400)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		flush := w.(http.Flusher)
+		if definitions, _ := body["tools"].([]any); len(definitions) == 0 {
+			writeAskUserIntegrationTextResponse(w, flush, "title", "Sampled safety")
+			return
+		}
+		n := calls.Add(1)
+
+		if n == 2 {
+			control := host.controlForTarget("target")
+			control.mu.Lock()
+			thread := control.threadID
+			control.mu.Unlock()
+			stopped := make(chan FlowerComputerFrame, 1)
+			stop, err := host.startComputerLiveFrames(req.Context(), computerLiveRequest{ComputerViewerRequest: ComputerViewerRequest{ThreadID: thread, TargetID: "target", ObserverID: "fixture", Revision: 1}}, func(frame FlowerComputerFrame) { stopped <- frame })
+			if err != nil {
+				t.Error(err)
+				http.Error(w, "sampler failed", 500)
+				return
+			}
+			select {
+			case frame := <-stopped:
+				if frame.AssistanceKind != "captcha" {
+					t.Errorf("lost classification: %+v", frame)
+				}
+			case <-time.After(time.Second):
+				t.Error("sampler timeout")
+			}
+			stop()
+		}
+		if n > 2 {
+			writeAskUserIntegrationTextResponse(w, flush, "unexpected", "Must not continue.")
+			return
+		}
+		item := map[string]any{"type": "function_call", "id": fmt.Sprintf("fc_%d", n), "call_id": fmt.Sprintf("observe-%d", n), "name": "computer_observe", "arguments": `{"target":"browser.managed"}`}
+		writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
+		writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
+		writeAskUserIntegrationCompletedResponse(w, flush, fmt.Sprintf("response-%d", n))
+	}))
+	defer provider.Close()
+	registry := NewTargetRegistry()
+	if err := registry.Register(TargetDescriptor{ID: "target", Kind: "browser.managed", DisplayName: "Flower managed browser", Ready: true, State: "ready", Capabilities: []string{"observe", "interaction"}}); err != nil {
+		t.Fatal(err)
+	}
+	effects := atomic.Int32{}
+	executor := browserControlReadyExecutor{scriptTestExecutor{fn: func(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
+		effects.Add(1)
+		if call.liveFrame {
+			return TargetToolResult{Safety: &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"captcha"}}}, nil
+		}
+		return TargetToolResult{TargetID: call.TargetID, Result: map[string]any{"observed": true}}, nil
+	}}}
+
+	state := t.TempDir()
+	host = NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"target": executor}, filepath.Join(state, "media"))
+	defer host.Close()
+	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,
+		Config:         &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
+		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close()
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "Safety", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.snapshotThreadStore().SetComputerTarget(t.Context(), thread.ThreadID, "target"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionFullAccess)); err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "start", Model: "openai/gpt-5-mini", Input: RunInput{Text: "Inspect the task page."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.WaitingPrompt != nil || calls.Load() > 2 })
+	if view.WaitingPrompt == nil || calls.Load() != 2 || effects.Load() != 2 {
+		t.Fatalf("loop escaped canonical pause: requests=%d executions=%d", calls.Load(), effects.Load())
+	}
+	if len(view.WaitingPrompt.Questions) != 1 || view.WaitingPrompt.Questions[0].ID != "computer_control" || !strings.Contains(view.WaitingPrompt.Questions[0].Question, "verification") {
+		t.Fatalf("wrong assistance: %+v", view.WaitingPrompt)
+	}
+}
+
+func TestSystemBrowserConnectionRequiresLiveProfileBeforeCanonicalRespond(t *testing.T) {
+	var calls atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		var body map[string]any
+		if json.NewDecoder(req.Body).Decode(&body) != nil {
+			http.Error(w, "bad request", 400)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		flush := w.(http.Flusher)
+		if definitions, _ := body["tools"].([]any); len(definitions) == 0 {
+			writeAskUserIntegrationTextResponse(w, flush, "title", "Connect browser")
+			return
+		}
+		if calls.Add(1) == 1 {
+			item := map[string]any{"type": "function_call", "id": "fc_discover", "call_id": "discover-system", "name": "computer_targets", "arguments": `{"browser_source":"system"}`}
+			writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
+			writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
+			writeAskUserIntegrationCompletedResponse(w, flush, "connect")
+			return
+		}
+		writeAskUserIntegrationTextResponse(w, flush, "continued", "Browser connected.")
+	}))
+	defer provider.Close()
+	state := t.TempDir()
+	host := NewComputerUseRuntime(NewTargetRegistry(), nil, filepath.Join(state, "media"))
+	defer host.Close()
+	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,
+		Config:         &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
+		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close()
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "Connection", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionFullAccess)); err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "start", Model: "openai/gpt-5-mini", Input: RunInput{Text: "Use my system browser."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.WaitingPrompt != nil || calls.Load() > 1 })
+	if view.WaitingPrompt == nil || calls.Load() != 1 {
+		t.Fatal("connection did not stop the provider")
+	}
+	request := SubmitRequestUserInputResponseRequest{ThreadID: thread.ThreadID, Response: RequestUserInputResponse{PromptID: view.WaitingPrompt.PromptID, Answers: map[string]RequestUserInputAnswer{"browser_connection": {ChoiceID: "Continue with connected browser"}}}}
+	if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, request); err == nil {
+		t.Fatal("unconnected browser resumed")
+	}
+	if calls.Load() != 1 || len(host.managedProfiles) != 0 {
+		t.Fatal("missing connection launched a substitute")
+	}
+	hub, _, peer := extensionFixture(t, host)
+	host.mu.Lock()
+	host.extension = hub
+	host.mu.Unlock()
+	go func() {
+		for {
+			raw, err := browserbridge.ReadMessage(peer, 1<<20)
+			if err != nil {
+				return
+			}
+			var message struct {
+				ID      string `json:"id"`
+				Command string `json:"command"`
+			}
+			if json.Unmarshal(raw, &message) != nil {
+				return
+			}
+			if message.Command != "inventory" {
+				t.Errorf("connection guide created or selected a tab: %s", message.Command)
+				return
+			}
+			if browserbridge.WriteMessage(peer, map[string]any{"id": message.ID, "result": []any{}}, 1<<20) != nil {
+				return
+			}
+		}
+	}()
+	if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, request); err != nil {
+		t.Fatal(err)
+	}
+	waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "success" })
+	if calls.Load() != 2 {
+		t.Fatalf("continuation requests=%d", calls.Load())
+	}
+	selected, _ := svc.snapshotThreadStore().GetComputerTarget(t.Context(), thread.ThreadID)
+	if selected != "" {
+		t.Fatal("connection guide bound a target")
+	}
+}
+
+type browserControlReadyExecutor struct{ scriptTestExecutor }
+
+func (browserControlReadyExecutor) EnsureTargetReady(context.Context, string) error { return nil }

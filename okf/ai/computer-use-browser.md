@@ -20,6 +20,18 @@ also selects that target for the current conversation. Full access already permi
 HTTP/HTTPS sites; other modes use separate saved grants. Delayed connection results cannot select a different
 conversation after navigation.
 
+The connection-only guide opens from canonical conversation assistance. It lists
+verified connected profiles and rechecks the connection before continuing; it
+never creates or selects a tab. Chrome is supported through the extension; this
+connection does not automate Safari. Managed profiles are always identified as
+**Flower managed browser**; a profile named Default is not the OS default browser.
+
+**View in browser** is an authenticated user action on the current connected target.
+Runtime verifies thread ownership, selection, policy and occupancy under the target
+gate. The extension activates that exact tab and its window; explicit CDP uses
+`Page.bringToFront`. Reveal grants no site access or private input and does not
+change selection. It is not a model tool or a second browser-opening path.
+
 ## Managed profiles
 
 The Runtime owns one persistent headless Chromium process per profile. A new tab
@@ -48,14 +60,14 @@ a later authorized file/command tool handles data processing.
 
 The MV3 extension uses Native Messaging and `chrome.debugger` bound to an exact
 tab. Setup registers a native host for the current machine; the relay forwards
-framed protocol-4 messages over a private local Unix socket to the Runtime.
+framed protocol-5 messages over a private local Unix socket to the Runtime.
 Only the packaged extension origin and its own popup UI may establish this
 connection. Setup does not create a thread grant or attach any tab.
 
 The extension requires a completed Runtime handshake before reporting connected.
 Its webNavigation creation events retain bounded, in-memory popup source facts;
 Chrome tab-group opener metadata is not treated as the source of an action.
-It exposes Runtime-owned inventory and bind/new-tab/disconnect commands.
+It exposes Runtime-owned inventory and bind/new-tab/disconnect/reveal commands.
 Flower and connection management share the candidate selection path.
 The Runtime owns the resulting opaque profile and target identities. Different
 tabs may execute concurrently, while one tab executes only one invocation at a

@@ -116,7 +116,8 @@ func (s *Service) InputComputerControl(ctx context.Context, meta *session.Meta, 
 		return err
 	}
 	control.mu.Lock()
-	control.threadID, control.turnID, control.runID, control.user = call.ThreadID, call.TurnID, call.RunID, true
+	control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, call.RunID
+	control.pauseForUser()
 	control.mu.Unlock()
 	_, err = host.executeComputerUserInputLocked(ctx, call)
 	return err

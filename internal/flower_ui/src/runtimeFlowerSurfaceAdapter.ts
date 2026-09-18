@@ -1,3 +1,4 @@
+import { isComputerSafetyAssistanceKind } from './computerAssistance';
 import type { FlowerModelCatalogDiscovery } from './contracts/flowerSurfaceContracts';
 import type {
   FlowerApprovalCommandResult,
@@ -238,6 +239,7 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
       ...(typeof rawFrame.interaction_id === 'string' ? { interaction_id: rawFrame.interaction_id } : {}),
       ...(typeof rawFrame.frame_id === 'string' ? { frame_id: rawFrame.frame_id } : {}),
       ...(typeof rawFrame.error_code === 'string' ? { error_code: rawFrame.error_code } : {}),
+      ...(isComputerSafetyAssistanceKind(rawFrame.assistance_kind) ? { assistance_kind: rawFrame.assistance_kind } : {}),
       mime_type: rawFrame.mime_type,
       ...(Number.isFinite(Number(rawFrame.width)) ? { width: Number(rawFrame.width) } : {}),
       ...(Number.isFinite(Number(rawFrame.height)) ? { height: Number(rawFrame.height) } : {}),

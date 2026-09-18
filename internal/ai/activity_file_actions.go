@@ -381,6 +381,8 @@ func sanitizeActivityTargetRefsValue(value any) []any {
 				allowed = len(resource) <= 2048 && (ComputerAccess{Origins: []string{resource}}).Validate() == nil
 			case "computer_app":
 				allowed = (ComputerAccess{Apps: []string{resource}}).Validate() == nil
+			case "computer_browser_source":
+				allowed = resource == "system"
 			case "computer_foreground":
 				allowed = resource == "foreground"
 			}

@@ -226,3 +226,36 @@ it('keeps the current page after a stale selection and supports keyboard switchi
     expect(management.selectCandidate).toHaveBeenCalledWith('draft-thread', 'child-ref');
   } finally { await page.viewport(1280, 720); }
 });
+
+it('guides connection without selecting a tab and rechecks the browser before continuing', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const connected = vi.fn().mockResolvedValue([]);
+  const connect = vi.fn(), continued = vi.fn().mockResolvedValue(undefined);
+  const management = {
+    listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+    listTargets: vi.fn(), listBrowserTabs: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(),
+    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/extension', native_host: 'fixture.host', extension_id: 'fixture' }),
+    listExtensionProfiles: connected, listExtensionTabs: vi.fn(),
+  };
+  const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open connectionOnly onContinue={continued} onOpenChange={() => undefined} threadID="thread"
+    adapter={{ ...adapter(true), connectComputerBrowser: connect, computerManagement: management }} copy={computerUseEnUS} /></LayoutProvider></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  const button = (text: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(item => item.textContent === text)!;
+  await waitFor(() => connected.mock.calls.length === 1 && !button(computerUseEnUS.refresh).disabled);
+  expect(button(computerUseEnUS.continueTask).disabled).toBe(true);
+  expect(document.querySelector('details')?.open).toBe(true);
+  connected.mockResolvedValue([{ id: 'profile', name: 'Personal' }]);
+  button(computerUseEnUS.refresh).click();
+  await waitFor(() => !button(computerUseEnUS.continueTask).disabled);
+  expect(document.querySelector('select')).toBeNull();
+  connected.mockResolvedValueOnce([]);
+  button(computerUseEnUS.continueTask).click();
+  await waitFor(() => !!document.querySelector('[role="alert"]'));
+  expect(continued).not.toHaveBeenCalled();
+  button(computerUseEnUS.refresh).click();
+  await waitFor(() => !button(computerUseEnUS.continueTask).disabled);
+  button(computerUseEnUS.continueTask).click();
+  await waitFor(() => continued.mock.calls.length === 1);
+  expect(connect).not.toHaveBeenCalled(); expect(management.selectTarget).not.toHaveBeenCalled();
+  expect(management.listCandidates).not.toHaveBeenCalled(); expect(management.loadAccess).not.toHaveBeenCalled();
+});

@@ -76,10 +76,10 @@ where work runs; it is not another confirmation of an already authorized action.
 
 ## Packaging and compatibility
 
-Browser execution JSONL and Native Messaging use protocol 4 for explicit page
-selection and popup progress. Native execution remains protocol 3. All carry
+Browser execution JSONL and Native Messaging use protocol 5 for Runtime-owned pause control, explicit page
+selection, reveal and popup progress. Native execution remains protocol 3. All carry
 host-owned `full_access` authorization. Inventory and isolated JavaScript helpers
-retain protocol 2. Desktop and Runtime negotiate compatibility epoch 22 and
+retain protocol 2. Desktop and Runtime negotiate compatibility epoch 24 and
 minimum version v0.13.0. Older execution helpers and
 resource inventories are rejected instead of used as a silent substitute. The
 compatibility JSON remains the release authority, independently of this document.

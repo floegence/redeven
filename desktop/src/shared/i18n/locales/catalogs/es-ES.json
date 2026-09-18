@@ -856,7 +856,7 @@
       "copyConnection": "Copiar nombre de conexión",
       "newTab": "Nueva pestaña en segundo plano",
       "disconnect": "Desconectar",
-      "managed": "Navegador administrado",
+      "managed": "Navegador administrado por Flower",
       "profileName": "Nombre del perfil",
       "createProfile": "Crear perfil",
       "allowContinue": "Permitir y continuar",
@@ -893,7 +893,16 @@
       "applicationWindows": "Ventanas de aplicaciones",
       "inUse": "En uso por otra tarea",
       "disconnected": "Sin conexión",
-      "selectionStale": "Esta página o ventana ha cambiado. Actualiza la lista y vuelve a seleccionarla."
+      "selectionStale": "Esta página o ventana ha cambiado. Actualiza la lista y vuelve a seleccionarla.",
+      "system": "Navegador del sistema conectado",
+      "connectionTitle": "Conectar el navegador del sistema",
+      "connectionHint": "Conecta Flower Browser en Chrome en este equipo, actualiza y continúa. Flower crea una pestaña independiente para la tarea. Esta conexión no admite Safari.",
+      "noFrame": "No hay capturas disponibles",
+      "frameConnecting": "Conectando con la vista…",
+      "frameDisconnected": "Conexión con la vista interrumpida",
+      "frameStale": "Última captura · no es en directo",
+      "reveal": "Ver en el navegador",
+      "revealFailed": "No se puede mostrar la pestaña. Comprueba la conexión del navegador."
     }
   },
   "common": {

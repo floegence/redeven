@@ -793,6 +793,7 @@ export type FlowerLiveStreamEnvelope = Readonly<{
     interaction_id?: string;
     frame_id?: string;
     error_code?: string;
+    assistance_kind?: string;
     resource_ref?: string;
     sha256?: string;
     mime_type: string;
@@ -1195,6 +1196,7 @@ export type FlowerComputerCandidate = Readonly<{
   state: string; new_tab?: boolean;
 }>;
 export type FlowerComputerInventory = Readonly<{
+  browser_source?: 'auto' | 'system' | 'managed'; connection_required?: boolean;
   current_target_id: string; default_candidate_ref?: string; candidates: readonly FlowerComputerCandidate[];
 }>;
 
@@ -1207,6 +1209,7 @@ export type FlowerBrowserConnection = Readonly<{ managed_profile_id?: string; cd
 export type FlowerBrowserTab = Readonly<{ id: string; profile_id: string; title: string; url: string }>;
 export type FlowerComputerExtensionSetup = Readonly<{ native_host: string; extension_id: string; extension_path: string }>;
 export type FlowerComputerManagement = Readonly<{
+  revealTarget?: (threadID: string, targetID: string) => Promise<void>;
   listCandidates: (threadID: string) => Promise<FlowerComputerInventory>;
   selectCandidate: (threadID: string, candidateRef: string) => Promise<FlowerTargetDescriptor>;
   listManagedProfiles?: () => Promise<readonly Readonly<{ id: string; name: string }>[]>;

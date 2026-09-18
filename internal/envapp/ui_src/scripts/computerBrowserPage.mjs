@@ -44,11 +44,10 @@ const privacyObserverSource = `(() => {
 // Trusted page operations shared by managed Chromium and the Chrome extension.
 // Only this module speaks CDP. Guest scripts receive selectors and JSON facts.
 export class BrowserComputerPage {
-  constructor(transport, { allowedOrigins = [], onTakeover = () => {} } = {}) {
+  constructor(transport, { allowedOrigins = [] } = {}) {
     this.transport = transport;
     this.allowedOrigins = new Set(allowedOrigins);
     this.fullAccess = false;
-    this.onTakeover = onTakeover;
     this.references = new Map();
     this.revision = 0;
     this.prefix = crypto.randomUUID();
@@ -112,7 +111,7 @@ export class BrowserComputerPage {
           if (allowed) await session.send('Fetch.continueRequest', { requestId: event.requestId });
           else {
             this.requiredOrigin = origin;
-            this.stopped = true; this.invalidate(); this.onTakeover();
+            this.stopped = true; this.invalidate();
             await session.send('Fetch.failRequest', { requestId: event.requestId, errorReason: 'BlockedByClient' });
           }
         })().catch(() => { this.guardFailure = true; this.stopped = true; this.invalidate(); });

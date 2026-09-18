@@ -1264,6 +1264,9 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		if targetID := strings.TrimSpace(anyToString(rawPayload["target_id"])); targetID != "" {
 			activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_target", ResourceRef: targetID, Label: firstNonEmptyString(anyToString(rawPayload["target_name"]), targetID)})
 		}
+		if kind := anyToString(rawPayload["target_kind"]); kind == "browser.connected" || kind == "browser.managed" {
+			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "browser_source", Label: "Browser", Value: kind})
+		}
 		if mode := anyToString(rawPayload["execution_mode"]); mode == "foreground" || mode == "background" {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "execution_mode", Label: "mode", Value: mode})
 		}
@@ -1271,26 +1274,31 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 			if len(result.inputRequired.Questions) > 0 {
 				activity.Description = result.inputRequired.Questions[0].Prompt
 			}
-			activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{
-				Kind: "computer_control", ResourceRef: strings.TrimSpace(anyToString(rawPayload["target_id"])),
-				Label: firstNonEmptyString(anyToString(rawPayload["target_name"]), "Computer"),
-			})
-			// These refs are display facts from the completed tool. Only an
-			// authenticated user command can turn them into product grants.
-			var safety InteractionSafetyDecision
-			body, _ := json.Marshal(rawPayload["safety"])
-			if json.Unmarshal(body, &safety) == nil {
-				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: computerAssistanceKind(safety), Tone: "warning"})
-				if safety.RequiredOrigin != "" {
-					activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_origin", ResourceRef: safety.RequiredOrigin, Label: safety.RequiredOrigin})
-				}
-				if safety.RequiredApp != "" {
-					activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_app", ResourceRef: safety.RequiredApp, Label: safety.RequiredApp})
-				}
-				for _, reason := range safety.ReasonCodes {
-					if reason == "foreground_permission" {
-						activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_foreground", ResourceRef: "foreground", Label: "Temporary foreground access"})
-						break
+			if rawPayload["connection_required"] == true && rawPayload["browser_source"] == "system" {
+				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_browser_source", ResourceRef: "system", Label: "System browser"})
+				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: "connection", Tone: "warning"})
+			} else {
+				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{
+					Kind: "computer_control", ResourceRef: strings.TrimSpace(anyToString(rawPayload["target_id"])),
+					Label: firstNonEmptyString(anyToString(rawPayload["target_name"]), "Computer"),
+				})
+				// These refs are display facts from the completed tool. Only an
+				// authenticated user command can turn them into product grants.
+				var safety InteractionSafetyDecision
+				body, _ := json.Marshal(rawPayload["safety"])
+				if json.Unmarshal(body, &safety) == nil {
+					activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: computerAssistanceKind(safety), Tone: "warning"})
+					if safety.RequiredOrigin != "" {
+						activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_origin", ResourceRef: safety.RequiredOrigin, Label: safety.RequiredOrigin})
+					}
+					if safety.RequiredApp != "" {
+						activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_app", ResourceRef: safety.RequiredApp, Label: safety.RequiredApp})
+					}
+					for _, reason := range safety.ReasonCodes {
+						if reason == "foreground_permission" {
+							activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_foreground", ResourceRef: "foreground", Label: "Temporary foreground access"})
+							break
+						}
 					}
 				}
 			}

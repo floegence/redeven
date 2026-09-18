@@ -856,7 +856,7 @@
       "copyConnection": "Copiar nome da conexão",
       "newTab": "Nova aba em segundo plano",
       "disconnect": "Desconectar",
-      "managed": "Navegador gerenciado",
+      "managed": "Navegador gerenciado pelo Flower",
       "profileName": "Nome do perfil",
       "createProfile": "Criar perfil",
       "allowContinue": "Permitir e continuar",
@@ -893,7 +893,16 @@
       "applicationWindows": "Janelas de aplicativos",
       "inUse": "Em uso por outra tarefa",
       "disconnected": "Não conectado",
-      "selectionStale": "Esta página ou janela mudou. Atualize a lista e selecione-a novamente."
+      "selectionStale": "Esta página ou janela mudou. Atualize a lista e selecione-a novamente.",
+      "system": "Navegador do sistema conectado",
+      "connectionTitle": "Conectar o navegador do sistema",
+      "connectionHint": "Conecte o Flower Browser no Chrome deste computador, atualize e continue. O Flower cria uma aba exclusiva para a tarefa. Esta conexão não oferece suporte ao Safari.",
+      "noFrame": "Nenhuma captura disponível",
+      "frameConnecting": "Conectando à visualização…",
+      "frameDisconnected": "Conexão com a visualização interrompida",
+      "frameStale": "Última captura · não está ao vivo",
+      "reveal": "Ver no navegador",
+      "revealFailed": "Não foi possível exibir a aba. Verifique a conexão do navegador."
     }
   },
   "common": {

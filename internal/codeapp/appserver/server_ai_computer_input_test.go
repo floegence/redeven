@@ -60,3 +60,17 @@ func TestComputerSelectionRejectsForgedConnectionAndTrailingBodies(t *testing.T)
 		t.Fatalf("unknown authority leaked or selected: %d %s", response.Code, response.Body.String())
 	}
 }
+
+func TestComputerRevealRejectsForgedBrowserCommands(t *testing.T) {
+	srv, origin, _ := newUploadRouteServer(t)
+	for _, body := range []string{`{"thread_id":"missing","target_id":"page","url":"https://example.test"}`, `{"thread_id":"missing","target_id":"page"}{}`} {
+		response := performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/computer/reveal", origin, body)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid reveal accepted: %d", response.Code)
+		}
+	}
+	response := performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/computer/reveal", origin, `{"thread_id":"missing","target_id":"private-target"}`)
+	if response.Code != http.StatusConflict || strings.Contains(response.Body.String(), "private-target") {
+		t.Fatalf("reveal authority leaked: %s", response.Body.String())
+	}
+}

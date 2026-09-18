@@ -4523,7 +4523,7 @@ webSearch: model.web_search,
       if (envelope.thread_id !== selectedThreadID() || !frame || frame.session_id !== computerObserverID()
         || frame.target_id !== selectedComputerStage()?.targetID || !computerViewerKey()
         || frame.viewer_revision !== activeComputerViewerRevision()) return;
-      if (frame.error_code) { setComputerViewFailed(true); return; }
+      if (frame.error_code) { batch(() => { setComputerViewerAssistance(frame.error_code === 'computer_control_required' ? frame.assistance_kind || 'inspection' : undefined); setComputerLiveFrame(undefined); setComputerViewFailed(true); }); return; }
       const previous = computerLiveFrame()?.computer_frame;
       if (previous?.session_id === frame.session_id && previous.sequence >= frame.sequence) return;
       setComputerLiveFrame(envelope);
@@ -5621,6 +5621,7 @@ webSearch: model.web_search,
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
   const [computerConnectionsOpen, setComputerConnectionsOpen] = createSignal(false);
+  createEffect(on([selectedThreadID, () => selectedInputRequest()?.prompt_id], () => setComputerConnectionsOpen(false), { defer: true }));
   const [computerStageOpen, setComputerStageOpen] = createSignal(false);
   const [computerFrameSelection, setComputerFrameSelection] = createSignal<{ frame: string; threadID: string; runID?: string }>();
   const selectedComputerFrame = createMemo(() => {
@@ -5642,6 +5643,7 @@ webSearch: model.web_search,
   const [computerHandbackError, setComputerHandbackError] = createSignal('');
   const [computerRecheck, setComputerRecheck] = createSignal<{ threadID: string; promptID: string; observation: ComputerAssistanceObservation }>();
   const [computerViewFailed, setComputerViewFailed] = createSignal(false);
+  const [computerViewerAssistance, setComputerViewerAssistance] = createSignal<string>();
   const [computerViewerRetry, setComputerViewerRetry] = createSignal(0);
   const [activeComputerViewerRevision, setActiveComputerViewerRevision] = createSignal(0);
   const [receivedComputerFPS, setReceivedComputerFPS] = createSignal(0);
@@ -5657,7 +5659,7 @@ webSearch: model.web_search,
   const resumeComputerViewer = () => batch(() => {
     if (computerControlDisconnected() && (!computerObserverID() || !computerCurrentVerified())) return;
     setComputerControlDisconnected(false);
-    setComputerControlError(false); setComputerViewFailed(false); setComputerHandbackError('');
+    setComputerControlError(false); setComputerViewFailed(false); setComputerViewerAssistance(undefined); setComputerHandbackError('');
     setComputerControlReady(false); setComputerViewerRetry(value => value + 1);
   });
   const takeComputerControl = (source: HTMLElement) => batch(() => {
@@ -5668,6 +5670,9 @@ webSearch: model.web_search,
   const isComputerInput = (request: FlowerInputRequest | null | undefined) => Boolean(request
     && (request.tool_name.startsWith('computer.') || request.tool_name.startsWith('browser.'))
     && request.questions.some((question) => question.id === 'computer_control'));
+  const isBrowserConnectionInput = (request: FlowerInputRequest | null | undefined) => Boolean(request
+    && request.tool_name === 'computer.targets' && request.questions.length === 1 && request.questions[0].id === 'browser_connection');
+  const isComputerAssistanceInput = (request: FlowerInputRequest | null | undefined) => isComputerInput(request) || isBrowserConnectionInput(request);
   let computerInputQueue = Promise.resolve();
   let computerInputCount = 0;
   let computerInputGeneration = 0;
@@ -5756,7 +5761,7 @@ webSearch: model.web_search,
     const execution = selectedThread()?.current_execution;
     const active = candidates.find(candidate => candidate.turnID === execution?.turn_id
       && candidate.runID === execution?.run_id && Boolean(candidate.targetID));
-    if (active && (execution?.status === 'running' || execution?.status === 'waiting_user' || execution?.status === 'waiting_approval')) return active;
+    if (active && (execution?.status === 'running' || execution?.status === 'waiting_user' || execution?.status === 'waiting_approval')) return { ...active, frame: active.frame ?? candidates.find(candidate => candidate.frame && candidate.runID === active.runID && candidate.targetID === active.targetID)?.frame };
     const latest = candidates.find(candidate => Boolean(candidate.targetID)) ?? candidates[0] ?? null;
     if (latest?.runID === selectedThread()?.active_run_id && selectedThread()?.status === 'running') return latest;
     // A later semantic observation has no image of its own. Completed viewing
@@ -5774,6 +5779,7 @@ webSearch: model.web_search,
   });
   const selectedComputerAssistance = createMemo(() => {
     const recheck = computerRecheck();
+    if (isBrowserConnectionInput(selectedInputRequest())) return computerAssistance(undefined, copy().computer, { kind: 'connection' });
     return computerAssistance(selectedComputerStage()?.item, copy().computer,
       recheck?.threadID === selectedThreadID() && recheck.promptID === selectedInputRequest()?.prompt_id ? recheck.observation : undefined, selectedThread()?.permission_type === 'full_access');
   });
@@ -5821,7 +5827,7 @@ webSearch: model.web_search,
     computerViewScope();
     // A failed preview pauses this execution only. A later run still waits for
     // its own observation before starting a fresh sampler.
-    setComputerViewFailed(false);
+    setComputerViewFailed(false); setComputerViewerAssistance(undefined);
   });
   const computerViewerKey = createMemo(() => {
     const stage = selectedComputerStage();
@@ -6931,7 +6937,7 @@ webSearch: model.web_search,
     if (bottomActionMode() !== 'chat') {
       const question = activeInputQuestion();
       const publicQuestion = bottomActionMode() === 'input_request' && question && !question.is_secret
-        && !isComputerInput(selectedInputRequest());
+        && !isComputerAssistanceInput(selectedInputRequest());
       return { kind: 'pending', targetThreadID, text: publicQuestion
         ? trimString(selectedInputRequest()?.public_summary) || trimString(question.question) || actionLabel
         : actionLabel };
@@ -6961,7 +6967,7 @@ webSearch: model.web_search,
   const currentQuestionFocusTarget = () => {
     const surface = composerSurfaceRef;
     const region = surface?.querySelector<HTMLElement>('.flower-input-request-surface');
-    if (isComputerInput(selectedInputRequest())) return region;
+    if (isComputerAssistanceInput(selectedInputRequest())) return region;
     return surface?.querySelector<HTMLElement>('textarea:not(:disabled), input:not([type="radio"]):not(:disabled)')
       ?? surface?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]:not(:disabled), input[role="radio"]:checked:not(:disabled)')
       ?? surface?.querySelector<HTMLElement>('[role="radio"]:not(:disabled)')
@@ -7002,7 +7008,7 @@ webSearch: model.web_search,
         return;
       }
       if (event.detail !== 0 || entry.kind !== 'pending') return;
-      if (bottomActionMode() === 'input_request' && !isComputerInput(selectedInputRequest())) {
+      if (bottomActionMode() === 'input_request' && !isComputerAssistanceInput(selectedInputRequest())) {
         try { await FlowerInputChoices.preload(); }
         catch { return; } // The existing lazy surface owns load-error presentation; keep reading focus.
       }
@@ -7709,12 +7715,12 @@ webSearch: model.web_search,
     <Show when={request()}>
       {(inputRequest) => (
         <section
-          class={cn('flower-input-request-panel', composerSurface && 'flower-input-request-surface', isComputerInput(inputRequest()) && 'flower-computer-control-panel')}
+          class={cn('flower-input-request-panel', composerSurface && 'flower-input-request-surface', isComputerAssistanceInput(inputRequest()) && 'flower-computer-control-panel')}
           data-flower-input-request-prompt
           tabIndex={composerSurface ? -1 : undefined}
           aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}
         >
-          <Show when={isComputerInput(inputRequest())} fallback={<>
+          <Show when={isComputerAssistanceInput(inputRequest())} fallback={<>
           <div class="flower-input-request-heading">
             <span class="flower-input-request-heading-icon" aria-hidden="true">
               <Clock class="flower-input-request-icon h-4 w-4" />
@@ -7845,16 +7851,17 @@ webSearch: model.web_search,
               <Show when={selectedThreadReadOnly()}><span class="flower-decision-readonly-status" role="status">{selectedThreadReadOnlyDisplay()}</span></Show>
               <div class="flower-computer-control-actions">
               <Show when={props.adapter.computerManagement && (selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'target')}><Button variant="secondary" disabled={inputRequestIsSubmitting()} onClick={() => setComputerConnectionsOpen(true)}>{copy().computer.title}</Button></Show>
-              <Show when={selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'authorized' && selectedComputerAssistance().kind !== 'target'}>
+              <Show when={selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'authorized' && selectedComputerAssistance().kind !== 'target'}>
               <Button variant="secondary" data-computer-control-action="take" disabled={computerReturning() || !computerObserverID() || !computerCurrentVerified() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{computerControlDisconnected() ? copy().chat.computerResumeControl : privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
               </Show>
-              <Button variant="primary" data-computer-control-action={selectedComputerAssistance().kind === 'access' ? 'grant' : 'return'} disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting() || (selectedComputerAssistance().kind === 'access' && !props.adapter.computerManagement)} loading={inputRequestIsSubmitting()} onClick={() => {
+              <Show when={selectedComputerAssistance().kind === 'connection'}><Button variant="primary" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} onClick={() => setComputerConnectionsOpen(true)}>{copy().computer.connectionTitle}</Button></Show>
+              <Show when={selectedComputerAssistance().kind !== 'connection'}><Button variant="primary" data-computer-control-action={selectedComputerAssistance().kind === 'access' ? 'grant' : 'return'} disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting() || (selectedComputerAssistance().kind === 'access' && !props.adapter.computerManagement)} loading={inputRequestIsSubmitting()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];
                 if (!question || !choice) return;
                 selectInputChoice(question, choice);
                 void submitInputRequest(selectedComputerAssistance().kind === 'access' ? requestedComputerAccess() : undefined);
-              }}>{selectedComputerAssistance().kind === 'access' ? copy().computer.allowContinue : selectedComputerAssistance().kind === 'authorized' ? copy().computer.continueTask : copy().chat.computerReturnControl}</Button>
+              }}>{selectedComputerAssistance().kind === 'access' ? copy().computer.allowContinue : selectedComputerAssistance().kind === 'authorized' ? copy().computer.continueTask : copy().chat.computerReturnControl}</Button></Show>
               </div>
             </div>
           </Show>
@@ -8169,7 +8176,7 @@ webSearch: model.web_search,
 
   const activityWaitingForComputer = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock) => {
     const request = selectedInputRequest(), execution = selectedThread()?.current_execution;
-    return isComputerInput(request) && request?.tool_call_id === item.tool_id
+    return isComputerAssistanceInput(request) && request?.tool_call_id === item.tool_id
       && timeline.turn_id === execution?.turn_id && timeline.run_id === execution?.run_id;
   };
   const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
@@ -11105,7 +11112,7 @@ webSearch: model.web_search,
                 }}>
                 <MonitorPointer size={15} aria-hidden="true" />
                 <span>{computerStageHistorical() ? copy().chat.computerViewLastScreenshot : (computerExecutionMode() || copy().chat.computerStageTitle)}</span>
-                <Show when={computerStageSessionState() !== 'historical' && !isComputerInput(selectedInputRequest())}><span class="flower-computer-state" role="status" data-session-state={computerStageSessionState()}>{copy().chat.computerStageStatus[computerStageSessionState()]}</span></Show>
+                <Show when={computerStageSessionState() !== 'historical' && !isComputerAssistanceInput(selectedInputRequest())}><span class="flower-computer-state" role="status" data-session-state={computerStageSessionState()}>{copy().chat.computerStageStatus[computerStageSessionState()]}</span></Show>
               </button>
             </Show>
             <Show when={presentation() === 'companion'}>
@@ -11160,6 +11167,15 @@ webSearch: model.web_search,
       </div>
       <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
       <FlowerComputerConnections open={computerConnectionsOpen()} onOpenChange={setComputerConnectionsOpen}
+        connectionOnly={isBrowserConnectionInput(selectedInputRequest())} onContinue={async () => {
+          const request = selectedInputRequest();
+          if (!isBrowserConnectionInput(request) || !request) return;
+          const question = request.questions[0], choice = question.choices?.[0];
+          if (!choice) return;
+          selectInputChoice(question, choice);
+          setComputerConnectionsOpen(false);
+          await submitInputRequest();
+        }}
         threadID={selectedThreadID()} fullAccess={selectedThread()?.permission_type === 'full_access'} adapter={props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
       <FlowerChatContextPreview
         preview={contextSnapshotPreview()}
@@ -11539,7 +11555,7 @@ webSearch: model.web_search,
                     <Show when={activeInputQuestionUsesTextEditor()}>
                       {composerTextEditor()}
                     </Show>
-                    <Show when={!isComputerInput(selectedInputRequest())}><div class="flower-decision-actions flower-input-request-actions">
+                    <Show when={!isComputerAssistanceInput(selectedInputRequest())}><div class="flower-decision-actions flower-input-request-actions">
                       <Show when={selectedThreadReadOnly()}>
                         <span class="flower-decision-readonly-status flower-composer-readonly-chip" role="status">
                           {selectedThreadReadOnlyDisplay()}
@@ -11556,7 +11572,7 @@ webSearch: model.web_search,
                         loading={selectedThreadStopPending()}
                         onClick={() => void stopSelectedThreadFromComposer()}
                       />
-                      <Show when={!isComputerInput(selectedInputRequest())}><Button
+                      <Show when={!isComputerAssistanceInput(selectedInputRequest())}><Button
                         variant="primary"
                         icon={ArrowUp}
                         class="flower-composer-continue rounded-full"
@@ -12114,9 +12130,17 @@ webSearch: model.web_search,
           return (
             <FlowerComputerStage
               snapshot={stage()}
+              revealLabel={copy().computer.reveal}
+              onReveal={props.adapter.canMutate !== false && props.adapter.computerManagement?.revealTarget && stage().item.chips?.some(chip => chip.kind === 'browser_source' && chip.value === 'browser.connected') ? () => {
+                void props.adapter.computerManagement!.revealTarget!(selectedThreadID(), stage().targetID!).catch(() => notifyComposerError(copy().computer.revealFailed));
+              } : undefined}
               historical={computerStageHistorical()}
               frame={computerStageFrame()}
-              retainLiveFrame={!selectedComputerFrame() && (computerStageSessionState() === 'completed' || computerStageSessionState() === 'failed')}
+              retainLiveFrame={!selectedComputerFrame() && !computerViewerKey()}
+              loading={Boolean(computerViewerKey()) && !computerViewFailed()}
+              blocked={Boolean((computerViewerAssistance() || isComputerInput(selectedInputRequest())) && !privateControlRequested())}
+              emptyMessage={computerViewerAssistance() && !privateControlRequested() ? computerAssistance(undefined, copy().computer, { kind: computerViewerAssistance()! }).title : computerViewFailed() ? copy().computer.frameDisconnected : computerViewerKey() ? copy().computer.frameConnecting : copy().computer.noFrame}
+              staleLabel={!computerViewerKey() && !privateControlRequested() ? copy().computer.frameStale : undefined}
               privateInteractionID={privateControlRequested() ? selectedInputRequest()?.prompt_id : undefined}
               frameRate={viewerFPS()} receivedFrameRate={receivedComputerFPS()} onFrameRateChange={changeComputerFrameRate}
               onFrameReady={(frame) => {
@@ -12150,7 +12174,7 @@ webSearch: model.web_search,
                 restore: copy().chat.computerStageRestore,
                 state: copy().chat.computerStageStatus,
                 move: copy().chat.computerStageMove,
-                noFrame: copy().chat.toolActivityDetailsPending,
+                noFrame: copy().computer.noFrame,
                 retry: copy().chat.handlerRetry,
               }}
               onClose={() => { setComputerStageOpen(false); }}

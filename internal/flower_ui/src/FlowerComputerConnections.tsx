@@ -11,6 +11,8 @@ export function FlowerComputerConnections(props: {
   threadID: string; adapter: FlowerSurfaceAdapter; copy: FlowerComputerCopy;
   requested?: FlowerRequestedComputerAccess;
   fullAccess?: boolean;
+  connectionOnly?: boolean;
+  onContinue?: () => Promise<void>;
 }) {
   const [targets, setTargets] = createSignal<readonly FlowerComputerCandidate[]>([]);
   const [targetID, setTargetID] = createSignal('');
@@ -18,7 +20,7 @@ export function FlowerComputerConnections(props: {
   const [managing, setManaging] = createSignal(false);
   const [query, setQuery] = createSignal('');
   const currentTarget = () => targets().find(target => target.target_id === targetID() && Boolean(targetID()));
-  const candidateLabel = (target: FlowerComputerCandidate) => target.new_tab ? `${target.profile_name || target.display_name} · ${props.copy.newTab}` : target.title || target.display_name;
+  const candidateLabel = (target: FlowerComputerCandidate) => target.new_tab ? `${target.kind === "browser.managed" ? props.copy.managed : props.copy.system} · ${target.profile_name || target.display_name} · ${props.copy.newTab}` : target.title || target.display_name;
   const candidateState = (target: FlowerComputerCandidate) => ({ in_use: props.copy.inUse, user_control: props.copy.waitingControl,
     permission_required: props.copy.permissionRequired, setup_required: props.copy.setupRequired, connection_required: props.copy.disconnected,
     stopped: props.copy.disconnected, ready: props.copy.connected }[target.state] || props.copy.disconnected);
@@ -37,7 +39,7 @@ export function FlowerComputerConnections(props: {
   const load = async () => {
     const management = props.adapter.computerManagement, thread = props.threadID, current = ++generation;
     setFailed(false); setSelectionFailure(''); setSaved(false); setSaving(false); setAccess(undefined); setTargets([]); setTargetID(''); setLoading(true);
-    if (!management || !thread) { setLoading(false); return; }
+    if (props.connectionOnly || !management || !thread) { setLoading(false); return; }
     const results = await Promise.allSettled([management.listCandidates(thread), management.loadAccess(thread)]);
     if (current !== generation) return;
     const [inventory, grants] = results;
@@ -101,10 +103,11 @@ export function FlowerComputerConnections(props: {
     } catch { setFailed(true); }
   };
   const requested = () => Boolean(props.requested?.origin || props.requested?.app || props.requested?.foreground);
-  return <Dialog open={props.open} onOpenChange={props.onOpenChange} title={props.copy.title} class="w-[min(42rem,94vw)]"
+  return <Dialog open={props.open} onOpenChange={props.onOpenChange} title={props.connectionOnly ? props.copy.connectionTitle : props.copy.title} class="w-[min(42rem,94vw)]"
     footer={<div class="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => props.onOpenChange(false)}>{props.copy.close}</Button>
-      <Show when={!props.fullAccess}><Button size="sm" disabled={!available()} onClick={() => void save()}>{saving() ? props.copy.saving : props.copy.save}</Button></Show></div>}>
+      <Show when={!props.connectionOnly && !props.fullAccess}><Button size="sm" disabled={!available()} onClick={() => void save()}>{saving() ? props.copy.saving : props.copy.save}</Button></Show></div>}>
     <div class="space-y-5 text-sm" aria-busy={loading() || saving()}>
+      <Show when={props.connectionOnly} fallback={<>
       <p class="text-muted-foreground">{props.copy.description}</p>
       <section class="space-y-3 rounded-lg border border-border p-4">
         <div class="flex items-center justify-between gap-3"><span class="text-xs text-muted-foreground">{props.copy.target}</span><span class="text-xs text-muted-foreground">{props.adapter.runtime.display_name}</span></div>
@@ -128,6 +131,7 @@ export function FlowerComputerConnections(props: {
           <For each={[true, false]}>{browser => <Show when={candidates(browser).length}><section class="space-y-1">
             <h3 class="px-1 text-xs font-medium text-muted-foreground">{browser ? props.copy.browserPages : props.copy.applicationWindows}</h3>
             <For each={candidates(browser)}>{target => <button type="button" class="flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              data-computer-candidate-target={target.target_id}
               disabled={!available() || target.state !== 'ready'} aria-pressed={Boolean(target.target_id) && targetID() === target.target_id}
               onClick={() => void select(target.candidate_ref)}>
               <span class="min-w-0 flex-1"><span class="block truncate text-sm">{candidateLabel(target)}</span>
@@ -167,6 +171,11 @@ export function FlowerComputerConnections(props: {
         <FlowerProfileConnection management={props.adapter.computerManagement!} connect={connectBrowser} copy={props.copy} onConnected={() => void load()} />
       </Show>
       <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement}><details class="rounded-md border border-border p-3"><summary class="cursor-pointer text-xs font-medium">{props.copy.advanced}</summary><div class="pt-3"><FlowerBrowserConnection copy={props.copy} listTabs={props.adapter.computerManagement!.listBrowserTabs} connect={connectBrowser} onConnected={() => void load()} /></div></details></Show>
+      </Show>
+      </>}>
+        <Show when={props.adapter.canMutate !== false && props.adapter.computerManagement?.listExtensionProfiles && props.adapter.computerManagement.setupExtension} fallback={<p role="alert">{props.copy.setupRequired}</p>}>
+          <FlowerProfileConnection connectionOnly management={props.adapter.computerManagement!} connect={connectBrowser} copy={props.copy} onConnected={() => undefined} onContinue={props.onContinue} />
+        </Show>
       </Show>
       <Show when={failed()}><p role="alert" class="text-xs text-destructive">{selectionFailure() || props.copy.failed}</p></Show>
       <Show when={saved()}><p role="status" class="text-xs">{props.copy.saved}</p></Show>

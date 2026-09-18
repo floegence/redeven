@@ -3,6 +3,8 @@ package ai
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"slices"
 	"sync"
 )
 
@@ -10,15 +12,58 @@ import (
 // The canonical terminal view releases it. Each target serializes observations,
 // actions and handback so screenshots cannot race a different thread's input.
 type computerTargetControl struct {
-	gate              chan struct{}
-	mu                sync.Mutex
-	threadID          string
-	turnID            string
-	runID             string
-	user              bool
-	requiredOrigin    string
-	requiredApp       string
-	requireForeground bool
+	gate     chan struct{}
+	mu       sync.Mutex
+	threadID string
+	turnID   string
+	runID    string
+	pause    *InteractionSafetyDecision
+}
+
+// The Runtime owns the barrier. Helpers report observations, not a second
+// independently advancing control mode. Callers hold control.mu.
+func (control *computerTargetControl) pauseForUser() {
+	if control.pause == nil {
+		control.pause = &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"user_control"}}
+	}
+}
+
+func (control *computerTargetControl) pauseError(call TargetToolCall) error {
+	if control.pause == nil {
+		return nil
+	}
+	safety := *control.pause
+	safety.ReasonCodes = slices.Clone(safety.ReasonCodes)
+	return &targetToolPolicyError{code: "interaction_takeover_required", tool: call.ToolName, target: call.TargetID, safety: &safety}
+}
+
+func (control *computerTargetControl) recordPause(call TargetToolCall, result TargetToolResult, err error) {
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	if control.threadID != call.ThreadID || (!call.liveFrame && control.runID != call.RunID) {
+		return
+	}
+	safety := computerPauseSafety(result, err)
+	control.pause = &safety
+	source := "tool"
+	if call.liveFrame {
+		source = "viewer"
+	}
+	slog.Info("computer safety paused", "thread_id", call.ThreadID, "target_id", call.TargetID, "source", source, "reason", computerAssistanceKind(safety))
+}
+
+func computerPauseSafety(result TargetToolResult, err error) InteractionSafetyDecision {
+	safety := result.Safety
+	var failure *targetToolPolicyError
+	if safety == nil && errors.As(err, &failure) {
+		safety = failure.safety
+	}
+	if safety == nil {
+		return InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"unknown"}}
+	}
+	copy := *safety
+	copy.ReasonCodes = slices.Clone(safety.ReasonCodes)
+	return copy
 }
 
 type computerProgressKey struct{}
@@ -87,14 +132,14 @@ func (r *ComputerUseRuntime) acquireComputerControl(ctx context.Context, call Ta
 		unlock()
 		return nil, nil, computerTargetFailure(call, "TARGET_IN_USE")
 	}
-	if control.user && !call.controlReturn && !call.userInput {
+	if control.pause != nil && !call.controlReturn && !call.userInput {
 		unlock()
-		return nil, nil, computerTargetFailure(call, "TAKEOVER_REQUIRED")
+		return nil, nil, control.pauseError(call)
 	}
 	if (!call.liveFrame || call.controlReturn) && call.ThreadID != "" && !call.bindSelection {
 		control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, call.RunID
 		if call.controlReturn {
-			control.user = true
+			control.pauseForUser()
 		}
 	}
 	return control, unlock, nil
@@ -111,7 +156,7 @@ func (r *ComputerUseRuntime) continueComputerControl(threadID, turnID, runID str
 	defer r.mu.RUnlock()
 	for _, control := range r.controls {
 		control.mu.Lock()
-		if control.threadID == threadID && control.turnID == turnID && !control.user {
+		if control.threadID == threadID && control.turnID == turnID && control.pause == nil {
 			control.runID = runID
 		}
 		control.mu.Unlock()
@@ -131,8 +176,7 @@ func (r *ComputerUseRuntime) releaseComputerControl(threadID, runID string) {
 					sampler.cancel()
 				}
 			}
-			control.threadID, control.turnID, control.runID, control.user = "", "", "", false
-			control.requiredOrigin, control.requiredApp, control.requireForeground = "", "", false
+			control.threadID, control.turnID, control.runID, control.pause = "", "", "", nil
 			released = true
 		}
 		control.mu.Unlock()
@@ -166,7 +210,7 @@ func (r *ComputerUseRuntime) releasePreviousComputerTarget(call TargetToolCall) 
 	r.mu.RUnlock()
 	for _, control := range controls {
 		control.mu.Lock()
-		if control.threadID == call.ThreadID && control.runID == call.RunID && !control.user {
+		if control.threadID == call.ThreadID && control.runID == call.RunID && control.pause == nil {
 			control.threadID, control.turnID, control.runID = "", "", ""
 		}
 		control.mu.Unlock()

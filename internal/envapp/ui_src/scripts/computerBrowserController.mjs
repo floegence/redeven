@@ -8,7 +8,6 @@ export class BrowserComputerController {
   constructor(transport) {
     this.transport = transport;
     this.page = new BrowserComputerPage(transport);
-    this.userInControl = false;
   }
   async initialize() { await this.page.initialize(); }
   close() { this.page.close(); }
@@ -18,7 +17,6 @@ export class BrowserComputerController {
     return { mime: 'image/png', data };
   }
   pause(safety, executed) {
-    this.userInControl = true;
     return { result: { code: 'TAKEOVER_REQUIRED', action_executed: executed }, safety };
   }
   async targetChange(executed) {
@@ -55,6 +53,12 @@ export class BrowserComputerController {
     return response;
   }
   async executeOperation(request) {
+    // Trusted host command; not exposed in the model toolset. It reveals the
+    // existing page without inspecting pixels or changing the control barrier.
+    if (request.tool_name === 'computer.reveal') {
+      try { await this.transport.send('Page.bringToFront'); return { result: { revealed: true } }; }
+      catch { return { error: 'TARGET_CONNECTION_REQUIRED' }; }
+    }
     const args = request.args || {};
     const privateInput = request.user_control === true;
     const page = this.page;
@@ -67,12 +71,11 @@ export class BrowserComputerController {
     try {
       if (privateInput) {
         if (!['computer.screenshot', 'computer.click', 'computer.key', 'computer.type', 'computer.scroll'].includes(request.tool_name)) throw new Error('TARGET_NOT_ALLOWED');
-        this.userInControl = true;
       } else {
         if (request.return_control) {
           if (request.tool_name !== 'computer.screenshot') throw new Error('TARGET_NOT_ALLOWED');
           page.handback();
-        } else if (this.userInControl) return this.pause({ level: 'takeover', reason_codes: ['user_control'], safe_to_capture: false, safe_to_send_to_model: false }, false);
+        }
         if (request.tool_name === 'computer.select_target' && !page.stopped) {
           page.openedPages = [];
           return { result: { selected: true, action_executed: false },
@@ -130,7 +133,6 @@ export class BrowserComputerController {
         // call inspect the new one without inventing a user takeover.
         throw new Error('OBSERVATION_INVALIDATED');
       }
-      if (request.return_control) this.userInControl = false;
       const metadata = await this.readObservation(async () => {
         const { frameTree } = await this.transport.send('Page.getFrameTree');
         const title = await page.inFrame({ session: this.transport, frame: frameTree.frame }, 'document.title');

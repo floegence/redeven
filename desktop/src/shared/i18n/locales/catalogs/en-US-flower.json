@@ -855,7 +855,7 @@
     "copyConnection": "Copy connection name",
     "newTab": "New background tab",
     "disconnect": "Disconnect",
-    "managed": "Managed browser",
+    "managed": "Flower managed browser",
     "profileName": "Profile name",
     "createProfile": "Create profile",
     "allowContinue": "Allow and continue",
@@ -892,6 +892,15 @@
     "applicationWindows": "Application windows",
     "inUse": "Used by another task",
     "disconnected": "Not connected",
-    "selectionStale": "This page or window changed. Refresh the list and choose it again."
+    "selectionStale": "This page or window changed. Refresh the list and choose it again.",
+    "system": "Connected system browser",
+    "connectionTitle": "Connect your system browser",
+    "connectionHint": "Connect Flower Browser in Chrome on this computer, then refresh and continue. Flower creates a separate task tab. Safari is not supported by this connection.",
+    "noFrame": "No screenshot available",
+    "frameConnecting": "Connecting to the view…",
+    "frameDisconnected": "View connection interrupted",
+    "frameStale": "Last captured view · not live",
+    "reveal": "View in browser",
+    "revealFailed": "Unable to show the browser tab. Check that the browser is connected."
   }
 }

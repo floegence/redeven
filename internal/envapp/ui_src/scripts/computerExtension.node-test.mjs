@@ -78,7 +78,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     await popup.locator('#profile').fill('Fixture profile'); await popup.locator('#bridge').fill('dev.floegence.redeven.r123456789abcdef0');
     await popup.locator('#connect-button').click();
     await worker.evaluate(() => fixtureWait('hello'));
-    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 4 }));
+    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 5 }));
     let sequence = 0;
     const call = async (command, args = {}) => {
       const id = String(++sequence);
@@ -96,6 +96,12 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     await user.bringToFront();
     assert.equal(await task.evaluate(() => document.hasFocus()), false);
     await call('bind', { tab_id: selected.id, tab_title: selected.title, tab_url: selected.url });
+    await call('reveal', { tab_id: selected.id });
+    const activated = await worker.evaluate(() => chrome.tabs.query({ active: true, lastFocusedWindow: true }));
+    assert.equal(String(activated[0].id), selected.id, 'reveal must activate exactly the bound browser tab');
+    await assert.rejects(call('reveal', { tab_id: '99999999' }), /EXTENSION_COMMAND_FAILED/);
+    await user.bringToFront();
+
     const execute = async (tool_name, args = {}) => call('execute', { tab_id: selected.id, request: { tool_name, args, full_access: true, script_operation: true } });
     // OOP frame attachment can invalidate an initial read. Follow the explicit
     // observation contract without repeating any effect or selecting a new tab.

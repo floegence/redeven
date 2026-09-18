@@ -273,7 +273,8 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 	stateDir := t.TempDir()
 	opts := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
 		Config: &config.AIConfig{CurrentModelID: "search/model-a", Providers: []config.AIProvider{{ID: "search", Type: "openai_compatible", BaseURL: server.URL,
-			Models: []config.AIProviderModel{{ModelName: "model-a"}, {ModelName: "model-b"}}, WebSearch: &config.AIProviderWebSearch{Mode: config.AIProviderWebSearchModeOpenAIBuiltin}}}},
+			// This fixture tests search continuation and model switching, not compaction.
+			Models: []config.AIProviderModel{{ModelName: "model-a", ContextWindow: 128000}, {ModelName: "model-b", ContextWindow: 128000}}, WebSearch: &config.AIProviderWebSearch{Mode: config.AIProviderWebSearchModeOpenAIBuiltin}}}},
 		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "test-key", true, nil }}
 	svc, err := NewService(opts)

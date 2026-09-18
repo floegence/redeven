@@ -52,7 +52,6 @@ type playwrightTargetRequest struct {
 	FullAccess      bool           `json:"full_access"`
 	AllowedOrigins  []string       `json:"allowed_origins"`
 	ScriptOperation bool           `json:"script_operation,omitempty"`
-	SessionID       string         `json:"session_id,omitempty"`
 	UserControl     bool           `json:"user_control,omitempty"`
 	ReturnControl   bool           `json:"return_control,omitempty"`
 	ID              string         `json:"id"`
@@ -151,12 +150,6 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
 	request := playwrightTargetRequest{FullAccess: call.fullAccess, AllowedOrigins: call.allowedOrigins, ScriptOperation: call.scriptOperation, ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, ReturnControl: call.controlReturn}
-	if call.ThreadID != "" && call.TurnID != "" {
-		// Canonical turn identity survives input continuation runs. Model args
-		// cannot select a private browser session or end another turn's takeover.
-		session := sha256.Sum256([]byte(call.ThreadID + "\x00" + call.TurnID))
-		request.SessionID = hex.EncodeToString(session[:])
-	}
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return TargetToolResult{}, err
@@ -329,7 +322,7 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 		return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_handshake_missing"}
 	case line := <-readyCh:
 		var handshake playwrightTargetReady
-		if err := json.Unmarshal(line, &handshake); err != nil || handshake.Type != "ready" || handshake.ProtocolVersion != 4 {
+		if err := json.Unmarshal(line, &handshake); err != nil || handshake.Type != "ready" || handshake.ProtocolVersion != 5 {
 			return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_handshake_invalid"}
 		}
 		if handshake.Error != "" {

@@ -303,7 +303,7 @@ func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, co
 			profileName = item.Name
 		}
 	}
-	target := TargetDescriptor{ID: targetID, Kind: "browser.managed", DisplayName: "Managed browser — " + profileName, Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "ready", PermissionState: "granted", Ready: true}
+	target := TargetDescriptor{ID: targetID, Kind: "browser.managed", DisplayName: "Flower managed browser — " + profileName, Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "ready", PermissionState: "granted", Ready: true}
 	if err := executor.EnsureTargetReady(ctx, target.ID); err != nil {
 		_ = executor.Close()
 		return TargetDescriptor{}, err

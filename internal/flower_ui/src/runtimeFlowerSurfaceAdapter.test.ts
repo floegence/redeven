@@ -143,6 +143,18 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+  it('preserves closed safety classifications from the real frame transport', async () => {
+    const frame = { session_id: 'observer', target_id: 'task-page', viewer_revision: 1, sequence: 1, mime_type: 'image/png', error_code: 'computer_control_required' };
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
+      yield { schema_version: 1, kind: 'computer.frame', thread_id: 'task', computer_frame: { ...frame, assistance_kind: 'captcha' } };
+      yield { schema_version: 1, kind: 'computer.frame', thread_id: 'task', computer_frame: { ...frame, assistance_kind: 'untrusted arbitrary page text' } };
+    } }));
+    const frames = [];
+    for await (const envelope of adapter.connectLiveStream!({ signal: new AbortController().signal })) frames.push(envelope.computer_frame);
+    expect(frames[0]).toEqual({ ...frame, assistance_kind: 'captcha' });
+    expect(frames[1]).toEqual(frame);
+  });
+
   it('returns a named fork summary without coupling creation to detail loading', async () => {
     const forkThread = vi.fn(async () => ({
       client_request_id: 'fork-request',

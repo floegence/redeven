@@ -5,12 +5,12 @@ import { page } from 'vitest/browser';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-async function setup(kind: 'site' | 'captcha' | 'unknown' = 'site', permission: 'approval_required' | 'full_access' = 'approval_required') {
+async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' = 'site', permission: 'approval_required' | 'full_access' = 'approval_required') {
   const threadID = 'assistance-fixture';
-  const item = activityItem({ item_id: 'step', tool_id: 'navigate', tool_name: 'browser.navigate', renderer: 'structured', status: 'success',
-    target_refs: [{ kind: 'computer_control', label: 'Task browser', resource_ref: 'browser-main' },
+  const item = activityItem({ item_id: 'step', tool_id: 'navigate', tool_name: kind === 'connection' ? 'computer.targets' : 'browser.navigate', renderer: 'structured', status: 'success',
+    target_refs: [{ kind: kind === 'connection' ? 'computer_browser_source' : 'computer_control', label: 'Task browser', resource_ref: kind === 'connection' ? 'system' : 'browser-main' },
       ...(kind === 'site' ? [{ kind: 'computer_origin', label: 'https://www.google.com', resource_ref: 'https://www.google.com' }] : [])],
-    chips: kind === 'site' ? [] : [{ kind: 'computer_assistance', label: 'Required step', value: kind === 'captcha' ? 'captcha' : 'inspection' }],
+    chips: kind === 'site' ? [] : [{ kind: 'computer_assistance', label: 'Required step', value: kind === 'connection' ? 'connection' : kind === 'captcha' ? 'captcha' : 'inspection' }],
     payload: { operation: 'navigate', status: 'success' },
   });
   const snapshot = thread({ thread_id: threadID, permission_type: permission, status: 'waiting_user', active_run_id: 'run-control', messages: [{
@@ -23,15 +23,16 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' = 'site', permission: 
     const { label, description, renderer, payload, chips, target_refs, ...facts } = entry.activity;
     return { ...entry, activity: { ...facts, presentation: { label, description, renderer, payload, chips, target_refs } } };
   }), interactions: [{ id: 'tool-input:step', kind: 'input' as const, turn_id: 'turn-control', run_id: 'run-control', tool_call_id: 'navigate',
-    input: { summary: 'Specific external step', questions: [{ id: 'computer_control', prompt: 'Inspect the selected page.', kind: 'select', options: ['Return control to Flower'] }] },
+    input: { summary: 'Specific external step', questions: [{ id: kind === 'connection' ? 'browser_connection' : 'computer_control', prompt: 'Inspect the selected page.', kind: 'select', options: [kind === 'connection' ? 'Continue with connected browser' : 'Return control to Flower'] }] },
   }] };
   const gate = deferred<void>();
   const other = thread({ thread_id: 'other-conversation' });
   const saveAccess = vi.fn(() => gate.promise);
+  const listExtensionProfiles = vi.fn(async () => [{ id: 'personal', name: 'Personal' }]);
   const loadAccess = vi.fn(async () => ({ origins: ['https://existing.test'], apps: ['dev.Notes'], allow_foreground: false }));
   const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:step', current: { ...current, view_version: 2, activity: 'idle' as const, last_outcome: 'completed' as const, interactions: [] } }));
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput,
-    computerManagement: { listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess, listTargets: vi.fn(async () => []), loadTarget: vi.fn(async () => ({ target_id: 'browser-main' })), selectTarget: vi.fn(), listBrowserTabs: vi.fn(async () => []) },
+    computerManagement: { listExtensionProfiles, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess, listTargets: vi.fn(async () => []), loadTarget: vi.fn(async () => ({ target_id: 'browser-main' })), selectTarget: vi.fn(), listBrowserTabs: vi.fn(async () => []) },
     listThreads: vi.fn(async () => [snapshot, other]), loadThread: vi.fn(async id => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(other)),
     connectLiveStream: async function* ({ signal }) {
       yield { schema_version: 1 as const, kind: 'ready' as const, observer_id: 'assistance-observer', summaries: [snapshot, other] };
@@ -39,7 +40,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' = 'site', permission: 
     },
   }, { focusThreadRequest: { request_id: 'select-assistance', thread_id: threadID }, layout: true });
   await waitFor(() => !!surface.querySelector('.flower-computer-control-heading'));
-  return { surface, gate, saveAccess, loadAccess, submitInput };
+  return { surface, gate, saveAccess, loadAccess, submitInput, listExtensionProfiles };
 }
 
 it('explains the exact site grant and grants it once before continuing without manual browser control', async () => {
@@ -168,5 +169,42 @@ it('keeps actual CAPTCHA instructions in full access mode', async () => {
   const s = await setup('captcha', 'full_access');
   expect(s.surface.querySelector('.flower-computer-control-title')?.textContent).toBe('Complete the CAPTCHA');
   expect(s.surface.querySelector('[data-computer-control-action="take"]')?.textContent).toBe('Open page');
+  expect(s.submitInput).not.toHaveBeenCalled();
+});
+
+
+it('opens the system-browser connection guide and resumes the canonical request once without private control', async () => {
+ const s = await setup('connection', 'full_access');
+ const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
+ expect(card.textContent).toContain('Connect your system browser');
+ expect(card.querySelector('[data-computer-control-action="take"]')).toBeNull();
+ expect(card.querySelector('[data-computer-control-action="return"]')).toBeNull();
+ const button = Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect your system browser')!;
+ button.click();
+ await waitFor(() => !!document.querySelector('[role="dialog"]'));
+ const continueButton = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find(value => value.textContent === 'Continue task')!;
+ await waitFor(() => continueButton() && !continueButton().disabled);
+ expect(document.querySelector('[role="dialog"] select')).toBeNull();
+ continueButton().click();
+ await waitFor(() => s.submitInput.mock.calls.length === 1);
+ expect(s.saveAccess).not.toHaveBeenCalled();
+ expect(document.querySelector('.flower-computer-stage')).toBeNull();
+});
+
+it('closes the connection guide when its conversation changes during a connection check', async () => {
+  const s = await setup('connection', 'full_access');
+  const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
+  Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(value => value.textContent === 'Connect your system browser')!.click();
+  const continueButton = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find(value => value.textContent === 'Continue task');
+  await waitFor(() => Boolean(continueButton() && !continueButton()!.disabled));
+  const check = deferred<{ id: string; name: string }[]>();
+  s.listExtensionProfiles.mockImplementationOnce(() => check.promise);
+  continueButton()!.click();
+  await waitFor(() => s.listExtensionProfiles.mock.calls.length === 2);
+  s.surface.querySelector<HTMLButtonElement>('[data-thread-id="other-conversation"] .flower-thread-card-select-button')!.click();
+  await waitFor(() => s.surface.querySelector('[data-thread-id="other-conversation"]')?.getAttribute('data-flower-thread-active') === 'true');
+  await waitFor(() => !document.querySelector('[role="dialog"]'));
+  check.resolve([{ id: 'personal', name: 'Personal' }]);
+  await new Promise(resolve => setTimeout(resolve, 30));
   expect(s.submitInput).not.toHaveBeenCalled();
 });

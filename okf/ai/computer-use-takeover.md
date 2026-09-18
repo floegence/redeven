@@ -87,11 +87,12 @@ replay and is not persisted as another model tool result.
 
 ## Target control
 
-Runtime serializes each target's actions, observations and control commands.
-Target tool calls resolve thread, turn, and run identity exclusively from the
-Floret canonical invocation, matching the terminal view that releases control.
-Uninitialized legacy run fields cannot authorize an action. Failure diagnostics
-record those same canonical identities.
+`ComputerUseRuntime` alone serializes target actions, observations and control.
+Its bounded pause retains the original target and reason, including safety found
+by live sampling. Canonical Floret thread, turn and run identify ownership;
+uninitialized legacy fields cannot authorize actions. Helpers classify the current
+page without replacing CAPTCHA with `user_control` or navigating to a blank page
+on a new Turn.
 
 Leases identify thread, turn and run. Floret continuation starts a new run in
 the same turn, advancing existing non-user leases before provider work without
@@ -100,12 +101,12 @@ original interaction run. Other threads cannot capture or manipulate a leased
 target. Safe target switches release the previous target; terminal views release
 only their matching run, never a later run’s target.
 
-A takeover retains user control even if the page becomes safe. Model actions and
-ordinary live sampling remain blocked until explicit handback. Waiting for the
-target lock respects cancellation before dispatch. These process-local leases
-own external resources, not a second Floret lifecycle or recovery journal.
-After restart, an authorized pending interaction reestablishes user control from
-canonical provenance before accepting a private command.
+A takeover blocks model actions and public sampling until explicit handback,
+even if the page becomes safe. Cancellation releases ownership; later observations
+still inspect the actual page for private content. Lock acquisition respects
+cancellation before dispatch. After restart, pending canonical provenance must
+authorize private commands again. These process-local resource controls do not
+form a second Floret lifecycle or recovery journal.
 
 ## Browser observation and private input
 
@@ -177,14 +178,19 @@ navigation, page restoration, or private input is replayed. Ordinary preview
 reconnection never grants private input. Historical display and terminal collapse
 follow the [media contract](computer-use-media.md).
 
-The Runtime's canonical target lease is the authority for admitting another
-turn. Browser requests carry a host-derived thread/turn session hash, stable
-across handback runs and independent of model arguments. When a newly admitted
-turn follows abandoned private control, the managed helper replaces its private
-page with a blank page before observation or navigation. It retains the browser
-profile but does not expose or act on the abandoned page. Same-turn control
-continues to require explicit handback. Connected browser tabs are user-owned
-and are never closed or replaced by this managed-page recovery.
+Every admitted computer tool converts a typed safety pause through one result
+boundary, including pre-dispatch selection checks. Confirmed script steps and
+action outcomes survive this conversion. Sampling itself creates no interaction;
+it stops public frames with a closed assistance classification. The next admitted
+tool supplies Floret's canonical `InputRequired`. Diagnostics record only target
+identity, source, reason and requested assistance, never page text or private input.
+
+An explicit system-browser request with no live connection uses a separate
+`browser_connection` question with canonical tool provenance. Its guide establishes
+an extension connection without selecting a tab or enabling private control.
+`Respond` rechecks current connected inventory; the resumed Agent discovers and
+selects its own task page. Connection and verification share Floret lifecycle
+ownership but grant different capabilities.
 
 # Boundaries
 

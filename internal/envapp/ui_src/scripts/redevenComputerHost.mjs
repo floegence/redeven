@@ -14,7 +14,6 @@ const tabIndex = process.argv.indexOf('--tab-id');
 const tabID = tabIndex >= 0 ? process.argv[tabIndex + 1] : undefined;
 const contextIndex = process.argv.indexOf('--browser-context-id');
 const browserContextID = contextIndex >= 0 ? process.argv[contextIndex + 1] : undefined;
-const managedTarget = !cdpURL || process.argv.includes('--managed-attachment');
 const downloadIndex = process.argv.indexOf('--download-dir');
 let downloadDirectory = downloadIndex >= 0 && process.argv.includes('--managed-attachment') ? process.argv[downloadIndex + 1] : undefined;
 const executionLocation = cdpURL && !process.argv.includes('--managed-attachment') ? 'connected_browser' : `${process.platform}_headless_browser`;
@@ -55,7 +54,7 @@ try {
   // CDP credentials, process environment, or application page content.
   const code = cdpURL ? 'TARGET_CONNECTION_REQUIRED' : 'TARGET_SETUP_REQUIRED';
   const reason = error?.code === 'ERR_MODULE_NOT_FOUND' ? 'browser_dependency_missing' : cdpURL ? 'browser_connection_failed' : 'browser_launch_failed';
-  process.stdout.write(JSON.stringify({ type: 'ready', protocol_version: 4, error: code, reason }) + '\n');
+  process.stdout.write(JSON.stringify({ type: 'ready', protocol_version: 5, error: code, reason }) + '\n');
   if (!browser) await context?.close().catch(() => {});
   process.exit(1);
 }
@@ -102,20 +101,13 @@ await controller.initialize();
 page.on('close', () => semantic.close());
 page.on('frameattached', () => semantic.invalidate());
 page.on('framedetached', frame => { frameSessions.get(frame)?.detach().catch(() => {}); frameSessions.delete(frame); semantic.invalidate(); });
-response({ type: 'ready', protocol_version: 4, capabilities: ['observe', 'interaction'], execution_location: executionLocation });
-let controlSession = '';
+response({ type: 'ready', protocol_version: 5, capabilities: ['observe', 'interaction'], execution_location: executionLocation });
 const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 rl.on('close', () => controller.cancel());
 for await (const line of rl) {
   if (line.length > 262144) break;
   let request;
   try { request = JSON.parse(line); } catch { break; }
-  // A new admitted turn must not inherit an abandoned private managed page.
-  const session = typeof request.session_id === 'string' ? request.session_id : '';
-  if (managedTarget && session && controlSession && session !== controlSession && controller.userInControl) {
-    await page.goto('about:blank'); semantic.handback(); controller.userInControl = false;
-  }
-  if (session) controlSession = session;
   const result = await controller.execute(request);
   response({ id: request.id, target_id: request.target_id, execution_location: executionLocation, ...result });
 }

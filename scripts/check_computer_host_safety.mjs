@@ -53,7 +53,7 @@ try {
       } finally { clearTimeout(timeout); }
     };
     const send = async (id, tool_name, args = {}, control = {}) => {
-      child.stdin.write(`${JSON.stringify({ id, target_id: 'browser-main', session_id: 'first-canonical-turn', allowed_origins: [`http://127.0.0.1:${server.address().port}`], tool_name, args, ...control })}\n`);
+      child.stdin.write(`${JSON.stringify({ id, target_id: 'browser-main', allowed_origins: [`http://127.0.0.1:${server.address().port}`], tool_name, args, ...control })}\n`);
       const result = await next();
       assert.equal(result.id, id);
       assert.equal(result.target_id, 'browser-main');
@@ -94,8 +94,8 @@ try {
         assert.equal(completions, 1, 'user did not finish the form');
         await send('user-after-submit', 'computer.screenshot', {}, { user_control: true });
         const stillPaused = await send('still-paused', 'computer.screenshot');
-        assert.equal(stillPaused.safety?.level, 'takeover', 'safe page silently returned model control');
-        assert.equal(Boolean(stillPaused.screenshot), false);
+        assert.equal(stillPaused.safety?.level, 'routine', 'helper must report current page safety; Runtime controls dispatch');
+        assert.equal(Boolean(stillPaused.screenshot), true);
         const returned = await send('return', 'computer.screenshot', {}, { return_control: true });
         assert.equal(returned.safety?.level, 'routine');
         assert.equal(Boolean(returned.screenshot), true);
@@ -118,14 +118,12 @@ try {
         }
         assert(changed, 'delayed page update was not visible at 3 FPS without another input');
       }
-      // A canceled pending interaction releases only the Runtime lease. The
-      // next admitted turn must start away from the abandoned private page;
-      // same-turn calls above must remain blocked until explicit handback.
+      // Changing turns cannot silently navigate away from an unfinished page.
       if (name !== 'login') {
-        const next = await send('new-turn', 'computer.screenshot', {}, { session_id: 'next-canonical-turn' });
-        assert.equal(next.safety?.level, 'routine', 'new turn inherited abandoned private control');
-        assert.equal(next.result.url, 'about:blank', 'new turn exposed the old private page');
-        assert.equal(Boolean(next.screenshot), true);
+        const next = await send('next-observation', 'computer.screenshot');
+        assert.equal(next.safety?.level, 'takeover');
+        assert.equal(Boolean(next.screenshot), false);
+        assert.deepEqual(next.safety.reason_codes, result.safety.reason_codes);
       }
       completed++;
     } finally {
