@@ -10,6 +10,8 @@ export function FlowerChromeConnection(props: {
 }) {
   const [setup, setSetup] = createSignal<FlowerComputerExtensionSetup>();
   const [phase, setPhase] = createSignal<'preparing' | 'waiting' | 'confirming' | 'connected' | 'failed' | 'timeout'>('preparing');
+  const [step, setStep] = createSignal<'install' | 'connect'>('install');
+  const [extensionsOpened, setExtensionsOpened] = createSignal(false);
   const [opening, setOpening] = createSignal(false);
   const [openFailed, setOpenFailed] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
@@ -48,35 +50,75 @@ export function FlowerChromeConnection(props: {
     setOpening(true); setOpenFailed(false);
     try {
       await props.management.openExtension!(action);
-      if (!disposed && !completing && action === 'connect') setPhase('confirming');
+      if (!disposed && !completing) {
+        if (action === 'extensions') setExtensionsOpened(true);
+        if (action === 'connect') setPhase('confirming');
+      }
     } catch { if (!disposed) setOpenFailed(true); }
     finally { if (!disposed) setOpening(false); }
   };
   onMount(() => void prepare());
-  const status = () => ({ preparing: props.copy.setupPreparing, waiting: props.copy.setupWaiting,
+  const status = () => ({ preparing: props.copy.setupPreparing, waiting: '',
     confirming: props.copy.setupConfirming, connected: props.copy.setupConnected,
     failed: props.copy.setupFailed, timeout: props.copy.setupTimeout }[phase()]);
-  return <section class="space-y-4 rounded-md border border-border p-4" data-flower-chrome-connection>
-    <p class="text-sm text-muted-foreground">{props.copy.connectionHint}</p>
-    <p class="text-sm font-medium" role={phase() === 'failed' ? 'alert' : 'status'} aria-live="polite">{status()}</p>
-    <Show when={setup() && phase() !== 'connected'}>
-      <ol class="space-y-4 text-sm">
-        <li class="space-y-2"><h3 class="font-medium">1. {props.copy.setupInstallTitle}</h3>
-          <p class="text-xs leading-relaxed text-muted-foreground">{props.copy.extensionHint}</p>
-          <div class="flex flex-wrap gap-2"><Button size="sm" variant="secondary" disabled={opening()} onClick={() => void open('extensions')}>{props.copy.openExtensions}</Button>
-            <Button size="sm" variant="outline" disabled={opening()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button></div>
-          <label class="block space-y-1 text-xs">{props.copy.extensionPath}<input class="flower-settings-text-input w-full" readOnly value={setup()!.extension_path} /></label>
-          <Button size="sm" variant="ghost" onClick={() => {
-            void navigator.clipboard.writeText(setup()!.extension_path).then(() => { if (!disposed) setCopied(true); }, () => { if (!disposed) setOpenFailed(true); });
-          }}>{copied() ? props.copy.pathCopied : props.copy.copyExtensionPath}</Button>
-        </li>
-        <li class="space-y-2"><h3 class="font-medium">2. {props.copy.setupConfirmTitle}</h3>
-          <p class="text-xs leading-relaxed text-muted-foreground">{props.copy.setupConfirmHint}</p>
-          <Button size="sm" disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>
-        </li>
-      </ol>
+  const changeStep = (next: 'install' | 'connect') => {
+    setStep(next); setOpenFailed(false);
+    if (phase() === 'confirming') setPhase('waiting');
+  };
+  return <section class="space-y-5" data-flower-chrome-connection>
+    <ol class="grid grid-cols-2 gap-4 text-sm">
+      <li aria-current={step() === 'install' ? 'step' : undefined}
+        class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'install', 'border-border text-muted-foreground': step() !== 'install' }}>
+        <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs">1</span>{props.copy.setupInstallTitle}
+      </li>
+      <li aria-current={step() === 'connect' ? 'step' : undefined}
+        class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'connect', 'border-border text-muted-foreground': step() !== 'connect' }}>
+        <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs">2</span>{props.copy.setupConfirmTitle}
+      </li>
+    </ol>
+    <Show when={status()}><p class="text-sm" role={phase() === 'failed' ? 'alert' : 'status'} aria-live="polite">{status()}</p></Show>
+    <Show when={setup() && (phase() === 'waiting' || phase() === 'confirming')}>
+      <Show when={step() === 'install'} fallback={<>
+        <p class="text-sm leading-relaxed text-muted-foreground">{props.copy.setupConfirmHint}</p>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('install')}>{props.copy.setupBack}</Button>
+          <Button disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>
+        </div>
+      </>}>
+        <Show when={extensionsOpened()} fallback={<p class="text-sm leading-relaxed text-muted-foreground">{props.copy.extensionHint}</p>}>
+          <ol class="list-decimal space-y-3 pl-5 text-sm leading-relaxed">
+            <li>{props.copy.setupDeveloperMode}</li>
+            <li>{props.copy.setupLoadUnpacked}
+              <div class="mt-2 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" disabled={opening()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button>
+                <Button size="sm" variant="ghost" onClick={() => {
+                  void navigator.clipboard.writeText(setup()!.extension_path).then(() => { if (!disposed) setCopied(true); }, () => { if (!disposed) setOpenFailed(true); });
+                }}>{copied() ? props.copy.pathCopied : props.copy.copyExtensionPath}</Button>
+              </div>
+            </li>
+          </ol>
+        </Show>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <Show when={extensionsOpened()} fallback={<>
+            <Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('connect')}>{props.copy.setupAlreadyInstalled}</Button>
+            <Button disabled={opening()} onClick={() => void open('extensions')}>{props.copy.openExtensions}</Button>
+          </>}>
+            <Button size="sm" variant="ghost" disabled={opening()} onClick={() => void open('extensions')}>{props.copy.openExtensions}</Button>
+            <Button disabled={opening()} onClick={() => changeStep('connect')}>{props.copy.setupInstalled}</Button>
+          </Show>
+        </div>
+      </Show>
     </Show>
     <Show when={openFailed()}><p class="text-xs text-destructive" role="alert">{props.copy.setupOpenFailed}</p></Show>
-    <Show when={phase() === 'failed' || phase() === 'timeout'}><Button size="sm" variant="secondary" onClick={() => void prepare()}>{props.copy.retryConnection}</Button></Show>
+    <Show when={phase() === 'failed' || phase() === 'timeout'}><Button onClick={() => void prepare()}>{props.copy.retryConnection}</Button></Show>
+    <Show when={setup() && phase() !== 'connected'}>
+      <details class="border-t border-border pt-3 text-xs text-muted-foreground">
+        <summary class="w-fit cursor-pointer">{props.copy.setupHelp}</summary>
+        <div class="mt-3 space-y-3 leading-relaxed">
+          <p>{props.copy.setupHostHint}</p>
+          <label class="block space-y-1">{props.copy.extensionPath}<input class="flower-settings-text-input w-full" readOnly value={setup()!.extension_path} /></label>
+        </div>
+      </details>
+    </Show>
   </section>;
 }

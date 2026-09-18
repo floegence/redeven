@@ -7,6 +7,7 @@ import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core'
 import type { FlowerComputerAccess } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { FlowerComputerConnections } from '../../../../flower_ui/src/FlowerComputerConnections';
 import { FlowerProfileConnection } from '../../../../flower_ui/src/FlowerProfileConnection';
+import zhCN from './i18n/locales/catalogs/zh-CN.json';
 import { computerUseEnUS } from '../../../../flower_ui/src/computerUseCopy';
 import { adapter, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -242,15 +243,24 @@ it('prepares Chrome automatically and continues only after a real connection', a
   dispose = () => { stop(); host.remove(); };
   const button = (text: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(item => item.textContent === text)!;
   await waitFor(() => management.setupExtension.mock.calls.length === 1);
-  await waitFor(() => !!button('Open extensions'));
-  expect(document.body.textContent).toContain('Developer mode');
-  expect(document.body.textContent).toContain('Load unpacked');
+  await waitFor(() => !!button(computerUseEnUS.openExtensions));
+  expect(button(computerUseEnUS.openConnection), 'connection action waits until the installation step is complete').toBeUndefined();
+  expect(document.querySelector<HTMLInputElement>('input[readonly]')?.checkVisibility(), 'technical paths stay out of the initial guide').toBe(false);
   expect(document.body.textContent).not.toContain('fixture.host');
   expect(document.querySelector('select')).toBeNull();
   expect(continued).not.toHaveBeenCalled();
-  button('Open extensions').click();
+  button(computerUseEnUS.openExtensions).click();
   await waitFor(() => management.openExtension.mock.calls.length === 1);
   expect(management.openExtension).toHaveBeenCalledWith('extensions');
+  await waitFor(() => document.body.textContent?.includes('Developer mode') === true);
+  expect(document.body.textContent).toContain('Load unpacked');
+  button(computerUseEnUS.setupInstalled).click();
+  expect(button(computerUseEnUS.openExtensions)).toBeUndefined();
+  expect(continued).not.toHaveBeenCalled();
+  button(computerUseEnUS.openConnection).click();
+  await waitFor(() => management.openExtension.mock.calls.length === 2);
+  expect(management.openExtension).toHaveBeenLastCalledWith('connect');
+  expect(continued).not.toHaveBeenCalled();
   connected.mockResolvedValue([{ id: 'profile', name: 'Chrome' }]);
   await waitFor(() => continued.mock.calls.length === 1);
   expect(connect).not.toHaveBeenCalled(); expect(management.selectTarget).not.toHaveBeenCalled();
@@ -314,3 +324,70 @@ it('stops after a failed automatic continuation and exposes explicit retry witho
   Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === computerUseEnUS.retryConnection)!.click();
   await waitFor(() => continued.mock.calls.length === 2);
 });
+
+for (const [locale, copy] of [['en-US', computerUseEnUS], ['zh-CN', zhCN.flowerSurface.computer]] as const) {
+  it(`keeps Chrome guidance focused and supports skip, back, help and open failure in ${locale}`, async () => {
+    const { page, userEvent } = await import('vitest/browser');
+    const host = document.createElement('div'); document.body.append(host);
+    const continued = vi.fn();
+    const management = {
+      listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+      listTargets: vi.fn(), listBrowserTabs: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(),
+      setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/a-very-long-runtime-state-directory/computer/browser-extension', native_host: 'fixture.host', extension_id: 'fixture' }),
+      openExtension: vi.fn().mockRejectedValueOnce(new Error('private open details')).mockResolvedValue(undefined),
+      listExtensionProfiles: vi.fn().mockResolvedValue([]),
+    };
+    const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open connectionOnly onContinue={continued} onOpenChange={() => undefined} threadID="guided-thread"
+      adapter={{ ...adapter(true), computerManagement: management }} copy={copy} /></LayoutProvider></FloeConfigProvider>, host);
+    dispose = () => { stop(); host.remove(); };
+    const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent === text)!;
+    const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const primary = () => [...dialog().querySelectorAll<HTMLButtonElement>('button.bg-primary')].filter(item => item.checkVisibility());
+    try {
+      await page.viewport(1000, 720);
+      await waitFor(() => !!button(copy.openExtensions));
+      await waitFor(() => dialog().getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
+      expect(primary()).toHaveLength(1);
+      expect(primary()[0].textContent).toBe(copy.openExtensions);
+      expect(dialog().getBoundingClientRect().height).toBeLessThan(400);
+      expect(dialog().innerText).not.toContain(copy.setupHostHint);
+      expect(dialog().innerText).not.toContain('/fixture/');
+      if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-start.png` });
+      button(copy.openExtensions).click();
+      await waitFor(() => !!dialog().querySelector('[role="alert"]'));
+      expect(dialog().innerText).not.toContain('private open details');
+      expect(dialog().querySelector('[aria-current="step"]')?.textContent).toContain(copy.setupInstallTitle);
+      button(copy.setupAlreadyInstalled).focus(); await userEvent.keyboard('{Enter}');
+      expect(primary()).toHaveLength(1);
+      expect(primary()[0].textContent).toBe(copy.openConnection);
+      expect(dialog().querySelector('[role="alert"]')).toBeNull();
+      button(copy.setupBack).focus(); await userEvent.keyboard('{Enter}');
+      button(copy.openExtensions).click();
+      await waitFor(() => !!button(copy.setupInstalled));
+      expect(primary()).toHaveLength(1);
+      expect(dialog().innerText).toContain(copy.setupDeveloperMode);
+      expect(dialog().innerText).toContain(copy.setupLoadUnpacked);
+      if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-install.png` });
+      const summary = dialog().querySelector('summary')!;
+      summary.focus(); await userEvent.keyboard('{Enter}');
+      const path = dialog().querySelector<HTMLInputElement>('input[readonly]')!;
+      expect(path.checkVisibility()).toBe(true);
+      expect(path.value).toContain('/fixture/');
+      summary.focus(); await userEvent.keyboard('{Enter}');
+      expect(path.checkVisibility()).toBe(false);
+      await page.viewport(390, 720);
+      expect(dialog().scrollWidth).toBeLessThanOrEqual(dialog().clientWidth + 1);
+      expect(button(copy.setupInstalled).getBoundingClientRect().right).toBeLessThanOrEqual(390);
+      if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-narrow.png` });
+      button(copy.setupInstalled).click();
+      expect(continued).not.toHaveBeenCalled();
+      button(copy.openConnection).click();
+      await waitFor(() => management.openExtension.mock.calls.length === 3);
+      await waitFor(() => dialog().querySelector('[role="status"]')?.textContent === copy.setupConfirming);
+      expect(continued).not.toHaveBeenCalled();
+      expect(primary()).toHaveLength(1);
+      await page.viewport(1000, 720);
+      if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-connect.png` });
+    } finally { await page.viewport(1280, 720); }
+  });
+}

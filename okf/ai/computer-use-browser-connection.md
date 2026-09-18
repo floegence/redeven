@@ -22,6 +22,15 @@ The stable installation directory belongs to the Runtime state root, so a new
 Runtime build does not change the folder Chrome registered. Staging validates a
 complete bundle before replacing it and removes retired assets.
 
+Installation and connection appear as two separate steps, with one primary
+action at a time. The initial screen opens Chrome extensions or lets an existing
+installation skip ahead. Opening extensions reveals the two installation
+instructions and folder actions; acknowledging installation advances only the
+guide. It does not establish a connection or resume the task. Long paths and
+host/browser limitations remain available in collapsed help. Users can return to
+installation from the connection step. Conversation assistance uses one short
+sentence instead of repeating installation instructions.
+
 A Runtime-generated extension-page fragment supplies the native-host name. It
 is configuration, not consent: only the extension's own exact popup path accepts
 messages, and the user confirms Connect there. Profile naming is optional. No
