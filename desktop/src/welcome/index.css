@@ -3911,16 +3911,20 @@ pre,
   }
 }
 
-/* Environment settings share one geometry; Floe owns floating material and motion. */
+/* Product geometry; Floe owns floating material and modal entry/exit motion. */
 [data-floe-dialog-panel].redeven-environment-settings-dialog {
+  --redeven-welcome-dialog-panel-max-height: min(88dvh, var(--redeven-welcome-dialog-available-height));
   width: min(48rem, calc(100vw - 2rem));
   max-width: 48rem;
-  max-height: min(88dvh, var(--redeven-welcome-dialog-available-height));
+  max-height: var(--redeven-welcome-dialog-panel-max-height);
   overflow: hidden;
   font-size: 13px;
 }
+.redeven-environment-settings-dialog.environment-settings-with-tabs {
+  height: min(42rem, var(--redeven-welcome-dialog-panel-max-height));
+}
 .redeven-environment-settings-dialog > div:first-child {
-  padding: 20px 24px 16px;
+  padding: 20px 20px 16px;
   border-bottom: 0;
   flex-shrink: 0;
 }
@@ -4040,10 +4044,31 @@ pre,
   padding: 0 !important;
 }
 .environment-settings-tabs { flex: none; padding-inline: 1.25rem; }
+.environment-settings-tabs .environment-settings-tab-trigger {
+  height: 2.5rem;
+  padding-inline: .875rem;
+  font-size: 13px;
+  background: transparent;
+}
+.environment-settings-tab-trigger[aria-selected="true"] { color: var(--primary); }
+.environment-settings-tab-trigger:hover { background: color-mix(in srgb, var(--foreground) 4%, transparent); }
+.environment-settings-indicator { border-radius: 2px 2px 0 0; }
 .environment-settings-tab:not([aria-hidden="true"]) {
   flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
 .environment-settings-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-.environment-settings-scroll { min-height: 0; overflow: auto; padding: 1.25rem; }
+.environment-settings-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 1.25rem; }
 .environment-settings-actions { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; padding: .875rem 1.25rem; border-top: 1px solid var(--border); }
 
 .environment-settings-tab[aria-hidden="true"] { display: none; }
+
+/* Fade retained section content without moving fields, focus targets or scrollbars. */
+@media (prefers-reduced-motion: no-preference) {
+  .environment-settings-with-tabs .environment-settings-tab:not([aria-hidden="true"]) .environment-settings-scroll,
+  .environment-settings-with-tabs .environment-settings-tab:not([aria-hidden="true"]) .environment-settings-actions > * {
+    animation: environment-settings-section-enter 160ms ease-out;
+  }
+}
+@keyframes environment-settings-section-enter {
+  from { opacity: .45; }
+  to { opacity: 1; }
+}
