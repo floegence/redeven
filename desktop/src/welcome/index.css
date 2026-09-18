@@ -866,135 +866,233 @@ html:not(.dark) .redeven-new-environment-card:hover {
   -webkit-mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat;
 }
 
-/* ── Card body: endpoint trigger button ── */
+/* ── Environment connection details ── */
 
 .redeven-card-fact-endpoint-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
+  width: 1.65rem;
+  height: 1.65rem;
   flex-shrink: 0;
-  margin-left: 0.3rem;
+  margin-left: 0.25rem;
+  padding: 0;
+  border: 0;
   vertical-align: middle;
-  border-radius: 0.25rem;
+  border-radius: 0.45rem;
   color: var(--muted-foreground);
+  background: transparent;
   cursor: pointer;
-  transition:
-    color 120ms ease, background-color 120ms ease;
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
 }
 
 .redeven-endpoint-trigger-icon {
   display: inline-block;
-  width: 0.85rem;
-  height: 0.85rem;
+  width: 0.9rem;
+  height: 0.9rem;
   flex-shrink: 0;
   background-color: currentColor;
   mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat;
   -webkit-mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat;
 }
 
-.redeven-card-fact-endpoint-trigger:hover {
+.redeven-card-fact-endpoint-trigger:hover,
+.redeven-card-fact-endpoint-trigger[aria-expanded='true'] {
   color: var(--primary);
-  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
-.redeven-card-fact-endpoint-trigger:focus-visible {
+.redeven-card-fact-endpoint-trigger:active {
+  transform: scale(0.93);
+}
+
+.redeven-card-fact-endpoint-trigger:focus-visible,
+.redeven-endpoints-popover-close:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--ring) 70%, transparent);
   outline-offset: 2px;
 }
 
-/* ── Endpoints popover ── */
-
-.redeven-endpoints-popover {
-  min-width: 14rem;
-  width: min(28rem, calc(100vw - 1rem));
-  max-width: calc(100vw - 1rem);
-  padding: 0.6rem;
+.redeven-endpoints-surface {
+  --endpoint-enter-offset: -0.3rem;
+  width: min(25rem, calc(100vw - 1rem));
 }
 
-.redeven-endpoints-popover--expanded {
-  width: min(37rem, calc(100vw - 1rem));
+/* The positioned shell stays unpainted; the inner panel owns its moving material. */
+.redeven-endpoints-surface[data-floe-surface='floating'] {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.redeven-endpoints-surface[data-placement='top'] {
+  --endpoint-enter-offset: 0.3rem;
+}
+
+.redeven-endpoints-surface--closing {
+  pointer-events: none;
+}
+
+.redeven-endpoints-surface > .redeven-anchored-overlay-arrow {
+  filter: drop-shadow(0 0 1px color-mix(in srgb, var(--border) 80%, transparent));
+  animation: redeven-endpoint-arrow-in 180ms ease both;
+  transition: opacity 100ms ease;
+}
+
+.redeven-endpoints-surface--closing > .redeven-anchored-overlay-arrow {
+  animation: none;
+  opacity: 0;
+}
+
+.redeven-endpoints-popover {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+  max-height: calc(100dvh - 1rem);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 0.875rem;
+  background: var(--popover);
+  box-shadow:
+    0 2px 5px color-mix(in srgb, var(--redeven-surface-shadow-source, #000) 7%, transparent),
+    0 16px 44px -12px color-mix(in srgb, var(--redeven-surface-shadow-source, #000) 23%, transparent);
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 180ms ease-out, transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.redeven-endpoints-popover[data-state='entering'],
+.redeven-endpoints-popover[data-state='exiting'] {
+  opacity: 0;
+  transform: translateY(var(--endpoint-enter-offset));
+}
+
+.redeven-endpoints-popover[data-state='exiting'] {
+  transition-duration: 140ms;
+  transition-timing-function: ease-in;
+}
+
+@starting-style {
+  .redeven-endpoints-popover {
+    opacity: 0;
+    transform: translateY(var(--endpoint-enter-offset));
+  }
 }
 
 .redeven-endpoints-popover-header {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.65rem;
   min-width: 0;
-  margin-bottom: 0.45rem;
-  padding: 0 0.25rem;
+  padding: 1rem 1rem 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 4%, var(--popover)), var(--popover));
+}
+
+.redeven-endpoints-popover-mark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 12%, transparent);
+  border-radius: 0.65rem;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+}
+
+.redeven-endpoints-popover-mark > span {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.redeven-endpoints-popover-heading {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.redeven-endpoints-popover-eyebrow {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.4;
 }
 
 .redeven-endpoints-popover-title {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   font-weight: 600;
+  line-height: 1.4;
   color: var(--foreground);
 }
 
 .redeven-endpoints-popover-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
   border: 0;
-  border-radius: 0.25rem;
+  border-radius: 0.45rem;
   background: transparent;
   padding: 0;
   color: var(--muted-foreground);
   cursor: pointer;
-  transition:
-    color 120ms ease, background-color 120ms ease;
+  transition: color 140ms ease, background-color 140ms ease, transform 140ms ease;
 }
 
 .redeven-endpoints-popover-close:hover {
   color: var(--foreground);
-  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+
+.redeven-endpoints-popover-close:active {
+  transform: scale(0.92);
 }
 
 .redeven-endpoints-popover-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.65rem;
   min-width: 0;
+  min-height: 0;
+  padding: 0.5rem;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .redeven-endpoints-popover-list {
   display: grid;
-  gap: 0.15rem;
-  align-content: start;
+  gap: 0.375rem;
   min-width: 0;
 }
 
-.redeven-endpoints-popover-body--expanded {
-  grid-template-columns: minmax(0, 1fr) 8.35rem;
-  align-items: start;
+.redeven-endpoints-share {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 180ms cubic-bezier(0.22, 1, 0.36, 1), opacity 140ms ease;
 }
 
-/* ── Card body: endpoints section ── */
-
-.redeven-endpoints-section {
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  border-radius: 0.375rem;
-  background: var(--redeven-tile, var(--card));
-  padding: 0.5rem 0.55rem;
+.redeven-endpoints-share[data-expanded='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
 }
 
-html:not(.dark) .redeven-endpoints-section {
-  border-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 74%, transparent);
+.redeven-endpoints-share-content {
+  min-height: 0;
+  overflow: hidden;
 }
 
-.redeven-endpoints-title {
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted-foreground);
-  margin-bottom: 0.25rem;
-  padding: 0 0.25rem;
+@keyframes redeven-endpoint-arrow-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes redeven-endpoint-copied {
+  from { opacity: 0.4; transform: scale(0.75); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 /* ── Card body: flat endpoint rows ── */
@@ -1049,6 +1147,91 @@ html:not(.dark) .redeven-endpoints-section {
   overflow-wrap: anywhere;
   font-size: 0.78rem;
   color: var(--foreground);
+}
+
+.redeven-endpoints-popover .redeven-card-endpoint-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  column-gap: 0.2rem;
+  row-gap: 0.3rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+}
+
+.redeven-endpoints-popover .redeven-card-endpoint-row[data-endpoint-kind='address'],
+.redeven-endpoints-popover .redeven-card-endpoint-row[data-endpoint-kind='status'] {
+  border-color: color-mix(in srgb, var(--border) 42%, transparent);
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+}
+
+.redeven-endpoints-popover .redeven-card-endpoint-row[data-selected] {
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+  background: color-mix(in srgb, var(--primary) 6%, var(--popover));
+}
+
+.redeven-endpoints-popover .redeven-card-endpoint-label {
+  grid-column: 1;
+  grid-row: 1;
+  justify-content: start;
+  min-width: 0;
+  max-width: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: normal;
+}
+
+.redeven-endpoints-popover .redeven-card-endpoint-row > div {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.redeven-endpoints-popover .redeven-card-endpoint-value {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.redeven-endpoints-popover .redeven-card-endpoint-detail {
+  margin-top: 0.3rem;
+  font-size: 0.6875rem;
+  line-height: 1.6;
+}
+
+.redeven-endpoints-popover .redeven-endpoint-action {
+  grid-row: 1;
+  align-self: start;
+  min-height: 1.75rem;
+  height: 1.75rem;
+  width: 1.75rem;
+  padding: 0;
+  border-radius: 0.4rem;
+  color: var(--muted-foreground);
+  transition: color 140ms ease, background-color 140ms ease, transform 140ms ease;
+}
+
+.redeven-endpoints-popover .redeven-endpoint-action:hover,
+.redeven-endpoints-popover .redeven-endpoint-action[aria-expanded='true'] {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.redeven-endpoints-popover .redeven-endpoint-action:active {
+  transform: scale(0.92);
+}
+
+.redeven-endpoints-popover .redeven-endpoint-action[data-copied] {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 9%, transparent);
+}
+
+.redeven-endpoints-popover .redeven-endpoint-action[data-copied] svg {
+  animation: redeven-endpoint-copied 180ms ease-out both;
 }
 
 .redeven-settings-connections {
@@ -1197,6 +1380,80 @@ html:not(.dark) .redeven-endpoint-qr-panel {
 .redeven-endpoint-qr-copy-button:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--ring) 70%, transparent);
   outline-offset: 2px;
+}
+
+/* Sharing expands inside the same width so its anchor never jumps sideways. */
+.redeven-endpoints-popover .redeven-endpoint-qr-panel {
+  grid-template-columns: 7.25rem minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  column-gap: 1rem;
+  justify-items: stretch;
+  align-items: center;
+  max-width: none;
+  width: auto;
+  margin: 0.5rem 0.25rem 0.25rem;
+  padding: 0.75rem;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 0;
+  background: transparent;
+}
+
+.redeven-endpoints-popover .redeven-endpoint-qr-card {
+  grid-row: 1 / 3;
+  width: 7.25rem;
+  border-radius: 0.6rem;
+  padding: 0.4rem;
+}
+
+.redeven-endpoints-popover .redeven-endpoint-qr-meta {
+  justify-items: start;
+  gap: 0.5rem;
+}
+
+.redeven-endpoints-popover .redeven-endpoint-qr-label {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.redeven-endpoints-popover .redeven-endpoint-qr-value {
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+.redeven-endpoints-popover .redeven-endpoint-qr-copy-button {
+  justify-self: start;
+  width: auto;
+  padding-inline: 0.6rem;
+  border-radius: 0.45rem;
+  font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-card-fact-endpoint-trigger,
+  .redeven-endpoints-popover,
+  .redeven-endpoints-popover *,
+  .redeven-endpoints-surface > .redeven-anchored-overlay-arrow {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .redeven-card-fact-endpoint-trigger,
+  .redeven-endpoints-popover,
+  .redeven-endpoints-popover-close,
+  .redeven-endpoints-popover .redeven-endpoint-action {
+    transform: none !important;
+  }
 }
 
 /* ── Tabs ── */

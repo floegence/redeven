@@ -11,6 +11,7 @@ import { IDLE_LAUNCHER_BUSY_STATE } from '../../src/welcome/launcherBusyState';
 import '../../src/welcome/index.css';
 
 document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '0px');
+const query = new URLSearchParams(location.search);
 const names = ['Local Environment', 'gzcom', 'gzlight', 'Network'];
 const context = (name: string): DesktopRuntimeConnectionContext => ({
   host_access: !name || name === 'Local Environment' ? { kind: 'local_host' } : {
@@ -23,11 +24,12 @@ const draft = { local_ui_bind: 'localhost:23998', local_ui_protocol: 'http' as c
 
 function Fixture() {
   // Chinese copy exercises the shipped localized connection surface.
-  const i18n = createDesktopI18n('zh-CN');
+  const i18n = createDesktopI18n(query.get('locale') || 'zh-CN');
   const theme = useTheme();
   onMount(() => {
-    const dark = new URLSearchParams(location.search).get('theme') === 'dark';
-    theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'ocean' : 'classic-light');
+    const dark = query.get('theme') === 'dark';
+    const preset = builtInShellThemePresets.find(entry => entry.name === query.get('preset'));
+    theme.selectShellTheme(preset?.mode ?? (dark ? 'dark' : 'light'), preset?.name ?? (dark ? 'ocean' : 'classic-light'));
   });
   const [active, setActive] = createSignal('');
   const [selected, setSelected] = createSignal<{ host: string; id: string } | null>(null);
@@ -46,10 +48,14 @@ function Fixture() {
         <h2 class="mb-4 font-semibold">{name}</h2>
         <div class="flex items-center justify-between gap-3">
           <span>{i18n.t('environmentFacts.runsOn')}</span>
-          <EndpointsPopover environmentLabel={name} i18n={i18n}
-            endpoints={buildRuntimeConnectionRows({ context: context(name), urls: [address(name)],
+          <EndpointsPopover environmentLabel={query.get('label') || name} i18n={i18n}
+            endpoints={buildRuntimeConnectionRows({ context: context(name), urls: name === 'Network' && query.has('multiple')
+              ? ['https://development.environment.example.invalid:23998/a-long-environment-path?workspace=shared', 'https://192.0.2.20:23998/', 'http://[::1]:23998/'] : [address(name)],
               health: { status: 'online', freshness: 'fresh', source: 'ssh_runtime_probe', checked_at_unix_ms: 1 } })}
-            open={active() === name} onOpenChange={(open) => setActive(open ? name : '')}
+            open={active() === name} onOpenChange={(open) => {
+              setActive(open ? name : '');
+              if (!open) setSelected(null);
+            }}
             selectedEndpointID={selected()?.host === name ? selected()?.id : undefined}
             selectEndpointForQRCode={(id) => setSelected({ host: name, id })} openInBrowser={copy} copyEnvironmentValue={copy} />
         </div>

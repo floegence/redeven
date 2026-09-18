@@ -1703,10 +1703,6 @@ describe('DesktopWelcomeShell', () => {
     expect(endpointTriggerIconStyles).toContain(
       '-webkit-mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat',
     );
-    expect(styles).toContain('.redeven-endpoints-popover--expanded');
-    expect(styles).toContain('grid-template-columns: minmax(0, 1fr) 8.35rem;');
-    expect(styles).toContain('.redeven-endpoints-section');
-    expect(styles).toContain('.redeven-endpoints-title');
     expect(styles).toContain('.redeven-card-endpoint-row');
     expect(styles).toContain('.redeven-card-endpoint-label');
     expect(styles).toContain('.redeven-card-endpoint-value');
@@ -2651,7 +2647,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('max-h-[calc(100dvh-1rem)]');
     expect(appSrc).not.toContain('max-h-[calc(100dvh-3rem)]');
     expect(appSrc).not.toContain('100dvh');
-    expect((styles.match(/100dvh/g) ?? []).length).toBe(2);
+    expect((styles.match(/100dvh/g) ?? []).length).toBe(3);
 
     expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
     expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(5);

@@ -52,6 +52,7 @@ import {
   Checkbox,
   CommandPalette,
   ConfirmDialog,
+  createFloatingPresence,
   Dialog,
   Input,
   SegmentedControl,
@@ -8470,11 +8471,32 @@ export function EndpointsPopover(props: Readonly<{
   selectedEndpointID?: string;
   selectEndpointForQRCode: (endpointID: string) => void;
 }>) {
-  let anchorRef: HTMLSpanElement | undefined;
+  let anchorRef: HTMLButtonElement | undefined;
   let popoverRef: HTMLDivElement | undefined;
 
+  const presence = createFloatingPresence({ open: () => props.open, exitDurationMs: 140 });
+  const popoverID = createUniqueId();
+  const close = () => {
+    props.onOpenChange(false);
+    anchorRef?.focus({ preventScroll: true });
+  };
+
+  const presentedSelection = createMemo<string>((previous) => props.open
+    ? props.selectedEndpointID ?? ''
+    : presence.mounted() ? previous : '', '');
   const selectedEndpoint = createMemo(() => props.endpoints.filter(isShareableConnectionAddress)
-    .find((endpoint) => endpoint.id === props.selectedEndpointID) ?? null);
+    .find((endpoint) => endpoint.id === presentedSelection()) ?? null);
+
+  const sharePresence = createFloatingPresence({ open: () => Boolean(selectedEndpoint()), exitDurationMs: 180 });
+  const [lastSharedID, setLastSharedID] = createSignal('');
+  createEffect(() => {
+    const endpoint = selectedEndpoint();
+    if (endpoint) setLastSharedID(endpoint.id);
+  });
+  // Retain only a still-shareable current address while its disclosure closes.
+  const presentedShare = createMemo(() => sharePresence.mounted()
+    ? props.endpoints.filter(isShareableConnectionAddress).find(row => row.id === lastSharedID())
+    : undefined);
 
   const handlePointerDown = (event: MouseEvent) => {
     if (popoverRef?.contains(event.target as Node) || anchorRef?.contains(event.target as Node)) {
@@ -8485,13 +8507,16 @@ export function EndpointsPopover(props: Readonly<{
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
-      props.onOpenChange(false);
-      anchorRef?.focus();
+      event.preventDefault();
+      close();
     }
   };
 
   createEffect(() => {
     if (props.open) {
+      queueMicrotask(() => {
+        if (props.open) popoverRef?.querySelector('button')?.focus({ preventScroll: true });
+      });
       document.addEventListener('mousedown', handlePointerDown);
       document.addEventListener('keydown', handleKeyDown);
       onCleanup(() => {
@@ -8503,23 +8528,17 @@ export function EndpointsPopover(props: Readonly<{
 
   return (
     <>
-      <span
+      <button
+        type="button"
         ref={anchorRef}
         class="redeven-card-fact-endpoint-trigger"
-        role="button"
-        tabIndex={0}
         aria-label={props.i18n.t('environmentCenter.showEndpoints')}
         aria-haspopup="dialog"
         aria-expanded={props.open}
+        aria-controls={presence.mounted() ? popoverID : undefined}
         onClick={(e) => {
           e.stopPropagation();
           props.onOpenChange(!props.open);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            props.onOpenChange(true);
-          }
         }}
       >
         <span
@@ -8527,58 +8546,65 @@ export function EndpointsPopover(props: Readonly<{
           style={cardFactIconMaskStyle(ICON_ENDPOINTS)}
           aria-hidden="true"
         />
-      </span>
-      <Show when={props.open}>
+      </button>
+      <Show when={presence.mounted()}>
         <DesktopAnchoredOverlaySurface
-          open={props.open}
+          open={presence.mounted()}
           anchorRef={anchorRef}
           placement="bottom"
-          role="dialog"
+          role={props.open ? 'dialog' : undefined}
           ariaModal={false}
           ariaLabel={props.i18n.t('environmentCenter.environmentEndpoints')}
-          interactive
-          class="redeven-desktop-overlay-surface z-[225] rounded-md border border-border/80 bg-popover text-popover-foreground"
+          interactive={props.open}
+          class={cn('redeven-endpoints-surface z-[225] text-popover-foreground', presence.exiting() && 'redeven-endpoints-surface--closing')}
           onOverlayRef={(element) => {
             popoverRef = element;
           }}
         >
           <div
+            id={popoverID}
             class="redeven-endpoints-popover"
-            classList={{
-              'redeven-endpoints-popover--expanded': selectedEndpoint() !== null,
-            }}
+            data-state={presence.state()}
+            inert={presence.exiting()}
+            aria-hidden={presence.exiting()}
           >
             <div class="redeven-endpoints-popover-header">
-              <span class="redeven-endpoints-popover-title">{props.environmentLabel}</span>
+              <span class="redeven-endpoints-popover-mark" aria-hidden="true">
+                <span class="redeven-endpoint-trigger-icon" style={cardFactIconMaskStyle(ICON_ENDPOINTS)} />
+              </span>
+              <div class="redeven-endpoints-popover-heading">
+                <span class="redeven-endpoints-popover-eyebrow">{props.i18n.t('environmentCenter.environmentEndpoints')}</span>
+                <span class="redeven-endpoints-popover-title">{props.environmentLabel}</span>
+              </div>
               <button
                 type="button"
                 class="redeven-endpoints-popover-close"
                 aria-label={props.i18n.t('environmentCenter.closeEndpoints')}
-                onClick={() => props.onOpenChange(false)}
+                onClick={close}
               >
                 <X class="h-3 w-3" />
               </button>
             </div>
-            <div
-              class="redeven-endpoints-popover-body"
-              classList={{
-                'redeven-endpoints-popover-body--expanded': selectedEndpoint() !== null,
-              }}
-            >
+            <div class="redeven-endpoints-popover-body">
               <div class="redeven-endpoints-popover-list">
                 <EnvironmentConnectionRows rows={props.endpoints} i18n={props.i18n}
-                  selectedID={props.selectedEndpointID} selectForShare={props.selectEndpointForQRCode}
+                  selectedID={presentedSelection()} selectForShare={props.selectEndpointForQRCode}
                   openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue} />
               </div>
-              <Show when={selectedEndpoint()}>
-                {(endpoint) => (
-                  <EndpointQRCodePanel
-                    i18n={props.i18n}
-                    endpoint={endpoint()}
-                    copyEnvironmentValue={props.copyEnvironmentValue}
-                  />
-                )}
-              </Show>
+              <div class="redeven-endpoints-share" data-expanded={Boolean(selectedEndpoint())}
+                inert={!selectedEndpoint()} aria-hidden={!selectedEndpoint()}>
+                <div class="redeven-endpoints-share-content">
+                  <Show when={presentedShare()}>
+                    {(endpoint) => (
+                      <EndpointQRCodePanel
+                        i18n={props.i18n}
+                        endpoint={endpoint()}
+                        copyEnvironmentValue={props.copyEnvironmentValue}
+                      />
+                    )}
+                  </Show>
+                </div>
+              </div>
             </div>
           </div>
         </DesktopAnchoredOverlaySurface>
@@ -8617,16 +8643,17 @@ function EnvironmentConnectionRows(props: Readonly<{
         <Show when={row.detail_key}>{(key) => <span class="redeven-card-endpoint-detail">{props.i18n.t(key(), row.detail_params)}</span>}</Show>
       </div>
       <Show when={row.kind !== 'status' && row.copyable}>
-        <Button size="sm" variant="ghost" class="shrink-0 px-1.5" aria-label={copyLabel()} title={copyLabel()}
+        <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0 px-1.5" aria-label={copyLabel()}
+          title={copied() ? props.i18n.t('environmentCenter.copied') : copyLabel()} data-copied={copied() || undefined}
           onClick={() => void copy()}>{copied() ? <Check class="h-3.5 w-3.5" /> : <Copy class="h-3.5 w-3.5" />}</Button>
       </Show>
       <Show when={row.kind === 'address' && row.browser_openable}>
-        <Button size="sm" variant="ghost" class="shrink-0 px-1.5"
+        <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0 px-1.5"
           aria-label={props.i18n.t('webServiceBrowser.openInBrowser')} title={props.i18n.t('webServiceBrowser.openInBrowser')}
           onClick={() => void props.openInBrowser(row.value)}><ExternalLink class="h-3.5 w-3.5" /></Button>
       </Show>
       <Show when={isShareableConnectionAddress(row)}>
-        <Button size="sm" variant="ghost" class="shrink-0 px-1.5"
+        <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0 px-1.5"
           aria-label={props.i18n.t('settings.shareConnection')} title={props.i18n.t('settings.shareConnection')}
           aria-expanded={row.id === props.selectedID} onClick={() => props.selectForShare(row.id === props.selectedID ? '' : row.id)}>
           <ShareIcon class="h-3.5 w-3.5" />
