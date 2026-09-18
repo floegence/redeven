@@ -3518,109 +3518,62 @@ pre,
   overflow: hidden;
 }
 
-/* ── Card header: runtime metadata chip ── */
+/* Runtime age and Cloud affiliation share the full card width, below header actions. */
 
-/* ── L-shaped connector line from title to runtime metadata ── */
-
-.redeven-card-l-line {
-  flex-shrink: 0;
-  width: 0.56rem;
-  height: 0.85rem;
-  display: block;
+.redeven-card-runtime-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.625rem;
+  min-width: 0;
+  height: 1.5rem;
 }
 
-.redeven-card-l-line path {
-  fill: none;
-  stroke-width: 1.1;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.redeven-card-l-line[data-tone='success'] path {
-  stroke: color-mix(in srgb, var(--success) 50%, var(--border));
-}
-
-.redeven-card-l-line[data-tone='warning'] path {
-  stroke: color-mix(in srgb, var(--warning) 45%, var(--border));
-}
-
-.redeven-card-l-line[data-tone='primary'] path {
-  stroke: color-mix(in srgb, var(--primary) 45%, var(--border));
-}
-
-.redeven-card-l-line[data-tone='neutral'] path {
-  stroke: color-mix(in srgb, var(--border) 65%, transparent);
-}
-
-/* ── Card header: runtime metadata chip ── */
-
-.redeven-card-runtime-chip {
+.redeven-card-runtime-age,
+.redeven-card-cloud-affiliation {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  border-radius: 9999px;
-  padding: 0.08rem 0.5rem 0.08rem 0.35rem;
-  font-size: 0.65rem;
-  font-weight: 550;
-  line-height: 1.4;
-  color: var(--muted-foreground);
-  background: color-mix(in srgb, var(--muted) 30%, transparent);
-  border: 0.5px solid color-mix(in srgb, var(--border) 30%, transparent);
+  gap: 0.375rem;
+  min-width: 0;
+  font-size: 0.6875rem;
+  line-height: 1rem;
   white-space: nowrap;
-  max-width: 12rem;
-  transition:
-    background-color 120ms ease, color 120ms ease;
 }
 
-.redeven-card-runtime-chip__dot {
-  width: 0.32rem;
-  height: 0.32rem;
-  border-radius: 9999px;
-  background: var(--muted-foreground);
+.redeven-card-runtime-age {
+  color: var(--muted-foreground);
+}
+
+.redeven-card-runtime-age svg,
+.redeven-card-cloud-affiliation svg {
+  width: 0.8125rem;
+  height: 0.8125rem;
   flex-shrink: 0;
-  opacity: 0.5;
 }
 
-.redeven-card-runtime-chip__text {
+.redeven-card-runtime-age svg {
+  opacity: 0.7;
+}
+
+.redeven-card-runtime-age > span,
+.redeven-card-cloud-affiliation > span {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.redeven-environment-card:hover .redeven-card-runtime-chip {
-  background: color-mix(in srgb, var(--muted) 42%, transparent);
-  color: var(--foreground);
-}
-
-.redeven-card-runtime-domain {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.65rem;
-  font-weight: 500;
-  color: var(--muted-foreground);
-  white-space: nowrap;
-  transition: color 120ms ease;
-}
-
-.redeven-card-runtime-domain svg {
-  opacity: 0.55;
+.redeven-card-cloud-affiliation {
   flex-shrink: 0;
+  max-width: 55%;
+  padding: 0.125rem 0.4375rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 14%, transparent);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  color: var(--muted-foreground);
+  font-weight: 500;
 }
 
-.redeven-environment-card:hover .redeven-card-runtime-domain {
-  color: color-mix(in srgb, var(--foreground) 70%, var(--muted-foreground));
-}
-
-.redeven-environment-card--open .redeven-card-runtime-chip {
-  background: color-mix(in srgb, var(--success) 6%, transparent);
-  border-color: color-mix(in srgb, var(--success) 14%, transparent);
-}
-
-.redeven-environment-card--open .redeven-card-runtime-chip__dot {
-  background: var(--success);
-  opacity: 0.85;
-  box-shadow: none;
+.redeven-card-cloud-affiliation svg {
+  color: var(--primary);
 }
 
 /* ── Card header: hover status dot interaction ── */

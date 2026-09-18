@@ -21,6 +21,8 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Clock,
+  Cloud,
   Copy,
   ExternalLink,
   Globe,
@@ -206,6 +208,7 @@ import {
   buildEnvironmentCardModel,
   buildEnvironmentSettingsRuntimeModel,
   buildEnvironmentCardFactsModel,
+  environmentControlPlaneLabel,
   buildGatewaySourceRowModel,
   ICON_ENDPOINTS,
   buildControlPlaneStatusModel,
@@ -10585,23 +10588,6 @@ function EnvironmentConnectionCard(
             >
               {props.environment.label}
             </CardTitle>
-            <div class="mt-1.5 flex flex-wrap items-center">
-              <svg class="redeven-card-l-line" data-tone={card().status_tone} viewBox="0 0 12 20">
-                <path d="M 1 0 L 1 10 L 11 10" />
-              </svg>
-              <span class="redeven-card-runtime-chip">
-                <span class="redeven-card-runtime-chip__dot" aria-hidden="true" />
-                <span class="redeven-card-runtime-chip__text">{card().runtime_started_label}</span>
-              </span>
-              <Show when={props.environment.control_plane_label}>
-                {(cpLabel) => (
-                  <span class="redeven-card-runtime-domain ml-1.5">
-                    <Globe class="h-3 w-3" />
-                    {cpLabel()}
-                  </span>
-                )}
-              </Show>
-            </div>
           </div>
           <DesktopTooltip content={props.i18n.t('environmentCenter.refreshRuntimeStatus')} placement="top">
             <span>
@@ -10649,6 +10635,20 @@ function EnvironmentConnectionCard(
               />
             </button>
           </DesktopTooltip>
+        </div>
+        <div class="redeven-card-runtime-meta">
+          <span class="redeven-card-runtime-age" title={card().runtime_started_label}>
+            <Clock aria-hidden="true" />
+            <span>{card().runtime_started_label}</span>
+          </span>
+          <Show when={environmentControlPlaneLabel(props.environment)}>
+            {(label) => (
+              <span class="redeven-card-cloud-affiliation" title={label()}>
+                <Cloud aria-hidden="true" />
+                <span>{label()}</span>
+              </span>
+            )}
+          </Show>
         </div>
       </CardHeader>
       <CardContent class="flex flex-1 flex-col px-4 pb-3">

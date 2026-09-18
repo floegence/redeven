@@ -120,7 +120,6 @@ export const FACT_LABEL_ICONS: Record<string, string> = {
   'RUNS ON': ICON_RUNS_ON,
   CONTAINER: ICON_CONTAINER,
   VERSION: ICON_VERSION,
-  'REDEVEN CLOUD': ICON_PROVIDER,
   'CONTROL PLANE': ICON_PROVIDER,
   'LOCAL LINK': ICON_LOCAL_LINK,
   'ENV ID': ICON_ENV_ID,
@@ -619,7 +618,6 @@ const ENVIRONMENT_CARD_FACT_ORDER = [
   'RUNS ON',
   'CONTAINER',
   'VERSION',
-  'REDEVEN CLOUD',
   'CONTROL PLANE',
   'LOCAL LINK',
   'ENV ID',
@@ -634,7 +632,7 @@ function orderEnvironmentCardFacts(
   ));
 }
 
-function controlPlaneDisplayLabel(environment: DesktopEnvironmentEntry): string {
+export function environmentControlPlaneLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind === 'provider_environment'
     || environment.provider_runtime_link_target?.provider_origin_supported === true) {
     return 'Redeven Cloud';
@@ -788,12 +786,11 @@ function providerEnvironmentIDFact(environment: DesktopEnvironmentEntry): Enviro
     : buildEnvironmentCardFact('ENV ID', envID, { copy_value: true });
 }
 
-function providerFact(environment: DesktopEnvironmentEntry): EnvironmentCardFactModel | null {
+function legacyControlPlaneFact(environment: DesktopEnvironmentEntry): EnvironmentCardFactModel | null {
   if (runtimeHasUnsupportedLegacyControlPlaneLink(environment)) {
     return buildEnvironmentCardFact('CONTROL PLANE', 'Unsupported legacy control-plane link');
   }
-  const value = controlPlaneDisplayLabel(environment);
-  return value === '' ? null : buildEnvironmentCardFact('REDEVEN CLOUD', value);
+  return null;
 }
 
 export function buildEnvironmentCardFactsModel(
@@ -803,7 +800,7 @@ export function buildEnvironmentCardFactsModel(
   const runsOnOpts = endpoints.length > 0 ? { endpoints } : undefined;
 
   if (environment.kind === 'local_environment') {
-    const provider = providerFact(environment);
+    const provider = legacyControlPlaneFact(environment);
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
       ...runtimePlacementFacts(environment),
@@ -813,7 +810,7 @@ export function buildEnvironmentCardFactsModel(
   }
 
   if (environment.kind === 'provider_environment') {
-    const provider = providerFact(environment);
+    const provider = legacyControlPlaneFact(environment);
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
       runtimeVersionFact(environment),

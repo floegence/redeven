@@ -29,6 +29,8 @@ The endpoint popover presents a compact Environment heading, inline management c
 
 # Boundaries
 
+Environment cards place runtime age and Cloud affiliation on one full-width metadata row below the title and header actions. Affiliation describes the control-plane relationship, not remote availability; it never borrows an online status dot. Cloud identity appears once in metadata instead of repeating as a label/value fact. Long localized ages and names truncate within that row without pushing adjacent cards' runtime facts out of alignment; their full text remains available on hover. Unsupported legacy control-plane links retain their explicit recovery fact.
+
 ## Access settings and independent clients
 
 Public Runtime addressing is independent from Desktop bridge use: other Desktops and browsers may connect concurrently through an address usable from their own network namespace. Saved bind and protocol are next-start settings and never synthesize an online URL. Settings put the current connection and Desktop/browser actions above scope, password, protocol, port, and advanced listening controls. Editing a draft leaves the current address intact until a new Runtime report arrives. Private bridge URLs and tokens are excluded from every displayed endpoint, clipboard value, QR payload, and system-browser target.

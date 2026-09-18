@@ -39,6 +39,7 @@ import {
   buildEnvironmentCardModel,
   buildEnvironmentCardEndpointsModel,
   buildEnvironmentCardFactsModel,
+  environmentControlPlaneLabel,
   buildEnvironmentSettingsRuntimeModel,
   buildGatewayRowModel,
   buildGatewaySourceRowModel,
@@ -63,6 +64,20 @@ import {
   splitPinnedEnvironmentEntries,
 } from './viewModel';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
+
+describe('environment card Cloud affiliation', () => {
+  it('keeps affiliation separate from runtime facts without implying remote availability', () => {
+    const local = buildSnapshot({ preferences: testDesktopPreferences() }).environments
+      .find(environment => environment.kind === 'local_environment')!;
+    expect(environmentControlPlaneLabel(local)).toBe('');
+    const linked = { ...local, control_plane_label: 'Redeven Cloud', provider_status: 'offline' as const };
+    expect(environmentControlPlaneLabel(linked)).toBe('Redeven Cloud');
+    expect(buildEnvironmentCardFactsModel(linked)).toEqual(buildEnvironmentCardFactsModel(local));
+    const remote = { ...linked, kind: 'provider_environment' as const, control_plane_label: 'https://redeven.test' };
+    expect(environmentControlPlaneLabel(remote)).toBe('Redeven Cloud');
+    expect(buildEnvironmentCardFactsModel(remote).some(fact => fact.label === 'REDEVEN CLOUD')).toBe(false);
+  });
+});
 import type { DesktopSavedRuntimeTarget } from '../main/desktopPreferences';
 
 // These card fixtures include a native local environment on every test host.
@@ -1185,7 +1200,6 @@ describe('buildEnvironmentCardModel', () => {
         ],
       }),
       placeholderFact('VERSION', 'UNKNOWN'),
-      defaultFact('REDEVEN CLOUD', 'Redeven Cloud'),
       defaultFact('LOCAL LINK', 'No managed runtime linked'),
       defaultFact('ENV ID', 'env_demo', { copy_value: true }),
     ]);
