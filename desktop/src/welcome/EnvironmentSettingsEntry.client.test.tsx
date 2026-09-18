@@ -260,3 +260,80 @@ describe('settings entry asynchronous isolation', () => {
   });
 
 });
+
+
+describe('environment card refresh continuity', () => {
+  it('updates copy availability and values in retained fact rows', async () => {
+    const h = await mount(async () => success);
+    const copy = vi.fn(async () => {});
+    vi.stubGlobal('navigator', { clipboard: { writeText: copy } });
+    const refresh = (env_public_id: string) => h.publish({ ...structuredClone(h.snapshot),
+      environments: h.snapshot.environments.map(entry => entry.kind === 'provider_environment'
+        ? { ...entry, env_public_id } : { ...entry }),
+    });
+    refresh(''); await settle();
+    const card = button('Settings for cloud-fixture').closest('.redeven-environment-card')!;
+    const fact = [...card.querySelectorAll('.redeven-card-fact-row')].find(row => row.querySelector('.redeven-card-fact-label')?.textContent === 'ENV ID')!;
+    const value = fact.querySelector<HTMLElement>('.redeven-card-fact-value')!;
+    value.click(); expect(copy).not.toHaveBeenCalled();
+    refresh('current-environment-id'); await settle();
+    expect(fact.querySelector('.redeven-card-fact-value')).toBe(value);
+    value.click(); await settle();
+    expect(copy).toHaveBeenLastCalledWith('current-environment-id');
+    refresh('next-environment-id'); await settle();
+    expect(value.querySelector('.redeven-card-fact-copy-icon--active')).toBeNull();
+    value.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await settle();
+    expect(copy).toHaveBeenLastCalledWith('next-environment-id');
+    refresh(''); await settle(); copy.mockClear();
+    value.click(); value.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(copy).not.toHaveBeenCalled();
+  });
+
+  it('preserves the open endpoint surface, focus, selection and QR through fresh snapshots', async () => {
+    const h = await mount(async () => success);
+    const urls = ['https://192.0.2.20:23998/', 'http://localhost:23998/'];
+    const refreshed = (addresses = urls) => ({ ...structuredClone(h.snapshot), environments: h.snapshot.environments.map(entry => ({
+      ...structuredClone(entry), ...(entry.id === id ? { local_ui_url: addresses[0] ?? '', local_ui_urls: addresses,
+        runtime_health: { ...entry.runtime_health, status: 'online' as const, freshness: 'fresh' as const },
+      } : {}),
+    })) });
+    h.publish(refreshed()); await settle();
+    const card = button('Settings for Fixture SSH').closest('.redeven-environment-card')!;
+    const factBlock = card.querySelector('.redeven-card-facts-block');
+    const factRow = factBlock!.firstElementChild;
+    const trigger = card.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]')!;
+    trigger.click(); await settle();
+    button('Share connection').click(); await settle();
+    const panel = document.querySelector('.redeven-endpoints-popover');
+    const host = panel!.querySelector('[data-endpoint-id="host"]')!;
+    const value = host.querySelector('.redeven-card-endpoint-value')!;
+    const copy = button('Copy SSH host');
+    const qr = panel!.querySelector('img');
+    copy.focus();
+    const range = document.createRange(); range.selectNodeContents(value);
+    const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+    for (let tick = 0; tick < 4; tick++) {
+      const next = refreshed(tick % 2 ? [...urls].reverse() : urls);
+      h.publish({ ...next, environments: next.environments.map(entry => entry.id === id
+        ? { ...entry, label: `Fixture SSH ${tick}` } : entry) });
+      await settle();
+      expect(button(`Settings for Fixture SSH ${tick}`).closest('.redeven-environment-card')).toBe(card);
+      expect(card.querySelector('.redeven-card-facts-block')).toBe(factBlock);
+      expect(factBlock!.firstElementChild).toBe(factRow);
+      expect(document.querySelector('.redeven-endpoints-popover')).toBe(panel);
+      expect(card.querySelector('[aria-haspopup="dialog"]')).toBe(trigger);
+      expect(panel!.querySelector('[data-endpoint-id="host"]')).toBe(host);
+      expect(document.activeElement).toBe(copy);
+      expect(selection.toString()).toBe('fixture-host:22');
+      expect(panel!.querySelector('img')).toBe(qr);
+      expect(panel!.textContent).toContain(`Fixture SSH ${tick}`);
+    }
+    h.publish(refreshed(['http://localhost:23998/'])); await settle();
+    expect(document.querySelector('.redeven-endpoints-popover')).toBe(panel);
+    expect(panel!.querySelector('img')).toBeNull();
+    expect(panel!.textContent).not.toContain('192.0.2.20');
+    h.publish({ ...h.snapshot, environments: h.snapshot.environments.filter(entry => entry.id !== id) });
+    await settle();
+    expect(document.querySelector('.redeven-endpoints-popover')).toBeNull();
+  });
+});

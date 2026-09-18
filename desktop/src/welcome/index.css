@@ -914,7 +914,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
 
 .redeven-endpoints-surface {
   --endpoint-enter-offset: -0.3rem;
-  width: min(25rem, calc(100vw - 1rem));
+  width: min(22rem, calc(100vw - 1rem));
 }
 
 /* The positioned shell stays unpainted; the inner panel owns its moving material. */
@@ -986,7 +986,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
   align-items: center;
   gap: 0.65rem;
   min-width: 0;
-  padding: 1rem 1rem 0.85rem;
+  padding: 0.65rem 0.75rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
   background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 4%, var(--popover)), var(--popover));
 }
@@ -995,10 +995,10 @@ html:not(.dark) .redeven-new-environment-card:hover {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 2.1rem;
-  height: 2.1rem;
+  width: 1.8rem;
+  height: 1.8rem;
   border: 1px solid color-mix(in srgb, var(--primary) 12%, transparent);
-  border-radius: 0.65rem;
+  border-radius: 0.55rem;
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 7%, transparent);
 }
@@ -1010,7 +1010,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
 
 .redeven-endpoints-popover-heading {
   display: grid;
-  gap: 0.15rem;
+  gap: 0.05rem;
   min-width: 0;
   flex: 1;
 }
@@ -1064,7 +1064,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
 
 .redeven-endpoints-popover-list {
   display: grid;
-  gap: 0.375rem;
+  gap: 0.25rem;
   min-width: 0;
 }
 
@@ -1143,6 +1143,8 @@ html:not(.dark) .redeven-new-environment-card:hover {
 
 .redeven-card-endpoint-value {
   display: block;
+  font-family: var(--font-sans);
+  font-variant-ligatures: none;
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: 0.78rem;
@@ -1154,16 +1156,16 @@ html:not(.dark) .redeven-new-environment-card:hover {
   grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   column-gap: 0.2rem;
-  row-gap: 0.3rem;
-  padding: 0.7rem 0.75rem;
+  row-gap: 0.2rem;
+  padding: 0.55rem 0.65rem;
   border: 1px solid transparent;
   border-radius: 0.6rem;
 }
 
 .redeven-endpoints-popover .redeven-card-endpoint-row[data-endpoint-kind='address'],
 .redeven-endpoints-popover .redeven-card-endpoint-row[data-endpoint-kind='status'] {
-  border-color: color-mix(in srgb, var(--border) 42%, transparent);
-  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  border-color: color-mix(in srgb, var(--border) 64%, transparent);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--primary) 4%, var(--popover)), color-mix(in srgb, var(--muted) 28%, var(--popover)));
 }
 
 .redeven-endpoints-popover .redeven-card-endpoint-row[data-selected] {
@@ -1182,7 +1184,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
   background: transparent;
   font-size: 0.6875rem;
   font-weight: 500;
-  letter-spacing: 0.02em;
+  letter-spacing: normal;
   text-transform: none;
   white-space: normal;
 }
@@ -1194,13 +1196,33 @@ html:not(.dark) .redeven-new-environment-card:hover {
 
 .redeven-endpoints-popover .redeven-card-endpoint-value {
   font-size: 0.8125rem;
-  line-height: 1.5;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.redeven-endpoints-popover .redeven-card-endpoint-row[data-endpoint-kind='connection'] {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 0.6rem;
+  padding-block: 0.35rem;
+}
+
+.redeven-endpoints-popover [data-endpoint-kind='connection'] > div {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.redeven-endpoints-popover [data-endpoint-kind='connection'] > .redeven-card-endpoint-label {
+  max-width: 7rem;
+}
+
+.redeven-endpoints-popover [data-endpoint-kind='connection'] .redeven-card-endpoint-value {
+  font-weight: 550;
 }
 
 .redeven-endpoints-popover .redeven-card-endpoint-detail {
-  margin-top: 0.3rem;
+  margin-top: 0.2rem;
   font-size: 0.6875rem;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .redeven-endpoints-popover .redeven-endpoint-action {
@@ -1425,7 +1447,7 @@ html:not(.dark) .redeven-endpoint-qr-panel {
   text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.6875rem;
   line-height: 1.5;
   font-weight: 400;

@@ -122,6 +122,7 @@ function sshRuntimeTarget(input: Readonly<{
 function defaultFact(label: string, value: string, extras?: Record<string, unknown>) {
   const labelIcon = FACT_LABEL_ICONS[label];
   return {
+    id: label,
     label,
     value,
     value_tone: 'default' as const,
@@ -133,6 +134,7 @@ function defaultFact(label: string, value: string, extras?: Record<string, unkno
 function placeholderFact(label: string, value = 'None') {
   const labelIcon = FACT_LABEL_ICONS[label];
   return {
+    id: label,
     label,
     value,
     value_tone: 'placeholder' as const,

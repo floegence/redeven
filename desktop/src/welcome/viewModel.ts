@@ -80,6 +80,7 @@ export type EnvironmentCardFactActionModel = Readonly<
 >;
 
 export type EnvironmentCardFactModel = Readonly<{
+  id: string;
   label: string;
   value: string;
   value_tone: 'default' | 'placeholder';
@@ -589,6 +590,7 @@ function buildEnvironmentCardFact(
   },
 ): EnvironmentCardFactModel {
   return {
+    id: label,
     label,
     value,
     value_tone: 'default',
@@ -605,6 +607,7 @@ function buildPlaceholderEnvironmentCardFact(
   value = 'None',
 ): EnvironmentCardFactModel {
   return {
+    id: label,
     label,
     value,
     value_tone: 'placeholder',

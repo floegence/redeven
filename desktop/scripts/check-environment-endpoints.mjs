@@ -119,12 +119,12 @@ try {
   }
   const opening = await frames('[data-environment="Network"] [aria-haspopup="dialog"]');
   assert.ok(opening.some(frame => frame && frame.opacity > 0 && frame.opacity < 1), 'opening interpolates opacity');
-  assert.ok(opening.every(frame => !frame || Math.abs(frame.width - 400) < 1), 'opening preserves measured width');
+  assert.ok(opening.every(frame => !frame || Math.abs(frame.width - 352) < 1), 'opening preserves measured width');
   assert.equal(await page.locator('.redeven-endpoints-surface').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)', 'only one material layer');
   const expanded = await frames('.redeven-endpoints-popover [aria-label="分享连接"]');
   const expandedHeights = expanded.filter(Boolean).map(frame => frame.height);
   assert.ok(new Set(expandedHeights.map(height => Math.round(height))).size > 2, 'sharing expands through intermediate heights');
-  assert.ok(expanded.every(frame => frame && Math.abs(frame.width - 400) < 1), 'sharing never changes panel width');
+  assert.ok(expanded.every(frame => frame && Math.abs(frame.width - 352) < 1), 'sharing never changes panel width');
   const collapsed = await frames('.redeven-endpoints-popover [aria-label="分享连接"]');
   assert.ok(new Set(collapsed.filter(Boolean).map(frame => Math.round(frame.height))).size > 2, 'sharing collapses through intermediate heights');
   assert.equal(await page.locator('.redeven-endpoint-qr-image').count(), 0);
@@ -229,6 +229,95 @@ try {
   assert.ok((await cardPage.getByRole('dialog').innerText()).includes('gzlight'));
   await cardPage.keyboard.press('Escape');
   await cardPage.waitForFunction(() => !document.querySelector('.redeven-endpoints-popover'));
+  // Exercise the real snapshot subscription, not only a directly mounted popover.
+  await card('gzcom').getByLabel('显示端点').click();
+  await cardPage.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-popover')).opacity === '1');
+  const compact = await cardPage.locator('.redeven-endpoints-popover').evaluate(panel => ({
+    height: panel.getBoundingClientRect().height,
+    fonts: [...panel.querySelectorAll('.redeven-card-endpoint-value')].map(el => getComputedStyle(el).fontFamily),
+  }));
+  assert.ok(compact.height < 205, 'the two-row host-only panel stays compact');
+  assert.ok(compact.fonts.every(font => font.includes('Inter') && !font.includes('Iosevka')), 'host and URL use product text typography');
+  await cardPage.getByRole('button', { name: /复制 SSH/ }).click();
+  await cardPage.locator('[data-endpoint-id="host"] [data-copied="true"]').waitFor();
+  const refreshEvidence = await cardPage.evaluate(async initial => {
+    const panel = document.querySelector('.redeven-endpoints-popover');
+    const trigger = document.querySelector('[aria-haspopup="dialog"][aria-expanded="true"]');
+    const host = panel.querySelector('[data-endpoint-id="host"]');
+    const copy = host.querySelector('button');
+    const value = host.querySelector('.redeven-card-endpoint-value');
+    copy.focus();
+    const selection = getSelection();
+    const range = document.createRange(); range.selectNodeContents(value);
+    selection.removeAllRanges(); selection.addRange(range);
+    const samples = [];
+    const started = performance.now();
+    for (let tick = 0; tick < 18; tick++) {
+      const next = structuredClone(initial);
+      for (const environment of next.environments) environment.runtime_health.checked_at_unix_ms = tick + 1;
+      window.settingsFixture.publish(next);
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      samples.push({ samePanel: document.querySelector('.redeven-endpoints-popover') === panel,
+        sameTrigger: document.querySelector('[aria-haspopup="dialog"][aria-expanded="true"]') === trigger,
+        sameRow: panel.querySelector('[data-endpoint-id="host"]') === host,
+        focused: document.activeElement === copy, selected: selection.toString(), copied: copy.dataset.copied,
+        opacity: Number(getComputedStyle(panel).opacity), state: panel.dataset.state, elapsed: performance.now() - started });
+      await new Promise(resolve => setTimeout(resolve, 35));
+    }
+    return samples;
+  }, snapshot);
+  for (const sample of refreshEvidence) {
+    const { copied, elapsed, ...continuity } = sample;
+    assert.deepEqual(continuity, { samePanel: true, sameTrigger: true, sameRow: true, focused: true,
+      selected: 'gzcom:22', opacity: 1, state: 'open' });
+    if (elapsed < 1000) assert.equal(copied, 'true', 'refresh preserves feedback until its normal timeout');
+  }
+  report.refreshFrames = refreshEvidence;
+  await cardPage.keyboard.press('Escape');
+  await cardPage.locator('.redeven-endpoints-popover').waitFor({ state: 'detached' });
+
+  // Exercise sharing and scroll continuity with overflowing, newly allocated address lists.
+  const networkSnapshot = structuredClone(snapshot);
+  const target = networkSnapshot.environments.find(entry => entry.label === 'gzcom');
+  target.local_ui_urls = Array.from({ length: 12 }, (_, index) => `https://192.0.2.${index + 10}:23998/`);
+  target.local_ui_url = target.local_ui_urls[0];
+  await cardPage.evaluate(value => window.settingsFixture.publish(value), networkSnapshot);
+  await card('gzcom').getByLabel('显示端点').click();
+  await cardPage.getByRole('button', { name: '分享连接', exact: true }).first().click();
+  await cardPage.locator('.redeven-endpoint-qr-image').waitFor();
+  await cardPage.waitForTimeout(250);
+  const sharingEvidence = await cardPage.evaluate(async initial => {
+    const panel = document.querySelector('.redeven-endpoints-popover');
+    const viewport = panel.querySelector('.redeven-endpoints-popover-body');
+    const qr = panel.querySelector('img');
+    const action = panel.querySelector('[aria-expanded="true"]');
+    action.focus({ preventScroll: true }); viewport.scrollTop = 120;
+    const top = viewport.scrollTop;
+    const samples = [];
+    for (let tick = 0; tick < 8; tick++) {
+      const next = structuredClone(initial);
+      const target = next.environments.find(entry => entry.label.startsWith('gzcom'));
+      target.local_ui_urls.reverse(); target.label = `gzcom · ${tick}`;
+      window.settingsFixture.publish(next);
+      await new Promise(resolve => setTimeout(resolve, 40));
+      samples.push({ samePanel: document.querySelector('.redeven-endpoints-popover') === panel,
+        sameQR: panel.querySelector('img') === qr, focused: document.activeElement === action,
+        scroll: viewport.scrollTop, titleUpdated: panel.querySelector('.redeven-endpoints-popover-title').textContent === target.label });
+    }
+    return { top, samples };
+  }, networkSnapshot);
+  assert.ok(sharingEvidence.top > 0, 'the test scrolls a real constrained viewport');
+  for (const sample of sharingEvidence.samples) assert.deepEqual(sample, {
+    samePanel: true, sameQR: true, focused: true, scroll: sharingEvidence.top, titleUpdated: true,
+  });
+  // New authoritative scope invalidates sharing without closing the panel.
+  await cardPage.evaluate(value => window.settingsFixture.publish(value), snapshot);
+  await cardPage.locator('.redeven-endpoint-qr-image').waitFor({ state: 'detached' });
+  assert.equal(await cardPage.getByRole('dialog').count(), 1);
+  assert.equal(await cardPage.getByRole('button', { name: '分享连接', exact: true }).count(), 0);
+  await cardPage.keyboard.press('Escape');
+  await cardPage.locator('.redeven-endpoints-popover').waitFor({ state: 'detached' });
+  report.cases.push('actual-cards-refresh-focus-selection-copy', 'actual-cards-refresh-share-scroll-and-invalidation', 'compact-layout-and-typography');
   const video = cardPage.video();
   await cardContext.close();
   await video.saveAs(`${output}/interaction.webm`);
