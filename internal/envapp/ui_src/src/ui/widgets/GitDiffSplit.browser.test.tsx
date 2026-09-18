@@ -33,16 +33,16 @@ afterEach(async () => {
   dispose?.(); document.body.replaceChildren();
 });
 
-function mount(width: number) {
+function mount(width: number, items = files) {
   const host = document.createElement('div');
   Object.assign(host.style, { width: `${width}px`, height: '640px' });
   document.body.append(host);
-  const [items, setItems] = createSignal(files);
+  const [currentItems, setItems] = createSignal(items);
   dispose = render(() => (
     <LayoutProvider><NotificationProvider><ProtocolProvider contract={redevenV1Contract}>
       <GitChangesPanel selectedSection="changes" workspace={{
-        repoRootPath: '/workspace/repo', summary: { unstagedCount: items().length, stagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-        staged: [], unstaged: items(), untracked: [], conflicted: [],
+        repoRootPath: '/workspace/repo', summary: { unstagedCount: currentItems().length, stagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+        staged: [], unstaged: currentItems(), untracked: [], conflicted: [],
       }} />
     </ProtocolProvider></NotificationProvider></LayoutProvider>
   ), host);
@@ -122,5 +122,23 @@ describe('Git inline diff browsing', () => {
     row.querySelector('button')!.focus();
     await userEvent.keyboard('{ArrowDown}');
     await expect.poll(() => host.querySelector('[data-git-diff-panel]')?.textContent).toContain('file1Line0');
+  });
+
+  it('keeps a visible horizontal scrollbar inside the constrained patch viewport for long diff lines', async () => {
+    await page.viewport(1280, 800);
+    const longLine = `+const generatedLine = "${'x'.repeat(1800)}";`;
+    const longFile = {
+      ...files[0],
+      patchText: `@@ -1,1 +1,1 @@\n${longLine}`,
+    };
+    const { host } = mount(1100, [longFile]);
+    await expect.poll(() => host.querySelector('.git-patch-viewer__viewport')).not.toBeNull();
+    const viewport = host.querySelector<HTMLElement>('.git-patch-viewer__viewport')!;
+    const detail = host.querySelector<HTMLElement>('.git-diff-split__detail')!;
+    expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth);
+    expect(getComputedStyle(viewport).overflowX).toBe('auto');
+    expect(getComputedStyle(viewport).scrollbarGutter).toContain('stable');
+    expect(getComputedStyle(viewport, '::-webkit-scrollbar').height).toBe('10px');
+    expect(viewport.getBoundingClientRect().bottom).toBeLessThanOrEqual(detail.getBoundingClientRect().bottom + 1);
   });
 });

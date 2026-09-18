@@ -70,11 +70,6 @@ type GitDiffDialogErrorState = {
   detail?: string;
 };
 type GitDiffDialogLoadPhase = "idle" | "loading" | "ready" | "error";
-type GitDiffDialogModeState = {
-  token: string;
-  value: GitDiffDialogMode;
-};
-
 type GitDiffDialogLoadSlot = {
   selectionKey: string;
   requestKey: string;
@@ -401,11 +396,10 @@ function createErrorGitDiffDialogLoadSlot(
 export function GitDiffPanel(props: GitDiffPanelProps) {
   const i18n = useI18n();
   const rpc = useRedevenRpc();
-  const [modeState, setModeState] = createSignal<GitDiffDialogModeState>({
-    token: "",
-    value: "patch",
-  });
-  const [dialogCycle, setDialogCycle] = createSignal(0);
+  // The mode is a browsing preference for this inspection surface. Keep it
+  // while the selected file changes so a reviewer can scan every file in the
+  // same context without repeating the control selection.
+  const [selectedMode, setSelectedMode] = createSignal<GitDiffDialogMode>("patch");
   const [previewSlot, setPreviewSlot] = createSignal<GitDiffDialogLoadSlot>(
     createGitDiffDialogLoadSlot(),
   );
@@ -455,17 +449,8 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
       !selectionSession().directoryUnavailableItem &&
       selectionSession().fullRequestKey !== "",
   );
-  const activeModeToken = createMemo(() => {
-    if (!props.open) return "";
-    const selectionKey = selectionSession().selectionKey;
-    if (!selectionKey) return "";
-    return `${dialogCycle()}:${selectionKey}`;
-  });
   const activeMode = createMemo<GitDiffDialogMode>(() => {
-    const currentToken = activeModeToken();
-    if (!currentToken) return "patch";
-    const state = modeState();
-    return state.token === currentToken ? state.value : "patch";
+    return props.open ? selectedMode() : "patch";
   });
   const previewSlotMatchesSelection = createMemo(
     () => previewSlot().selectionKey === selectionSession().selectionKey,
@@ -644,22 +629,8 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
     return props.unavailableMessage;
   };
 
-  createEffect(
-    on(
-      () => props.open,
-      (open, wasOpen) => {
-        if (!open && wasOpen) {
-          setDialogCycle((value) => value + 1);
-        }
-      },
-    ),
-  );
-
   const setModeForCurrentSelection = (nextMode: GitDiffDialogMode) => {
-    setModeState({
-      token: activeModeToken(),
-      value: nextMode,
-    });
+    setSelectedMode(nextMode);
   };
 
   createEffect(
