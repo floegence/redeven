@@ -58,7 +58,6 @@ import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } from './FlowerComputerStage';
 import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
-import type { FlowerComposerContextUsageFreshness } from './chat/flowerContextPresentation';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
 import type { FlowerChatContextChip, FlowerChatContextSnapshotPreview } from './contracts/flowerChatContextTypes';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
@@ -289,10 +288,6 @@ function latestThreadFailureIsUserRejectedTool(thread: FlowerThreadSnapshot | nu
   return latestFailedMessage ? messageHasUserRejectedTool(latestFailedMessage) : false;
 }
 
-type FlowerComposerContextUsageModel = Readonly<{
-  usage: FlowerContextUsage;
-  freshness: FlowerComposerContextUsageFreshness;
-}>;
 type FlowerComposerControlID = 'working_dir' | 'permission' | 'model_reasoning' | 'read_only';
 type FlowerComposerControlLocation = 'inline' | 'overflow';
 type FlowerComposerControlLayout = Readonly<{
@@ -6357,14 +6352,12 @@ webSearch: model.web_search,
   const selectedRunProgress = createMemo<FlowerLiveProgress | null>((previous) => retainEqualValue(
     previous, selectedThreadTerminalSyncing() ? null : flowerRunProgress(selectedThread()),
   ));
-  const selectedContextUsage = createMemo<FlowerComposerContextUsageModel | null>((previous) => {
+  const selectedContextUsage = createMemo<FlowerContextUsage | null>((previous) => {
     const thread = selectedThread();
     const usage = thread?.context_usage ?? null;
     if (!thread || !usage) return null;
     if (!usage.confirmed && !usage.estimate) return null;
-    const active = Boolean(trimString(thread.active_run_id));
-    const freshness = usage.confirmed && (active || usage.estimate) ? 'last_known' : 'current';
-    return retainEqualValue(previous, { usage, freshness });
+    return retainEqualValue(previous, usage);
   });
   const selectedThreadHasLiveProgress = createMemo(() => selectedRunProgress() != null);
   const showScrollToLatestButton = createMemo(() => (
@@ -11797,8 +11790,7 @@ webSearch: model.web_search,
                       <Show when={selectedContextUsage()}>
                         {(contextUsage) => (
                           <FlowerComposerContextIndicator
-                            usage={contextUsage().usage}
-                            freshness={contextUsage().freshness}
+                            usage={contextUsage()}
                             copy={copy()}
                           />
                         )}

@@ -1481,20 +1481,20 @@
   justify-content: center;
 }
 
-.flower-composer-context-sample-label {
+.flower-composer-context-percent {
   margin-inline-start: 0.4rem;
-  max-width: 6rem;
-  font-size: 0.625rem;
-  line-height: 1.2;
+  min-width: 3ch;
   color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
-.flower-composer-context-estimate-help {
-  margin: 0.3rem 0 0.4rem;
+.flower-composer-context-warning {
+  margin-top: 0.35rem;
+  color: var(--redeven-status-warning-foreground);
   font-size: 0.6875rem;
   line-height: 1.4;
-  color: var(--muted-foreground);
-  max-width: 21rem;
 }
 
 .flower-composer-context-progress {
@@ -1551,7 +1551,7 @@
   bottom: calc(100% + 0.55rem);
   z-index: 20;
   width: max-content;
-  max-width: min(24rem, calc(100vw - 2rem));
+  max-width: min(18rem, calc(100vw - 2rem));
   pointer-events: none;
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, transparent);
   border-radius: 0.5rem;
@@ -1584,14 +1584,6 @@
   visibility: visible;
   opacity: 1;
   transform: translateY(0);
-}
-
-.flower-composer-context-tooltip-title {
-  margin-bottom: 0.35rem;
-  color: color-mix(in srgb, var(--foreground) 82%, var(--muted-foreground) 18%);
-  font-size: 0.75rem;
-  font-weight: 760;
-  line-height: 1.1;
 }
 
 .flower-composer-context-tooltip-row {

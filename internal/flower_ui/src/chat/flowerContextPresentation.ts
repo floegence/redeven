@@ -4,32 +4,17 @@ import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import { trimString } from '../flowerSurfaceModel';
 
 export type FlowerContextTone = 'stable' | 'warning' | 'danger' | 'estimated';
-export type FlowerComposerContextUsageFreshness = 'current' | 'last_known';
-
 export type FlowerComposerContextIndicatorView = Readonly<{
   ariaLabel: string;
-  sampleLabel: string;
-  estimateLabel: string;
-  estimateValue: string;
-  estimateHelp: string;
   ariaValueText: string;
   percentLabel: string;
+  ratioValue: string;
   tone: FlowerContextTone;
   ratio: number | null;
   progressValue: number | null;
-  tooltipTitle: string;
-  usedLabel: string;
-  usedValue: string;
-  ratioLabel: string;
-  ratioValue: string;
   cacheHitLabel: string;
   cacheHitValue: string;
-  thresholdLabel: string;
-  thresholdValue: string;
-  safeLimitLabel: string;
-  safeLimitValue: string;
-  statusLabel: string;
-  statusValue: string;
+  warning: string;
 }>;
 
 export function formatContextTokenCount(tokens: number | undefined): string {
@@ -43,9 +28,9 @@ export function formatContextTokenCount(tokens: number | undefined): string {
 export function contextUsageRatio(usage: FlowerContextSample): number | null {
   const direct = Number(usage.used_ratio);
   if (Number.isFinite(direct) && direct >= 0) return Math.min(1, direct);
-  const input = Number(usage.input_tokens ?? 0);
+  const input = Number(usage.input_tokens);
   const windowTokens = Number(usage.context_window_tokens ?? 0);
-  if (!Number.isFinite(input) || !Number.isFinite(windowTokens) || input <= 0 || windowTokens <= 0) return null;
+  if (!Number.isFinite(input) || !Number.isFinite(windowTokens) || input < 0 || windowTokens <= 0) return null;
   return Math.min(1, input / windowTokens);
 }
 
@@ -66,12 +51,6 @@ export function contextPressureTone(pressure: string): FlowerContextTone {
     default:
       return 'stable';
   }
-}
-
-export function formatFullContextTokenCount(tokens: number | undefined): string {
-  const value = Math.max(0, Math.floor(Number(tokens ?? 0)));
-  if (!Number.isFinite(value) || value <= 0) return '';
-  return value.toLocaleString('en-US');
 }
 
 function formatCompactContextPercent(percent: number): string {
@@ -105,66 +84,37 @@ export function formatThreadCacheHitPercent(usage: FlowerContextUsage, unavailab
 export function buildFlowerComposerContextIndicatorView(
   usage: FlowerContextUsage,
   copy: FlowerSurfaceCopy,
-  freshness: FlowerComposerContextUsageFreshness = 'current',
 ): FlowerComposerContextIndicatorView {
   const labels = copy.chat.contextIndicator ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
-  const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
-  const sample = usage.confirmed ?? usage.estimate;
+  // An estimate can exceed the next native measurement. Show only confirmed
+  // input so switching measurement sources never makes usage jump backwards.
+  const ratio = usage.confirmed ? contextUsageRatio(usage.confirmed) : null;
+  const progressValue = ratio === null ? null : Math.round(ratio * 100);
+  const percentLabel = progressValue === null ? labels.unknownPercent : formatCompactContextPercent(progressValue);
+  const ratioValue = progressValue === null ? labels.unknownPercent : labels.percent(progressValue);
   const pressure = usage.estimate ?? usage.confirmed;
-  const sampleLabel = !usage.confirmed ? labels.estimated
-    : freshness === 'last_known' || usage.estimate ? labels.lastKnownLabel : '';
-  const label = [labels.label, sampleLabel].filter(Boolean).join(' · ');
-  const ratio = sample ? contextUsageRatio(sample) : null;
-  const progressValue = ratio === null ? null : Math.max(0, Math.min(100, Math.round(ratio * 100)));
-  const unknownPercent = trimString(labels.unknownPercent) || fallback.unknownPercent;
-  const percentLabel = progressValue === null ? unknownPercent : formatCompactContextPercent(progressValue);
-  const ratioValue = progressValue === null ? unknownPercent : labels.percent(progressValue);
-  const used = formatFullContextTokenCount(usage.confirmed?.input_tokens);
-  const total = formatFullContextTokenCount(sample?.context_window_tokens);
-  const threshold = formatFullContextTokenCount(pressure?.threshold_tokens);
-  const safeLimit = formatFullContextTokenCount(pressure?.request_safe_limit_tokens);
-  const statusValue = (() => {
-    switch (trimString(pressure?.pressure_status)) {
-      case 'near_threshold': return trimString(labels.nearThreshold) || fallback.nearThreshold;
-      case 'will_compact': return trimString(labels.willCompact) || fallback.willCompact;
-      case 'hard_limit': return trimString(labels.hardLimit) || fallback.hardLimit;
-      case 'estimated': return trimString(labels.estimated) || fallback.estimated;
-      default: return trimString(labels.stable) || fallback.stable;
+  const warning = (() => {
+    switch (pressure?.pressure_status) {
+      case 'near_threshold': return labels.nearThreshold;
+      case 'will_compact': return labels.willCompact;
+      case 'hard_limit': return labels.hardLimit;
+      default: return '';
     }
   })();
-  const usedValue = used && total ? labels.usage(used, total) : trimString(labels.unavailable) || fallback.unavailable;
-  const unavailable = trimString(labels.unavailable) || fallback.unavailable;
-  const cacheHitLabel = trimString(labels.cacheHitLabel) || fallback.cacheHitLabel;
-  const cacheHitValue = formatThreadCacheHitPercent(usage, unavailable);
-  const predicted = formatFullContextTokenCount(usage.estimate?.input_tokens);
-  const estimateValue = predicted && total ? labels.usage(predicted, total) : '';
-  const ariaValueText = progressValue === null
-    ? `${label}: ${unknownPercent}, ${cacheHitLabel}: ${cacheHitValue}`
-    : `${label}: ${ratioValue}, ${usedValue}, ${cacheHitLabel}: ${cacheHitValue}`;
+  const cacheHitValue = formatThreadCacheHitPercent(usage, labels.unknownPercent);
+  const accessibleUsage = progressValue === null ? labels.unavailable : ratioValue;
+  const accessibleCache = formatThreadCacheHitPercent(usage, labels.unavailable);
   return {
-    ariaLabel: label,
-    sampleLabel,
-    estimateLabel: labels.estimateLabel,
-    estimateValue,
-    estimateHelp: labels.estimateHelp,
-    ariaValueText: `${ariaValueText}${estimateValue ? `, ${labels.estimateLabel}: ${estimateValue}` : ''}`,
+    ariaLabel: labels.label,
+    ariaValueText: `${labels.label}: ${accessibleUsage}, ${labels.cacheHitLabel}: ${accessibleCache}${warning ? `, ${warning}` : ''}`,
     percentLabel,
+    ratioValue,
     tone: contextPressureTone(pressure?.pressure_status ?? 'estimated'),
     ratio,
     progressValue,
-    tooltipTitle: labels.label,
-    usedLabel: labels.confirmedLabel,
-    usedValue,
-    ratioLabel: trimString(labels.ratioLabel) || fallback.ratioLabel,
-    ratioValue,
-    cacheHitLabel,
+    cacheHitLabel: labels.cacheHitLabel,
     cacheHitValue,
-    thresholdLabel: trimString(labels.thresholdLabel) || fallback.thresholdLabel,
-    thresholdValue: threshold,
-    safeLimitLabel: trimString(labels.safeLimitLabel) || fallback.safeLimitLabel,
-    safeLimitValue: safeLimit,
-    statusLabel: trimString(labels.statusLabel) || fallback.statusLabel,
-    statusValue,
+    warning,
   };
 }
 

@@ -143,8 +143,8 @@ describe('Flower progress indicator', () => {
     expect(progressRule).toContain('flex: 0 0 1.125rem');
     expect(progressRule).toContain('conic-gradient');
     expect(progressRule).toContain('cursor: pointer');
-    expect(css).not.toContain('.flower-composer-context-percent');
-    expect(contextIndicator).not.toContain('view().percentLabel');
+    expect(css).toContain('.flower-composer-context-percent');
+    expect(contextIndicator).toContain('view().percentLabel');
     expect(contextIndicator).toContain('role="progressbar"');
     expect(contextIndicator).toContain('aria-valuemin="0"');
     expect(contextIndicator).toContain('aria-valuemax="100"');

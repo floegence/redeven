@@ -2,18 +2,13 @@ import { Show, createMemo, createSignal, createUniqueId } from 'solid-js';
 
 import type { FlowerContextUsage } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
-import {
-  buildFlowerComposerContextIndicatorView,
-  type FlowerComposerContextUsageFreshness,
-} from './flowerContextPresentation';
+import { buildFlowerComposerContextIndicatorView } from './flowerContextPresentation';
 
 export function FlowerComposerContextIndicator(props: {
   usage: FlowerContextUsage;
-  freshness?: FlowerComposerContextUsageFreshness;
   copy: FlowerSurfaceCopy;
 }) {
-  const freshness = createMemo<FlowerComposerContextUsageFreshness>(() => props.freshness ?? 'current');
-  const view = createMemo(() => buildFlowerComposerContextIndicatorView(props.usage, props.copy, freshness()));
+  const view = createMemo(() => buildFlowerComposerContextIndicatorView(props.usage, props.copy));
   const [tooltipOpen, setTooltipOpen] = createSignal(false);
   const tooltipID = `flower-composer-context-${createUniqueId()}`;
   const progressStyle = createMemo(() => ({
@@ -28,7 +23,6 @@ export function FlowerComposerContextIndicator(props: {
       class="flower-composer-context-indicator"
       data-context-pressure={view().tone}
       data-context-ratio={dataRatio()}
-      data-context-freshness={freshness()}
       onPointerEnter={() => setTooltipOpen(true)}
       onPointerLeave={() => setTooltipOpen(false)}
     >
@@ -53,9 +47,7 @@ export function FlowerComposerContextIndicator(props: {
           }
         }}
       />
-      <Show when={view().sampleLabel}>
-        <span class="flower-composer-context-sample-label">{view().sampleLabel}</span>
-      </Show>
+      <span class="flower-composer-context-percent" aria-hidden="true">{view().percentLabel}</span>
       <div
         id={tooltipID}
         role="tooltip"
@@ -63,46 +55,17 @@ export function FlowerComposerContextIndicator(props: {
         data-open={tooltipOpen() ? 'true' : undefined}
         aria-hidden={tooltipOpen() ? undefined : 'true'}
       >
-        <div class="flower-composer-context-tooltip-title">{view().tooltipTitle}</div>
         <div class="flower-composer-context-tooltip-row">
-          <span>{view().usedLabel}</span>
-          <strong>{view().usedValue}</strong>
-        </div>
-        <Show when={view().estimateValue}>
-          <div class="flower-composer-context-tooltip-row">
-            <span>{view().estimateLabel}</span>
-            <strong>{view().estimateValue}</strong>
-          </div>
-          <p class="flower-composer-context-estimate-help">{view().estimateHelp}</p>
-        </Show>
-        <div class="flower-composer-context-tooltip-row">
-          <span>{view().ratioLabel}</span>
+          <span>{view().ariaLabel}</span>
           <strong>{view().ratioValue}</strong>
         </div>
         <div class="flower-composer-context-tooltip-row">
           <span>{view().cacheHitLabel}</span>
           <strong>{view().cacheHitValue}</strong>
         </div>
-        <Show when={view().thresholdValue}>
-          {(threshold) => (
-            <div class="flower-composer-context-tooltip-row">
-              <span>{view().thresholdLabel}</span>
-              <strong>{threshold()}</strong>
-            </div>
-          )}
+        <Show when={view().warning}>
+          <div class="flower-composer-context-warning">{view().warning}</div>
         </Show>
-        <Show when={view().safeLimitValue}>
-          {(safeLimit) => (
-            <div class="flower-composer-context-tooltip-row">
-              <span>{view().safeLimitLabel}</span>
-              <strong>{safeLimit()}</strong>
-            </div>
-          )}
-        </Show>
-        <div class="flower-composer-context-tooltip-row">
-          <span>{view().statusLabel}</span>
-          <strong>{view().statusValue}</strong>
-        </div>
       </div>
     </div>
   );

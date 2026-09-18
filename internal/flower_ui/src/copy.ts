@@ -476,24 +476,12 @@ export type FlowerSurfaceCopy = Readonly<{
     liveProgressOutput: string;
     contextIndicator: Readonly<{
       label: string;
-      stable: string;
       nearThreshold: string;
       willCompact: string;
       hardLimit: string;
-      estimated: string;
-      unknown: string;
-      lastKnownLabel: string;
       unknownPercent: string;
       unavailable: string;
-      confirmedLabel: string;
-      estimateLabel: string;
-      estimateHelp: string;
-      ratioLabel: string;
       cacheHitLabel: string;
-      thresholdLabel: string;
-      safeLimitLabel: string;
-      statusLabel: string;
-      usage: (used: string, total: string) => string;
       percent: (percent: number) => string;
     }>;
     compactionDivider: Readonly<{
@@ -811,24 +799,12 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     liveProgressOutput: 'Writing the reply',
     contextIndicator: {
       label: 'Context',
-      stable: 'Stable',
       nearThreshold: 'Near limit',
       willCompact: 'Compacting soon',
       hardLimit: 'At limit',
-      estimated: 'Estimated',
-      unknown: 'Tracking',
-      lastKnownLabel: 'Previous request',
-      unknownPercent: '--%',
+      unknownPercent: '—',
       unavailable: 'Not available',
-      confirmedLabel: 'Model-confirmed usage',
-      estimateLabel: 'Current request estimate',
-      estimateHelp: 'Estimates include safety margins. Actual usage may differ.',
-      ratioLabel: 'Usage',
-      cacheHitLabel: 'Conversation cache hit rate',
-      thresholdLabel: 'Compaction threshold',
-      safeLimitLabel: 'Request safe limit',
-      statusLabel: 'Status',
-      usage: (used, total) => `${used} of ${total}`,
+      cacheHitLabel: 'Cache hit rate',
       percent: (percent) => `${percent}%`,
     },
     compactionDivider: {

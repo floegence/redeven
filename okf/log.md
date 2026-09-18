@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-09-18: Compact context presentation
+
+* Show one confirmed context percentage and a two-row usage/cache tooltip; keep estimates for pressure decisions only.
+* Remove source badges and technical budget details across all locales; retain keyboard access, canonical invalidation and reconnect consistency.
+
 ## 2026-09-18 — System browser intent and canonical computer assistance
 
 - Require explicit browser sources and connection-only assistance without managed fallback.
