@@ -2679,11 +2679,8 @@
     "deviceAddress": "이 기기의 브라우저 주소",
     "networkAccessAddress": "네트워크 접속 주소",
     "listenerDetails": "내부 수신 주소 보기",
-    "openViaDesktop": "이 기기에서는 Desktop에서 “{action}”을 선택해 연결하세요.",
-    "loopbackHelp": "이 루프백 주소는 {host} 자체를 가리킵니다. 서로 다른 호스트는 같은 포트를 사용할 수 있습니다. 이 기기의 브라우저에서 해당 환경에 접속하는 주소가 아닙니다.",
-    "sshConnection": "Desktop은 SSH를 통해 이 환경에 연결합니다.",
-    "wslConnection": "Desktop은 이 WSL 배포판에 연결합니다.",
-    "containerConnection": "Desktop은 컨테이너 호스트를 통해 연결합니다."
+    "openViaDesktop": "Desktop에서 “{action}”을 선택해 이 환경을 여세요.",
+    "loopbackHelp": "이 루프백 주소는 {host} 자체를 가리킵니다. 서로 다른 호스트는 같은 포트를 사용할 수 있습니다. 이 기기의 브라우저에서 해당 환경에 접속하는 주소가 아닙니다."
   },
   "flowerRuntime": {
     "runtimeTitle": "Flower를 사용하려면 런타임을 업데이트하세요",

@@ -8656,7 +8656,7 @@ function EnvironmentConnectionRows(props: Readonly<{
       <Show when={internalAddress()}>{(address) => (
         <div class="redeven-card-endpoint-row" data-endpoint-id={address().id} data-endpoint-kind="address" data-internal-listener>
           <span class="redeven-card-endpoint-label">{props.i18n.t(address().label_key)}</span>
-          <div class="min-w-0 flex-1 select-text">
+          <div class="redeven-card-endpoint-content min-w-0 select-text">
             <span class="redeven-endpoint-scope-title">{props.i18n.t(address().detail_key, address().detail_params)}</span>
             <span class="redeven-card-endpoint-detail">{props.i18n.t('environmentConnection.openViaDesktop', { action: props.i18n.t('environmentAction.open') })}</span>
             <details class="redeven-endpoint-listener">
@@ -8672,28 +8672,30 @@ function EnvironmentConnectionRows(props: Readonly<{
       <Show when={!internalAddress()}>{(_visible) => <div class="redeven-card-endpoint-row" data-endpoint-id={row().id} data-endpoint-kind={row().kind}
       data-selected={row().id === props.selectedID ? '' : undefined} role={row().kind === 'status' ? 'status' : undefined}>
       <span class="redeven-card-endpoint-label">{props.i18n.t(row().label_key)}</span>
-      <div class="min-w-0 flex-1 select-text">
+      <div class="redeven-card-endpoint-content min-w-0 select-text">
         <span class="redeven-card-endpoint-value"
           title={row().value || undefined}>{row().value_key ? props.i18n.t(row().value_key!) : row().value}</span>
         <Show when={row().detail_key}>{(key) => <span class="redeven-card-endpoint-detail">{props.i18n.t(key(), row().detail_params)}</span>}</Show>
       </div>
-      <Show when={copyable()}>
-        <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0 px-1.5" aria-label={copyLabel()}
-          title={copied() ? props.i18n.t('environmentCenter.copied') : copyLabel()} data-copied={copied() || undefined}
-          onClick={() => void copy()}>{copied() ? <Check class="h-3.5 w-3.5" /> : <Copy class="h-3.5 w-3.5" />}</Button>
-      </Show>
-      <Show when={browserOpenable()}>
-        <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0 px-1.5"
-          aria-label={props.i18n.t('webServiceBrowser.openInBrowser')} title={props.i18n.t('webServiceBrowser.openInBrowser')}
-          onClick={() => void props.openInBrowser(row().value)}><ExternalLink class="h-3.5 w-3.5" /></Button>
-      </Show>
-      <Show when={isShareableConnectionAddress(row())}>
-        <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0 px-1.5"
-          aria-label={props.i18n.t('settings.shareConnection')} title={props.i18n.t('settings.shareConnection')}
-          aria-expanded={row().id === props.selectedID} onClick={() => props.selectForShare(row().id === props.selectedID ? '' : row().id)}>
-          <ShareIcon class="h-3.5 w-3.5" />
-        </Button>
-      </Show>
+      <div class="redeven-endpoint-actions">
+        <Show when={copyable()}>
+          <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0" aria-label={copyLabel()}
+            title={copied() ? props.i18n.t('environmentCenter.copied') : copyLabel()} data-copied={copied() || undefined}
+            onClick={() => void copy()}>{copied() ? <Check class="h-3.5 w-3.5" /> : <Copy class="h-3.5 w-3.5" />}</Button>
+        </Show>
+        <Show when={browserOpenable()}>
+          <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0"
+            aria-label={props.i18n.t('webServiceBrowser.openInBrowser')} title={props.i18n.t('webServiceBrowser.openInBrowser')}
+            onClick={() => void props.openInBrowser(row().value)}><ExternalLink class="h-3.5 w-3.5" /></Button>
+        </Show>
+        <Show when={isShareableConnectionAddress(row())}>
+          <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0"
+            aria-label={props.i18n.t('settings.shareConnection')} title={props.i18n.t('settings.shareConnection')}
+            aria-expanded={row().id === props.selectedID} onClick={() => props.selectForShare(row().id === props.selectedID ? '' : row().id)}>
+            <ShareIcon class="h-3.5 w-3.5" />
+          </Button>
+        </Show>
+      </div>
     </div>}</Show>
     </>;
   }}</For>;

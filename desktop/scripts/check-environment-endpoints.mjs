@@ -32,6 +32,13 @@ try {
         .map(animation => animation.finished.catch(() => {})));
     });
   }
+  async function assertActionAlignment(surface) {
+    const offsets = await surface.locator('.redeven-card-endpoint-row').evaluateAll(rows => rows.flatMap(row => {
+      const actions = row.querySelectorAll('.redeven-endpoint-action');
+      return actions.length ? [Math.abs(row.getBoundingClientRect().right - actions[actions.length - 1].getBoundingClientRect().right)] : [];
+    }));
+    assert.ok(offsets.every(offset => offset < 1), 'available actions stay on the same trailing edge');
+  }
   async function stableScreenshot(path) {
     await page.evaluate(() => document.fonts.ready);
     await page.waitForFunction(() => [...document.querySelectorAll('[data-floe-dialog-panel], .redeven-endpoints-popover')]
@@ -45,6 +52,13 @@ try {
     await trigger.click();
     const popup = page.locator('.redeven-endpoints-popover');
     await popup.waitFor();
+    await assertActionAlignment(popup);
+    const readingAlignment = await popup.locator('.redeven-card-endpoint-row').evaluateAll(rows => rows.map(row => {
+      const label = row.querySelector('.redeven-card-endpoint-label');
+      const value = row.querySelector('.redeven-endpoint-scope-title, .redeven-card-endpoint-value');
+      return Math.abs(label.getBoundingClientRect().left - value.getBoundingClientRect().left);
+    }));
+    assert.ok(readingAlignment.every(offset => offset < 1), 'connection labels and values share one reading edge');
     assert.ok((await popup.innerText()).includes(name));
     const network = name === 'Network';
     assert.equal(await popup.getByLabel('分享连接').count(), network ? 1 : 0);
@@ -58,7 +72,7 @@ try {
     if (name === 'gzcom' || name === 'gzlight') {
       assert.ok((await popup.innerText()).includes(`仅限 ${name} 内部`));
       assert.equal(await popup.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').isVisible(), false);
-      assert.ok((await popup.innerText()).includes('在此设备上，请在 Desktop 中点击“打开 Env App”进入环境。'));
+      assert.ok((await popup.innerText()).includes('通过 Desktop 的“打开 Env App”进入此环境。'));
       await popup.getByRole('button', { name: /复制 SSH/ }).click();
       assert.equal(await page.locator('[data-copy-result]').innerText(), `${name}:22`);
     }
@@ -86,6 +100,7 @@ try {
     await page.locator(`[data-environment="${name}"]`).getByRole('button', { name: '环境设置' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.waitFor();
+    await assertActionAlignment(dialog);
     assert.equal(await dialog.getByLabel('分享连接').count(), name === 'Network' ? 1 : 0);
     assert.equal(await dialog.getByRole('button', { name: '在浏览器中打开' }).count(), name !== 'gzcom' ? 1 : 0);
     if (name === 'gzcom') {

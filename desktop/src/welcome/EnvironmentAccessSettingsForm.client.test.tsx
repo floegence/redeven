@@ -75,7 +75,7 @@ describe('Runtime connection settings', () => {
     const listener = overview.querySelector<HTMLDetailsElement>('.redeven-endpoint-listener')!;
     expect(listener).not.toBeNull();
     expect(listener.open).toBe(false);
-    expect(overview.textContent).toContain('On this device, choose “Open Env App” in Desktop to connect.');
+    expect(overview.textContent).toContain('Choose “Open Env App” in Desktop to enter this environment.');
     expect(overview.querySelector('[aria-label="Open in browser"]')).toBeNull();
     listener.open = true;
     const port = document.getElementById('local-ui-port') as HTMLInputElement;

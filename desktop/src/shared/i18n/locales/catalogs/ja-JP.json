@@ -2679,11 +2679,8 @@
     "deviceAddress": "このデバイスのブラウザー用アドレス",
     "networkAccessAddress": "ネットワーク経由のアクセス用アドレス",
     "listenerDetails": "内部の待ち受けアドレスを表示",
-    "openViaDesktop": "このデバイスでは、Desktop で「{action}」を選んで接続してください。",
-    "loopbackHelp": "このループバックアドレスは {host} 自身を指します。異なるホストでは同じポートを使用できます。このデバイスのブラウザーからこの環境にアクセスするためのアドレスではありません。",
-    "sshConnection": "Desktop は SSH 経由でこの環境に接続します。",
-    "wslConnection": "Desktop はこの WSL ディストリビューションに接続します。",
-    "containerConnection": "Desktop はコンテナーのホスト経由で接続します。"
+    "openViaDesktop": "Desktop で「{action}」を選んでこの環境を開きます。",
+    "loopbackHelp": "このループバックアドレスは {host} 自身を指します。異なるホストでは同じポートを使用できます。このデバイスのブラウザーからこの環境にアクセスするためのアドレスではありません。"
   },
   "flowerRuntime": {
     "runtimeTitle": "Flower を使うにはランタイムを更新してください",

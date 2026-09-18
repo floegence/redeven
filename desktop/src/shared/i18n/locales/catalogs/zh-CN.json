@@ -2679,11 +2679,8 @@
     "deviceAddress": "此设备的浏览器地址",
     "networkAccessAddress": "网络访问地址",
     "listenerDetails": "查看内部监听地址",
-    "openViaDesktop": "在此设备上，请在 Desktop 中点击“{action}”进入环境。",
-    "loopbackHelp": "此回环地址属于 {host} 自身。不同主机可以使用相同端口；它不是此设备访问该环境的浏览器入口。",
-    "sshConnection": "Desktop 通过 SSH 连接此环境。",
-    "wslConnection": "Desktop 连接此 WSL 分发。",
-    "containerConnection": "Desktop 通过容器所在主机连接。"
+    "openViaDesktop": "通过 Desktop 的“{action}”进入此环境。",
+    "loopbackHelp": "此回环地址属于 {host} 自身。不同主机可以使用相同端口；它不是此设备访问该环境的浏览器入口。"
   },
   "flowerRuntime": {
     "runtimeTitle": "更新运行时后使用 Flower",
