@@ -487,7 +487,7 @@ describe("GitHistoryBrowser interactions", () => {
     }
   });
 
-  it("keeps the opened commit diff stable while the external graph selection changes", async () => {
+  it("clears the inline diff and ignores late results when the graph selection is cleared", async () => {
     let resolvePreview:
       | ((value: Awaited<ReturnType<typeof mockGetDiffContent>>) => void)
       | undefined;
@@ -592,8 +592,9 @@ describe("GitHistoryBrowser interactions", () => {
       });
       await flush();
 
-      expect(document.body.textContent).toContain("Commit Diff");
-      expect(document.body.textContent).toContain("+newValue");
+      expect(host.querySelector('[data-git-diff-panel]')).toBeNull();
+      expect(document.body.textContent).not.toContain("+newValue");
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
     } finally {
       dispose();
     }
@@ -962,8 +963,9 @@ describe("GitHistoryBrowser interactions", () => {
       expect(stackedBodyGroup?.className).toContain("pl-0");
       expect(
         host.querySelector('[data-git-commit-files-list-layout="compact"]'),
-      ).toBeFalsy();
-      expect(host.querySelectorAll("tbody tr")).toHaveLength(2);
+      ).toBeTruthy();
+      expect(host.querySelectorAll('[data-git-commit-files-list-layout] button')).toHaveLength(2);
+      expect(host.querySelector('[data-git-diff-panel]')).toBeTruthy();
 
       const inlineOverview = await setCommitOverviewWidth(host, 1040);
       const inlineBodyGroup = host.querySelector(
@@ -974,8 +976,9 @@ describe("GitHistoryBrowser interactions", () => {
       expect(inlineBodyGroup?.className).toContain("pl-4");
       expect(
         host.querySelector('[data-git-commit-files-list-layout="compact"]'),
-      ).toBeFalsy();
-      expect(host.querySelectorAll("tbody tr")).toHaveLength(2);
+      ).toBeTruthy();
+      expect(host.querySelectorAll('[data-git-commit-files-list-layout] button')).toHaveLength(2);
+      expect(host.querySelector('[data-git-diff-panel]')).toBeTruthy();
     } finally {
       dispose();
     }

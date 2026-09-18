@@ -110,7 +110,8 @@ import {
   workspaceSectionTone,
 } from "./GitChrome";
 import { GitChangesBreadcrumb } from "./GitChangesBreadcrumb";
-import { GitDiffDialog } from "./GitDiffDialog";
+import { GitDiffPanel } from "./GitDiffPanel";
+import { GitDiffSplit } from "./GitDiffSplit";
 import { GitCommitGraph } from './GitCommitGraph';
 import { GitCommitMessageDialog } from './GitCommitMessageDialog';
 import { GitVirtualTable } from "./GitVirtualTable";
@@ -674,7 +675,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
           viewportClass={props.surface === "inline" ? "git-branch-history-files__viewport" : undefined}
           tableClass={cn(
             GIT_CHANGED_FILES_TABLE_CLASS,
-            "min-w-[34rem] sm:min-w-[46rem] md:min-w-0",
+            "git-diff-file-table",
             props.surface === "inline" && "git-branch-history-files__table",
           )}
           header={
@@ -691,7 +692,8 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
             return (
               <tr
                 aria-selected={active()}
-                class={gitChangedFilesRowClass(active())}
+                class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
+                onClick={() => props.onOpenDiff?.(item, props.context)}
                 tabIndex={0}
                 onContextMenu={(event) => {
                   event.stopPropagation();
@@ -1104,7 +1106,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
       >
         <GitVirtualTable
           items={props.items}
-          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[36rem] sm:min-w-[52rem] md:min-w-0`}
+          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} git-diff-file-table git-diff-file-table--status`}
           header={
             <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
               <For each={BRANCH_STATUS_TABLE_COLUMN_KEYS}>
@@ -1320,7 +1322,6 @@ interface BranchHistoryCommitDetailsProps {
   files: GitCommitFileSummary[];
   presentation?: GitCommitDiffPresentation;
   fileTotals: ReturnType<typeof summarizeCommitFileChanges>;
-  selectedDiffKey?: string;
   repoRootPath: string;
   branchName?: string;
   askFlowerLabel: string;
@@ -1328,7 +1329,6 @@ interface BranchHistoryCommitDetailsProps {
   alreadyDetachedHere?: boolean;
   onAskFlower?: GitBranchesPanelProps["onAskFlower"];
   onSwitchDetached?: GitBranchesPanelProps["onSwitchDetached"];
-  onOpenDiff?: (item: GitCommitFileSummary, commitHash: string) => void;
   onOpenInTerminal?: GitBranchesPanelProps["onOpenInTerminal"];
   onBrowseFiles?: GitBranchesPanelProps["onBrowseFiles"];
   onPreviewCurrentFile?: GitBranchesPanelProps["onPreviewCurrentFile"];
@@ -1337,6 +1337,9 @@ interface BranchHistoryCommitDetailsProps {
 
 function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
   const i18n = useI18n();
+  const [selectedFileKey, setSelectedFileKey] = createSignal('');
+  const diffItem = createMemo(() => props.files.find((file) => gitDiffEntryIdentity(file) === selectedFileKey()) ?? props.files[0] ?? null);
+  createEffect(() => { void props.commit.hash; setSelectedFileKey(''); });
   const [messageDialogOpen, setMessageDialogOpen] = createSignal(false);
   const presentationBadge = () =>
     localizedGitCommitDiffPresentationBadge(props.presentation, i18n);
@@ -1511,27 +1514,31 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                     deletions={props.fileTotals.deletions}
                   />
                 </div>
-                <BranchCompareFilesTable
-                  surface="inline"
-                  items={props.files}
-                  selectedKey={props.selectedDiffKey}
-                  context={{
-                    kind: 'commit',
-                    repoRootPath: props.repoRootPath,
-                    liveRootPath: props.repoRootPath,
-                    branchName: props.branchName,
-                    commit: props.commit,
-                  }}
-                  onOpenDiff={(item, context) => props.onOpenDiff?.(
-                    item,
-                    context.kind === 'commit' ? context.commit.hash : props.commit.hash,
-                  )}
-                  onAskFlower={props.onAskFlower}
-                  onOpenInTerminal={props.onOpenInTerminal}
-                  onBrowseFiles={props.onBrowseFiles}
-                  onPreviewCurrentFile={props.onPreviewCurrentFile}
-                  onCopyText={props.onCopyText}
-                />
+                <GitDiffSplit detail={
+                  <GitDiffPanel open={Boolean(diffItem())} item={diffItem()}
+                    source={{ kind: 'commit', repoRootPath: props.repoRootPath, commit: props.commit.hash, presentation: props.presentation }}
+                    emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
+                  />
+                }>
+                  <BranchCompareFilesTable
+                    surface="inline"
+                    items={props.files}
+                    selectedKey={gitDiffEntryIdentity(diffItem())}
+                    context={{
+                      kind: 'commit',
+                      repoRootPath: props.repoRootPath,
+                      liveRootPath: props.repoRootPath,
+                      branchName: props.branchName,
+                      commit: props.commit,
+                    }}
+                    onOpenDiff={(item) => setSelectedFileKey(gitDiffEntryIdentity(item))}
+                    onAskFlower={props.onAskFlower}
+                    onOpenInTerminal={props.onOpenInTerminal}
+                    onBrowseFiles={props.onBrowseFiles}
+                    onPreviewCurrentFile={props.onPreviewCurrentFile}
+                    onCopyText={props.onCopyText}
+                  />
+                </GitDiffSplit>
               </Show>
             </div>
           </Show>
@@ -1579,10 +1586,6 @@ function HistoryList(
   const [commitDetailsByContext, setCommitDetailsByContext] = createSignal<
     Record<string, Record<string, BranchHistoryCommitDetailState>>
   >({});
-  const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
-  const [diffDialogItem, setDiffDialogItem] =
-    createSignal<GitCommitFileSummary | null>(null);
-  const [diffDialogCommitHash, setDiffDialogCommitHash] = createSignal("");
   const requestedCommitDetailKeys = new Set<string>();
 
   const expandedCommitHash = createMemo(() =>
@@ -1608,12 +1611,6 @@ function HistoryList(
     if (!contextKey) return {};
     return commitDetailsByContext()[contextKey] ?? {};
   });
-  const selectedDiffKey = () => gitDiffEntryIdentity(diffDialogItem());
-  const diffDialogPresentation = createMemo(() => {
-    const hash = diffDialogCommitHash();
-    if (!hash) return undefined;
-    return commitDetails()[hash]?.presentation;
-  });
   const selectedCommit = createMemo(() =>
     (props.commits ?? []).find((commit) => commit.hash === expandedCommitHash()) ?? null,
   );
@@ -1628,13 +1625,6 @@ function HistoryList(
   const toggleCommit = (hash: string) => {
     props.onSelectCommit?.(expandedCommitHash() === hash ? "" : hash);
   };
-
-  createEffect(() => {
-    void historyContextKey();
-    setDiffDialogItem(null);
-    setDiffDialogCommitHash("");
-    setDiffDialogOpen(false);
-  });
 
   createEffect(() => {
     if (!props.active) return;
@@ -1775,7 +1765,7 @@ function HistoryList(
                         </Show>
                       </div>
 
-                      <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class={cn('min-h-0 overflow-auto rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass())}>
+                      <div class={cn('flex min-h-0 flex-col overflow-hidden rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass())}>
                         <Show
                           when={selectedCommit()}
                           fallback={(
@@ -1794,7 +1784,6 @@ function HistoryList(
                                 files={files()}
                                 presentation={detail()?.presentation}
                                 fileTotals={summarizeCommitFileChanges(files())}
-                                selectedDiffKey={selectedDiffKey()}
                                 repoRootPath={repoRootPath()}
                                 branchName={selectedBranchName()}
                                 askFlowerLabel={i18n.t("git.changes.askFlower")}
@@ -1806,11 +1795,6 @@ function HistoryList(
                                 onBrowseFiles={props.onBrowseFiles}
                                 onPreviewCurrentFile={props.onPreviewCurrentFile}
                                 onCopyText={props.onCopyText}
-                                onOpenDiff={(item, commitHash) => {
-                                  setDiffDialogItem(item);
-                                  setDiffDialogCommitHash(commitHash);
-                                  setDiffDialogOpen(true);
-                                }}
                               />
                             );
                           }}
@@ -1824,35 +1808,6 @@ function HistoryList(
           </div>
         </div>
       </div>
-
-      <GitDiffDialog
-        open={diffDialogOpen()}
-        onOpenChange={(open) => {
-          setDiffDialogOpen(open);
-          if (!open) {
-            setDiffDialogItem(null);
-            setDiffDialogCommitHash("");
-          }
-        }}
-        item={diffDialogItem()}
-        source={
-          diffDialogItem()
-            ? {
-                kind: "commit",
-                repoRootPath: repoRootPath(),
-                commit: diffDialogCommitHash(),
-                presentation: diffDialogPresentation(),
-              }
-            : null
-        }
-        title={i18n.t('uiCopy.git.commitDiff')}
-        description={
-          diffDialogItem()
-            ? changeSecondaryPath(diffDialogItem())
-            : i18n.t('uiCopy.git.reviewSelectedFileDiff')
-        }
-        emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
-      />
     </>
   );
 }
@@ -1930,10 +1885,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
     createSignal<GitGetBranchCompareResponse | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal("");
-  const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
-  const [diffDialogItem, setDiffDialogItem] =
-    createSignal<GitCommitFileSummary | null>(null);
-  const [diffDialogSource, setDiffDialogSource] = createSignal<Extract<BranchFileContext, { kind: 'compare' }> | null>(null);
+  const [selectedFileKey, setSelectedFileKey] = createSignal('');
 
   let compareReqSeq = 0;
 
@@ -1961,7 +1913,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
       setLoading(false);
       setError("");
       setCompare(null);
-      setDiffDialogSource(null);
+      setSelectedFileKey('');
       return;
     }
 
@@ -2000,7 +1952,8 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
   });
 
   const compareFiles = () => compare()?.files ?? [];
-  const selectedKey = () => gitDiffEntryIdentity(diffDialogItem());
+  const diffItem = createMemo(() => compareFiles().find((file) => gitDiffEntryIdentity(file) === selectedFileKey()) ?? compareFiles()[0] ?? null);
+  const selectedKey = () => gitDiffEntryIdentity(diffItem());
 
   return (
     <>
@@ -2017,7 +1970,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
           "[&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:!overflow-hidden [&>div:last-child]:!p-0",
           layout.isMobile()
             ? "h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none"
-            : "max-h-[88vh] w-[min(1100px,94vw)]",
+            : "h-[min(760px,88vh)] w-[min(1280px,94vw)]",
         )}
       >
         <div class="flex min-h-0 flex-1 flex-col">
@@ -2089,7 +2042,12 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
                           </div>
                         </div>
 
-                        <div class="flex min-h-0 flex-1 overflow-hidden">
+                        <GitDiffSplit detail={
+                          <GitDiffPanel open={props.open && Boolean(diffItem())} item={diffItem()}
+                            source={{ kind: 'compare', repoRootPath: exactGitPath(props.repoRootPath), baseRef: compareAccessor().baseRef, targetRef: compareAccessor().targetRef }}
+                            emptyMessage={i18n.t('uiCopy.git.selectComparedFile')}
+                          />
+                        }>
                           <BranchCompareFilesTable
                             items={compareFiles()}
                             selectedKey={selectedKey()}
@@ -2100,19 +2058,14 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
                               baseRef: compareAccessor().baseRef,
                               targetRef: compareAccessor().targetRef,
                             }}
-                            onOpenDiff={(item, context) => {
-                              if (context.kind !== 'compare') return;
-                              setDiffDialogItem(item);
-                              setDiffDialogSource({ ...context });
-                              setDiffDialogOpen(true);
-                            }}
+                            onOpenDiff={(item) => setSelectedFileKey(gitDiffEntryIdentity(item))}
                             onAskFlower={props.onAskFlower}
                             onOpenInTerminal={props.onOpenInTerminal}
                             onBrowseFiles={props.onBrowseFiles}
                             onPreviewCurrentFile={props.onPreviewCurrentFile}
                             onCopyText={props.onCopyText}
                           />
-                        </div>
+                        </GitDiffSplit>
                       </div>
                     </div>
                   )}
@@ -2122,35 +2075,6 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
           </div>
         </div>
       </Dialog>
-
-      <GitDiffDialog
-        open={diffDialogOpen()}
-        onOpenChange={(open) => {
-          setDiffDialogOpen(open);
-          if (!open) {
-            setDiffDialogItem(null);
-            setDiffDialogSource(null);
-          }
-        }}
-        item={diffDialogItem()}
-        source={
-          diffDialogItem() && diffDialogSource()
-            ? {
-                kind: "compare",
-                repoRootPath: diffDialogSource()!.repoRootPath,
-                baseRef: diffDialogSource()!.baseRef,
-                targetRef: diffDialogSource()!.targetRef,
-              }
-            : null
-        }
-        title={i18n.t('uiCopy.git.branchCompareDiff')}
-        description={
-          diffDialogItem()
-            ? changeSecondaryPath(diffDialogItem())
-            : i18n.t('uiCopy.git.reviewSelectedCompareDiff')
-        }
-        emptyMessage={i18n.t('uiCopy.git.selectComparedFile')}
-      />
     </>
   );
 }
@@ -2170,10 +2094,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const [selectedStatusSection, setSelectedStatusSection] =
     createSignal<GitWorkspaceViewSection>("changes");
   const [statusSectionPinned, setStatusSectionPinned] = createSignal(false);
-  const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
-  const [diffDialogItem, setDiffDialogItem] =
-    createSignal<GitWorkspaceChange | null>(null);
-  const [diffDialogRepoRootPath, setDiffDialogRepoRootPath] = createSignal('');
+  const [selectedStatusFileKey, setSelectedStatusFileKey] = createSignal('');
   const [compareDialogOpen, setCompareDialogOpen] = createSignal(false);
   const [compareDialogBranch, setCompareDialogBranch] = createSignal<GitBranchSummary | null>(null);
   const branchContextMenu = createGitEntityContextMenuController<BranchHeaderContextTarget>({
@@ -2373,7 +2294,11 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (!request) return;
     void props.onBrowseFiles?.(request);
   };
-  const visibleStatusKey = () => workspaceEntryKey(diffDialogItem());
+  const diffItem = createMemo(() => {
+    const files = visibleStatusItems().filter((item) => !isGitWorkspaceDirectoryEntry(item));
+    return files.find((item) => workspaceEntryKey(item) === selectedStatusFileKey()) ?? files[0] ?? null;
+  });
+  const visibleStatusKey = () => workspaceEntryKey(diffItem());
   const statusEmptyState = () =>
     branchStatusEmptyState(selectedBranch(), statusRepoRootPath(), i18n);
   const mergeReviewBranch = () =>
@@ -3341,12 +3266,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     }
   });
 
-  createEffect(() => {
-    if (!diffDialogOpen()) return;
-    if (diffDialogItem()) return;
-    setDiffDialogOpen(false);
-  });
-
   const renderStatusUnavailableSummary = () => (
     <div
       class="git-branch-status-unavailable-summary"
@@ -3586,33 +3505,36 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                 when={branchStatusPresentationState() === "ready"}
                 fallback={renderBranchStatusContentFallback()}
               >
-                <BranchStatusTable
-                  canonicalRepoRootPath={activeRepoRootPath()}
-                  repoRootPath={statusRepoRootPath()}
-                  branch={interactiveBranch() as GitBranchSummary}
-                  section={selectedStatusSection()}
-                  items={visibleStatusItems()}
-                  totalCount={visibleStatusTotalRows()}
-                  scopeFileCount={visibleStatusScopeFileCount()}
-                  directoryPath={activeStatusDirectoryPath()}
-                  hasMore={visibleStatusPageState().hasMore}
-                  loadingMore={visibleStatusLoadingMore()}
-                  selectedKey={visibleStatusKey()}
-                  onOpenDiff={(item, context) => {
-                    setDiffDialogItem(item);
-                    setDiffDialogRepoRootPath(context.liveRootPath);
-                    setDiffDialogOpen(true);
-                  }}
-                  onOpenDirectory={navigateStatusDirectory}
-                  onAskFlower={props.onAskFlower}
-                  onOpenInTerminal={props.onOpenInTerminal}
-                  onBrowseFiles={props.onBrowseFiles}
-                  onPreviewCurrentFile={props.onPreviewCurrentFile}
-                  onCopyText={props.onCopyText}
-                  onLoadMore={() => {
-                    void loadMoreStatusSection(selectedStatusSection());
-                  }}
-                />
+                <GitDiffSplit detail={
+                  <GitDiffPanel open={statusTabActive() && Boolean(diffItem())} item={diffItem()}
+                    source={{ kind: 'workspace', repoRootPath: statusRepoRootPath(), workspaceSection: diffItem()?.section ?? '' }}
+                    emptyMessage={i18n.t('uiCopy.git.selectBranchStatusFile')}
+                  />
+                }>
+                  <BranchStatusTable
+                    canonicalRepoRootPath={activeRepoRootPath()}
+                    repoRootPath={statusRepoRootPath()}
+                    branch={interactiveBranch() as GitBranchSummary}
+                    section={selectedStatusSection()}
+                    items={visibleStatusItems()}
+                    totalCount={visibleStatusTotalRows()}
+                    scopeFileCount={visibleStatusScopeFileCount()}
+                    directoryPath={activeStatusDirectoryPath()}
+                    hasMore={visibleStatusPageState().hasMore}
+                    loadingMore={visibleStatusLoadingMore()}
+                    selectedKey={visibleStatusKey()}
+                    onOpenDiff={(item) => setSelectedStatusFileKey(workspaceEntryKey(item))}
+                    onOpenDirectory={navigateStatusDirectory}
+                    onAskFlower={props.onAskFlower}
+                    onOpenInTerminal={props.onOpenInTerminal}
+                    onBrowseFiles={props.onBrowseFiles}
+                    onPreviewCurrentFile={props.onPreviewCurrentFile}
+                    onCopyText={props.onCopyText}
+                    onLoadMore={() => {
+                      void loadMoreStatusSection(selectedStatusSection());
+                    }}
+                  />
+                </GitDiffSplit>
               </Show>
             </div>
           </div>
@@ -3935,35 +3857,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         onCopyText={props.onCopyText}
       />
 
-      <GitDiffDialog
-        open={diffDialogOpen()}
-        onOpenChange={(open) => {
-          setDiffDialogOpen(open);
-          if (!open) {
-            setDiffDialogItem(null);
-            setDiffDialogRepoRootPath('');
-          }
-        }}
-        item={diffDialogItem()}
-        source={
-          diffDialogItem()
-            ? {
-                kind: "workspace",
-                repoRootPath: diffDialogRepoRootPath(),
-                workspaceSection: String(
-                  diffDialogItem()?.section ?? "",
-                ).trim(),
-              }
-            : null
-        }
-        title={i18n.t('uiCopy.git.branchStatusDiff')}
-        description={
-          diffDialogItem()
-            ? changeSecondaryPath(diffDialogItem())
-            : i18n.t('uiCopy.git.reviewSelectedBranchStatusDiff')
-        }
-        emptyMessage={i18n.t('uiCopy.git.selectBranchStatusFile')}
-      />
       <GitEntityContextMenu controller={branchContextMenu} items={branchContextMenuItems} />
       <GitEntityContextMenu controller={statusScopeContextMenu} items={statusScopeContextMenuItems} />
 
