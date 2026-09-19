@@ -168,6 +168,7 @@ export type GitContentSkeletonVariant =
   | 'commit-graph'
   | 'commit-graph-detail'
   | 'changed-files'
+  | 'file-rail'
   | 'commit-detail'
   | 'overview'
   | 'comparison'
@@ -175,8 +176,8 @@ export type GitContentSkeletonVariant =
   | 'stash-list'
   | 'form';
 
-function GitSkeletonBlock(props: { class?: string }) {
-  return <span class={cn('git-content-skeleton__block', props.class)} />;
+export function GitSkeletonBlock(props: { class?: string }) {
+  return <span aria-hidden="true" class={cn('git-content-skeleton__block', props.class)} />;
 }
 
 function GitSkeletonTable(props: { rows: number; showHeader: boolean }) {
@@ -333,6 +334,14 @@ export function GitContentSkeleton(props: GitContentSkeletonProps) {
         );
       case 'changed-files':
         return <GitSkeletonTable rows={rows()} showHeader={props.showHeader !== false} />;
+      case 'file-rail':
+        return <For each={Array.from({ length: rows() }, (_, index) => index)}>{(index) => (
+          <div class="git-file-row" data-skeleton-row={index}>
+            <GitSkeletonBlock class="git-content-skeleton__table-path" />
+            <GitSkeletonBlock class="h-2 w-2" />
+            <GitSkeletonBlock class="h-2 w-12" />
+          </div>
+        )}</For>;
       case 'overview':
         return (
           <div class="git-content-skeleton__overview">

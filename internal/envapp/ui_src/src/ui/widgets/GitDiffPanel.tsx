@@ -32,7 +32,7 @@ import {
   redevenSurfaceRoleClass,
 } from "../utils/redevenSurfaceRoles";
 import { GitPatchViewer } from "./GitPatchViewer";
-import { GitMetaPill, GitStatePane } from "./GitWorkbenchPrimitives";
+import { GitMetaPill, GitSkeletonBlock, GitStatePane } from "./GitWorkbenchPrimitives";
 import { useI18n } from "../i18n";
 
 export type GitDiffDialogItem =
@@ -133,6 +133,7 @@ const gitDiffModeButtonClass =
 
 export interface GitDiffPanelProps {
   open: boolean;
+  loading?: boolean;
   item: GitDiffDialogItem | null | undefined;
   source?: GitDiffDialogSource | null;
   emptyMessage: string;
@@ -846,8 +847,10 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
     <div data-git-diff-panel class={cn("git-diff-panel flex h-full min-h-0 min-w-0 flex-col", props.class)}>
       <div class="git-diff-panel__toolbar">
         <div class="git-diff-panel__identity">
-          <Show when={props.item} fallback={<span class="text-[11px] font-medium text-muted-foreground">{i18n.t('gitDiff.title')}</span>}>
-            <GitFileLabel path={props.item?.newPath || props.item?.path || props.item?.oldPath || ''} />
+          <Show when={!props.loading} fallback={<GitSkeletonBlock class="h-3 w-40 max-w-full" />}>
+            <Show when={props.item} fallback={<span class="text-[11px] font-medium text-muted-foreground">{i18n.t('gitDiff.title')}</span>}>
+              <GitFileLabel path={props.item?.newPath || props.item?.path || props.item?.oldPath || ''} />
+            </Show>
           </Show>
         </div>
         <Show when={props.item}>
@@ -898,6 +901,9 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
 
       <div class="relative min-h-0 flex-1">
         <Switch>
+          <Match when={props.loading || activeBodyState().kind === "loading"}>
+            <GitStatePane loading loadingVariant="patch" loadingRows={10} message={activeBodyLoadingMessage()} class="git-diff-panel__loading" />
+          </Match>
           <Match when={activeErrorState()}>
             <GitStatePane
               tone="error"
@@ -925,17 +931,6 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
               item={activeReadyItem()}
               emptyMessage={activeBodyEmptyMessage()}
               unavailableMessage={unavailableMessage}
-            />
-          </Match>
-
-          <Match when={activeBodyState().kind === "loading"}>
-            <GitStatePane
-              loading
-              loadingVariant="patch"
-              loadingRows={10}
-              message={activeBodyLoadingMessage()}
-              surface
-              class="min-h-0 flex-1"
             />
           </Match>
 

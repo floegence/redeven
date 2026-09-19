@@ -205,7 +205,7 @@ afterEach(() => {
 });
 
 describe("GitHistoryBrowser interactions", () => {
-  it("shows a commit-detail skeleton while graph commit details are loading", async () => {
+  it("keeps the file and diff frames while graph commit details are loading", async () => {
     mockGetCommitDetail.mockImplementationOnce(() => new Promise(() => {}));
 
     const host = document.createElement("div");
@@ -235,8 +235,8 @@ describe("GitHistoryBrowser interactions", () => {
 
     try {
       await flush();
-      expect(host.textContent).toContain("Loading commit details...");
-      expect(host.querySelector('[data-git-content-skeleton="commit-detail"]')).toBeTruthy();
+      expect(host.textContent).toContain("Loading changed files...");
+      expect(host.querySelector('[data-git-content-skeleton="file-rail"]')).toBeTruthy();
       expect(host.querySelector(".git-loading-indicator")).toBeNull();
       expect(host.querySelector(".floe-grid-cell")).toBeNull();
     } finally {
@@ -244,7 +244,7 @@ describe("GitHistoryBrowser interactions", () => {
     }
   });
 
-  it("replaces the previous commit with a full detail skeleton while switching commits", async () => {
+  it("clears previous content inside the retained inspection frame while switching commits", async () => {
     const [selectedCommitHash, setSelectedCommitHash] = createSignal(
       "3a47b67b1234567890",
     );
@@ -282,7 +282,7 @@ describe("GitHistoryBrowser interactions", () => {
       await flush();
 
       expect(host.textContent).not.toContain("Refine bootstrap");
-      expect(host.querySelector('[data-git-content-skeleton="commit-detail"]')).toBeTruthy();
+      expect(host.querySelector('[data-git-content-skeleton="file-rail"]')).toBeTruthy();
       expect(host.querySelector('.git-inline-loading-status')).toBeNull();
     } finally {
       dispose();

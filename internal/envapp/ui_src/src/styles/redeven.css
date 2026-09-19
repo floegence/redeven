@@ -5716,6 +5716,29 @@ html.dark .git-content-skeleton__block {
   min-height: 0;
   overflow: hidden;
 }
+.git-diff-split__files > .git-content-skeleton {
+  overflow: hidden;
+}
+.git-diff-panel__loading {
+  height: 100%;
+  overflow: hidden;
+}
+.git-diff-panel__loading .git-content-skeleton__patch {
+  border: 0;
+  border-radius: 0;
+}
+.git-diff-panel__loading .git-content-skeleton__patch-heading {
+  box-sizing: border-box;
+  height: 32px;
+  min-height: 32px;
+  margin: 0;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.git-diff-panel__loading .git-content-skeleton__code-row {
+  min-height: 20px;
+  padding: 0 10px;
+}
 .git-diff-panel__empty {
   display: grid;
   grid-template-rows: minmax(1rem, 2fr) auto minmax(1rem, 3fr);

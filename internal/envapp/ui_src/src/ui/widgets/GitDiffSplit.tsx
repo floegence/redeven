@@ -1,10 +1,11 @@
-import type { JSX } from 'solid-js';
+import { Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useI18n } from '../i18n';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { GitContentSkeleton } from './GitWorkbenchPrimitives';
 
 /** Keep the Git file rail and its diff in the same constrained browsing surface. */
-export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element; filesHeader?: JSX.Element; class?: string }) {
+export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element; filesHeader?: JSX.Element; loading?: boolean; class?: string }) {
   const i18n = useI18n();
   const navigateFiles: JSX.EventHandler<HTMLDivElement, KeyboardEvent> = (event) => {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -36,7 +37,9 @@ export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element
       <div class="git-diff-split__layout">
         <div class="git-diff-split__files" onKeyDown={navigateFiles}>
           <div class="git-diff-split__files-header">{props.filesHeader ?? i18n.t('uiCopy.git.changedFiles')}</div>
-          {props.children}
+          <Show when={!props.loading} fallback={<GitContentSkeleton variant="file-rail" rows={8} label={i18n.t('uiCopy.git.loadingChangedFiles')} />}>
+            {props.children}
+          </Show>
         </div>
         <div class="git-diff-split__detail">{props.detail}</div>
       </div>

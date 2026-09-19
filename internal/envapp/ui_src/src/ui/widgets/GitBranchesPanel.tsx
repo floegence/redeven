@@ -129,6 +129,7 @@ import {
   GitChangeStatusPill,
   GitDirectoryStatus,
   GitContentSkeleton,
+  GitSkeletonBlock,
   GitLabelBlock,
   GitInlineLoadingStatus,
   GitMetaPill,
@@ -1229,9 +1230,10 @@ interface BranchHistoryCommitDetailsProps {
 
 function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
   const i18n = useI18n();
+  const loading = () => !props.detail || props.detail.loading;
   const [selectedFileKey, setSelectedFileKey] = createSignal('');
   const diffItem = createMemo(() => props.files.find((file) => gitDiffEntryIdentity(file) === selectedFileKey()) ?? props.files[0] ?? null);
-  createEffect(() => { void props.commit.hash; setSelectedFileKey(''); });
+  createEffect(() => { void props.commit.hash; setSelectedFileKey(''); setMessageDialogOpen(false); });
   const [messageDialogOpen, setMessageDialogOpen] = createSignal(false);
   const presentationBadge = () =>
     localizedGitCommitDiffPresentationBadge(props.presentation, i18n);
@@ -1253,18 +1255,6 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
   return (
     <>
       <div class="git-branch-history-details" data-git-branch-history-details>
-        <Show
-          when={props.detail && !props.detail.loading}
-          fallback={
-            <GitStatePane
-              loading
-              loadingVariant="commit-detail"
-              loadingRows={3}
-              message={i18n.t('uiCopy.git.loadingChangedFiles')}
-              class="git-branch-history-state min-h-[5rem] px-1 py-2"
-            />
-          }
-        >
           <Show
             when={!props.detail?.error}
             fallback={
@@ -1275,7 +1265,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
               />
             }
           >
-            <div class="git-branch-history-detail-stack">
+            <div class="git-branch-history-detail-stack" aria-busy={loading()}>
               <div class="git-branch-history-summary">
                 <div class="git-branch-history-summary-main">
                   <span
@@ -1295,7 +1285,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                   </div>
                 </div>
                 <div class="git-branch-history-summary-meta">
-                  <GitMetaPill tone="neutral">{fileCountLabel()}</GitMetaPill>
+                  <Show when={!loading()} fallback={<GitSkeletonBlock class="h-4 w-12" />}><GitMetaPill tone="neutral">{fileCountLabel()}</GitMetaPill></Show>
                   <Show when={presentationBadge()}>
                     {(badge) => (
                       <GitMetaPill tone="violet">{badge()}</GitMetaPill>
@@ -1310,6 +1300,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                     size="sm"
                     variant="outline"
                     data-git-full-commit-message-trigger
+                    disabled={loading()}
                     class={cn(
                       "rounded-md bg-background/70",
                       redevenSurfaceRoleClass("control"),
@@ -1328,7 +1319,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                         redevenSurfaceRoleClass("control"),
                       )}
                       disabled={
-                        Boolean(props.switchDetachedBusy) ||
+                        loading() || Boolean(props.switchDetachedBusy) ||
                         Boolean(props.alreadyDetachedHere)
                       }
                       onClick={() =>
@@ -1356,6 +1347,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                         tone="flower"
                         icon={FlowerIcon}
                         size="sm"
+                        disabled={loading()}
                         onClick={() =>
                           props.onAskFlower?.({
                             kind: "commit",
@@ -1388,7 +1380,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
               </Show>
 
               <Show
-                when={props.files.length > 0}
+                when={loading() || props.files.length > 0}
                 fallback={(
                   <div class="git-branch-history-note">
                     {i18n.t('uiCopy.git.noCommitFiles')}
@@ -1397,13 +1389,12 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
               >
                 <div class="flex items-center justify-between gap-2 text-[11px] font-medium text-foreground">
                   <span>{i18n.t('uiCopy.git.filesInCommit')}</span>
-                  <GitChangeMetrics
-                    additions={props.fileTotals.additions}
-                    deletions={props.fileTotals.deletions}
-                  />
+                  <Show when={!loading()} fallback={<GitSkeletonBlock class="h-2 w-14" />}>
+                    <GitChangeMetrics additions={props.fileTotals.additions} deletions={props.fileTotals.deletions} />
+                  </Show>
                 </div>
-                <GitDiffSplit detail={
-                  <GitDiffPanel open={Boolean(diffItem())} item={diffItem()}
+                <GitDiffSplit loading={loading()} detail={
+                  <GitDiffPanel loading={loading()} open={Boolean(diffItem())} item={diffItem()}
                     source={{ kind: 'commit', repoRootPath: props.repoRootPath, commit: props.commit.hash, presentation: props.presentation }}
                     emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
                   />
@@ -1430,7 +1421,6 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
               </Show>
             </div>
           </Show>
-        </Show>
       </div>
       <GitCommitMessageDialog
         open={messageDialogOpen()}

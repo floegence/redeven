@@ -594,6 +594,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               repoInfoLoading={props.repoInfoLoading}
               repoSummary={props.repoSummary}
               selectedCommitHash={props.selectedCommitHash}
+              selectedCommit={props.commits?.find((commit) => commit.hash === props.selectedCommitHash)}
               switchDetachedBusy={props.switchDetachedBusy}
               onSwitchDetached={props.onSwitchDetached}
               onAskFlower={(request) => props.onAskFlower?.(request)}
