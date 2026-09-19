@@ -31,15 +31,9 @@ Address presentation groups this-device, network and internal listeners by their
 
 # Boundaries
 
-## Linked Runtime and Cloud presentation
+## Environment library presentation
 
-Welcome groups a Local, SSH, or WSL Runtime with its Cloud Environment only when the Runtime link target ID equals the Cloud linked-runtime summary ID and their Provider origin, Provider ID, and ENV ID agree. Linking, linked, and disconnecting records retain that exact relationship; unbound, unrelated, or missing counterparts render independently. This is a Renderer projection over original snapshot entries, not a new connection or lifecycle state machine. Gateway projection remains independent.
-
-The Runtime is the primary identity, status, age, and lifecycle action surface. A secondary Redeven Cloud connection region owns the Cloud name, remote status, ENV ID, remote address, and remote Env App action. Cloud identity appears once. Cloud authorization, offline state, or sync failure never disables Runtime lifecycle actions. Each owner retains its own refresh, settings, pin, Flower context, permission checks, and progress. Popovers, QR, focus, and busy state use real entry IDs; only connection-detail disclosure uses the stable relationship group ID.
-
-Search matches either owner's name, ENV ID, or connection information. Source and Runtime Target filters match either member independently of search and highlight the relevant owner. Counts, ordering, layout, and pinned sections use visual groups; either owner's pin places the group in Pinned, while controls identify which owner they change. Snapshot refresh updates values in place. Unlinking restores independent cards without deleting records; persistence and removal boundaries follow [Environment registration ownership](desktop-environment-registrations.md).
-
-Standalone Runtime cards retain the full-width runtime-age and Cloud-affiliation metadata row. Affiliation has no remote availability dot and never repeats as a fact. Long values truncate with full text on hover. Unsupported legacy links retain their recovery fact. Fact values reserve space for endpoint controls even at narrow widths.
+[Environment library](desktop-environment-library.md) owns relationship cards, Runtime/Cloud access perspectives, source grids, searching, counts, and owner-scoped pin presentation. A selected perspective supplies the original owner to this connection model. Switching perspectives closes the previous owner's endpoint popover; it does not change address validity, cancel work, or rebind open settings. Standalone Runtime metadata retains startup age and one Cloud affiliation, while Cloud perspectives show only source, ENV ID and remote entry facts. Unsupported legacy links retain their recovery fact.
 
 ## Access settings and independent clients
 
@@ -52,10 +46,6 @@ Managed settings use the selected Runtime's private control channel, or its auth
 [Environment settings](desktop-environment-settings.md) owns section layout, draft/session identity, validation, and committed rebinding. [Local UI certificates](../security/local-ui-certificates.md) owns explicit HTTPS, certificate validity and client trust, maintenance confirmation, and restart blocking. [Local UI network exposure](../security/local-ui-network-exposure.md) owns bind, public-address, and password authority. Missing saved protocols retain HTTP; explicit HTTPS is preserved. Native settings remain readable for older Runtimes, while unsupported management requires an update or stop before saving. Failed writes preserve the prior password verifier and report failure rather than claiming success.
 
 # Evidence
-
-- `redeven:desktop/src/welcome/environmentLibraryProjection.ts` - Exact relationship identity and original owner entries.
-- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Owner action isolation, Cloud failures, refresh continuity, and unlinking.
-- `redeven:desktop/scripts/check-environment-relations.mjs` - Real relationship-card actions, focus, and localized narrow/dark layouts.
 
 - `redeven:desktop/src/shared/desktopEnvironmentConnection.ts` - One typed connection, address, and status model for Welcome and settings.
 - `redeven:desktop/src/welcome/EnvironmentConnectionRows.tsx` - Shared scoped groups, bounded address lists, stable row identity and Environment-owned filtering.

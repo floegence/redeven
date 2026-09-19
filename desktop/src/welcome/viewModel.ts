@@ -45,7 +45,6 @@ import {
   desktopRuntimeMaintenanceRequiresUpdate,
 } from '../shared/desktopRuntimeHealth';
 import {
-  buildEnvironmentLibraryDisplayGroups,
   environmentLibrarySearchText,
   type EnvironmentLibraryDisplayGroup,
 } from './environmentLibraryProjection';
@@ -77,8 +76,8 @@ export type EnvironmentCardMetaItem = Readonly<{
 
 export type EnvironmentCardFactActionModel = Readonly<
   | {
-      kind: 'filter_runtime_target';
-      runtime_target_id: DesktopProviderRuntimeLinkTargetID;
+      kind: 'focus_cloud_source';
+      source_id: string;
       label: string;
       aria_label: string;
     }
@@ -115,8 +114,6 @@ const ICON_VERSION = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53
 
 const ICON_PROVIDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik01IDEySDMuNUEyLjggMi44IDAgMDEzLjUgNi41Yy4yLTEuNiAxLjctMyAzLjUtM2EzLjQgMy40IDAgMDEzLjIgMi4yIDIuMyAyLjMgMCAwMTEuMyA0LjNIOSIvPjwvc3ZnPgo=';
 
-const ICON_LOCAL_LINK = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik01LjUgOC41YTMgMyAwIDAxMC00TDcuNSAyLjVhMyAzIDAgMDE0LjIgNC4yTDEwIDguNSIvPjxwYXRoIGQ9Ik0xMC41IDcuNWEzIDMgMCAwMTAgNEw4LjUgMTMuNWEzIDMgMCAwMS00LjItNC4yTDYgNy41Ii8+PC9zdmc+Cg==';
-
 const ICON_ENV_ID = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjUuNSIgY3k9IjUuNSIgcj0iMi44Ii8+PHBhdGggZD0iTTcuNSA3LjVMMTIuNSAxMi41Ii8+PHBhdGggZD0iTTEwIDEwbDIuNSAyLjUiLz48L3N2Zz4K';
 
 export const ICON_ENDPOINTS = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjIuNSIgY3k9IjEwLjUiIHI9IjEuOCIvPjxjaXJjbGUgY3g9IjEzLjUiIGN5PSIxMC41IiByPSIxLjgiLz48Y2lyY2xlIGN4PSI4IiBjeT0iMi41IiByPSIxLjgiLz48cGF0aCBkPSJNNCA5bDMtNSIvPjxwYXRoIGQ9Ik0xMiA5TDkgNCIvPjwvc3ZnPgo=';
@@ -126,12 +123,13 @@ export const FACT_LABEL_ICONS: Record<string, string> = {
   CONTAINER: ICON_CONTAINER,
   VERSION: ICON_VERSION,
   'CONTROL PLANE': ICON_PROVIDER,
-  'LOCAL LINK': ICON_LOCAL_LINK,
+  SOURCE: ICON_PROVIDER,
+  REMOTE: ICON_ENDPOINTS,
   'ENV ID': ICON_ENV_ID,
 };
 
 export type EnvironmentCardModel = Readonly<{
-  kind_label: 'Local' | 'Redeven Cloud' | 'Gateway' | 'Redeven URL' | 'SSH Host';
+  kind_label: 'Local' | 'Redeven Cloud' | 'Gateway' | 'Redeven URL' | 'SSH Host' | 'WSL';
   status_label: string;
   status_tone: EnvironmentCardTone;
   runtime_started_label: string;
@@ -476,6 +474,8 @@ export function isRemoteEnvironmentEntry(environment: DesktopEnvironmentEntry): 
 
 export function environmentKindLabel(environment: DesktopEnvironmentEntry): EnvironmentCardModel['kind_label'] {
   switch (environment.kind) {
+    case 'wsl_environment':
+      return 'WSL';
     case 'ssh_environment':
       return 'SSH Host';
     case 'provider_environment':
@@ -624,7 +624,6 @@ const ENVIRONMENT_CARD_FACT_ORDER = [
   'CONTAINER',
   'VERSION',
   'CONTROL PLANE',
-  'LOCAL LINK',
   'ENV ID',
 ] as const;
 
@@ -743,47 +742,6 @@ function providerRemoteLooksOffline(environment: DesktopEnvironmentEntry): boole
   return environment.remote_route_state === 'offline';
 }
 
-function providerLocalLinkLabel(environment: DesktopEnvironmentEntry): string {
-  if (environment.kind !== 'provider_environment') {
-    return '';
-  }
-  const linkedRuntime = environment.provider_linked_runtime_summary;
-  if (!linkedRuntime) {
-    return 'No managed runtime linked';
-  }
-  switch (linkedRuntime.provider_connection_state) {
-    case 'connected':
-      return linkedRuntime.label;
-    case 'connecting':
-      return `Connecting through ${linkedRuntime.label}`;
-    case 'disconnecting':
-      return `Disconnecting from ${linkedRuntime.label}`;
-    case 'error':
-      return `${linkedRuntime.label} needs attention`;
-    case 'unlinked':
-    case 'unsupported':
-      return 'No managed runtime linked';
-  }
-}
-
-function providerLocalLinkFact(environment: DesktopEnvironmentEntry): EnvironmentCardFactModel {
-  const value = providerLocalLinkLabel(environment);
-  const linkedRuntime = environment.kind === 'provider_environment'
-    ? environment.provider_linked_runtime_summary
-    : undefined;
-  if (!linkedRuntime) {
-    return buildEnvironmentCardFact('LOCAL LINK', value);
-  }
-  return buildEnvironmentCardFact('LOCAL LINK', value, {
-    action: {
-      kind: 'filter_runtime_target',
-      runtime_target_id: linkedRuntime.runtime_target_id,
-      label: `Show ${linkedRuntime.label}`,
-      aria_label: `Show linked runtime ${linkedRuntime.label}`,
-    },
-  });
-}
-
 function providerEnvironmentIDFact(environment: DesktopEnvironmentEntry): EnvironmentCardFactModel {
   const envID = compact(environment.env_public_id) || 'UNKNOWN';
   return envID === 'UNKNOWN'
@@ -814,16 +772,7 @@ export function buildEnvironmentCardFactsModel(
     ]);
   }
 
-  if (environment.kind === 'provider_environment') {
-    const provider = legacyControlPlaneFact(environment);
-    return orderEnvironmentCardFacts([
-      buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
-      runtimeVersionFact(environment),
-      ...(provider ? [provider] : []),
-      providerLocalLinkFact(environment),
-      providerEnvironmentIDFact(environment),
-    ]);
-  }
+  if (environment.kind === 'provider_environment') return cloudEnvironmentFacts(environment);
 
   if (environment.kind === 'gateway_environment') {
     return orderEnvironmentCardFacts([
@@ -850,10 +799,17 @@ export function buildEnvironmentCardFactsModel(
   ]);
 }
 
-export function buildEnvironmentCloudConnectionFactsModel(
+function cloudEnvironmentFacts(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardFactModel[] {
   return [
+    buildEnvironmentCardFact('SOURCE', environment.control_plane_label || environment.provider_origin || 'UNKNOWN', {
+      ...(environment.provider_origin && environment.provider_id ? { action: {
+        kind: 'focus_cloud_source', source_id: desktopControlPlaneKey(environment.provider_origin, environment.provider_id),
+        label: `Show ${environment.control_plane_label || environment.provider_origin}`,
+        aria_label: `Show ${environment.control_plane_label || environment.provider_origin}`,
+      } as const } : {}),
+    }),
     providerEnvironmentIDFact(environment),
     buildEnvironmentCardFact('REMOTE', compact(environment.remote_environment_url) || 'UNKNOWN', {
       endpoints: buildEnvironmentCardEndpointsModel(environment),
@@ -903,6 +859,14 @@ function environmentRuntimeDisplayState(environment: DesktopEnvironmentEntry): E
   if (environment.reinstall_required === true) {
     return 'blocked';
   }
+  // Cloud health and authorization remain visible even when an existing window can be focused.
+  if (environment.kind === 'provider_environment') {
+    if (environment.control_plane_sync_state === 'auth_required') return 'sync_required';
+    if (!providerRemoteOpenLooksAvailable(environment)) {
+      if (providerRemoteLooksOffline(environment)) return 'offline';
+      return environment.remote_route_state === 'removed' ? 'removed' : 'sync_required';
+    }
+  }
   if (environment.window_state === 'open') {
     return 'window_open';
   }
@@ -929,18 +893,7 @@ function environmentRuntimeDisplayState(environment: DesktopEnvironmentEntry): E
     }
     return 'sync_required';
   }
-  if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
-    return 'sync_required';
-  }
-  if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
-    if (providerRemoteOpenLooksAvailable(environment)) {
-      return 'ready_to_open';
-    }
-    if (providerRemoteLooksOffline(environment)) {
-      return 'offline';
-    }
-    return environment.remote_route_state === 'removed' ? 'removed' : 'sync_required';
-  }
+  if (environment.kind === 'provider_environment') return 'ready_to_open';
   if (environment.runtime_health.freshness === 'checking') {
     return 'checking';
   }
@@ -1121,9 +1074,8 @@ export function buildEnvironmentDisplayStateModel(
 
 export function buildEnvironmentLibrarySummaryModel(
   snapshot: DesktopWelcomeSnapshot,
-  entries: readonly DesktopEnvironmentEntry[],
+  groups: readonly EnvironmentLibraryDisplayGroup[],
 ): EnvironmentLibrarySummaryModel {
-  const groups = buildEnvironmentLibraryDisplayGroups(entries);
   const visibleEnvironmentIDs = new Set(groups.flatMap(group => group.member_ids));
   const summary: {
     ready_count: number;
@@ -1136,21 +1088,10 @@ export function buildEnvironmentLibrarySummaryModel(
   };
 
   for (const group of groups) {
-    const environment = group.primary_entry;
-    if (environment.runtime_health.status === 'online') summary.running_count += 1;
-    switch (buildEnvironmentDisplayStateModel(environment).summary_bucket) {
-      case 'ready':
-        summary.ready_count += 1;
-        break;
-      case 'running':
-        break;
-      case 'attention':
-        summary.attention_count += 1;
-        break;
-      case 'windows':
-      case null:
-        break;
-    }
+    if (group.primary_entry.runtime_health.status === 'online') summary.running_count += 1;
+    const states = group.member_entries.map(buildEnvironmentDisplayStateModel);
+    if (states.some(state => state.summary_bucket === 'ready')) summary.ready_count += 1;
+    if (states.some(state => state.summary_bucket === 'attention')) summary.attention_count += 1;
   }
 
   return {
@@ -2253,7 +2194,7 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
 
 export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
   const displayState = buildEnvironmentDisplayStateModel(environment);
-  if (environment.kind === 'local_environment') {
+  if (environment.kind === 'local_environment' || environment.kind === 'wsl_environment') {
     const localEndpoint = compact(environment.local_ui_url);
     const targetPrimary = localEndpoint || 'This device';
     return {
@@ -2431,30 +2372,21 @@ export function environmentMatchesProviderFilter(
 }
 
 export function environmentLibraryCount(
-  snapshot: DesktopWelcomeSnapshot,
+  groups: readonly EnvironmentLibraryDisplayGroup[],
   query = '',
   providerFilter = '',
 ): number {
-  return filterEnvironmentLibraryDisplayGroups(snapshot, query, providerFilter).length;
+  return filterEnvironmentLibraryDisplayGroups(groups, query, providerFilter).length;
 }
 
 export function filterEnvironmentLibraryDisplayGroups(
-  snapshot: DesktopWelcomeSnapshot,
+  groups: readonly EnvironmentLibraryDisplayGroup[],
   query = '',
   providerFilter = '',
 ): readonly EnvironmentLibraryDisplayGroup[] {
   const search = query.trim().toLowerCase();
-  return buildEnvironmentLibraryDisplayGroups(snapshot.environments)
-    .filter(group => group.search_text.includes(search)
-      && group.member_entries.some(entry => environmentMatchesProviderFilter(entry, providerFilter)))
-    .map(group => {
-      if (!group.provider_entry) return group;
-      // A Cloud-specific filter emphasizes remote access even when both owners share that origin.
-      const highlighted = providerFilter.trim()
-        ? [group.provider_entry, group.primary_entry].find(entry => environmentMatchesProviderFilter(entry, providerFilter))
-        : search ? group.member_entries.find(entry => environmentMatchesLibrarySearch(entry, search)) : undefined;
-      return { ...group, highlighted_owner_id: highlighted?.id };
-    });
+  return groups.filter(group => group.search_text.includes(search)
+      && group.member_entries.some(entry => environmentMatchesProviderFilter(entry, providerFilter)));
 }
 
 export type GatewaySourceFilterOption = Readonly<{

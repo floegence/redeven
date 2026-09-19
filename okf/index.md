@@ -55,13 +55,14 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Desktop Web Service browser window](desktop/web-service-browser-window.md) - Preserve trusted chrome, isolated application state, exact navigation authority, and recoverable connection failures.
 - [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.
 - [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Separate Desktop direct lifecycle coordination from Runtime and optional access transports.
+- [Desktop Environment library](desktop/desktop-environment-library.md) - Browse shared Runtime/Cloud cards, source grids, scoped actions and consistent group counts.
 - [Desktop Environment connections](desktop/desktop-environment-connections.md) - Identify each connection's host and apply one address scope and sharing policy across cards and settings.
 - [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Separate direct Runtime health and recovery from access-only Gateway, Provider, and URL readiness.
 - [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.
 - [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Execute SSH-host and SSH-container lifecycle actions through one direct Desktop owner.
 - [Desktop WSL runtime operations](desktop/desktop-wsl-runtime-operations.md) - Register exact WSL 2 distributions and manage Linux Runtime lifecycle through a private Windows Desktop Bridge.
 - [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.
-- [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md) - Keep one storage owner per card, migrate retired SSH records once, and serialize rename, pin, and removal safely.
+- [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md) - Keep independent registration owners per action surface, migrate retired SSH records once, and serialize rename, pin, and removal safely.
 - [Desktop environment settings](desktop/desktop-environment-settings.md) - Open one settings window, retain independent drafts, and save through the selected registration’s authority.
 - [Desktop SSH environment settings](desktop/desktop-ssh-environment-settings.md) - Edit SSH connection details, reveal custom configuration, and dismiss the editor directly.
 - [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Own Local, WSL, SSH, and container Runtime lifecycle through one process-local Desktop coordinator.

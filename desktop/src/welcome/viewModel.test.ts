@@ -1,3 +1,4 @@
+import { buildEnvironmentLibraryDisplayGroups } from './environmentLibraryProjection';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot as buildSnapshot } from '../main/desktopWelcomeState';
@@ -958,7 +959,7 @@ describe('buildEnvironmentLibrarySummaryModel', () => {
     const visibleEntries = snapshot.environments.filter((environment) => environment.kind !== 'local_environment');
 
     expect(snapshot.open_windows).toHaveLength(1);
-    expect(buildEnvironmentLibrarySummaryModel(snapshot, visibleEntries)).toEqual({
+    expect(buildEnvironmentLibrarySummaryModel(snapshot, buildEnvironmentLibraryDisplayGroups(visibleEntries))).toEqual({
       scope: 'visible',
       environment_count: 2,
       window_count: 0,
@@ -966,7 +967,7 @@ describe('buildEnvironmentLibrarySummaryModel', () => {
       running_count: 1,
       attention_count: 1,
     });
-    expect(buildEnvironmentLibrarySummaryModel(snapshot, snapshot.environments)).toEqual({
+    expect(buildEnvironmentLibrarySummaryModel(snapshot, buildEnvironmentLibraryDisplayGroups(snapshot.environments))).toEqual({
       scope: 'visible',
       environment_count: 3,
       window_count: 1,
@@ -1193,14 +1194,11 @@ describe('buildEnvironmentCardModel', () => {
       defaultFact('VERSION', 'v1.4.2'),
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
-      defaultFact('RUNS ON', 'Redeven Cloud remote', {
-        endpoints: [
-          expect.objectContaining({ kind: 'address', value: 'https://dev.redeven.test/env/env_demo', shareable: true }),
-        ],
-      }),
-      placeholderFact('VERSION', 'UNKNOWN'),
-      defaultFact('LOCAL LINK', 'No managed runtime linked'),
+      defaultFact('SOURCE', 'Demo Control Plane', { action: expect.objectContaining({ kind: 'focus_cloud_source' }) }),
       defaultFact('ENV ID', 'env_demo', { copy_value: true }),
+      defaultFact('REMOTE', 'https://dev.redeven.test/env/env_demo', {
+        endpoints: [expect.objectContaining({ kind: 'address', value: 'https://dev.redeven.test/env/env_demo', shareable: true })],
+      }),
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
       defaultFact('RUNS ON', 'LAN host', {
@@ -1260,14 +1258,14 @@ describe('buildEnvironmentCardModel', () => {
       controlPlanes: [controlPlane],
     });
 
-    expect(environmentLibraryCount(snapshot)).toBe(4);
-    expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
-    expect(environmentLibraryCount(snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
-    expect(environmentLibraryCount(snapshot, '', URL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
-    expect(environmentLibraryCount(snapshot, '', SSH_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
+    expect(environmentLibraryCount(buildEnvironmentLibraryDisplayGroups(snapshot.environments))).toBe(4);
+    expect(environmentLibraryCount(buildEnvironmentLibraryDisplayGroups(snapshot.environments), '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
+    expect(environmentLibraryCount(buildEnvironmentLibraryDisplayGroups(snapshot.environments), '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
+    expect(environmentLibraryCount(buildEnvironmentLibraryDisplayGroups(snapshot.environments), '', URL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
+    expect(environmentLibraryCount(buildEnvironmentLibraryDisplayGroups(snapshot.environments), '', SSH_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
 
     expect(filterEnvironmentLibraryDisplayGroups(
-      snapshot,
+      buildEnvironmentLibraryDisplayGroups(snapshot.environments),
       '',
       desktopControlPlaneKey('https://redeven.test', 'example_control_plane'),
     ).map(group => group.primary_entry).map((environment) => environment.kind)).toEqual([
@@ -2599,12 +2597,7 @@ describe('buildEnvironmentCardModel', () => {
         provider_connection_state: 'connected',
       },
     });
-    expect(buildEnvironmentCardFactsModel(openLocalServeProviderEntry!)).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        label: 'LOCAL LINK',
-        value: 'Local Environment',
-      }),
-    ]));
+    expect(buildEnvironmentCardFactsModel(openLocalServeProviderEntry!).map(fact => fact.id)).toEqual(['SOURCE', 'ENV ID', 'REMOTE']);
     expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toMatchObject({
       status_label: 'REMOTE OFFLINE',
       status_tone: 'warning',
@@ -2672,7 +2665,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const localOnlyProviderEntry = localOnlyLinkedSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const localOnlyEntry = localOnlyLinkedSnapshot.environments.find((environment) => environment.kind === 'local_environment');
-    const linkedGroups = filterEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot);
+    const linkedGroups = filterEnvironmentLibraryDisplayGroups(buildEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot.environments));
     expect(linkedGroups).toHaveLength(1);
     expect(linkedGroups[0]).toMatchObject({
       primary_entry: expect.objectContaining({ kind: 'local_environment' }),
@@ -2680,32 +2673,21 @@ describe('buildEnvironmentCardModel', () => {
       member_ids: [localOnlyEntry?.id, localOnlyProviderEntry?.id],
     });
     expect(filterEnvironmentLibraryDisplayGroups(
-      localOnlyLinkedSnapshot,
+      buildEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot.environments),
       '',
       PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
     )).toHaveLength(1);
     expect(filterEnvironmentLibraryDisplayGroups(
-      localOnlyLinkedSnapshot,
+      buildEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot.environments),
       '',
       runtimeTargetEnvironmentLibraryFilterValue('local:local'),
     )).toHaveLength(1);
-    expect(filterEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot, 'env_demo')).toHaveLength(1);
-    expect(buildEnvironmentCardFactsModel(localOnlyProviderEntry!)).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        label: 'LOCAL LINK',
-        value: 'Local Environment needs attention',
-        action: {
-          kind: 'filter_runtime_target',
-          runtime_target_id: 'local:local',
-          label: 'Show Local Environment',
-          aria_label: 'Show linked runtime Local Environment',
-        },
-      }),
-    ]));
+    expect(filterEnvironmentLibraryDisplayGroups(buildEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot.environments), 'env_demo')).toHaveLength(1);
+    expect(buildEnvironmentCardFactsModel(localOnlyProviderEntry!).map(fact => fact.id)).toEqual(['SOURCE', 'ENV ID', 'REMOTE']);
     const localOnlyFilter = runtimeTargetEnvironmentLibraryFilterValue('local:local');
     expect(localOnlyFilter).toBe('__runtime_target__:local:local');
     expect(runtimeTargetEnvironmentLibraryFilterTargetID(localOnlyFilter)).toBe('local:local');
-    expect(filterEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot, '', localOnlyFilter).map(group => group.primary_entry)).toEqual([
+    expect(filterEnvironmentLibraryDisplayGroups(buildEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot.environments), '', localOnlyFilter).map(group => group.primary_entry)).toEqual([
       expect.objectContaining({
         kind: 'local_environment',
         provider_runtime_link_target: expect.objectContaining({ id: 'local:local' }),
@@ -3383,7 +3365,7 @@ describe('Gateway view models', () => {
       ],
     });
 
-    expect(environmentLibraryCount(snapshot, '', GATEWAY_ENVIRONMENT_LIBRARY_FILTER)).toBe(2);
+    expect(environmentLibraryCount(buildEnvironmentLibraryDisplayGroups(snapshot.environments), '', GATEWAY_ENVIRONMENT_LIBRARY_FILTER)).toBe(2);
     expect(filterGatewayEnvironmentEntries(snapshot, 'finance', '')).toEqual([
       expect.objectContaining({
         gateway_env_id: 'finance',
@@ -3401,7 +3383,7 @@ describe('Gateway view models', () => {
       }),
     ]);
     expect(filterEnvironmentLibraryDisplayGroups(
-      snapshot,
+      buildEnvironmentLibraryDisplayGroups(snapshot.environments),
       '',
       gatewaySourceFilterValue('office'),
     ).map(group => group.primary_entry)).toEqual([

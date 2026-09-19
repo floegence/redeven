@@ -1,3 +1,5 @@
+import { EnvironmentCardsPanel, environmentActionUsesLifecycleOwner, type EnvironmentOwnerPresentation, type EnvironmentGuidanceActionResolution, type LifecycleProgressFocusRequest } from './EnvironmentCards';
+import { ConsoleActionIconButton, EnvironmentStatusIndicator } from './environmentCardPrimitives';
 import { EnvironmentConnectionRows } from './EnvironmentConnectionRows';
 import { DesktopFlowerRuntimeBoundary } from './flower/DesktopFlowerRuntimeBoundary';
 import { runtimeFlowerBlocker } from '../shared/runtimeFlowerAccess';
@@ -23,13 +25,11 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
-  Cloud,
   Copy,
   ExternalLink,
   Globe,
   Lock,
   Highlighter,
-  Pin,
   Play,
   Plus,
   Refresh,
@@ -122,10 +122,6 @@ import {
 import { launcherOperationInterruptionPresentation } from '../shared/launcherOperationInterruptionPresentation';
 import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import {
-  desktopProviderEnvironmentRuntimeLabel,
-  desktopProviderOnlineEnvironmentCount,
-} from '../shared/providerEnvironmentState';
-import {
   type DesktopLocalUIPasswordMode,
   type DesktopSettingsDraft,
 } from '../shared/settingsIPC';
@@ -136,7 +132,6 @@ import {
 import { createAskFlowerWindowViewportInsets } from '../shared/askFlowerWindowViewport';
 import {
   FlowerIcon,
-  FlowerSoftAuraIcon,
   FlowerSurface,
   FlowerTurnLauncherWindow,
 	createFlowerComposerDraftCoordinator,
@@ -204,19 +199,14 @@ import {
 } from '../shared/desktopAccessModel';
 import {
   buildEnvironmentLibrarySummaryModel,
-  buildEnvironmentLibraryLayoutModel,
   buildEnvironmentCardModel,
   buildEnvironmentSettingsRuntimeModel,
   buildEnvironmentCardFactsModel,
-  buildEnvironmentCloudConnectionFactsModel,
-  environmentControlPlaneLabel,
   buildGatewaySourceRowModel,
   ICON_ENDPOINTS,
   buildControlPlaneStatusModel,
-  buildProviderBackedEnvironmentActionModel,
   environmentOpenFlow,
   environmentLibraryCount,
-  environmentProviderFilterValue,
   filterGatewayEnvironmentEntries,
   filterEnvironmentLibraryDisplayGroups,
   gatewaySourceFilterOptions,
@@ -242,7 +232,7 @@ import {
   type EnvironmentCenterTab,
   type EnvironmentPrimaryActionOverlayModel,
 } from './viewModel';
-import { splitPinnedEnvironmentGroupIDs, type EnvironmentLibraryDisplayGroup } from './environmentLibraryProjection';
+import { buildEnvironmentLibraryDisplayGroups, environmentCloudSections, type EnvironmentCloudSection, type EnvironmentLibraryDisplayGroup } from './environmentLibraryProjection';
 import {
   launcherActionFailurePresentation,
 } from './launcherActionFeedback';
@@ -280,15 +270,6 @@ import {
 import { DesktopActionPopover } from './DesktopActionPopover';
 import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
 import {
-  closeEnvironmentLibraryOverlayState,
-  closedEnvironmentLibraryOverlayState,
-  environmentEndpointOverlaySelectedIDFor,
-  environmentLibraryOverlayOpenFor,
-  openEnvironmentLibraryOverlayState,
-  reconcileEnvironmentLibraryOverlayState,
-  selectEnvironmentEndpointOverlayState,
-} from './environmentLibraryOverlayState';
-import {
   closeGatewaySourceOverlayState,
   closedGatewaySourceOverlayState,
   gatewaySourceIDsWithActiveOverlay,
@@ -304,12 +285,9 @@ import {
   advanceEnvironmentOpenFlowStage,
   completeEnvironmentGuidanceRefresh,
   failEnvironmentGuidanceIntent,
-  guidanceSessionKeepsPopoverOpen,
   guidanceSessionNotice,
-  guidanceSessionShouldAutoDismiss,
   isEnvironmentGuidancePendingIntent,
   openEnvironmentGuidanceSession,
-  reconcileEnvironmentGuidanceSession,
   startEnvironmentGuidanceIntent,
   type EnvironmentGuidanceSessionState,
 } from './environmentGuidanceSession';
@@ -319,19 +297,6 @@ import {
   runEnvironmentOpenPreflight,
 } from './environmentOpenPreflight';
 import {
-  abandonEnvironmentLifecycleDisclosureAttempt,
-  beginEnvironmentLifecycleDisclosure,
-  bindEnvironmentLifecycleDisclosureOperation,
-  closeEnvironmentLifecycleDisclosure,
-  createEnvironmentLifecycleAttempt,
-  environmentActionStartsLifecycleDisclosure,
-  environmentLifecycleDisclosureHasPendingRequest,
-  focusEnvironmentLifecycleDisclosure,
-  reconcileEnvironmentLifecycleDisclosure,
-  reopenEnvironmentLifecycleDisclosure,
-  isEnvironmentLifecycleDisclosureIntent,
-  type EnvironmentLifecycleDisclosureIntent,
-  type EnvironmentLifecycleDisclosureState,
   type EnvironmentLifecycleAttempt,
 } from './environmentLifecycleDisclosure';
 import {
@@ -350,7 +315,6 @@ import {
 import {
   busyStateForLauncherRequest,
   busyStateWithActionProgress,
-  environmentOperationState,
   reconcileBusyStateWithActionProgressSnapshot,
   busyStateMatchesAction,
   busyStateMatchesControlPlane,
@@ -358,7 +322,6 @@ import {
   busyStateMatchesGateway,
   IDLE_LAUNCHER_BUSY_STATE,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
-  progressForEnvironmentFocusRequest,
   selectedFlowerWarmupProgress,
   gatewaySourceMatchesRuntimeLifecycleProgress,
   type DesktopLauncherBusyState,
@@ -521,24 +484,11 @@ type ControlPlaneDialogState = Readonly<{
   provider_origin: string;
 }> | null;
 
-type EnvironmentGuidanceActionResolution = Readonly<{
-  close_panel: boolean;
-  next_session: EnvironmentGuidanceSessionState;
-}>;
-
 const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg', import.meta.url).href;
 const LOGO_DARK_URL = new URL('../../../internal/envapp/ui_src/public/logo-dark.svg', import.meta.url).href;
 type ControlPlaneProviderPresetOption = Readonly<{
   domain: string;
   provider_origin: string;
-}>;
-
-type LifecycleProgressFocusRequest = Readonly<{
-  request_id: number;
-  operation_key: string;
-  started_at_unix_ms: number;
-  subject_kind: 'environment' | 'gateway';
-  subject_id: string;
 }>;
 
 type RuntimeLauncherActionKind =
@@ -567,8 +517,6 @@ const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
 const DESKTOP_FLOE_SHELL_THEME_STORAGE_KEY = `${DESKTOP_FLOE_THEME_STORAGE_KEY}-shell-preset`;
 const ACTION_TOAST_TTL_MS = 4_000;
 const GATEWAY_TERMINAL_PROGRESS_VISIBLE_MS = ACTION_TOAST_TTL_MS;
-const GUIDANCE_SUCCESS_DISMISS_MS = 720;
-const GUIDANCE_SESSION_CLEAR_MS = 220;
 
 const FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT: RedevenLanguageSnapshot = {
   preference: SYSTEM_LOCALE_PREFERENCE,
@@ -576,33 +524,6 @@ const FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT: RedevenLanguageSnapshot = {
   source: 'fallback',
   system_candidates: [],
 };
-
-function normalizePixelMeasurement(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-  return Math.max(0, Math.round(value));
-}
-
-function readMeasuredElementWidth(element: HTMLElement | undefined): number {
-  if (!element) {
-    return 0;
-  }
-  return normalizePixelMeasurement(
-    element.getBoundingClientRect().width || element.clientWidth || element.offsetWidth,
-  );
-}
-
-function readDocumentRootFontSizePx(): number {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return 16;
-  }
-  const value = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize);
-  if (!Number.isFinite(value) || value <= 0) {
-    return 16;
-  }
-  return value;
-}
 
 function buildDesktopFloeConfig(i18n: DesktopI18n) {
   const themeBridge = desktopThemeBridge();
@@ -1483,13 +1404,13 @@ function localizedFactLabel(i18n: DesktopI18n, label: string): string {
     VERSION: 'environmentFacts.version',
     'REDEVEN CLOUD': 'environmentFacts.provider',
     'CONTROL PLANE': 'environmentFacts.controlPlane',
-    'LOCAL LINK': 'environmentFacts.localLink',
     'ENV ID': 'environmentFacts.environmentId',
     'Redeven Cloud': 'environmentFacts.provider',
     Gateway: 'environmentCenter.gatewaysSection',
     'Runtime root': 'environmentFacts.runtimeRoot',
     Bootstrap: 'environmentFacts.bootstrap',
     Source: 'environmentFacts.source',
+    SOURCE: 'environmentFacts.source',
     URL: 'environmentFacts.url',
     Local: 'environmentCenter.localFilter',
     'Redeven URL': 'environmentCenter.redevenUrlFilter',
@@ -1512,24 +1433,6 @@ function environmentFlowerContextSummary(i18n: DesktopI18n, environment: Desktop
 }
 
 function localizedFactValue(i18n: DesktopI18n, label: string, value: string): string {
-  const connecting = value.match(/^Connecting through (.+)$/u);
-  if (label === 'LOCAL LINK' && connecting) {
-    return i18n.t('environmentFacts.connectingThrough', {
-      label: connecting[1] ?? '',
-    });
-  }
-  const disconnecting = value.match(/^Disconnecting from (.+)$/u);
-  if (label === 'LOCAL LINK' && disconnecting) {
-    return i18n.t('environmentFacts.disconnectingFrom', {
-      label: disconnecting[1] ?? '',
-    });
-  }
-  const needsAttention = value.match(/^(.+) needs attention$/u);
-  if (label === 'LOCAL LINK' && needsAttention) {
-    return i18n.t('environmentFacts.runtimeNeedsAttention', {
-      label: needsAttention[1] ?? '',
-    });
-  }
   if (label === 'VERSION') {
     return localizedStringByValue(i18n, value, {
       UNKNOWN: 'environmentFacts.unknown',
@@ -1546,11 +1449,6 @@ function localizedFactValue(i18n: DesktopI18n, label: string, value: string): st
     return localizedStringByValue(i18n, value, {
       UNKNOWN: 'environmentFacts.unknown',
       Unknown: 'environmentFacts.unknown',
-    });
-  }
-  if (label === 'LOCAL LINK') {
-    return localizedStringByValue(i18n, value, {
-      'No managed runtime linked': 'environmentFacts.noManagedRuntimeLinked',
     });
   }
   if (label === 'RUNS ON') {
@@ -1679,16 +1577,6 @@ function localizedFactActionLabel(i18n: DesktopI18n, label: string): string {
   return label;
 }
 
-function localizedFactActionAriaLabel(i18n: DesktopI18n, label: string): string {
-  const showLinked = label.match(/^Show linked runtime (.+)$/u);
-  if (showLinked) {
-    return i18n.t('environmentFacts.showLinkedRuntime', {
-      label: showLinked[1] ?? '',
-    });
-  }
-  return localizedFactActionLabel(i18n, label);
-}
-
 function localizedEnvironmentFact(
   i18n: DesktopI18n,
   fact: EnvironmentCardFactModel,
@@ -1703,7 +1591,7 @@ function localizedEnvironmentFact(
       ? {
           ...fact.action,
           label: localizedFactActionLabel(i18n, fact.action.label),
-          aria_label: localizedFactActionAriaLabel(i18n, fact.action.aria_label),
+          aria_label: localizedFactActionLabel(i18n, fact.action.aria_label),
         }
         : undefined,
   };
@@ -2239,18 +2127,6 @@ function createControlPlaneDialogState(
   };
 }
 
-function environmentKindTagVariant(kind: string): 'neutral' | 'primary' | 'success' {
-  switch (kind) {
-    case 'local_environment':
-      return 'primary';
-    case 'provider_environment':
-      return 'neutral';
-    case 'ssh_environment':
-      return 'success';
-    default:
-      return 'neutral';
-  }
-}
 
 function passwordStateTagVariant(
   tone: DesktopSettingsSurfaceSnapshot['password_state_tone'],
@@ -2813,7 +2689,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     open: flowerTurnLauncherOpen,
     chrome: window.redevenDesktopWindowChrome,
   });
-  const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
+  const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<EnvironmentFlowerTurnLauncherIntent | null>(null);
   const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
   const [flowerFocusThreadRequest, setFlowerFocusThreadRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
   let flowerFocusThreadRequestSequence = 0;
@@ -2829,6 +2705,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   });
   const [librarySourceFilter, setLibrarySourceFilter] = createSignal('');
   const [libraryQuery, setLibraryQuery] = createSignal('');
+  const [cloudQuery, setCloudQuery] = createSignal('');
+  const [focusedCloudSource, setFocusedCloudSource] = createSignal('', { equals: false });
   const [gatewaySourceFilter, setGatewaySourceFilter] = createSignal('');
   const [gatewayQuery, setGatewayQuery] = createSignal('');
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
@@ -2865,6 +2743,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const selected = settingsPresentation()?.environment;
     return selected ? snapshot().environments.find(environment => environment.id === selected.id) ?? selected : null;
   });
+  createEffect(() => {
+    const entries = snapshot().environments;
+    const session = settingsSession();
+    // A connection save can replace its registration ID before the reply rebinds the dialog.
+    if (session && !session.saving && !entries.some(entry => entry.id === session.environment.id)) settingsController.close();
+    const contextOwner = flowerTurnLauncherIntent()?.context_action?.source.surface_id;
+    if (contextOwner && !entries.some(entry => entry.id === contextOwner)) closeFlowerTurnLauncher();
+  });
   const settingsSurface = (): DesktopSettingsSurfaceSnapshot => {
     const saved = settingsBaselineSurface();
     const environment = selectedSettingsEnvironmentEntry()!;
@@ -2895,25 +2781,26 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const environment = selectedSettingsEnvironmentEntry();
     return environment?.runtime_operations.restart.availability === 'available';
   });
+  const allLibraryGroups = createMemo(() => buildEnvironmentLibraryDisplayGroups(snapshot().environments));
   const controlPlanes = createMemo(() => snapshot().control_planes);
   const libraryLocalEntryCount = createMemo(() => (
-    environmentLibraryCount(snapshot(), '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)
+    environmentLibraryCount(allLibraryGroups(), '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)
   ));
   const availableLibrarySourceFilters = createMemo(() => {
     const next = new Set<string>();
     if (libraryLocalEntryCount() > 0) {
       next.add(LOCAL_ENVIRONMENT_LIBRARY_FILTER);
     }
-    if (environmentLibraryCount(snapshot(), '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER) > 0) {
+    if (environmentLibraryCount(allLibraryGroups(), '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER) > 0) {
       next.add(PROVIDER_ENVIRONMENT_LIBRARY_FILTER);
     }
-    if (environmentLibraryCount(snapshot(), '', GATEWAY_ENVIRONMENT_LIBRARY_FILTER) > 0) {
+    if (environmentLibraryCount(allLibraryGroups(), '', GATEWAY_ENVIRONMENT_LIBRARY_FILTER) > 0) {
       next.add(GATEWAY_ENVIRONMENT_LIBRARY_FILTER);
     }
-    if (environmentLibraryCount(snapshot(), '', URL_ENVIRONMENT_LIBRARY_FILTER) > 0) {
+    if (environmentLibraryCount(allLibraryGroups(), '', URL_ENVIRONMENT_LIBRARY_FILTER) > 0) {
       next.add(URL_ENVIRONMENT_LIBRARY_FILTER);
     }
-    if (environmentLibraryCount(snapshot(), '', SSH_ENVIRONMENT_LIBRARY_FILTER) > 0) {
+    if (environmentLibraryCount(allLibraryGroups(), '', SSH_ENVIRONMENT_LIBRARY_FILTER) > 0) {
       next.add(SSH_ENVIRONMENT_LIBRARY_FILTER);
     }
     for (const environment of snapshot().environments) {
@@ -2935,7 +2822,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   });
   const libraryGroups = createMemo<readonly EnvironmentLibraryDisplayGroup[]>(() => (
     filterEnvironmentLibraryDisplayGroups(
-      snapshot(),
+      allLibraryGroups(),
       libraryQuery(),
       librarySourceFilter(),
     )
@@ -2995,7 +2882,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     snapshot().gateway_sources.filter(gatewayCanWriteEnvironmentProfiles)
   ));
   const librarySummary = createMemo(() => (
-    buildEnvironmentLibrarySummaryModel(snapshot(), libraryGroups().flatMap((group) => group.member_entries))
+    buildEnvironmentLibrarySummaryModel(snapshot(), activeCenterTab() === 'control_planes'
+      ? environmentCloudSections(allLibraryGroups(), controlPlanes(), cloudQuery()).flatMap(section => section.visible_groups)
+      : libraryGroups())
   ));
   const providerRuntimeLinkActionLabel = createMemo(() => (
     providerRuntimeLinkConfirmation()?.action === 'disconnect'
@@ -3123,10 +3012,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   const runEnvironmentCardFactAction = (action: EnvironmentCardFactActionModel) => {
     switch (action.kind) {
-      case 'filter_runtime_target':
-        setActiveCenterTab('environments');
-        setLibraryQuery('');
-        setLibrarySourceFilter(runtimeTargetEnvironmentLibraryFilterValue(action.runtime_target_id));
+      case 'focus_cloud_source':
+        setCloudQuery('');
+        setFocusedCloudSource(action.source_id);
+        setActiveCenterTab('control_planes');
         break;
     }
   };
@@ -3986,12 +3875,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogError('');
     setControlPlaneDialogError('');
     setControlPlaneDialogState(createControlPlaneDialogState(controlPlaneProviderPresets()));
-  }
-
-  function focusProviderEnvironments(controlPlane: DesktopControlPlaneSummary): void {
-    setActiveCenterTab('environments');
-    setLibraryQuery('');
-    setLibrarySourceFilter(controlPlaneFilterValue(controlPlane));
   }
 
   function focusGatewayEnvironments(gateway: DesktopGatewaySource): void {
@@ -6122,7 +6005,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  function buildEnvironmentFlowerTurnLauncherIntent(environment: DesktopEnvironmentEntry): FlowerTurnLauncherIntent {
+  function buildEnvironmentFlowerTurnLauncherIntent(environment: DesktopEnvironmentEntry): EnvironmentFlowerTurnLauncherIntent {
     const cleanLabel = trimString(environment.label) || i18n().t('environmentCenter.thisEnvironment');
     const contextSummary = environmentFlowerContextSummary(i18n(), environment);
     return {
@@ -6392,6 +6275,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               librarySourceFilter={librarySourceFilter()}
               libraryQuery={libraryQuery()}
               libraryGroups={libraryGroups()}
+              allLibraryGroups={allLibraryGroups()}
+              cloudQuery={cloudQuery()} setCloudQuery={setCloudQuery}
+              focusedCloudSource={focusedCloudSource()}
               gatewaySourceFilter={gatewaySourceFilter()}
               gatewayQuery={gatewayQuery()}
               gatewayEntries={gatewayEntries()}
@@ -6461,7 +6347,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               }}
               controlPlanes={controlPlanes()}
               gatewaySources={snapshot().gateway_sources}
-              viewControlPlaneEnvironments={focusProviderEnvironments}
               viewGatewayEnvironments={focusGatewayEnvironments}
               reconnectControlPlane={reconnectControlPlane}
               refreshControlPlane={refreshControlPlane}
@@ -7235,6 +7120,10 @@ function WSLDiscoveryPanel(props: Readonly<{
   );
 }
 
+type EnvironmentFlowerTurnLauncherIntent = FlowerTurnLauncherIntent & { context_action: ReturnType<typeof buildEnvironmentFlowerContextAction> };
+
+type EnvironmentGridProps = { groups: readonly EnvironmentLibraryDisplayGroup[]; scope: string; cloud?: boolean; quickAdd?: boolean };
+
 function ConnectEnvironmentSurface(props: Readonly<{
   i18n: DesktopI18n;
   snapshot: DesktopWelcomeSnapshot;
@@ -7245,6 +7134,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
   librarySourceFilter: string;
   libraryQuery: string;
   libraryGroups: readonly EnvironmentLibraryDisplayGroup[];
+  allLibraryGroups: readonly EnvironmentLibraryDisplayGroup[];
+  cloudQuery: string;
+  setCloudQuery: (value: string) => void;
+  focusedCloudSource: string;
   gatewaySourceFilter: string;
   gatewayQuery: string;
   gatewayEntries: readonly DesktopEnvironmentEntry[];
@@ -7305,7 +7198,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
   controlPlanes: readonly DesktopControlPlaneSummary[];
   gatewaySources: readonly DesktopGatewaySource[];
-  viewControlPlaneEnvironments: (controlPlane: DesktopControlPlaneSummary) => void;
   viewGatewayEnvironments: (gateway: DesktopGatewaySource) => void;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
@@ -7314,25 +7206,25 @@ function ConnectEnvironmentSurface(props: Readonly<{
 }>) {
   const visibleEnvironmentCount = createMemo(() => (
     environmentLibraryCount(
-      props.snapshot,
+      props.allLibraryGroups,
       props.libraryQuery,
       props.librarySourceFilter,
     )
   ));
   const localSourceCount = createMemo(() => (
-    environmentLibraryCount(props.snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)
+    environmentLibraryCount(props.allLibraryGroups, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)
   ));
   const providerSourceCount = createMemo(() => (
-    environmentLibraryCount(props.snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)
+    environmentLibraryCount(props.allLibraryGroups, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)
   ));
   const gatewaySourceCount = createMemo(() => (
-    environmentLibraryCount(props.snapshot, '', GATEWAY_ENVIRONMENT_LIBRARY_FILTER)
+    environmentLibraryCount(props.allLibraryGroups, '', GATEWAY_ENVIRONMENT_LIBRARY_FILTER)
   ));
   const urlSourceCount = createMemo(() => (
-    environmentLibraryCount(props.snapshot, '', URL_ENVIRONMENT_LIBRARY_FILTER)
+    environmentLibraryCount(props.allLibraryGroups, '', URL_ENVIRONMENT_LIBRARY_FILTER)
   ));
   const sshSourceCount = createMemo(() => (
-    environmentLibraryCount(props.snapshot, '', SSH_ENVIRONMENT_LIBRARY_FILTER)
+    environmentLibraryCount(props.allLibraryGroups, '', SSH_ENVIRONMENT_LIBRARY_FILTER)
   ));
   const sourceFilterOptions = createMemo(() => {
     const options: Array<Readonly<{ value: string; label: string; count: number }>> = [];
@@ -7418,18 +7310,58 @@ function ConnectEnvironmentSurface(props: Readonly<{
   ));
   const layoutReferenceEnvironmentCount = createMemo(() => (
     environmentLibraryCount(
-      props.snapshot,
+      props.allLibraryGroups,
       '',
       '',
     )
-  ));
-  const visibleEnvironmentCardCount = createMemo(() => (
-    props.libraryGroups.length + (showQuickAddCards() ? 1 : 0)
   ));
   const layoutReferenceEnvironmentCardCount = createMemo(() => (
     layoutReferenceEnvironmentCount() + 1
   ));
   const headerCopy = createMemo(() => ENVIRONMENT_CENTER_HEADER_COPY[props.activeTab]);
+  const ownerPresentation: EnvironmentOwnerPresentation = {
+    card: entry => {
+      const model = buildEnvironmentCardModel(entry);
+      return { ...model, kind_label: localizedFactLabel(props.i18n, model.kind_label),
+        status_label: localizedEnvironmentStatusLabel(props.i18n, model.status_label),
+        runtime_started_label: localizedRuntimeStartedLabel(props.i18n, model.runtime_started_label) };
+    },
+    facts: entry => buildEnvironmentCardFactsModel(entry).map(fact => localizedEnvironmentFact(props.i18n, fact)),
+    actions: model => localizedEnvironmentActionPresentation(props.i18n, model),
+  };
+  const EnvironmentGrid = (gridProps: EnvironmentGridProps) => (
+    <EnvironmentCardsPanel
+      i18n={props.i18n}
+      groups={gridProps.groups}
+      allGroups={props.allLibraryGroups}
+      viewScope={gridProps.scope}
+      defaultCloud={gridProps.cloud}
+      presentation={ownerPresentation}
+      Facts={EnvironmentCardFactsBlock}
+      Actions={EnvironmentSplitActionButton}
+      newCard={<NewEnvironmentPlaceholderCard i18n={props.i18n} openCreateConnectionDialog={props.openCreateConnectionDialog} />}
+      showQuickAddCards={gridProps.quickAdd ?? false}
+      visibleCardCount={gridProps.groups.length + (gridProps.quickAdd ? 1 : 0)}
+      layoutReferenceCardCount={layoutReferenceEnvironmentCardCount()}
+      busyState={props.busyState}
+      actionProgress={props.actionProgress}
+      lifecycleProgressFocusRequest={props.lifecycleProgressFocusRequest}
+      consumeLifecycleProgressFocusRequest={props.consumeLifecycleProgressFocusRequest}
+      runLocalEnvironmentAction={props.runLocalEnvironmentAction}
+      refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
+      openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
+      runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
+      runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
+      runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
+      toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+      openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
+      editEnvironment={props.editEnvironment}
+      deleteEnvironment={props.deleteEnvironment}
+      cancelOperation={props.cancelOperation}
+      dismissOperation={props.dismissOperation}
+      copyOperationDiagnostics={props.copyOperationDiagnostics}
+    />
+  );
 
   return (
     <div class="redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background">
@@ -7443,32 +7375,30 @@ function ConnectEnvironmentSurface(props: Readonly<{
                   {props.i18n.t(headerCopy().descriptionKey)}
                 </p>
               </div>
-              <div class="flex items-center gap-2">
-                <Show when={props.activeTab === 'environments' || props.activeTab === 'gateways'}>
-                  <div class="relative w-full sm:w-[14.5rem]">
-                    <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                    <Show
-                      when={props.activeTab === 'gateways'}
-                      fallback={(
-                        <Input
-                          value={props.libraryQuery}
-                          onInput={(event) => props.setLibraryQuery(event.currentTarget.value)}
-                          placeholder={props.i18n.t('environmentCenter.searchPlaceholder')}
-                          size="sm"
-                          class="w-full pl-9"
-                        />
-                      )}
-                    >
+              <div class="redeven-center-actions flex min-w-0 flex-wrap items-center gap-2">
+                <div class="relative w-full sm:w-[14.5rem]">
+                  <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Show
+                    when={props.activeTab === 'gateways'}
+                    fallback={(
                       <Input
-                        value={props.gatewayQuery}
-                        onInput={(event) => props.setGatewayQuery(event.currentTarget.value)}
-                        placeholder={props.i18n.t('environmentCenter.gatewaySearchPlaceholder')}
+                        value={props.activeTab === 'control_planes' ? props.cloudQuery : props.libraryQuery}
+                        onInput={(event) => (props.activeTab === 'control_planes' ? props.setCloudQuery : props.setLibraryQuery)(event.currentTarget.value)}
+                        placeholder={props.i18n.t(props.activeTab === 'control_planes' ? 'environmentCenter.cloudSearchPlaceholder' : 'environmentCenter.searchPlaceholder')}
                         size="sm"
                         class="w-full pl-9"
                       />
-                    </Show>
-                  </div>
-                </Show>
+                    )}
+                  >
+                    <Input
+                      value={props.gatewayQuery}
+                      onInput={(event) => props.setGatewayQuery(event.currentTarget.value)}
+                      placeholder={props.i18n.t('environmentCenter.gatewaySearchPlaceholder')}
+                      size="sm"
+                      class="w-full pl-9"
+                    />
+                  </Show>
+                </div>
                 <Show when={props.activeTab === 'environments'}>
                   <DesktopTooltip content={props.i18n.t('environmentCenter.refreshRuntimeStatuses')} placement="top">
                     <span>
@@ -7629,31 +7559,9 @@ function ConnectEnvironmentSurface(props: Readonly<{
                     setDefault={props.setDefaultWSLEnvironment}
                   />
                 </Show>
-                <EnvironmentCardsPanel
-                  i18n={props.i18n}
-                  groups={props.libraryGroups}
-                  showQuickAddCards={showQuickAddCards()}
-                  visibleCardCount={visibleEnvironmentCardCount()}
-                  layoutReferenceCardCount={layoutReferenceEnvironmentCardCount()}
-                  busyState={props.busyState}
-                  actionProgress={props.actionProgress}
-                  lifecycleProgressFocusRequest={props.lifecycleProgressFocusRequest}
-                  consumeLifecycleProgressFocusRequest={props.consumeLifecycleProgressFocusRequest}
-                  openCreateConnectionDialog={props.openCreateConnectionDialog}
-                  runLocalEnvironmentAction={props.runLocalEnvironmentAction}
-                  refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
-                  openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
-                  runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
-                  runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
-                  runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
-                  toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                  openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
-                  editEnvironment={props.editEnvironment}
-                  deleteEnvironment={props.deleteEnvironment}
-                  cancelOperation={props.cancelOperation}
-                  dismissOperation={props.dismissOperation}
-                  copyOperationDiagnostics={props.copyOperationDiagnostics}
-                />
+                <EnvironmentGrid groups={props.libraryGroups} scope={props.librarySourceFilter}
+                  cloud={props.librarySourceFilter === PROVIDER_ENVIRONMENT_LIBRARY_FILTER || props.controlPlanes.some(source => controlPlaneFilterValue(source) === props.librarySourceFilter)}
+                  quickAdd={showQuickAddCards()} />
               </>
             </Show>
             <Show when={props.activeTab === 'control_planes'}>
@@ -7662,8 +7570,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 controlPlanes={props.controlPlanes}
                 busyState={props.busyState}
                 openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
-                environments={props.snapshot.environments}
-                viewControlPlaneEnvironments={props.viewControlPlaneEnvironments}
+                groups={props.allLibraryGroups}
+                query={props.cloudQuery}
+                focusedSource={props.focusedCloudSource}
+                Grid={EnvironmentGrid}
                 reconnectControlPlane={props.reconnectControlPlane}
                 refreshControlPlane={props.refreshControlPlane}
                 deleteControlPlane={props.deleteControlPlane}
@@ -7697,449 +7607,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
   );
 }
 
-function EnvironmentCardsPanel(
-  props: Readonly<{
-    i18n: DesktopI18n;
-    groups: readonly EnvironmentLibraryDisplayGroup[];
-    showQuickAddCards: boolean;
-    visibleCardCount: number;
-    layoutReferenceCardCount: number;
-    busyState: DesktopLauncherBusyState;
-    actionProgress: readonly DesktopLauncherActionProgress[];
-    lifecycleProgressFocusRequest: LifecycleProgressFocusRequest | null;
-    consumeLifecycleProgressFocusRequest: (requestID: number) => void;
-    openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
-    runLocalEnvironmentAction: (
-      environment: DesktopEnvironmentEntry,
-      action: EnvironmentActionModel,
-      errorTarget?: 'connect' | 'dialog' | 'settings',
-      attempt?: EnvironmentLifecycleAttempt,
-      bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
-    ) => Promise<boolean>;
-    refreshEnvironmentRuntime: (
-      environment: DesktopEnvironmentEntry,
-      errorTarget?: 'connect' | 'dialog' | 'settings',
-    ) => Promise<boolean>;
-    openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry, anchor?: FlowerTurnLauncherAnchor) => void;
-    runEnvironmentGuidanceAction: (
-      environment: DesktopEnvironmentEntry,
-      action: EnvironmentActionModel,
-      updateSession?: (state: EnvironmentGuidanceSessionState) => void,
-      attempt?: EnvironmentLifecycleAttempt,
-    ) => Promise<EnvironmentGuidanceActionResolution>;
-    runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
-    runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
-    toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
-    openInBrowser: (url: string) => Promise<void>;
-    copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
-    editEnvironment: (environment: DesktopEnvironmentEntry) => void;
-    deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
-    cancelOperation: (progress: DesktopLauncherActionProgress) => void;
-    dismissOperation: (progress: DesktopLauncherActionProgress) => void;
-    copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
-  }>,
-) {
-  const [environmentLibraryElement, setEnvironmentLibraryElement] = createSignal<HTMLDivElement>();
-  const [environmentLibraryWidthPx, setEnvironmentLibraryWidthPx] = createSignal(0);
-  const [rootFontSizePx, setRootFontSizePx] = createSignal(16);
-  const [activeEnvironmentOverlayState, setActiveEnvironmentOverlayState] = createSignal(
-    closedEnvironmentLibraryOverlayState(),
-  );
-  const [guidanceSessionState, setGuidanceSessionState] = createSignal<EnvironmentGuidanceSessionState>(null);
-  const [lifecycleDisclosureState, setLifecycleDisclosureState] =
-    createSignal<EnvironmentLifecycleDisclosureState>(null);
-  // Render relation cards by stable group id so snapshot refreshes update data in place instead of remounting the card subtree.
-  const projectedEntries = createMemo(() => props.groups.flatMap((group) => group.member_entries));
-  const projectedGroupsByID = createMemo(() => Object.fromEntries(
-    props.groups.map((group) => [group.id, group] as const),
-  ) as Readonly<Record<string, EnvironmentLibraryDisplayGroup>>);
-  const groupedGroupIDs = createMemo(() => splitPinnedEnvironmentGroupIDs(props.groups));
-  const projectedEntriesByID = createMemo(() => Object.fromEntries(projectedEntries().map(entry => [entry.id, entry])));
-  const [collapsedRelationIDs, setCollapsedRelationIDs] = createSignal<ReadonlySet<string>>(new Set());
-  const toggleRelationDetails = (groupID: string) => setCollapsedRelationIDs(current => {
-    const next = new Set(current);
-    if (next.has(groupID)) next.delete(groupID); else next.add(groupID);
-    return next;
-  });
-  // Keep transient provider/search filters from collapsing the shared environment column system.
-  const layoutModel = createMemo(() =>
-    buildEnvironmentLibraryLayoutModel({
-      visible_card_count: props.visibleCardCount,
-      layout_reference_count: props.layoutReferenceCardCount,
-      container_width_px: environmentLibraryWidthPx(),
-      root_font_size_px: rootFontSizePx(),
-    }),
-  );
-  const environmentGridStyle = createMemo<JSX.CSSProperties>(() => ({
-    '--redeven-environment-grid-columns': String(layoutModel().column_count),
-  }));
-
-  createEffect(() => {
-    setLifecycleDisclosureState((current) =>
-      reconcileEnvironmentLifecycleDisclosure(current, projectedEntries(), props.actionProgress),
-    );
-  });
-
-  createEffect(() => {
-    setActiveEnvironmentOverlayState((current) => {
-      const session = guidanceSessionState();
-      const lifecycleDisclosure = lifecycleDisclosureState();
-      if (current.kind === 'lifecycle_progress') {
-        const environment = projectedEntries().find((entry) => entry.id === current.environment_id);
-        const operationState = environment
-          ? environmentOperationState(environment, props.actionProgress, props.busyState)
-          : null;
-        const progressStillVisible = operationState?.panelProgress !== null || operationState?.isSubmitting === true;
-        const pendingDisclosureVisible =
-          lifecycleDisclosure?.environment_id === current.environment_id &&
-          lifecycleDisclosure.visibility === 'open' &&
-          environmentLifecycleDisclosureHasPendingRequest(lifecycleDisclosure, props.busyState);
-        return pendingDisclosureVisible || progressStillVisible ? current : closedEnvironmentLibraryOverlayState();
-      }
-      if (
-        current.kind === 'primary_action_guidance' &&
-        session?.environment_id === current.environment_id &&
-        guidanceSessionKeepsPopoverOpen(session)
-      ) {
-        return current;
-      }
-      return reconcileEnvironmentLibraryOverlayState(current, projectedEntries());
-    });
-    setGuidanceSessionState((current) => reconcileEnvironmentGuidanceSession(current, projectedEntries()));
-  });
-
-  createEffect(() => {
-    const session = guidanceSessionState();
-    if (!guidanceSessionShouldAutoDismiss(session) || typeof window === 'undefined') {
-      return;
-    }
-    let clearHandle: number | undefined;
-    const handle = window.setTimeout(() => {
-      setActiveEnvironmentOverlayState((current) =>
-        session
-          ? closeEnvironmentLibraryOverlayState(current, 'primary_action_guidance', session.environment_id)
-          : current,
-      );
-      clearHandle = window.setTimeout(() => {
-        setGuidanceSessionState((current) => (current?.environment_id === session?.environment_id ? null : current));
-      }, GUIDANCE_SESSION_CLEAR_MS);
-    }, GUIDANCE_SUCCESS_DISMISS_MS);
-    onCleanup(() => {
-      window.clearTimeout(handle);
-      if (clearHandle !== undefined) {
-        window.clearTimeout(clearHandle);
-      }
-    });
-  });
-
-  const setRuntimeMenuOpen = (environmentID: string, open: boolean) => {
-    if (open) {
-      setLifecycleDisclosureState((current) => closeEnvironmentLifecycleDisclosure(current, environmentID));
-    }
-    setActiveEnvironmentOverlayState((current) =>
-      open
-        ? openEnvironmentLibraryOverlayState('runtime_menu', environmentID)
-        : closeEnvironmentLibraryOverlayState(current, 'runtime_menu', environmentID),
-    );
-  };
-
-  const setPrimaryActionGuidanceOpen = (environmentID: string, open: boolean) => {
-    if (open) {
-      setLifecycleDisclosureState((current) => closeEnvironmentLifecycleDisclosure(current, environmentID));
-    }
-    setActiveEnvironmentOverlayState((current) => {
-      const nextState = open
-        ? openEnvironmentLibraryOverlayState('primary_action_guidance', environmentID)
-        : closeEnvironmentLibraryOverlayState(current, 'primary_action_guidance', environmentID);
-      setGuidanceSessionState((session) => {
-        if (open) {
-          return openEnvironmentGuidanceSession(environmentID);
-        }
-        return session?.environment_id === environmentID ? null : session;
-      });
-      return nextState;
-    });
-  };
-
-  const setLifecycleProgressOpen = (environmentID: string, open: boolean) => {
-    setActiveEnvironmentOverlayState((current) =>
-      open
-        ? openEnvironmentLibraryOverlayState('lifecycle_progress', environmentID)
-        : closeEnvironmentLibraryOverlayState(current, 'lifecycle_progress', environmentID),
-    );
-    setLifecycleDisclosureState((current) =>
-      open
-        ? reopenEnvironmentLifecycleDisclosure(current, environmentID)
-        : closeEnvironmentLifecycleDisclosure(current, environmentID),
-    );
-  };
-
-  const abandonLifecycleProgressDisclosure = (environmentID: string, attempt: EnvironmentLifecycleAttempt) => {
-    const current = lifecycleDisclosureState();
-    const next = abandonEnvironmentLifecycleDisclosureAttempt(current, environmentID, attempt);
-    if (next === current) {
-      return;
-    }
-    setLifecycleDisclosureState(next);
-    setActiveEnvironmentOverlayState((overlay) =>
-      closeEnvironmentLibraryOverlayState(overlay, 'lifecycle_progress', environmentID),
-    );
-  };
-
-  const bindLifecycleProgressDisclosure = (
-    environmentID: string,
-    attempt: EnvironmentLifecycleAttempt,
-    operation: EnvironmentLifecycleAttempt,
-  ) => {
-    setLifecycleDisclosureState((current) =>
-      bindEnvironmentLifecycleDisclosureOperation(current, environmentID, attempt, operation),
-    );
-  };
-
-  let handledLifecycleProgressFocusRequestID = 0;
-  createEffect(() => {
-    const request = props.lifecycleProgressFocusRequest;
-    if (
-      !request ||
-      request.subject_kind !== 'environment' ||
-      request.request_id === handledLifecycleProgressFocusRequestID
-    ) {
-      return;
-    }
-    const environment = projectedEntries().find((entry) => entry.id === request.subject_id);
-    if (!environment) {
-      return;
-    }
-    const progress = progressForEnvironmentFocusRequest(environment, props.actionProgress, request);
-    if (
-      !progress ||
-      trimString(progress.operation_key) !== request.operation_key ||
-      (progress?.started_at_unix_ms ?? 0) !== request.started_at_unix_ms
-    ) {
-      return;
-    }
-    handledLifecycleProgressFocusRequestID = request.request_id;
-    setLifecycleDisclosureState((current) => focusEnvironmentLifecycleDisclosure(current, environment.id, progress));
-    setLifecycleProgressOpen(environment.id, true);
-    props.consumeLifecycleProgressFocusRequest(request.request_id);
-  });
-
-  const beginLifecycleProgressDisclosure = (
-    environmentID: string,
-    intent: EnvironmentLifecycleDisclosureIntent,
-    attempt: EnvironmentLifecycleAttempt,
-  ) => {
-    setGuidanceSessionState((current) => (current?.environment_id === environmentID ? null : current));
-    setLifecycleDisclosureState((current) =>
-      beginEnvironmentLifecycleDisclosure(current, environmentID, intent, attempt),
-    );
-    setActiveEnvironmentOverlayState(openEnvironmentLibraryOverlayState('lifecycle_progress', environmentID));
-  };
-
-  const setEndpointPopoverOpen = (environmentID: string, open: boolean) => {
-    if (open) {
-      setLifecycleDisclosureState((current) => closeEnvironmentLifecycleDisclosure(current, environmentID));
-    }
-    setActiveEnvironmentOverlayState((current) =>
-      open
-        ? openEnvironmentLibraryOverlayState('endpoints', environmentID)
-        : closeEnvironmentLibraryOverlayState(current, 'endpoints', environmentID),
-    );
-  };
-
-  const selectEndpointForQRCode = (environmentID: string, endpointID: string) => {
-    setActiveEnvironmentOverlayState(selectEnvironmentEndpointOverlayState(environmentID, endpointID));
-  };
-
-  const projectedGroup = (groupID: string): EnvironmentLibraryDisplayGroup =>
-    projectedGroupsByID()[groupID]!;
-  const guidanceSessionForEnvironment = (environmentID: string): EnvironmentGuidanceSessionState =>
-    guidanceSessionState()?.environment_id === environmentID ? guidanceSessionState() : null;
-  createEffect(() => {
-    const element = environmentLibraryElement();
-    if (!element) {
-      return;
-    }
-
-    const updateLayoutMetrics = () => {
-      setEnvironmentLibraryWidthPx(readMeasuredElementWidth(element));
-      setRootFontSizePx(readDocumentRootFontSizePx());
-    };
-
-    updateLayoutMetrics();
-
-    const resizeObserver =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => updateLayoutMetrics());
-    resizeObserver?.observe(element);
-    if (typeof window !== 'undefined') {
-      window.addEventListener('resize', updateLayoutMetrics);
-    }
-
-    onCleanup(() => {
-      resizeObserver?.disconnect();
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('resize', updateLayoutMetrics);
-      }
-    });
-  });
-
-  const renderOwner = (environmentID: string, groupID: string, role?: 'runtime' | 'cloud') => (
-    <EnvironmentOwnerSurface
-      i18n={props.i18n}
-      environment={projectedEntriesByID()[environmentID]!}
-      relationshipRole={role === 'cloud' ? 'cloud' : projectedGroup(groupID).provider_entry ? 'runtime' : undefined}
-      highlighted={projectedGroup(groupID).highlighted_owner_id === environmentID}
-      detailsExpanded={!collapsedRelationIDs().has(groupID)}
-      onDetailsExpandedChange={() => toggleRelationDetails(groupID)}
-      busyState={props.busyState}
-      actionProgress={props.actionProgress}
-      runtimeMenuOpen={environmentLibraryOverlayOpenFor(
-        activeEnvironmentOverlayState(),
-        'runtime_menu',
-        environmentID,
-      )}
-      onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
-      primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(
-        activeEnvironmentOverlayState(),
-        'primary_action_guidance',
-        environmentID,
-      )}
-      onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
-      lifecycleProgressOpen={environmentLibraryOverlayOpenFor(
-        activeEnvironmentOverlayState(),
-        'lifecycle_progress',
-        environmentID,
-      )}
-      onLifecycleProgressOpenChange={(open) => setLifecycleProgressOpen(environmentID, open)}
-      endpointPopoverOpen={environmentLibraryOverlayOpenFor(
-        activeEnvironmentOverlayState(),
-        'endpoints',
-        environmentID,
-      )}
-      onEndpointPopoverOpenChange={(open) => setEndpointPopoverOpen(environmentID, open)}
-      selectedEndpointID={environmentEndpointOverlaySelectedIDFor(
-        activeEnvironmentOverlayState(),
-        environmentID,
-      )}
-      selectEndpointForQRCode={(endpointID) => selectEndpointForQRCode(environmentID, endpointID)}
-      guidanceSession={guidanceSessionForEnvironment(environmentID)}
-      runLocalEnvironmentAction={props.runLocalEnvironmentAction}
-      refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
-      openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
-      runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
-      runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
-      runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
-      toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-      openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
-      editEnvironment={props.editEnvironment}
-      deleteEnvironment={props.deleteEnvironment}
-      cancelOperation={props.cancelOperation}
-      dismissOperation={props.dismissOperation}
-      copyOperationDiagnostics={props.copyOperationDiagnostics}
-      setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
-      beginLifecycleDisclosure={(intent, attempt) =>
-        beginLifecycleProgressDisclosure(environmentID, intent, attempt)
-      }
-      abandonLifecycleDisclosure={(attempt) => abandonLifecycleProgressDisclosure(environmentID, attempt)}
-      bindLifecycleDisclosure={(attempt, operation) =>
-        bindLifecycleProgressDisclosure(environmentID, attempt, operation)
-      }
-    />
-  );
-  const RelationCard = (cardProps: { groupID: string }) => (
-    <Card
-      class={cn('redeven-environment-card h-full overflow-hidden',
-        projectedGroup(cardProps.groupID).primary_entry.window_state === 'open' && 'redeven-environment-card--open')}
-      data-environment-group={cardProps.groupID}
-    >
-      {renderOwner(cardProps.groupID, cardProps.groupID)}
-      <For each={projectedGroup(cardProps.groupID).provider_entry ? [projectedGroup(cardProps.groupID).provider_entry!.id] : []}>
-        {ownerID => renderOwner(ownerID, cardProps.groupID, 'cloud')}
-      </For>
-    </Card>
-  );
-
-  return (
-    <div class="space-y-3">
-      <Show
-        when={props.groups.length > 0 || props.showQuickAddCards}
-        fallback={
-          <Motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-lg px-6 py-8 text-center">
-              <Search class="h-8 w-8 text-muted-foreground/50" />
-              <div class="space-y-1">
-                <div class="text-sm font-medium text-foreground">
-                  {props.i18n.t('environmentCenter.noMatchingEnvironmentsTitle')}
-                </div>
-                <div class="text-xs text-muted-foreground">
-                  {props.i18n.t('environmentCenter.noMatchingEnvironmentsDescription')}
-                </div>
-              </div>
-            </div>
-          </Motion.div>
-        }
-      >
-        <div
-          ref={setEnvironmentLibraryElement}
-          class="redeven-environment-library space-y-3"
-          data-density={layoutModel().density}
-          style={environmentGridStyle()}
-        >
-          <Show when={groupedGroupIDs().pinned_group_ids.length > 0}>
-            <EnvironmentLibrarySection title={props.i18n.t('environmentCenter.pinnedSection')}>
-              <For each={groupedGroupIDs().pinned_group_ids}>
-                {(groupID) => (
-                  <RelationCard groupID={groupID} />
-                )}
-              </For>
-            </EnvironmentLibrarySection>
-          </Show>
-          <Show when={groupedGroupIDs().regular_group_ids.length > 0 || props.showQuickAddCards}>
-            <EnvironmentLibrarySection
-              title={
-                groupedGroupIDs().pinned_group_ids.length > 0
-                  ? props.i18n.t('environmentCenter.environmentsSection')
-                  : undefined
-              }
-            >
-              <For each={groupedGroupIDs().regular_group_ids}>
-                {(groupID) => (
-                  <RelationCard groupID={groupID} />
-                )}
-              </For>
-              <Show when={props.showQuickAddCards}>
-                <NewEnvironmentPlaceholderCard
-                  i18n={props.i18n}
-                  openCreateConnectionDialog={props.openCreateConnectionDialog}
-                />
-              </Show>
-            </EnvironmentLibrarySection>
-          </Show>
-        </div>
-      </Show>
-    </div>
-  );
-}
-
-function EnvironmentLibrarySection(props: Readonly<{
-  title?: string;
-  children: JSX.Element;
-}>) {
-  return (
-    <section class="space-y-2.5">
-      <Show when={props.title}>
-        {(title) => (
-          <div class="px-1">
-            <h2 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title()}</h2>
-          </div>
-        )}
-      </Show>
-      <div class="redeven-environment-grid">
-        {props.children}
-      </div>
-    </section>
-  );
-}
 
 function ConsoleIconTile(props: Readonly<{
   children: JSX.Element;
@@ -8165,17 +7632,6 @@ function ConsoleStatusBadge(props: Readonly<{
   );
 }
 
-function EnvironmentStatusIndicator(props: Readonly<{
-  tone: 'neutral' | 'primary' | 'success' | 'warning';
-  children: JSX.Element;
-}>) {
-  return (
-    <span class="redeven-status-indicator" data-tone={props.tone}>
-      <span class="redeven-status-indicator__dot" aria-hidden="true" />
-      {props.children}
-    </span>
-  );
-}
 
 function BottomBarMetric(props: Readonly<{
   count: number;
@@ -8213,39 +7669,6 @@ function BottomBarMetric(props: Readonly<{
   );
 }
 
-function ConsoleActionIconButton(props: Readonly<{
-  title: string;
-  'aria-label': string;
-  onClick: () => void;
-  active?: boolean;
-  'aria-expanded'?: boolean;
-  'aria-haspopup'?: JSX.AriaAttributes['aria-haspopup'];
-  disabled?: boolean;
-  loading?: boolean;
-  danger?: boolean;
-  children: JSX.Element;
-}>) {
-  return (
-    <button
-      type="button"
-      title={props.title}
-      aria-label={props['aria-label']}
-      aria-pressed={props.active}
-      aria-expanded={props['aria-expanded']}
-      aria-haspopup={props['aria-haspopup']}
-      data-active={props.active === true}
-      disabled={props.disabled || props.loading}
-      aria-busy={props.loading === true ? 'true' : undefined}
-      class={cn(
-        'redeven-console-icon-button',
-        props.danger && 'redeven-console-icon-button--danger',
-      )}
-      onClick={props.onClick}
-    >
-      {props.children}
-    </button>
-  );
-}
 
 function ConsoleChipActionButton(props: Readonly<{
   onClick: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>;
@@ -8281,7 +7704,7 @@ function qrCodeDataUrl(value: string): string {
   return qrCodeSvgDataUrl(value);
 }
 
-function EnvironmentCardFactsBlock(props: Readonly<{
+export function EnvironmentCardFactsBlock(props: Readonly<{
   i18n: DesktopI18n;
   facts: readonly EnvironmentCardFactModel[];
   environmentID: string;
@@ -9749,14 +9172,6 @@ function progressTriggerClassName(presentation: EnvironmentProgressPrimaryPresen
     : 'redeven-split-action-trigger--attention';
 }
 
-function environmentActionUsesLifecycleOwner(action: EnvironmentActionModel): boolean {
-  return (
-    isEnvironmentLifecycleDisclosureIntent(action.intent) ||
-    action.intent === 'open' ||
-    action.intent === 'open_with_preflight' ||
-    action.intent === 'start_and_open'
-  );
-}
 
 function localizedPrimaryProgressPresentation(
   i18n: DesktopI18n,
@@ -10361,410 +9776,6 @@ function QuickCreateConnectionCard(props: Readonly<{
   );
 }
 
-function EnvironmentOwnerSurface(
-  props: Readonly<{
-    i18n: DesktopI18n;
-    environment: DesktopEnvironmentEntry;
-    relationshipRole?: 'runtime' | 'cloud';
-    highlighted?: boolean;
-    detailsExpanded?: boolean;
-    onDetailsExpandedChange?: () => void;
-    busyState: DesktopLauncherBusyState;
-    actionProgress: readonly DesktopLauncherActionProgress[];
-    runtimeMenuOpen: boolean;
-    onRuntimeMenuOpenChange: (open: boolean) => void;
-    primaryActionGuidanceOpen: boolean;
-    onPrimaryActionGuidanceOpenChange: (open: boolean) => void;
-    lifecycleProgressOpen: boolean;
-    onLifecycleProgressOpenChange: (open: boolean) => void;
-    endpointPopoverOpen: boolean;
-    onEndpointPopoverOpenChange: (open: boolean) => void;
-    selectedEndpointID?: string;
-    selectEndpointForQRCode: (endpointID: string) => void;
-    guidanceSession: EnvironmentGuidanceSessionState;
-    setGuidanceSession: (state: EnvironmentGuidanceSessionState) => void;
-    beginLifecycleDisclosure: (
-      intent: EnvironmentLifecycleDisclosureIntent,
-      attempt: EnvironmentLifecycleAttempt,
-    ) => void;
-    abandonLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt) => void;
-    bindLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt, operation: EnvironmentLifecycleAttempt) => void;
-    runLocalEnvironmentAction: (
-      environment: DesktopEnvironmentEntry,
-      action: EnvironmentActionModel,
-      errorTarget?: 'connect' | 'dialog' | 'settings',
-      attempt?: EnvironmentLifecycleAttempt,
-      bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
-    ) => Promise<boolean>;
-    refreshEnvironmentRuntime: (
-      environment: DesktopEnvironmentEntry,
-      errorTarget?: 'connect' | 'dialog' | 'settings',
-    ) => Promise<boolean>;
-    openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry, anchor?: FlowerTurnLauncherAnchor) => void;
-    runEnvironmentGuidanceAction: (
-      environment: DesktopEnvironmentEntry,
-      action: EnvironmentActionModel,
-      updateSession?: (state: EnvironmentGuidanceSessionState) => void,
-      attempt?: EnvironmentLifecycleAttempt,
-    ) => Promise<EnvironmentGuidanceActionResolution>;
-    runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
-    runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
-    toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
-    openInBrowser: (url: string) => Promise<void>;
-    copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
-    editEnvironment: (environment: DesktopEnvironmentEntry) => void;
-    deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
-    cancelOperation: (progress: DesktopLauncherActionProgress) => void;
-    dismissOperation: (progress: DesktopLauncherActionProgress) => void;
-    copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
-  }>,
-) {
-  const card = createMemo(() => {
-    const model = buildEnvironmentCardModel(props.environment);
-    return {
-      ...model,
-      kind_label: localizedFactLabel(props.i18n, model.kind_label),
-      status_label: localizedEnvironmentStatusLabel(props.i18n, model.status_label),
-      runtime_started_label: localizedRuntimeStartedLabel(props.i18n, model.runtime_started_label),
-    };
-  });
-  const facts = createMemo(() =>
-    (props.relationshipRole === 'cloud'
-      ? buildEnvironmentCloudConnectionFactsModel(props.environment)
-      : buildEnvironmentCardFactsModel(props.environment)).map((fact) => localizedEnvironmentFact(props.i18n, fact)),
-  );
-
-  const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
-  const ownerLabel = createMemo(() => props.relationshipRole
-    ? props.i18n.t('environmentCenter.relationshipOwnerLabel', {
-      label: props.environment.label,
-      owner: props.i18n.t(props.relationshipRole === 'cloud' ? 'environmentCenter.providerFilter' : 'environmentCenter.runtimeOwner'),
-    }) : props.environment.label);
-  const refreshLabel = createMemo(() => props.environment.kind === 'provider_environment'
-    ? props.i18n.t('environmentCenter.refreshCloudStatus')
-    : props.i18n.t('environmentCenter.refreshRuntimeStatus'));
-  const environmentActionPresentation = createMemo(() => {
-    const presentation = localizedEnvironmentActionPresentation(props.i18n, environmentActionModel().action_presentation);
-    return props.relationshipRole === 'cloud' ? {
-      ...presentation,
-      primary_action: { ...presentation.primary_action, variant: 'outline' as const, label: props.i18n.t(
-        props.environment.window_state === 'open' ? 'environmentCenter.showCloudEnvApp' : 'environmentCenter.openCloudEnvApp',
-      ) },
-    } : presentation;
-  });
-  const operationState = createMemo(() =>
-    environmentOperationState(props.environment, props.actionProgress, props.busyState),
-  );
-  const isPinBusy = createMemo(() =>
-    busyStateMatchesEnvironment(props.busyState, props.environment.id, [
-      'set_provider_environment_pinned',
-      'set_environment_registration_pinned',
-    ]),
-  );
-  const deleteTitle = createMemo(() => props.i18n.t('environmentCenter.removeEnvironment'));
-  const runOpenWithPreflight = async (action: EnvironmentActionModel): Promise<void> => {
-    const nextSession = startEnvironmentGuidanceIntent(
-      props.guidanceSession,
-      props.environment.id,
-      'open_with_preflight',
-    );
-    props.onPrimaryActionGuidanceOpenChange(true);
-    props.setGuidanceSession(nextSession);
-    const resolution = await props.runEnvironmentGuidanceAction(props.environment, action, props.setGuidanceSession);
-    props.setGuidanceSession(resolution.next_session);
-    if (resolution.close_panel) {
-      props.onPrimaryActionGuidanceOpenChange(false);
-    }
-  };
-
-  return (
-    <section
-      class={cn('redeven-environment-owner', props.relationshipRole === 'cloud' && 'redeven-linked-cloud')}
-      data-owner-id={props.environment.id}
-      data-owner-role={props.relationshipRole ?? 'standalone'}
-      data-highlighted={props.highlighted || undefined}
-      aria-label={ownerLabel()}
-    >
-      <CardHeader class={props.relationshipRole === 'cloud' ? 'px-3 pb-2 pt-3' : 'px-4 pb-2.5 pt-4'}>
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0 flex-1">
-            <div class="mb-2 flex flex-wrap items-center gap-2">
-              <Tag
-                variant={environmentKindTagVariant(props.environment.kind)}
-                tone="soft"
-                size="sm"
-                class={props.relationshipRole === 'cloud' ? 'redeven-cloud-identity cursor-default whitespace-nowrap' : 'cursor-default whitespace-nowrap'}
-              >
-                {props.relationshipRole === 'cloud' ? props.i18n.t('environmentCenter.cloudConnectionLabel') : card().kind_label}
-              </Tag>
-              <EnvironmentStatusIndicator tone={card().status_tone}>{card().status_label}</EnvironmentStatusIndicator>
-            </div>
-            <CardTitle
-              class="truncate text-sm font-semibold leading-5 tracking-[0.01em]"
-              title={props.environment.label}
-            >
-              {props.environment.label}
-            </CardTitle>
-          </div>
-          <DesktopTooltip content={refreshLabel()} placement="top">
-            <span>
-              <ConsoleActionIconButton
-                title={refreshLabel()}
-                aria-label={props.i18n.t(props.environment.kind === 'provider_environment' ? 'environmentCenter.cloudRefreshForLabel' : 'environmentCenter.refreshRuntimeStatusForLabel', {
-                  label: ownerLabel(),
-                })}
-                disabled={operationState().actionsDisabled}
-                onClick={() => {
-                  void props.refreshEnvironmentRuntime(props.environment, 'connect');
-                }}
-              >
-                <Refresh class="h-3.5 w-3.5" />
-              </ConsoleActionIconButton>
-            </span>
-          </DesktopTooltip>
-          <DesktopTooltip
-            content={props.i18n.t('environmentCenter.askFlowerForLabel', {
-              label: ownerLabel(),
-            })}
-            placement="top"
-          >
-            <button
-              type="button"
-              class="redeven-environment-card__flower-button"
-              aria-label={props.i18n.t('environmentCenter.askFlowerForLabel', {
-                label: ownerLabel(),
-              })}
-              title={props.i18n.t('environmentCenter.askFlowerForLabel', {
-                label: ownerLabel(),
-              })}
-              onClick={(event) => {
-                event.stopPropagation();
-                const rect = event.currentTarget.getBoundingClientRect();
-                props.openEnvironmentFlowerSurface(props.environment, {
-                  x: rect.right,
-                  y: rect.bottom,
-                });
-              }}
-            >
-              <FlowerSoftAuraIcon
-                class="redeven-environment-card__flower-aura"
-                iconClass="redeven-environment-card__flower-icon"
-              />
-            </button>
-          </DesktopTooltip>
-        </div>
-        <Show when={props.relationshipRole !== 'cloud'}>
-          <div class="redeven-card-runtime-meta">
-            <span class="redeven-card-runtime-age" title={card().runtime_started_label}>
-              <Clock aria-hidden="true" />
-              <span>{card().runtime_started_label}</span>
-            </span>
-            <Show when={!props.relationshipRole && environmentControlPlaneLabel(props.environment)}>
-              {(label) => (
-                <span class="redeven-card-cloud-affiliation" title={label()}>
-                  <Cloud aria-hidden="true" />
-                  <span>{label()}</span>
-                </span>
-              )}
-            </Show>
-          </div>
-        </Show>
-        <Show when={props.relationshipRole === 'cloud'}>
-          <button
-            type="button"
-            class="redeven-linked-cloud__disclosure"
-            aria-expanded={props.detailsExpanded}
-            aria-controls={`cloud-details-${props.environment.id}`}
-            onClick={() => {
-              props.onEndpointPopoverOpenChange(false);
-              props.onDetailsExpandedChange?.();
-            }}
-          >
-            <ChevronDown class={cn('h-3 w-3 transition-transform', !props.detailsExpanded && '-rotate-90')} />
-            {props.i18n.t(props.detailsExpanded ? 'environmentCenter.hideCloudDetails' : 'environmentCenter.showCloudDetails')}
-          </button>
-        </Show>
-      </CardHeader>
-      <Show when={props.relationshipRole !== 'cloud' || props.detailsExpanded}>
-        <CardContent id={`cloud-details-${props.environment.id}`} class={cn('flex flex-1 flex-col pb-3', props.relationshipRole === 'cloud' ? 'px-3' : 'px-4')}>
-          <EnvironmentCardFactsBlock
-            environmentID={props.environment.id}
-            i18n={props.i18n}
-            facts={facts()}
-            environmentLabel={props.environment.label}
-            minRows={props.relationshipRole === 'cloud' ? 2 : 3}
-            onFactAction={props.runEnvironmentCardFactAction}
-            openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
-            endpointPopoverOpen={props.endpointPopoverOpen}
-            onEndpointPopoverOpenChange={props.onEndpointPopoverOpenChange}
-            selectedEndpointID={props.selectedEndpointID}
-            selectEndpointForQRCode={props.selectEndpointForQRCode}
-          />
-        </CardContent>
-      </Show>
-      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border/60 px-4 pt-3 pb-2.5">
-        <EnvironmentSplitActionButton
-          i18n={props.i18n}
-          presentation={environmentActionPresentation()}
-          environmentID={props.environment.id}
-          environmentLabel={props.environment.label}
-          menuOpen={props.runtimeMenuOpen}
-          onMenuOpenChange={props.onRuntimeMenuOpenChange}
-          guidanceOpen={props.primaryActionGuidanceOpen}
-          onGuidanceOpenChange={props.onPrimaryActionGuidanceOpenChange}
-          progressOpen={props.lifecycleProgressOpen}
-          onProgressOpenChange={props.onLifecycleProgressOpenChange}
-          guidanceSession={props.guidanceSession}
-          busyState={props.busyState}
-          operationState={operationState()}
-          cancelOperation={props.cancelOperation}
-          dismissOperation={props.dismissOperation}
-          copyOperationDiagnostics={props.copyOperationDiagnostics}
-          refreshEnvironmentRuntime={() => {
-            void props.refreshEnvironmentRuntime(props.environment, 'connect');
-          }}
-          runDesktopUpdateHandoff={async (environmentID, label) => {
-            await props.runDesktopUpdateHandoff(environmentID, label);
-          }}
-          onRunAction={(action) => {
-            void (async () => {
-              if (operationState().actionsDisabled && environmentActionUsesLifecycleOwner(action)) {
-                if (operationState().activeProgress) {
-                  props.onLifecycleProgressOpenChange(true);
-                }
-                return;
-              }
-              if (action.continue_open_after_completion) {
-                await runOpenWithPreflight({
-                  intent: 'open_with_preflight',
-                  label: props.i18n.t('environmentAction.open'),
-                  enabled: true,
-                  variant: 'default',
-                });
-                return;
-              }
-              if (action.intent === 'update_desktop') {
-                props.setGuidanceSession(null);
-                props.onPrimaryActionGuidanceOpenChange(false);
-              }
-              if (action.intent === 'open_with_preflight') {
-                await runOpenWithPreflight(action);
-                return;
-              }
-              let lifecycleAttempt: EnvironmentLifecycleAttempt | undefined;
-              if (environmentActionStartsLifecycleDisclosure(action)) {
-                lifecycleAttempt = createEnvironmentLifecycleAttempt(props.environment.id, action.intent);
-                props.beginLifecycleDisclosure(action.intent, lifecycleAttempt);
-              } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
-                props.setGuidanceSession(
-                  startEnvironmentGuidanceIntent(props.guidanceSession, props.environment.id, action.intent),
-                );
-                props.onPrimaryActionGuidanceOpenChange(true);
-              }
-              const completed = await props.runLocalEnvironmentAction(
-                props.environment,
-                action,
-                'connect',
-                lifecycleAttempt,
-                lifecycleAttempt
-                  ? (operation) => props.bindLifecycleDisclosure(lifecycleAttempt, operation)
-                  : undefined,
-              );
-              if (!completed && lifecycleAttempt) {
-                props.abandonLifecycleDisclosure(lifecycleAttempt);
-              }
-            })();
-          }}
-          onRunGuidanceAction={(action) => {
-            void (async () => {
-              let lifecycleAttempt: EnvironmentLifecycleAttempt | undefined;
-              if (environmentActionStartsLifecycleDisclosure(action)) {
-                lifecycleAttempt = createEnvironmentLifecycleAttempt(props.environment.id, action.intent);
-                props.beginLifecycleDisclosure(action.intent, lifecycleAttempt);
-              } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
-                props.setGuidanceSession(
-                  startEnvironmentGuidanceIntent(props.guidanceSession, props.environment.id, action.intent),
-                );
-              }
-              const resolution = await props.runEnvironmentGuidanceAction(
-                props.environment,
-                action,
-                props.setGuidanceSession,
-                lifecycleAttempt,
-              );
-              props.setGuidanceSession(lifecycleAttempt ? null : resolution.next_session);
-              if (resolution.close_panel) {
-                props.onPrimaryActionGuidanceOpenChange(false);
-              }
-            })();
-          }}
-        />
-        <div class="flex items-center gap-0.5">
-          <Show when={props.environment.kind !== 'gateway_environment'}>
-            <DesktopTooltip
-              content={
-                props.environment.pinned
-                  ? props.i18n.t('environmentCenter.unpinLabel', { label: ownerLabel() })
-                  : props.i18n.t('environmentCenter.pinLabel', { label: ownerLabel() })
-              }
-              placement="top"
-            >
-              <ConsoleActionIconButton
-                title={
-                  props.environment.pinned
-                    ? props.i18n.t('environmentCenter.unpinLabel', { label: ownerLabel() })
-                    : props.i18n.t('environmentCenter.pinLabel', { label: ownerLabel() })
-                }
-                aria-label={
-                  props.environment.pinned
-                    ? props.i18n.t('environmentCenter.unpinLabel', {
-                        label: ownerLabel(),
-                      })
-                    : props.i18n.t('environmentCenter.pinLabel', {
-                        label: ownerLabel(),
-                      })
-                }
-                active={props.environment.pinned}
-                disabled={isPinBusy()}
-                onClick={() => {
-                  void props.toggleEnvironmentPinned(props.environment);
-                }}
-              >
-                <Pin class="h-3.5 w-3.5" />
-              </ConsoleActionIconButton>
-            </DesktopTooltip>
-          </Show>
-          <Show when={props.environment.can_edit}>
-            <DesktopTooltip content={props.i18n.t('common.settings')} placement="top">
-              <ConsoleActionIconButton
-                title={props.i18n.t('environmentCenter.environmentSettings')}
-                aria-label={props.i18n.t('environmentCenter.settingsForLabel', { label: ownerLabel() })}
-                onClick={() => props.editEnvironment(props.environment)}
-              >
-                <Settings class="h-3.5 w-3.5" />
-              </ConsoleActionIconButton>
-            </DesktopTooltip>
-          </Show>
-          <Show when={props.environment.can_delete}>
-            <DesktopTooltip content={props.i18n.t('common.delete')} placement="top">
-              <ConsoleActionIconButton
-                title={deleteTitle()}
-                aria-label={props.i18n.t('environmentCenter.removeLabel', {
-                  label: ownerLabel(),
-                })}
-                danger
-                onClick={() => props.deleteEnvironment(props.environment)}
-              >
-                <Trash class="h-3.5 w-3.5" />
-              </ConsoleActionIconButton>
-            </DesktopTooltip>
-          </Show>
-        </div>
-      </CardFooter>
-    </section>
-  );
-}
-
 function NewEnvironmentPlaceholderCard(props: Readonly<{
   i18n: DesktopI18n;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
@@ -10836,188 +9847,57 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
 function ControlPlanesPanel(props: Readonly<{
   i18n: DesktopI18n;
   controlPlanes: readonly DesktopControlPlaneSummary[];
-  environments: readonly DesktopEnvironmentEntry[];
+  groups: readonly EnvironmentLibraryDisplayGroup[];
+  query: string;
+  focusedSource: string;
+  Grid: (props: EnvironmentGridProps) => JSX.Element;
   busyState: DesktopLauncherBusyState;
   openCreateControlPlaneDialog: (message?: string) => void;
-  viewControlPlaneEnvironments: (controlPlane: DesktopControlPlaneSummary) => void;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
 }>) {
+  const sections = createMemo(() => environmentCloudSections(props.groups, props.controlPlanes));
+  const sectionIDs = createMemo(() => sections().map(section => section.id));
+  const visible = createMemo(() => environmentCloudSections(props.groups, props.controlPlanes, props.query));
+  const byID = createMemo(() => new Map(sections().map(section => [section.id, section])));
+  const visibleByID = createMemo(() => new Map(visible().map(section => [section.id, section])));
+  createEffect(() => {
+    const id = props.focusedSource;
+    if (id) document.getElementById(`cloud-source:${id}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
   return (
-    <div class="space-y-3">
-      <Show
-        when={props.controlPlanes.length > 0}
-        fallback={(
-          <div class="redeven-control-plane-grid">
-            <div class="redeven-control-plane-card">
-              <QuickCreateConnectionCard
-                title={props.i18n.t('environmentCenter.addProviderTitle')}
-                badge={props.i18n.t('environmentCenter.addProviderBadge')}
-                detail={props.i18n.t('environmentCenter.addProviderDescription')}
-                actionLabel={props.i18n.t('environmentCenter.connectProvider')}
-                onClick={() => props.openCreateControlPlaneDialog()}
-              />
+    <div class="space-y-6">
+      <Show when={props.controlPlanes.length === 0}>
+        <QuickCreateConnectionCard
+          title={props.i18n.t('environmentCenter.addProviderTitle')}
+          badge={props.i18n.t('environmentCenter.addProviderBadge')}
+          detail={props.i18n.t('environmentCenter.addProviderDescription')}
+          actionLabel={props.i18n.t('environmentCenter.connectProvider')}
+          onClick={() => props.openCreateControlPlaneDialog()}
+        />
+      </Show>
+      <Show when={props.controlPlanes.length > 0 && visible().length === 0}>
+        <div class="redeven-console-empty rounded-lg px-6 py-8 text-center text-sm text-muted-foreground">
+          {props.i18n.t('environmentCenter.noCloudSearchResults')}
+        </div>
+      </Show>
+      <For each={sectionIDs()}>{id => {
+        const section = () => byID().get(id)!;
+        const current = () => visibleByID().get(id) ?? { ...section(), visible_groups: [] };
+        return <section id={`cloud-source:${id}`} data-cloud-source={id} hidden={!visibleByID().has(id)} class="space-y-3 scroll-mt-4">
+          <ControlPlaneShelf i18n={props.i18n} section={section()} busyState={props.busyState}
+            reconnectControlPlane={props.reconnectControlPlane} refreshControlPlane={props.refreshControlPlane}
+            deleteControlPlane={props.deleteControlPlane} />
+          <Show when={section().groups.length === 0} fallback={<props.Grid groups={current().visible_groups} scope={id} cloud />}>
+            <div class="rounded-lg border border-dashed border-border px-5 py-6 text-center text-xs text-muted-foreground">
+              {props.i18n.t(section().source.sync_state === 'ready' ? 'environmentCenter.cloudSourceEmpty' : 'environmentCenter.cloudSourceUnavailable')}
             </div>
-          </div>
-        )}
-      >
-        <div class="redeven-control-plane-grid">
-          <For each={props.controlPlanes}>
-            {(controlPlane) => (
-              <ControlPlaneShelf
-                i18n={props.i18n}
-                controlPlane={controlPlane}
-                environments={props.environments}
-                busyState={props.busyState}
-                viewControlPlaneEnvironments={props.viewControlPlaneEnvironments}
-                reconnectControlPlane={props.reconnectControlPlane}
-                refreshControlPlane={props.refreshControlPlane}
-                deleteControlPlane={props.deleteControlPlane}
-              />
-            )}
-          </For>
-        </div>
-      </Show>
+          </Show>
+        </section>;
+      }}</For>
     </div>
   );
-}
-
-function controlPlaneLocalEnvironmentStats(
-  controlPlane: DesktopControlPlaneSummary,
-  environments: readonly DesktopEnvironmentEntry[],
-): Readonly<{
-  online_count: number;
-  local_host_count: number;
-  open_count: number;
-}> {
-  const providerFilter = controlPlaneFilterValue(controlPlane);
-  const matchedEntries = environments.filter((environment) => (
-    environment.kind === 'provider_environment'
-    && environmentProviderFilterValue(environment) === providerFilter
-  ));
-  return {
-    online_count: desktopProviderOnlineEnvironmentCount(controlPlane.environments),
-    local_host_count: 0,
-    open_count: matchedEntries.filter((environment) => environment.is_open).length,
-  };
-}
-
-function ControlPlaneMetricTooltipContent(props: Readonly<{
-  title: string;
-  description: string;
-  status?: string;
-}>) {
-  const status = createMemo(() => trimString(props.status));
-
-  return (
-    <div class="max-w-[17rem] space-y-1.5">
-      <div class="text-xs font-semibold leading-4 text-foreground">{props.title}</div>
-      <div class="text-[11px] leading-5 text-muted-foreground">{props.description}</div>
-      <Show when={status()}>
-        <div class="rounded-md border border-border/70 bg-muted/35 px-2 py-1.5 text-[11px] leading-5 text-muted-foreground">
-          {status()}
-        </div>
-      </Show>
-    </div>
-  );
-}
-
-function controlPlanePublishedCountTooltipContent(
-  i18n: DesktopI18n,
-  controlPlane: DesktopControlPlaneSummary,
-): JSX.Element {
-  return (
-    <ControlPlaneMetricTooltipContent
-      title={i18n.t('environmentCenter.publishedTooltipTitle')}
-      description={i18n.t('environmentCenter.publishedTooltipDescription')}
-      status={controlPlane.environments.length === 0
-        ? i18n.t('environmentCenter.publishedTooltipEmpty')
-        : undefined}
-    />
-  );
-}
-
-function controlPlaneOnlineCountTooltipContent(
-  i18n: DesktopI18n,
-  controlPlane: DesktopControlPlaneSummary,
-  onlineCount: number,
-): JSX.Element {
-  const status = (() => {
-    if (controlPlane.sync_state === 'syncing') {
-      return i18n.t('environmentCenter.onlineTooltipSyncing');
-    }
-
-    if (controlPlane.sync_state === 'ready' && controlPlane.catalog_freshness === 'fresh') {
-      return onlineCount > 0
-        ? i18n.t('environmentCenter.onlineTooltipFreshOnline')
-        : i18n.t('environmentCenter.onlineTooltipFreshNone');
-    }
-
-    return onlineCount > 0
-      ? i18n.t('environmentCenter.onlineTooltipStaleOnline')
-      : i18n.t('environmentCenter.onlineTooltipStaleNone');
-  })();
-
-  return (
-    <ControlPlaneMetricTooltipContent
-      title={i18n.t('environmentCenter.onlineTooltipTitle')}
-      description={i18n.t('environmentCenter.onlineTooltipDescription')}
-      status={status}
-    />
-  );
-}
-
-function controlPlaneLocalHostCountTooltipContent(
-  i18n: DesktopI18n,
-  stats: Readonly<{
-    local_host_count: number;
-    open_count: number;
-  }>,
-  freshestEnvironment: DesktopControlPlaneSummary['environments'][number] | null,
-): JSX.Element {
-  const runtimeLabel = freshestEnvironment
-    ? localizedProviderRuntimeLabel(i18n, desktopProviderEnvironmentRuntimeLabel(
-      freshestEnvironment.status,
-      freshestEnvironment.lifecycle_status,
-    ))
-    : '';
-  const status = stats.open_count > 0
-    ? i18n.t(stats.open_count === 1 ? 'environmentCenter.localWindowOpenOne' : 'environmentCenter.localWindowsOpen', {
-        count: stats.open_count,
-      })
-    : runtimeLabel !== ''
-        ? i18n.t('environmentCenter.mostRecentProviderState', {
-            state: runtimeLabel,
-          })
-      : i18n.t('environmentCenter.noProviderRuntimeState');
-
-  return (
-    <ControlPlaneMetricTooltipContent
-      title={i18n.t('environmentCenter.localLinksTooltipTitle')}
-      description={stats.local_host_count > 0
-        ? i18n.t('environmentCenter.localLinksTooltipDescription')
-        : i18n.t('environmentCenter.localLinksTooltipEmptyDescription')}
-      status={status}
-    />
-  );
-}
-
-function localizedProviderRuntimeLabel(i18n: DesktopI18n, label: string): string {
-  const parts = trimString(label).split('·').map((part) => trimString(part)).filter(Boolean);
-  if (parts.length <= 0) {
-    return i18n.t('common.unknown');
-  }
-  return parts.map((part) => localizedStringByValue(i18n, part, {
-    online: 'providerRuntimeState.online',
-    offline: 'providerRuntimeState.offline',
-    unknown: 'providerRuntimeState.unknown',
-    ready: 'providerRuntimeState.ready',
-    active: 'providerRuntimeState.active',
-    inactive: 'providerRuntimeState.inactive',
-    stopped: 'providerRuntimeState.stopped',
-    suspended: 'providerRuntimeState.suspended',
-  })).join(' · ');
 }
 
 function localizedProviderRuntimeTargetLabel(
@@ -11113,157 +9993,57 @@ function localizedControlPlaneStatusModel(
   };
 }
 
-function ControlPlaneMetricTile(props: Readonly<{
-  i18n: DesktopI18n;
-  label: string;
-  value: number;
-  help: JSX.Element;
-}>) {
-  return (
-    <div class="redeven-provider-shelf__metric redeven-tile rounded-md border border-border/70 px-3 py-3">
-      <div class="redeven-provider-shelf__metric-header">
-        <div class="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          {props.label}
-        </div>
-        <SettingsHelpBadge label={props.label} content={props.help} i18n={props.i18n} />
-      </div>
-      <div class="redeven-provider-shelf__metric-value">
-        {props.value}
-      </div>
-    </div>
-  );
-}
-
 function ControlPlaneShelf(props: Readonly<{
   i18n: DesktopI18n;
-  controlPlane: DesktopControlPlaneSummary;
-  environments: readonly DesktopEnvironmentEntry[];
+  section: EnvironmentCloudSection;
   busyState: DesktopLauncherBusyState;
-  viewControlPlaneEnvironments: (controlPlane: DesktopControlPlaneSummary) => void;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
 }>) {
-  const statusModel = createMemo(() => localizedControlPlaneStatusModel(
-    props.i18n,
-    buildControlPlaneStatusModel(props.controlPlane),
-  ));
-  const stats = createMemo(() => controlPlaneLocalEnvironmentStats(
-    props.controlPlane,
-    props.environments,
-  ));
-  const freshestEnvironment = createMemo(() => {
-    const environments = [...props.controlPlane.environments];
-    environments.sort((left, right) => right.last_seen_at_unix_ms - left.last_seen_at_unix_ms);
-    return environments[0] ?? null;
-  });
-  const isReconnectBusy = createMemo(() => busyStateMatchesControlPlane(
-    props.busyState,
-    props.controlPlane.provider.provider_origin,
-    props.controlPlane.provider.provider_id,
-    ['start_control_plane_connect'],
-  ));
-  const isRefreshBusy = createMemo(() => busyStateMatchesControlPlane(
-    props.busyState,
-    props.controlPlane.provider.provider_origin,
-    props.controlPlane.provider.provider_id,
-    ['refresh_control_plane'],
-  ));
-
+  const source = () => props.section.source;
+  const sourceName = () => source().display_label || controlPlaneName(source());
+  const status = createMemo(() => localizedControlPlaneStatusModel(props.i18n, buildControlPlaneStatusModel(source())));
+  const cloudOnlineCount = createMemo(() => props.section.groups.filter(group => {
+    const cloud = group.provider_entry ?? group.primary_entry;
+    return cloud.runtime_health.status === 'online';
+  }).length);
+  const reconnectBusy = () => busyStateMatchesControlPlane(props.busyState, source().provider.provider_origin, source().provider.provider_id, ['start_control_plane_connect']);
+  const refreshBusy = () => busyStateMatchesControlPlane(props.busyState, source().provider.provider_origin, source().provider.provider_id, ['refresh_control_plane']);
   return (
-    <section class="redeven-control-plane-card space-y-2.5">
-      <div class="redeven-provider-shelf rounded-lg border border-border bg-card">
-        <div class="px-4 py-3">
-          <div class="flex" style="flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:0.75rem">
-            <div class="flex min-w-0 items-center gap-3">
-              <ConsoleIconTile><Shield class="h-4 w-4" /></ConsoleIconTile>
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <div class="truncate text-sm font-semibold tracking-tight text-foreground">{controlPlaneName(props.controlPlane)}</div>
-                  <ConsoleStatusBadge tone={statusModel().tone}>
-                    {statusModel().label}
-                  </ConsoleStatusBadge>
-                  <ConsoleBadge>{props.controlPlane.provider.display_name}</ConsoleBadge>
-                  <ConsoleBadge>{props.i18n.t('environmentCenter.providerEnvsBadge', { count: props.controlPlane.environments.length })}</ConsoleBadge>
-                  <Show when={stats().local_host_count > 0}>
-                    <ConsoleBadge>{props.i18n.t('environmentCenter.providerLocalLinksBadge', { count: stats().local_host_count })}</ConsoleBadge>
-                  </Show>
-                </div>
-                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  <span>{props.controlPlane.account.user_display_name}</span>
-                  <span class="font-mono text-[11px]">{props.controlPlane.provider.provider_origin}</span>
-                  <span>{props.i18n.t('environmentCenter.providerSynced', { time: formatLocalizedRelativeTimestamp(props.i18n, props.controlPlane.last_synced_at_ms) })}</span>
-                </div>
-              </div>
-            </div>
+    <header class="redeven-cloud-source-header rounded-lg border border-border bg-card px-4 py-3">
+      <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="max-w-full truncate text-sm font-semibold text-foreground" title={sourceName()}>{sourceName()}</h2>
+            <ConsoleStatusBadge tone={status().tone}>{status().label}</ConsoleStatusBadge>
           </div>
-          <Show when={statusModel().detail}>
-            <div class="redeven-status-detail mt-3">
-              {statusModel().detail}
-            </div>
-          </Show>
-          <div class="redeven-provider-shelf__metrics mt-3">
-            <ControlPlaneMetricTile
-              i18n={props.i18n}
-              label={props.i18n.t('environmentCenter.providerPublishedLabel')}
-              value={props.controlPlane.environments.length}
-              help={controlPlanePublishedCountTooltipContent(props.i18n, props.controlPlane)}
-            />
-            <ControlPlaneMetricTile
-              i18n={props.i18n}
-              label={props.i18n.t('environmentCenter.providerOnlineLabel')}
-              value={stats().online_count}
-              help={controlPlaneOnlineCountTooltipContent(props.i18n, props.controlPlane, stats().online_count)}
-            />
-            <ControlPlaneMetricTile
-              i18n={props.i18n}
-              label={props.i18n.t('environmentCenter.providerLocalLinksLabel')}
-              value={stats().local_host_count}
-              help={controlPlaneLocalHostCountTooltipContent(props.i18n, stats(), freshestEnvironment())}
-            />
+          <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>{source().account.user_display_name}</span>
+            <span class="max-w-full truncate font-mono text-[11px]" title={source().provider.provider_origin}>{source().provider.provider_origin}</span>
+            <span>{props.i18n.t('environmentCenter.providerSynced', { time: formatLocalizedRelativeTimestamp(props.i18n, source().last_synced_at_ms) })}</span>
+          </div>
+          <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" data-cloud-source-counts>
+            <span>{props.i18n.t('environmentCenter.providerEnvsBadge', { count: props.section.groups.length })}</span>
+            <span>{props.i18n.t('environmentCenter.cloudOnlineCount', { count: cloudOnlineCount() })}</span>
+            <span>{props.i18n.t('environmentCenter.cloudLinkedCount', { count: props.section.linked_runtime_count })}</span>
+            <Show when={source().sync_state !== 'ready' || source().catalog_freshness !== 'fresh'}><span>{props.i18n.t('environmentCenter.cloudLastSyncResults')}</span></Show>
           </div>
         </div>
-        <div class="redeven-provider-shelf__actions">
-          <Button
-            size="sm"
-            variant="default"
-            onClick={() => props.viewControlPlaneEnvironments(props.controlPlane)}
-          >
-            {props.i18n.t('environmentCenter.viewEnvironments')}
+        <div class="flex flex-wrap items-center gap-1.5">
+          <Button size="sm" variant="outline" loading={refreshBusy()} disabled={source().sync_state === 'syncing'} onClick={() => { void props.refreshControlPlane(source()); }}>
+            <Refresh class="mr-1 h-3.5 w-3.5" />{props.i18n.t('common.refresh')}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            loading={isReconnectBusy()}
-            onClick={() => {
-              void props.reconnectControlPlane(props.controlPlane);
-            }}
-          >
+          <Button size="sm" variant="outline" loading={reconnectBusy()} onClick={() => { void props.reconnectControlPlane(source()); }}>
             {props.i18n.t('environmentCenter.reconnect')}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            loading={isRefreshBusy()}
-            disabled={props.controlPlane.sync_state === 'syncing'}
-            onClick={() => {
-              void props.refreshControlPlane(props.controlPlane);
-            }}
-          >
-            {props.i18n.t('common.refresh')}
-          </Button>
-          <div class="flex-1" />
-          <ConsoleActionIconButton
-            title={props.i18n.t('environmentCenter.removeProvider')}
-            danger
-            onClick={() => props.deleteControlPlane(props.controlPlane)}
-            aria-label={props.i18n.t('environmentCenter.removeProviderAriaLabel', { label: controlPlaneName(props.controlPlane) })}
-          >
-            <Trash class="h-4 w-4" />
-          </ConsoleActionIconButton>
+          <ConsoleActionIconButton title={props.i18n.t('environmentCenter.removeProvider')} danger
+            aria-label={props.i18n.t('environmentCenter.removeProviderAriaLabel', { label: sourceName() })}
+            onClick={() => props.deleteControlPlane(source())}><Trash class="h-4 w-4" /></ConsoleActionIconButton>
         </div>
       </div>
-    </section>
+      <Show when={source().sync_state !== 'ready' && status().detail}><p class={cn("mt-2 text-xs", status().tone === 'warning' ? 'text-warning' : 'text-muted-foreground')} role="status">{status().detail}</p></Show>
+    </header>
   );
 }
 

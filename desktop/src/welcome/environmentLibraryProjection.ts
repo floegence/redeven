@@ -1,3 +1,4 @@
+import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 
 export type EnvironmentLibraryDisplayGroup = Readonly<{
@@ -8,7 +9,7 @@ export type EnvironmentLibraryDisplayGroup = Readonly<{
   member_ids: readonly string[];
   search_text: string;
   pinned: boolean;
-  highlighted_owner_id?: string;
+  cloud_source_id?: string;
 }>;
 
 export function environmentLibrarySearchText(entry: DesktopEnvironmentEntry): string {
@@ -65,6 +66,7 @@ export function buildEnvironmentLibraryDisplayGroups(
       member_ids: members.map(member => member.id),
       search_text: members.map(environmentLibrarySearchText).join('\n'),
       pinned: members.some(member => member.pinned),
+      cloud_source_id: environmentCloudSourceID(provider ?? primary),
     });
   }
   return groups;
@@ -75,4 +77,36 @@ export function splitPinnedEnvironmentGroupIDs(groups: readonly EnvironmentLibra
     pinned_group_ids: groups.filter(group => group.pinned).map(group => group.id),
     regular_group_ids: groups.filter(group => !group.pinned).map(group => group.id),
   };
+}
+
+export function environmentCloudSourceID(entry: DesktopEnvironmentEntry): string | undefined {
+  return entry.kind === 'provider_environment' && entry.provider_origin && entry.provider_id
+    ? desktopControlPlaneKey(entry.provider_origin, entry.provider_id) : undefined;
+}
+
+export type EnvironmentCloudSection = Readonly<{
+  id: string;
+  source: DesktopControlPlaneSummary;
+  groups: readonly EnvironmentLibraryDisplayGroup[];
+  visible_groups: readonly EnvironmentLibraryDisplayGroup[];
+  linked_runtime_count: number;
+}>;
+
+export function environmentCloudSections(
+  groups: readonly EnvironmentLibraryDisplayGroup[],
+  sources: readonly DesktopControlPlaneSummary[],
+  query = '',
+): readonly EnvironmentCloudSection[] {
+  const search = query.trim().toLowerCase();
+  return sources.flatMap(source => {
+    const id = desktopControlPlaneKey(source.provider.provider_origin, source.provider.provider_id);
+    const members = groups.filter(group => group.cloud_source_id === id);
+    const sourceMatches = [source.display_label, source.provider.provider_origin, source.account.user_display_name]
+      .some(value => value.toLowerCase().includes(search));
+    const visible = sourceMatches ? members : members.filter(group => group.search_text.includes(search));
+    return !sourceMatches && visible.length === 0 ? [] : [{
+      id, source, groups: members, visible_groups: visible,
+      linked_runtime_count: members.filter(group => group.provider_entry).length,
+    }];
+  });
 }
