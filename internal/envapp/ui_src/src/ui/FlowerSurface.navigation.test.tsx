@@ -1074,7 +1074,7 @@ describe('FlowerSurface navigation', () => {
     )).join(',') === `${second.queue_id},${first.queue_id}`);
   });
 
-  it('waits for canonical timeline messages after a new thread is accepted', async () => {
+  it('renders admitted timeline while loading authoritative thread settings', async () => {
     const acceptedThread = thread({
       thread_id: 'thread-accepted-without-messages',
       title: 'Accepted pending',
@@ -1138,7 +1138,7 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-model-status-flower')).toBeTruthy();
     expect(runtime.querySelector('.flower-model-status-flower')?.getAttribute('aria-hidden')).toBe('true');
     expect(runtime.querySelector('.flower-model-status-indicator')?.firstElementChild?.className).toContain('flower-model-status-flower');
-    expect(loadThread).not.toHaveBeenCalled();
+    expect(loadThread).toHaveBeenCalledOnce();
   });
 
   it('recovers a newly accepted thread when its receipt has no current view', async () => {

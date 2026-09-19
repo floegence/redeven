@@ -19,6 +19,7 @@ import (
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -90,6 +91,18 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		t.Fatalf("close AI service before canonical fixture: %v", err)
 	}
 	seedAppserverWaitingPrompt(t, stateDir, thread.ThreadID, waitingTurnID, "run-11111111111111111111111111111111", waitingToolID)
+	store, err := threadstore.Open(filepath.Join(stateDir, "ai", "threads.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = store.PutExecutionAuthority(t.Context(), threadstore.ExecutionAuthority{RequestKey: "waiting-input", ThreadID: thread.ThreadID, TurnID: waitingTurnID, EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID, UserPublicID: meta.UserPublicID, UserEmail: meta.UserEmail, PermissionType: "approval_required"})
+	if closeErr := store.Close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	aiSvc, err = ai.NewService(aiOptions)
 	if err != nil {
 		t.Fatalf("reopen AI service after canonical fixture: %v", err)
