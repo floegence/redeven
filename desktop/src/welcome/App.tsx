@@ -208,6 +208,7 @@ import {
   buildEnvironmentCardModel,
   buildEnvironmentSettingsRuntimeModel,
   buildEnvironmentCardFactsModel,
+  buildEnvironmentCloudConnectionFactsModel,
   environmentControlPlaneLabel,
   buildGatewaySourceRowModel,
   ICON_ENDPOINTS,
@@ -217,7 +218,7 @@ import {
   environmentLibraryCount,
   environmentProviderFilterValue,
   filterGatewayEnvironmentEntries,
-  filterEnvironmentLibrary,
+  filterEnvironmentLibraryDisplayGroups,
   gatewaySourceFilterOptions,
   gatewaySourceFilterValue,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
@@ -241,6 +242,7 @@ import {
   type EnvironmentCenterTab,
   type EnvironmentPrimaryActionOverlayModel,
 } from './viewModel';
+import { splitPinnedEnvironmentGroupIDs, type EnvironmentLibraryDisplayGroup } from './environmentLibraryProjection';
 import {
   launcherActionFailurePresentation,
 } from './launcherActionFeedback';
@@ -294,10 +296,6 @@ import {
   openGatewaySourceOverlayState,
   reconcileGatewaySourceOverlayState,
 } from './gatewaySourceOverlayState';
-import {
-  environmentLibraryEntryRecord,
-  splitPinnedEnvironmentEntryIDs,
-} from './environmentLibraryProjection';
 import {
   environmentActionForLauncherRetry,
   groupedVisibleOperationNextActions,
@@ -1478,6 +1476,7 @@ function localizedEnvironmentActionPresentation(
 }
 
 function localizedFactLabel(i18n: DesktopI18n, label: string): string {
+  if (label === 'REMOTE') return i18n.t('environmentCenter.cloudRemoteAddress');
   return localizedStringByValue(i18n, label, {
     'RUNS ON': 'environmentFacts.runsOn',
     CONTAINER: 'environmentFacts.container',
@@ -2934,8 +2933,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     return next;
   });
-  const libraryEntries = createMemo(() => (
-    filterEnvironmentLibrary(
+  const libraryGroups = createMemo<readonly EnvironmentLibraryDisplayGroup[]>(() => (
+    filterEnvironmentLibraryDisplayGroups(
       snapshot(),
       libraryQuery(),
       librarySourceFilter(),
@@ -2996,7 +2995,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     snapshot().gateway_sources.filter(gatewayCanWriteEnvironmentProfiles)
   ));
   const librarySummary = createMemo(() => (
-    buildEnvironmentLibrarySummaryModel(snapshot(), libraryEntries())
+    buildEnvironmentLibrarySummaryModel(snapshot(), libraryGroups().flatMap((group) => group.member_entries))
   ));
   const providerRuntimeLinkActionLabel = createMemo(() => (
     providerRuntimeLinkConfirmation()?.action === 'disconnect'
@@ -6392,7 +6391,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               setActiveTab={setActiveCenterTab}
               librarySourceFilter={librarySourceFilter()}
               libraryQuery={libraryQuery()}
-              libraryEntries={libraryEntries()}
+              libraryGroups={libraryGroups()}
               gatewaySourceFilter={gatewaySourceFilter()}
               gatewayQuery={gatewayQuery()}
               gatewayEntries={gatewayEntries()}
@@ -6432,7 +6431,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               setDefaultWSLEnvironment={setDefaultWSLEnvironment}
               openRemoteEnvironment={openRemoteEnvironment}
               openSSHEnvironment={openSSHEnvironment}
-              openEnvironment={openEnvironment}
               runLocalEnvironmentAction={triggerLocalEnvironmentAction}
               refreshEnvironmentRuntime={refreshEnvironmentRuntime}
               openEnvironmentFlowerSurface={openEnvironmentFlowerSurface}
@@ -7246,7 +7244,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   setActiveTab: (value: EnvironmentCenterTab) => void;
   librarySourceFilter: string;
   libraryQuery: string;
-  libraryEntries: readonly DesktopEnvironmentEntry[];
+  libraryGroups: readonly EnvironmentLibraryDisplayGroup[];
   gatewaySourceFilter: string;
   gatewayQuery: string;
   gatewayEntries: readonly DesktopEnvironmentEntry[];
@@ -7277,11 +7275,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
     details: DesktopSSHEnvironmentDetails,
     errorTarget?: 'connect' | 'dialog',
     environment?: DesktopEnvironmentEntry,
-  ) => Promise<boolean>;
-  openEnvironment: (
-    environment: DesktopEnvironmentEntry,
-    errorTarget?: 'connect' | 'dialog',
-    route?: 'auto' | DesktopLocalEnvironmentStateRoute,
   ) => Promise<boolean>;
   runLocalEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
@@ -7431,7 +7424,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     )
   ));
   const visibleEnvironmentCardCount = createMemo(() => (
-    props.libraryEntries.length + (showQuickAddCards() ? 1 : 0)
+    props.libraryGroups.length + (showQuickAddCards() ? 1 : 0)
   ));
   const layoutReferenceEnvironmentCardCount = createMemo(() => (
     layoutReferenceEnvironmentCount() + 1
@@ -7638,28 +7631,27 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 </Show>
                 <EnvironmentCardsPanel
                   i18n={props.i18n}
-                entries={props.libraryEntries}
-                showQuickAddCards={showQuickAddCards()}
-                visibleCardCount={visibleEnvironmentCardCount()}
-                layoutReferenceCardCount={layoutReferenceEnvironmentCardCount()}
-                busyState={props.busyState}
-                actionProgress={props.actionProgress}
-                lifecycleProgressFocusRequest={props.lifecycleProgressFocusRequest}
-                consumeLifecycleProgressFocusRequest={props.consumeLifecycleProgressFocusRequest}
-                openCreateConnectionDialog={props.openCreateConnectionDialog}
-                openEnvironment={props.openEnvironment}
-                runLocalEnvironmentAction={props.runLocalEnvironmentAction}
-                refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
-                openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
-                runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
-                runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
-                runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
-                toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
-                editEnvironment={props.editEnvironment}
-                deleteEnvironment={props.deleteEnvironment}
-                cancelOperation={props.cancelOperation}
-                dismissOperation={props.dismissOperation}
+                  groups={props.libraryGroups}
+                  showQuickAddCards={showQuickAddCards()}
+                  visibleCardCount={visibleEnvironmentCardCount()}
+                  layoutReferenceCardCount={layoutReferenceEnvironmentCardCount()}
+                  busyState={props.busyState}
+                  actionProgress={props.actionProgress}
+                  lifecycleProgressFocusRequest={props.lifecycleProgressFocusRequest}
+                  consumeLifecycleProgressFocusRequest={props.consumeLifecycleProgressFocusRequest}
+                  openCreateConnectionDialog={props.openCreateConnectionDialog}
+                  runLocalEnvironmentAction={props.runLocalEnvironmentAction}
+                  refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
+                  openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
+                  runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
+                  runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
+                  runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
+                  toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+                  openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
+                  editEnvironment={props.editEnvironment}
+                  deleteEnvironment={props.deleteEnvironment}
+                  cancelOperation={props.cancelOperation}
+                  dismissOperation={props.dismissOperation}
                   copyOperationDiagnostics={props.copyOperationDiagnostics}
                 />
               </>
@@ -7708,7 +7700,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
 function EnvironmentCardsPanel(
   props: Readonly<{
     i18n: DesktopI18n;
-    entries: readonly DesktopEnvironmentEntry[];
+    groups: readonly EnvironmentLibraryDisplayGroup[];
     showQuickAddCards: boolean;
     visibleCardCount: number;
     layoutReferenceCardCount: number;
@@ -7717,11 +7709,6 @@ function EnvironmentCardsPanel(
     lifecycleProgressFocusRequest: LifecycleProgressFocusRequest | null;
     consumeLifecycleProgressFocusRequest: (requestID: number) => void;
     openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
-    openEnvironment: (
-      environment: DesktopEnvironmentEntry,
-      errorTarget?: 'connect' | 'dialog',
-      route?: 'auto' | DesktopLocalEnvironmentStateRoute,
-    ) => Promise<boolean>;
     runLocalEnvironmentAction: (
       environment: DesktopEnvironmentEntry,
       action: EnvironmentActionModel,
@@ -7761,10 +7748,19 @@ function EnvironmentCardsPanel(
   const [guidanceSessionState, setGuidanceSessionState] = createSignal<EnvironmentGuidanceSessionState>(null);
   const [lifecycleDisclosureState, setLifecycleDisclosureState] =
     createSignal<EnvironmentLifecycleDisclosureState>(null);
-  // Render cards by stable environment id so snapshot refreshes update data in place instead of remounting the card subtree.
-  const projectedEntriesByID = createMemo(() => environmentLibraryEntryRecord(props.entries));
-  const projectedEntryIDs = createMemo<readonly string[]>(() => props.entries.map((entry) => entry.id));
-  const groupedEntryIDs = createMemo(() => splitPinnedEnvironmentEntryIDs(projectedEntryIDs(), projectedEntriesByID()));
+  // Render relation cards by stable group id so snapshot refreshes update data in place instead of remounting the card subtree.
+  const projectedEntries = createMemo(() => props.groups.flatMap((group) => group.member_entries));
+  const projectedGroupsByID = createMemo(() => Object.fromEntries(
+    props.groups.map((group) => [group.id, group] as const),
+  ) as Readonly<Record<string, EnvironmentLibraryDisplayGroup>>);
+  const groupedGroupIDs = createMemo(() => splitPinnedEnvironmentGroupIDs(props.groups));
+  const projectedEntriesByID = createMemo(() => Object.fromEntries(projectedEntries().map(entry => [entry.id, entry])));
+  const [collapsedRelationIDs, setCollapsedRelationIDs] = createSignal<ReadonlySet<string>>(new Set());
+  const toggleRelationDetails = (groupID: string) => setCollapsedRelationIDs(current => {
+    const next = new Set(current);
+    if (next.has(groupID)) next.delete(groupID); else next.add(groupID);
+    return next;
+  });
   // Keep transient provider/search filters from collapsing the shared environment column system.
   const layoutModel = createMemo(() =>
     buildEnvironmentLibraryLayoutModel({
@@ -7780,7 +7776,7 @@ function EnvironmentCardsPanel(
 
   createEffect(() => {
     setLifecycleDisclosureState((current) =>
-      reconcileEnvironmentLifecycleDisclosure(current, props.entries, props.actionProgress),
+      reconcileEnvironmentLifecycleDisclosure(current, projectedEntries(), props.actionProgress),
     );
   });
 
@@ -7789,7 +7785,7 @@ function EnvironmentCardsPanel(
       const session = guidanceSessionState();
       const lifecycleDisclosure = lifecycleDisclosureState();
       if (current.kind === 'lifecycle_progress') {
-        const environment = props.entries.find((entry) => entry.id === current.environment_id);
+        const environment = projectedEntries().find((entry) => entry.id === current.environment_id);
         const operationState = environment
           ? environmentOperationState(environment, props.actionProgress, props.busyState)
           : null;
@@ -7807,9 +7803,9 @@ function EnvironmentCardsPanel(
       ) {
         return current;
       }
-      return reconcileEnvironmentLibraryOverlayState(current, props.entries);
+      return reconcileEnvironmentLibraryOverlayState(current, projectedEntries());
     });
-    setGuidanceSessionState((current) => reconcileEnvironmentGuidanceSession(current, props.entries));
+    setGuidanceSessionState((current) => reconcileEnvironmentGuidanceSession(current, projectedEntries()));
   });
 
   createEffect(() => {
@@ -7910,7 +7906,7 @@ function EnvironmentCardsPanel(
     ) {
       return;
     }
-    const environment = props.entries.find((entry) => entry.id === request.subject_id);
+    const environment = projectedEntries().find((entry) => entry.id === request.subject_id);
     if (!environment) {
       return;
     }
@@ -7955,8 +7951,8 @@ function EnvironmentCardsPanel(
     setActiveEnvironmentOverlayState(selectEnvironmentEndpointOverlayState(environmentID, endpointID));
   };
 
-  const projectedEnvironment = (environmentID: string): DesktopEnvironmentEntry =>
-    projectedEntriesByID()[environmentID]!;
+  const projectedGroup = (groupID: string): EnvironmentLibraryDisplayGroup =>
+    projectedGroupsByID()[groupID]!;
   const guidanceSessionForEnvironment = (environmentID: string): EnvironmentGuidanceSessionState =>
     guidanceSessionState()?.environment_id === environmentID ? guidanceSessionState() : null;
   createEffect(() => {
@@ -7987,10 +7983,86 @@ function EnvironmentCardsPanel(
     });
   });
 
+  const renderOwner = (environmentID: string, groupID: string, role?: 'runtime' | 'cloud') => (
+    <EnvironmentOwnerSurface
+      i18n={props.i18n}
+      environment={projectedEntriesByID()[environmentID]!}
+      relationshipRole={role === 'cloud' ? 'cloud' : projectedGroup(groupID).provider_entry ? 'runtime' : undefined}
+      highlighted={projectedGroup(groupID).highlighted_owner_id === environmentID}
+      detailsExpanded={!collapsedRelationIDs().has(groupID)}
+      onDetailsExpandedChange={() => toggleRelationDetails(groupID)}
+      busyState={props.busyState}
+      actionProgress={props.actionProgress}
+      runtimeMenuOpen={environmentLibraryOverlayOpenFor(
+        activeEnvironmentOverlayState(),
+        'runtime_menu',
+        environmentID,
+      )}
+      onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
+      primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(
+        activeEnvironmentOverlayState(),
+        'primary_action_guidance',
+        environmentID,
+      )}
+      onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
+      lifecycleProgressOpen={environmentLibraryOverlayOpenFor(
+        activeEnvironmentOverlayState(),
+        'lifecycle_progress',
+        environmentID,
+      )}
+      onLifecycleProgressOpenChange={(open) => setLifecycleProgressOpen(environmentID, open)}
+      endpointPopoverOpen={environmentLibraryOverlayOpenFor(
+        activeEnvironmentOverlayState(),
+        'endpoints',
+        environmentID,
+      )}
+      onEndpointPopoverOpenChange={(open) => setEndpointPopoverOpen(environmentID, open)}
+      selectedEndpointID={environmentEndpointOverlaySelectedIDFor(
+        activeEnvironmentOverlayState(),
+        environmentID,
+      )}
+      selectEndpointForQRCode={(endpointID) => selectEndpointForQRCode(environmentID, endpointID)}
+      guidanceSession={guidanceSessionForEnvironment(environmentID)}
+      runLocalEnvironmentAction={props.runLocalEnvironmentAction}
+      refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
+      openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
+      runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
+      runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
+      runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
+      toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+      openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
+      editEnvironment={props.editEnvironment}
+      deleteEnvironment={props.deleteEnvironment}
+      cancelOperation={props.cancelOperation}
+      dismissOperation={props.dismissOperation}
+      copyOperationDiagnostics={props.copyOperationDiagnostics}
+      setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
+      beginLifecycleDisclosure={(intent, attempt) =>
+        beginLifecycleProgressDisclosure(environmentID, intent, attempt)
+      }
+      abandonLifecycleDisclosure={(attempt) => abandonLifecycleProgressDisclosure(environmentID, attempt)}
+      bindLifecycleDisclosure={(attempt, operation) =>
+        bindLifecycleProgressDisclosure(environmentID, attempt, operation)
+      }
+    />
+  );
+  const RelationCard = (cardProps: { groupID: string }) => (
+    <Card
+      class={cn('redeven-environment-card h-full overflow-hidden',
+        projectedGroup(cardProps.groupID).primary_entry.window_state === 'open' && 'redeven-environment-card--open')}
+      data-environment-group={cardProps.groupID}
+    >
+      {renderOwner(cardProps.groupID, cardProps.groupID)}
+      <For each={projectedGroup(cardProps.groupID).provider_entry ? [projectedGroup(cardProps.groupID).provider_entry!.id] : []}>
+        {ownerID => renderOwner(ownerID, cardProps.groupID, 'cloud')}
+      </For>
+    </Card>
+  );
+
   return (
     <div class="space-y-3">
       <Show
-        when={props.entries.length > 0 || props.showQuickAddCards}
+        when={props.groups.length > 0 || props.showQuickAddCards}
         fallback={
           <Motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-lg px-6 py-8 text-center">
@@ -8013,140 +8085,26 @@ function EnvironmentCardsPanel(
           data-density={layoutModel().density}
           style={environmentGridStyle()}
         >
-          <Show when={groupedEntryIDs().pinned_entry_ids.length > 0}>
+          <Show when={groupedGroupIDs().pinned_group_ids.length > 0}>
             <EnvironmentLibrarySection title={props.i18n.t('environmentCenter.pinnedSection')}>
-              <For each={groupedEntryIDs().pinned_entry_ids}>
-                {(environmentID) => (
-                  <EnvironmentConnectionCard
-                    i18n={props.i18n}
-                    environment={projectedEnvironment(environmentID)}
-                    busyState={props.busyState}
-                    actionProgress={props.actionProgress}
-                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(
-                      activeEnvironmentOverlayState(),
-                      'runtime_menu',
-                      environmentID,
-                    )}
-                    onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
-                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(
-                      activeEnvironmentOverlayState(),
-                      'primary_action_guidance',
-                      environmentID,
-                    )}
-                    onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
-                    lifecycleProgressOpen={environmentLibraryOverlayOpenFor(
-                      activeEnvironmentOverlayState(),
-                      'lifecycle_progress',
-                      environmentID,
-                    )}
-                    onLifecycleProgressOpenChange={(open) => setLifecycleProgressOpen(environmentID, open)}
-                    endpointPopoverOpen={environmentLibraryOverlayOpenFor(
-                      activeEnvironmentOverlayState(),
-                      'endpoints',
-                      environmentID,
-                    )}
-                    onEndpointPopoverOpenChange={(open) => setEndpointPopoverOpen(environmentID, open)}
-                    selectedEndpointID={environmentEndpointOverlaySelectedIDFor(
-                      activeEnvironmentOverlayState(),
-                      environmentID,
-                    )}
-                    selectEndpointForQRCode={(endpointID) => selectEndpointForQRCode(environmentID, endpointID)}
-                    guidanceSession={guidanceSessionForEnvironment(environmentID)}
-                    openEnvironment={props.openEnvironment}
-                    runLocalEnvironmentAction={props.runLocalEnvironmentAction}
-                    refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
-                    openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
-                    runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
-                    runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
-                    runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
-                    toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                    openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
-                    editEnvironment={props.editEnvironment}
-                    deleteEnvironment={props.deleteEnvironment}
-                    cancelOperation={props.cancelOperation}
-                    dismissOperation={props.dismissOperation}
-                    copyOperationDiagnostics={props.copyOperationDiagnostics}
-                    setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
-                    beginLifecycleDisclosure={(intent, attempt) =>
-                      beginLifecycleProgressDisclosure(environmentID, intent, attempt)
-                    }
-                    abandonLifecycleDisclosure={(attempt) => abandonLifecycleProgressDisclosure(environmentID, attempt)}
-                    bindLifecycleDisclosure={(attempt, operation) =>
-                      bindLifecycleProgressDisclosure(environmentID, attempt, operation)
-                    }
-                  />
+              <For each={groupedGroupIDs().pinned_group_ids}>
+                {(groupID) => (
+                  <RelationCard groupID={groupID} />
                 )}
               </For>
             </EnvironmentLibrarySection>
           </Show>
-          <Show when={groupedEntryIDs().regular_entry_ids.length > 0 || props.showQuickAddCards}>
+          <Show when={groupedGroupIDs().regular_group_ids.length > 0 || props.showQuickAddCards}>
             <EnvironmentLibrarySection
               title={
-                groupedEntryIDs().pinned_entry_ids.length > 0
+                groupedGroupIDs().pinned_group_ids.length > 0
                   ? props.i18n.t('environmentCenter.environmentsSection')
                   : undefined
               }
             >
-              <For each={groupedEntryIDs().regular_entry_ids}>
-                {(environmentID) => (
-                  <EnvironmentConnectionCard
-                    i18n={props.i18n}
-                    environment={projectedEnvironment(environmentID)}
-                    busyState={props.busyState}
-                    actionProgress={props.actionProgress}
-                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(
-                      activeEnvironmentOverlayState(),
-                      'runtime_menu',
-                      environmentID,
-                    )}
-                    onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
-                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(
-                      activeEnvironmentOverlayState(),
-                      'primary_action_guidance',
-                      environmentID,
-                    )}
-                    onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
-                    lifecycleProgressOpen={environmentLibraryOverlayOpenFor(
-                      activeEnvironmentOverlayState(),
-                      'lifecycle_progress',
-                      environmentID,
-                    )}
-                    onLifecycleProgressOpenChange={(open) => setLifecycleProgressOpen(environmentID, open)}
-                    endpointPopoverOpen={environmentLibraryOverlayOpenFor(
-                      activeEnvironmentOverlayState(),
-                      'endpoints',
-                      environmentID,
-                    )}
-                    onEndpointPopoverOpenChange={(open) => setEndpointPopoverOpen(environmentID, open)}
-                    selectedEndpointID={environmentEndpointOverlaySelectedIDFor(
-                      activeEnvironmentOverlayState(),
-                      environmentID,
-                    )}
-                    selectEndpointForQRCode={(endpointID) => selectEndpointForQRCode(environmentID, endpointID)}
-                    guidanceSession={guidanceSessionForEnvironment(environmentID)}
-                    openEnvironment={props.openEnvironment}
-                    runLocalEnvironmentAction={props.runLocalEnvironmentAction}
-                    refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
-                    openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
-                    runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
-                    runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
-                    runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
-                    toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                    openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
-                    editEnvironment={props.editEnvironment}
-                    deleteEnvironment={props.deleteEnvironment}
-                    cancelOperation={props.cancelOperation}
-                    dismissOperation={props.dismissOperation}
-                    copyOperationDiagnostics={props.copyOperationDiagnostics}
-                    setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
-                    beginLifecycleDisclosure={(intent, attempt) =>
-                      beginLifecycleProgressDisclosure(environmentID, intent, attempt)
-                    }
-                    abandonLifecycleDisclosure={(attempt) => abandonLifecycleProgressDisclosure(environmentID, attempt)}
-                    bindLifecycleDisclosure={(attempt, operation) =>
-                      bindLifecycleProgressDisclosure(environmentID, attempt, operation)
-                    }
-                  />
+              <For each={groupedGroupIDs().regular_group_ids}>
+                {(groupID) => (
+                  <RelationCard groupID={groupID} />
                 )}
               </For>
               <Show when={props.showQuickAddCards}>
@@ -8407,11 +8365,7 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                       />
                     )}
                   </Show>
-                  {fact().copy_value ? (
-                    <span class="redeven-card-fact-value__text">{fact().value}</span>
-                  ) : (
-                    fact().value
-                  )}
+                  <span class="redeven-card-fact-value__text">{fact().value}</span>
                   <Show when={fact().endpoints && fact().endpoints!.length > 0}>
                     <EndpointsPopover
                       environmentID={props.environmentID}
@@ -10407,10 +10361,14 @@ function QuickCreateConnectionCard(props: Readonly<{
   );
 }
 
-function EnvironmentConnectionCard(
+function EnvironmentOwnerSurface(
   props: Readonly<{
     i18n: DesktopI18n;
     environment: DesktopEnvironmentEntry;
+    relationshipRole?: 'runtime' | 'cloud';
+    highlighted?: boolean;
+    detailsExpanded?: boolean;
+    onDetailsExpandedChange?: () => void;
     busyState: DesktopLauncherBusyState;
     actionProgress: readonly DesktopLauncherActionProgress[];
     runtimeMenuOpen: boolean;
@@ -10431,11 +10389,6 @@ function EnvironmentConnectionCard(
     ) => void;
     abandonLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt) => void;
     bindLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt, operation: EnvironmentLifecycleAttempt) => void;
-    openEnvironment: (
-      environment: DesktopEnvironmentEntry,
-      errorTarget?: 'connect' | 'dialog',
-      route?: 'auto' | DesktopLocalEnvironmentStateRoute,
-    ) => Promise<boolean>;
     runLocalEnvironmentAction: (
       environment: DesktopEnvironmentEntry,
       action: EnvironmentActionModel,
@@ -10476,17 +10429,32 @@ function EnvironmentConnectionCard(
     };
   });
   const facts = createMemo(() =>
-    buildEnvironmentCardFactsModel(props.environment).map((fact) => localizedEnvironmentFact(props.i18n, fact)),
+    (props.relationshipRole === 'cloud'
+      ? buildEnvironmentCloudConnectionFactsModel(props.environment)
+      : buildEnvironmentCardFactsModel(props.environment)).map((fact) => localizedEnvironmentFact(props.i18n, fact)),
   );
 
   const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
-  const environmentActionPresentation = createMemo(() =>
-    localizedEnvironmentActionPresentation(props.i18n, environmentActionModel().action_presentation),
-  );
+  const ownerLabel = createMemo(() => props.relationshipRole
+    ? props.i18n.t('environmentCenter.relationshipOwnerLabel', {
+      label: props.environment.label,
+      owner: props.i18n.t(props.relationshipRole === 'cloud' ? 'environmentCenter.providerFilter' : 'environmentCenter.runtimeOwner'),
+    }) : props.environment.label);
+  const refreshLabel = createMemo(() => props.environment.kind === 'provider_environment'
+    ? props.i18n.t('environmentCenter.refreshCloudStatus')
+    : props.i18n.t('environmentCenter.refreshRuntimeStatus'));
+  const environmentActionPresentation = createMemo(() => {
+    const presentation = localizedEnvironmentActionPresentation(props.i18n, environmentActionModel().action_presentation);
+    return props.relationshipRole === 'cloud' ? {
+      ...presentation,
+      primary_action: { ...presentation.primary_action, variant: 'outline' as const, label: props.i18n.t(
+        props.environment.window_state === 'open' ? 'environmentCenter.showCloudEnvApp' : 'environmentCenter.openCloudEnvApp',
+      ) },
+    } : presentation;
+  });
   const operationState = createMemo(() =>
     environmentOperationState(props.environment, props.actionProgress, props.busyState),
   );
-  const isCardOpen = createMemo(() => props.environment.window_state === 'open');
   const isPinBusy = createMemo(() =>
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
       'set_provider_environment_pinned',
@@ -10510,20 +10478,24 @@ function EnvironmentConnectionCard(
   };
 
   return (
-    <Card
-      class={cn('redeven-environment-card h-full overflow-hidden', isCardOpen() && 'redeven-environment-card--open')}
+    <section
+      class={cn('redeven-environment-owner', props.relationshipRole === 'cloud' && 'redeven-linked-cloud')}
+      data-owner-id={props.environment.id}
+      data-owner-role={props.relationshipRole ?? 'standalone'}
+      data-highlighted={props.highlighted || undefined}
+      aria-label={ownerLabel()}
     >
-      <CardHeader class="px-4 pb-2.5 pt-4">
+      <CardHeader class={props.relationshipRole === 'cloud' ? 'px-3 pb-2 pt-3' : 'px-4 pb-2.5 pt-4'}>
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
-            <div class="mb-2 flex items-center gap-2">
+            <div class="mb-2 flex flex-wrap items-center gap-2">
               <Tag
                 variant={environmentKindTagVariant(props.environment.kind)}
                 tone="soft"
                 size="sm"
-                class="cursor-default whitespace-nowrap"
+                class={props.relationshipRole === 'cloud' ? 'redeven-cloud-identity cursor-default whitespace-nowrap' : 'cursor-default whitespace-nowrap'}
               >
-                {card().kind_label}
+                {props.relationshipRole === 'cloud' ? props.i18n.t('environmentCenter.cloudConnectionLabel') : card().kind_label}
               </Tag>
               <EnvironmentStatusIndicator tone={card().status_tone}>{card().status_label}</EnvironmentStatusIndicator>
             </div>
@@ -10534,12 +10506,12 @@ function EnvironmentConnectionCard(
               {props.environment.label}
             </CardTitle>
           </div>
-          <DesktopTooltip content={props.i18n.t('environmentCenter.refreshRuntimeStatus')} placement="top">
+          <DesktopTooltip content={refreshLabel()} placement="top">
             <span>
               <ConsoleActionIconButton
-                title={props.i18n.t('environmentCenter.refreshRuntimeStatus')}
-                aria-label={props.i18n.t('environmentCenter.refreshRuntimeStatusForLabel', {
-                  label: props.environment.label,
+                title={refreshLabel()}
+                aria-label={props.i18n.t(props.environment.kind === 'provider_environment' ? 'environmentCenter.cloudRefreshForLabel' : 'environmentCenter.refreshRuntimeStatusForLabel', {
+                  label: ownerLabel(),
                 })}
                 disabled={operationState().actionsDisabled}
                 onClick={() => {
@@ -10552,7 +10524,7 @@ function EnvironmentConnectionCard(
           </DesktopTooltip>
           <DesktopTooltip
             content={props.i18n.t('environmentCenter.askFlowerForLabel', {
-              label: props.environment.label,
+              label: ownerLabel(),
             })}
             placement="top"
           >
@@ -10560,10 +10532,10 @@ function EnvironmentConnectionCard(
               type="button"
               class="redeven-environment-card__flower-button"
               aria-label={props.i18n.t('environmentCenter.askFlowerForLabel', {
-                label: props.environment.label,
+                label: ownerLabel(),
               })}
               title={props.i18n.t('environmentCenter.askFlowerForLabel', {
-                label: props.environment.label,
+                label: ownerLabel(),
               })}
               onClick={(event) => {
                 event.stopPropagation();
@@ -10581,36 +10553,55 @@ function EnvironmentConnectionCard(
             </button>
           </DesktopTooltip>
         </div>
-        <div class="redeven-card-runtime-meta">
-          <span class="redeven-card-runtime-age" title={card().runtime_started_label}>
-            <Clock aria-hidden="true" />
-            <span>{card().runtime_started_label}</span>
-          </span>
-          <Show when={environmentControlPlaneLabel(props.environment)}>
-            {(label) => (
-              <span class="redeven-card-cloud-affiliation" title={label()}>
-                <Cloud aria-hidden="true" />
-                <span>{label()}</span>
-              </span>
-            )}
-          </Show>
-        </div>
+        <Show when={props.relationshipRole !== 'cloud'}>
+          <div class="redeven-card-runtime-meta">
+            <span class="redeven-card-runtime-age" title={card().runtime_started_label}>
+              <Clock aria-hidden="true" />
+              <span>{card().runtime_started_label}</span>
+            </span>
+            <Show when={!props.relationshipRole && environmentControlPlaneLabel(props.environment)}>
+              {(label) => (
+                <span class="redeven-card-cloud-affiliation" title={label()}>
+                  <Cloud aria-hidden="true" />
+                  <span>{label()}</span>
+                </span>
+              )}
+            </Show>
+          </div>
+        </Show>
+        <Show when={props.relationshipRole === 'cloud'}>
+          <button
+            type="button"
+            class="redeven-linked-cloud__disclosure"
+            aria-expanded={props.detailsExpanded}
+            aria-controls={`cloud-details-${props.environment.id}`}
+            onClick={() => {
+              props.onEndpointPopoverOpenChange(false);
+              props.onDetailsExpandedChange?.();
+            }}
+          >
+            <ChevronDown class={cn('h-3 w-3 transition-transform', !props.detailsExpanded && '-rotate-90')} />
+            {props.i18n.t(props.detailsExpanded ? 'environmentCenter.hideCloudDetails' : 'environmentCenter.showCloudDetails')}
+          </button>
+        </Show>
       </CardHeader>
-      <CardContent class="flex flex-1 flex-col px-4 pb-3">
-        <EnvironmentCardFactsBlock
-          environmentID={props.environment.id}
-          i18n={props.i18n}
-          facts={facts()}
-          environmentLabel={props.environment.label}
-          minRows={3}
-          onFactAction={props.runEnvironmentCardFactAction}
-          openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
-          endpointPopoverOpen={props.endpointPopoverOpen}
-          onEndpointPopoverOpenChange={props.onEndpointPopoverOpenChange}
-          selectedEndpointID={props.selectedEndpointID}
-          selectEndpointForQRCode={props.selectEndpointForQRCode}
-        />
-      </CardContent>
+      <Show when={props.relationshipRole !== 'cloud' || props.detailsExpanded}>
+        <CardContent id={`cloud-details-${props.environment.id}`} class={cn('flex flex-1 flex-col pb-3', props.relationshipRole === 'cloud' ? 'px-3' : 'px-4')}>
+          <EnvironmentCardFactsBlock
+            environmentID={props.environment.id}
+            i18n={props.i18n}
+            facts={facts()}
+            environmentLabel={props.environment.label}
+            minRows={props.relationshipRole === 'cloud' ? 2 : 3}
+            onFactAction={props.runEnvironmentCardFactAction}
+            openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue}
+            endpointPopoverOpen={props.endpointPopoverOpen}
+            onEndpointPopoverOpenChange={props.onEndpointPopoverOpenChange}
+            selectedEndpointID={props.selectedEndpointID}
+            selectEndpointForQRCode={props.selectEndpointForQRCode}
+          />
+        </CardContent>
+      </Show>
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border/60 px-4 pt-3 pb-2.5">
         <EnvironmentSplitActionButton
           i18n={props.i18n}
@@ -10713,24 +10704,24 @@ function EnvironmentConnectionCard(
             <DesktopTooltip
               content={
                 props.environment.pinned
-                  ? props.i18n.t('environmentCenter.unpin')
-                  : props.i18n.t('environmentCenter.pin')
+                  ? props.i18n.t('environmentCenter.unpinLabel', { label: ownerLabel() })
+                  : props.i18n.t('environmentCenter.pinLabel', { label: ownerLabel() })
               }
               placement="top"
             >
               <ConsoleActionIconButton
                 title={
                   props.environment.pinned
-                    ? props.i18n.t('environmentCenter.unpinEnvironment')
-                    : props.i18n.t('environmentCenter.pinEnvironment')
+                    ? props.i18n.t('environmentCenter.unpinLabel', { label: ownerLabel() })
+                    : props.i18n.t('environmentCenter.pinLabel', { label: ownerLabel() })
                 }
                 aria-label={
                   props.environment.pinned
                     ? props.i18n.t('environmentCenter.unpinLabel', {
-                        label: props.environment.label,
+                        label: ownerLabel(),
                       })
                     : props.i18n.t('environmentCenter.pinLabel', {
-                        label: props.environment.label,
+                        label: ownerLabel(),
                       })
                 }
                 active={props.environment.pinned}
@@ -10747,7 +10738,7 @@ function EnvironmentConnectionCard(
             <DesktopTooltip content={props.i18n.t('common.settings')} placement="top">
               <ConsoleActionIconButton
                 title={props.i18n.t('environmentCenter.environmentSettings')}
-                aria-label={props.i18n.t('environmentCenter.settingsForLabel', { label: props.environment.label })}
+                aria-label={props.i18n.t('environmentCenter.settingsForLabel', { label: ownerLabel() })}
                 onClick={() => props.editEnvironment(props.environment)}
               >
                 <Settings class="h-3.5 w-3.5" />
@@ -10759,7 +10750,7 @@ function EnvironmentConnectionCard(
               <ConsoleActionIconButton
                 title={deleteTitle()}
                 aria-label={props.i18n.t('environmentCenter.removeLabel', {
-                  label: props.environment.label,
+                  label: ownerLabel(),
                 })}
                 danger
                 onClick={() => props.deleteEnvironment(props.environment)}
@@ -10770,7 +10761,7 @@ function EnvironmentConnectionCard(
           </Show>
         </div>
       </CardFooter>
-    </Card>
+    </section>
   );
 }
 

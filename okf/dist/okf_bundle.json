@@ -670,7 +670,7 @@
               "environment",
               "settings"
             ],
-            "summary": "Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure model; presentation never chooses or changes a transport. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.",
+            "summary": "Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure connection model; presentation never chooses or changes a transport. An exactly linked Runtime and Cloud Environment share one visual card while retaining independent action owners. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.",
             "section_count": 2
           },
           {
@@ -765,7 +765,7 @@
               "ssh",
               "wsl"
             ],
-            "summary": "Each Environment card has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. Renderer display kinds never select storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.",
+            "summary": "Each Environment action surface has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. A linked Runtime and Provider Environment may share one visual relationship card, but every action surface still names the exact owner entry and Renderer display grouping never selects storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.",
             "section_count": 4
           },
           {
@@ -11913,7 +11913,7 @@
         "environment",
         "settings"
       ],
-      "timestamp": "2026-09-18T00:00:00Z",
+      "timestamp": "2026-09-19T00:00:00Z",
       "frontmatter": {
         "description": "Explain each Environment connection and apply one address namespace policy to Welcome and settings.",
         "tags": [
@@ -11922,29 +11922,44 @@
           "environment",
           "settings"
         ],
-        "timestamp": "2026-09-18T00:00:00Z",
+        "timestamp": "2026-09-19T00:00:00Z",
         "title": "Desktop Environment connections",
         "type": "Desktop Contract"
       },
-      "body_length": 12622,
-      "summary": "Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure model; presentation never chooses or changes a transport. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.",
+      "body_length": 11656,
+      "summary": "Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure connection model; presentation never chooses or changes a transport. An exactly linked Runtime and Cloud Environment share one visual card while retaining independent action owners. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Connection information and address actions\n\nConnection details identify the selected Environment before listing access addresses. Native host connections identify this device; SSH connections show the saved authority and explicit port when configured; WSL shows the distribution and Linux user; container placement additionally names its engine and container reference. Desktop never substitutes an SSH alias for a Runtime URL host or relies on WSL localhost forwarding.\n\nOnly an HTTP or HTTPS public URL is an address row. Management text, Gateway names or management endpoints, wildcard binds, credential-bearing URLs, and session-only entries cannot become access addresses. Cloud and saved external URL registrations retain their own explicit entry URLs; Gateway cards present Gateway connection information without inventing an Environment URL.\n\nA loopback URL on this device remains copyable and browser-openable but has no cross-device QR action. SSH, WSL, and container loopback addresses appear as an internal-only browser-access explanation naming their namespace and directing users to Open Env App in Desktop. Their literal URL is selectable only after expanding internal listening details, which explain that loopback belongs to that host and separate hosts may reuse a port. These rows have no URL copy, browser, or share controls. This-device and network addresses have explicit browser-access labels. Actual non-loopback addresses remain copyable, browser-openable, and shareable, with a network-availability explanation rather than a claim of tested client reachability. Connection information may be copied separately and never enters the QR component.\n\nAn explicitly present public-address list, including an empty list, is authoritative; its singular companion is not a second fallback source. The legacy singular-only report shape is read only when no list exists. Welcome chooses one current managed report rather than merging report, private entry, and generic card text. A stopped Runtime's report overrides a stale open session. No-address presentation follows health freshness and explicit stopped reasons: not checked, checking, unconfirmed, running without a reported address, or confirmed stopped. These are presentation results, not another lifecycle state machine.\n\nPopover sharing is keyed by Environment and address-row identity. Snapshot refresh preserves the open popover and removes only an absent or no-longer-shareable selection. Settings also clear sharing when their Environment changes. Keyboard dismissal restores trigger focus; explanatory rows retain native text selection.\n\nRefresh continuity includes component and DOM identity, not just the open flag. Cards, semantic facts (independent of translated labels), and connection rows render by stable IDs with reactive access to the latest data. A fresh snapshot must not reconstruct their interactive subtree, replay entry motion, reclaim focus, reset native text selection or scrolling, discard copy feedback, or recreate a still-valid QR panel. Usable browser addresses precede internal listeners; each group has a deterministic numeric text order independent of Runtime enumeration and UI locale. An expanded listener disclosure keeps its native DOM, open state and focus across equivalent snapshots. Refresh is never suspended while a panel is open: changed values appear in place, invalid addresses disappear immediately, and removing the owning Environment closes its surface. Client and real-card browser regressions exercise repeated snapshot publication during interaction.\n\nThe endpoint popover presents one compact Environment heading and a flat list of connection facts and access scope, separated by quiet rules rather than nested cards. Labels, values and guidance share one reading edge; the wider settings overview uses aligned label and value columns without an additional surrounding card. Connection type and host identity are sufficient facts; explanatory copy is reserved for address scope and the actual entry action. Hostnames and URLs use the product sans-serif text face without changing their literal display or copied content. Opening, closing and QR disclosure use brief transitions; reduced-motion preferences remove movement. The panel retains one width when sharing expands, and motion never changes the dimensions used to anchor it. Closing content is immediately non-interactive, remains visible only for its exit transition, and can be reopened without a stale dismissal removing it. Opening moves focus into the panel; Escape and its Close control restore the trigger. Retained QR presentation may reference only an address that is still public and shareable in the current model.\n\nAddress presentation groups this-device, network and internal listeners by their existing access scope. Each group presents its scope label and explanation once, then compact URL rows with their existing actions. Lists have a bounded, keyboard-scrollable viewport, retain every reported address and wrap long URLs without horizontal overflow. More than six addresses exposes a localized filter; once exposed it stays mounted for that group so shrinking inventories cannot remove a focused input. Explicit filtering resets only list scroll; equivalent Runtime refreshes preserve the query, focus, row identity, copy feedback and list scroll. Changing Environment identity resets filter state. A filter changes visibility only and must not revoke a still-valid QR selection; authoritative address removal still invalidates sharing immediately. Settings keep their fixed window and footer geometry regardless of address count.",
-          "char_count": 5637
+          "body": "## Connection information and address actions\n\nConnection details identify the selected Environment before listing access addresses. Native host connections identify this device; SSH connections show the saved authority and explicit port when configured; WSL shows the distribution and Linux user; container placement additionally names its engine and container reference. Desktop never substitutes an SSH alias for a Runtime URL host or relies on WSL localhost forwarding.\n\nOnly an HTTP or HTTPS public URL is an address row. Management text, Gateway names or management endpoints, wildcard binds, credential-bearing URLs, and session-only entries cannot become access addresses. Cloud and saved external URL registrations retain their own explicit entry URLs; Gateway cards present Gateway connection information without inventing an Environment URL.\n\nA loopback URL on this device remains copyable and browser-openable but has no cross-device QR action. SSH, WSL, and container loopback addresses appear as an internal-only browser-access explanation naming their namespace and directing users to Open Env App in Desktop. Their literal URL is selectable only after expanding internal listening details, which explain that loopback belongs to that host and separate hosts may reuse a port. These rows have no URL copy, browser, or share controls. This-device and network addresses have explicit browser-access labels. Actual non-loopback addresses remain copyable, browser-openable, and shareable, with a network-availability explanation rather than a claim of tested client reachability. Connection information may be copied separately and never enters the QR component.\n\nAn explicitly present public-address list, including an empty list, is authoritative; its singular companion is not a second fallback source. The legacy singular-only report shape is read only when no list exists. Welcome chooses one current managed report rather than merging report, private entry, and generic card text. A stopped Runtime's report overrides a stale open session. No-address presentation follows health freshness and explicit stopped reasons: not checked, checking, unconfirmed, running without a reported address, or confirmed stopped. These are presentation results, not another lifecycle state machine.\n\nPopover sharing is keyed by Environment and address-row identity. Snapshot refresh preserves the open popover and removes only an absent or no-longer-shareable selection. Settings also clear sharing when their Environment changes. Keyboard dismissal restores trigger focus; explanatory rows retain native text selection.\n\nRefresh continuity includes component and DOM identity. Cards, semantic facts, and connection rows use stable IDs with live snapshot values. Refresh must preserve entry motion, focus, text selection, scroll, copy feedback, expanded listeners, and still-valid QR panels. Changed values appear immediately; invalid addresses disappear, and removing an owner closes its surfaces. Usable addresses precede internal listeners in deterministic numeric order independent of report order and locale. Client and browser regressions publish fresh snapshots during interaction.\n\nThe endpoint popover has one compact Environment heading and flat connection facts, with quiet rules and a shared label/value reading edge. Settings use aligned columns without another card. Hostnames and URLs use the product sans-serif face without changing copied content. Opening, closing, and QR disclosure use brief transitions; reduced motion removes movement. QR expansion retains panel width, and motion never alters anchor measurements. Closing content immediately becomes non-interactive; reopening cancels stale dismissal. Opening focuses the panel; Escape and Close restore the trigger. A QR selection must remain public and shareable.\n\nAddress presentation groups this-device, network and internal listeners by their existing access scope. Each group presents its scope label and explanation once, then compact URL rows with their existing actions. Lists have a bounded, keyboard-scrollable viewport, retain every reported address and wrap long URLs without horizontal overflow. More than six addresses exposes a localized filter; once exposed it stays mounted for that group so shrinking inventories cannot remove a focused input. Explicit filtering resets only list scroll; equivalent Runtime refreshes preserve the query, focus, row identity, copy feedback and list scroll. Changing Environment identity resets filter state. A filter changes visibility only and must not revoke a still-valid QR selection; authoritative address removal still invalidates sharing immediately. Settings keep their fixed window and footer geometry regardless of address count.",
+          "char_count": 4762
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Environment cards place runtime age and Cloud affiliation on one full-width metadata row below the title and header actions. Affiliation describes the control-plane relationship, not remote availability; it never borrows an online status dot. Cloud identity appears once in metadata instead of repeating as a label/value fact. Long localized ages and names truncate within that row without pushing adjacent cards' runtime facts out of alignment; their full text remains available on hover. Unsupported legacy control-plane links retain their explicit recovery fact.\n\n## Access settings and independent clients\n\nPublic Runtime addressing is independent from Desktop bridge use: other Desktops and browsers may connect concurrently through an address usable from their own network namespace. Saved bind and protocol are next-start settings and never synthesize an online URL. Settings put the current connection and Desktop/browser actions above scope, password, protocol, port, and advanced listening controls. Editing a draft leaves the current address intact until a new Runtime report arrives. Private bridge URLs and tokens are excluded from every displayed endpoint, clipboard value, QR payload, and system-browser target.\n\nNarrow settings windows wrap full URLs within compact address rows while the icon actions retain their own trailing space. Address groups scroll independently; the footer remains visible while configuration content scrolls.\n\nBackground snapshots refresh connection details while preserving expanded settings sections, scroll position, input focus, selection and unsaved edits. Certificate state and pending operations belong to the actual Environment ID, not the snapshot object. Only a target change or reopening the certificate section initializes a new check; explicit refresh remains available. Responses from a previous target or closed section are ignored.\n\nMissing saved protocol settings use HTTP on load and startup, including existing Environment catalogs. The connection security control selects HTTP without a confirmation or certificate prompt. Explicit HTTPS remains unchanged. When saving a stopped Environment, Desktop supplies any retained password with `keep` to the Runtime authority. Runtime may establish a missing verifier, but never replaces an existing server password unless the user explicitly chooses replacement.\n\nHTTPS settings follow [Local UI certificates](../security/local-ui-certificates.md): validity, client trust, and operation outcomes stay separate. The certificate row exposes explicit management with inline replacement/removal confirmation and privileged file selection. Checks and mutations block HTTPS restart until they finish; main revalidates the saved identity and bind coverage before stopping Runtime. Certificate changes survive canceling settings and become active only on restart. The Runtime reports pending certificate changes across settings reopen. Older runtimes without management capability show an update hint instead of unsupported actions.\n\nManaged server settings read and save the selected Runtime's access configuration through its private control channel, or the authorized host CLI while stopped. The same single-column settings surface labels the exposure control as browser access and uses \"Environment only\" for remote loopback and never opens that address in the client browser. This control does not change Desktop’s managed connection; the port field explicitly configures a listening port on the environment. Public network addresses remain copyable and shareable, and SSH connection details remain available in the same window’s Connection tab. URL registrations edit connection information only. Remote certificate maintenance runs on the selected server; each client verifies trust in its issuing CA. Runtime retains the password verifier for independent restarts as specified by [Local UI network exposure](../security/local-ui-network-exposure.md).\n\nWhen the server cannot return its settings, Desktop shows the failure and Retry in Access \u0026 security; Connection remains available in the same window. Password inputs validate the 72-byte UTF-8 limit before saving. A failed server settings write restores the prior password verifier and reports the failure; it must not claim that an incomplete save succeeded.\n\nSaved access changes remain visibly pending across dialog reopenings until a new Runtime applies them. The pending report belongs to one process start identity, including password-only changes; it does not replace the current URL. Native saved settings remain readable through the bundled authority for older Runtimes; saving requires stopping or updating that Runtime first. The session and section contract is owned by [Environment settings](desktop-environment-settings.md).",
-          "char_count": 4797
+          "body": "## Linked Runtime and Cloud presentation\n\nWelcome groups a Local, SSH, or WSL Runtime with its Cloud Environment only when the Runtime link target ID equals the Cloud linked-runtime summary ID and their Provider origin, Provider ID, and ENV ID agree. Linking, linked, and disconnecting records retain that exact relationship; unbound, unrelated, or missing counterparts render independently. This is a Renderer projection over original snapshot entries, not a new connection or lifecycle state machine. Gateway projection remains independent.\n\nThe Runtime is the primary identity, status, age, and lifecycle action surface. A secondary Redeven Cloud connection region owns the Cloud name, remote status, ENV ID, remote address, and remote Env App action. Cloud identity appears once. Cloud authorization, offline state, or sync failure never disables Runtime lifecycle actions. Each owner retains its own refresh, settings, pin, Flower context, permission checks, and progress. Popovers, QR, focus, and busy state use real entry IDs; only connection-detail disclosure uses the stable relationship group ID.\n\nSearch matches either owner's name, ENV ID, or connection information. Source and Runtime Target filters match either member independently of search and highlight the relevant owner. Counts, ordering, layout, and pinned sections use visual groups; either owner's pin places the group in Pinned, while controls identify which owner they change. Snapshot refresh updates values in place. Unlinking restores independent cards without deleting records; persistence and removal boundaries follow [Environment registration ownership](desktop-environment-registrations.md).\n\nStandalone Runtime cards retain the full-width runtime-age and Cloud-affiliation metadata row. Affiliation has no remote availability dot and never repeats as a fact. Long values truncate with full text on hover. Unsupported legacy links retain their recovery fact. Fact values reserve space for endpoint controls even at narrow widths.\n\n## Access settings and independent clients\n\nPublic Runtime addresses are independent from Desktop's private management connection. Other Desktops and browsers may connect concurrently within their own reachable namespace. Saved bind, protocol, port, password, and certificate changes apply on the next Runtime start; drafts never synthesize or replace the current reported URL. Pending changes remain visible across settings reopenings and belong to one process start identity, including password-only changes.\n\nSettings show connection identity and access actions before configuration. Narrow windows wrap full URLs and retain trailing icon actions; address groups scroll independently while the footer stays visible. Live snapshots preserve expanded sections, scroll, focus, selection, and drafts. Certificate checks and pending operations bind to the real Environment ID; responses from an old target or closed section are ignored. Refreshing a snapshot does not restart a certificate check.\n\nManaged settings use the selected Runtime's private control channel, or its authorized host CLI while stopped. Browser access and listening-port controls configure the Environment, not Desktop's managed connection. Remote loopback is labeled Environment only and cannot open in the client browser. SSH connection details remain available if access settings fail; the failure has an explicit Retry. URL registrations edit connection information only.\n\n[Environment settings](desktop-environment-settings.md) owns section layout, draft/session identity, validation, and committed rebinding. [Local UI certificates](../security/local-ui-certificates.md) owns explicit HTTPS, certificate validity and client trust, maintenance confirmation, and restart blocking. [Local UI network exposure](../security/local-ui-network-exposure.md) owns bind, public-address, and password authority. Missing saved protocols retain HTTP; explicit HTTPS is preserved. Native settings remain readable for older Runtimes, while unsupported management requires an update or stop before saving. Failed writes preserve the prior password verifier and report failure rather than claiming success.",
+          "char_count": 4178
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:desktop/src/welcome/environmentLibraryProjection.ts:0:exact relationship identity and original owner entries.",
+          "source": "redeven:desktop/src/welcome/environmentLibraryProjection.ts",
+          "description": "Exact relationship identity and original owner entries."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx:0:owner action isolation, cloud failures, refresh continuity, and unlinking.",
+          "source": "redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx",
+          "description": "Owner action isolation, Cloud failures, refresh continuity, and unlinking."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-environment-relations.mjs:0:real relationship-card actions, focus, and localized narrow/dark layouts.",
+          "source": "redeven:desktop/scripts/check-environment-relations.mjs",
+          "description": "Real relationship-card actions, focus, and localized narrow/dark layouts."
+        },
         {
           "id": "redeven:desktop/src/shared/desktopEnvironmentConnection.ts:0:one typed connection, address, and status model for welcome and settings.",
           "source": "redeven:desktop/src/shared/desktopEnvironmentConnection.ts",
@@ -11991,8 +12006,14 @@
           "description": "Isolated browser acceptance for the actual product popover and settings components, including narrow and dark surfaces."
         }
       ],
-      "snippet": "Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure model; presentation never chooses ",
+      "snippet": "Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure connection model; presentation nev",
       "links": [
+        {
+          "label": "Environment registration ownership",
+          "path": "desktop/desktop-environment-registrations.md",
+          "concept_id": "desktop.desktop-environment-registrations",
+          "title": "Desktop Environment registration ownership"
+        },
         {
           "label": "Environment settings",
           "path": "desktop/desktop-environment-settings.md",
@@ -12013,6 +12034,12 @@
         }
       ],
       "backlinks": [
+        {
+          "label": "Desktop Environment registration ownership",
+          "path": "desktop/desktop-environment-registrations.md",
+          "concept_id": "desktop.desktop-environment-registrations",
+          "title": "Desktop Environment registration ownership"
+        },
         {
           "label": "Desktop environment settings",
           "path": "desktop/desktop-environment-settings.md",
@@ -12047,7 +12074,7 @@
         "ssh",
         "wsl"
       ],
-      "timestamp": "2026-08-23T00:00:00Z",
+      "timestamp": "2026-09-19T00:00:00Z",
       "frontmatter": {
         "description": "Single registration owners, versioned connection records, serialized persistence, and generation-safe removal.",
         "tags": [
@@ -12059,19 +12086,19 @@
           "ssh",
           "wsl"
         ],
-        "timestamp": "2026-08-23T00:00:00Z",
+        "timestamp": "2026-09-19T00:00:00Z",
         "title": "Desktop Environment registration ownership",
         "type": "Desktop Contract"
       },
-      "body_length": 7132,
-      "summary": "Each Environment card has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. Renderer display kinds never select storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.",
+      "body_length": 7733,
+      "summary": "Each Environment action surface has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. A linked Runtime and Provider Environment may share one visual relationship card, but every action surface still names the exact owner entry and Renderer display grouping never selects storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Every actionable card carries an explicit `EnvironmentRegistrationRef`. Create, edit, rename, pin, and remove route through the generic registration actions and that reference; Renderer presentation kinds and placement fields never select a persistence action. An SSH destination is connection identity, while the Runtime Target label is user-visible metadata; changing the label does not change the SSH destination. Removal deletes only the Desktop registration, publishes the new snapshot before background session and bridge cleanup, and never deletes remote Redeven data. A missing registration is a typed failure rather than a successful no-op.\n\nPreferences mutations form one serialized queue. Each mutation reads the latest committed value and writes only its owner fields. Long-running Open, probe, and lifecycle work may update health, operation, or `last_used_at` only while the registration still exists. Removal advances the Launcher subject generation before background cleanup, so results from an earlier generation cannot reintroduce a card. Pinning and use-time updates never upsert a missing registration.\n\nConnection records are explicitly versioned. Desktop reads existing v1 Local, URL, and SSH records without eagerly rewriting or deleting them; new WSL records require v2 and preserve the exact distribution name plus confirmed Linux user. `default_flower_runtime_target_id` references one registered Runtime Target. The first WSL registration fills an empty default, explicit selection replaces it, and deleting that target clears the reference in the same preference mutation.",
-          "char_count": 1600
+          "body": "Registered Runtime, URL, and Gateway action surfaces carry an explicit `EnvironmentRegistrationRef`. Create, edit, rename, pin, and remove route through the generic registration actions and that reference; Renderer presentation kinds and placement fields never select a persistence action. An SSH destination is connection identity, while the Runtime Target label is user-visible metadata; changing the label does not change the SSH destination. Removal deletes only the Desktop registration, publishes the new snapshot before background session and bridge cleanup, and never deletes remote Redeven data. A missing registration is a typed failure rather than a successful no-op.\n\nProvider Environment entries retain their Provider-specific action and pin owner; a visual pairing grants no registration or lifecycle authority. Relationship grouping never merges persisted records. Pinning or removing one registration does not mutate its counterpart, and unlinking deletes neither owner nor remote data. Display rules are owned by [Environment connections](desktop-environment-connections.md).\n\nPreferences mutations form one serialized queue. Each mutation reads the latest committed value and writes only its owner fields. Long-running Open, probe, and lifecycle work may update health, operation, or `last_used_at` only while the registration still exists. Removal advances the Launcher subject generation before background cleanup, so results from an earlier generation cannot reintroduce a card. Pinning and use-time updates never upsert a missing registration.\n\nConnection records are explicitly versioned. Desktop reads existing v1 Local, URL, and SSH records without eagerly rewriting or deleting them; new WSL records require v2 and preserve the exact distribution name plus confirmed Linux user. `default_flower_runtime_target_id` references one registered Runtime Target. The first WSL registration fills an empty default, explicit selection replaces it, and deleting that target clears the reference in the same preference mutation.",
+          "char_count": 2043
         },
         {
           "id": "boundaries",
@@ -12115,10 +12142,10 @@
           "description": "Canonical preference owners and non-resurrecting mutations."
         },
         {
-          "id": "redeven:desktop/src/main/desktopWelcomeState.ts:1:one card projection per canonical registration owner.",
+          "id": "redeven:desktop/src/main/desktopWelcomeState.ts:1:one snapshot entry per canonical registration owner.",
           "source": "redeven:desktop/src/main/desktopWelcomeState.ts",
           "line": 1,
-          "description": "One card projection per canonical registration owner."
+          "description": "One snapshot entry per canonical registration owner."
         },
         {
           "id": "redeven:desktop/src/main/launcherOperations.ts:1:required active surface and subject generation.",
@@ -12151,8 +12178,14 @@
           "description": "Snapshot-based progress percentage and elapsed-time projection."
         }
       ],
-      "snippet": "Each Environment card has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed en",
+      "snippet": "Each Environment action surface has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway",
       "links": [
+        {
+          "label": "Environment connections",
+          "path": "desktop/desktop-environment-connections.md",
+          "concept_id": "desktop.desktop-environment-connections",
+          "title": "Desktop Environment connections"
+        },
         {
           "label": "Desktop environment settings",
           "path": "desktop/desktop-environment-settings.md",
@@ -12173,6 +12206,12 @@
         }
       ],
       "backlinks": [
+        {
+          "label": "Desktop Environment connections",
+          "path": "desktop/desktop-environment-connections.md",
+          "concept_id": "desktop.desktop-environment-connections",
+          "title": "Desktop Environment connections"
+        },
         {
           "label": "Desktop SSH environment settings",
           "path": "desktop/desktop-ssh-environment-settings.md",
@@ -20190,5 +20229,5 @@
       ]
     }
   ],
-  "source_sha256": "5e16b4ea4d1db89bca716cfadeed4283f70b80c771dd356894378317cccda2af"
+  "source_sha256": "0d7490f6c82bdb63ad407c0f1f3042b103ee041a5ab6572bc73d20eb2094e2c3"
 }

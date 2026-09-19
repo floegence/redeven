@@ -761,10 +761,12 @@ html:not(.dark) .redeven-new-environment-card:hover {
 }
 
 .redeven-card-fact-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: 65%;
   min-width: 0;
-  overflow: hidden;
   text-align: right;
-  text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.78rem;
   font-weight: 600;
@@ -4475,6 +4477,34 @@ pre,
 }
 
 .environment-settings-tab[aria-hidden="true"] { display: none; }
+
+.redeven-environment-owner {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.redeven-environment-owner[data-highlighted] {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primary) 55%, transparent);
+}
+.redeven-linked-cloud {
+  flex: none;
+  margin: .25rem .75rem .75rem;
+  border: 1px solid var(--border);
+  border-radius: .5rem;
+  background: color-mix(in srgb, var(--muted) 28%, transparent);
+}
+.redeven-linked-cloud__disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  margin-top: .5rem;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  cursor: pointer;
+}
+.redeven-linked-cloud__disclosure:hover { color: var(--foreground); }
 
 /* Fade retained section content without moving fields, focus targets or scrollbars. */
 @media (prefers-reduced-motion: no-preference) {

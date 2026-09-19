@@ -3,15 +3,17 @@ type: Desktop Contract
 title: Desktop Environment registration ownership
 description: Single registration owners, versioned connection records, serialized persistence, and generation-safe removal.
 tags: [desktop, environments, persistence, ssh, wsl, runtime, launcher]
-timestamp: 2026-08-23T00:00:00Z
+timestamp: 2026-09-19T00:00:00Z
 ---
 # Summary
 
-Each Environment card has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. Renderer display kinds never select storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.
+Each Environment action surface has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. A linked Runtime and Provider Environment may share one visual relationship card, but every action surface still names the exact owner entry and Renderer display grouping never selects storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.
 
 # Contract
 
-Every actionable card carries an explicit `EnvironmentRegistrationRef`. Create, edit, rename, pin, and remove route through the generic registration actions and that reference; Renderer presentation kinds and placement fields never select a persistence action. An SSH destination is connection identity, while the Runtime Target label is user-visible metadata; changing the label does not change the SSH destination. Removal deletes only the Desktop registration, publishes the new snapshot before background session and bridge cleanup, and never deletes remote Redeven data. A missing registration is a typed failure rather than a successful no-op.
+Registered Runtime, URL, and Gateway action surfaces carry an explicit `EnvironmentRegistrationRef`. Create, edit, rename, pin, and remove route through the generic registration actions and that reference; Renderer presentation kinds and placement fields never select a persistence action. An SSH destination is connection identity, while the Runtime Target label is user-visible metadata; changing the label does not change the SSH destination. Removal deletes only the Desktop registration, publishes the new snapshot before background session and bridge cleanup, and never deletes remote Redeven data. A missing registration is a typed failure rather than a successful no-op.
+
+Provider Environment entries retain their Provider-specific action and pin owner; a visual pairing grants no registration or lifecycle authority. Relationship grouping never merges persisted records. Pinning or removing one registration does not mutate its counterpart, and unlinking deletes neither owner nor remote data. Display rules are owned by [Environment connections](desktop-environment-connections.md).
 
 Preferences mutations form one serialized queue. Each mutation reads the latest committed value and writes only its owner fields. Long-running Open, probe, and lifecycle work may update health, operation, or `last_used_at` only while the registration still exists. Removal advances the Launcher subject generation before background cleanup, so results from an earlier generation cannot reintroduce a card. Pinning and use-time updates never upsert a missing registration.
 
@@ -44,7 +46,7 @@ Settings sections, explicit target binding, and committed identity rebinding fol
 - `redeven:desktop/src/shared/desktopLauncherIPC.ts:1` - Explicit registration reference and progress-surface contracts.
 - `redeven:desktop/src/main/desktopEnvironmentRegistrationMigration.ts:1` - Sole retired SSH decoder and idempotent canonical migration.
 - `redeven:desktop/src/main/desktopPreferences.ts:1` - Canonical preference owners and non-resurrecting mutations.
-- `redeven:desktop/src/main/desktopWelcomeState.ts:1` - One card projection per canonical registration owner.
+- `redeven:desktop/src/main/desktopWelcomeState.ts:1` - One snapshot entry per canonical registration owner.
 - `redeven:desktop/src/main/launcherOperations.ts:1` - Required active surface and subject generation.
 - `redeven:desktop/src/main/main.ts:1` - Serialized persistence, atomic removal, and parent/child operation ownership.
 - `redeven:desktop/src/welcome/environmentLifecycleDisclosure.ts:1` - Exact attempt binding.
