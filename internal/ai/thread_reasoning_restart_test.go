@@ -39,8 +39,13 @@ func TestThreadReasoningOffSurvivesRestartAndWaitingContinuation(t *testing.T) {
 		var surface map[string]any
 		encoded, _ := json.Marshal(request)
 		_ = json.Unmarshal(encoded, &surface)
-		assertPermissionProviderSurface(t, surface, "approval_required")
-		if calls.Add(1) == 1 {
+		n := calls.Add(1)
+		permission := "readonly"
+		if n == 1 {
+			permission = "approval_required"
+		}
+		assertPermissionProviderSurface(t, surface, permission)
+		if n == 1 {
 			args := `{"reason_code":"missing_external_input","required_from_user":["Choose a target."],"evidence_refs":["message:latest"],"questions":[{"id":"target","header":"Target","question":"Which target?","response_mode":"write","is_secret":false,"write_label":"Target","write_placeholder":"Type a target"}]}`
 			for _, event := range []string{"response.output_item.added", "response.output_item.done"} {
 				writeOpenAISSEJSON(w, flusher, map[string]any{

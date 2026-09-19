@@ -53,32 +53,28 @@ func (r *ComputerUseRuntime) authorizeComputerCall(ctx context.Context, call *Ta
 	store, ok := r.targetBindings().(interface {
 		GetThreadSettingsByCanonicalThreadID(context.Context, string) (*threadstore.ThreadSettings, error)
 		GetComputerAccess(context.Context, string) (ComputerAccess, error)
-		GetExecutionAuthorityByTurn(context.Context, string, string) (*threadstore.ExecutionAuthority, error)
 	})
 	if !ok {
 		return errors.New("computer access store is unavailable")
 	}
-	var permissionType string
-	if call.TurnID != "" {
-		authority, err := store.GetExecutionAuthorityByTurn(ctx, call.ThreadID, call.TurnID)
-		if err != nil {
-			return err
-		}
-		if authority == nil {
-			return errors.New("computer turn execution authority is unavailable")
-		}
-		permissionType = authority.PermissionType
-	} else {
-		// Thread-level user controls have no admitted turn.
-		settings, err := store.GetThreadSettingsByCanonicalThreadID(ctx, call.ThreadID)
-		if err != nil {
-			return err
-		}
-		if settings == nil {
-			return errors.New("computer thread settings are unavailable")
-		}
-		permissionType = settings.PermissionType
+	settings, err := store.GetThreadSettingsByCanonicalThreadID(ctx, call.ThreadID)
+	if err != nil {
+		return err
 	}
+	if settings == nil {
+		return errors.New("computer thread settings are unavailable")
+	}
+	permissionType := settings.PermissionType
+	// User control carries TurnID only for interaction provenance. Its policy
+	// comes from the saved setting; model calls require their invocation proof.
+	if call.TurnID != "" && !call.userInput && !call.controlReturn {
+		snapshot, ok := toolAuthorizationSnapshotFromContext(ctx)
+		if !ok {
+			return errors.New("computer invocation permission snapshot is unavailable")
+		}
+		permissionType = permissionTypeString(snapshot.PermissionType)
+	}
+
 	permission, err := parsePermissionType(permissionType)
 	if err != nil {
 		return err

@@ -1,10 +1,12 @@
 package ai
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	flprovider "github.com/floegence/floret/v7/provider"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
 )
 
@@ -22,6 +24,7 @@ type runToolSurfaceConfig struct {
 	State                          *floretToolRuntimeState
 	HostLabels                     map[string]string
 	SupportsAskUserQuestionBatches bool
+	InitialProviderSurface         *flruntime.ProviderToolSurface
 }
 
 func (r *run) buildRunToolSurfaceConfig(capabilitySupportsAskUserBatches bool, state *floretToolRuntimeState, hostLabels map[string]string) runToolSurfaceConfig {
@@ -32,7 +35,8 @@ func (r *run) buildRunToolSurfaceConfig(capabilitySupportsAskUserBatches bool, s
 	}
 }
 
-// The admitted permission is independent of the thread's future-turn setting.
+// One surface is selected before each provider request or tool authorization batch.
+// It remains stable until all invocations in that batch finish.
 func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType FlowerPermissionType) (runToolSurface, error) {
 	if r == nil {
 		return runToolSurface{}, fmt.Errorf("nil run")
@@ -59,6 +63,11 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 	_, searchAllowed := r.toolAllowlist["web_search"]
 	if r.webSearch.HostedTool() && (len(r.toolAllowlist) == 0 || searchAllowed) {
 		hosted = []flprovider.HostedToolDefinition{{Name: "web_search", Type: "web_search", Options: map[string]any{"wire_shape": r.webSearch.Mode}}}
+	}
+	if cfg.InitialProviderSurface != nil {
+		// Search configuration retains its Turn boundary independently of live
+		// permission policy, including when an interaction resumes after restart.
+		hosted = cfg.InitialProviderSurface.HostedToolDefinitions
 	}
 	capabilityContract := resolveRunCapabilityContract(r, activeTools, activeSignals, cfg.SupportsAskUserQuestionBatches, hosted...)
 	floretToolItems, err := buildFloretTools(r, activeTools, cfg.State)
@@ -103,4 +112,39 @@ func permissionSurfaceEpoch(snapshot PermissionSnapshot) string {
 		strings.TrimSpace(snapshot.SchemaHash),
 		strings.TrimSpace(snapshot.PresentationHash),
 	}, ":")
+}
+
+func (r *run) liveThreadPermissionType(ctx context.Context) (FlowerPermissionType, error) {
+	settings, err := r.product.currentThreadSettings(ctx)
+	if err != nil {
+		return "", err
+	}
+	return threadPermissionType(settings)
+}
+
+func (r *run) liveFloretToolSurface(cfg runToolSurfaceConfig) flruntime.ToolSurfaceProvider {
+	return func(ctx context.Context, request flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
+		permission, err := r.liveThreadPermissionType(ctx)
+		if err != nil {
+			return flruntime.ToolSurface{}, err
+		}
+		current := cfg
+		current.InitialProviderSurface = request.InitialProviderSurface
+		surface, err := r.buildRunToolSurface(current, permission)
+		if err != nil {
+			return flruntime.ToolSurface{}, err
+		}
+		registry := fltools.NewRegistry()
+		for _, tool := range surface.FloretToolItems {
+			if err := registry.Register(tool); err != nil {
+				return flruntime.ToolSurface{}, err
+			}
+		}
+		return flruntime.ToolSurface{
+			RefreshProviderSurface: true,
+			Tools:                  registry, HostedToolDefinitions: surface.HostedTools,
+			SystemPrompt: surface.SystemPrompt, HostContext: surface.HostContext,
+			Epoch: permissionSurfaceEpoch(surface.PermissionSnapshot), Reason: "thread_permission",
+		}, nil
+	}
 }

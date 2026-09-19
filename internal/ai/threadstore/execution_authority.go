@@ -12,7 +12,8 @@ import (
 var ErrExecutionAuthorityConflict = errors.New("execution authority conflicts with an existing request")
 
 // ExecutionAuthority is the minimum durable host fact needed to rebuild one
-// provider execution after restart, including its admission permission. It is not a second Agent lifecycle or
+// provider execution after restart. PermissionType records admission policy for
+// attribution; live tool authorization reads thread settings. It is not a second Agent lifecycle or
 // transcript store; Floret remains authoritative for all execution state.
 type ExecutionAuthority struct {
 	RequestKey        string

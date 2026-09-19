@@ -170,13 +170,7 @@ plus cancellation means stopping. Floret installs terminal lifecycle and
 canonical results atomically, including direct View and Send reads. Its schema
 11 migration preserves older records without inventing missing Stop provenance.
 
-Redeven resolves one complete `ToolSurface` when it creates the hosted Agent for a new Turn.
-Registry tools with nil provider definitions inherit the registry definitions;
-a non-nil empty definitions slice intentionally exposes no registry tools. The
-current model, reasoning, definitions, System Prompt, adapter, and context
-policy are checkpointed by Floret as one immutable Turn surface. Ask User,
-ordinary tools, retries, and restart recovery reuse that surface. Idle settings
-or product-version changes affect only the next Turn.
+Redeven resolves a complete `ToolSurface` at provider and tool-dispatch boundaries. Nil provider definitions inherit registry definitions; an explicit empty slice exposes none. Floret fixes model, reasoning and context policy for a Turn and keeps each provider checkpoint immutable. Published v7.18.0 lets Redeven refresh current permission instructions and local tools on every request. The detached `InitialProviderSurface` preserves unrelated hosted search definitions from the first checkpoint. Pending invocations retain their authorization snapshot. Ask User, retries and restart use current thread permission without rewriting history. Unrelated profile changes retain their new-Turn boundary.
 
 Redeven consumes Floret v7.1.4's public ordered `ThreadView.Items`, exact
 item and interaction `TurnID` plus `RunID`, exact active `ThreadView.RunID`,

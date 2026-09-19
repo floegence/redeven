@@ -1,8 +1,16 @@
 # Redeven OKF Update Log
 
+## 2026-09-20: Apply permission changes to the next tool invocation
+
+- Adopt published Floret v7.18.0 after its full Go, API compatibility and clean-module adoption checks.
+- Resolve current thread permission at provider and tool authorization boundaries; pending approvals and executing invocations retain their own snapshots. Queue, input continuation and restart use current policy without requiring another user message.
+- Keep model/reasoning busy locks, canonical history, historical migrations, resource grants and unrelated provider-profile settings boundaries. Computer tools consume the same invocation proof; authenticated user control uses current thread policy.
+- Replace admission-freeze behavioral tests with six transition directions, queued mode reversal, continued automatic execution after answering an existing approval, and input, recovery, search and Computer regressions.
+
 ## 2026-09-20
 
 * **Interaction**: Route Flower image clicks and preview actions through the existing file preview, add explicit containing-folder navigation, and adopt released Floe v0.58.0 floating previews for non-file images.
+
 
 ## 2026-09-19 — Inline Flower media previews
 
