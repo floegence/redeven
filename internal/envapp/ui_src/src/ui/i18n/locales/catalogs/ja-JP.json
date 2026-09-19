@@ -2013,6 +2013,7 @@
       "copyPatchFailed": "patch をクリップボードにコピーできませんでした。",
       "binaryBadge": "バイナリ",
       "copyPatch": "パッチのコピー",
+      "horizontalScrollbar": "差分を横方向にスクロール",
       "mobileHorizontalHint": "長い差分行を検査するには、水平にスワイプします。",
       "binaryDiffUnavailable": "バイナリ ファイルが変更されました。インラインテキストの差分は利用できません。",
       "noInlineDiffLines": "このファイルに使用できるインライン diff 行はありません。",

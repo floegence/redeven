@@ -166,6 +166,23 @@ export default mergeConfig(viteConfig, defineConfig({
           await frame.evaluate(() => document.getAnimations().forEach(animation => animation.play()));
           return result;
         },
+        exerciseGitScrollbar: async ({ page }) => {
+          const frame = await frameForSelector(page, '[data-git-horizontal-scrollbar]');
+          const track = frame.locator('[data-git-horizontal-scrollbar]');
+          const thumb = track.locator('[data-git-horizontal-scrollbar-thumb]');
+          const trackBox = (await track.boundingBox())!;
+          const thumbBox = (await thumb.boundingBox())!;
+          const x = thumbBox.x + thumbBox.width / 2;
+          const y = thumbBox.y + thumbBox.height / 2;
+          await page.mouse.move(x, y);
+          await page.mouse.down();
+          await page.mouse.move(x + (trackBox.width - thumbBox.width) / 2, y, { steps: 8 });
+          await page.mouse.up();
+          const fraction = await track.evaluate((el) => Number(el.getAttribute('aria-valuenow')) / Number(el.getAttribute('aria-valuemax')));
+          await page.mouse.click(trackBox.x + trackBox.width - 4, y);
+          const afterTrackClick = await track.evaluate((el) => Number(el.getAttribute('aria-valuenow')) / Number(el.getAttribute('aria-valuemax')));
+          return { fraction, afterTrackClick };
+        },
         exerciseComputerLauncherTouch: async ({ page }) => {
           const frame = await frameForSelector(page, '.flower-computer-stage');
           return qualifyComputerLauncherTouch({ page, root: frame });

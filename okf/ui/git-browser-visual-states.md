@@ -39,7 +39,7 @@ Diff chrome keeps file identity and Patch/Full Context controls in one compact t
 
 One shared diff panel owns preview and full-context requests for both inline inspection and the remaining dialog adapter. Preview loading starts when an inline panel mounts. Full context loads only on explicit selection of that mode. The selected Patch or Full Context mode is a panel browsing preference and remains active while the file selection changes, so the next file is rendered in the same context mode; changing files never silently returns to Patch. A changed source, file, or refreshed file summary invalidates prior request ownership, including a refresh at the same path; disposal invalidates outstanding results. Binary, directory, unavailable, truncated, and failed diff states remain explicit. Commit first-parent presentation comes from the existing runtime contract.
 
-Long lines keep their own horizontal scroll viewport. The viewport exposes a themed bottom scrollbar when content overflows, reserves room for the scroll affordance, and keeps the scrollbar inside the detail surface rather than allowing page or Workbench scrolling to own it. Horizontal and vertical scrolling remain available together, and the viewport remains contained at narrow widths and under Workbench projection.
+Long lines keep their own horizontal scroll viewport. When content overflows, the detail surface renders a persistent in-surface horizontal scrollbar track instead of relying on an OS overlay scrollbar that may disappear; the track mirrors the viewport, supports pointer dragging and track seeking, and exposes keyboard scrolling through the horizontal scrollbar role. The viewport reserves room for this affordance, keeps it inside the detail surface rather than allowing page or Workbench scrolling to own it, and retains independent vertical scrolling. The viewport remains contained at narrow widths and under Workbench projection.
 
 ## Theme and accessibility
 
@@ -51,10 +51,9 @@ Inline inspection changes local presentation and file navigation only. It does n
 
 # Evidence
 
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffSplit.browser.test.tsx - Verifies row density, stable commit-file navigation, responsive containment, independent scrolling, keyboard selection, and removal of the selected file in a real browser.
+- redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffSplit.browser.test.tsx - Verifies row density, stable commit-file navigation, responsive containment, independent scrolling, keyboard selection, removal of the selected file, and a persistent scrollbar with synchronized seeking, resizing, and scaled pointer dragging in a real browser.
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx - Verifies initial loading, late-response isolation, and fresh content after a same-path inventory refresh.
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffDialog.test.tsx - Verifies the selected context mode is reused for a newly selected file and requests the matching full-context payload.
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffSplit.browser.test.tsx - Verifies long lines create a contained horizontal scroll viewport with a visible themed scrollbar.
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitHistoryBrowser.e2e.test.tsx - Verifies commit navigation clears obsolete diff ownership and preserves commit actions.
 - redeven:internal/envapp/ui_src/src/styles/redeven.css - Defines the shared light, dark, and forced-colors Git interaction tokens and state classes.
 - redeven:internal/envapp/ui_src/src/styles/gitBrowserSelectionVisual.browser.test.tsx - Verifies computed contrast and perceptual separation across all built-in shell themes.

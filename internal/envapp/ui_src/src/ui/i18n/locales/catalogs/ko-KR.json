@@ -2013,6 +2013,7 @@
       "copyPatchFailed": "patch 를 클립보드에 복사하지 못했습니다.",
       "binaryBadge": "바이너리",
       "copyPatch": "패치 복사",
+      "horizontalScrollbar": "변경 내용 가로 스크롤",
       "mobileHorizontalHint": "긴 diff 라인을 검사하려면 가로로 스와이프하세요.",
       "binaryDiffUnavailable": "바이너리 파일이 변경되었습니다. 인라인 텍스트 비교를 사용할 수 없습니다.",
       "noInlineDiffLines": "이 파일에 사용할 수 있는 인라인 diff 줄이 없습니다.",

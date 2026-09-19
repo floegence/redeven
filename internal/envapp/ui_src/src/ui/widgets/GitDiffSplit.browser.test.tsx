@@ -129,7 +129,7 @@ describe('Git inline diff browsing', () => {
     const longLine = `+const generatedLine = "${'x'.repeat(1800)}";`;
     const longFile = {
       ...files[0],
-      patchText: `@@ -1,1 +1,1 @@\n${longLine}`,
+      patchText: `@@ -1,1 +1,71 @@\n${longLine}\n${files[0].patchText}`,
     };
     const { host } = mount(1100, [longFile]);
     await expect.poll(() => host.querySelector('.git-patch-viewer__viewport')).not.toBeNull();
@@ -137,8 +137,55 @@ describe('Git inline diff browsing', () => {
     const detail = host.querySelector<HTMLElement>('.git-diff-split__detail')!;
     expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth);
     expect(getComputedStyle(viewport).overflowX).toBe('auto');
-    expect(getComputedStyle(viewport).scrollbarGutter).toContain('stable');
-    expect(getComputedStyle(viewport, '::-webkit-scrollbar').height).toBe('10px');
-    expect(viewport.getBoundingClientRect().bottom).toBeLessThanOrEqual(detail.getBoundingClientRect().bottom + 1);
+    await expect.poll(() => host.querySelector('[data-git-horizontal-scrollbar]')).not.toBeNull();
+    const scrollbar = host.querySelector<HTMLElement>('[data-git-horizontal-scrollbar]')!;
+    const thumb = scrollbar.querySelector<HTMLElement>('[data-git-horizontal-scrollbar-thumb]')!;
+    expect(scrollbar.getAttribute('role')).toBe('scrollbar');
+    expect(scrollbar.getAttribute('aria-controls')).toBe(viewport.id);
+    expect(getComputedStyle(thumb).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    const top = scrollbar.getBoundingClientRect().top;
+    viewport.scrollTop = 300;
+    expect(scrollbar.getBoundingClientRect().top).toBe(top);
+    viewport.scrollLeft = 250;
+    await expect.poll(() => Number(scrollbar.getAttribute('aria-valuenow'))).toBe(250);
+    expect(parseFloat(thumb.style.left)).toBeGreaterThan(0);
+    expect(scrollbar.getAttribute('aria-orientation')).toBe('horizontal');
+    expect(scrollbar.getBoundingClientRect().height).toBeGreaterThanOrEqual(10);
+    expect(thumb.getBoundingClientRect().width).toBeGreaterThan(20);
+    expect(scrollbar.getBoundingClientRect().bottom).toBeLessThanOrEqual(detail.getBoundingClientRect().bottom + 1);
+
+    scrollbar.focus();
+    await userEvent.keyboard('{End}');
+    expect(viewport.scrollLeft).toBeGreaterThan(0);
+    await userEvent.keyboard('{Home}');
+    expect(viewport.scrollLeft).toBe(0);
   });
+
+  it('remeasures content and resizing, and removes the track for short files', async () => {
+    await page.viewport(1280, 800);
+    const { host, setItems } = mount(1100, [files[0]]);
+    await expect.poll(() => host.querySelector('.git-patch-viewer__viewport')).not.toBeNull();
+    expect(host.querySelector('[data-git-horizontal-scrollbar]')).toBeNull();
+    setItems([{ ...files[0], patchText: `@@ -1 +1 @@\n+${'wide'.repeat(200)}` }]);
+    await expect.poll(() => host.querySelector('[data-git-horizontal-scrollbar]')).not.toBeNull();
+    const scrollbar = host.querySelector<HTMLElement>('[data-git-horizontal-scrollbar]')!;
+    const maximum = Number(scrollbar.getAttribute('aria-valuemax'));
+    host.style.width = '800px';
+    await expect.poll(() => Number(scrollbar.getAttribute('aria-valuemax'))).toBeGreaterThan(maximum);
+    setItems([files[1]]);
+    await expect.poll(() => host.querySelector('[data-git-horizontal-scrollbar]')).toBeNull();
+  });
+
+  it('drags the thumb precisely under Workbench scaling and seeks on track clicks', async () => {
+    await page.viewport(1280, 800);
+    const { host } = mount(1100, [{ ...files[0], patchText: `@@ -1 +1 @@\n+${'wide'.repeat(400)}` }]);
+    host.style.transform = 'scale(0.6)';
+    host.style.transformOrigin = 'top left';
+    await expect.poll(() => host.querySelector('[data-git-horizontal-scrollbar]')).not.toBeNull();
+    const interaction = commands as unknown as { exerciseGitScrollbar: () => Promise<{ fraction: number; afterTrackClick: number }> };
+    const result = await interaction.exerciseGitScrollbar();
+    expect(result.fraction).toBeCloseTo(0.5, 1);
+    expect(result.afterTrackClick).toBeGreaterThan(0.9);
+  });
+
 });

@@ -2013,6 +2013,7 @@
       "copyPatchFailed": "Não foi possível copiar o patch para a área de transferência.",
       "binaryBadge": "Binário",
       "copyPatch": "Copiar patch",
+      "horizontalScrollbar": "Rolar as diferenças horizontalmente",
       "mobileHorizontalHint": "Deslize horizontalmente para inspecionar longas linhas de comparação.",
       "binaryDiffUnavailable": "Arquivo binário alterado. A diferença de texto embutido não está disponível.",
       "noInlineDiffLines": "Nenhuma linha de comparação sequencial disponível para este arquivo.",

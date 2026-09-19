@@ -2013,6 +2013,7 @@
       "copyPatchFailed": "無法將 patch 複製到剪貼簿。",
       "binaryBadge": "二進位",
       "copyPatch": "複製補丁",
+      "horizontalScrollbar": "水平捲動差異內容",
       "mobileHorizontalHint": "水平滑動以檢查長差異行。",
       "binaryDiffUnavailable": "二進位已更改。內嵌文本差異不可用。",
       "noInlineDiffLines": "此檔案沒有可用的內嵌差異行。",
