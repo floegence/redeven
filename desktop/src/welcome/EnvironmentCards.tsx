@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type 
 import { Motion } from 'solid-motionone';
 import { cn } from '@floegence/floe-webapp-core';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Tag, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
-import { AlertTriangle, Clock, Cloud, Pin, Refresh, Search, Settings, Trash } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Clock, Cloud, MonitorPointer, Pin, Refresh, Search, Settings, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { FlowerSoftAuraIcon, type FlowerTurnLauncherAnchor } from '../../../internal/flower_ui/src';
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
@@ -465,12 +465,24 @@ export function EnvironmentCardsPanel(
           const name = entry().kind === 'provider_environment' ? props.i18n.t('environmentCenter.providerFilter') : model().kind_label;
           return name;
         },
-        icon: <span class="redeven-owner-tab-status" data-tone={busy() ? 'primary' : model().status_tone}
-          role="img" title={status()} aria-label={status()}>
-          <Show when={busy()} fallback={<Show when={model().status_tone === 'warning'} fallback={<span class="redeven-owner-tab-dot" />}>
-            <AlertTriangle class="h-3 w-3" />
-          </Show>}><Refresh class="h-3 w-3 motion-safe:animate-spin" /></Show>
-        </span>,
+        icon: (
+          <span class="redeven-owner-tab-icon" role="img" title={status()} aria-label={status()}>
+            <Show when={entry().kind === 'provider_environment'} fallback={
+              <Show when={entry().kind === 'local_environment'} fallback={<Terminal aria-hidden="true" />}>
+                <MonitorPointer aria-hidden="true" />
+              </Show>
+            }>
+              <Cloud aria-hidden="true" />
+            </Show>
+            <Show when={busy() || model().status_tone === 'warning'}>
+              <span class="redeven-owner-tab-status" data-tone={busy() ? 'primary' : 'warning'} aria-hidden="true">
+                <Show when={busy()} fallback={<AlertTriangle />}>
+                  <Refresh class="motion-safe:animate-spin" />
+                </Show>
+              </span>
+            </Show>
+          </span>
+        ),
       };
     }));
     return (

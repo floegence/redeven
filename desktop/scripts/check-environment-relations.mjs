@@ -11,15 +11,15 @@ async function assertGridAlignment(page, label) {
       const bounds = card.getBoundingClientRect();
       const owner = [...card.querySelectorAll('[data-owner-id]')].find(el => !el.closest('[aria-hidden="true"]'));
       const footer = owner.lastElementChild.getBoundingClientRect();
-      return { height: bounds.height, top: Math.round(bounds.top), footerTop: footer.top, footerBottom: footer.bottom };
+      return { height: bounds.height, top: Math.round(bounds.top), titleTop: owner.querySelector('h3').getBoundingClientRect().top, footerTop: footer.top, footerBottom: footer.bottom };
     });
     if (!cards.length) return [];
     const unequal = Math.max(...cards.map(card => card.height)) - Math.min(...cards.map(card => card.height)) > 1;
     const footerDrift = cards.some(card => cards.some(other => other.top === card.top
-      && (Math.abs(card.footerTop - other.footerTop) > 1 || Math.abs(card.footerBottom - other.footerBottom) > 1)));
+      && (Math.abs(card.titleTop - other.titleTop) > 1 || Math.abs(card.footerTop - other.footerTop) > 1 || Math.abs(card.footerBottom - other.footerBottom) > 1)));
     return unequal || footerDrift ? [cards] : [];
   }));
-  assert.deepEqual(failures, [], `${label}: cards and action footers align`);
+  assert.deepEqual(failures, [], `${label}: cards, titles and action footers align`);
 }
 
 const output = fileURLToPath(new URL('../dist/environment-relation-acceptance/', import.meta.url));
