@@ -5181,6 +5181,7 @@
       "setupChooseFolder": "No seletor de pastas, comece pela sua pasta pessoal:",
       "setupHome": "Pasta pessoal",
       "setupFolderHint": "Selecione a última pasta e confirme. Mantenha-a aqui após a instalação.",
+      "setupDragFolderHint": "Você também pode clicar em “Mostrar pasta” e arrastar a pasta inteira da extensão para a página de extensões do Chrome para instalá-la.",
       "setupLabelsHint": "Os nomes dos botões variam conforme o idioma e a versão do Chrome. Em inglês, são Developer mode e Load unpacked.",
       "extensionPath": "Pasta da extensão",
       "newTab": "Nova aba em segundo plano",
