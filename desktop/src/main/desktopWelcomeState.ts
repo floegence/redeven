@@ -679,9 +679,10 @@ function providerEnvironmentCandidatesForSnapshot(
 function linkedRuntimeTargetForProviderEnvironment(
   environment: DesktopProviderEnvironmentRecord,
   runtimeLinkTargets: readonly DesktopProviderRuntimeLinkTarget[],
+  includeInFlightBinding = false,
 ): DesktopProviderRuntimeLinkTarget | null {
   return runtimeLinkTargets.find((target) => (
-    target.provider_link_state === 'linked'
+    (target.provider_link_state === 'linked' || (includeInFlightBinding && ['linking', 'disconnecting'].includes(target.provider_link_state)))
     && target.provider_origin === environment.provider_origin
     && target.provider_id === environment.provider_id
     && target.env_public_id === environment.env_public_id
@@ -1463,7 +1464,8 @@ function buildProviderEnvironmentEntry(
   const sessions = openSessionsByProviderEnvironment(openSessions, environment);
   const remoteSession = sessions.remote_desktop ?? null;
   const routeDetails = providerEnvironmentRouteDetails(environment, controlPlanes);
-  const linkedRuntime = linkedRuntimeTargetForProviderEnvironment(environment, runtimeLinkTargets);
+  // Display identity survives in-flight binding changes; candidate occupancy still requires linked.
+  const linkedRuntime = linkedRuntimeTargetForProviderEnvironment(environment, runtimeLinkTargets, true);
   const remoteRuntimeHealth = routeDetails.providerEnvironment
     ? providerEnvironmentRuntimeHealth(routeDetails.providerEnvironment)
     : offlineRuntimeHealthForProviderRoute(routeDetails.remoteRouteState, routeDetails.remoteStateReason);

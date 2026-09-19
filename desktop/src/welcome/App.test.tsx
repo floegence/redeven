@@ -1,3 +1,4 @@
+import { buildEnvironmentLibraryDisplayGroups } from './environmentLibraryProjection';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -32,7 +33,7 @@ import {
 } from './viewModel';
 
 function readWelcomeSource(): string {
-  return fs.readFileSync(path.join(__dirname, 'App.tsx'), 'utf8');
+  return ['App.tsx', 'EnvironmentCards.tsx', 'environmentCardPrimitives.tsx'].map(file => fs.readFileSync(path.join(__dirname, file), 'utf8')).join('\n');
 }
 
 function readGatewaySourceActionRunnerSource(): string {
@@ -701,18 +702,18 @@ describe('DesktopWelcomeShell', () => {
       controlPlanes: [testControlPlaneSummary()],
     });
 
-    expect(environmentLibraryCount(snapshot)).toBe(4);
-    expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
-    expect(environmentLibraryCount(snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
+    expect(environmentLibraryCount(buildEnvironmentLibraryDisplayGroups(snapshot.environments))).toBe(4);
+    expect(environmentLibraryCount(buildEnvironmentLibraryDisplayGroups(snapshot.environments), '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
+    expect(environmentLibraryCount(buildEnvironmentLibraryDisplayGroups(snapshot.environments), '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
 
-    expect(filterEnvironmentLibraryDisplayGroups(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER).map(group => group.primary_entry)).toEqual([
+    expect(filterEnvironmentLibraryDisplayGroups(buildEnvironmentLibraryDisplayGroups(snapshot.environments), '', LOCAL_ENVIRONMENT_LIBRARY_FILTER).map(group => group.primary_entry)).toEqual([
       expect.objectContaining({
         id: 'local',
         category: 'local',
         local_environment_kind: 'local',
       }),
     ]);
-    expect(filterEnvironmentLibraryDisplayGroups(snapshot, 'stag').map(group => group.primary_entry)).toEqual([
+    expect(filterEnvironmentLibraryDisplayGroups(buildEnvironmentLibraryDisplayGroups(snapshot.environments), 'stag').map(group => group.primary_entry)).toEqual([
       expect.objectContaining({
         id: 'http://192.168.1.12:24000/',
         label: 'Staging',
@@ -742,7 +743,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(
       filterEnvironmentLibraryDisplayGroups(
-        snapshot,
+        buildEnvironmentLibraryDisplayGroups(snapshot.environments),
         '',
         desktopControlPlaneKey('https://provider.example.invalid', 'example_control_plane'),
       ).map(group => group.primary_entry),
@@ -754,26 +755,18 @@ describe('DesktopWelcomeShell', () => {
     ]);
   });
 
-  it('shows compact Control Plane metrics with tooltip-based guidance instead of inline prose', () => {
+  it('renders source summaries directly above shared environment grids', () => {
     const appSrc = readWelcomeSource();
-
-    expect(appSrc).toContain("props.i18n.t('environmentCenter.providerOnlineLabel')");
-    expect(appSrc).toContain('ControlPlaneMetricTile');
-    expect(appSrc).toContain('controlPlanePublishedCountTooltipContent');
-    expect(appSrc).toContain('controlPlaneOnlineCountTooltipContent');
-    expect(appSrc).toContain('controlPlaneLocalHostCountTooltipContent');
-    expect(appSrc).toContain('desktopProviderOnlineEnvironmentCount(controlPlane.environments)');
-    expect(appSrc).not.toContain('Environments currently visible from this provider account.');
-    expect(appSrc).not.toContain('Published environments currently reporting online status.');
-    expect(appSrc).not.toContain('Latest provider signal:');
-    expect(appSrc).not.toContain('Unified Catalog');
-    expect(appSrc).not.toContain('Provider-backed entries already materialized into the Environment list.');
+    expect(appSrc).toContain('<props.Grid groups={current().visible_groups}');
+    expect(appSrc).toContain('props.section.linked_runtime_count');
+    expect(appSrc).not.toContain('local_host_count: 0');
+    expect(appSrc).not.toContain('viewControlPlaneEnvironments');
   });
 
   it('uses the same rounded-lg shell radius for Control Plane cards as Environment cards', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('redeven-provider-shelf rounded-lg border border-border bg-card');
+    expect(appSrc).toContain('redeven-cloud-source-header rounded-lg border border-border bg-card');
     expect(appSrc).not.toContain('redeven-provider-shelf rounded-[0.625rem]');
   });
 
@@ -819,7 +812,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('buildEnvironmentLibrarySummaryModel');
     expect(appSrc).toContain('const librarySummary = createMemo(() => (');
-    expect(appSrc).toContain('buildEnvironmentLibrarySummaryModel(snapshot(), libraryGroups().flatMap((group) => group.member_entries))');
+    expect(appSrc).toContain("environmentCloudSections(allLibraryGroups(), controlPlanes(), cloudQuery())");
     expect(appSrc).toContain('localizedVisibleLabel(i18n(), librarySummary().environment_count)');
     expect(appSrc).toContain('localizedWindowsLabel(i18n(), librarySummary().window_count)');
     expect(appSrc).toContain('count={librarySummary().ready_count}');
@@ -864,7 +857,7 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('buildEnvironmentLibraryLayoutModel');
-    expect(appSrc).toContain('visibleCardCount={visibleEnvironmentCardCount()}');
+    expect(appSrc).toContain('visibleCardCount={gridProps.groups.length + (gridProps.quickAdd ? 1 : 0)}');
     expect(appSrc).toContain('layoutReferenceCardCount={layoutReferenceEnvironmentCardCount()}');
     expect(appSrc).toContain('environmentLibraryCount(');
     expect(appSrc).toContain('props.librarySourceFilter');
@@ -1609,7 +1602,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('function openRedevenDashboard');
     expect(appSrc).toContain('props.i18n.t(headerCopy().titleKey)');
     expect(appSrc).toContain("labelKey: 'desktop.provider'");
-    expect(appSrc).toContain("props.i18n.t('environmentCenter.searchPlaceholder')");
+    expect(appSrc).toContain("'environmentCenter.searchPlaceholder'");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.localFilter')");
     expect(appSrc).toContain('<EnvironmentOwnerSurface');
     expect(appSrc).toContain("props.i18n.t('environmentCenter.newEnvironmentTitle')");
@@ -1672,7 +1665,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('function EnvironmentLibrarySection');
     expect(appSrc).toContain('function EnvironmentCardFactsBlock');
     expect(appSrc).toContain('runEnvironmentCardFactAction');
-    expect(appSrc).toContain('runtimeTargetEnvironmentLibraryFilterValue(action.runtime_target_id)');
+    expect(appSrc).toContain('setFocusedCloudSource(action.source_id)');
     expect(appSrc).toContain('runtimeTargetEnvironmentLibraryFilterTargetID(props.librarySourceFilter)');
     expect(appSrc).toContain("props.i18n.t('environmentCenter.linkedRuntimeFilterWithLabel'");
     expect(appSrc).toContain('redeven-card-fact-value--action');
@@ -2232,7 +2225,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain("labelKey: 'desktop.provider'");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.addProviderTitle')");
-    expect(appSrc).toContain("props.i18n.t('environmentCenter.viewEnvironments')");
+    expect(appSrc).toContain('data-cloud-source={id}');
     expect(appSrc).not.toContain('All Sources');
     expect(appSrc).toContain('Local');
     expect(appSrc).toContain('snapshot().redeven_cloud_origins');
@@ -2257,21 +2250,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('placeholder="https://redeven.test"');
     expect(appSrc).toContain("props.i18n.t('environmentCenter.reconnect')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.connectProvider')");
-    expect(appSrc).toContain('redeven-control-plane-grid');
-    expect(appSrc).toContain('redeven-control-plane-card');
-    expect(styles).toContain('--redeven-control-plane-grid-column-size: 35rem;');
-    expect(styles).not.toContain('--redeven-control-plane-card-max-width');
-    expect(styles).toContain('.redeven-control-plane-card {\n  width: 100%;\n}');
-    expect(styles).toContain('.redeven-control-plane-grid');
-    expect(styles).toContain('.redeven-control-plane-card');
-    expect(appSrc).toContain('redeven-provider-shelf__metrics');
-    expect(styles).toContain('--redeven-provider-shelf-metric-min-size: 10.75rem;');
-    expect(styles).toContain('.redeven-provider-shelf__metrics');
-    expect(styles).toContain('grid-template-columns: repeat(3, minmax(0, 1fr));');
-    expect(styles).toContain('.redeven-provider-shelf__metric');
-    expect(styles).toContain('.redeven-provider-shelf__metric-header');
-    expect(styles).toContain('@media (max-width: 36rem)');
-    expect(appSrc).not.toContain('Remote access through Control Plane');
+    expect(appSrc).toContain('redeven-cloud-source-header');
+    expect(appSrc).toContain('cloudLastSyncResults');
+    expect(styles).toContain('.redeven-cloud-source-header');
   });
 
   it('keeps the fixed Redeven Cloud confirmation flat while reserving selection chrome for development targets', () => {

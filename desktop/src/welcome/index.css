@@ -18,8 +18,6 @@
   --redeven-environment-grid-spacious-column-size: 19rem;
   --redeven-environment-grid-gap: 1rem;
   --redeven-environment-grid-spacious-gap: 1.125rem;
-  --redeven-control-plane-grid-column-size: 35rem;
-  --redeven-provider-shelf-metric-min-size: 10.75rem;
   --redeven-welcome-window-bg: var(--background);
   --redeven-welcome-page-bg: var(--background);
   --redeven-welcome-panel-bg: var(--card);
@@ -599,6 +597,7 @@ html:not(.dark) .redeven-welcome-surface {
   gap: var(--redeven-environment-grid-current-gap);
   grid-template-columns: repeat(var(--redeven-environment-grid-columns), minmax(0, 1fr));
   align-items: stretch;
+  grid-auto-rows: 1fr;
 }
 
 /* ── Environment cards ── */
@@ -727,6 +726,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
 
 .redeven-card-fact-row {
   display: flex;
+  column-gap: .5rem;
   min-height: var(--redeven-card-fact-row-min-height);
   align-items: center;
   justify-content: space-between;
@@ -740,6 +740,8 @@ html:not(.dark) .redeven-new-environment-card:hover {
 
 .redeven-card-fact-label {
   display: inline-flex;
+  min-width: 0;
+  overflow-wrap: anywhere;
   align-items: center;
   gap: 0.3rem;
   font-size: 0.62rem;
@@ -3157,7 +3159,7 @@ html:not(.dark) .redeven-header-separator {
   }
 }
 
-/* ── Provider shelf ── */
+/* ── Welcome surfaces ── */
 
 .redeven-launcher-head,
 .redeven-toolbar-strip,
@@ -3173,80 +3175,6 @@ html:not(.dark) .redeven-settings-hero {
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--redeven-welcome-window-bg) 82%, var(--redeven-welcome-card) 18%);
   box-shadow: var(--redeven-welcome-soft-shadow);
-}
-
-.redeven-provider-shelf {
-  box-shadow: none;
-}
-
-html:not(.dark) .redeven-provider-shelf {
-  border-color: color-mix(in srgb, var(--redeven-welcome-card-border) 88%, var(--redeven-surface-highlight-source) 12%);
-  border-radius: 0.5rem;
-  background: var(--redeven-welcome-card);
-  box-shadow:
-    none;
-}
-
-.redeven-control-plane-grid {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--redeven-control-plane-grid-column-size)), 1fr));
-  align-items: start;
-}
-
-.redeven-control-plane-card {
-  width: 100%;
-}
-
-.redeven-provider-shelf__actions {
-  padding: 0.625rem 1rem;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-html:not(.dark) .redeven-provider-shelf__actions {
-  border-top-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 78%, transparent);
-  background: color-mix(in srgb, var(--redeven-welcome-window-bg) 46%, transparent);
-}
-
-.redeven-provider-shelf__metrics {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: stretch;
-}
-
-.redeven-provider-shelf__metric {
-  min-width: 0;
-}
-
-html:not(.dark) .redeven-provider-shelf__metric {
-  border-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 78%, transparent);
-  background: var(--redeven-tile, var(--card));
-}
-
-.redeven-provider-shelf__metric-header {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.redeven-provider-shelf__metric-value {
-  margin-top: 0.625rem;
-  font-size: 1.125rem;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0;
-  color: var(--foreground);
-}
-
-@media (max-width: 36rem) {
-  .redeven-provider-shelf__metrics {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--redeven-provider-shelf-metric-min-size)), 1fr));
-  }
 }
 
 .redeven-launcher-head::after,
@@ -3548,17 +3476,6 @@ pre,
 
 .redeven-popover-panel-collapse > div {
   overflow: hidden;
-}
-
-/* Runtime age and Cloud affiliation share the full card width, below header actions. */
-
-.redeven-card-runtime-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.625rem;
-  min-width: 0;
-  height: 1.5rem;
 }
 
 .redeven-card-runtime-age,
@@ -4484,27 +4401,93 @@ pre,
   flex-direction: column;
   min-width: 0;
 }
-.redeven-environment-owner[data-highlighted] {
-  background: color-mix(in srgb, var(--primary) 5%, transparent);
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primary) 55%, transparent);
-}
-.redeven-linked-cloud {
-  flex: none;
-  margin: .25rem .75rem .75rem;
-  border: 1px solid var(--border);
-  border-radius: .5rem;
-  background: color-mix(in srgb, var(--muted) 28%, transparent);
-}
-.redeven-linked-cloud__disclosure {
-  display: inline-flex;
+/* Access selection occupies the type-badge slot for every card. Both retained
+ * perspectives size the same grid cell, so changing routes never shifts cards. */
+.redeven-environment-access-heading {
+  display: flex;
   align-items: center;
-  gap: .375rem;
-  margin-top: .5rem;
-  color: var(--muted-foreground);
-  font-size: 11px;
-  cursor: pointer;
+  min-height: 2.625rem;
+  padding: .75rem 1rem 0;
 }
-.redeven-linked-cloud__disclosure:hover { color: var(--foreground); }
+.redeven-environment-owner-tabs {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-radius: .375rem;
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  padding: .125rem;
+}
+.redeven-environment-owner-tablist {
+  gap: .125rem;
+  align-items: stretch;
+}
+.redeven-environment-owner-tab {
+  min-width: 0;
+  height: auto;
+  min-height: 1.375rem;
+  padding: .1875rem .5rem;
+  border-radius: .25rem;
+  white-space: normal;
+  font-size: .6875rem;
+  line-height: 1rem;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+.redeven-environment-owner-tab[aria-selected="true"] {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+.redeven-environment-owner-tab[aria-selected="false"]:hover {
+  background: color-mix(in srgb, var(--muted) 65%, transparent);
+  color: var(--foreground);
+}
+.redeven-environment-owner-stack { display: grid; flex: 1; min-width: 0; }
+.redeven-environment-owner-panel {
+  display: flex;
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+.redeven-environment-owner-panel[aria-hidden="true"] {
+  display: flex;
+  visibility: hidden;
+  pointer-events: none;
+}
+.redeven-environment-owner-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem .625rem;
+  min-height: 1.5rem;
+}
+.redeven-environment-owner-footer { min-height: 4rem; }
+.redeven-owner-tab-status { display: inline-flex; align-items: center; }
+.redeven-owner-tab-status[data-tone="success"] { color: var(--success); }
+.redeven-owner-tab-status[data-tone="warning"] { color: var(--warning); }
+.redeven-owner-tab-status[data-tone="primary"] { color: var(--primary); }
+.redeven-owner-tab-dot { width: .375rem; height: .375rem; border-radius: 50%; background: currentColor; }
+.redeven-cloud-source-header { min-width: 0; }
+
+.redeven-other-owner-pin { display: flex; align-items: center; gap: .375rem; padding: 0 1rem .5rem; font-size: .6875rem; color: var(--muted-foreground); }
+.redeven-environment-owner-tab > span:last-child { max-width: none; white-space: normal; overflow-wrap: anywhere; }
+
+.redeven-center-actions > .relative { flex: 1 1 14.5rem; min-width: 0; }
+.redeven-center-actions button,
+.redeven-cloud-source-header button {
+  height: auto;
+  min-height: 1.75rem;
+  max-width: 100%;
+  white-space: normal;
+  padding-block: .35rem;
+}
+.redeven-center-actions button > svg,
+.redeven-cloud-source-header button > svg { flex-shrink: 0; }
+.redeven-environment-card .redeven-split-action-primary button {
+  height: auto;
+  min-height: 1.75rem;
+  padding-block: .3rem;
+  white-space: normal;
+}
 
 /* Fade retained section content without moving fields, focus targets or scrollbars. */
 @media (prefers-reduced-motion: no-preference) {

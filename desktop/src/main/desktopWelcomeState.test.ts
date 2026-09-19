@@ -2165,7 +2165,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.environments.find(entry => entry.id === local.id)?.local_ui_url).toBe('http://localhost:23998/');
   });
 
-  it('keeps provider cards remote-only while summarizing linked managed runtimes', () => {
+  it.each(['linked', 'linking', 'disconnecting'] as const)('keeps provider cards remote-only while summarizing %s managed runtimes', linkState => {
     const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
     const managedControlPlane = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo');
     const local = testLocalEnvironment({
@@ -2198,7 +2198,7 @@ describe('desktopWelcomeState', () => {
           bindings: {
             desktop_model_source: { state: 'unsupported' },
             provider_link: {
-              state: 'linked',
+              state: linkState,
               provider_origin: 'https://provider.example.invalid',
               provider_id: 'example_control_plane',
               env_public_id: 'env_demo',
@@ -2250,7 +2250,7 @@ describe('desktopWelcomeState', () => {
         runtime_target_id: 'local:local',
         runtime_kind: 'local_environment',
         label: 'Local Environment',
-        provider_connection_state: 'connected',
+        provider_connection_state: linkState === 'linked' ? 'connected' : linkState === 'linking' ? 'connecting' : 'disconnecting',
       },
       runtime_health: expect.objectContaining({
         status: 'online',
