@@ -126,7 +126,7 @@ export type DesktopLauncherActionOutcome =
   | 'opened_environment_center'
   | 'started_control_plane_connect'
   | 'refreshed_control_plane'
-  | 'deleted_control_plane'
+  | 'signed_out_control_plane'
   | 'saved_gateway'
   | 'enabled_gateway'
   | 'disabled_gateway'
@@ -220,7 +220,7 @@ export type DesktopLauncherActionKind =
   | 'open_environment_center'
   | 'focus_environment_window'
   | 'refresh_control_plane'
-  | 'delete_control_plane'
+  | 'sign_out_control_plane'
   | 'upsert_gateway'
   | 'set_gateway_enabled'
   | 'refresh_gateway'
@@ -766,7 +766,7 @@ export type DesktopLauncherActionRequest = Readonly<
       provider_id: string;
     }
   | {
-      kind: 'delete_control_plane';
+      kind: 'sign_out_control_plane';
       provider_origin: string;
       provider_id: string;
     }
@@ -1348,7 +1348,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       };
     }
     case 'refresh_control_plane':
-    case 'delete_control_plane': {
+    case 'sign_out_control_plane': {
       const providerOrigin = compact((candidate as { provider_origin?: unknown }).provider_origin);
       const providerID = compact((candidate as { provider_id?: unknown }).provider_id);
       if (providerOrigin === '' || providerID === '') {

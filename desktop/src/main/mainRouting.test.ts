@@ -1806,8 +1806,8 @@ describe('main routing', () => {
   it('settles deleted runtime lifecycle tasks while preventing stale SSH and provider tasks from resurrecting entries', () => {
     const mainSrc = readMainSource();
     const runtimeTargetDeleteStart = mainSrc.indexOf('async function deleteSavedRuntimeTargetFromWelcome');
-    const providerDeleteStart = mainSrc.indexOf('async function deleteControlPlaneFromLauncher');
-    const providerCleanupStart = mainSrc.indexOf('async function cleanupDeletedControlPlane');
+    const providerDeleteStart = mainSrc.indexOf('async function signOutControlPlaneFromLauncher');
+    const providerCleanupStart = mainSrc.indexOf('async function cleanupSignedOutControlPlane');
     const syncAccountStart = mainSrc.indexOf('async function syncSavedControlPlaneAccount(');
     const syncStart = mainSrc.indexOf('async function syncSavedControlPlaneAccountWithState');
     const syncEnd = mainSrc.indexOf('async function ensureControlPlaneAccessToken');
@@ -1831,10 +1831,10 @@ describe('main routing', () => {
     const providerDeleteSrc = mainSrc.slice(providerDeleteStart, providerCleanupStart);
     expect(providerDeleteSrc).toContain("launcherOperations.markSubjectDeleted(\n    'control_plane'");
     expect(providerDeleteSrc).toContain(
-      'await mutateDesktopPreferences((current) => deleteSavedControlPlane(current, request.provider_origin, request.provider_id));',
+      'await mutateDesktopPreferences((current) => signOutSavedControlPlane(current, request.provider_origin, request.provider_id));',
     );
     expect(providerDeleteSrc).toContain(
-      'void cleanupDeletedControlPlane(controlPlane, refreshToken, providerSessionKeys);',
+      'void cleanupSignedOutControlPlane(controlPlane, refreshToken, providerSessionKeys);',
     );
     expect(providerDeleteSrc).not.toContain('await revokeProviderDesktopAuthorization');
     expect(providerDeleteSrc).not.toContain('await finalizeSessionClosure(sessionKey)');

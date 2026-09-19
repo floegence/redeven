@@ -215,7 +215,7 @@ describe('shared overview and Cloud source grids', () => {
     button(card, 'Show Personal Cloud').click(); await settle();
     expect(document.querySelectorAll('[data-cloud-source]')).toHaveLength(2);
     expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
-    expect(document.querySelector('[data-cloud-source-counts]')?.textContent).toContain('Linked runtimes: 1');
+    expect(document.querySelector('[data-cloud-stat="linked"] dd')?.textContent).toBe('1');
   });
   it('explains an inactive owner pin and keeps owner pin requests independent', async () => {
     const h = await mount();
@@ -242,11 +242,65 @@ describe('shared overview and Cloud source grids', () => {
     const source = { ...snapshot.control_planes[0], environments: [] };
     const h = await mount({ ...snapshot, control_planes: [source], environments: [] });
     button(document, 'Redeven Cloud').click(); await settle();
-    expect(document.body.textContent).toContain('This source has no environments yet.');
+    expect(document.body.textContent).toContain('This account has no environments yet.');
     h.publish({ ...snapshot, environments: [], control_planes: [{ ...source, sync_state: 'provider_unreachable' }] }); await settle();
     expect(document.body.textContent).toContain('Environments will appear after a successful sync.');
     h.publish({ ...snapshot, environments: [], control_planes: [] }); await settle();
     expect(document.body.textContent).toContain('Authorize this Desktop with Redeven Cloud.');
+  });
+});
+
+describe('Redeven Cloud account overview', () => {
+  it('offers account sign-out rather than provider deletion and sends the exact account identity', async () => {
+    const { snapshot } = mixedEnvironmentFixture();
+    const h = await mount(snapshot);
+    button(document, 'Redeven Cloud').click(); await settle();
+    const account = document.querySelector('.redeven-cloud-source-header')!;
+    expect(account.textContent).not.toContain('Reconnect');
+    expect(account.querySelectorAll('dl > div')).toHaveLength(3);
+    button(account, 'Sign out of Team account on this Desktop').click(); await settle();
+    const confirmation = document.querySelector('[role="dialog"]')!;
+    expect(confirmation.textContent).toContain('Cloud environments, runtimes and their links are kept.');
+    button(confirmation, 'Sign out').click(); await settle();
+    expect(h.performAction).toHaveBeenLastCalledWith({ kind: 'sign_out_control_plane',
+      provider_origin: snapshot.control_planes[0].provider.provider_origin,
+      provider_id: snapshot.control_planes[0].provider.provider_id });
+  });
+  it('cancels sign-out without a request and closes a confirmation when its account disappears', async () => {
+    const { snapshot } = mixedEnvironmentFixture();
+    const h = await mount(snapshot);
+    button(document, 'Redeven Cloud').click(); await settle();
+    const account = document.querySelector('.redeven-cloud-source-header')!;
+    button(account, 'Sign out of Team account on this Desktop').click(); await settle();
+    button(document.querySelector('[role="dialog"]')!, 'Cancel').click(); await settle();
+    expect(h.performAction).not.toHaveBeenCalled();
+    button(account, 'Sign out of Team account on this Desktop').click(); await settle();
+    h.publish({ ...snapshot, control_planes: snapshot.control_planes.slice(1) }); await settle();
+    expect(document.querySelector('[role="dialog"][data-state="open"]')).toBeNull();
+  });
+  it('does not claim authorization or prior sync results before its first catalog', async () => {
+    const { snapshot } = mixedEnvironmentFixture();
+    await mount({ ...snapshot, control_planes: snapshot.control_planes.map(source => ({ ...source, sync_state: 'idle', catalog_freshness: 'unknown', last_synced_at_ms: 0 })) });
+    button(document, 'Redeven Cloud').click(); await settle();
+    const account = document.querySelector('.redeven-cloud-source-header')!;
+    expect(account.textContent).toContain('Not synced yet');
+    expect(account.textContent).not.toContain('Authorized');
+    expect(account.textContent).not.toContain('Showing last synced results');
+    expect(account.querySelector('.redeven-cloud-account-sync-time')).toBeNull();
+  });
+  it('keeps network diagnostics out of the overview and selects the appropriate recovery action', async () => {
+    const { snapshot } = mixedEnvironmentFixture({ syncState: 'provider_unreachable' });
+    const h = await mount({ ...snapshot, control_planes: snapshot.control_planes.map(source => ({ ...source, last_sync_error_message: 'Desktop failed to talk to the provider.' })) });
+    button(document, 'Redeven Cloud').click(); await settle();
+    const account = document.querySelector('.redeven-cloud-source-header')!;
+    expect(account.textContent).not.toContain('Desktop failed to talk to the provider.');
+    expect(button(account, 'Refresh')).toBeTruthy();
+    button(account, 'Sync details').click(); await settle();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Desktop failed to talk to the provider.');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await settle();
+    h.publish(mixedEnvironmentFixture({ syncState: 'auth_required' }).snapshot); await settle();
+    button(account, 'Sign in again').click(); await settle();
+    expect(h.performAction).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'start_control_plane_connect', provider_origin: snapshot.control_planes[0].provider.provider_origin }));
   });
 });
 

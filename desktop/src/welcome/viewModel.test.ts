@@ -1,3 +1,5 @@
+import { mixedEnvironmentFixture } from '../testSupport/mixedEnvironmentFixture';
+import { createDesktopI18n } from '../shared/i18n';
 import { buildEnvironmentLibraryDisplayGroups } from './environmentLibraryProjection';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -36,6 +38,7 @@ import {
   testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
 import {
+  buildControlPlaneStatusModel,
   buildEnvironmentLibraryLayoutModel,
   buildEnvironmentCardModel,
   buildEnvironmentCardEndpointsModel,
@@ -3872,5 +3875,27 @@ describe('Gateway view models', () => {
         label: 'Refresh',
       }),
     });
+  });
+});
+
+
+describe('Redeven Cloud account status', () => {
+  it.each([
+    ['ready', 'fresh', 'environmentStatus.authorized', 'refresh'],
+    ['ready', 'stale', 'environmentStatus.statusStale', 'refresh'],
+    ['idle', 'unknown', 'environmentCenter.cloudAwaitingSync', 'refresh'],
+    ['syncing', 'stale', 'environmentStatus.checking', 'refresh'],
+    ['auth_required', 'stale', 'environmentCenter.cloudSignInRequired', 'sign_in'],
+    ['provider_unreachable', 'stale', 'environmentStatus.syncFailed', 'refresh'],
+    ['provider_invalid', 'stale', 'environmentStatus.invalidResponse', 'refresh'],
+    ['sync_error', 'stale', 'environmentStatus.syncFailed', 'refresh'],
+  ] as const)('maps %s/%s to localized status and an explicit recovery action', (sync_state, catalog_freshness, label_key, recovery_action) => {
+    const source = mixedEnvironmentFixture().snapshot.control_planes[0];
+    const model = buildControlPlaneStatusModel({ ...source, sync_state, catalog_freshness, last_sync_error_message: 'Raw transport diagnostic' });
+    expect(model.label_key).toBe(label_key);
+    expect(model.recovery_action).toBe(recovery_action);
+    const i18n = createDesktopI18n('zh-CN');
+    expect(i18n.t(model.label_key)).not.toBe(createDesktopI18n('en-US').t(model.label_key));
+    expect(i18n.t(model.detail_key)).not.toContain('Raw transport diagnostic');
   });
 });
