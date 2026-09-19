@@ -4455,6 +4455,19 @@
       "modelSupportUnavailable": "無法確認附件支援狀態"
     },
     "chat": {
+      "media": {
+        "image": "圖片",
+        "video": "影片",
+        "audio": "音訊",
+        "html": "互動預覽",
+        "loading": "正在載入預覽…",
+        "unavailable": "暫時無法預覽",
+        "retry": "重試",
+        "expand": "放大預覽",
+        "collapse": "收合預覽",
+        "open": "開啟原始檔案",
+        "close": "關閉預覽"
+      },
       "webSearch": {
         "search": "搜尋",
         "openPage": "開啟網頁",

@@ -4440,6 +4440,19 @@
       "modelSupportUnavailable": "Anhangsunterstützung konnte nicht geprüft werden"
     },
     "chat": {
+      "media": {
+        "image": "Bild",
+        "video": "Video",
+        "audio": "Audio",
+        "html": "Interaktive Vorschau",
+        "loading": "Vorschau wird geladen…",
+        "unavailable": "Vorschau nicht verfügbar",
+        "retry": "Erneut versuchen",
+        "expand": "Vorschau vergrößern",
+        "collapse": "Vorschau verkleinern",
+        "open": "Original öffnen",
+        "close": "Vorschau schließen"
+      },
       "webSearch": {
         "search": "Suchen",
         "openPage": "Seite öffnen",

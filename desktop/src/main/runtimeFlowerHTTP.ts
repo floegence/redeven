@@ -5,13 +5,21 @@ import {
 	normalizeDesktopPrivateBridgeToken,
 } from './desktopPrivateBridge';
 import type { StartupReport } from './startup';
-import type { RuntimeFlowerComputerFrame, RuntimeFlowerError, RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
+import type { RuntimeFlowerMedia, RuntimeFlowerError, RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
 
-export function runtimeFlowerComputerFrame(response: RuntimeFlowerHTTPResponse): RuntimeFlowerComputerFrame {
+export function runtimeFlowerComputerFrame(response: RuntimeFlowerHTTPResponse): RuntimeFlowerMedia {
   if (response.headers['content-type'] !== 'image/png' || response.bytes.length === 0 || response.bytes.length > (10 << 20)) {
     throw new Error('Flower returned invalid computer media.');
   }
   return { bytes: new Uint8Array(response.bytes), mime_type: 'image/png' };
+}
+
+export function runtimeFlowerMessageFile(response: RuntimeFlowerHTTPResponse): RuntimeFlowerMedia {
+  const mime = String(response.headers['content-type'] ?? '').toLowerCase();
+  if (!/^(image\/(?!svg\+xml)|video\/|audio\/|text\/plain(?:;|$))/.test(mime) || response.bytes.length > (64 << 20)) {
+    throw new Error('Flower returned invalid file media.');
+  }
+  return { bytes: new Uint8Array(response.bytes), mime_type: mime };
 }
 
 export type RuntimeFlowerHTTPResponse = Readonly<{
@@ -56,9 +64,10 @@ export function runtimeFlowerPrivateBridgeHeaders(
 	};
 }
 
-export function readRuntimeFlowerHTTPResponse(response: IncomingMessage): Promise<RuntimeFlowerHTTPResponse> {
+export function readRuntimeFlowerHTTPResponse(response: IncomingMessage, maxBytes = Infinity): Promise<RuntimeFlowerHTTPResponse> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
+    let size = 0;
     let settled = false;
     const fail = (error: unknown) => {
       if (settled) return;
@@ -66,7 +75,15 @@ export function readRuntimeFlowerHTTPResponse(response: IncomingMessage): Promis
       reject(error instanceof Error ? error : new Error(String(error)));
     };
     response.on('data', (chunk: Buffer | string) => {
-      if (!settled) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      if (settled) return;
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += bytes.length;
+      if (size > maxBytes) {
+        fail(new Error('Flower runtime media response is too large.'));
+        response.destroy();
+        return;
+      }
+      chunks.push(bytes);
     });
     response.once('aborted', () => {
       fail(new Error('Flower runtime response was aborted.'));
@@ -109,7 +126,7 @@ export function requestRuntimeFlowerHTTP(
         } : {}),
       },
     }, (response) => {
-      void readRuntimeFlowerHTTPResponse(response).then(resolve, reject);
+      void readRuntimeFlowerHTTPResponse(response, url.pathname === '/_redeven_proxy/api/fs/file' ? 64 << 20 : Infinity).then(resolve, reject);
     });
     req.on('timeout', () => {
       const error = new Error('Flower runtime request timed out.');

@@ -1,5 +1,6 @@
 import { computerManagementAdapter } from '../../../../internal/flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../internal/flower_ui/host/computerFramePath';
+import { messageFilePath } from '../../../../internal/flower_ui/host/messageFilePath';
 import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../internal/flower_ui/src/computerViewer';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../../shared/desktopCertificate';
 import { withFlowerWebSearchAvailability } from '../../../../internal/flower_ui/src/webSearchCapability';
@@ -13,7 +14,7 @@ import type {
 } from '../../shared/settingsIPC';
 import type {
   RuntimeFlowerError,
-  RuntimeFlowerComputerFrame,
+  RuntimeFlowerMedia,
   RuntimeFlowerFailureKind,
   RuntimeFlowerRequest,
   RuntimeFlowerRequestResult,
@@ -834,13 +835,20 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     loadComputerFrame: async (input) => {
       input.signal.throwIfAborted();
-      const frame = await runtimeJSON<RuntimeFlowerComputerFrame>(bridge, 'GET',
+      const frame = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET',
         computerFramePath(input));
       input.signal.throwIfAborted();
       if (!(frame.bytes instanceof Uint8Array) || frame.mime_type !== 'image/png') {
         throw new Error('Flower returned invalid computer media.');
       }
       return new Blob([new Uint8Array(frame.bytes)], { type: frame.mime_type });
+    },
+    loadMessageFile: async ({ path, signal }) => {
+      signal.throwIfAborted();
+      const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageFilePath(path));
+      signal.throwIfAborted();
+      if (!(media.bytes instanceof Uint8Array)) throw new Error('File preview is unavailable.');
+      return new Blob([new Uint8Array(media.bytes)], { type: media.mime_type });
     },
     computerFrameRate: {
       read: () => computerFrameRate(window.redevenDesktopStateStorage?.getItem(COMPUTER_FRAME_RATE_KEY)),

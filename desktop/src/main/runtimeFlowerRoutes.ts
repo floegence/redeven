@@ -40,6 +40,14 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/settings', methods: ['GET'] },
   { path: '/_redeven_proxy/api/fs/path_context', methods: ['GET'] },
   { path: '/_redeven_proxy/api/fs/list', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/fs/file', methods: ['GET'], allowsQuery: parsed => {
+    return [...parsed.searchParams.keys()].length === 2
+      && parsed.searchParams.getAll('path').length === 1
+      && Boolean(parsed.searchParams.get('path'))
+      && (parsed.searchParams.get('path')?.length ?? 0) <= 8192
+      && parsed.searchParams.getAll('preview').length === 1
+      && parsed.searchParams.get('preview') === '1';
+  } },
   { path: '/_redeven_proxy/api/ai/default_permission', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/computer_use', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/computer/candidates', methods: ['GET'], allowsQuery: runtimeFlowerIdentifierQuery('thread_id') },

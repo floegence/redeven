@@ -48,6 +48,19 @@
     "modelSupportUnavailable": "Could not check attachment support"
   },
   "chat": {
+    "media": {
+      "image": "Image",
+      "video": "Video",
+      "audio": "Audio",
+      "html": "Interactive preview",
+      "loading": "Loading preview…",
+      "unavailable": "Preview unavailable",
+      "retry": "Retry",
+      "expand": "Expand preview",
+      "collapse": "Collapse preview",
+      "open": "Open source",
+      "close": "Close preview"
+    },
     "webSearch": {
       "search": "Search",
       "openPage": "Open page",

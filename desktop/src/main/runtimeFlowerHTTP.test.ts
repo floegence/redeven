@@ -13,10 +13,19 @@ import {
 	runtimeFlowerInvalidJSONError,
 	runtimeFlowerPrivateBridgeHeaders,
   runtimeFlowerComputerFrame,
+  runtimeFlowerMessageFile,
 } from './runtimeFlowerHTTP';
 import { RUNTIME_FLOWER_COMPUTER_MEDIA_PATH } from '../shared/runtimeFlowerIPC';
 
 describe('computer media transport', () => {
+  it('preserves bounded video and inert HTML bytes while rejecting active documents', () => {
+    const response = { status: 200, headers: { 'content-type': 'video/mp4' }, body: '', bytes: Buffer.from([0, 128, 255]) };
+    expect(runtimeFlowerMessageFile(response).bytes).toEqual(new Uint8Array([0, 128, 255]));
+    expect(runtimeFlowerMessageFile({ ...response, headers: { 'content-type': 'text/plain; charset=utf-8' } }).mime_type).toBe('text/plain; charset=utf-8');
+    for (const mime of ['text/html', 'image/svg+xml', 'application/javascript']) {
+      expect(() => runtimeFlowerMessageFile({ ...response, headers: { 'content-type': mime } })).toThrow('invalid file media');
+    }
+  });
   it('preserves binary bytes across the runtime response boundary', async () => {
     const bytes = Buffer.from([137, 80, 78, 71, 255, 0, 128]);
     const server = http.createServer((_request, response) => {
@@ -73,16 +82,30 @@ function close(server: http.Server): Promise<void> {
   });
 }
 
-function request(port: number): Promise<ReturnType<typeof readRuntimeFlowerHTTPResponse>> {
+function request(port: number, maxBytes = Infinity): Promise<ReturnType<typeof readRuntimeFlowerHTTPResponse>> {
   return new Promise((resolve, reject) => {
     const req = http.get({ host: '127.0.0.1', port, path: '/' }, (response) => {
-      resolve(readRuntimeFlowerHTTPResponse(response));
+      resolve(readRuntimeFlowerHTTPResponse(response, maxBytes));
     });
     req.once('error', reject);
   });
 }
 
 describe('readRuntimeFlowerHTTPResponse', () => {
+  it('rejects and closes a response as soon as its byte limit is exceeded', async () => {
+    let closed: Promise<unknown> | undefined;
+    const server = http.createServer((_request, response) => {
+      closed = once(response, 'close');
+      response.writeHead(200, { 'Content-Type': 'video/mp4' });
+      response.write(Buffer.alloc(9));
+    });
+    const port = await listen(server);
+    try {
+      await expect(request(port, 8)).rejects.toThrow('media response is too large');
+      await closed;
+    } finally { await close(server); }
+  });
+
   it('reads a complete response', async () => {
     const server = http.createServer((_request, response) => {
       response.writeHead(200, { 'Content-Type': 'application/json' });

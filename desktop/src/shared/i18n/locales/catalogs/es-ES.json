@@ -80,6 +80,19 @@
       "modelSupportUnavailable": "No se pudo comprobar la compatibilidad con archivos adjuntos"
     },
     "chat": {
+      "media": {
+        "image": "Imagen",
+        "video": "Vídeo",
+        "audio": "Audio",
+        "html": "Vista previa interactiva",
+        "loading": "Cargando vista previa…",
+        "unavailable": "Vista previa no disponible",
+        "retry": "Reintentar",
+        "expand": "Ampliar vista previa",
+        "collapse": "Reducir vista previa",
+        "open": "Abrir original",
+        "close": "Cerrar vista previa"
+      },
       "webSearch": {
         "search": "Buscar",
         "openPage": "Abrir página",

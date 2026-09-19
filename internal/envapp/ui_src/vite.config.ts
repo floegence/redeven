@@ -38,7 +38,7 @@ export default defineConfig({
   plugins: [solid(), tailwindcss(), chunkModuleManifest()],
   resolve: {
     alias: [
-      { find: /^@floegence\/floe-webapp-core\/(chat|icons|layout|loading|ui)$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
+      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|icons|layout|loading|ui)$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
       { find: /^@floegence\/floe-webapp-core$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/index.js') },
       { find: /^marked$/, replacement: path.resolve(__dirname, 'node_modules/marked/lib/marked.esm.js') },
       { find: /^thinking-orbs\/engine$/, replacement: path.resolve(__dirname, 'node_modules/thinking-orbs/dist/engine.es.js') },

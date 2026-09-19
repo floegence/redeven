@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-19 — Inline Flower media previews
+
+- Consume released Floe media cards for assistant screenshots, images, video, audio, and self-contained interactive HTML.
+- Route local files through bounded authenticated previews and keep HTML inert on the Runtime origin.
+- Preserve committed preview instances during streaming and document Desktop transport and resource disposal.
+
 ## 2026-09-19 — ReDevPlugin Rust toolchain staging recovery
 
 - Reuse the exact installed Rust 1.88.0 toolchain and target before any

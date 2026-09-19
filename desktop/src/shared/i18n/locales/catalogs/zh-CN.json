@@ -80,6 +80,19 @@
       "modelSupportUnavailable": "无法检查附件支持情况"
     },
     "chat": {
+      "media": {
+        "image": "图片",
+        "video": "视频",
+        "audio": "音频",
+        "html": "交互预览",
+        "loading": "正在加载预览…",
+        "unavailable": "暂时无法预览",
+        "retry": "重试",
+        "expand": "放大预览",
+        "collapse": "收起预览",
+        "open": "打开原文件",
+        "close": "关闭预览"
+      },
       "webSearch": {
         "search": "搜索",
         "openPage": "打开网页",

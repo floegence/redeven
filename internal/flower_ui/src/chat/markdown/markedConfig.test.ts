@@ -14,6 +14,18 @@ function createMarked(): Marked<string, string> {
 }
 
 describe('createFlowerMarkdownRenderer', () => {
+  it('opts assistant media into inert placeholders and leaves ordinary HTML code alone', () => {
+    const marked = new Marked<string, string>({ gfm: true });
+    marked.use({ renderer: createFlowerMarkdownRenderer({ media: true }) });
+    for (const input of ['![Screenshot](computer://browser/' + 'a'.repeat(64) + ')', '![Clip](/project/demo.mp4)', '[Report](/project/report.html)', '```html preview\n<button>Try me</button>\n```']) {
+      const html = marked.parse(input);
+      expect(html).toContain('data-floe-markdown-media');
+      expect(html).not.toContain('<iframe');
+      expect(html).not.toContain('<button>');
+    }
+    expect(marked.parse('```html\n<button>Code only</button>\n```')).not.toContain('data-floe-markdown-media');
+    expect(marked.parse('![unsafe](javascript:alert(1))')).not.toContain('data-floe-markdown-media');
+  });
   it('escapes raw html and script content', () => {
     const html = createMarked().parse('<script>alert(1)</script>\n\n<div onclick="x">text</div>');
 

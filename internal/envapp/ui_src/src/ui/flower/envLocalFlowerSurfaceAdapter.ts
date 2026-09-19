@@ -1,5 +1,6 @@
 import { computerManagementAdapter } from '../../../../../flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../../flower_ui/host/computerFramePath';
+import { messageFilePath } from '../../../../../flower_ui/host/messageFilePath';
 import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../../flower_ui/src/computerViewer';
 import type { FlowerComputerFrameSource } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
@@ -924,6 +925,11 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     loadStagedAttachmentPreview: (attachment, scope, signal) => loadEnvStagedAttachmentPreview(attachment, scope, signal),
     previewStagedAttachment: previewEnvStagedAttachment,
     loadComputerFrame: loadEnvComputerFrame,
+    loadMessageFile: async ({ path, signal }) => {
+      const response = await fetch(messageFilePath(path), await prepareLocalApiRequestInit({ method: 'GET', signal }));
+      if (!response.ok) throw new Error('File preview is unavailable.');
+      return response.blob();
+    },
     computerFrameRate: {
       read: () => computerFrameRate(readUIStorageItem(COMPUTER_FRAME_RATE_KEY)),
       write: (fps) => writeUIStorageItem(COMPUTER_FRAME_RATE_KEY, String(fps)),

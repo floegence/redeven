@@ -80,6 +80,19 @@
       "modelSupportUnavailable": "Não foi possível verificar a compatibilidade com anexos"
     },
     "chat": {
+      "media": {
+        "image": "Imagem",
+        "video": "Vídeo",
+        "audio": "Áudio",
+        "html": "Prévia interativa",
+        "loading": "Carregando prévia…",
+        "unavailable": "Prévia indisponível",
+        "retry": "Tentar novamente",
+        "expand": "Ampliar prévia",
+        "collapse": "Reduzir prévia",
+        "open": "Abrir original",
+        "close": "Fechar prévia"
+      },
       "webSearch": {
         "search": "Pesquisar",
         "openPage": "Abrir página",

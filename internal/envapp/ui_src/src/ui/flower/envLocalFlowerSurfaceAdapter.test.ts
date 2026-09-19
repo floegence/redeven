@@ -129,6 +129,17 @@ function typedCommandResponse(
 }
 
 describe('Env local Flower surface adapter', () => {
+  it('loads media through authenticated preview reads and preserves cancellation', async () => {
+    const blob = new Blob(['preview'], { type: 'text/plain' });
+    fetchMock.mockResolvedValueOnce({ ok: true, blob: async () => blob });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_media', envLabel: 'Media', rpc: { ai: {} } as any });
+    const controller = new AbortController();
+    expect(await adapter.loadMessageFile!({ path: '/workspace/report #1.html', signal: controller.signal })).toBe(blob);
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith('/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Freport+%231.html&preview=1', expect.objectContaining({ method: 'GET', signal: controller.signal }));
+    fetchMock.mockResolvedValueOnce({ ok: false });
+    await expect(adapter.loadMessageFile!({ path: '/workspace/report.html', signal: controller.signal })).rejects.toThrow('unavailable');
+  });
+
   it('sends a relative pin move and maps only revisioned pin metadata', async () => {
     const pin = { thread_id: 'thread/source', pinned_at_unix_ms: 10, pin_rank: 3, settings_revision: 20 };
     fetchMock.mockResolvedValueOnce(jsonResponse({ pins: [pin] }));

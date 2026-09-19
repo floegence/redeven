@@ -14,7 +14,7 @@ export default defineConfig({
   resolve: {
     conditions: ['node'],
     alias: [
-      { find: /^@floegence\/floe-webapp-core\/(chat|icons|layout|loading|ui)$/, replacement: `${coreDist}$1.js` },
+      { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|icons|layout|loading|ui)$/, replacement: `${coreDist}$1.js` },
       { find: /^@floegence\/floe-webapp-core$/, replacement: `${coreDist}index.js` },
       { find: /^marked$/, replacement: markedDist },
       { find: /^thinking-orbs\/engine$/, replacement: thinkingOrbsEngine },

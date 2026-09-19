@@ -1,3 +1,5 @@
+import { markdownMediaEnUS } from './chat/markdown/mediaCopy';
+import type { MarkdownMediaLabels } from '@floegence/floe-webapp-core/chat';
 import { toolActivityEnUS, type FlowerToolActivityCopy } from './toolActivityCopy';
 import { computerUseEnUS, type FlowerComputerCopy } from './computerUseCopy';
 import { reasoningControlEnUS, type ReasoningControlCopy } from './i18n/reasoningControlMessages';
@@ -323,6 +325,7 @@ export type FlowerSurfaceCopy = Readonly<{
     modelSupportUnavailable: string;
   }>;
   chat: Readonly<{
+    media: MarkdownMediaLabels;
     restoredInputTitle: string;
     restoredInputDescription: string;
     restoredInputCopy: string;
@@ -625,6 +628,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     modelSupportUnavailable: 'Could not check attachment support',
   },
   chat: {
+    media: markdownMediaEnUS,
     restoredInputTitle: 'Input preserved after restore',
     restoredInputDescription: 'This input will not run automatically. Copy it into a new task to run it again.',
     restoredInputCopy: 'Copy input',
