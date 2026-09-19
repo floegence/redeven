@@ -4442,6 +4442,8 @@
     "chat": {
       "media": {
         "image": "Imagen",
+        "previewImage": "Ver imagen",
+        "revealInFolder": "Abrir carpeta contenedora",
         "video": "Vídeo",
         "audio": "Audio",
         "html": "Vista previa interactiva",

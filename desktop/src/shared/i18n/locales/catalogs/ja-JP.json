@@ -82,6 +82,8 @@
     "chat": {
       "media": {
         "image": "画像",
+        "previewImage": "画像をプレビュー",
+        "revealInFolder": "保存先フォルダーを開く",
         "video": "動画",
         "audio": "音声",
         "html": "インタラクティブプレビュー",

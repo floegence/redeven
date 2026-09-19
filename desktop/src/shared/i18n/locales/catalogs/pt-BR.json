@@ -82,6 +82,8 @@
     "chat": {
       "media": {
         "image": "Imagem",
+        "previewImage": "Visualizar imagem",
+        "revealInFolder": "Abrir pasta do arquivo",
         "video": "Vídeo",
         "audio": "Áudio",
         "html": "Prévia interativa",

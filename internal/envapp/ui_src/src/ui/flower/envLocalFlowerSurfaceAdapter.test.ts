@@ -129,6 +129,18 @@ function typedCommandResponse(
 }
 
 describe('Env local Flower surface adapter', () => {
+  it('forwards message-file preview and reveal through the runtime adapter', async () => {
+    const openMessageFile = vi.fn(async () => undefined);
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_media', envLabel: 'Media', rpc: { ai: {} } as any, openMessageFile });
+    await adapter.openMessageFile!({ path: '/workspace/image.png', action: 'preview' });
+    await adapter.openMessageFile!({ path: '/workspace/image.png', action: 'reveal' });
+    expect(openMessageFile.mock.calls).toEqual([
+      [{ path: '/workspace/image.png', action: 'preview' }],
+      [{ path: '/workspace/image.png', action: 'reveal' }],
+    ]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('loads media through authenticated preview reads and preserves cancellation', async () => {
     const blob = new Blob(['preview'], { type: 'text/plain' });
     fetchMock.mockResolvedValueOnce({ ok: true, blob: async () => blob });

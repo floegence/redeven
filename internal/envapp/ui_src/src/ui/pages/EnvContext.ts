@@ -2,6 +2,7 @@ import { createContext, useContext, type Resource } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type {
   FlowerFileOpenRequest,
+  FlowerSurfaceAdapter,
   FlowerComposerDraftCoordinator,
   FlowerLinkedContextPathOpenRequest,
   FlowerThreadFocusRequest,
@@ -153,6 +154,7 @@ export type EnvContextValue = {
     options?: FilePreviewOpenOptions,
   ) => Promise<void>;
   flowerWorkingDirectoryActions?: FlowerWorkingDirectoryNavigation;
+  openFlowerMessageFile?: FlowerSurfaceAdapter['openMessageFile'];
   openFlowerFileBrowser: (request: FlowerFileOpenRequest) => Promise<void>;
   openFlowerFilePreview: (request: FlowerFileOpenRequest) => Promise<void>;
   openFlowerCanonicalReferenceTarget?: (target: FlowerCanonicalReferenceNavigationTarget) => Promise<void>;

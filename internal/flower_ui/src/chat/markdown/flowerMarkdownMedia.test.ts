@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { flowerMarkdownFilePath, resolveFlowerMarkdownMedia } from './flowerMarkdownMedia';
+import { markdownMediaEnUS } from './mediaCopy';
 import type { FlowerSurfaceAdapter } from '../../contracts/flowerSurfaceContracts';
 
 describe('Flower Markdown resource resolution', () => {
@@ -16,9 +17,12 @@ describe('Flower Markdown resource resolution', () => {
     const controller = new AbortController();
     const revoke = vi.spyOn(URL, 'revokeObjectURL');
     const ref = `computer://browser-main/${'a'.repeat(64)}`;
-    const resource = await resolveFlowerMarkdownMedia({ kind: 'image', title: 'Screenshot', src: ref }, controller.signal, { adapter, threadID: 'thread-a', workingDirectory: '/project' });
+    const resource = await resolveFlowerMarkdownMedia({ kind: 'image', title: 'Screenshot', src: ref }, controller.signal, { adapter, threadID: 'thread-a', workingDirectory: '/project', copy: markdownMediaEnUS, onActionError: vi.fn() });
     expect(loadComputerFrame).toHaveBeenCalledWith(expect.objectContaining({ thread_id: 'thread-a', resource_ref: ref }));
     expect(resource.src).toMatch(/^blob:/);
+    expect(resource.openURL).toBeUndefined();
+    expect(resource.preview).toBeUndefined();
+    expect(resource.reveal).toBeUndefined();
     controller.abort();
     expect(revoke).toHaveBeenCalledWith(resource.src);
     revoke.mockRestore();
@@ -26,14 +30,34 @@ describe('Flower Markdown resource resolution', () => {
   it('rejects type mismatches and cancelled reads before creating a media URL', async () => {
     const controller = new AbortController();
     const adapter = { loadMessageFile: async () => new Blob(['html'], { type: 'text/plain' }) } as unknown as FlowerSurfaceAdapter;
-    const context = { adapter, threadID: 'thread-a', workingDirectory: '/project' };
+    const context = { adapter, threadID: 'thread-a', workingDirectory: '/project', copy: markdownMediaEnUS, onActionError: vi.fn() };
     await expect(resolveFlowerMarkdownMedia({ kind: 'video', title: '', src: '/project/a.mp4' }, controller.signal, context)).rejects.toThrow('Media type');
     controller.abort();
     await expect(resolveFlowerMarkdownMedia({ kind: 'html', title: '', src: '/project/a.html' }, controller.signal, context)).rejects.toThrow();
   });
+  it('opens an authorized local file or its folder through distinct host actions', async () => {
+    const openMessageFile = vi.fn(async () => undefined);
+    const onActionError = vi.fn();
+    const controller = new AbortController();
+    const adapter = { loadMessageFile: vi.fn(async () => new Blob(['pixels'], { type: 'image/png' })), openMessageFile } as unknown as FlowerSurfaceAdapter;
+    const resolved = await resolveFlowerMarkdownMedia({ kind: 'image', title: 'Chart', src: './figures/chart.png' }, controller.signal, {
+      adapter, threadID: 't', workingDirectory: '/project', copy: markdownMediaEnUS, onActionError,
+    });
+    expect(resolved.openURL).toBeUndefined();
+    resolved.preview!.onSelect();
+    resolved.reveal!.onSelect();
+    expect(openMessageFile.mock.calls).toEqual([[{ path: '/project/figures/chart.png', action: 'preview' }], [{ path: '/project/figures/chart.png', action: 'reveal' }]]);
+    openMessageFile.mockRejectedValueOnce(new Error('access denied'));
+    resolved.preview!.onSelect();
+    await Promise.resolve();
+    expect(onActionError).toHaveBeenCalledWith(expect.objectContaining({ message: 'access denied' }));
+    controller.abort();
+    resolved.preview!.onSelect();
+    expect(openMessageFile).toHaveBeenCalledTimes(3);
+  });
   it('never fetches local bytes for an arbitrary web address', async () => {
     const loadMessageFile = vi.fn();
-    const context = { adapter: { loadMessageFile } as unknown as FlowerSurfaceAdapter, threadID: 't', workingDirectory: '/project' };
+    const context = { adapter: { loadMessageFile } as unknown as FlowerSurfaceAdapter, threadID: 't', workingDirectory: '/project', copy: markdownMediaEnUS, onActionError: vi.fn() };
     expect(await resolveFlowerMarkdownMedia({ kind: 'video', title: '', src: 'https://example.com/demo.mp4' }, new AbortController().signal, context)).toEqual({ src: 'https://example.com/demo.mp4', openURL: 'https://example.com/demo.mp4' });
     expect(loadMessageFile).not.toHaveBeenCalled();
   });

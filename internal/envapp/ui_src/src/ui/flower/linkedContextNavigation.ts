@@ -1,8 +1,8 @@
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
-import type { FlowerLinkedContextPathOpenRequest } from '../../../../../flower_ui/src';
+import type { FlowerLinkedContextPathOpenRequest, FlowerSurfaceAdapter } from '../../../../../flower_ui/src';
 import type { FilePreviewOpenOptions } from '../widgets/FilePreviewContext';
-import { basenameFromAbsolutePath, normalizeAbsolutePath } from '../utils/askFlowerPath';
+import { basenameFromAbsolutePath, dirnameAbsolute, normalizeAbsolutePath } from '../utils/askFlowerPath';
 import { fileItemFromPath } from '../utils/filePreviewItem';
 
 type LinkedContextNavigationOptions = Readonly<{
@@ -25,6 +25,7 @@ export type FlowerCanonicalReferenceNavigationTarget = Readonly<{
 }>;
 
 export function createFlowerLinkedContextNavigation(options: LinkedContextNavigationOptions): Readonly<{
+  openMessageFile: NonNullable<FlowerSurfaceAdapter['openMessageFile']>;
   openCanonicalReferenceTarget: (target: FlowerCanonicalReferenceNavigationTarget) => Promise<void>;
   openLinkedFilePreview: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openLinkedDirectoryBrowser: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
@@ -53,6 +54,10 @@ export function createFlowerLinkedContextNavigation(options: LinkedContextNaviga
   };
 
   return {
+    openMessageFile: async ({ path, action }) => {
+      if (action === 'preview') await openFilePath(path);
+      else await openDirectoryPath(dirnameAbsolute(path));
+    },
     openCanonicalReferenceTarget: async (target) => {
       if (target.kind === 'file') {
         await openFilePath(target.path);

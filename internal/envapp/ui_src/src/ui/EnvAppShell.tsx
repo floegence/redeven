@@ -2482,6 +2482,7 @@ export function EnvAppShell() {
   };
 
   const {
+    openMessageFile: openFlowerMessageFile,
     openCanonicalReferenceTarget: openFlowerCanonicalReferenceTarget,
     openLinkedFilePreview: openFlowerLinkedFilePreview,
     openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
@@ -2586,6 +2587,7 @@ export function EnvAppShell() {
           failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
         },
         onSettingsChanged: () => { bumpSettingsSeq(); },
+        openMessageFile: openFlowerMessageFile,
         openFileBrowser: openFlowerFileBrowser,
         openFilePreview: openFlowerFilePreview,
         openCanonicalReferenceTarget: openFlowerCanonicalReferenceTarget,
@@ -5153,6 +5155,7 @@ export function EnvAppShell() {
         openFileBrowserAtPath,
         openFilePreview,
         flowerWorkingDirectoryActions,
+        openFlowerMessageFile,
         openFlowerFileBrowser,
         openFlowerFilePreview,
         openFlowerCanonicalReferenceTarget,

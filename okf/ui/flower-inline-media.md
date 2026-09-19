@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower inline media
 description: Display assistant media through released Floe previews and authorized Runtime resources.
 tags: [flower, media, preview, security]
-timestamp: 2026-09-19T00:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 
 # Summary
@@ -28,10 +28,15 @@ preview error without interrupting the conversation.
   preview. Ordinary `html` fences remain copyable source code. Raw HTML remains
   escaped. External HTML pages must be saved locally before inline preview.
 - Media displays without outer cards or title bars, with a single rounded edge,
-  quiet captions, and open/enlarge actions on hover or keyboard focus (always
+  quiet captions, and named actions on hover or keyboard focus (always
   visible on touch). Loading and retry states use the active locale.
-  Images enlarge in Floe's surface-aware dialog. Video/audio use native playback
-  controls without autoplay. HTML expands without recreating its iframe.
+  Clicking a local image or its eye button opens the existing host file preview
+  with the same-file reuse policy. The folder button opens its containing
+  directory through the host file browser. Remote images, opaque computer frames,
+  and hosts without file navigation use Floe's shared floating preview; they do
+  not expose a fabricated folder action or a raw blob link. Labels follow the
+  active locale. Video/audio use native playback controls without autoplay.
+  HTML expands without recreating its iframe.
 - Only stable Markdown segments mount media. An unfinished streaming tail stays
   inert, and later reply text does not reload committed previews. Media near the
   viewport loads lazily. Disposal aborts pending observation and revokes blob URLs.
