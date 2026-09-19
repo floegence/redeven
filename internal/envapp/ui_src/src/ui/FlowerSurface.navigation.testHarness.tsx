@@ -106,7 +106,8 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => {
   };
 });
 
-vi.mock('@floegence/floe-webapp-core/icons', () => {
+vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/icons')>();
   const Icon = (props: any) => <span data-icon class={props.class} />;
   return {
     Activity: Icon,
@@ -130,7 +131,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Globe: Icon,
     GripVertical: Icon,
     MoreHorizontal: Icon,
-    MonitorPointer: Icon,
+    Link: actual.Link,
+    MonitorPointer: actual.MonitorPointer,
     Paperclip: Icon,
     Pencil: Icon,
     Pin: Icon,

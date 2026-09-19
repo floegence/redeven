@@ -14,23 +14,25 @@ const states = { awaiting_control: 'Waiting for you to take control', historical
 const waitFor = async (predicate: () => boolean) => vi.waitFor(() => expect(predicate()).toBe(true), { timeout: 5000, interval: 16 });
 
 for (const projected of [false, true]) {
-  it(`preserves native window geometry and snaps its launcher inside content (projected=${projected})`, async () => {
+  it(`moves across the Flower surface and preserves window and launcher geometry (projected=${projected})`, async () => {
     await page.viewport(1440, 1000);
     const host = document.createElement('div'); document.body.append(host);
     const [open, setOpen] = createSignal(true);
     const [owner, setOwner] = createSignal('window-thread');
     const [state, setState] = createSignal<FlowerComputerStageSessionState>('running');
     const [boundary, setBoundary] = createSignal<HTMLElement>();
+    const [launcherBoundary, setLauncherBoundary] = createSignal<HTMLElement>();
     const [dockHeight, setDockHeight] = createSignal(100);
     const input = vi.fn();
     const blob = new Blob([Uint8Array.from(atob(PNG), value => value.charCodeAt(0))], { type: 'image/png' });
     const dispose = render(() => <FloeConfigProvider><LayoutProvider>
-      <div data-floe-dialog-surface-host={projected ? 'true' : undefined}
-        style={{ position: 'relative', width: '900px', height: '650px', transform: projected ? 'scale(0.7)' : undefined, 'transform-origin': 'top left' }}>
-        <div class="flower-chat-header" style={{ height: '50px' }} />
-        <div ref={setBoundary} class="flower-chat-transcript" style={{ position: 'absolute', top: '50px', bottom: `${dockHeight()}px`, left: '0', right: '0' }} />
+      <div ref={setBoundary} class="flower-surface" data-floe-dialog-surface-host={projected ? 'true' : undefined}
+        style={{ position: 'relative', width: '900px', 'max-width': '100%', height: '650px', transform: projected ? 'scale(0.7)' : undefined, 'transform-origin': 'top left' }}>
+        <aside class="flower-component-thread-rail" style={{ width: '200px', height: '100%' }} />
+        <div class="flower-chat-header" style={{ position: 'absolute', left: '200px', right: '0', top: '0', height: '50px' }} />
+        <div ref={setLauncherBoundary} class="flower-chat-transcript" style={{ position: 'absolute', top: '50px', bottom: `${dockHeight()}px`, left: '200px', right: '0' }} />
         <div class="flower-chat-bottom-dock" style={{ position: 'absolute', bottom: '0', width: '100%', height: `${dockHeight()}px` }} />
-        <FlowerComputerStage threadID={owner()} boundary={boundary()} open={open()} sessionState={state()}
+        <FlowerComputerStage threadID={owner()} boundary={boundary()} launcherBoundary={launcherBoundary()} open={open()} sessionState={state()}
           snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'running', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'running', targetID: 'browser-main', target: 'Browser', action: 'Browse' }}
           frame={{ thread_id: "fixture", target_id: "browser-main", resource_ref: `computer://browser-main/${"a".repeat(64)}`, sha256: "a".repeat(64) }} loadFrame={async () => blob} onInput={input} onClose={() => setOpen(false)} onRestore={() => setOpen(true)}
           copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer (arrow keys)', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
@@ -69,12 +71,12 @@ for (const projected of [false, true]) {
         expect(getComputedStyle(launcher).boxShadow).not.toBe('none');
       }
       setDockHeight(240);
-      await waitFor(() => launcher.getBoundingClientRect().bottom <= boundary()!.getBoundingClientRect().bottom - 10);
+      await waitFor(() => launcher.getBoundingClientRect().bottom <= launcherBoundary()!.getBoundingClientRect().bottom - 10);
       setOwner('next-window-thread');
       await waitFor(() => document.querySelector('.flower-computer-stage-ball') !== launcher);
       await waitFor(() => {
         const next = document.querySelector('.flower-computer-stage-ball')!.getBoundingClientRect();
-        const bounds = boundary()!.getBoundingClientRect();
+        const bounds = launcherBoundary()!.getBoundingClientRect();
         return Math.abs(next.right - bounds.right + 12) < 2 && Math.abs(next.bottom - bounds.bottom + 12) < 2;
       });
       expect(document.querySelector('.flower-computer-stage')).toBeNull();
@@ -101,7 +103,7 @@ it('returns focus to each restore entry and offers actual-size viewing without c
     <button type="button" data-testid="header-entry" onClick={event => restore(event.currentTarget)}>Computer</button>
     <button type="button" data-testid="activity-entry" onClick={event => restore(event.currentTarget)}>Activity</button>
     <div ref={setBoundary} style={{ width: '800px', height: '600px' }} />
-    <FlowerComputerStage threadID="focus-thread" boundary={boundary()} open={open()} sessionState="failed"
+    <FlowerComputerStage threadID="focus-thread" boundary={boundary()} launcherBoundary={boundary()} open={open()} sessionState="failed"
       restoreFocus={source()} onRestore={restore} onClose={() => setOpen(false)} frame={{ thread_id: "fixture", target_id: "browser-main", resource_ref: `computer://browser-main/${"a".repeat(64)}`, sha256: "a".repeat(64) }} loadFrame={async () => blob} onInput={takeover() ? input : undefined}
       snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'success', targetID: 'browser-main', target: 'Browser', action: 'Browse' }}
       copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close viewer', maximize: 'Maximize viewer', restoreSize: 'Restore viewer size', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: states }} />

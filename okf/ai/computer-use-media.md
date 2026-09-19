@@ -3,7 +3,7 @@ type: Media Contract
 title: Computer use media and visual requests
 description: Resolve authenticated keyframes and bounded live samples into decoded Flower pixels without persisting image bytes in model history.
 tags: [ai, computer-use, media, attachments]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-09-19T00:00:00Z
 ---
 # Summary
 
@@ -25,7 +25,13 @@ descriptors and hashes, never base64. Resolution failure, changed bytes and
 unsupported model image capabilities fail explicitly.
 
 The Stage uses the published Floe `FloatingWindow` for its title bar, drag,
-resize, maximize, and close controls. Its body contains decoded pixels only.
+resize, maximize, and close controls. Flower supplies its entire surface as the
+window boundary, including the conversation rail, header and composer. Live and
+historical viewers can move across that surface; maximization fills it with a
+12px inset. Floe owns clamping and projected Workbench coordinates. The header
+uses `Link` for browser and desktop connection management and `MonitorPointer`
+for viewing, with distinct localized accessible labels. The Stage body contains
+decoded pixels only.
 Closing a live viewer switches to a neutral 40px launcher with the published 20px
 `MonitorPointer` icon, an opaque theme surface, thin border, and a restrained
 black shadow. It has no glow, status ring or internal dot. Coarse pointers gain
@@ -61,9 +67,10 @@ Activity identify the actual browser; previews do not require extra model screen
 
 Both components remain mounted across visibility changes, preserving the
 window's position, size, and maximization and the launcher's relative placement.
-Floe keeps preferred geometry separate from viewport constraints, so composer
-growth and narrowing do not permanently reduce the saved window size. Below a
-560px content boundary the viewer fills the safe region and hides desktop drag,
+Floe keeps preferred geometry separate from viewport constraints, so narrowing
+does not permanently reduce the saved window size. Composer growth adjusts only
+the launcher's safe boundary. Below a 560px Flower surface boundary the viewer
+fills the safe region and hides desktop drag,
 resize and maximize controls. Narrow transcripts reserve a launcher gutter.
 Thread selection resets presentation and clears old pixels. The viewer starts
 closed; a frame or semantic target Activity enables its entry. Activity, the header Computer entry,
@@ -165,6 +172,6 @@ its existing authenticated transport and byte validation.
 - `redeven:internal/flower_ui/src/FlowerComputerStage.tsx` - decoded Blob URL viewing.
 - `redeven:internal/flower_ui/host/computerFramePath.ts` - host-owned media route encoding without transport or authorization.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerLifecycle.browser.test.tsx` - history, canonical result identity and interrupted recovery.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerStage.browser.test.tsx` - live-to-durable transition and reopening.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerStage.browser.test.tsx` - distinct header actions, full-surface window movement, live-to-durable transition and reopening.
 - `redeven:scripts/check_computer_use_webtop.sh` - container-only real Linux Flower qualification and cleanup.
 - `redeven:internal/ai/floret_provider_prepared_test.go` - visual budgeting and prepared request identity.

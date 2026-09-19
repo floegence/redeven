@@ -60,6 +60,7 @@ export type FlowerComputerStageProps = Readonly<{
   threadID?: string;
   loadFrame?: FlowerSurfaceAdapter['loadComputerFrame'];
   boundary?: HTMLElement;
+  launcherBoundary?: HTMLElement;
   copy: FlowerComputerStageCopy;
   open: boolean;
   sessionState: FlowerComputerStageSessionState;
@@ -279,7 +280,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
     <Show when={resolvedURL() && props.staleLabel}><p class="px-3 py-1 text-xs text-muted-foreground" role="status">{props.staleLabel}</p></Show>
     </FloatingWindow>
       <Show when={!props.historical}><SurfaceFloatingPanel
-        boundary={props.boundary}
+        boundary={props.launcherBoundary}
         class={`flower-computer-viewer-minimized${props.open ? ' flower-computer-viewer-minimized-hidden' : ''}`}
         aria-hidden={props.open ? 'true' : undefined}
         snapToEdge
