@@ -137,9 +137,9 @@ describe('Git inline diff browsing', () => {
     const detail = host.querySelector<HTMLElement>('.git-diff-split__detail')!;
     expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth);
     expect(getComputedStyle(viewport).overflowX).toBe('auto');
-    await expect.poll(() => host.querySelector('[data-git-horizontal-scrollbar]')).not.toBeNull();
-    const scrollbar = host.querySelector<HTMLElement>('[data-git-horizontal-scrollbar]')!;
-    const thumb = scrollbar.querySelector<HTMLElement>('[data-git-horizontal-scrollbar-thumb]')!;
+    await expect.poll(() => host.querySelector('[data-floe-horizontal-scrollbar]')).not.toBeNull();
+    const scrollbar = host.querySelector<HTMLElement>('[data-floe-horizontal-scrollbar]')!;
+    const thumb = scrollbar.querySelector<HTMLElement>('[data-floe-horizontal-scrollbar-thumb]')!;
     expect(scrollbar.getAttribute('role')).toBe('scrollbar');
     expect(scrollbar.getAttribute('aria-controls')).toBe(viewport.id);
     expect(getComputedStyle(thumb).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
@@ -165,15 +165,15 @@ describe('Git inline diff browsing', () => {
     await page.viewport(1280, 800);
     const { host, setItems } = mount(1100, [files[0]]);
     await expect.poll(() => host.querySelector('.git-patch-viewer__viewport')).not.toBeNull();
-    expect(host.querySelector('[data-git-horizontal-scrollbar]')).toBeNull();
+    expect(host.querySelector('[data-floe-horizontal-scrollbar]')).toBeNull();
     setItems([{ ...files[0], patchText: `@@ -1 +1 @@\n+${'wide'.repeat(200)}` }]);
-    await expect.poll(() => host.querySelector('[data-git-horizontal-scrollbar]')).not.toBeNull();
-    const scrollbar = host.querySelector<HTMLElement>('[data-git-horizontal-scrollbar]')!;
+    await expect.poll(() => host.querySelector('[data-floe-horizontal-scrollbar]')).not.toBeNull();
+    const scrollbar = host.querySelector<HTMLElement>('[data-floe-horizontal-scrollbar]')!;
     const maximum = Number(scrollbar.getAttribute('aria-valuemax'));
     host.style.width = '800px';
     await expect.poll(() => Number(scrollbar.getAttribute('aria-valuemax'))).toBeGreaterThan(maximum);
     setItems([files[1]]);
-    await expect.poll(() => host.querySelector('[data-git-horizontal-scrollbar]')).toBeNull();
+    await expect.poll(() => host.querySelector('[data-floe-horizontal-scrollbar]')).toBeNull();
   });
 
   it('drags the thumb precisely under Workbench scaling and seeks on track clicks', async () => {
@@ -181,7 +181,7 @@ describe('Git inline diff browsing', () => {
     const { host } = mount(1100, [{ ...files[0], patchText: `@@ -1 +1 @@\n+${'wide'.repeat(400)}` }]);
     host.style.transform = 'scale(0.6)';
     host.style.transformOrigin = 'top left';
-    await expect.poll(() => host.querySelector('[data-git-horizontal-scrollbar]')).not.toBeNull();
+    await expect.poll(() => host.querySelector('[data-floe-horizontal-scrollbar]')).not.toBeNull();
     const interaction = commands as unknown as { exerciseGitScrollbar: () => Promise<{ fraction: number; afterTrackClick: number }> };
     const result = await interaction.exerciseGitScrollbar();
     expect(result.fraction).toBeCloseTo(0.5, 1);
