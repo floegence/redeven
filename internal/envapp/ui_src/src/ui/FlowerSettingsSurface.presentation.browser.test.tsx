@@ -61,14 +61,16 @@ async function mount(locale: RedevenLocale = 'en-US', width = 1000) {
 }
 
 for (const [locale, dark, width] of [
-  ['en-US', false, 1000], ['zh-CN', false, 1000], ['de-DE', true, 390], ['zh-TW', true, 544],
+  ['en-US', false, 1000], ['zh-CN', false, 1000], ['zh-CN', true, 1200],
+  ['en-US', false, 320], ['de-DE', true, 390], ['zh-TW', true, 544],
 ] as const) {
   it(`keeps ${locale} settings readable in a ${width}px ${dark ? 'dark' : 'light'} container`, async () => {
     const { copy } = await mount(locale, width);
     document.documentElement.classList.toggle('dark', dark);
     const frame = host.querySelector<HTMLElement>('.flower-settings-frame')!;
     expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth);
-    const sections = [...frame.querySelectorAll<HTMLElement>('.flower-settings-models, .flower-settings-policy-section, .flower-settings-computer-use-section')];
+    const sections = [...frame.querySelectorAll<HTMLElement>(':scope > section')];
+    expect(sections).toHaveLength(4);
     for (let index = 0; index < sections.length; index++) {
       expect(sections[index].scrollWidth).toBeLessThanOrEqual(sections[index].clientWidth);
       expect(getComputedStyle(sections[index]).borderRadius).toBe('0px');
@@ -78,15 +80,22 @@ for (const [locale, dark, width] of [
       expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth);
     }
     const currentModel = frame.querySelector<HTMLElement>('.flower-settings-current-model')!;
+    const modelField = currentModel.querySelector<HTMLElement>('.flower-settings-model-field')!;
+    expect(modelField.scrollWidth).toBeLessThanOrEqual(modelField.clientWidth);
     expect(currentModel.textContent).toContain(copy.settings.dialog.contextWindow);
     expect(currentModel.textContent).toContain(copy.settings.dialog.maxOutput);
     const permission = frame.querySelector<HTMLElement>('[role="radiogroup"]')!;
     const columns = getComputedStyle(permission).gridTemplateColumns.split(' ');
-    expect(columns.length).toBe(width > 640 ? 3 : 1);
+    expect(columns.length).toBe(1);
     const thumb = frame.querySelector<HTMLElement>('.flower-settings-toggle-thumb')!;
     expect(getComputedStyle(thumb).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
     expect(getComputedStyle(thumb).backgroundColor).not.toBe(getComputedStyle(thumb.parentElement!).backgroundColor);
-    const advanced = frame.querySelector<HTMLDetailsElement>('details')!;
+    const providerDetails = frame.querySelector<HTMLDetailsElement>('.flower-settings-provider-details')!;
+    providerDetails.querySelector('summary')!.click();
+    expect(providerDetails.open).toBe(true);
+    expect(providerDetails.scrollWidth).toBeLessThanOrEqual(providerDetails.clientWidth);
+    providerDetails.querySelector('summary')!.click();
+    const advanced = frame.querySelector<HTMLDetailsElement>('.flower-settings-computer-connect-section')!;
     expect(advanced.open).toBe(false);
     advanced.querySelector('summary')!.click();
     expect(advanced.open).toBe(true);
@@ -100,6 +109,33 @@ for (const [locale, dark, width] of [
     }
   });
 }
+
+it('aligns section headings separately from controls and discloses provider detail on demand', async () => {
+  const { copy } = await mount();
+  const sections = [...host.querySelectorAll<HTMLElement>('.flower-settings-frame > section')];
+  expect(sections.map(section => section.getAttribute('aria-label'))).toEqual([
+    copy.settings.currentModel, copy.settings.providersTitle, copy.settings.defaultPermissionTitle, copy.settings.computerUseTitle,
+  ]);
+  const contentEdges = sections.map(section => {
+    const heading = section.querySelector<HTMLElement>('.flower-settings-subsection-header')!;
+    const content = section.querySelector<HTMLElement>('.flower-settings-section-content')!;
+    expect(content.getBoundingClientRect().left - heading.getBoundingClientRect().right).toBeGreaterThanOrEqual(32);
+    expect(parseFloat(getComputedStyle(section).paddingTop)).toBeGreaterThanOrEqual(32);
+    return content.getBoundingClientRect().left;
+  });
+  expect(new Set(contentEdges).size).toBe(1);
+  const details = host.querySelector<HTMLDetailsElement>('.flower-settings-provider-details')!;
+  expect(details.open).toBe(false);
+  expect(details.querySelector('summary')?.textContent).toContain('3');
+  const summary = details.querySelector('summary')!;
+  summary.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(details.open).toBe(true);
+  expect(details.textContent).toContain('deepseek-v4-flash-vision-exp');
+  expect(details.textContent).toContain(copy.settings.web);
+  await userEvent.keyboard('{Enter}');
+  expect(details.open).toBe(false);
+});
 
 it('saves permission by keyboard and restores the computer switch after a failed save', async () => {
   const { savePermission, saveComputer } = await mount();

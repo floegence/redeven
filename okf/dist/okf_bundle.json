@@ -17380,7 +17380,7 @@
         "title": "Flower setup and settings",
         "type": "UI Contract"
       },
-      "body_length": 4734,
+      "body_length": 5430,
       "summary": "The shared Flower surface owns first-time configuration and settings presentation\nfor Desktop and Env App. An empty provider profile with no usable model and no\nselected conversation presents a neutral welcome with explicit setup actions.\nSettings use flat sections, typography, spacing, and separators instead of nested\nrounded panels. Presentation must preserve drafts, model-source identity, and\npermission ownership. Connection failures and configured profiles needing repair\nretain their existing recovery controls instead of being described as first setup.",
       "sections": [
         {
@@ -17394,8 +17394,8 @@
           "id": "settings-composition",
           "title": "Settings composition",
           "level": 1,
-          "body": "The settings surface edits the environment profile even when a Desktop model\nsource is available. The current model and provider list come first, followed by\ndefault permission and computer/browser controls. Model limits use localized\nlabels. Provider rows avoid repeating the provider type when it already matches\nthe display name, and truncated model identifiers retain their full title.\n\nSections share one page background and use thin separators and consistent\nspacing. Provider entries remain flat rows. Permission options use radio\nsemantics, a check indicator, and a restrained selected fill and underline.\nTheir layout responds to the settings container, including embedded Workbench\nand companion widths; long translations must wrap without covering adjacent\nvalues. Buttons, switches, and disclosure summaries retain keyboard focus and\npointer affordances. Input boundaries use the published Floe focus contract.\n\nComputer use remains a separately saved switch with a visible thumb in both\nthemes. The self-managed Chromium connection form is an expandable advanced\nsection; collapsing it does not destroy its address or connection result.\nDiscovery, profile/tab selection, and explicit connection retain their existing\nruntime operations. The shared settings panel stays mounted when returning to chat.",
-          "char_count": 1313
+          "body": "The settings surface edits the environment profile even when a Desktop model\nsource is available. The current model and provider list come first, followed by\ndefault permission and computer/browser controls. Model limits use localized\nlabels. Provider rows avoid repeating the provider type when it already matches\nthe display name, and model identifiers remain fully readable when expanded.\n\nFour peer sections share one page background: current model, providers, default\npermission, and computer/browser use. Each has a localized accessible name and a\nfull-width separator with generous vertical spacing. Wide containers align section\ntitles and descriptions in a dedicated left column with controls in a shared right\ncolumn. At 760 CSS pixels or below they stack, preserving the reading order.\n\nCurrent-model capabilities, capacity figures, and reasoning preferences have\nseparate visual groups. Provider rows always expose identity, credential readiness,\nand edit/remove actions. A keyboard-operable model disclosure shows the configured\ncount and expands to every model identifier plus web/image capability details;\nidentifiers wrap rather than hiding the rest of the inventory behind a count.\nAdding a provider remains directly available without expanding details.\n\nPermission choices remain visible as a vertical radio group, with a check indicator,\nrestrained selected fill, and a left selection rule. Long translations must wrap\nwithout covering adjacent values. Buttons, switches, and disclosure summaries\nretain keyboard focus and pointer affordances. Input boundaries use the published\nFloe focus contract.\n\nComputer use remains a separately saved switch with a visible thumb in both\nthemes. The self-managed Chromium connection form is an expandable advanced\nsection; collapsing it does not destroy its address or connection result.\nDiscovery, profile/tab selection, and explicit connection retain their existing\nruntime operations. The shared settings panel stays mounted when returning to chat.",
+          "char_count": 2009
         },
         {
           "id": "saving-and-ownership",
@@ -20518,5 +20518,5 @@
       ]
     }
   ],
-  "source_sha256": "8ecf110c91e8a4d29d6d5e468ddc6b7c0503e0da3a5ec0c872b4e9e1bacedf21"
+  "source_sha256": "aaa2156a5843231be7bd4ec2decf46316a2845ca7bcbe6e0a83ff093e79bf912"
 }
