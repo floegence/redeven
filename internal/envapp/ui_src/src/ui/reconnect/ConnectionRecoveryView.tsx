@@ -1,6 +1,6 @@
 import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { Check, Copy, Loader2, Refresh, WifiOffIcon } from '@floegence/floe-webapp-core/icons';
+import { Copy, Refresh } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
@@ -8,7 +8,7 @@ import { Tooltip } from '../primitives/Tooltip';
 import { openConnectionCenter } from '../services/desktopShellBridge';
 import { reopenEnvironmentPage } from '../utils/windowNavigation';
 import { createConnectionRecoveryPresentation, type ConnectionRecoveryStepID } from './createConnectionRecoveryPresentation';
-import { ConnectionPausedIllustration } from './ConnectionPausedIllustration';
+import { ConnectionRecoveryIllustration, type ConnectionIllustrationState } from './ConnectionRecoveryIllustration';
 import type { ConnectionRecoverySnapshot } from './createRuntimeReconnectController';
 
 export type ConnectionRecoveryViewProps = Readonly<{
@@ -105,6 +105,13 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
     return props.snapshot.next_retry_at_unix_ms !== undefined;
   });
   const serverWait = () => (props.snapshot.retry_not_before_unix_ms ?? 0) > nowMs();
+  const illustrationState = createMemo<ConnectionIllustrationState>(() => {
+    if (props.snapshot.state === 'succeeded') return 'succeeded';
+    if (props.snapshot.state === 'failed') return 'failed';
+    if (props.snapshot.state === 'paused') return 'paused';
+    if (offline()) return 'offline';
+    return props.snapshot.next_retry_at_unix_ms ? 'waiting' : 'connecting';
+  });
   const canOpenConnectionCenter = () => props.snapshot.state === 'failed'
     && props.snapshot.desktop_transport?.actions.includes('open_connection_center');
   const retry = async () => {
@@ -125,18 +132,10 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
       data-testid="connection-recovery-view"
       data-recovery-state={props.snapshot.state}
     >
-      <div class="m-auto w-full max-w-[460px] rounded-3xl border border-border/60 bg-card/80 px-6 py-8 text-center shadow-sm sm:px-9 sm:py-10" data-recovery-content>
+      <div class="m-auto w-full max-w-[560px] px-3 py-8 text-center sm:px-8 sm:py-10" data-recovery-content>
         <div>
-          <Show when={props.snapshot.state === 'failed' || props.snapshot.state === 'paused'} fallback={(
-            <div class="mx-auto mb-7 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/10 bg-primary/5" aria-hidden="true">
-              {props.snapshot.state === 'succeeded' ? <Check class="h-6 w-6 text-success" />
-                : offline() ? <WifiOffIcon class="h-6 w-6 text-muted-foreground" />
-                  : <Refresh class="h-6 w-6 text-primary motion-safe:animate-[spin_3s_linear_infinite]" />}
-            </div>
-          )}>
-            <div class="mb-4"><ConnectionPausedIllustration /></div>
-          </Show>
-          <p class="mx-auto mb-3 w-fit max-w-full break-words rounded-full border border-border/50 bg-muted/30 px-3 py-1 text-[11px] font-medium leading-5 text-muted-foreground">{props.environmentName}</p>
+          <ConnectionRecoveryIllustration state={illustrationState()} />
+          <p class="mx-auto mb-3 max-w-full break-words text-xs font-medium tracking-wide text-muted-foreground">{props.environmentName}</p>
           <div role={props.snapshot.state === 'failed' ? undefined : 'status'} aria-live="polite" aria-atomic="true">
             {/* This heading receives announcement focus; keyboard indicators remain on the actions. */}
             <h1 ref={failedHeading} class="text-2xl font-semibold leading-8 tracking-tight text-foreground outline-none" style={{ 'box-shadow': 'none' }}
@@ -146,12 +145,9 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
             <p class="mx-auto mt-3 max-w-[340px] text-[13px] leading-6 text-muted-foreground">{summary()}</p>
           </div>
           <Show when={props.snapshot.state === 'recovering'}>
-            <div class="mt-6 rounded-2xl border border-border/50 bg-muted/25 px-4 py-4" data-recovery-activity>
-              <p class="mb-2 text-[11px] font-medium text-muted-foreground">{i18n.t('connectionRecovery.automaticRetry')}</p>
+            <div class="mx-auto mt-7 max-w-[360px] border-y border-border/60 py-4" data-recovery-activity>
+              <p class="mb-2 text-[10px] font-semibold uppercase tracking-[.16em] text-muted-foreground">{i18n.t('connectionRecovery.automaticRetry')}</p>
               <div class="flex items-center justify-center gap-2.5 text-sm font-medium text-foreground" role="timer" aria-live="off">
-                <Show when={!props.snapshot.next_retry_at_unix_ms} fallback={<span class="h-2 w-2 shrink-0 rounded-full bg-primary/65" aria-hidden="true" />}>
-                  <Loader2 class="h-4 w-4 shrink-0 text-primary motion-safe:animate-spin" aria-hidden="true" />
-                </Show>
                 <span class="tabular-nums">{retryRemainingSeconds() > 0
                   ? i18n.t('connectionRecovery.retryIn', { seconds: retryRemainingSeconds() })
                   : props.snapshot.phase === 'secure_session'
@@ -164,34 +160,34 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
           <Show when={props.snapshot.state !== 'succeeded'}>
             <div class="mt-6 flex flex-wrap items-center justify-center gap-2" data-recovery-actions>
               <Show when={canRetry()}>
-                <Button class="min-h-10 cursor-pointer rounded-full px-5" size="sm" icon={Refresh} disabled={retrying() || serverWait()} onClick={() => void retry()}>
+                <Button class="min-h-10 cursor-pointer px-4" size="sm" icon={Refresh} disabled={retrying() || serverWait()} onClick={() => void retry()}>
                   {i18n.t('connectionRecovery.retryNow')}
                 </Button>
               </Show>
               <Show when={props.snapshot.state === 'recovering'}>
-                <Button ref={stopButton} class="min-h-10 cursor-pointer rounded-full px-5" size="sm" variant="ghost" disabled={stopping()} onClick={() => void stop()}>
+                <Button ref={stopButton} class="min-h-10 cursor-pointer px-4" size="sm" variant="ghost" disabled={stopping()} onClick={() => void stop()}>
                   {i18n.t('connectionRecovery.stopRetry')}
                 </Button>
               </Show>
               <Show when={props.snapshot.state === 'paused'}>
-                <Button ref={resumeButton} class="min-h-10 cursor-pointer rounded-full px-5" size="sm" icon={Refresh} disabled={stopping() || !online()} onClick={() => void retry()}>
+                <Button ref={resumeButton} class="min-h-10 cursor-pointer px-4" size="sm" icon={Refresh} disabled={stopping() || !online()} onClick={() => void retry()}>
                   {i18n.t('connectionRecovery.resumeRetry')}
                 </Button>
               </Show>
               <Show when={canOpenConnectionCenter()}>
-                <Button class="min-h-10 cursor-pointer rounded-full px-5" size="sm" onClick={() => void openConnectionCenter()}>{i18n.t('connectionRecovery.openConnectionCenter')}</Button>
+                <Button class="min-h-10 cursor-pointer px-4" size="sm" onClick={() => void openConnectionCenter()}>{i18n.t('connectionRecovery.openConnectionCenter')}</Button>
               </Show>
               <Show when={props.snapshot.state === 'failed' && !canOpenConnectionCenter()}>
-                <Button class="min-h-10 cursor-pointer rounded-full px-5" size="sm" icon={Refresh} onClick={() => reopenEnvironmentPage(window)}>{i18n.t('connectionRecovery.reopenEnvironment')}</Button>
+                <Button class="min-h-10 cursor-pointer px-4" size="sm" icon={Refresh} onClick={() => reopenEnvironmentPage(window)}>{i18n.t('connectionRecovery.reopenEnvironment')}</Button>
               </Show>
             </div>
           </Show>
         </div>
-        <details class="mx-auto mt-6 text-xs text-muted-foreground">
-          <summary class="mx-auto w-fit cursor-pointer select-none rounded px-1 py-1.5 text-[11px] transition-colors hover:text-foreground">
+        <details class="mx-auto mt-8 text-xs text-muted-foreground">
+          <summary class="mx-auto w-fit cursor-pointer select-none px-1 py-1.5 text-[11px] transition-colors hover:text-foreground">
             {i18n.t('connectionRecovery.technicalDetails')}
           </summary>
-          <div class="mt-4 rounded-xl border border-border/60 bg-muted/20 p-4 text-left">
+          <div class="mt-4 border-t border-border/60 pt-4 text-left">
             <Show when={props.snapshot.state === 'failed'}><p class="mb-4 text-xs leading-5 text-foreground">{failureReason()}</p></Show>
             <ol class="space-y-3" aria-label={i18n.t('connectionRecovery.timelineLabel')}>
               <For each={presentation().steps}>{(step) => (

@@ -13,12 +13,19 @@ Each Desktop placement bridge owns one HTTP/2 session, an immutable-generation r
 
 ## Recovery presentation
 
-Terminal failure uses one opaque recovery surface with generous whitespace,
-a disconnected companion drawn from the Redeven mark, the environment identity,
-a clear next action, and collapsed diagnostics. The illustration is bundled
-inline so a failed connection cannot prevent it from rendering. It does not show a
-completion percentage or imply that automatic recovery is still running.
-Recoverable interruptions use a compact, calm card with the environment identity, an authoritative countdown or active phase, Retry now, and Stop retrying. User-stopped recovery offers Resume connection; it is distinct from terminal failure. Desktop identity failures retain the existing Connection Center action.
+Recovery uses an unboxed layout within the existing shell, with generous
+whitespace, semantic theme colors, standard buttons, and fine separators around
+the authoritative countdown or active phase. The environment identity, next
+action, and collapsed diagnostics remain visible without nested cards.
+An inline SVG connects a workspace terminal to a Runtime cube: a gently pulsing
+clock denotes a scheduled wait, and opposing signals denote active connection
+work. Stopped, offline, and terminal states remain still; success shows a check.
+Reduced-motion preferences disable all illustration animation. The artwork
+needs no asset request and never implies percentage completion.
+Terminal failure uses an opaque surface and cannot imply that recovery is still
+running. Recoverable interruptions offer Retry now and Stop retrying;
+user-stopped recovery offers Resume connection. Desktop identity failures retain
+the existing Connection Center action.
 For Cloud windows, Reopen environment reloads the same-origin parent bootstrap
 that owns the connection, rather than only reloading its iframe through an
 expired proxy. Unrelated or cross-origin parents are never navigated.
