@@ -27,7 +27,10 @@ Downloads and verifies the released ReDevPlugin platform manifest, builds the
 runtime from the exact published Rust source crate with Rust 1.88.0, and emits
 Redeven-owned SBOM, provenance, notices, signature, and verification evidence.
 The closed runtime target set is linux/amd64, linux/arm64, darwin/amd64, and
-darwin/arm64.
+darwin/arm64. Rustup reuses installed components and recovers transient network
+failures with bounded retries. Set REDEVEN_RUSTUP_OFFLINE=1 for explicit
+Rustup cache-only preparation; set REDEVEN_RUSTUP_MAX_ATTEMPTS or
+REDEVEN_RUSTUP_RETRY_DELAY_SECONDS to tune the bounded retry policy.
 USAGE
 }
 
@@ -64,7 +67,9 @@ require_command() {
 if [[ "$self_test" -eq 1 ]]; then
   [[ -z "$dest_dir$goos$goarch$runtime_out$manifest_file" && "$profile" == "development" ]] ||
     die "--self-test cannot be combined with staging arguments"
-  exec node --test "$SCRIPT_DIR/redevplugin_release_contract.test.mjs"
+  exec node --test \
+    "$SCRIPT_DIR/redevplugin_release_contract.test.mjs" \
+    "$SCRIPT_DIR/redevplugin_rust_toolchain.test.mjs"
 fi
 
 [[ -n "$dest_dir" && -n "$runtime_out" && -n "$goos" && -n "$goarch" ]] || { usage >&2; exit 2; }
@@ -100,17 +105,6 @@ if [[ -z "$manifest_file" || "$profile" == "release" ]]; then
   require_command curl
   require_command jq
 fi
-
-# The Desktop development launcher may provide an isolated HOME while Rustup
-# itself is installed in the user's normal Cargo home. Keep Rustup pointed at
-# the installation that supplied the executable; use a separate Cargo home
-# only for the build cache below.
-rustup_bin=$(command -v rustup)
-rustup_cargo_home=$(cd -- "$(dirname -- "$rustup_bin")/.." >/dev/null 2>&1 && pwd -P)
-rustup_home="${RUSTUP_HOME:-${HOME:?HOME is required}/.rustup}"
-rustup_exec() {
-  CARGO_HOME="$rustup_cargo_home" RUSTUP_HOME="$rustup_home" rustup "$@"
-}
 
 if [[ "$profile" == "release" ]]; then
   require_command cosign
@@ -185,9 +179,10 @@ process.stdout.write(artifact.sha256);
 NODE
 )
 
-rustup_exec toolchain install "$RUST_TOOLCHAIN" --profile minimal
-rustup_exec target add --toolchain "$RUST_TOOLCHAIN" "$rust_target"
-toolchain_cargo=$(rustup_exec which --toolchain "$RUST_TOOLCHAIN" cargo)
+# Keep Rustup preparation in one owner, before the isolated Cargo build cache.
+toolchain_cargo=$("$SCRIPT_DIR/prepare_redevplugin_rust_toolchain.sh" \
+  --toolchain "$RUST_TOOLCHAIN" \
+  --target "$rust_target")
 toolchain_root=$(cd -- "$(dirname -- "$toolchain_cargo")/.." >/dev/null 2>&1 && pwd -P)
 toolchain_rustc="$toolchain_root/bin/rustc"
 [[ -x "$toolchain_cargo" && -x "$toolchain_rustc" ]] || die "Rust toolchain $RUST_TOOLCHAIN is not installed"

@@ -1,5 +1,16 @@
 # Redeven OKF Update Log
 
+## 2026-09-19 — ReDevPlugin Rust toolchain staging recovery
+
+- Reuse the exact installed Rust 1.88.0 toolchain and target before any
+  distribution-server request, preventing warm-cache builds from failing on a
+  transient TLS handshake.
+- Retry only classified temporary network failures with bounded exponential
+  backoff; checksum, manifest, and other deterministic errors fail closed.
+- Add explicit cache-only mode and fake-Rustup acceptance coverage. TLS
+  verification, published source selection, and release evidence remain
+  unchanged.
+
 ## 2026-09-19 — Permission changes during Flower work
 
 - Keep the permission selector available during work, with pending protection,
@@ -11,6 +22,7 @@
   remove dispatch-time permission reconstruction and the permission busy guard.
 - Use published Floret v7.16.2 contracts without an upstream API change. Keep
   full-access fill, text, and keyboard focus while removing its warning border.
+
 
 ## 2026-09-18 — Chrome connection recovery
 
