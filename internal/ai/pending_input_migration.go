@@ -113,6 +113,7 @@ func migratePendingInputGroup(ctx context.Context, runtime flruntime.ThreadServi
 			NamespacePublicID: meta.NamespacePublicID, ChannelID: meta.ChannelID,
 			UserPublicID: meta.UserPublicID, UserEmail: meta.UserEmail, CreatedAtUnixMs: record.CreatedAtUnixMs,
 		}
+		request.Options.PermissionType = settings.PermissionType
 		effects.put(identity.ThreadID(threadID), requestID, floretEffectRequest{meta: pendingInputEffectMeta(meta), req: request})
 
 		requestIDs = append(requestIDs, requestID)

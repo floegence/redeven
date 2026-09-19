@@ -87,8 +87,11 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	}
 	hostLabels := floretHostLabelsForRun(r)
 	surfaceConfig := r.buildRunToolSurfaceConfig(req.ModelCapability.SupportsAskUserQuestionBatches, sharedState, hostLabels)
-	r.effectPermissionSurfaceConfig = surfaceConfig
-	initialSurface, err := r.buildRunToolSurface(ctx, surfaceConfig)
+	permission, err := parsePermissionType(req.Options.PermissionType)
+	if err != nil {
+		return nil, err
+	}
+	initialSurface, err := r.buildRunToolSurface(surfaceConfig, permission)
 	if err != nil {
 		return nil, r.failRun("Failed to initialize run tool surface", err)
 	}

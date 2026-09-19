@@ -71,14 +71,14 @@ func TestRetryThreadContinuationBindsAuthorityToEveryRetryTurn(t *testing.T) {
 	store := newAuthorityContinuityStore(t)
 	if err := store.CreateThreadSettings(ctx, threadstore.ThreadSettings{
 		ThreadID: threadID, EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID,
-		ModelID: "openai/gpt-5-mini", PermissionType: permissionTypeString(FlowerPermissionApprovalRequired),
+		ModelID: "openai/gpt-5-mini", PermissionType: permissionTypeString(FlowerPermissionReadonly),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.PutExecutionAuthority(ctx, threadstore.ExecutionAuthority{
 		RequestKey: "source-request", ThreadID: threadID, TurnID: "turn-source",
 		EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID, ChannelID: meta.ChannelID,
-		UserPublicID: meta.UserPublicID, UserEmail: meta.UserEmail,
+		PermissionType: "approval_required", UserPublicID: meta.UserPublicID, UserEmail: meta.UserEmail,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestRetryThreadContinuationBindsAuthorityToEveryRetryTurn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if persisted == nil || persisted.TurnID != input.SourceTurnID.String() || persisted.UserPublicID != meta.UserPublicID {
+		if persisted == nil || persisted.TurnID != input.SourceTurnID.String() || persisted.UserPublicID != meta.UserPublicID || persisted.PermissionType != "approval_required" {
 			t.Fatalf("authority before retry=%#v, source_turn=%q", persisted, input.SourceTurnID)
 		}
 		turnID := retryTurns[retryCount]
@@ -129,7 +129,7 @@ func TestRetryThreadContinuationBindsAuthorityToEveryRetryTurn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if authority == nil || authority.UserPublicID != meta.UserPublicID || authority.EndpointID != meta.EndpointID {
+		if authority == nil || authority.UserPublicID != meta.UserPublicID || authority.EndpointID != meta.EndpointID || authority.PermissionType != "approval_required" {
 			t.Fatalf("retry %d turn authority=%#v", index+1, authority)
 		}
 	}

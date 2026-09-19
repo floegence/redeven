@@ -1202,13 +1202,6 @@ func (s *Service) SetThreadPermissionType(ctx context.Context, meta *session.Met
 		return err
 	}
 	defer unlockLifecycle()
-	preferenceBlocked, err := s.threadPreferenceChangeBlocked(ctx, threadID)
-	if err != nil {
-		return err
-	}
-	if preferenceBlocked {
-		return ErrThreadBusy
-	}
 	currentPermissionType, err := threadPermissionType(th)
 	if err != nil {
 		return err

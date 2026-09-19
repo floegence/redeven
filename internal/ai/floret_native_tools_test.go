@@ -73,7 +73,7 @@ func TestFloretNativeWebFetchPermissionResolvesForEveryProductMode(t *testing.T)
 	}
 }
 
-func TestFloretNativeWebFetchEffectPolicyFailsClosedAfterSurfaceTightening(t *testing.T) {
+func TestFloretNativeWebFetchEffectRejectsToolsOutsideAdmittedSurface(t *testing.T) {
 	t.Parallel()
 
 	def := floretNativeToolDefinitions()[0]
@@ -93,12 +93,8 @@ func TestFloretNativeWebFetchEffectPolicyFailsClosedAfterSurfaceTightening(t *te
 		buildPermissionSnapshot(FlowerPermissionFullAccess, nil, nil),
 		"endpoint", "thread", "run",
 	)
-	decision, err := floretEffectPolicyDecision(&run{}, tightened, webfetch.ToolName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decision != ApprovalDecisionDeny {
-		t.Fatalf("tightened decision=%q, want deny", decision)
+	if err := validateFloretEffectRequestAgainstSnapshot(req, tightened); err == nil {
+		t.Fatal("effect outside the admitted surface was accepted")
 	}
 }
 

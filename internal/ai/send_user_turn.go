@@ -189,6 +189,11 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		return finish(SendUserTurnResponse{}, err)
 	}
 	req.Model = modelID
+	permission, err := threadPermissionType(settings)
+	if err != nil {
+		return finish(SendUserTurnResponse{}, err)
+	}
+	req.Options.PermissionType = permissionTypeString(permission)
 	if err := s.requireDesktopModelSourceForSend(ctx, meta, req); err != nil {
 		return finish(SendUserTurnResponse{}, err)
 	}
@@ -245,7 +250,7 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		}
 		turnInput.Context = projection.Context
 	}
-	if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, ""); err != nil {
+	if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, "", req.Options.PermissionType); err != nil {
 		return finish(SendUserTurnResponse{}, err)
 	}
 	s.floretEffects.put(identity.ThreadID(req.ThreadID), executionKey, floretEffectRequest{meta: *meta, req: req, effect: effect})
@@ -258,8 +263,9 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		s.floretEffects.drop(identity.ThreadID(req.ThreadID), executionKey)
 		return finish(SendUserTurnResponse{}, err)
 	}
-	if result.TurnID != "" {
-		if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, result.TurnID.String()); err != nil {
+	_, queued := queuedInputFor(result, executionKey)
+	if result.TurnID != "" && !queued {
+		if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, result.TurnID.String(), req.Options.PermissionType); err != nil {
 			return finish(SendUserTurnResponse{}, err)
 		}
 	}
@@ -339,7 +345,7 @@ func (s *Service) floretTurnRuntimeContextForAdmission(ctx context.Context, meta
 	if settings == nil {
 		return flruntime.MessageContextItem{}, errors.New("thread not found")
 	}
-	permission, err := threadPermissionType(settings)
+	permission, err := parsePermissionType(req.Options.PermissionType)
 	if err != nil {
 		return flruntime.MessageContextItem{}, err
 	}
@@ -440,7 +446,14 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 		return SubmitRequestUserInputResponseResponse{}, ErrWaitingPromptChanged
 	}
 	if !inputInteraction.Resolved {
-		if err := s.persistExecutionAuthority(ctx, meta, threadID, "continue-input:"+interactionID, inputInteraction.TurnID.String()); err != nil {
+		authority, err := s.executionAuthorityForRequest(ctx, flruntime.AgentRequest{ThreadID: identity.ThreadID(threadID), TurnID: inputInteraction.TurnID})
+		if err != nil {
+			return SubmitRequestUserInputResponseResponse{}, err
+		}
+		if authority == nil {
+			return SubmitRequestUserInputResponseResponse{}, errors.New("input continuation execution authority is unavailable")
+		}
+		if err := s.persistExecutionAuthority(ctx, meta, threadID, "continue-input:"+interactionID, inputInteraction.TurnID.String(), authority.PermissionType); err != nil {
 			return SubmitRequestUserInputResponseResponse{}, err
 		}
 	}

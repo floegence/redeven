@@ -53,18 +53,33 @@ func (r *ComputerUseRuntime) authorizeComputerCall(ctx context.Context, call *Ta
 	store, ok := r.targetBindings().(interface {
 		GetThreadSettingsByCanonicalThreadID(context.Context, string) (*threadstore.ThreadSettings, error)
 		GetComputerAccess(context.Context, string) (ComputerAccess, error)
+		GetExecutionAuthorityByTurn(context.Context, string, string) (*threadstore.ExecutionAuthority, error)
 	})
 	if !ok {
 		return errors.New("computer access store is unavailable")
 	}
-	settings, err := store.GetThreadSettingsByCanonicalThreadID(ctx, call.ThreadID)
-	if err != nil {
-		return err
+	var permissionType string
+	if call.TurnID != "" {
+		authority, err := store.GetExecutionAuthorityByTurn(ctx, call.ThreadID, call.TurnID)
+		if err != nil {
+			return err
+		}
+		if authority == nil {
+			return errors.New("computer turn execution authority is unavailable")
+		}
+		permissionType = authority.PermissionType
+	} else {
+		// Thread-level user controls have no admitted turn.
+		settings, err := store.GetThreadSettingsByCanonicalThreadID(ctx, call.ThreadID)
+		if err != nil {
+			return err
+		}
+		if settings == nil {
+			return errors.New("computer thread settings are unavailable")
+		}
+		permissionType = settings.PermissionType
 	}
-	if settings == nil {
-		return errors.New("computer thread settings are unavailable")
-	}
-	permission, err := parsePermissionType(settings.PermissionType)
+	permission, err := parsePermissionType(permissionType)
 	if err != nil {
 		return err
 	}

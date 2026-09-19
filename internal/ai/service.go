@@ -1452,7 +1452,7 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 	if settings == nil {
 		return nil, errors.New("thread not found")
 	}
-	permission, err := threadPermissionType(settings)
+	permission, err := parsePermissionType(req.Options.PermissionType)
 	if err != nil {
 		return nil, err
 	}
@@ -1499,6 +1499,7 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 		TargetResolver:     targetResolver, InteractionSafetyGate: interactionSafetyGate,
 		PublishComputerFrame: func(frame FlowerComputerFrame) { _ = s.PublishFlowerComputerFrame(metaRef, frame) },
 	})
+	builder.setPermissionState(permission, PermissionSnapshot{})
 	builder.subagentRuntime = newServiceFloretSubagentRuntime(s, builder)
 	return &threadEffect{
 		req: req, threadModelID: strings.TrimSpace(settings.ModelID),

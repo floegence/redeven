@@ -1051,7 +1051,7 @@ Product handlers perform authorization and DTO mapping, then call typed `View`, 
 
 Flower uses one workspace live transport, a summary/detail-separated bounded thread cache, composer drafts, and a short-lived request-key outbox. Summary updates never mutate detail. Thread selection never owns execution or reconnects transport. Approval, waiting, loading, and commands never disable thread navigation.
 
-Each new Turn resolves the current persisted model, reasoning, System Prompt, and tool definitions. Ask User continuation, tool loops, retries, and restart recovery reuse Floret's durable surface for that Turn. Settings changes are idle-only and affect only a later Turn. Historical tool Activity comes from the canonical persisted presentation; a tool removed from the current version uses the neutral unknown-tool presentation and is never restored to the current registry.
+Each new Turn resolves the current persisted model, reasoning, System Prompt, and tool definitions. Ask User continuation, tool loops, retries, and restart recovery reuse Floret's durable surface for that Turn. Model and reasoning changes require an idle thread with no queued input or unresolved interaction. Permission changes remain available during work and affect only later admissions; active and queued turns retain the permission frozen in their execution authority. Historical tool Activity comes from the canonical persisted presentation; a tool removed from the current version uses the neutral unknown-tool presentation and is never restored to the current registry.
 
 Submitted references and ordinary runtime context belong to Floret's canonical
 model history. Admission maps references and `UserInput.Context` snapshots once;

@@ -40,6 +40,9 @@ func computerBindingFixture(t *testing.T) (*ComputerUseRuntime, *bindingTestExec
 		if err := store.AdoptCanonicalRootSettings(t.Context(), threadstore.ThreadSettings{ThreadID: id, EndpointID: "env", NamespacePublicID: "ns", ModelID: "deepseek/vision", PermissionType: "full_access", WorkingDir: t.TempDir()}); err != nil {
 			t.Fatal(err)
 		}
+		for _, turn := range []string{"turn", "canonical-turn-" + id} {
+			seedComputerTurnAuthority(t, store, id, turn, "full_access")
+		}
 	}
 
 	return runtime, executor, store, path
@@ -200,5 +203,14 @@ func TestComputerTargetForkStartsWithoutParentSelection(t *testing.T) {
 	}
 	if err := store.SetComputerTarget(t.Context(), fork.ThreadID, "desktop-main"); err == nil {
 		t.Fatal("binding recreated a deleted thread")
+	}
+}
+
+func seedComputerTurnAuthority(t *testing.T, store *threadstore.Store, threadID, turnID, permission string) {
+	t.Helper()
+	if err := store.PutExecutionAuthority(t.Context(), threadstore.ExecutionAuthority{
+		RequestKey: threadID + ":" + turnID, ThreadID: threadID, TurnID: turnID, EndpointID: "env", NamespacePublicID: "ns", UserPublicID: "user", PermissionType: permission,
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

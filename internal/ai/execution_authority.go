@@ -9,12 +9,12 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func executionAuthorityFromMeta(meta *session.Meta, threadID, requestKey, turnID string) (threadstore.ExecutionAuthority, error) {
+func executionAuthorityFromMeta(meta *session.Meta, threadID, requestKey, turnID, permissionType string) (threadstore.ExecutionAuthority, error) {
 	if meta == nil {
 		return threadstore.ExecutionAuthority{}, errors.New("missing execution authority metadata")
 	}
 	authority := threadstore.ExecutionAuthority{
-		RequestKey: requestKey, ThreadID: threadID, TurnID: turnID,
+		RequestKey: requestKey, ThreadID: threadID, TurnID: turnID, PermissionType: permissionType,
 		EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID,
 		ChannelID: meta.ChannelID, UserPublicID: meta.UserPublicID, UserEmail: meta.UserEmail,
 	}
@@ -24,8 +24,8 @@ func executionAuthorityFromMeta(meta *session.Meta, threadID, requestKey, turnID
 	return authority, nil
 }
 
-func (s *Service) persistExecutionAuthority(ctx context.Context, meta *session.Meta, threadID, requestKey, turnID string) error {
-	authority, err := executionAuthorityFromMeta(meta, threadID, requestKey, turnID)
+func (s *Service) persistExecutionAuthority(ctx context.Context, meta *session.Meta, threadID, requestKey, turnID, permissionType string) error {
+	authority, err := executionAuthorityFromMeta(meta, threadID, requestKey, turnID, permissionType)
 	if err != nil {
 		return err
 	}

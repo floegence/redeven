@@ -78,11 +78,16 @@ func TestComputerAccessMigrationFailurePreservesExactV8(t *testing.T) {
 	seedComputerMigrationThread(t, path)
 	spec := threadstoreSchemaSpec()
 	failure := errors.New("injected failure after computer grant migration")
-	spec.Migrations[len(spec.Migrations)-1].Apply = func(tx *sql.Tx) error {
-		if err := migrateThreadstoreV8ToV9(tx); err != nil {
-			return err
+	for index := range spec.Migrations {
+		if spec.Migrations[index].FromVersion != 8 {
+			continue
 		}
-		return failure
+		spec.Migrations[index].Apply = func(tx *sql.Tx) error {
+			if err := migrateThreadstoreV8ToV9(tx); err != nil {
+				return err
+			}
+			return failure
+		}
 	}
 	db, err := sqliteutil.Open(path, spec)
 	if db != nil {

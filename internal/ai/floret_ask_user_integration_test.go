@@ -50,6 +50,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 		}
 		switch mainCalls.Add(1) {
 		case 1:
+			assertPermissionProviderSurface(t, request, "approval_required")
 			initialProviderRequest <- request
 			args := `{"reason_code":"missing_external_input","required_from_user":["Choose a deployment target."],"evidence_refs":["message:latest"],"questions":[{"id":"target","header":"Target","question":"Which target should I deploy?","response_mode":"write","is_secret":false,"write_label":"Target","write_placeholder":"Type a target"}]}`
 			writeOpenAISSEJSON(w, flusher, map[string]any{
@@ -63,12 +64,14 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 			writeAskUserIntegrationCompletedResponse(w, flusher, "resp_waiting")
 			return
 		case 2:
+			assertPermissionProviderSurface(t, request, "approval_required")
 			if requestContainsPairedToolHistory(request, "ask_user") && !requestContainsLegacyInteractionText(request) {
 				sawStructuredContinuation.Store(true)
 			}
 			writeAskUserIntegrationTextResponse(w, flusher, "resp_resumed", "Deployment target accepted.")
 			return
 		case 3:
+			assertPermissionProviderSurface(t, request, "readonly")
 			pair := requestContainsPairedToolHistory(request, "ask_user")
 			sawHistoricalAskUserPair.Store(pair)
 			writeAskUserIntegrationTextResponse(w, flusher, "resp_history", "Historical interaction remains available.")
@@ -143,8 +146,8 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "openai/gpt-5-nano"); !errors.Is(err, ErrThreadBusy) {
 		t.Fatalf("SetThreadModel while waiting error=%v, want ErrThreadBusy", err)
 	}
-	if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionReadonly)); !errors.Is(err, ErrThreadBusy) {
-		t.Fatalf("SetThreadPermissionType while waiting error=%v, want ErrThreadBusy", err)
+	if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionReadonly)); err != nil {
+		t.Fatalf("SetThreadPermissionType while waiting: %v", err)
 	}
 	if _, err := svc.SubmitRequestUserInputResponse(context.Background(), meta, SubmitRequestUserInputResponseRequest{
 		ThreadID: thread.ThreadID, Model: "openai/gpt-5-nano",

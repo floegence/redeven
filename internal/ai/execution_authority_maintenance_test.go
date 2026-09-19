@@ -65,6 +65,7 @@ func TestExecutionAuthorityPruningUsesCanonicalThreadView(t *testing.T) {
 		{RequestKey: "request_deleted", ThreadID: "thread_deleted", CreatedAtUnixMs: cutoff + 1},
 	}
 	for index := range authorities {
+		authorities[index].PermissionType = "approval_required"
 		authorities[index].EndpointID = "endpoint"
 		authorities[index].UserPublicID = "user"
 		if err := store.PutExecutionAuthority(t.Context(), authorities[index]); err != nil {

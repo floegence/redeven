@@ -63,12 +63,15 @@ its independent bounded sampler; those samples never enter model history. See
 
 ## Task access
 
-The thread's existing permission mode is the authority for computer access.
+An admitted turn's frozen execution authority supplies its computer permission mode.
+Thread-level user controls without a turn use the saved thread default.
 `full_access` includes HTTP/HTTPS origins, applications and temporary foreground
 use on the selected target. Other modes continue to use saved resource grants.
-Runtime reads the current policy after acquiring the target gate for every
-operation, including script host calls and handback. Guest code cannot set this
-authorization. Changing modes does not create or delete resource grants.
+Runtime validates that authority and rereads resource grants after acquiring the
+target gate for every operation, including script host calls and handback. Guest
+code cannot set this authorization. Changing the thread default neither changes
+an admitted turn nor creates or deletes resource grants. Explicit grant changes
+remain effective during the turn and invalidate active scripts.
 
 Full access does not change target ownership, OS capabilities, explicit Stop,
 private-input handling or unknown-effect settlement. Target selection chooses
