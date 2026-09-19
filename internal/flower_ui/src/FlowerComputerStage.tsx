@@ -303,6 +303,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
             type="button"
             class="flower-computer-stage-ball"
             data-session-state={props.sessionState}
+            data-floe-progress-shimmer={props.sessionState === 'running' && !props.open ? 'surface' : undefined}
             aria-label={props.copy.restore}
             aria-description={[props.copy.state[props.sessionState], props.copy.move].filter(Boolean).join(". ")}
             title={[props.copy.restore, props.copy.state[props.sessionState], props.copy.move].filter(Boolean).join(" — ")}

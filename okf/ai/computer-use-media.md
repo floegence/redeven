@@ -36,11 +36,19 @@ centered fit; non-live notices never share or reduce the image's horizontal spac
 The footer places a quiet clock notice beside explicit Fit to window and Actual
 size choices, with the active choice exposed visually and through `aria-pressed`.
 On narrow windows the footer wraps without covering or cropping pixels.
-Closing a live viewer switches to a neutral 40px launcher with the published 20px
+Closing a live viewer switches to a 40px launcher with the published 20px
 `MonitorPointer` icon, an opaque theme surface, thin border, and a restrained
-black shadow. It has no glow, status ring or internal dot. Coarse pointers gain
-an invisible 48px hit area. Running, waiting, completed, stopped and failed states appear as
-localized text in the header and viewer; waiting and failure use muted semantic
+black shadow. While the exact task is running, the header entry and visible
+launcher use semantic blue with the published Floe progress shimmer. The header
+has one label: execution mode when known, otherwise task status; assistance names
+the step needing attention. It never prefixes that status with another Computer
+label. Historical entries retain their View last screenshot action and expose
+the matching task outcome in their tooltip and accessible name.
+Waiting, takeover, paused, disconnected and settled states remove the shimmer;
+non-running launchers remain neutral. Hidden launchers do not animate. Reduced
+motion and forced colors use the upstream static presentation. There is no halo,
+status ring or internal dot. Coarse pointers retain an invisible 48px hit area,
+separate from the shimmer paint. Waiting and failure text uses muted semantic
 colors. The accepted canonical current supplies exact turn/run outcome in the existing
 `ThreadCache` detail. Only matching screenshot identity can show completed,
 stopped or failed; a successful screenshot never proves task success. A later

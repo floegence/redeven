@@ -106,6 +106,56 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        inspectComputerProgress: async ({ page }, theme: string) => {
+          const frame = await frameForSelector(page, '.flower-computer-entry');
+          const selectors = ['.flower-computer-entry', '.flower-computer-stage-ball'];
+          const freeze = (time: number) => frame.evaluate(time => {
+            for (const animation of document.getAnimations()) {
+              animation.pause(); animation.currentTime = time;
+            }
+          }, time);
+          const changed = [];
+          for (const selector of selectors) {
+            const control = frame.locator(selector);
+            const before = await control.boundingBox();
+            await freeze(0);
+            const first = PNG.sync.read(await control.screenshot({ animations: 'allow' }));
+            await freeze(1200);
+            const second = PNG.sync.read(await control.screenshot({ animations: 'allow' }));
+            if (JSON.stringify(before) !== JSON.stringify(await control.boundingBox())) throw new Error('Progress paint moved its control');
+            let count = 0;
+            for (let i = 0; i < first.data.length; i += 4) {
+              const difference = [0, 1, 2].reduce((sum, channel) => sum + second.data[i + channel] - first.data[i + channel], 0);
+              if (difference > 15) count++;
+            }
+            changed.push(count);
+          }
+          const output = process.env.REDEVEN_COMPUTER_PROGRESS_EVIDENCE;
+          if (output && ['classic-light', 'classic-dark'].includes(theme)) {
+            await mkdir(path.join(output, theme), { recursive: true });
+            for (let index = 0; index < 12; index++) {
+              await freeze(index * 200);
+              await page.screenshot({ path: path.join(output, theme, `frame-${String(index).padStart(2, '0')}.png`), animations: 'allow' });
+            }
+          }
+          try {
+            for (const media of [{ reducedMotion: 'reduce' }, { forcedColors: 'active' }] as const) {
+              await page.emulateMedia(media);
+              for (const selector of [...selectors, '.flower-computer-entry-label']) {
+                const animated = await frame.locator(selector).evaluate(element => {
+                  const view = element.ownerDocument.defaultView!;
+                  return [view.getComputedStyle(element).animationName, view.getComputedStyle(element, '::before').animationName].some(name => name !== 'none');
+                });
+                if (animated) throw new Error('Accessible display preferences must stop the shimmer');
+              }
+              await page.emulateMedia({ reducedMotion: 'no-preference', forcedColors: 'none' });
+            }
+            return { changed, reducedMotion: true, forcedColors: true };
+          } finally {
+            await page.emulateMedia({ reducedMotion: 'no-preference', forcedColors: 'none' });
+            await frame.evaluate(() => document.getAnimations().forEach(animation => animation.play()));
+          }
+        },
         inspectProgressShimmerPaint: async ({ page }, name: string, measurements: unknown) => {
           if (!/^[a-z-]+$/u.test(name)) throw new Error('Invalid progress evidence name');
           const frame = await frameForSelector(page, '[data-flower-activity-item-id="tool-0"]');

@@ -1,7 +1,8 @@
 import '../index.css';
 import './flower-feature.css';
 import { expect, it, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
+import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import type { FlowerSurfaceAdapter, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { adapter, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
@@ -62,6 +63,86 @@ async function openStage(surface: HTMLElement) {
   surface.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
   await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
 }
+
+it.each(['browser.navigate', 'computer.exec'])('shows one animated task label for %s and stops it on settlement', async (toolName) => {
+  const running = current();
+  const initial = { ...running, items: running.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: toolName } })) };
+  const f = fixture(initial);
+  await waitFor(() => Boolean(f.surface.querySelector('.flower-computer-entry')) && Boolean(document.querySelector('.flower-computer-stage-ball')));
+  const entry = f.surface.querySelector<HTMLButtonElement>('.flower-computer-entry')!;
+  const ball = document.querySelector<HTMLButtonElement>('.flower-computer-stage-ball')!;
+  expect(entry.textContent).toBe('Computer running');
+  expect(entry.getAttribute('data-floe-progress-shimmer')).toBe('surface');
+  expect(entry.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toBe('Computer running');
+  expect(ball.getAttribute('data-floe-progress-shimmer')).toBe('surface');
+  expect(f.setComputerViewer).not.toHaveBeenCalled();
+  f.update({ ...initial, view_version: 2, interactions: [{ id: 'confirm-next', kind: 'input', turn_id: 'computer-turn', run_id: 'computer-run',
+    input: { summary: 'Choose the next step', questions: [{ id: 'next-step', prompt: 'Continue?', kind: 'select', options: ['Continue'] }] },
+  }] });
+  await waitFor(() => entry.dataset.sessionState === 'awaiting_user');
+  expect(entry.textContent).toBe('Waiting for your input or approval');
+  expect(entry.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  expect(ball.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  f.update({ ...initial, view_version: 3 });
+  await waitFor(() => entry.dataset.sessionState === 'running');
+  expect(entry.getAttribute('data-floe-progress-shimmer')).toBe('surface');
+  expect(ball.getAttribute('data-floe-progress-shimmer')).toBe('surface');
+  f.update({ ...current('completed'), view_version: 4 });
+  await waitFor(() => entry.textContent === 'View last screenshot');
+  expect(entry.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  expect(entry.querySelector('[data-floe-progress-shimmer]')).toBeNull();
+  expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
+});
+
+it('keeps blue running controls readable across themes with visible motion and static accessibility modes', async () => {
+  await page.viewport(1200, 850);
+  const f = fixture(current());
+  f.surface.style.cssText = 'width: 1100px; height: 740px; margin: 24px;';
+  await waitFor(() => Boolean(document.querySelector('.flower-computer-stage-ball')));
+  const entry = f.surface.querySelector<HTMLElement>('.flower-computer-entry')!;
+  const ball = document.querySelector<HTMLElement>('.flower-computer-stage-ball')!;
+  const root = document.documentElement;
+  const originalStyle = root.getAttribute('style'), originalTheme = root.dataset.floeShellTheme, originalClass = root.className;
+  const probe = document.createElement('span'); probe.hidden = true; entry.append(probe);
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+  const context = canvas.getContext('2d')!;
+  const color = (variable: string) => {
+    probe.style.color = `var(${variable})`;
+    context.fillStyle = getComputedStyle(probe).color; context.fillRect(0, 0, 1, 1);
+    return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map(channel => channel / 255);
+  };
+  const luminance = (channels: number[]) => channels.map(c => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4).reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+  try {
+    for (const preset of builtInShellThemePresets) {
+      root.removeAttribute('style');
+      root.classList.toggle('dark', preset.mode === 'dark'); root.classList.toggle('light', preset.mode !== 'dark');
+      root.dataset.floeShellTheme = preset.name;
+      for (const [name, value] of Object.entries(preset.semanticTokens ?? {})) if (value) root.style.setProperty(name, value);
+      for (const control of [entry, ball]) {
+        control.append(probe);
+        for (const hovered of [false, true]) {
+          await userEvent.hover(hovered ? control : f.surface.querySelector('h2') ?? f.surface);
+          const base = color('--floe-progress-text-base'), peak = color('--floe-progress-text-peak');
+          expect(base[2] - base[0], preset.name).toBeGreaterThan(0.1);
+          for (const ink of control === entry ? [base, peak] : [base]) for (const surface of [color('--floe-progress-surface-base'), color('--floe-progress-surface-peak')]) {
+            const a = luminance(ink), b = luminance(surface);
+            expect.soft((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), `${preset.name}, ${control.className}, hover=${hovered}: ${ink} on ${surface}`).toBeGreaterThanOrEqual(control === entry ? 4.5 : 3);
+          }
+        }
+      }
+      if (['classic-light', 'classic-dark'].includes(preset.name)) {
+        const inspect = commands as unknown as { inspectComputerProgress: (theme: string) => Promise<{ changed: number[]; reducedMotion: boolean; forcedColors: boolean }> };
+        const result = await inspect.inspectComputerProgress(preset.name);
+        expect.soft(result.changed.every(value => value > 5), `${preset.name}: ${result.changed}`).toBe(true);
+        expect(result.reducedMotion && result.forcedColors).toBe(true);
+      }
+    }
+  } finally {
+    probe.remove(); root.className = originalClass;
+    if (originalStyle === null) root.removeAttribute('style'); else root.setAttribute('style', originalStyle);
+    if (originalTheme === undefined) delete root.dataset.floeShellTheme; else root.dataset.floeShellTheme = originalTheme;
+  }
+});
 
 it('preserves script intent, disclosure, selection and copy through a live failure', async () => {
   await page.viewport(1100, 850);
@@ -293,10 +374,10 @@ it('accepts fresh canonical results when Runtime restart resets process-local vi
   f.restart({ ...current('cancelled'), view_version: 1 });
   await waitFor(() => f.connections() === 2);
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
-  expect(f.surface.querySelector('.flower-computer-entry')?.textContent).toContain('Computer task stopped');
+  expect(f.surface.querySelector('.flower-computer-entry')?.getAttribute('aria-label')).toContain('Computer task stopped');
   expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
   f.update({ ...current('failed'), view_version: 2 });
-  await waitFor(() => f.surface.querySelector('.flower-computer-entry')?.textContent?.includes('Computer task failed') === true);
+  await waitFor(() => f.surface.querySelector('.flower-computer-entry')?.getAttribute('aria-label')?.includes('Computer task failed') === true);
 });
 
 it('rejects a delayed HTTP current from the previous Runtime connection', async () => {
@@ -311,7 +392,7 @@ it('rejects a delayed HTTP current from the previous Runtime connection', async 
   await waitFor(() => f.connections() === 2);
   finish({ thread: applyFlowerRuntimeCurrentView(f.snapshot(), current()), current: { ...current(), view_version: 99 } });
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
-  expect(f.surface.querySelector('.flower-computer-entry')?.textContent).toContain('Computer task stopped');
+  expect(f.surface.querySelector('.flower-computer-entry')?.getAttribute('aria-label')).toContain('Computer task stopped');
 });
 
 it('clears public pixels on a sampled CAPTCHA and waits for canonical assistance without an endless spinner', async () => {

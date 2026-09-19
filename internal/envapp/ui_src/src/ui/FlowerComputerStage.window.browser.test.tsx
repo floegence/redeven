@@ -114,6 +114,8 @@ for (const projected of [false, true]) {
       expect(hiddenLauncher.tabIndex).toBe(-1);
       expect(getComputedStyle(hiddenLauncher).visibility).toBe('hidden');
       expect(getComputedStyle(hiddenLauncher).pointerEvents).toBe('none');
+      expect(hiddenLauncher.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+      expect(getComputedStyle(hiddenLauncher, '::before').animationName).toBe('none');
       const exercise = commands as unknown as { exerciseComputerViewer: () => Promise<{ pixelsDecoded: boolean }> };
       expect((await exercise.exerciseComputerViewer()).pixelsDecoded).toBe(true);
       await page.viewport(390, 740);
@@ -130,7 +132,8 @@ for (const projected of [false, true]) {
         setState(next);
         await waitFor(() => launcher.dataset.sessionState === next);
         expect(launcher.getAttribute('aria-description')).toContain(states[next]);
-        colors.add([getComputedStyle(launcher).backgroundColor, getComputedStyle(launcher).borderColor, getComputedStyle(launcher).color].join('|'));
+        expect(launcher.getAttribute('data-floe-progress-shimmer')).toBe(next === 'running' ? 'surface' : null);
+        if (next !== 'running') colors.add([getComputedStyle(launcher).backgroundColor, getComputedStyle(launcher).borderColor, getComputedStyle(launcher).color].join('|'));
       }
       expect(colors.size).toBe(1);
       expect(getComputedStyle(launcher).width).toBe('40px');
