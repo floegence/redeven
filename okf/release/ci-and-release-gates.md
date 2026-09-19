@@ -183,8 +183,23 @@ Partial publication, an extra GitHub Release asset, an unrecognized workflow,
 local package source, mutable source identity, or any registry mismatch fails
 before runtime construction.
 
-For every native Linux and Darwin target, staging installs Rust 1.88.0 and the
-exact published `redevplugin-runtime` version with its packaged lockfile.
+For every native Linux and Darwin target, staging prepares Rust 1.88.0 and the
+exact published `redevplugin-runtime` version with its packaged lockfile. The
+Rust preparation step first verifies the exact local toolchain and target, so a
+warm cache never contacts the distribution server. A missing component uses a
+bounded exponential retry (three attempts by default, at most five) only for
+classified transient network failures;
+checksum, manifest, signature, and other deterministic failures stop
+immediately. `REDEVEN_RUSTUP_OFFLINE=1` makes Rustup cache-only preparation
+explicit and reports the exact missing component instead of silently switching
+mirrors or weakening TLS verification; it does not disable manifest or Cargo
+downloads owned by the surrounding staging flow. Standard `CARGO_HOME`,
+`RUSTUP_HOME`, `RUSTUP_DIST_SERVER`, and proxy settings are honored; probes
+disable Rustup auto-install. Download timeout defaults to 120 seconds per
+Rustup download, retries wait 2 then 4 seconds by default, and backoff is capped
+at 60 seconds. Successful installs are rechecked before returning the exact
+Cargo path. Cancellation stops retrying and terminal exits clean up temporary
+diagnostics.
 Metadata comes from that crate and must not resolve another first-party runtime
 path dependency. The fixed product toolchain links a static PIE with no ELF
 interpreter or dynamic dependencies on Linux, and a target-exact 64-bit Mach-O
@@ -385,6 +400,8 @@ not become a fallback, shim, or local artifact path.
 - `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the exact-one upstream publication and registry readbacks.
 - `redeven:scripts/check_redevplugin_consumption_gate.sh:1` - Verifies the product runtime marker, evidence, target, and signature.
 - `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Builds and signs each native Linux or Darwin runtime from the exact published crate graph.
+- `redeven:scripts/prepare_redevplugin_rust_toolchain.sh:1` - Reuses verified local Rust components and bounds transient Rustup recovery without changing trust or source selection.
+- `redeven:scripts/redevplugin_rust_toolchain.test.mjs:1` - Covers cache reuse, transient retry, deterministic failure, offline mode, and retry-policy bounds with a fake Rustup.
 - `redeven:scripts/link_redevplugin_runtime_static_pie.sh:1` - Enforces the closed static PIE linker profile required by runtime admission.
 - `redeven:scripts/safe_extract_tar.py:1` - Enforces bounded, typed, inode-bound archive extraction and atomic directory publication.
 - `redeven:scripts/build_desktop_bundled_runtime.sh:1` - Stages the formal runtime into Desktop bundles.

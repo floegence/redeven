@@ -55,6 +55,9 @@ test('runtime staging derives its release tag from the published Go dependency',
   assert.match(source, /release manifest version does not match Go module version/u);
   assert.match(source, /redevplugin_release_contract\.mjs" verify-runtime-executable "\$runtime" "\$target"/u);
   assert.match(source, /link_redevplugin_runtime_static_pie\.sh/u);
+  assert.match(source, /prepare_redevplugin_rust_toolchain\.sh/u);
+  assert.doesNotMatch(source, /rustup_exec toolchain install/u);
+  assert.doesNotMatch(source, /rustup_exec target add/u);
   assert.doesNotMatch(source, /\breadelf\b/u);
   assert.doesNotMatch(source, /\bmapfile\b/u);
   assert.doesNotMatch(source, /read_redevplugin_release_manifest/u);
