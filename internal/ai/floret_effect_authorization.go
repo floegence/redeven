@@ -133,10 +133,10 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 		return errors.New("floret effect permission authority is missing")
 	}
 	if req.Permission.Mode == fltools.PermissionDeny {
-		return errors.New("permission denied: tool unavailable for admitted permission policy")
+		return errors.New("permission denied: tool unavailable for invocation permission policy")
 	}
-	// Floret settles the canonical approval. Revalidate only the admitted
-	// snapshot; a thread preference change cannot alter this turn's authority.
+	// Floret settles the canonical approval. This snapshot belongs to the
+	// pending invocation; preference changes apply at the next authorization boundary.
 	policyRevision := floretEffectPolicyRevision(authorityThreadID, currentSnapshot)
 	releaseAuthorization := func() {}
 	if !isFloretNativeTool(req.ToolName) {
@@ -236,10 +236,10 @@ func floretEffectAuthorizationContext(ctx context.Context, base *run, req flrunt
 func validateFloretEffectRequestAgainstSnapshot(req flruntime.EffectAuthorizationRequest, snapshot PermissionSnapshot) error {
 	policy, ok := snapshot.ToolPolicies[strings.TrimSpace(req.ToolName)]
 	if !ok || !stringSliceContains(snapshot.FloretToolNames, req.ToolName) {
-		return errors.New("floret effect tool is absent from its admitted permission snapshot")
+		return errors.New("floret effect tool is absent from its invocation permission snapshot")
 	}
 	if req.Permission.Mode != floretPermissionMode(policy.ApprovalDecision) {
-		return errors.New("floret effect permission mode differs from its admitted permission snapshot")
+		return errors.New("floret effect permission mode differs from its invocation permission snapshot")
 	}
 	return nil
 }

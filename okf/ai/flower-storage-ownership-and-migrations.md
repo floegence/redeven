@@ -34,8 +34,8 @@ ranks in the previous pin-time, creation-time and ThreadID order without changin
 pin timestamps, settings revisions or other user records. The
 [sidebar contract](../ui/flower-thread-sidebar.md) owns relative reorder semantics.
 Version 9 appends bounded task computer access with empty grants; forks do not
-inherit those grants. Version 10 freezes admission permission in execution
-authority. Its v9-to-v10 transaction validates matching endpoint and namespace
+inherit those grants. Version 10 records admission permission in execution
+authority as historical attribution; current tool authorization uses thread settings. Its v9-to-v10 transaction validates matching endpoint and namespace
 settings, backfills the permission, and preserves identities and timestamps;
 missing or invalid source authority fails without mutation. No Floret schema
 or Agent lifecycle state changes.

@@ -1452,7 +1452,7 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 	if settings == nil {
 		return nil, errors.New("thread not found")
 	}
-	permission, err := parsePermissionType(req.Options.PermissionType)
+	permission, err := threadPermissionType(settings)
 	if err != nil {
 		return nil, err
 	}
@@ -1481,7 +1481,6 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 	if err != nil {
 		return nil, err
 	}
-	req.Options.PermissionType = permissionTypeString(permission)
 	builder := newRun(runOptions{
 		Log: s.log, StateDir: s.stateDir, AgentHomeDir: s.agentHomeDir,
 		WorkingDir: workingDir, FilesystemScope: s.scope, Shell: s.shell,

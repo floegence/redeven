@@ -64,7 +64,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 			writeAskUserIntegrationCompletedResponse(w, flusher, "resp_waiting")
 			return
 		case 2:
-			assertPermissionProviderSurface(t, request, "approval_required")
+			assertPermissionProviderSurface(t, request, "readonly")
 			if requestContainsPairedToolHistory(request, "ask_user") && !requestContainsLegacyInteractionText(request) {
 				sawStructuredContinuation.Store(true)
 			}

@@ -135,7 +135,8 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 	if _, err := parsePermissionType(authority.PermissionType); err != nil {
 		return floretEffectRequest{}, err
 	}
-	// Admission requires RWX session authority; readonly is the frozen tool policy.
+	// Admission requires RWX session authority. Tool policy is resolved at each
+	// authorization boundary independently of this durable identity.
 	meta := session.Meta{
 		ChannelID: strings.TrimSpace(authority.ChannelID), EndpointID: strings.TrimSpace(authority.EndpointID),
 		NamespacePublicID: strings.TrimSpace(authority.NamespacePublicID), UserPublicID: strings.TrimSpace(authority.UserPublicID),

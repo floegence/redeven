@@ -57,8 +57,10 @@ existing permission and credential checks. The prompt reads this final local and
 hosted tool surface, distinguishing URL discovery from `web_fetch`. Adapters
 render only the request's tools. Transport selection is independent of search in
 one request, so automatic titles omit search without changing protocol. Attachment
-routing shares that transport decision. Floret owns the frozen execution surface
-for continuation, provider retry, and recovery; a new Turn resolves current configuration.
+routing shares that transport decision. Floret owns immutable provider checkpoints. Model, reasoning and hosted search
+retain their Turn configuration across continuation and recovery; local tools
+and permission instructions refresh from current thread policy. A new Turn
+resolves current configuration.
 Floret canonical user retry admits a new Turn, so it also resolves current
 configuration. A restored native wire shape retains its required transport even
 if search settings changed while the earlier Turn was waiting.

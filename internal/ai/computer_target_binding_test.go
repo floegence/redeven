@@ -40,9 +40,6 @@ func computerBindingFixture(t *testing.T) (*ComputerUseRuntime, *bindingTestExec
 		if err := store.AdoptCanonicalRootSettings(t.Context(), threadstore.ThreadSettings{ThreadID: id, EndpointID: "env", NamespacePublicID: "ns", ModelID: "deepseek/vision", PermissionType: "full_access", WorkingDir: t.TempDir()}); err != nil {
 			t.Fatal(err)
 		}
-		for _, turn := range []string{"turn", "canonical-turn-" + id} {
-			seedComputerTurnAuthority(t, store, id, turn, "full_access")
-		}
 	}
 
 	return runtime, executor, store, path
@@ -63,7 +60,7 @@ func TestComputerTargetSwitchPersistsOnlyForExecutingThread(t *testing.T) {
 		{first, "current", "desktop-main"},
 		{second, "browser.managed", "browser-main"},
 	} {
-		if _, err := step.run.execTargetTool(t.Context(), "call", "computer.screenshot", map[string]any{"target": step.alias}); err != nil {
+		if _, err := step.run.execTargetTool(computerPermissionContext(t, "full_access"), "call", "computer.screenshot", map[string]any{"target": step.alias}); err != nil {
 			t.Fatal(err)
 		}
 		call := executor.calls[len(executor.calls)-1]
@@ -80,7 +77,7 @@ func TestComputerTargetBindingRestoresWithoutRestoringReadiness(t *testing.T) {
 	runtime, _, store, path := computerBindingFixture(t)
 	run := &run{threadID: "thread-first", targetResolver: runtime, targetToolExecutor: runtime}
 	bindTargetTestRun(t, run)
-	if _, err := run.execTargetTool(t.Context(), "select", "computer.screenshot", map[string]any{"target": "desktop.screen"}); err != nil {
+	if _, err := run.execTargetTool(computerPermissionContext(t, "full_access"), "select", "computer.screenshot", map[string]any{"target": "desktop.screen"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := runtime.Close(); err != nil {
@@ -115,10 +112,10 @@ func TestComputerTargetRejectedSelectionDoesNotChangeBinding(t *testing.T) {
 			runtime, executor, store, _ := computerBindingFixture(t)
 			r := &run{threadID: "thread-first", targetResolver: runtime, targetToolExecutor: runtime}
 			bindTargetTestRun(t, r)
-			if _, err := r.execTargetTool(t.Context(), "initial", "computer.screenshot", map[string]any{"target": "browser-main"}); err != nil {
+			if _, err := r.execTargetTool(computerPermissionContext(t, "full_access"), "initial", "computer.screenshot", map[string]any{"target": "browser-main"}); err != nil {
 				t.Fatal(err)
 			}
-			ctx := t.Context()
+			ctx := computerPermissionContext(t, "full_access")
 			switch reason {
 			case "missing":
 				runtime.registry.remove("desktop-main")
@@ -203,14 +200,5 @@ func TestComputerTargetForkStartsWithoutParentSelection(t *testing.T) {
 	}
 	if err := store.SetComputerTarget(t.Context(), fork.ThreadID, "desktop-main"); err == nil {
 		t.Fatal("binding recreated a deleted thread")
-	}
-}
-
-func seedComputerTurnAuthority(t *testing.T, store *threadstore.Store, threadID, turnID, permission string) {
-	t.Helper()
-	if err := store.PutExecutionAuthority(t.Context(), threadstore.ExecutionAuthority{
-		RequestKey: threadID + ":" + turnID, ThreadID: threadID, TurnID: turnID, EndpointID: "env", NamespacePublicID: "ns", UserPublicID: "user", PermissionType: permission,
-	}); err != nil {
-		t.Fatal(err)
 	}
 }

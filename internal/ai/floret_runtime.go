@@ -87,7 +87,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	}
 	hostLabels := floretHostLabelsForRun(r)
 	surfaceConfig := r.buildRunToolSurfaceConfig(req.ModelCapability.SupportsAskUserQuestionBatches, sharedState, hostLabels)
-	permission, err := parsePermissionType(req.Options.PermissionType)
+	permission, err := r.liveThreadPermissionType(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,6 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		"model": modelName, "wire_model": capability.WireModelName,
 		"protocol": config.AIProviderProtocol(providerType, webSearchCapability.Mode),
 	})
-	req.Options.PermissionType = permissionTypeString(initialSurface.PermissionType)
 	r.recordRunDiagnostic("floret.host_turn.start", RealtimeStreamKindLifecycle, map[string]any{
 		"engine":                        "floret",
 		"provider_type":                 providerType,
@@ -190,6 +189,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	agent, err := buildFloretThreadAgent(
 		r,
 		initialSurface,
+		surfaceConfig,
 		labels,
 		floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens, req.ModelCapability.MaxOutputTokens),
 		req.Options,
@@ -209,6 +209,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 func buildFloretThreadAgent(
 	r *run,
 	surface runToolSurface,
+	surfaceConfig runToolSurfaceConfig,
 	labels flruntime.RunLabels,
 	contextPolicy flconfig.ContextPolicy,
 	options RunOptions,
@@ -219,15 +220,12 @@ func buildFloretThreadAgent(
 		return nil, errors.New("floret effect adapter requires a run and provider")
 	}
 	agentOptions := []flruntime.AgentOption{
-		flruntime.WithAgentTools(surface.FloretToolItems...),
+		flruntime.WithAgentDynamicToolSurface(r.liveFloretToolSurface(surfaceConfig)),
 		flruntime.WithAgentRunLabels(labels),
 		flruntime.WithAgentEffectAuthorization(floretEffectAuthorizationGateForRun(r)),
 		flruntime.WithAgentEventSink(floretEventSink{run: r}),
 		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
 		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
-	}
-	if len(surface.HostedTools) > 0 {
-		agentOptions = append(agentOptions, flruntime.WithAgentHostedTools(surface.HostedTools...))
 	}
 	if manualCompactions != nil {
 		agentOptions = append(agentOptions, flruntime.WithAgentManualCompactions(manualCompactions))

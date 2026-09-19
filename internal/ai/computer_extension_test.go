@@ -342,7 +342,7 @@ func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *test
 		go func() {
 			planned, err := host.ResolveTargetForThread(t.Context(), thread, "current")
 			if err == nil {
-				planned, err = host.selectComputerTarget(t.Context(), TargetToolCall{ThreadID: thread, RunID: thread, TurnID: "turn", ToolName: "computer.select_target"}, planned)
+				planned, err = host.selectComputerTarget(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: thread, RunID: thread, TurnID: "turn", ToolName: "computer.select_target"}, planned)
 			}
 			results <- planned
 			failures <- err
