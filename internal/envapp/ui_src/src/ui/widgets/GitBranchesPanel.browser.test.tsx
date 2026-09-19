@@ -301,4 +301,43 @@ describe('GitBranchesPanel rendered branch verification stability', () => {
     expect(navigation.clientHeight).toBeGreaterThan(layout.clientHeight * 0.9);
     expect(panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(host!.getBoundingClientRect().bottom);
   });
+
+  it('aligns directory navigation and diff inspection in one frame before and after file selection', async () => {
+    await page.viewport(1280, 1700);
+    Object.assign(host!.style, { width: '980px', height: '1500px' });
+    rpcMocks.listWorkspacePage.mockImplementation(async ({ directoryPath }: { directoryPath?: string }) => ({
+      repoRootPath: '/workspace/repo', section: 'changes', directoryPath: directoryPath ?? '',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      totalCount: 1, scopeFileCount: 1, offset: 0, nextOffset: 1, hasMore: false,
+      items: directoryPath ? [{ section: 'unstaged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' }]
+        : [{ section: 'changes', entryKind: 'directory', path: 'src', displayPath: 'src', directoryPath: 'src', descendantFileCount: 1, containsUnstaged: true }],
+    }));
+    const branch: GitBranchSummary = { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true };
+    dispose = render(() => <LayoutProvider><NotificationProvider><ProtocolProvider contract={redevenV1Contract}>
+      <GitBranchesPanel repoRootPath="/workspace/repo" selectedBranch={branch} />
+    </ProtocolProvider></NotificationProvider></LayoutProvider>, host!);
+    await waitForCondition(() => !!host!.querySelector('tr[aria-selected]'), 'directory inventory loads');
+    const frame = host!.querySelector<HTMLElement>('[data-git-diff-split]')!;
+    const rail = frame.querySelector<HTMLElement>('.git-diff-split__files')!;
+    const detail = frame.querySelector<HTMLElement>('.git-diff-split__detail')!;
+    const railHeader = rail.querySelector<HTMLElement>('.git-diff-split__files-header');
+    const detailHeader = detail.querySelector<HTMLElement>('.git-diff-panel__toolbar')!;
+    expect(railHeader, 'file navigation has a matching header').not.toBeNull();
+    expect(railHeader!.getBoundingClientRect().top).toBe(detailHeader.getBoundingClientRect().top);
+    expect(railHeader!.getBoundingClientRect().bottom).toBe(detailHeader.getBoundingClientRect().bottom);
+    expect(getComputedStyle(frame).borderTopWidth).toBe('1px');
+    expect(rail.getBoundingClientRect().bottom).toBe(detail.getBoundingClientRect().bottom);
+    expect(detail.querySelector('.git-diff-panel__modes'), 'no inactive mode controls without a file').toBeNull();
+    const empty = detail.querySelector<HTMLElement>('[data-git-diff-empty]')!;
+    expect(empty).not.toBeNull();
+    expect(empty.clientHeight).toBeGreaterThan(detail.clientHeight * 0.8);
+    expect(frame.scrollWidth).toBe(frame.clientWidth);
+    rail.querySelector<HTMLButtonElement>('tr button')!.click();
+    await waitForCondition(() => !!detail.querySelector('.git-patch-viewer__viewport'), 'directory opens into file inspection');
+    expect(detail.querySelector('.git-diff-panel__modes')).not.toBeNull();
+    expect(railHeader!.getBoundingClientRect().bottom).toBe(detailHeader.getBoundingClientRect().bottom);
+    expect(rail.querySelector('tbody tr')!.getBoundingClientRect().top).toBe(railHeader!.getBoundingClientRect().bottom);
+    expect(rail.querySelector('tbody tr')!.getBoundingClientRect().height).toBe(30);
+  });
+
 });

@@ -5690,11 +5690,52 @@ html.dark .git-content-skeleton__block {
   overflow: hidden;
   border-right: 1px solid var(--border);
 }
+.git-diff-split__files-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+}
+.git-diff-split__files-header,
+.git-diff-panel__toolbar {
+  box-sizing: border-box;
+  height: 38px;
+  flex: 0 0 38px;
+}
+.git-diff-split__files .git-table-frame {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
 .git-diff-split__detail {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--background);
+}
+.git-diff-panel__empty {
+  display: grid;
+  grid-template-rows: minmax(1rem, 2fr) auto minmax(1rem, 3fr);
+  justify-items: center;
+  height: 100%;
+  overflow: auto;
+  padding: 24px;
+}
+.git-diff-panel__empty-content {
+  grid-row: 2;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 24rem;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
 }
 .git-file-row,
 .git-diff-file-table tr {
