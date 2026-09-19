@@ -10,7 +10,7 @@ import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceCont
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Bot, Check, ChevronDown, ChevronLeft, Pencil, Plus, Shield, Trash } from '@floegence/floe-webapp-core/icons';
+import { Check, ChevronDown, ChevronLeft, Pencil, Plus, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, Select } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerSettingsCopy } from '../copy';
@@ -559,64 +559,53 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
             </div>
           </header>
 
-          <div class="flower-settings-models">
-            <Show when={currentModelID() && !activeModelOption()}><p role="alert" class="text-sm text-destructive">{copy().dialog.catalog.unavailable}</p></Show>
-            <section class="flower-settings-current-model">
-              <div class="flower-settings-current-model-icon">
-                <Show when={activeModelOption()} fallback={<Bot class="h-6 w-6 text-muted-foreground" />}>
-                  {(option) => <FlowerProviderBrandIcon type={option().provider_type} class="h-6 w-6" />}
-                </Show>
-              </div>
-              <div class="flower-settings-current-model-body">
-                <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{copy().currentModel}</div>
-                <Show when={modelOptions().length > 0} fallback={<div class="mt-1 text-base font-semibold text-muted-foreground">{copy().noModelSelected}</div>}>
-                  <div>
-                      <Select
-                        value={currentModelID()}
-                        options={modelSelectOptions()}
-                        onChange={(value) => { setCurrentModelID(trim(value)); markDirty(); }}
-                        placeholder={copy().selectModelPlaceholder}
-                        disabled={modelOptions().length === 0 || props.saving}
-                        class="flower-settings-model-select mt-1 w-full"
-                      />
-                      <div class="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                        <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().text}</span>
-                        <Show when={activeModelOption()?.supportsImageInput}>
-                          <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().imageInput}</span>
-                        </Show>
-                        <Show when={activeModelOption()?.contextWindow}>
-                          <span class="flower-settings-dot-pill">{copy().dialog.contextWindow}: {formatFlowerTokenCount(activeModelOption()?.contextWindow)}</span>
-                        </Show>
-                        <Show when={activeModelOption()?.maxOutputTokens}>
-                          <span class="flower-settings-dot-pill">{copy().dialog.maxOutput}: {formatFlowerTokenCount(activeModelOption()?.maxOutputTokens)}</span>
-                        </Show>
-                      </div>
-                      <Show when={activeProviderModel()?.reasoning_capability && reasoningCapabilitySupportsControl(activeProviderModel()?.reasoning_capability)}>
-                        <div class="mt-3">
-                          <FlowerReasoningControl
-                            copy={copy().reasoningControl}
-                            capability={activeProviderModel()?.reasoning_capability}
-                            selection={activeProviderModel()?.default_reasoning_selection}
-                            label={copy().reasoningControl.defaultLabel}
-                            onChange={updateCurrentModelReasoning}
-                          />
-                        </div>
-                      </Show>
+          <section class="flower-settings-section flower-settings-current-model" aria-label={copy().currentModel}>
+            <FlowerSubSectionHeader title={copy().currentModel} />
+            <div class="flower-settings-section-content">
+              <Show when={currentModelID() && !activeModelOption()}>
+                <p role="alert" class="mb-3 text-sm text-destructive">{copy().dialog.catalog.unavailable}</p>
+              </Show>
+              <Show when={modelOptions().length > 0} fallback={<p class="text-sm text-muted-foreground">{copy().noModelSelected}</p>}>
+                <div class="flower-settings-model-field">
+                  <Select
+                    value={currentModelID()}
+                    options={modelSelectOptions()}
+                    onChange={(value) => { setCurrentModelID(trim(value)); markDirty(); }}
+                    placeholder={copy().selectModelPlaceholder}
+                    disabled={props.saving}
+                    class="flower-settings-model-select w-full"
+                  />
+                </div>
+                <div class="flower-settings-model-capabilities">
+                  <span>{copy().text}</span>
+                  <Show when={activeModelOption()?.supportsImageInput}><span>{copy().imageInput}</span></Show>
+                </div>
+                <dl class="flower-settings-model-limits">
+                  <Show when={activeModelOption()?.contextWindow}>
+                    <div><dt>{copy().dialog.contextWindow}</dt><dd>{formatFlowerTokenCount(activeModelOption()?.contextWindow)}</dd></div>
+                  </Show>
+                  <Show when={activeModelOption()?.maxOutputTokens}>
+                    <div><dt>{copy().dialog.maxOutput}</dt><dd>{formatFlowerTokenCount(activeModelOption()?.maxOutputTokens)}</dd></div>
+                  </Show>
+                </dl>
+                <Show when={activeProviderModel()?.reasoning_capability && reasoningCapabilitySupportsControl(activeProviderModel()?.reasoning_capability)}>
+                  <div class="flower-settings-reasoning">
+                    <FlowerReasoningControl
+                      copy={copy().reasoningControl}
+                      capability={activeProviderModel()?.reasoning_capability}
+                      selection={activeProviderModel()?.default_reasoning_selection}
+                      label={copy().reasoningControl.defaultLabel}
+                      onChange={updateCurrentModelReasoning}
+                    />
                   </div>
                 </Show>
-              </div>
-            </section>
+              </Show>
+            </div>
+          </section>
 
-            <section class="flower-settings-section flower-settings-providers-section">
-              <FlowerSubSectionHeader
-                title={copy().providersTitle}
-                description={copy().providersDescription}
-                actions={(
-                  <Button size="sm" variant="default" icon={Plus} onClick={openAddProviderDialog}>
-                    {copy().addProvider}
-                  </Button>
-                )}
-              />
+          <section class="flower-settings-section flower-settings-providers-section" aria-label={copy().providersTitle}>
+            <FlowerSubSectionHeader title={copy().providersTitle} description={copy().providersDescription} />
+            <div class="flower-settings-section-content">
               <div class="flower-settings-provider-gallery">
                 <For each={providers()} fallback={<div class="flower-settings-provider-empty">{copy().noProviders}</div>}>
                   {(provider, index) => {
@@ -624,86 +613,79 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                     const modelNames = () => provider.models.map((model) => trim(model.model_name)).filter(Boolean);
                     const hasImageInput = () => provider.models.some((model) => flowerModelSupportsImage(model.input_modalities));
                     const isDefault = () => currentModelID().startsWith(`${providerID()}/`);
+                    const keyReady = () => providerSecretConfigured(props.snapshot, provider.id) || !!trim(provider.provider_api_key);
                     const webSearch = () => flowerProviderSearchSummary(provider.models, copy().dialog.catalog);
                     return (
                       <div class="flower-settings-provider-card">
-                        <div class="flower-settings-provider-brand">
-                          <FlowerProviderBrandIcon type={provider.type} class="h-5 w-5" />
-                        </div>
+                        <div class="flower-settings-provider-brand"><FlowerProviderBrandIcon type={provider.type} class="h-6 w-6" /></div>
                         <div class="flower-settings-provider-body">
                           <div class="flower-settings-provider-topline">
                             <div class="flower-settings-provider-title">
                               <span class="truncate text-sm font-semibold text-foreground">{providerDisplayName(provider, copy().providerTypeLabels)}</span>
-                              <Show when={providerDisplayName(provider, copy().providerTypeLabels) !== copy().providerTypeLabels[provider.type]}><span class="text-[11px] text-muted-foreground">{copy().providerTypeLabels[provider.type]}</span></Show>
-                              <Show when={isDefault()}><span class="flex-shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-medium text-primary">{copy().defaultProvider}</span></Show>
+                              <Show when={providerDisplayName(provider, copy().providerTypeLabels) !== copy().providerTypeLabels[provider.type]}>
+                                <span class="text-xs text-muted-foreground">{copy().providerTypeLabels[provider.type]}</span>
+                              </Show>
+                              <Show when={isDefault()}><span class="flower-settings-provider-default">{copy().defaultProvider}</span></Show>
                             </div>
                             <div class="flower-settings-provider-actions">
-                              <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={(event) => { event.stopPropagation(); openEditProviderDialog(index()); }} aria-label={copy().editProvider}>
+                              <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={event => { event.stopPropagation(); openEditProviderDialog(index()); }} aria-label={copy().editProvider}>
                                 <Pencil class="h-3.5 w-3.5" />
                               </Button>
-                              <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(event) => { event.stopPropagation(); removeProvider(index()); }} disabled={providers().length <= 1} aria-label={copy().removeProvider}>
+                              <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={event => { event.stopPropagation(); removeProvider(index()); }} disabled={providers().length <= 1} aria-label={copy().removeProvider}>
                                 <Trash class="h-3.5 w-3.5" />
                               </Button>
                             </div>
                           </div>
-                          <div class="mt-2 space-y-1.5">
-                            <div class="flower-settings-provider-fact">
-                              <span class="flower-settings-provider-fact-label">{copy().apiKey}</span>
-                              <span class={cn('flower-settings-dot-pill', (providerSecretConfigured(props.snapshot, provider.id) || trim(provider.provider_api_key)) && 'flower-settings-dot-pill-active')}>
-                                {provider.type === 'ollama' ? copy().dialog.catalog.optionalKey : providerSecretConfigured(props.snapshot, provider.id) || trim(provider.provider_api_key) ? copy().ready : copy().needsKey}
-                              </span>
-                            </div>
-                            <div class="flower-settings-provider-fact">
-                              <span class="flower-settings-provider-fact-label">{copy().models}</span>
-                              <div class="flex min-w-0 flex-wrap gap-1">
-                                <For each={modelNames().slice(0, 3)}>
-                                  {(name) => <code title={name} class={cn('flower-settings-model-code', currentModelID() === `${providerID()}/${name}` && 'flower-settings-model-code-active')}>{name}</code>}
-                                </For>
-                                <Show when={modelNames().length > 3}><span class="text-[11px] text-muted-foreground">+{modelNames().length - 3}</span></Show>
-                              </div>
-                            </div>
-                            <div class="flower-settings-provider-fact">
-                              <span class="flower-settings-provider-fact-label">{copy().web}</span>
-                              <span class={cn('flower-settings-dot-pill', webSearch().enabled && 'flower-settings-dot-pill-active')}>{webSearch().label}</span>
-                            </div>
-                            <Show when={hasImageInput()}>
-                              <div class="flower-settings-provider-fact">
-                                <span class="flower-settings-provider-fact-label">{copy().vision}</span>
-                                <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().imageInput}</span>
-                              </div>
-                            </Show>
+                          <div class="flower-settings-provider-status">
+                            <span>{copy().apiKey}</span>
+                            <span class={cn('flower-settings-dot-pill', keyReady() && 'flower-settings-dot-pill-active')}>
+                              {provider.type === 'ollama' ? copy().dialog.catalog.optionalKey : keyReady() ? copy().ready : copy().needsKey}
+                            </span>
                           </div>
+                          <details class="flower-settings-provider-details">
+                            <summary><span>{copy().models}</span><span class="flower-settings-provider-count">{modelNames().length}</span><ChevronDown class="h-3.5 w-3.5" aria-hidden="true" /></summary>
+                            <div class="flower-settings-provider-detail-body">
+                              <ul class="flower-settings-provider-models">
+                                <For each={modelNames()}>{name => <li><code>{name}</code></li>}</For>
+                              </ul>
+                              <div class="flower-settings-provider-fact">
+                                <span class="flower-settings-provider-fact-label">{copy().web}</span>
+                                <span>{webSearch().label}</span>
+                              </div>
+                              <Show when={hasImageInput()}>
+                                <div class="flower-settings-provider-fact">
+                                  <span class="flower-settings-provider-fact-label">{copy().vision}</span><span>{copy().imageInput}</span>
+                                </div>
+                              </Show>
+                            </div>
+                          </details>
                         </div>
                       </div>
                     );
                   }}
                 </For>
               </div>
-            </section>
-          </div>
+              <Button size="sm" variant="outline" icon={Plus} class="flower-settings-provider-add" onClick={openAddProviderDialog}>
+                {copy().addProvider}
+              </Button>
+            </div>
+          </section>
 
-          <section class="flower-settings-section flower-settings-policy-section">
-              <FlowerSubSectionHeader
-                title={copy().defaultPermissionTitle}
-                description={copy().defaultPermissionDescription}
-                actions={(
-                  <FlowerAutoSaveIndicator
-                    dirty={permissionDirty()}
-                    copy={copy().autoSave}
-                    saving={permissionSaving()}
-                    error={permissionError()}
-                    savedAt={permissionSavedAt()}
-                  />
-                )}
-              />
-              <div class="flower-settings-permission-grid" role="radiogroup" aria-label={copy().defaultPermissionTitle}>
+          <section class="flower-settings-section flower-settings-policy-section" aria-label={copy().defaultPermissionTitle}>
+            <FlowerSubSectionHeader
+              title={copy().defaultPermissionTitle}
+              description={copy().defaultPermissionDescription}
+              actions={<FlowerAutoSaveIndicator dirty={permissionDirty()} copy={copy().autoSave} saving={permissionSaving()} error={permissionError()} savedAt={permissionSavedAt()} />}
+            />
+            <div class="flower-settings-section-content">
+              <div class="flower-settings-permission-grid" role="radiogroup" aria-label={copy().defaultPermissionTitle} aria-orientation="vertical">
                 <For each={PERMISSION_TYPE_ORDER}>
-                  {(kind) => {
+                  {kind => {
                     const item = () => copy().permissionTypes[kind];
                     const active = () => permissionType() === kind;
                     return (
                       <button
-                        ref={(el) => { permissionButtonRefs.set(kind, el); }}
+                        ref={el => { permissionButtonRefs.set(kind, el); }}
                         type="button"
                         class={cn('flower-settings-policy-card', active() && 'flower-settings-policy-card-active')}
                         role="radio"
@@ -712,63 +694,44 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                         onKeyDown={onPermissionTypeKeyDown}
                         onClick={() => choosePermissionType(kind)}
                       >
-                        <span class="flower-settings-policy-card-row">
-                          <span class="flower-settings-policy-card-icon"><Shield class="h-3.5 w-3.5" /></span>
+                        <span class="flower-settings-policy-radio" aria-hidden="true"><Show when={active()}><Check class="h-3 w-3" /></Show></span>
+                        <span class="flower-settings-policy-copy">
                           <span class="flower-settings-policy-card-label">{item().label}</span>
-                          <span class="flower-settings-policy-radio" aria-hidden="true"><Show when={active()}><Check class="h-3 w-3" /></Show></span>
+                          <span class="flower-settings-policy-card-desc">{item().description}</span>
                         </span>
-                        <span class="flower-settings-policy-card-desc">{item().description}</span>
                       </button>
                     );
                   }}
                 </For>
               </div>
-              <Show when={permissionError()}>
-                <p role="alert" class="mt-2 text-xs text-destructive">{permissionError()}</p>
-              </Show>
+              <Show when={permissionError()}><p role="alert" class="mt-3 text-xs text-destructive">{permissionError()}</p></Show>
+            </div>
           </section>
 
           <Show when={props.onSaveComputerUseEnabled || (props.onConnectComputerBrowser && props.onListComputerBrowserTabs)}>
-            <section class="flower-settings-section flower-settings-computer-use-section">
+            <section class="flower-settings-section flower-settings-computer-use-section" aria-label={copy().computerUseTitle}>
               <FlowerSubSectionHeader
                 title={copy().computerUseTitle}
-                actions={(
-                  <FlowerAutoSaveIndicator
-                    dirty={computerUseSaving()}
-                    copy={copy().autoSave}
-                    saving={computerUseSaving()}
-                    error={computerUseError()}
-                    savedAt={computerUseSavedAt()}
-                  />
-                )}
+                actions={<FlowerAutoSaveIndicator dirty={computerUseSaving()} copy={copy().autoSave} saving={computerUseSaving()} error={computerUseError()} savedAt={computerUseSavedAt()} />}
               />
-              <Show when={props.onSaveComputerUseEnabled}>
-                <button
-                  type="button"
-                  class={cn('flower-settings-toggle-card', computerUseEnabled() && 'flower-settings-toggle-card-active')}
-                  role="switch"
-                  aria-checked={computerUseEnabled()}
-                  disabled={computerUseSaving()}
-                  onClick={() => void saveComputerUseEnabled(!computerUseEnabled())}
-                >
-                  <span class="flower-settings-toggle-copy">
+              <div class="flower-settings-section-content">
+                <Show when={props.onSaveComputerUseEnabled}>
+                  <button type="button" class="flower-settings-toggle-card" role="switch" aria-checked={computerUseEnabled()}
+                    disabled={computerUseSaving()} onClick={() => void saveComputerUseEnabled(!computerUseEnabled())}>
                     <span class="flower-settings-toggle-label">{copy().computerUseLabel}</span>
-                  </span>
-                  <span class={cn('flower-settings-toggle-track', computerUseEnabled() && 'flower-settings-toggle-track-on')} aria-hidden="true">
-                    <span class="flower-settings-toggle-thumb" />
-                  </span>
-                </button>
-                <Show when={computerUseError()}>
-                  <p role="alert" class="mt-2 text-xs text-destructive">{computerUseError()}</p>
+                    <span class={cn('flower-settings-toggle-track', computerUseEnabled() && 'flower-settings-toggle-track-on')} aria-hidden="true">
+                      <span class="flower-settings-toggle-thumb" />
+                    </span>
+                  </button>
+                  <Show when={computerUseError()}><p role="alert" class="mt-3 text-xs text-destructive">{computerUseError()}</p></Show>
                 </Show>
-              </Show>
-
-              <Show when={props.onConnectComputerBrowser && props.onListComputerBrowserTabs}>
-                <details class="flower-settings-computer-connect-section">
-                  <summary><ChevronDown class="h-3.5 w-3.5" aria-hidden="true" /><span>{(props.computerCopy ?? computerUseEnUS).advanced}</span></summary>
-                  <FlowerBrowserConnection copy={props.computerCopy ?? computerUseEnUS} listTabs={props.onListComputerBrowserTabs!} connect={props.onConnectComputerBrowser!} />
-                </details>
-              </Show>
+                <Show when={props.onConnectComputerBrowser && props.onListComputerBrowserTabs}>
+                  <details class="flower-settings-computer-connect-section">
+                    <summary><ChevronDown class="h-3.5 w-3.5" aria-hidden="true" /><span>{(props.computerCopy ?? computerUseEnUS).advanced}</span></summary>
+                    <FlowerBrowserConnection copy={props.computerCopy ?? computerUseEnUS} listTabs={props.onListComputerBrowserTabs!} connect={props.onConnectComputerBrowser!} />
+                  </details>
+                </Show>
+              </div>
             </section>
           </Show>
 

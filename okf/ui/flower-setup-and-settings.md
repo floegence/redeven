@@ -42,15 +42,26 @@ The settings surface edits the environment profile even when a Desktop model
 source is available. The current model and provider list come first, followed by
 default permission and computer/browser controls. Model limits use localized
 labels. Provider rows avoid repeating the provider type when it already matches
-the display name, and truncated model identifiers retain their full title.
+the display name, and model identifiers remain fully readable when expanded.
 
-Sections share one page background and use thin separators and consistent
-spacing. Provider entries remain flat rows. Permission options use radio
-semantics, a check indicator, and a restrained selected fill and underline.
-Their layout responds to the settings container, including embedded Workbench
-and companion widths; long translations must wrap without covering adjacent
-values. Buttons, switches, and disclosure summaries retain keyboard focus and
-pointer affordances. Input boundaries use the published Floe focus contract.
+Four peer sections share one page background: current model, providers, default
+permission, and computer/browser use. Each has a localized accessible name and a
+full-width separator with generous vertical spacing. Wide containers align section
+titles and descriptions in a dedicated left column with controls in a shared right
+column. At 760 CSS pixels or below they stack, preserving the reading order.
+
+Current-model capabilities, capacity figures, and reasoning preferences have
+separate visual groups. Provider rows always expose identity, credential readiness,
+and edit/remove actions. A keyboard-operable model disclosure shows the configured
+count and expands to every model identifier plus web/image capability details;
+identifiers wrap rather than hiding the rest of the inventory behind a count.
+Adding a provider remains directly available without expanding details.
+
+Permission choices remain visible as a vertical radio group, with a check indicator,
+restrained selected fill, and a left selection rule. Long translations must wrap
+without covering adjacent values. Buttons, switches, and disclosure summaries
+retain keyboard focus and pointer affordances. Input boundaries use the published
+Floe focus contract.
 
 Computer use remains a separately saved switch with a visible thumb in both
 themes. The self-managed Chromium connection form is an expandable advanced
