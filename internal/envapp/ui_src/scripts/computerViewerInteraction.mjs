@@ -1,5 +1,53 @@
 import assert from 'node:assert/strict';
 
+async function dragViewerHandle(page, handle, dx, dy) {
+  const box = await handle.boundingBox(); assert(box);
+  const local = await handle.evaluate(element => element.getBoundingClientRect().toJSON());
+  const scaleX = box.width / local.width; const scaleY = box.height / local.height;
+  const x = box.x + box.width / 2; const y = box.y + box.height / 2;
+  await page.mouse.move(x, y); await page.mouse.down();
+  await page.mouse.move(x + dx * scaleX, y + dy * scaleY, { steps: 12 }); await page.mouse.up();
+}
+
+export async function qualifyComputerViewerSurface({ page, root = page, output }) {
+  const boxOf = locator => locator.evaluate(element => element.getBoundingClientRect().toJSON());
+  const viewer = root.locator('[data-floe-geometry-surface="floating-window"]').filter({ has: root.locator('.flower-computer-stage') });
+  const grip = viewer.locator('[data-floe-floating-window-titlebar="true"]');
+  await grip.click({ trial: true });
+  const initial = await boxOf(viewer);
+  const surface = await boxOf(root.locator('.flower-surface'));
+  const transcript = await boxOf(root.locator('.flower-chat-transcript'));
+  const near = (actual, expected) => Math.abs(actual - expected) < 2;
+  assert(transcript.x > surface.x + 100 && transcript.y > surface.y + 20, 'fixture must include the conversation rail and header');
+  await dragViewerHandle(page, grip, surface.x + 12 - initial.x, surface.y + 12 - initial.y);
+  const topLeft = await boxOf(viewer);
+  assert(near(topLeft.x, surface.x + 12) && near(topLeft.y, surface.y + 12),
+    `viewer must reach the Flower rail and header: ${JSON.stringify({ surface, transcript, topLeft })}`);
+  assert(await viewer.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return element.contains(element.ownerDocument.elementFromPoint(rect.x + 24, rect.y + 20));
+  }), 'viewer must remain interactive over the conversation rail');
+  if (output) await page.screenshot({ path: `${output}/viewer-over-conversations.png` });
+  await dragViewerHandle(page, grip, -30, -30);
+  const clamped = await boxOf(viewer);
+  assert(near(clamped.x, topLeft.x) && near(clamped.y, topLeft.y), 'dragging past Flower must keep the title bar inside its boundary');
+  await dragViewerHandle(page, grip, surface.right - 12 - topLeft.right, surface.bottom - 12 - topLeft.bottom);
+  const bottomRight = await boxOf(viewer);
+  assert(near(bottomRight.right, surface.right - 12) && near(bottomRight.bottom, surface.bottom - 12),
+    `viewer must reach the Flower composer area: ${JSON.stringify({ surface, bottomRight })}`);
+  await viewer.locator('[data-floe-floating-window-control="maximize"]').click();
+  const maximized = await boxOf(viewer);
+  assert(near(maximized.x, surface.x + 12) && near(maximized.y, surface.y + 12)
+    && near(maximized.right, surface.right - 12) && near(maximized.bottom, surface.bottom - 12),
+    `maximization must fill the whole Flower surface: ${JSON.stringify({ surface, maximized })}`);
+  await viewer.locator('[data-floe-floating-window-control="maximize"]').click();
+  const restored = await boxOf(viewer);
+  assert(near(restored.x, bottomRight.x) && near(restored.y, bottomRight.y)
+    && near(restored.width, initial.width) && near(restored.height, initial.height), 'restore must preserve position and size');
+  await dragViewerHandle(page, grip, initial.x - restored.x, initial.y - restored.y);
+  return { crossesTranscript: true, surface, topLeft, bottomRight, maximized };
+}
+
 export async function qualifyComputerLauncherTouch({ page, root = page }) {
   const viewport = page.viewportSize();
   const session = await page.context().newCDPSession(page);
@@ -27,6 +75,11 @@ export async function qualifyComputerLauncherTouch({ page, root = page }) {
     assert(after.x >= 0 && after.y >= 0 && after.x + after.width <= 391 && after.y + after.height <= 741, 'launcher must remain visible on a narrow high-DPI screen');
     await ball.press('Enter');
     await stage.waitFor();
+    const viewer = root.locator('[data-floe-geometry-surface="floating-window"]').filter({ has: stage });
+    const narrow = await viewer.boundingBox(); assert(narrow);
+    assert(narrow.x >= 0 && narrow.y >= 0 && narrow.x + narrow.width <= 391 && narrow.y + narrow.height <= 741,
+      'restored viewer must fit the narrow screen');
+    assert.equal(await viewer.locator('[data-floe-floating-window-resize-handle]').count(), 0, 'compact viewer must hide resize handles');
     return { deviceScaleFactor: 3, touch: true, width: 390 };
   } finally {
     await session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
@@ -47,17 +100,11 @@ export async function qualifyComputerViewer({ page, root = page, output }) {
   const pixels = () => stage.locator('img').evaluate(img => img.complete && img.naturalWidth > 0 && img.src.startsWith('blob:'));
   assert(await pixels(), 'viewer requires decoded pixels before interaction');
   await grip.click({ trial: true });
+  const surfaceGeometry = await qualifyComputerViewerSurface({ page, root, output });
   const initial = await boxOf(viewer);
   assert(initial, 'native FloatingWindow geometry is unavailable');
-  const drag = async (handle, dx, dy) => {
-    const box = await handle.boundingBox(); assert(box);
-    const local = await boxOf(handle);
-    const scaleX = box.width / local.width; const scaleY = box.height / local.height;
-    const x = box.x + box.width / 2; const y = box.y + box.height / 2;
-    await page.mouse.move(x, y); await page.mouse.down();
-    await page.mouse.move(x + dx * scaleX, y + dy * scaleY, { steps: 12 }); await page.mouse.up();
-  };
-  const contentBoundary = await boxOf(root.locator('.flower-chat-transcript'));
+  const drag = (handle, dx, dy) => dragViewerHandle(page, handle, dx, dy);
+  const contentBoundary = await boxOf(root.locator('.flower-surface'));
   const moveX = -Math.min(60, Math.max(0, initial.x - contentBoundary.x - 12));
   const moveY = -Math.min(40, Math.max(0, initial.y - contentBoundary.y - 12));
   await drag(grip, moveX, moveY);
@@ -189,7 +236,7 @@ export async function qualifyComputerViewer({ page, root = page, output }) {
   await stage.waitFor();
   await viewer.locator('[data-floe-floating-window-control="maximize"]').click();
   const maximized = await boxOf(viewer);
-  assert(maximized && maximized.y >= contentBoundary.y + 10 && maximized.width > resized.width, 'maximized window must respect the app header');
+  assert(maximized && maximized.y >= contentBoundary.y + 10 && maximized.width > resized.width, 'maximized window must stay inside Flower');
   await viewer.locator('[data-floe-floating-window-control="close"]').click();
   await stage.waitFor({ state: 'detached' });
   await ball.press('Enter');
@@ -202,7 +249,7 @@ export async function qualifyComputerViewer({ page, root = page, output }) {
   assert(unmaximized && Math.abs(unmaximized.width - resized.width) < 2
     && Math.abs(unmaximized.height - resized.height) < 2, 'native restore must retain pre-maximize size');
   if (output) await page.screenshot({ path: `${output}/viewer-restored.png` });
-  return { initial, moved, resized, collapsed, draggedBall, keyedBall, retainedBall, restored, visual,
+  return { surfaceGeometry, initial, moved, resized, collapsed, draggedBall, keyedBall, retainedBall, restored, visual,
     snapEdgesAndCorners: true, cancelledDragRestored: true, keyboardRestore: ['Enter', 'Space'],
     maximizationRetained: true, forcedColors: true, reducedMotion: true, pixelsDecoded: true, visibleText: '' };
 }

@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 import { describe, expect, it, vi } from 'vitest';
-import { commands } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 import type { JSX } from 'solid-js';
 import { createSignal } from 'solid-js';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
@@ -32,6 +32,50 @@ function renderWithFloeLayout(factory: () => JSX.Element, host: HTMLElement): ()
 }
 
 describe('Flower computer stage', () => {
+  for (const historical of [false, true]) {
+    it(`distinguishes connection management and lets the viewer move across all of Flower (historical=${historical})`, async () => {
+      await page.viewport(1440, 1000);
+      const threadID = 'surface-viewer';
+      const current = thread({ thread_id: threadID, title: 'Review browser results', status: historical ? 'success' : 'running',
+        active_run_id: historical ? undefined : 'surface-run', messages: [{
+          id: 'surface-message', turn_id: 'surface-turn', run_id: 'surface-run', role: 'assistant', content: '', status: historical ? 'complete' : 'streaming', created_at_ms: 10,
+          blocks: [activityTimeline({ thread_id: threadID, run_id: 'surface-run', turn_id: 'surface-turn', status: historical ? 'success' : 'running',
+            items: [activityItem({ item_id: 'surface-frame', tool_id: 'surface-frame', tool_name: 'computer.screenshot', renderer: 'structured', status: 'success', label: 'Review browser results',
+              target_refs: [{ kind: 'computer_frame', label: 'Chrome', resource_ref: FRAME_REF }], payload: { operation: 'screenshot', status: 'success' },
+            })],
+          })],
+        }],
+      });
+      const listCandidates = vi.fn(async () => ({ current_target_id: '', candidates: [] }));
+      const runtime = renderSurfaceWithAdapterProps({ ...adapter(true),
+        loadComputerFrame: async () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), value => value.charCodeAt(0))], { type: 'image/png' }),
+        computerManagement: { openExtension: vi.fn(), loadExtensionStatus: vi.fn(async () => ({ profiles: [] })), setupExtension: vi.fn(),
+          listCandidates, selectCandidate: vi.fn(),
+          loadAccess: vi.fn(async () => ({ origins: [], apps: [], allow_foreground: false })), saveAccess: vi.fn(),
+          listTargets: vi.fn(async () => []), loadTarget: vi.fn(async () => ({ target_id: 'browser-main' })), selectTarget: vi.fn(), listBrowserTabs: vi.fn(async () => []),
+        },
+        listThreads: vi.fn(async () => [current]), loadThread: vi.fn(async () => computerBootstrap(current)),
+      }, { focusThreadRequest: { request_id: 'focus-surface-viewer', thread_id: threadID }, layout: true });
+      runtime.style.cssText = 'width: 1200px; height: 800px; margin: 32px;';
+      await waitFor(() => Boolean(runtime.querySelector('.flower-computer-entry')));
+      const management = runtime.querySelector<HTMLButtonElement>('.flower-chat-header-actions [aria-label="Browser and desktop"]')!;
+      const viewerEntry = runtime.querySelector<HTMLButtonElement>('.flower-computer-entry')!;
+      expect(management).not.toBeNull();
+      expect.soft(management.querySelector('svg')!.innerHTML).not.toBe(viewerEntry.querySelector('svg')!.innerHTML);
+      viewerEntry.click();
+      await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
+      const exercise = commands as unknown as { exerciseComputerViewerSurface: (scenario: string) => Promise<{ crossesTranscript: boolean }> };
+      expect((await exercise.exerciseComputerViewerSurface(historical ? 'historical' : 'live')).crossesTranscript).toBe(true);
+      document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
+      await waitFor(() => !document.querySelector('.flower-computer-stage'));
+      expect(document.activeElement).toBe(viewerEntry);
+      management.click();
+      await waitFor(() => listCandidates.mock.calls.length > 0);
+      expect(management.getAttribute('aria-expanded')).toBe('true');
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+      expect(document.querySelector('.flower-computer-stage')).toBeNull();
+    });
+  }
   it('commits real IME, native text and clipboard paste once without exposing drafts or losing key order', async () => {
     const host = document.createElement('div'); document.body.append(host);
     const input = vi.fn(() => { document.querySelector('.flower-computer-stage')?.setAttribute('data-input-count', String(input.mock.calls.length)); });

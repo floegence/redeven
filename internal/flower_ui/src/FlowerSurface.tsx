@@ -14,7 +14,7 @@ import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, Link, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { FlowerContextMenu } from './FlowerContextMenu';
@@ -5636,6 +5636,7 @@ webSearch: model.web_search,
     setComputerStageOpen(true);
   };
   const [computerStageBoundary, setComputerStageBoundary] = createSignal<HTMLElement>();
+  const [computerLauncherBoundary, setComputerLauncherBoundary] = createSignal<HTMLElement>();
   const [viewerFPS, setViewerFPS] = createSignal(computerFrameRate(props.adapter.computerFrameRate?.read()));
   const [privateControlRequested, setPrivateControlRequested] = createSignal(false);
   const [computerControlDisconnected, setComputerControlDisconnected] = createSignal(false);
@@ -11105,7 +11106,7 @@ webSearch: model.web_search,
           <div class="flower-chat-header-actions">
             <Show when={selectedThreadID() && props.adapter.computerManagement}>
               <button type="button" class="flower-header-icon-button" aria-label={copy().computer.title} title={copy().computer.title}
-                aria-haspopup="dialog" aria-expanded={computerConnectionsOpen()} onClick={() => setComputerConnectionsOpen(true)}><MonitorPointer class="h-4 w-4" /></button>
+                aria-haspopup="dialog" aria-expanded={computerConnectionsOpen()} onClick={() => setComputerConnectionsOpen(true)}><Link class="h-4 w-4" aria-hidden="true" /></button>
             </Show>
             <Show when={computerStageAvailable() && selectedComputerStage()}>
               <button type="button" class="flower-computer-entry" aria-expanded={computerStageOpen()}
@@ -11199,7 +11200,7 @@ webSearch: model.web_search,
       <div class="flower-chat-main" data-setup-welcome={showSetupWelcome() && !companionCollapsed() ? 'true' : undefined}>
         <div
           ref={(node) => {
-            setComputerStageBoundary(node);
+            setComputerLauncherBoundary(node);
             transcriptScroll.bind(node);
           }}
           class="flower-chat-transcript flower-chat-transcript"
@@ -11850,7 +11851,10 @@ webSearch: model.web_search,
   return (
     <main
       id="redeven-flower-surface"
-      ref={surfaceRef}
+      ref={(node) => {
+        surfaceRef = node;
+        setComputerStageBoundary(node);
+      }}
       tabIndex={-1}
       class={cn(
         'flower-component-shell flower-surface',
@@ -12156,6 +12160,7 @@ webSearch: model.web_search,
               onFrameError={() => setComputerViewFailed(true)} onRetry={resumeComputerViewer}
               onInput={!computerStageHistorical() && !computerControlDisconnected() && computerStageOpen() && computerControlReady() && privateControlRequested() && !computerReturning() && !computerControlError() && !computerViewFailed() && isComputerInput(selectedInputRequest()) ? inputComputerControl : undefined}
               boundary={computerStageBoundary()}
+              launcherBoundary={computerLauncherBoundary()}
               threadID={selectedThreadID()}
               open={computerStageOpen()}
               sessionState={computerStageSessionState()}
