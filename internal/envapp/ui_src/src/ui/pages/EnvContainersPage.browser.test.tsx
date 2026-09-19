@@ -250,6 +250,32 @@ describe('native Containers responsive product surface', () => {
     await page.viewport(1280, 720);
   });
 
+  it.each(['activity', 'workbench'] as const)('replaces loading with stopped runtime feedback and retries in %s', async (variant) => {
+    const detection = deferred<readonly unknown[]>();
+    browserHarness.listRuntimes.mockReturnValueOnce(detection.promise);
+    const mounted = mount(variant);
+    dispose = mounted.dispose;
+    await settle();
+    expect(mounted.host.querySelector('[data-container-list-loading]')).not.toBeNull();
+
+    detection.resolve([{ engine: 'docker', state: 'stopped' }, { engine: 'podman', state: 'not_installed' }]);
+    await settle();
+    const unavailable = mounted.host.querySelector<HTMLElement>('[data-container-engine-state="unavailable"]')!;
+    expect(unavailable.textContent).toContain('Docker');
+    expect(unavailable.textContent).toContain('Not running');
+    expect(mounted.host.querySelector('[data-container-list-loading]')).toBeNull();
+    expect(browserHarness.listResources).not.toHaveBeenCalled();
+    const retry = page.elementLocator(unavailable).getByRole('button', { name: 'Check again', exact: true });
+    await expect.element(retry).toBeEnabled();
+    await retry.click();
+    await settle();
+
+    expect(browserHarness.listRuntimes).toHaveBeenCalledTimes(2);
+    expect(mounted.host.querySelector('[data-container-engine-state]')).toBeNull();
+    expect(mounted.host.querySelector('[data-container-list-loading]')).toBeNull();
+    expect(mounted.host.querySelector('[data-container-resource-table]')).not.toBeNull();
+  });
+
   it('keeps operation hover feedback inside the portaled drawer', async () => {
     await page.viewport(1440, 900);
     browserHarness.listOperations.mockResolvedValue(['golang:1.26', 'postgres:17-alpine'].map((identity, index) => ({

@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Native container resources
 description: Aggregate the active Docker and Podman runtimes behind one Redeven-owned execution and operation boundary.
 tags: [architecture, containers, docker, podman]
-timestamp: 2026-09-06T00:00:00Z
+timestamp: 2026-09-19T00:00:00Z
 ---
 # Summary
 
@@ -29,7 +29,17 @@ not probed, listed, or used as fallback targets.
 
 Discovery reports `ready`, `not_installed`, `stopped`, `permission`,
 `unreachable`, or `error` for each engine. One engine failure never suppresses
-the other engine's state or resources. The engine resolves every ready endpoint
+the other engine's state or resources. Each concurrent engine probe has one
+two-second deadline covering endpoint resolution, status, and metadata. A
+responsive stopped daemon returns immediately; an expired probe reports
+`unreachable`, while request cancellation cancels the whole read. Resource
+readiness never waits for Desktop, systemd, or Podman Machine management
+discovery. Those implementation and lifecycle checks belong to the explicit
+service management surface and do not determine resource access. This
+discovery deadline does not change command,
+mutation, image-pull, or stream timeouts.
+
+The engine resolves every ready endpoint
 again before each read, mutation, stream, and reconciliation. Docker commands
 select the resolved context explicitly; Podman commands select the resolved
 connection explicitly. Redeven never changes the user's global engine
@@ -201,9 +211,11 @@ second routing, mutation, or ownership path.
 
 Installation, host lifecycle, service configuration, non-elevation, and
 service-state reconciliation are owned by
-[Container service management](container-service-management.md). Resource
-runtime discovery consumes that single controller and does not maintain a
-second stopped, permission, or reachability projection.
+[Container service management](container-service-management.md). Both discovery
+surfaces use the same selected-endpoint CLI boundary and typed engine errors.
+Resource readiness observes engine reachability directly; host-service state
+additionally identifies management capabilities and never substitutes for a
+successful resource probe.
 
 # Boundaries
 
@@ -219,6 +231,7 @@ second stopped, permission, or reachability projection.
 
 - `redeven:internal/containerengine/adapter.go` - Defines the shared typed engine boundary.
 - `redeven:internal/containerengine/resources_v4.go` - Discovers one active target per engine and resolves opaque endpoint routing.
+- `redeven:internal/containerengine/runtime_detection_test.go` - Proves immediate stopped-daemon feedback, independent discovery deadlines, and request cancellation with a virtual clock.
 - `redeven:internal/containerengine/resources_v4_cli.go` - Constructs explicit Docker and Podman commands for bound targets.
 - `redeven:internal/containerengine/container_exec.go` - Validates running-container Exec and exact argv limits.
 - `redeven:internal/terminal/container_exec.go` - Owns hidden program-session access, attachment timeouts, and cleanup.
