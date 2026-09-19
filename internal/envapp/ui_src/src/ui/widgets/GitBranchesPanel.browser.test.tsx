@@ -8,10 +8,12 @@ import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { createSignal } from 'solid-js';
 import type { GitGetDiffContentRequest } from '../protocol/redeven_v1';
 import { render } from 'solid-js/web';
+import { page } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const rpcMocks = vi.hoisted(() => ({
   listWorkspacePage: vi.fn(),
+  getCommitDetail: vi.fn(),
 }));
 
 vi.mock('../protocol/redeven_v1', async () => {
@@ -23,7 +25,7 @@ vi.mock('../protocol/redeven_v1', async () => {
     useRedevenRpc: () => ({
       git: {
         getBranchCompare: vi.fn(),
-        getCommitDetail: vi.fn(),
+        getCommitDetail: rpcMocks.getCommitDetail,
         getDiffContent: vi.fn(async (request: GitGetDiffContentRequest) => ({
           repoRootPath: request.repoRootPath,
           mode: request.mode,
@@ -215,5 +217,88 @@ describe('GitBranchesPanel rendered branch verification stability', () => {
       expectStableMetric(readyBefore[key], verifying[key], `${key} during verification`);
       expectStableMetric(readyBefore[key], readyAfter[key], `${key} after verification`);
     }
+  });
+  it('shows one contained empty workspace across portrait and narrow widget sizes', async () => {
+    await page.viewport(1280, 1700);
+    rpcMocks.listWorkspacePage.mockResolvedValue({
+      repoRootPath: '/workspace/repo', section: 'changes',
+      summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+      totalCount: 0, scopeFileCount: 0, offset: 0, nextOffset: 0, hasMore: false, items: [],
+    });
+    Object.assign(host!.style, { width: '980px', height: '1500px' });
+    const branch: GitBranchSummary = { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true };
+    dispose = render(() => <LayoutProvider><NotificationProvider><ProtocolProvider contract={redevenV1Contract}>
+      <GitBranchesPanel repoRootPath="/workspace/repo" selectedBranch={branch} />
+    </ProtocolProvider></NotificationProvider></LayoutProvider>, host!);
+    await waitForCondition(() => !!host!.querySelector('.git-branch-status-empty-state'), 'empty workspace loads');
+    const frame = host!.querySelector<HTMLElement>('[data-git-branch-status-content-frame]')!;
+    expect(frame.querySelector('.git-diff-split'), 'empty workspace has no file/diff divider').toBeNull();
+    expect(frame.querySelector('[data-git-diff-panel]')).toBeNull();
+    expect(frame.textContent).toContain('This worktree is clean.');
+    for (const width of [980, 420]) {
+      host!.style.width = `${width}px`;
+      await settle();
+      const state = frame.querySelector<HTMLElement>('.git-branch-status-empty-state')!;
+      const bounds = frame.getBoundingClientRect();
+      const copy = state.getBoundingClientRect();
+      expect(frame.scrollWidth).toBe(frame.clientWidth);
+      expect(copy.left).toBeGreaterThanOrEqual(bounds.left);
+      expect(copy.right).toBeLessThanOrEqual(bounds.right);
+      expect(Math.abs((copy.left + copy.right) / 2 - (bounds.left + bounds.right) / 2)).toBeLessThan(2);
+    }
+  });
+
+  it('uses the full history height before selection and a bounded rail during portrait inspection', async () => {
+    await page.viewport(1280, 1700);
+    Object.assign(host!.style, { width: '980px', height: '1500px' });
+    const commits = Array.from({ length: 50 }, (_, index) => ({
+      hash: `commit-${index}`, shortHash: `hash${index}`, parents: index < 49 ? [`commit-${index + 1}`] : [],
+      subject: `Review history entry ${index}`, authorName: 'Developer', authorTimeMs: 1706000000000,
+    }));
+    rpcMocks.getCommitDetail.mockImplementation(async ({ commit }: { commit: string }) => ({
+      repoRootPath: '/workspace/repo', commit: commits.find((item) => item.hash === commit),
+      files: [{ path: 'src/app.ts', changeType: 'modified', additions: 1, deletions: 1, patchText: '@@ -1 +1 @@\n-before\n+after' }],
+    }));
+    const branch: GitBranchSummary = { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true };
+    const [selected, setSelected] = createSignal('');
+    dispose = render(() => <LayoutProvider><NotificationProvider><ProtocolProvider contract={redevenV1Contract}>
+      <GitBranchesPanel repoRootPath="/workspace/repo" selectedBranch={branch} selectedBranchSubview="history"
+        commits={commits} selectedCommitHash={selected()} onSelectCommit={setSelected} />
+    </ProtocolProvider></NotificationProvider></LayoutProvider>, host!);
+    await waitForCondition(() => !!host!.querySelector('[data-commit-graph-row]'), 'history loads');
+    const layout = host!.querySelector<HTMLElement>('.git-branch-history-layout')!;
+    const graph = host!.querySelector<HTMLElement>('[data-commit-graph]')!;
+    const navigation = graph.parentElement!;
+    expect(navigation.clientHeight, 'unselected history uses available height').toBeGreaterThan(layout.clientHeight * 0.9);
+    const first = host!.querySelector<HTMLButtonElement>('[data-commit-graph-row="commit-0"]')!;
+    first.click();
+    await waitForCondition(() => !!host!.querySelector('.git-patch-viewer__viewport'), 'selected diff loads');
+    expect(navigation.clientHeight).toBeLessThanOrEqual(320);
+    expect(navigation.clientHeight).toBeGreaterThanOrEqual(100);
+    const detail = host!.querySelector<HTMLElement>('[data-git-branch-history-details]')!;
+    expect(detail.getBoundingClientRect().top).toBeGreaterThan(navigation.getBoundingClientRect().bottom);
+    expect(detail.clientHeight).toBeGreaterThan(layout.clientHeight * 0.6);
+    expect(host!.scrollWidth).toBe(host!.clientWidth);
+    const later = host!.querySelector<HTMLButtonElement>('[data-commit-graph-row="commit-20"]')!;
+    later.click();
+    await settle();
+    expect(later.getBoundingClientRect().bottom).toBeLessThanOrEqual(navigation.getBoundingClientRect().bottom + 1);
+    const close = host!.querySelector<HTMLButtonElement>('[aria-label="Close commit details"]')!;
+    expect(close).not.toBeNull();
+    close.click();
+    await settle();
+    expect(selected()).toBe('');
+    expect(document.activeElement).toBe(later);
+    expect(navigation.clientHeight).toBeGreaterThan(layout.clientHeight * 0.9);
+    expect(host!.querySelector('[data-git-branch-history-details]')).toBeNull();
+    expect(host!.querySelector('[data-commit-graph]')).toBe(graph);
+    host!.style.width = '1400px';
+    host!.style.height = '700px';
+    later.click();
+    await settle();
+    const panel = host!.querySelector<HTMLElement>('.git-branch-history-detail-panel')!;
+    expect(navigation.getBoundingClientRect().right).toBeLessThan(panel.getBoundingClientRect().left);
+    expect(navigation.clientHeight).toBeGreaterThan(layout.clientHeight * 0.9);
+    expect(panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(host!.getBoundingClientRect().bottom);
   });
 });

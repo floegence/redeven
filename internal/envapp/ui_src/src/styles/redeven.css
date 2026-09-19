@@ -806,9 +806,44 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
 @container (max-width: 1000px) {
   .git-branch-history-layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(100px, 25%) minmax(0, 1fr);
+    grid-template-rows: clamp(100px, 25%, 18rem) minmax(0, 1fr);
   }
 }
+.git-branch-history-layout[data-detail-open='false'] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.git-branch-history-navigation { min-width: 0; }
+.git-branch-history-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.git-branch-history-detail-panel { position: relative; animation: git-patch-reveal 140ms ease-out; }
+.git-branch-history-detail-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background-color 150ms, color 150ms;
+}
+.git-branch-history-detail-close:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.git-branch-history-detail-panel .git-branch-history-summary { padding-right: 24px; }
 .git-branch-history-details {
   display: flex;
   flex: 1;
@@ -1043,54 +1078,20 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   background: color-mix(in srgb, var(--muted) 4%, transparent);
 }
 
-.git-branch-status-empty-table {
-  --git-branch-status-empty-template: minmax(12rem, 1fr) 6rem 6rem 5rem 4.5rem;
-  flex: 1 1 auto;
-  width: 100%;
-  min-height: clamp(12rem, 32vh, 20rem);
-  overflow: auto hidden;
-  scrollbar-gutter: stable;
+.git-branch-status-state-surface {
+  display: grid;
+  grid-template-rows: minmax(1rem, 2fr) auto minmax(1rem, 3fr);
+  justify-items: center;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 1.5rem;
+  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  border-radius: 0.5rem;
   background: color-mix(in srgb, var(--muted) 3%, transparent);
 }
-
-.git-branch-status-empty-table__content {
-  min-width: 36rem;
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.git-branch-status-empty-table__header {
-  min-height: 2.125rem;
-  display: grid;
-  grid-template-columns: var(--git-branch-status-empty-template);
-  align-items: center;
-  gap: 1rem;
-  padding-inline: 0.875rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
-  color: var(--muted-foreground);
-  font-size: 0.625rem;
-  font-weight: 600;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.git-branch-status-empty-table__header > span:last-child {
-  justify-self: end;
-}
-
-.git-branch-status-empty-table__body {
-  flex: 1 1 auto;
-  min-height: clamp(9rem, 24vh, 15rem);
-  display: grid;
-  align-items: start;
-  justify-items: center;
-  padding: clamp(1.75rem, 6vh, 3.25rem) clamp(1rem, 3vw, 2rem) 2rem;
-}
-
-.git-branch-status-unavailable .git-branch-status-empty-table__body {
-  align-items: center;
-}
+.git-branch-status-state-surface > * { grid-row: 2; }
 
 .git-branch-status-empty-state {
   width: min(25rem, 100%);
@@ -1126,6 +1127,8 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
 }
 
 .git-branch-status-empty-state__copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: grid;
   justify-items: center;
   gap: 0.25rem;
@@ -5813,7 +5816,8 @@ html.dark .git-content-skeleton__block {
 }
 @media (prefers-reduced-motion: reduce) {
   .git-file-row, .git-diff-file-table tr, .git-file-actions button, .git-diff-panel__modes button { transition: none; }
-  .git-patch-viewer__horizontal-scrollbar-thumb { transition: none; }
+  .git-patch-viewer__horizontal-scrollbar-thumb, .git-branch-history-detail-close { transition: none; }
+  .git-branch-history-detail-panel { animation: none; }
   .git-patch-viewer--embedded .git-patch-viewer__viewport { animation: none; }
 }
 @media (forced-colors: active) {

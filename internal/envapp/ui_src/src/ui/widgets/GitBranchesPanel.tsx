@@ -4,6 +4,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  onCleanup,
   type Component,
 } from "solid-js";
 import { Dynamic } from "solid-js/web";
@@ -25,6 +26,7 @@ import {
   Package,
   Terminal,
   Trash,
+  X,
 } from "@floegence/floe-webapp-core/icons";
 import { Button, Dropdown, type DropdownItem } from "@floegence/floe-webapp-core/ui";
 import { Dialog } from '../primitives/EnvAppModal';
@@ -817,73 +819,32 @@ function BranchStatusEmptyState(props: {
   );
 }
 
-function BranchStatusEmptyTable(props: {
+function BranchStatusEmptySurface(props: {
   section: GitWorkspaceViewSection;
   directoryPath?: string;
 }) {
-  const i18n = useI18n();
   return (
-    <div
-      class="git-branch-status-empty-table"
-      data-git-branch-status-empty-table="true"
-      data-git-branch-status-empty-section={props.section}
-    >
-      <div class="git-branch-status-empty-table__content">
-        <div class="git-branch-status-empty-table__header" aria-hidden="true">
-          <For each={BRANCH_STATUS_TABLE_COLUMN_KEYS}>
-            {(key) => <span>{i18n.t(key)}</span>}
-          </For>
-        </div>
-        <div class="git-branch-status-empty-table__body">
-          <BranchStatusEmptyState
-            section={props.section}
-            directoryPath={props.directoryPath}
-          />
-        </div>
-      </div>
+    <div class="git-branch-status-state-surface" data-git-branch-status-empty-surface>
+      <BranchStatusEmptyState section={props.section} directoryPath={props.directoryPath} />
     </div>
   );
 }
 
-function BranchStatusUnavailableTable(props: {
+function BranchStatusUnavailableSurface(props: {
   state: BranchStatusUnavailablePresentation;
 }) {
-  const i18n = useI18n();
   return (
-    <div
-      class="git-branch-status-empty-table git-branch-status-unavailable"
-      data-git-branch-status-empty-table="true"
-      data-git-branch-status-unavailable="true"
-    >
-      <div class="git-branch-status-empty-table__content">
-        <div class="git-branch-status-empty-table__header" aria-hidden="true">
-          <For each={BRANCH_STATUS_TABLE_COLUMN_KEYS}>
-            {(key) => <span>{i18n.t(key)}</span>}
-          </For>
+    <div class="git-branch-status-state-surface" data-git-branch-status-unavailable="true">
+      <div class="git-branch-status-unavailable__state" role="status" aria-live="polite">
+        <div class="git-branch-status-unavailable__mark" aria-hidden="true">
+          <AlertTriangle class="git-branch-status-unavailable__icon" />
         </div>
-        <div class="git-branch-status-empty-table__body">
-          <div
-            class="git-branch-status-unavailable__state"
-            role="status"
-            aria-live="polite"
-          >
-            <div class="git-branch-status-unavailable__mark" aria-hidden="true">
-              <AlertTriangle class="git-branch-status-unavailable__icon" />
-            </div>
-            <div class="git-branch-status-unavailable__copy">
-              <div class="git-branch-status-unavailable__title">
-                {props.state.title}
-              </div>
-              <div class="git-branch-status-unavailable__detail">
-                {props.state.detail}
-              </div>
-              <Show when={props.state.hint}>
-                <div class="git-branch-status-unavailable__hint">
-                  {props.state.hint}
-                </div>
-              </Show>
-            </div>
-          </div>
+        <div class="git-branch-status-unavailable__copy">
+          <div class="git-branch-status-unavailable__title">{props.state.title}</div>
+          <div class="git-branch-status-unavailable__detail">{props.state.detail}</div>
+          <Show when={props.state.hint}>
+            <div class="git-branch-status-unavailable__hint">{props.state.hint}</div>
+          </Show>
         </div>
       </div>
     </div>
@@ -1073,130 +1034,63 @@ function BranchStatusTable(props: BranchStatusTableProps) {
 
   return (
     <GitTableFrame class="flex min-h-0 flex-1 flex-col">
-      <Show
-        when={props.items.length > 0}
-        fallback={
-          <BranchStatusEmptyTable
-            section={props.section}
-            directoryPath={props.directoryPath}
-          />
-        }
-      >
-        <GitVirtualTable
-          items={props.items}
-          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} git-diff-file-table git-diff-file-table--status`}
-          header={
-            <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-              <For each={BRANCH_STATUS_TABLE_COLUMN_KEYS}>
-                {(key) => (
-                  <th
-                    class={
-                      key === "git.common.action"
-                        ? GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS
-                        : GIT_CHANGED_FILES_HEADER_CELL_CLASS
-                    }
-                  >
-                    {i18n.t(key)}
-                  </th>
-                )}
-              </For>
-            </tr>
-          }
-          renderRow={(item) => {
-            const active = () => props.selectedKey === workspaceEntryKey(item);
-            return (
-              <tr
-                aria-selected={active()}
-                class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
-                tabIndex={0}
-                onContextMenu={(event) => {
-                  event.stopPropagation();
-                  contextMenu.openFromContextMenu(event, menuTarget(item));
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
-                  event.stopPropagation();
-                  contextMenu.openFromKeyboard(event, menuTarget(item));
-                }}
-                onClick={() => {
-                  if (isGitWorkspaceDirectoryEntry(item)) {
-                    const nextDirectoryPath = workspaceDirectoryPath(item);
-                    if (nextDirectoryPath) {
-                      props.onOpenDirectory?.(nextDirectoryPath);
-                    }
-                    return;
+      <GitVirtualTable
+        items={props.items}
+        tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} git-diff-file-table git-diff-file-table--status`}
+        header={
+          <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
+            <For each={BRANCH_STATUS_TABLE_COLUMN_KEYS}>
+              {(key) => (
+                <th
+                  class={
+                    key === "git.common.action"
+                      ? GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS
+                      : GIT_CHANGED_FILES_HEADER_CELL_CLASS
                   }
-                  props.onOpenDiff?.(item, menuTarget(item));
-                }}
-              >
-                <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                  <div class="min-w-0">
-                    <button
-                      type="button"
-                      class="git-file-open"
-                      title={
-                        isGitWorkspaceDirectoryEntry(item)
-                          ? workspaceDirectoryPath(item)
-                          : changeSecondaryPath(item)
-                      }
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (isGitWorkspaceDirectoryEntry(item)) {
-                          const nextDirectoryPath = workspaceDirectoryPath(item);
-                          if (nextDirectoryPath) {
-                            props.onOpenDirectory?.(nextDirectoryPath);
-                          }
-                          return;
-                        }
-                        props.onOpenDiff?.(item, menuTarget(item));
-                      }}
-                    >
-                      <GitFileLabel
-                        path={isGitWorkspaceDirectoryEntry(item) ? workspaceDirectoryPath(item) : worktreeFilePath(item, i18n.t('filePreview.unknownPath'))}
-                        secondaryPath={changeSecondaryPath(item)}
-                        directory={isGitWorkspaceDirectoryEntry(item)}
-                      />
-                    </button>
-                  </div>
-                </td>
-                <td class={`${GIT_CHANGED_FILES_CELL_MIDDLE_CLASS} text-muted-foreground`}>
-                  <Show
-                    when={isGitWorkspaceDirectoryEntry(item)}
-                    fallback={workspaceSectionLabel(
-                      (item.section as GitWorkspaceSection | undefined) ??
-                        "unstaged",
-                    )}
-                  >
-                    {localizedWorkspaceViewSectionLabel(props.section, i18n)}
-                  </Show>
-                </td>
-                <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
-                  <Show
-                    when={isGitWorkspaceDirectoryEntry(item)}
-                    fallback={
-                      <GitChangeStatusPill compact change={item.changeType} />
+                >
+                  {i18n.t(key)}
+                </th>
+              )}
+            </For>
+          </tr>
+        }
+        renderRow={(item) => {
+          const active = () => props.selectedKey === workspaceEntryKey(item);
+          return (
+            <tr
+              aria-selected={active()}
+              class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
+              tabIndex={0}
+              onContextMenu={(event) => {
+                event.stopPropagation();
+                contextMenu.openFromContextMenu(event, menuTarget(item));
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+                event.stopPropagation();
+                contextMenu.openFromKeyboard(event, menuTarget(item));
+              }}
+              onClick={() => {
+                if (isGitWorkspaceDirectoryEntry(item)) {
+                  const nextDirectoryPath = workspaceDirectoryPath(item);
+                  if (nextDirectoryPath) {
+                    props.onOpenDirectory?.(nextDirectoryPath);
+                  }
+                  return;
+                }
+                props.onOpenDiff?.(item, menuTarget(item));
+              }}
+            >
+              <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                <div class="min-w-0">
+                  <button
+                    type="button"
+                    class="git-file-open"
+                    title={
+                      isGitWorkspaceDirectoryEntry(item)
+                        ? workspaceDirectoryPath(item)
+                        : changeSecondaryPath(item)
                     }
-                  >
-                    <GitDirectoryStatus unstaged={item.containsUnstaged} untracked={item.containsUntracked} />
-                  </Show>
-                </td>
-                <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
-                  <Show
-                    when={isGitWorkspaceDirectoryEntry(item)}
-                    fallback={
-                      <GitChangeMetrics compact
-                        additions={item.additions}
-                        deletions={item.deletions}
-                      />
-                    }
-                  >
-                    <div class="text-[11px] font-medium text-muted-foreground">
-                      {branchStatusDirectorySummary(item, i18n)}
-                    </div>
-                  </Show>
-                </td>
-                <td class={gitChangedFilesStickyCellClass(active())}>
-                  <GitChangedFilesActionButton
                     onClick={(event) => {
                       event.stopPropagation();
                       if (isGitWorkspaceDirectoryEntry(item)) {
@@ -1209,26 +1103,83 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                       props.onOpenDiff?.(item, menuTarget(item));
                     }}
                   >
-                    {isGitWorkspaceDirectoryEntry(item)
-                      ? i18n.t('uiCopy.git.openFolder')
-                      : i18n.t('uiCopy.git.viewDiff')}
-                  </GitChangedFilesActionButton>
-                </td>
-              </tr>
-            );
-          }}
+                    <GitFileLabel
+                      path={isGitWorkspaceDirectoryEntry(item) ? workspaceDirectoryPath(item) : worktreeFilePath(item, i18n.t('filePreview.unknownPath'))}
+                      secondaryPath={changeSecondaryPath(item)}
+                      directory={isGitWorkspaceDirectoryEntry(item)}
+                    />
+                  </button>
+                </div>
+              </td>
+              <td class={`${GIT_CHANGED_FILES_CELL_MIDDLE_CLASS} text-muted-foreground`}>
+                <Show
+                  when={isGitWorkspaceDirectoryEntry(item)}
+                  fallback={workspaceSectionLabel(
+                    (item.section as GitWorkspaceSection | undefined) ??
+                      "unstaged",
+                  )}
+                >
+                  {localizedWorkspaceViewSectionLabel(props.section, i18n)}
+                </Show>
+              </td>
+              <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
+                <Show
+                  when={isGitWorkspaceDirectoryEntry(item)}
+                  fallback={
+                    <GitChangeStatusPill compact change={item.changeType} />
+                  }
+                >
+                  <GitDirectoryStatus unstaged={item.containsUnstaged} untracked={item.containsUntracked} />
+                </Show>
+              </td>
+              <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
+                <Show
+                  when={isGitWorkspaceDirectoryEntry(item)}
+                  fallback={
+                    <GitChangeMetrics compact
+                      additions={item.additions}
+                      deletions={item.deletions}
+                    />
+                  }
+                >
+                  <div class="text-[11px] font-medium text-muted-foreground">
+                    {branchStatusDirectorySummary(item, i18n)}
+                  </div>
+                </Show>
+              </td>
+              <td class={gitChangedFilesStickyCellClass(active())}>
+                <GitChangedFilesActionButton
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (isGitWorkspaceDirectoryEntry(item)) {
+                      const nextDirectoryPath = workspaceDirectoryPath(item);
+                      if (nextDirectoryPath) {
+                        props.onOpenDirectory?.(nextDirectoryPath);
+                      }
+                      return;
+                    }
+                    props.onOpenDiff?.(item, menuTarget(item));
+                  }}
+                >
+                  {isGitWorkspaceDirectoryEntry(item)
+                    ? i18n.t('uiCopy.git.openFolder')
+                    : i18n.t('uiCopy.git.viewDiff')}
+                </GitChangedFilesActionButton>
+              </td>
+            </tr>
+          );
+        }}
+      />
+      <Show
+        when={(props.hasMore || props.loadingMore) && props.items.length > 0}
+      >
+        <GitPagedTableFooter
+          summary={footerSummary()}
+          onLoadMore={props.onLoadMore}
+          hasMore={props.hasMore}
+          loading={props.loadingMore}
+          loadingStatus={i18n.t('git.common.loadingNextPage')}
         />
-        <Show
-          when={(props.hasMore || props.loadingMore) && props.items.length > 0}
-        >
-          <GitPagedTableFooter
-            summary={footerSummary()}
-            onLoadMore={props.onLoadMore}
-            hasMore={props.hasMore}
-            loading={props.loadingMore}
-            loadingStatus={i18n.t('git.common.loadingNextPage')}
-          />
-        </Show>
       </Show>
       <GitEntityContextMenu controller={contextMenu} items={contextMenuItems} />
     </GitTableFrame>
@@ -1563,6 +1514,22 @@ function HistoryList(
     props.onSelectCommit?.(expandedCommitHash() === hash ? "" : hash);
   };
 
+  let historyNavigation: HTMLDivElement | undefined;
+  const selectedCommitRow = (hash: string) => Array.from(
+    historyNavigation?.querySelectorAll<HTMLButtonElement>('[data-commit-graph-row]') ?? [],
+  ).find((row) => row.dataset.commitGraphRow === hash);
+  const closeDetails = () => {
+    const row = selectedCommitRow(expandedCommitHash());
+    props.onSelectCommit?.('');
+    row?.focus({ preventScroll: true });
+  };
+  createEffect(() => {
+    const hash = expandedCommitHash();
+    if (!hash || !props.active) return;
+    const frame = requestAnimationFrame(() => selectedCommitRow(hash)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
+
   createEffect(() => {
     if (!props.active) return;
     const repo = repoRootPath();
@@ -1666,8 +1633,9 @@ function HistoryList(
                     <div
                       class="git-branch-history-layout"
                       data-git-branch-history-layout="graph-detail"
+                      data-detail-open={Boolean(selectedCommit())}
                     >
-                      <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="min-h-0 overflow-auto">
+                      <div ref={historyNavigation} {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="git-branch-history-navigation min-h-0 overflow-auto">
                         <GitCommitGraph
                           commits={props.commits ?? []}
                           selectedCommitHash={expandedCommitHash()}
@@ -1702,19 +1670,22 @@ function HistoryList(
                         </Show>
                       </div>
 
-                      <div class={cn('flex min-h-0 flex-col overflow-hidden rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass())}>
-                        <Show
-                          when={selectedCommit()}
-                          fallback={(
-                            <div class="flex h-full min-h-[8rem] items-center justify-center px-5 text-center text-xs text-muted-foreground">
-                              {i18n.t('uiCopy.git.chooseCommit')}
-                            </div>
-                          )}
-                        >
-                          {(commit) => {
-                            const detail = () => selectedDetail();
-                            const files = () => detail()?.files ?? [];
-                            return (
+                      <Show when={selectedCommit()} fallback={
+                        <div class="git-branch-history-hint">
+                          <History class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          {i18n.t('uiCopy.git.chooseCommit')}
+                        </div>
+                      }>
+                        {(commit) => {
+                          const detail = () => selectedDetail();
+                          const files = () => detail()?.files ?? [];
+                          return (
+                            <div class={cn('git-branch-history-detail-panel flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass())}>
+                              <button type="button" class="git-branch-history-detail-close git-browser-interactive"
+                                aria-label={i18n.t('uiCopy.git.closeCommitDetails')} title={i18n.t('uiCopy.git.closeCommitDetails')}
+                                onClick={closeDetails}>
+                                <X class="h-3.5 w-3.5" />
+                              </button>
                               <BranchHistoryCommitDetails
                                 commit={commit()}
                                 detail={detail()}
@@ -1733,10 +1704,10 @@ function HistoryList(
                                 onPreviewCurrentFile={props.onPreviewCurrentFile}
                                 onCopyText={props.onCopyText}
                               />
-                            );
-                          }}
-                        </Show>
-                      </div>
+                            </div>
+                          );
+                        }}
+                      </Show>
                     </div>
                   </Show>
                 </div>
@@ -3226,7 +3197,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       branchStatusPresentationState() === "unavailable" &&
       branchIsReady()
     ) {
-      return <BranchStatusUnavailableTable state={statusEmptyState()} />;
+      return <BranchStatusUnavailableSurface state={statusEmptyState()} />;
     }
     return renderBranchStablePlaceholder("status");
   };
@@ -3442,36 +3413,40 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                 when={branchStatusPresentationState() === "ready"}
                 fallback={renderBranchStatusContentFallback()}
               >
-                <GitDiffSplit detail={
-                  <GitDiffPanel open={statusTabActive() && Boolean(diffItem())} item={diffItem()}
-                    source={{ kind: 'workspace', repoRootPath: statusRepoRootPath(), workspaceSection: diffItem()?.section ?? '' }}
-                    emptyMessage={i18n.t('uiCopy.git.selectBranchStatusFile')}
-                  />
+                <Show when={visibleStatusItems().length > 0} fallback={
+                  <BranchStatusEmptySurface section={selectedStatusSection()} directoryPath={activeStatusDirectoryPath()} />
                 }>
-                  <BranchStatusTable
-                    canonicalRepoRootPath={activeRepoRootPath()}
-                    repoRootPath={statusRepoRootPath()}
-                    branch={interactiveBranch() as GitBranchSummary}
-                    section={selectedStatusSection()}
-                    items={visibleStatusItems()}
-                    totalCount={visibleStatusTotalRows()}
-                    scopeFileCount={visibleStatusScopeFileCount()}
-                    directoryPath={activeStatusDirectoryPath()}
-                    hasMore={visibleStatusPageState().hasMore}
-                    loadingMore={visibleStatusLoadingMore()}
-                    selectedKey={visibleStatusKey()}
-                    onOpenDiff={(item) => setSelectedStatusFileKey(workspaceEntryKey(item))}
-                    onOpenDirectory={navigateStatusDirectory}
-                    onAskFlower={props.onAskFlower}
-                    onOpenInTerminal={props.onOpenInTerminal}
-                    onBrowseFiles={props.onBrowseFiles}
-                    onPreviewCurrentFile={props.onPreviewCurrentFile}
-                    onCopyText={props.onCopyText}
-                    onLoadMore={() => {
-                      void loadMoreStatusSection(selectedStatusSection());
-                    }}
-                  />
-                </GitDiffSplit>
+                  <GitDiffSplit detail={
+                    <GitDiffPanel open={statusTabActive() && Boolean(diffItem())} item={diffItem()}
+                      source={{ kind: 'workspace', repoRootPath: statusRepoRootPath(), workspaceSection: diffItem()?.section ?? '' }}
+                      emptyMessage={i18n.t('uiCopy.git.selectBranchStatusFile')}
+                    />
+                  }>
+                    <BranchStatusTable
+                      canonicalRepoRootPath={activeRepoRootPath()}
+                      repoRootPath={statusRepoRootPath()}
+                      branch={interactiveBranch() as GitBranchSummary}
+                      section={selectedStatusSection()}
+                      items={visibleStatusItems()}
+                      totalCount={visibleStatusTotalRows()}
+                      scopeFileCount={visibleStatusScopeFileCount()}
+                      directoryPath={activeStatusDirectoryPath()}
+                      hasMore={visibleStatusPageState().hasMore}
+                      loadingMore={visibleStatusLoadingMore()}
+                      selectedKey={visibleStatusKey()}
+                      onOpenDiff={(item) => setSelectedStatusFileKey(workspaceEntryKey(item))}
+                      onOpenDirectory={navigateStatusDirectory}
+                      onAskFlower={props.onAskFlower}
+                      onOpenInTerminal={props.onOpenInTerminal}
+                      onBrowseFiles={props.onBrowseFiles}
+                      onPreviewCurrentFile={props.onPreviewCurrentFile}
+                      onCopyText={props.onCopyText}
+                      onLoadMore={() => {
+                        void loadMoreStatusSection(selectedStatusSection());
+                      }}
+                    />
+                  </GitDiffSplit>
+                </Show>
               </Show>
             </div>
           </div>

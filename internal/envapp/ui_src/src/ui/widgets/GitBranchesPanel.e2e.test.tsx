@@ -119,6 +119,8 @@ async function clickDropdownMenuItem(
 }
 
 beforeEach(() => {
+  // jsdom does not implement layout-driven scrolling; real geometry is covered in the browser suite.
+  Element.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal("queueMicrotask", (callback: VoidFunction) => callback());
   mockGetCommitDetail.mockReset();
   mockGetBranchCompare.mockReset();
@@ -993,7 +995,7 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
-  it("renders a polished branch-status empty table when the worktree has no pending files", async () => {
+  it("renders one branch-status empty surface when the worktree has no pending files", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -1062,7 +1064,7 @@ describe("GitBranchesPanel interactions", () => {
         '[data-git-branch-status-content-frame="true"]',
       );
       const emptyTable = contentFrame?.querySelector(
-        '[data-git-branch-status-empty-table="true"]',
+        '[data-git-branch-status-empty-surface]',
       );
       const emptyState = emptyTable?.querySelector(
         '.git-branch-status-empty-state[data-git-branch-status-empty-section="changes"]',
@@ -1074,11 +1076,8 @@ describe("GitBranchesPanel interactions", () => {
       expect(contentFrame).toBeTruthy();
       expect(emptyTable).toBeTruthy();
       expect(emptyState).toBeTruthy();
-      expect(emptyHeader?.textContent).toContain("Path");
-      expect(emptyHeader?.textContent).toContain("Section");
-      expect(emptyHeader?.textContent).toContain("Status");
-      expect(emptyHeader?.textContent).toContain("Changes");
-      expect(emptyHeader?.textContent).toContain("Action");
+      expect(emptyHeader).toBeNull();
+      expect(contentFrame?.querySelector('.git-diff-split')).toBeNull();
       expect(emptyState?.textContent).toContain("No pending files");
       expect(emptyState?.textContent).toContain("This worktree is clean.");
       expect(
