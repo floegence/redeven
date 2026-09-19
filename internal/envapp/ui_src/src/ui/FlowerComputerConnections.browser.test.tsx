@@ -269,6 +269,31 @@ it('prepares Chrome automatically and continues only after a real connection', a
   expect(management.listCandidates).not.toHaveBeenCalled(); expect(management.loadAccess).not.toHaveBeenCalled();
 });
 
+it('starts with reconnection after prior setup and keeps installation available as a separate action', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const loadExtensionStatus = vi.fn().mockResolvedValue({ prepared: true, profiles: [] });
+  const continued = vi.fn().mockResolvedValue(undefined);
+  const management = {
+    listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+    listTargets: vi.fn(), listBrowserTabs: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(),
+    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/Redeven/Flower Browser fixture', platform: 'darwin', extension_home_path: ['Redeven', 'Flower Browser fixture'], native_host: 'fixture.host', extension_id: 'fixture' }),
+    openExtension: vi.fn(), loadExtensionStatus,
+  };
+  const stop = render(() => <FloeConfigProvider><FlowerProfileConnection connectionOnly onContinue={continued}
+    management={management} connect={vi.fn()} copy={computerUseEnUS} onConnected={() => undefined} /></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(value => value.textContent === text);
+  await waitFor(() => Boolean(button(computerUseEnUS.openConnection)));
+  expect(button(computerUseEnUS.openExtensions)).toBeUndefined();
+  expect(host.textContent).not.toContain(computerUseEnUS.extensionHint);
+  expect(continued).not.toHaveBeenCalled();
+  button(computerUseEnUS.setupBack)!.click();
+  expect(button(computerUseEnUS.openExtensions)).toBeDefined();
+  loadExtensionStatus.mockResolvedValue({ prepared: true, profiles: [{ id: 'restored', name: 'Chrome' }] });
+  await waitFor(() => continued.mock.calls.length === 1);
+  expect(management.openExtension).not.toHaveBeenCalled();
+});
+
 it('does not continue a closed guide when profile discovery finishes late', async () => {
   const host = document.createElement('div'); document.body.append(host);
   let resolve!: (value: {profiles: {id:string;name:string}[]}) => void;

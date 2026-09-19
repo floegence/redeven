@@ -9,7 +9,7 @@ timestamp: 2026-09-19T00:00:00Z
 
 Desktop and Env App share one Chrome connection guide. ComputerUseRuntime owns
 connections; Floret InputRequired and Respond remain the conversation owners.
-The guide is bounded UI observation, not a second execution lifecycle. Users confirm installation and connection in Chrome; routine tasks reuse the verified connection without manually selecting a target.
+The guide is bounded UI observation, not a second execution lifecycle. Users confirm installation and the first connection in Chrome; that profile then restores the same environment connection after restarts. Routine tasks reuse the verified connection without manually selecting a target.
 
 # Contract
 
@@ -59,8 +59,21 @@ bounded two-minute inventory observation exists only while the guide is open;
 only the completed Native Messaging handshake can resume the original Floret
 interaction. Closing or switching conversations discards delayed results. A
 failed check exposes retry, without binding a tab or creating another lifecycle.
-Connected profiles are reused; a disconnected profile can reconnect through
-step 2 without reinstalling the extension.
+Connected profiles are reused. Conversation assistance starts at the connection
+step when the Runtime has a prepared registration; installation remains available
+through Back. First setup and adding another profile start with installation.
+Preparation is not proof of Chrome installation or a live connection, and never
+resumes a task. Only live, handshaken profiles do so.
+
+After a successful user-confirmed connection, extension-local settings retain
+the profile identity, exact native host and automatic-reconnection consent.
+Worker startup, Chrome startup and native-port loss restore only that confirmed
+transport. A Chrome alarm retries every 30 seconds while Runtime is unavailable.
+The popup observes status changes while open. Explicit Disconnect clears consent
+and the alarm; restarting Chrome does not undo that choice. Reconnection drains
+old requests and bindings without replaying commands, inspecting tabs or granting
+new target authority. Existing saved names without confirmed consent do not opt
+in. Upgrading from extension 1.0.2 requires a one-time reload and Connect.
 
 Chrome must run on the environment host (macOS or Linux); a remote environment
 cannot open Chrome on the client machine. Safari and other browsers are not
@@ -76,8 +89,11 @@ profile ambiguity remains the Agent's responsibility through existing discovery.
 The extension's optional profile label is user content, not routing authority.
 
 Runtime Service epoch 27 pairs the connection status snapshot with both product
-carriers. `extension/status` replaces the removed profile-list route. Native Messaging uses protocol 6. The extension
-connection page remains consent-gated even when the URL supplies configuration.
+carriers. `extension/status` contains live profiles, an optional failure reason
+and optional `prepared` presentation hint. Older carriers safely ignore the hint;
+new carriers retain installation guidance when it is absent. Native Messaging
+uses protocol 6. The first connection remains consent-gated even when the URL
+supplies configuration.
 No database, Floret API, tool-selection rule or authorization policy changes.
 
 The Runtime hub owns one bounded, non-sensitive handshake failure alongside its
@@ -91,8 +107,10 @@ explicit setup clears the diagnostic; no failure or pending connection is stored
 Chrome's native-host error is read only during its disconnect callback and mapped
 to a closed reason for expired registration, blocked or failed host startup,
 unavailable Runtime, or timeout. Raw platform errors and paths do not enter the
-popup. Reopening the guide or its connection action uses the same explicit setup
-path to repair package files and registration, including after Runtime restart.
+popup. The stable staged package records prior setup. Runtime startup uses the
+same setup path to restore registration and current assets only when that package
+exists; fresh environments do not prepare Chrome automatically. Reopening the
+guide or its connection action can also repair registration and package files.
 Shutdown removes only the exact owned registration and active socket. A stale
 page cannot silently attach to another Runtime, downgrade the protocol or bypass
 Chrome consent. Updating an unpacked extension loads the current visible folder
@@ -130,6 +148,8 @@ differ from Redeven; collapsed help includes the English labels.
 - `redeven:internal/ai/computer_extension_onboarding_test.go` - destination rejection, sandbox arguments and installation replacement.
 - `redeven:internal/flower_ui/src/FlowerChromeConnection.tsx` - bounded connection inventory observation and disposal.
 - `redeven:browser-extension/popup.mjs` - automatic configuration and explicit confirmation.
+- `redeven:browser-extension/background.mjs` - confirmed transport recovery and explicit disconnect.
+- `redeven:internal/envapp/ui_src/scripts/computerExtensionLifecycle.node-test.mjs` - worker restart, unavailable Runtime, alarm recovery and consent persistence.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerComputerConnections.browser.test.tsx` - first connection, extra profiles, cancellation and retry.
 - `redeven:scripts/stage_browser_extension.mjs` - canonical brand assets in the packaged extension.
 - `redeven:internal/envapp/ui_src/scripts/computerExtensionInstall.node-test.mjs` - staged icon integrity and installation qualification.
