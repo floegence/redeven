@@ -5246,6 +5246,8 @@
       "connectionHint": "Conecta Chrome para continuar esta tarea automáticamente.",
       "noFrame": "No hay capturas disponibles",
       "frameConnecting": "Conectando con la vista…",
+      "frameLoading": "Cargando la vista…",
+      "frameLoadingHint": "La vista aparecerá aquí cuando esté lista.",
       "frameDisconnected": "Conexión con la vista interrumpida",
       "frameStale": "Última captura · no es en directo",
       "reveal": "Ver en el navegador",

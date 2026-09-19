@@ -896,6 +896,8 @@
     "connectionHint": "Connect Chrome to continue this task automatically.",
     "noFrame": "No screenshot available",
     "frameConnecting": "Connecting to the view…",
+    "frameLoading": "Loading the view…",
+    "frameLoadingHint": "The view will appear here when it’s ready.",
     "frameDisconnected": "View connection interrupted",
     "frameStale": "Last captured view · not live",
     "reveal": "View in browser",

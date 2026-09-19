@@ -1,9 +1,9 @@
 import { COMPUTER_FRAME_RATES } from './computerViewer';
 import type { Component } from 'solid-js';
 import { Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
-import { Clock, MonitorPointer, Refresh } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Clock, MonitorPointer, Refresh } from '@floegence/floe-webapp-core/icons';
 
-import { FloatingWindow, SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
+import { Button, FloatingWindow, SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerActivityItem, FlowerComputerInputCommand, FlowerComputerFrameSource, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 
@@ -28,6 +28,8 @@ export type FlowerComputerStageCopy = Readonly<{
   restore: string;
   move: string;
   noFrame: string;
+  loading: string;
+  loadingHint: string;
   retry: string;
   resumeControl: string;
   frameRate: string;
@@ -181,6 +183,11 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
     props.onRetry?.();
     setRetry(value => value + 1);
   };
+  const viewInterrupted = () => props.sessionState === 'paused' || props.sessionState === 'disconnected';
+  const framePending = createMemo(() => props.open && !props.blocked && !failed() && !viewInterrupted() && Boolean(props.loading || decoding()));
+  const frameRetryAvailable = () => !props.blocked && (failed() || (viewInterrupted() && Boolean(props.onRetry)));
+  const retryLabel = () => props.sessionState === 'disconnected' ? props.copy.resumeControl : props.copy.retry;
+  const showFrameTools = createMemo(() => Boolean(resolvedURL()) && Boolean(props.staleLabel || !props.onInput));
   return (
   <Show when={threadID() || 'computer-viewer'} keyed>
     {(viewerThread) => <>
@@ -206,9 +213,9 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
               {COMPUTER_FRAME_RATES.map(fps => <option value={fps}>{fps} FPS</option>)}
             </select>
           </label></Show>
-          <Show when={props.sessionState === 'paused' || props.sessionState === 'disconnected'}><button type="button" aria-label={props.sessionState === 'disconnected' ? props.copy.resumeControl : props.copy.retry} title={props.sessionState === 'disconnected' ? props.copy.resumeControl : props.copy.retry} onClick={retryFrames}><Refresh class="h-4 w-4" /></button></Show>
+          <Show when={resolvedURL() && viewInterrupted()}><button type="button" aria-label={retryLabel()} title={retryLabel()} onClick={retryFrames}><Refresh class="h-4 w-4" /></button></Show>
         </div>}
-        footer={<Show when={resolvedURL() && (props.staleLabel || !props.onInput)}>
+        footer={showFrameTools() ?
           <div class="flower-computer-viewer-toolbar">
             <Show when={props.staleLabel}><span class="flower-computer-frame-notice" role="status">
               <Clock size={13} aria-hidden="true" /><span>{props.staleLabel}</span>
@@ -218,9 +225,9 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
               <button type="button" class="flower-computer-zoom" aria-pressed={actualSize()} onClick={() => setActualSize(true)}>{props.copy.zoomIn}</button>
             </div></Show>
           </div>
-        </Show>}
+        : undefined}
         class="flower-computer-stage">
-    <div ref={frameWrap} class="flower-computer-stage-frame-wrap" data-zoomed={actualSize() ? 'true' : undefined} data-computer-viewer-thread={viewerThread} data-computer-target={targetID()}>
+    <div ref={frameWrap} class="flower-computer-stage-frame-wrap" data-empty={!resolvedURL() ? 'true' : undefined} data-zoomed={actualSize() ? 'true' : undefined} data-computer-viewer-thread={viewerThread} data-computer-target={targetID()}>
       <Show when={props.onInput}>
         <textarea
           ref={keyboard}
@@ -247,11 +254,26 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
           }}
         />
       </Show>
-      <Show when={resolvedURL()} fallback={<div class="flower-computer-stage-no-frame">
-        <p role="status">{props.emptyMessage || props.copy.noFrame}</p>
-        <Show when={!props.blocked && (props.loading || decoding()) && !failed()}><Refresh class="h-5 w-5 animate-spin" aria-hidden="true" /></Show>
-        <Show when={failed()}>
-          <button type="button" aria-label={props.copy.retry} title={props.copy.retry} onClick={retryFrames}><Refresh class="h-5 w-5" aria-hidden="true" /></button>
+      <Show when={resolvedURL()} fallback={<div class="flower-computer-stage-no-frame" data-loading={framePending() ? 'true' : undefined} data-interrupted={frameRetryAvailable() ? 'true' : undefined}>
+        <div class="flower-computer-placeholder-art" aria-hidden="true">
+          <Show when={frameRetryAvailable()} fallback={
+            <svg class="flower-computer-placeholder-scan" viewBox="0 0 104 64" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <path class="flower-computer-placeholder-guides" d="M24 10H12v12m68-12h12v12M12 42v12h12m68-12v12H80" />
+              <path opacity=".24" d="M30 20h28m7 0h9M26 44h12m7 0h33" />
+              <path opacity=".4" d="M26 26h42m7 0h7M22 38h8m7 0h41" />
+              <path opacity=".65" d="M22 32h60" />
+            </svg>
+          }><AlertTriangle size={30} /></Show>
+          <Show when={framePending()}><span class="flower-computer-placeholder-scan-light" data-floe-progress-shimmer="surface" /></Show>
+        </div>
+        <div class="flower-computer-placeholder-copy">
+          <p class="flower-computer-placeholder-title" role="status" data-floe-progress-shimmer={framePending() ? 'text' : undefined}>
+            {framePending() ? (props.loading && props.emptyMessage ? props.emptyMessage : props.copy.loading) : props.emptyMessage || props.copy.noFrame}
+          </p>
+          <Show when={framePending()}><p class="flower-computer-placeholder-hint">{props.copy.loadingHint}</p></Show>
+        </div>
+        <Show when={frameRetryAvailable()}>
+          <Button variant="secondary" size="sm" icon={Refresh} onClick={retryFrames}>{retryLabel()}</Button>
         </Show>
       </div>}>
         {(url) => (

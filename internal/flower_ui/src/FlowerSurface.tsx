@@ -12199,6 +12199,8 @@ webSearch: model.web_search,
                 state: copy().chat.computerStageStatus,
                 move: copy().chat.computerStageMove,
                 noFrame: copy().computer.noFrame,
+                loading: copy().computer.frameLoading,
+                loadingHint: copy().computer.frameLoadingHint,
                 retry: copy().chat.handlerRetry,
               }}
               onClose={() => { setComputerStageOpen(false); }}

@@ -36,6 +36,16 @@ centered fit; non-live notices never share or reduce the image's horizontal spac
 The footer places a quiet clock notice beside explicit Fit to window and Actual
 size choices, with the active choice exposed visually and through `aria-pressed`.
 On narrow windows the footer wraps without covering or cropping pixels.
+Before the first decoded frame, the viewer centers an open capture-line
+illustration, one localized status, and a short loading hint on a quiet theme
+surface. The illustration uses bare strokes instead of an icon inside a tile.
+Only an active connection or decode opts the scan line and status into the
+published surface and text shimmer. Assistance, absent captures, and interrupted
+viewing remain static. Small viewer heights reduce the artwork and then omit
+the secondary hint. Empty
+viewers have no footer. An interrupted empty view exposes one labeled retry or
+reconnect button; a retained image keeps the existing header recovery action.
+Decoded pixels replace the placeholder without changing window geometry.
 Closing a live viewer switches to a 40px launcher with the published 20px
 `MonitorPointer` icon, an opaque theme surface, thin border, and a restrained
 black shadow. While the exact task is running, the header entry and visible

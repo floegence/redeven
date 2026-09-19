@@ -5261,6 +5261,8 @@
       "connectionHint": "连接 Chrome 后，当前任务会自动继续。",
       "noFrame": "暂无截图",
       "frameConnecting": "正在连接画面…",
+      "frameLoading": "正在加载画面…",
+      "frameLoadingHint": "画面就绪后会自动显示在这里",
       "frameDisconnected": "画面连接已中断",
       "frameStale": "最后拍摄的画面 · 非实时",
       "reveal": "在浏览器中查看",
