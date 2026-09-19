@@ -73,6 +73,7 @@ main() {
       node scripts/check-environment-settings.mjs
       node scripts/check-environment-endpoints.mjs
       node scripts/check-welcome-cards.mjs
+      node scripts/check-appearance-electron.mjs
     fi
     npm run build
   )

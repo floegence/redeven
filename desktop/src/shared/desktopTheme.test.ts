@@ -8,6 +8,12 @@ import {
 } from './desktopTheme';
 
 describe('desktop shell theme contract', () => {
+  it('defaults to Porcelain without rewriting explicit Classic choices', () => {
+    expect(DESKTOP_SHELL_THEME_DEFAULTS).toEqual({ version: 1, light: 'porcelain-light', dark: 'porcelain-dark' });
+    const stored = { version: 1, light: 'classic-light', dark: 'classic-dark' };
+    expect(normalizeDesktopShellThemeSelection(stored)).toEqual(stored);
+  });
+
   it('keeps the published unique presets for each mode', () => {
     expect(DESKTOP_SHELL_THEME_PRESETS.light).toHaveLength(12);
     expect(DESKTOP_SHELL_THEME_PRESETS.dark).toHaveLength(14);

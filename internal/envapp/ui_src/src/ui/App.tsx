@@ -12,7 +12,7 @@ import {
   useTheme,
   WidgetRegistryProvider,
 } from '@floegence/floe-webapp-core';
-import { createMemo, onCleanup, onMount } from 'solid-js';
+import { batch, createMemo, onCleanup, onMount } from 'solid-js';
 import { CommandPalette } from '@floegence/floe-webapp-core/ui';
 import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { EnvAppShell } from './EnvAppShell';
@@ -179,7 +179,7 @@ function DesktopThemeSync() {
       });
     };
 
-    const applyShellTheme = (next: DesktopThemeSnapshot) => {
+    const applyShellTheme = (next: DesktopThemeSnapshot) => batch(() => {
       const nextThemeSnapshotKey = desktopThemeSnapshotKey(next);
       if (nextThemeSnapshotKey !== lastThemeSnapshotKey) {
         lastThemeSnapshotKey = nextThemeSnapshotKey;
@@ -194,7 +194,7 @@ function DesktopThemeSync() {
       if (theme.theme() !== next.source) {
         theme.setTheme(next.source);
       }
-    };
+    });
     applyShellTheme(shellTheme.getSnapshot());
     const unsubscribe = shellTheme.subscribe(applyShellTheme);
     onCleanup(() => {

@@ -1233,6 +1233,7 @@ export const enUS = defineDictionary({
       systemResolvedDark: 'System is currently using dark mode',
       themesLabel: 'Themes',
       changeFailed: 'Could not update appearance. Try again.',
+      switching: 'Switching appearance…',
       presets: {
         'classic-light': 'Classic Light',
         'porcelain-light': 'Porcelain Light',

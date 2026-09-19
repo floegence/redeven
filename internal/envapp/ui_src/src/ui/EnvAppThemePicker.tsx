@@ -2,6 +2,7 @@ import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import {
   getShellThemePresetsForMode,
+  deferAfterPaint,
   resolveThemeTokenOverrides,
   useTheme,
   type FloeShellThemeMode,
@@ -17,8 +18,8 @@ import { useI18n, type EnvAppTranslationKey } from './i18n';
 export type EnvAppThemePickerProps = Readonly<{
   openRequestSeq?: () => number;
   tooltip?: string | false;
-  onSourceChange: (source: ThemeType) => boolean;
-  onShellThemeChange: (mode: FloeShellThemeMode, presetName: string) => boolean;
+  onSourceChange: (source: ThemeType) => boolean | Promise<boolean>;
+  onShellThemeChange: (mode: FloeShellThemeMode, presetName: string) => boolean | Promise<boolean>;
 }>;
 
 const THEME_SOURCE_OPTIONS = ['system', 'light', 'dark'] as const satisfies readonly ThemeType[];
@@ -118,6 +119,9 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
   const i18n = useI18n();
   const [open, setOpen] = createSignal(false);
   const [error, setError] = createSignal('');
+  const [pending, setPending] = createSignal('');
+  let disposed = false;
+  onCleanup(() => { disposed = true; });
   const [themeGroupFocused, setThemeGroupFocused] = createSignal(false);
   const id = `redeven-env-theme-picker-${createUniqueId()}`;
   const dialogID = `${id}-dialog`;
@@ -142,7 +146,6 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
 
   const closePicker = (restoreFocus = false) => {
     setOpen(false);
-    setError('');
     if (restoreFocus) {
       queueMicrotask(() => triggerEl?.focus());
     }
@@ -153,7 +156,6 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
   };
 
   const openPicker = () => {
-    setError('');
     setOpen(true);
     focusById(`${modeGroupID}-${theme.theme()}`);
   };
@@ -206,34 +208,49 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
   });
 
   const showUpdateFailure = () => setError(i18n.t('shell.themePicker.changeFailed'));
-  const selectSource = (source: ThemeType) => {
+  const selectSource = async (source: ThemeType) => {
+    if (pending()) return;
     if (source === theme.theme()) {
       setError('');
       return;
     }
+    setError('');
+    setPending(`mode-${source}`);
     try {
-      if (!props.onSourceChange(source)) {
+      await new Promise<void>(deferAfterPaint);
+      if (disposed) return;
+      if (!await props.onSourceChange(source)) {
         showUpdateFailure();
         return;
       }
       setError('');
     } catch {
-      showUpdateFailure();
+      if (!disposed) showUpdateFailure();
+    } finally {
+      if (!disposed) setPending('');
     }
   };
-  const selectPreset = (preset: FloeThemePreset) => {
+  const selectPreset = async (preset: FloeThemePreset) => {
+    if (pending()) return;
     if (preset.name === selectedPresetName()) {
       setError('');
       return;
     }
+    const mode = activeMode();
+    setError('');
+    setPending(preset.name);
     try {
-      if (!props.onShellThemeChange(activeMode(), preset.name)) {
+      await new Promise<void>(deferAfterPaint);
+      if (disposed) return;
+      if (!await props.onShellThemeChange(mode, preset.name)) {
         showUpdateFailure();
         return;
       }
       setError('');
     } catch {
-      showUpdateFailure();
+      if (!disposed) showUpdateFailure();
+    } finally {
+      if (!disposed) setPending('');
     }
   };
   const activePreviewColor = () => {
@@ -261,6 +278,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
           'border border-transparent text-muted-foreground',
           open() && 'border-border/70 bg-accent text-foreground',
         )}
+        aria-busy={Boolean(pending())}
         aria-haspopup="dialog"
         aria-expanded={open() ? 'true' : 'false'}
         aria-controls={dialogID}
@@ -328,11 +346,13 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
                     <button
                       type="button"
                       id={`${modeGroupID}-${source}`}
+                      aria-disabled={Boolean(pending())}
+                      aria-busy={pending() === `mode-${source}`}
                       role="radio"
                       aria-checked={selected() ? 'true' : 'false'}
                       tabIndex={selected() ? 0 : -1}
                       class={cn(
-                        'h-7 cursor-pointer rounded-md px-2 text-[11px] font-medium transition-colors',
+                        'relative h-7 cursor-pointer aria-disabled:cursor-progress rounded-md px-2 text-[11px] font-medium transition-colors',
                         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
                         selected()
                           ? redevenSegmentedItemClass(true)
@@ -349,6 +369,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
                         }
                       }}
                     >
+                      <Show when={pending() === `mode-${source}`}><span class="mr-1 inline-block h-3 w-3 animate-spin rounded-full border border-current border-t-transparent align-middle motion-reduce:animate-none" aria-hidden="true" /></Show>
                       {i18n.t(`shell.themePicker.mode.${source}` as EnvAppTranslationKey)}
                     </button>
                   );
@@ -371,8 +392,8 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
             >
               {i18n.t('shell.themePicker.themesLabel')}
             </div>
-            <span class="rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-              {presets().length}
+            <span role="status" aria-live="polite" class="text-[10px] font-medium text-muted-foreground">
+              {pending() ? i18n.t('shell.themePicker.switching') : presets().length}
             </span>
           </div>
 
@@ -416,8 +437,10 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
                       aria-checked={selected() ? 'true' : 'false'}
                       tabIndex={selected() ? 0 : -1}
                       data-envapp-theme-preset={preset.name}
+                      aria-disabled={Boolean(pending())}
+                      aria-busy={pending() === preset.name}
                       class={cn(
-                        'group min-w-0 cursor-pointer rounded-lg border p-1.5 text-left transition-colors motion-reduce:transition-none',
+                        'group min-w-0 cursor-pointer aria-disabled:cursor-progress rounded-lg border p-1.5 text-left transition-colors motion-reduce:transition-none',
                         'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-popover',
                         selected()
                           ? 'border-primary bg-accent/60 shadow-sm'
@@ -437,11 +460,13 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
                         <span
                           class={cn(
                             'inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity',
-                            selected() ? 'opacity-100' : 'opacity-0',
+                            selected() || pending() === preset.name ? 'opacity-100' : 'opacity-0',
                           )}
                           aria-hidden="true"
                         >
-                          <Check class="h-2.5 w-2.5" />
+                          <Show when={pending() === preset.name} fallback={<Check class="h-2.5 w-2.5" />}>
+                            <span class="h-2.5 w-2.5 animate-spin rounded-full border border-current border-t-transparent motion-reduce:animate-none" />
+                          </Show>
                         </span>
                       </span>
                     </button>

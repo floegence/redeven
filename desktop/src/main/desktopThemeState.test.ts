@@ -52,7 +52,7 @@ function createStore(
 }
 
 describe('DesktopThemeState', () => {
-  it('migrates the existing source-only state to the published Classic presets', () => {
+  it('migrates the existing source-only state to the published Porcelain presets', () => {
     const store = createStore('dark');
     const nativeTheme = new FakeNativeTheme();
     nativeTheme.shouldUseDarkColors = false;
@@ -66,17 +66,32 @@ describe('DesktopThemeState', () => {
       resolvedTheme: 'dark',
       shellThemes: {
         version: 1,
-        light: 'classic-light',
-        dark: 'classic-dark',
+        light: 'porcelain-light',
+        dark: 'porcelain-dark',
       },
-      activeShellTheme: 'classic-dark',
+      activeShellTheme: 'porcelain-dark',
       window: {
-        backgroundColor: '#202223',
-        symbolColor: '#e5e6e2',
+        backgroundColor: '#0c0c0d',
+        symbolColor: '#f2f1ee',
       },
-      semantic: desktopSemanticPaletteForShellTheme('classic-dark'),
+      semantic: desktopSemanticPaletteForShellTheme('porcelain-dark'),
     });
     expect(store.setRendererItem).not.toHaveBeenCalled();
+  });
+
+  it('retains acknowledged state after persistence failure and allows the same choice to retry', () => {
+    const store = createStore('light');
+    const state = new DesktopThemeState(store, new FakeNativeTheme(), 'darwin');
+    const initial = state.getSnapshot();
+    store.setRendererItem.mockImplementationOnce(() => { throw new Error('disk unavailable'); });
+    expect(() => state.setShellTheme('light', 'mist')).toThrow('disk unavailable');
+    expect(state.getSnapshot()).toBe(initial);
+    expect(state.setShellTheme('light', 'mist').shellThemes.light).toBe('mist');
+    const selected = state.getSnapshot();
+    store.setRendererItem.mockImplementationOnce(() => { throw new Error('disk unavailable'); });
+    expect(() => state.setSource('dark')).toThrow('disk unavailable');
+    expect(state.getSnapshot()).toBe(selected);
+    expect(state.setSource('dark').source).toBe('dark');
   });
 
   it('loads a persisted per-mode selection and derives the active native colors', () => {
@@ -110,10 +125,10 @@ describe('DesktopThemeState', () => {
 
     expect(state.getSnapshot().shellThemes).toEqual({
       version: 1,
-      light: 'classic-light',
+      light: 'porcelain-light',
       dark: 'forest',
     });
-    expect(state.getSnapshot().activeShellTheme).toBe('classic-light');
+    expect(state.getSnapshot().activeShellTheme).toBe('porcelain-light');
   });
 
   it('persists shell selection and broadcasts the renderer-safe snapshot to every window', () => {
@@ -136,7 +151,7 @@ describe('DesktopThemeState', () => {
     expect(snapshot.shellThemes).toEqual({
       version: 1,
       light: 'mist',
-      dark: 'classic-dark',
+      dark: 'porcelain-dark',
     });
     expect(snapshot.activeShellTheme).toBe('mist');
     expect(snapshot.window).toEqual({
@@ -166,8 +181,8 @@ describe('DesktopThemeState', () => {
 
     expect(snapshot.source).toBe('light');
     expect(snapshot.shellThemes.dark).toBe('ember');
-    expect(snapshot.activeShellTheme).toBe('classic-light');
-    expect(snapshot.window.backgroundColor).toBe('#f8f7f2');
+    expect(snapshot.activeShellTheme).toBe('porcelain-light');
+    expect(snapshot.window.backgroundColor).toBe('#f4f1ed');
   });
 
   it('switches active preset and native colors when the OS changes under system mode', () => {
@@ -235,7 +250,7 @@ describe('DesktopThemeState', () => {
     state.setShellTheme('dark', 'forest');
     expect(onSnapshotChanged).toHaveBeenCalledTimes(1);
     expect(onSnapshotChanged.mock.calls[0]?.[0].semantic).toEqual(
-      desktopSemanticPaletteForShellTheme('classic-light'),
+      desktopSemanticPaletteForShellTheme('porcelain-light'),
     );
 
     const snapshot = state.setShellTheme('light', 'mist');
@@ -257,7 +272,7 @@ describe('DesktopThemeState', () => {
     const initial = state.getSnapshot();
     expect(state.setShellTheme('light', 'ocean')).toBe(initial);
     expect(state.setShellTheme('future', 'mist')).toBe(initial);
-    expect(state.setShellTheme('light', 'classic-light')).toBe(initial);
+    expect(state.setShellTheme('light', 'porcelain-light')).toBe(initial);
     expect(store.setRendererItem).not.toHaveBeenCalled();
     expect(win.setBackgroundColor).not.toHaveBeenCalled();
     expect(win.webContents.send).not.toHaveBeenCalled();

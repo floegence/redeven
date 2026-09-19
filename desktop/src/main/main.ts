@@ -17998,11 +17998,11 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.on(DESKTOP_THEME_GET_SNAPSHOT_CHANNEL, (event) => {
     event.returnValue = desktopRendererThemeSnapshot(desktopThemeState().getSnapshot());
   });
-  ipcMain.on(DESKTOP_THEME_SET_SOURCE_CHANNEL, (event, source) => {
-    event.returnValue = desktopRendererThemeSnapshot(desktopThemeState().setSource(source));
+  ipcMain.handle(DESKTOP_THEME_SET_SOURCE_CHANNEL, (_event, source) => {
+    return desktopRendererThemeSnapshot(desktopThemeState().setSource(source));
   });
-  ipcMain.on(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, (event, mode, presetName) => {
-    event.returnValue = desktopRendererThemeSnapshot(
+  ipcMain.handle(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, (_event, mode, presetName) => {
+    return desktopRendererThemeSnapshot(
       desktopThemeState().setShellTheme(mode, presetName),
     );
   });

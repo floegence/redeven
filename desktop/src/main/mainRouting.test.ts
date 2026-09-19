@@ -343,7 +343,7 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('DESKTOP_THEME_SET_SHELL_THEME_CHANNEL,');
-    expect(mainSrc).toContain('ipcMain.on(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, (event, mode, presetName) => {');
+    expect(mainSrc).toContain('ipcMain.handle(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, (_event, mode, presetName) => {');
     expect(mainSrc).toContain('event.returnValue = desktopRendererThemeSnapshot(');
     expect(mainSrc).toContain('desktopThemeState().setShellTheme(mode, presetName),');
   });

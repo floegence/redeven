@@ -411,6 +411,7 @@
       "systemResolvedDark": "系统当前使用深色模式",
       "themesLabel": "主题",
       "changeFailed": "无法更新外观，请重试。",
+      "switching": "正在切换外观…",
       "presets": {
         "classic-light": "经典浅色",
         "porcelain-light": "暖瓷浅色",

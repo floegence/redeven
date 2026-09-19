@@ -411,6 +411,7 @@
       "systemResolvedDark": "Le système utilise actuellement le mode sombre",
       "themesLabel": "Thèmes",
       "changeFailed": "Impossible de modifier l’apparence. Réessayez.",
+      "switching": "Changement d’apparence…",
       "presets": {
         "classic-light": "Classique clair",
         "porcelain-light": "Porcelaine claire",

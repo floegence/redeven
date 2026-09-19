@@ -65,7 +65,7 @@ describe('EnvAppThemePicker', () => {
 
   function mountPicker(
     openRequestSeq?: () => number,
-    outcomes: Readonly<{ source?: boolean; shellTheme?: boolean }> = {},
+    outcomes: Readonly<{ source?: boolean | Promise<boolean>; shellTheme?: boolean | Promise<boolean> }> = {},
   ) {
     const onSourceChange = vi.fn(() => outcomes.source ?? true);
     const onShellThemeChange = vi.fn(() => outcomes.shellTheme ?? true);
@@ -90,6 +90,33 @@ describe('EnvAppThemePicker', () => {
     return trigger!;
   }
 
+  it('paints pending feedback before committing, prevents duplicate writes, and allows closing during a slow change', async () => {
+    let resolve!: (value: boolean) => void;
+    const promise = new Promise<boolean>((resolvePromise) => { resolve = resolvePromise; });
+    const { dispose, onShellThemeChange } = mountPicker(undefined, { shellTheme: promise });
+    try {
+      const trigger = openPicker();
+      const target = host.querySelector<HTMLButtonElement>('[data-envapp-theme-preset="paper"]')!;
+      target.click();
+      expect(host.querySelector('[role="status"]')?.textContent).toContain('Switching appearance');
+      expect(target.getAttribute('aria-busy')).toBe('true');
+      expect(target.getAttribute('aria-checked')).toBe('false');
+      expect(onShellThemeChange).not.toHaveBeenCalled();
+      target.click();
+      await vi.waitFor(() => expect(onShellThemeChange).toHaveBeenCalledTimes(1));
+      trigger.click();
+      expect(host.querySelector('[role="dialog"]')).toBeNull();
+      resolve(false);
+      await vi.waitFor(() => expect(trigger.getAttribute('aria-busy')).not.toBe('true'));
+      trigger.click();
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not update appearance');
+      expect(themeHarness.selected().light).toBe('classic-light');
+    } finally {
+      resolve(false);
+      dispose();
+    }
+  });
+
   it('shows all 12 light themes, including Classic Light and Porcelain Light', () => {
     const { dispose } = mountPicker();
     try {
@@ -107,7 +134,7 @@ describe('EnvAppThemePicker', () => {
     }
   });
 
-  it('shows all 14 dark themes and selects Nord without changing the source', () => {
+  it('shows all 14 dark themes and selects Nord without changing the source', async () => {
     themeHarness.setSource('dark');
     themeHarness.setResolved('dark');
     const { dispose, onSourceChange, onShellThemeChange } = mountPicker();
@@ -120,14 +147,14 @@ describe('EnvAppThemePicker', () => {
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('classic-dark');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).not.toContain('classic-light');
       nord?.click();
-      expect(onShellThemeChange).toHaveBeenCalledWith('dark', 'nord');
+      await vi.waitFor(() => expect(onShellThemeChange).toHaveBeenCalledWith('dark', 'nord'));
       expect(onSourceChange).not.toHaveBeenCalled();
     } finally {
       dispose();
     }
   });
 
-  it('keeps system mode while selecting the preset for the currently resolved side', () => {
+  it('keeps system mode while selecting the preset for the currently resolved side', async () => {
     themeHarness.setSource('system');
     themeHarness.setResolved('dark');
     const { dispose, onSourceChange, onShellThemeChange } = mountPicker();
@@ -135,7 +162,7 @@ describe('EnvAppThemePicker', () => {
       openPicker();
       host.querySelector<HTMLButtonElement>('[data-envapp-theme-preset="monokai"]')?.click();
 
-      expect(onShellThemeChange).toHaveBeenCalledWith('dark', 'monokai');
+      await vi.waitFor(() => expect(onShellThemeChange).toHaveBeenCalledWith('dark', 'monokai'));
       expect(onSourceChange).not.toHaveBeenCalled();
       expect(host.textContent).toContain('System is currently using dark mode');
     } finally {
@@ -143,7 +170,7 @@ describe('EnvAppThemePicker', () => {
     }
   });
 
-  it('changes the color source through the mode radiogroup', () => {
+  it('changes the color source through the mode radiogroup', async () => {
     const { dispose, onSourceChange } = mountPicker();
     try {
       openPicker();
@@ -151,7 +178,7 @@ describe('EnvAppThemePicker', () => {
         (button) => button.textContent === 'Dark',
       );
       darkMode?.click();
-      expect(onSourceChange).toHaveBeenCalledWith('dark');
+      await vi.waitFor(() => expect(onSourceChange).toHaveBeenCalledWith('dark'));
     } finally {
       dispose();
     }
@@ -248,7 +275,7 @@ describe('EnvAppThemePicker', () => {
     }
   });
 
-  it('shows an accessible inline error when the validated update is rejected', () => {
+  it('shows an accessible inline error when the validated update is rejected', async () => {
     const { dispose } = mountPicker(undefined, { source: false });
     try {
       openPicker();
@@ -257,14 +284,13 @@ describe('EnvAppThemePicker', () => {
       );
       darkMode?.click();
 
-      const alert = host.querySelector<HTMLElement>('[role="alert"]');
-      expect(alert?.textContent).toBe('Could not update appearance. Try again.');
+      await vi.waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toBe('Could not update appearance. Try again.'));
     } finally {
       dispose();
     }
   });
 
-  it('uses roving keyboard selection within the theme grid', () => {
+  it('uses roving keyboard selection within the theme grid', async () => {
     themeHarness.setSource('dark');
     themeHarness.setResolved('dark');
     const { dispose, onShellThemeChange } = mountPicker();
@@ -273,7 +299,7 @@ describe('EnvAppThemePicker', () => {
       const classicDark = host.querySelector<HTMLButtonElement>('[data-envapp-theme-preset="classic-dark"]')!;
       expect(classicDark.tabIndex).toBe(0);
       classicDark.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-      expect(onShellThemeChange).toHaveBeenCalledWith('dark', 'ink');
+      await vi.waitFor(() => expect(onShellThemeChange).toHaveBeenCalledWith('dark', 'ink'));
     } finally {
       dispose();
     }

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { BUILT_IN_SHELL_THEME_DEFAULTS } from '@floegence/floe-webapp-core/themes';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDesktopThemeStorageAdapter, desktopThemeBridge } from './desktopTheme';
@@ -68,8 +70,8 @@ describe('desktopTheme storage adapter', () => {
     const snapshots = [snapshot(), snapshot('dark')];
     const bridge = {
       getSnapshot: vi.fn(() => snapshots[0]),
-      setSource: vi.fn(() => snapshots[1]),
-      setShellTheme: vi.fn(() => snapshots[0]),
+      setSource: vi.fn(async () => snapshots[1]),
+      setShellTheme: vi.fn(async () => snapshots[0]),
       subscribe: vi.fn(),
     };
 
@@ -79,8 +81,8 @@ describe('desktopTheme storage adapter', () => {
     adapter.setItem('redeven-envapp:desktop-theme', '"dark"');
     adapter.removeItem('redeven-envapp:desktop-theme');
 
-    expect(bridge.setSource).toHaveBeenNthCalledWith(1, 'dark');
-    expect(bridge.setSource).toHaveBeenNthCalledWith(2, 'system');
+    expect(bridge.setSource).toHaveBeenCalledTimes(1);
+    expect(bridge.setSource).toHaveBeenCalledWith('system');
     expect(base.setItem).not.toHaveBeenCalled();
     expect(base.removeItem).not.toHaveBeenCalled();
     expect(adapter.keys?.()).toEqual([
@@ -99,8 +101,8 @@ describe('desktopTheme storage adapter', () => {
     };
     const bridge = {
       getSnapshot: vi.fn(() => snapshot()),
-      setSource: vi.fn(() => snapshot()),
-      setShellTheme: vi.fn(() => snapshot()),
+      setSource: vi.fn(async () => snapshot()),
+      setShellTheme: vi.fn(async () => snapshot()),
       subscribe: vi.fn(),
     };
     const adapter = createDesktopThemeStorageAdapter(base, 'redeven-envapp:desktop', 'theme', bridge);
@@ -109,21 +111,20 @@ describe('desktopTheme storage adapter', () => {
     expect(adapter.getItem(key)).toBe(JSON.stringify(snapshot().shellThemes));
     adapter.setItem(key, JSON.stringify({ version: 1, light: 'mist', dark: 'nord' }));
 
-    expect(bridge.setShellTheme).toHaveBeenNthCalledWith(1, 'light', 'mist');
-    expect(bridge.setShellTheme).toHaveBeenNthCalledWith(2, 'dark', 'nord');
+    expect(bridge.setShellTheme).not.toHaveBeenCalled();
     expect(base.setItem).not.toHaveBeenCalled();
 
     adapter.removeItem(key);
-    expect(bridge.setShellTheme).toHaveBeenNthCalledWith(3, 'light', 'classic-light');
-    expect(bridge.setShellTheme).toHaveBeenNthCalledWith(4, 'dark', 'classic-dark');
+    expect(bridge.setShellTheme).toHaveBeenNthCalledWith(1, 'light', BUILT_IN_SHELL_THEME_DEFAULTS.light);
+    expect(bridge.setShellTheme).toHaveBeenNthCalledWith(2, 'dark', BUILT_IN_SHELL_THEME_DEFAULTS.dark);
   });
 
   it('ignores malformed desktop-owned theme payloads', () => {
     const base = { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() };
     const bridge = {
       getSnapshot: vi.fn(() => snapshot()),
-      setSource: vi.fn(() => snapshot()),
-      setShellTheme: vi.fn(() => snapshot()),
+      setSource: vi.fn(async () => snapshot()),
+      setShellTheme: vi.fn(async () => snapshot()),
       subscribe: vi.fn(),
     };
     const adapter = createDesktopThemeStorageAdapter(base, 'redeven-envapp:desktop', 'theme', bridge);

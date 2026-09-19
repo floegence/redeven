@@ -6,7 +6,7 @@ import { DesktopFlowerRuntimeBoundary } from './flower/DesktopFlowerRuntimeBound
 import { runtimeFlowerBlocker } from '../shared/runtimeFlowerAccess';
 import { buildRuntimeConnectionRows, runtimeConnectionIsOnThisDevice, isShareableConnectionAddress, type DesktopShareableConnectionAddress } from '../shared/desktopEnvironmentConnection';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../shared/desktopCertificate';
-import { For, Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
+import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { Motion, Presence } from 'solid-motionone';
 import qrcode from 'qrcode-generator';
@@ -3037,7 +3037,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   });
 
   if (shellTheme) {
-    const applyShellTheme = (next: ReturnType<typeof shellTheme.getSnapshot>) => {
+    const applyShellTheme = (next: ReturnType<typeof shellTheme.getSnapshot>) => batch(() => {
       setThemeSnapshot(next);
       for (const mode of ['light', 'dark'] as const) {
         if (theme.shellPresetForMode(mode)?.name !== next.shellThemes[mode]) {
@@ -3047,7 +3047,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (theme.theme() !== next.source) {
         theme.setTheme(next.source);
       }
-    };
+    });
     applyShellTheme(shellTheme.getSnapshot());
     const unsubscribe = shellTheme.subscribe(applyShellTheme);
     onCleanup(unsubscribe);
@@ -3057,9 +3057,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  const updateDesktopThemeSource = (source: DesktopThemePickerSnapshot['source']): DesktopThemePickerSnapshot => {
+  const updateDesktopThemeSource = async (source: DesktopThemePickerSnapshot['source']): Promise<DesktopThemePickerSnapshot> => {
     if (shellTheme) {
-      const next = shellTheme.setSource(source);
+      const next = await shellTheme.setSource(source);
       setThemeSnapshot(next);
       return next;
     }
@@ -3069,12 +3069,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return next;
   };
 
-  const updateDesktopShellTheme = (
+  const updateDesktopShellTheme = async (
     mode: DesktopThemePickerSnapshot['resolvedTheme'],
     presetName: string,
-  ): DesktopThemePickerSnapshot => {
+  ): Promise<DesktopThemePickerSnapshot> => {
     if (shellTheme) {
-      const next = shellTheme.setShellTheme(mode, presetName);
+      const next = await shellTheme.setShellTheme(mode, presetName);
       setThemeSnapshot(next);
       return next;
     }
