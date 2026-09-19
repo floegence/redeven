@@ -2013,6 +2013,7 @@
       "copyPatchFailed": "无法将 patch 复制到剪贴板。",
       "binaryBadge": "二进制",
       "copyPatch": "复制补丁",
+      "horizontalScrollbar": "横向滚动差异内容",
       "mobileHorizontalHint": "水平滑动以检查长差异行。",
       "binaryDiffUnavailable": "二进制文件已更改。内嵌文本差异不可用。",
       "noInlineDiffLines": "该文件没有可用的内联差异行。",

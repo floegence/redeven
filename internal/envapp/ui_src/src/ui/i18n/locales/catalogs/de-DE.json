@@ -2013,6 +2013,7 @@
       "copyPatchFailed": "Patch konnte nicht in die Zwischenablage kopiert werden.",
       "binaryBadge": "Binär",
       "copyPatch": "Patch kopieren",
+      "horizontalScrollbar": "Diff horizontal scrollen",
       "mobileHorizontalHint": "Wischen Sie horizontal, um lange Diff-Linien zu überprüfen.",
       "binaryDiffUnavailable": "Binärdatei geändert. Inline-Textdiff ist nicht verfügbar.",
       "noInlineDiffLines": "Für diese Datei sind keine Inline-Diff-Zeilen verfügbar.",

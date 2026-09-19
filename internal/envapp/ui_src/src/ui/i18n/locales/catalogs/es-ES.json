@@ -2013,6 +2013,7 @@
       "copyPatchFailed": "No se pudo copiar el patch al portapapeles.",
       "binaryBadge": "Binario",
       "copyPatch": "Copiar patch",
+      "horizontalScrollbar": "Desplazar las diferencias horizontalmente",
       "mobileHorizontalHint": "Desliza el dedo horizontalmente para inspeccionar las líneas de diferencias largas.",
       "binaryDiffUnavailable": "Archivo binario modificado. La diferenciación de texto en línea no está disponible.",
       "noInlineDiffLines": "No hay líneas de diferencias en línea disponibles para este archivo.",

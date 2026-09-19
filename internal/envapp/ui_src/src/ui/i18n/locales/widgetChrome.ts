@@ -435,6 +435,7 @@ export const enUSWidgetChrome = defineDictionary({
       copyPatchFailed: 'Failed to copy patch to clipboard.',
       binaryBadge: 'Binary',
       copyPatch: 'Copy Patch',
+      horizontalScrollbar: 'Scroll diff horizontally',
       mobileHorizontalHint: 'Swipe horizontally to inspect long diff lines.',
       binaryDiffUnavailable: 'Binary file changed. Inline text diff is not available.',
       noInlineDiffLines: 'No inline diff lines available for this file.',

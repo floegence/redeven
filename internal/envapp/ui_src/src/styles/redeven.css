@@ -5760,7 +5760,10 @@ html.dark .git-content-skeleton__block {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--muted-foreground) 55%, transparent) color-mix(in srgb, var(--muted) 72%, transparent);
 }
-.git-patch-viewer__viewport::-webkit-scrollbar { width: 10px; height: 10px; }
+@supports selector(::-webkit-scrollbar) {
+  .git-patch-viewer__viewport { scrollbar-width: auto; scrollbar-color: auto; }
+}
+.git-patch-viewer__viewport::-webkit-scrollbar { width: 10px; height: 0; }
 .git-patch-viewer__viewport::-webkit-scrollbar-track { background: color-mix(in srgb, var(--muted) 72%, transparent); }
 .git-patch-viewer__viewport::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
@@ -5769,6 +5772,36 @@ html.dark .git-content-skeleton__block {
   background-color: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
 }
 .git-patch-viewer__viewport::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--foreground) 62%, transparent); }
+.git-patch-viewer__horizontal-scrollbar {
+  position: relative;
+  flex: 0 0 14px;
+  min-height: 14px;
+  margin: 0 4px 3px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 72%, transparent);
+  cursor: pointer;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+}
+.git-patch-viewer__horizontal-scrollbar:focus-visible {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 28%, transparent);
+}
+.git-patch-viewer__horizontal-scrollbar-thumb {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-foreground) 68%, transparent);
+  cursor: grab;
+  transition: background-color 120ms ease-out;
+}
+.git-patch-viewer__horizontal-scrollbar-thumb:hover,
+.git-patch-viewer__horizontal-scrollbar-thumb:active { background: color-mix(in srgb, var(--foreground) 72%, transparent); }
+.git-patch-viewer__horizontal-scrollbar-thumb:active { cursor: grabbing; }
+.git-patch-viewer--embedded .git-patch-viewer__horizontal-scrollbar { margin-right: 10px; margin-left: 10px; }
 @keyframes git-patch-reveal { from { opacity: .55; } to { opacity: 1; } }
 @container (max-width: 680px) {
   .git-diff-split__layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(100px, 30%) minmax(0, 1fr); }
@@ -5780,9 +5813,12 @@ html.dark .git-content-skeleton__block {
 }
 @media (prefers-reduced-motion: reduce) {
   .git-file-row, .git-diff-file-table tr, .git-file-actions button, .git-diff-panel__modes button { transition: none; }
+  .git-patch-viewer__horizontal-scrollbar-thumb { transition: none; }
   .git-patch-viewer--embedded .git-patch-viewer__viewport { animation: none; }
 }
 @media (forced-colors: active) {
   .git-file-row[aria-selected='true'],
   .git-diff-file-table tr[aria-selected='true'] { border-left-color: Highlight; }
+  .git-patch-viewer__horizontal-scrollbar { border-color: ButtonBorder; background: ButtonFace; }
+  .git-patch-viewer__horizontal-scrollbar-thumb { background: ButtonText; }
 }

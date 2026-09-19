@@ -2013,6 +2013,7 @@
       "copyPatchFailed": "Impossible de copier le patch dans le presse-papiers.",
       "binaryBadge": "Binaire",
       "copyPatch": "Copier le patch",
+      "horizontalScrollbar": "Faire défiler les différences horizontalement",
       "mobileHorizontalHint": "Faites glisser votre doigt horizontalement pour inspecter les longues lignes de différence.",
       "binaryDiffUnavailable": "Fichier binaire modifié. La différence de texte en ligne n'est pas disponible.",
       "noInlineDiffLines": "Aucune ligne de comparaison en ligne disponible pour ce fichier.",
