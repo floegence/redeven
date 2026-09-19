@@ -42,11 +42,11 @@ declare global {
 
 export interface DesktopThemeBridge {
   getSnapshot: () => DesktopRendererThemeSnapshot;
-  setSource: (source: DesktopThemeSource) => DesktopRendererThemeSnapshot;
+  setSource: (source: DesktopThemeSource) => Promise<DesktopRendererThemeSnapshot>;
   setShellTheme: (
     mode: DesktopResolvedTheme,
     presetName: DesktopShellThemePreset,
-  ) => DesktopRendererThemeSnapshot;
+  ) => Promise<DesktopRendererThemeSnapshot>;
   subscribe: (listener: (snapshot: DesktopRendererThemeSnapshot) => void) => () => void;
 }
 
@@ -160,26 +160,27 @@ function updateDesktopWindowChromeSnapshot(snapshot: DesktopWindowChromeSnapshot
   return currentWindowChromeSnapshot;
 }
 
-function setDesktopThemeSource(source: unknown): DesktopRendererThemeSnapshot {
-  const nextSource = normalizeDesktopThemeSource(source, currentSnapshot.source);
-  const nextSnapshot = normalizeDesktopThemeSnapshot(ipcRenderer.sendSync(DESKTOP_THEME_SET_SOURCE_CHANNEL, nextSource));
-  if (!nextSnapshot) {
-    return currentSnapshot;
-  }
-  return updateDesktopThemeSnapshot(nextSnapshot);
+async function requestDesktopThemeUpdate(channel: string, ...args: unknown[]): Promise<DesktopRendererThemeSnapshot> {
+  const before = currentSnapshot;
+  const next = normalizeDesktopThemeSnapshot(await ipcRenderer.invoke(channel, ...args));
+  if (!next) throw new Error('Invalid Desktop theme response');
+  // Broadcasts are authoritative. A delayed reply must not undo a newer
+  // selection from this window, another window, or the operating system.
+  return currentSnapshot === before ? updateDesktopThemeSnapshot(next) : currentSnapshot;
+}
+
+function setDesktopThemeSource(source: unknown): Promise<DesktopRendererThemeSnapshot> {
+  return requestDesktopThemeUpdate(
+    DESKTOP_THEME_SET_SOURCE_CHANNEL,
+    normalizeDesktopThemeSource(source, currentSnapshot.source),
+  );
 }
 
 function setDesktopShellTheme(
   mode: DesktopResolvedTheme,
   presetName: DesktopShellThemePreset,
-): DesktopRendererThemeSnapshot {
-  const nextSnapshot = normalizeDesktopThemeSnapshot(
-    ipcRenderer.sendSync(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, mode, presetName),
-  );
-  if (!nextSnapshot) {
-    return currentSnapshot;
-  }
-  return updateDesktopThemeSnapshot(nextSnapshot);
+): Promise<DesktopRendererThemeSnapshot> {
+  return requestDesktopThemeUpdate(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, mode, presetName);
 }
 
 function installDesktopThemeEventBridge(): void {

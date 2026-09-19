@@ -531,18 +531,18 @@ export function EnvAppShell() {
     onCleanup(unsubscribe);
   });
   const shellTheme = desktopThemeBridge();
-  const setThemeSourceWithRenderBoundary = (source: 'system' | 'light' | 'dark') => {
+  const setThemeSourceWithRenderBoundary = async (source: 'system' | 'light' | 'dark') => {
     requestWorkbenchRenderTransaction('theme');
     if (shellTheme) {
-      return shellTheme.setSource(source).source === source;
+      return (await shellTheme.setSource(source)).source === source;
     }
     theme.setTheme(source);
     return theme.theme() === source;
   };
-  const setShellThemeWithRenderBoundary = (mode: 'light' | 'dark', presetName: string) => {
+  const setShellThemeWithRenderBoundary = async (mode: 'light' | 'dark', presetName: string) => {
     requestWorkbenchRenderTransaction('theme');
     if (shellTheme) {
-      return shellTheme.setShellTheme(mode, presetName).shellThemes[mode] === presetName;
+      return (await shellTheme.setShellTheme(mode, presetName)).shellThemes[mode] === presetName;
     }
     theme.setShellPreset(presetName);
     return theme.shellPresetForMode(mode)?.name === presetName;

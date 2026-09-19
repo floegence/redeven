@@ -10,6 +10,7 @@ import {
 const exposeInMainWorld = vi.fn();
 const ipcRendererOn = vi.fn();
 const ipcRendererSendSync = vi.fn();
+const ipcRendererInvoke = vi.fn();
 let updatedListener: ((event: unknown, payload: unknown) => void) | null = null;
 let windowChromeUpdatedListener: ((event: unknown, payload: unknown) => void) | null = null;
 
@@ -28,6 +29,7 @@ vi.mock('electron', () => ({
   ipcRenderer: {
     on: ipcRendererOn,
     sendSync: ipcRendererSendSync,
+    invoke: ipcRendererInvoke,
   },
 }));
 
@@ -91,6 +93,7 @@ describe('bootstrapDesktopThemeBridge', () => {
     exposeInMainWorld.mockReset();
     ipcRendererOn.mockReset();
     ipcRendererSendSync.mockReset();
+    ipcRendererInvoke.mockReset();
     updatedListener = null;
     windowChromeUpdatedListener = null;
     ipcRendererOn.mockImplementation((channel: string, listener: (event: unknown, payload: unknown) => void) => {
@@ -101,13 +104,16 @@ describe('bootstrapDesktopThemeBridge', () => {
         windowChromeUpdatedListener = listener;
       }
     });
-    ipcRendererSendSync.mockImplementation((channel: string, ...payload: unknown[]) => {
+    ipcRendererSendSync.mockImplementation((channel: string) => {
       if (channel === 'redeven-desktop:theme-get-snapshot') {
         return darkSnapshot();
       }
       if (channel === 'redeven-desktop:window-chrome-get-snapshot') {
         return resolveDesktopWindowChromeSnapshot(process.platform);
       }
+      return null;
+    });
+    ipcRendererInvoke.mockImplementation(async (channel: string, ...payload: unknown[]) => {
       if (channel === 'redeven-desktop:theme-set-source') {
         return payload[0] === 'light' ? lightSnapshot() : darkSnapshot();
       }
@@ -209,30 +215,30 @@ describe('bootstrapDesktopThemeBridge', () => {
     updatedListener?.({}, darkSnapshot());
     expect(listener).toHaveBeenCalledTimes(1);
 
-    bridge.setSource('system');
+    await bridge.setSource('system');
     expect(listener).toHaveBeenCalledTimes(1);
 
-    bridge.setSource('light');
+    await bridge.setSource('light');
     expect(listener).toHaveBeenCalledTimes(2);
     expect(listener).toHaveBeenLastCalledWith(lightSnapshot());
   });
 
-  it('sets the shell theme source synchronously through the bridge', async () => {
+  it('sets the shell theme source asynchronously through the bridge', async () => {
     const { bootstrapDesktopThemeBridge } = await import('./windowTheme');
 
     bootstrapDesktopThemeBridge();
 
     const bridge = exposedBridge<{ setSource: (source: string) => unknown }>('redevenDesktopTheme');
-    const snapshot = bridge.setSource('light');
+    const snapshot = await bridge.setSource('light');
 
-    expect(ipcRendererSendSync).toHaveBeenCalledWith('redeven-desktop:theme-set-source', 'light');
+    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:theme-set-source', 'light');
     expect(snapshot).toEqual(lightSnapshot());
     expect(document.documentElement.classList.contains('light')).toBe(true);
     expect(document.documentElement.dataset.floeShellTheme).toBe('mist');
     expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-background')).toBe('#eef3f7');
   });
 
-  it('sets a shell preset synchronously through the bridge', async () => {
+  it('sets a shell preset asynchronously through the bridge', async () => {
     const { bootstrapDesktopThemeBridge } = await import('./windowTheme');
 
     bootstrapDesktopThemeBridge();
@@ -240,9 +246,9 @@ describe('bootstrapDesktopThemeBridge', () => {
     const bridge = exposedBridge<{
       setShellTheme: (mode: string, presetName: string) => unknown;
     }>('redevenDesktopTheme');
-    const snapshot = bridge.setShellTheme('dark', 'ember');
+    const snapshot = await bridge.setShellTheme('dark', 'ember');
 
-    expect(ipcRendererSendSync).toHaveBeenCalledWith(
+    expect(ipcRendererInvoke).toHaveBeenCalledWith(
       'redeven-desktop:theme-set-shell-theme',
       'dark',
       'ember',
@@ -250,6 +256,49 @@ describe('bootstrapDesktopThemeBridge', () => {
     expect(snapshot).toEqual(emberSnapshot());
     expect(document.documentElement.dataset.floeShellTheme).toBe('ember');
     expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-background')).toBe('#1d1115');
+  });
+
+  it('keeps the renderer available while a theme write is pending and reports rejection without changing selection', async () => {
+    const { bootstrapDesktopThemeBridge } = await import('./windowTheme');
+    bootstrapDesktopThemeBridge();
+    const bridge = exposedBridge<import('./windowTheme').DesktopThemeBridge>('redevenDesktopTheme');
+    let reject!: (reason: Error) => void;
+    const promise = new Promise<unknown>((_resolve, rejectPromise) => { reject = rejectPromise; });
+    ipcRendererInvoke.mockReturnValueOnce(promise);
+    ipcRendererSendSync.mockClear();
+    const request = bridge.setShellTheme('dark', 'ember');
+    expect(request).toBeInstanceOf(Promise);
+    expect(ipcRendererSendSync).not.toHaveBeenCalled();
+    expect(bridge.getSnapshot()).toEqual(darkSnapshot());
+    const failure = expect(request).rejects.toThrow('Theme write failed');
+    reject(new Error('Theme write failed'));
+    await failure;
+    expect(bridge.getSnapshot()).toEqual(darkSnapshot());
+    expect(document.documentElement.dataset.floeShellTheme).toBe('forest');
+  });
+
+  it('does not overwrite a newer broadcast with a delayed mutation response', async () => {
+    const { bootstrapDesktopThemeBridge } = await import('./windowTheme');
+    bootstrapDesktopThemeBridge();
+    const bridge = exposedBridge<import('./windowTheme').DesktopThemeBridge>('redevenDesktopTheme');
+    let resolve!: (value: unknown) => void;
+    ipcRendererInvoke.mockReturnValueOnce(new Promise(value => { resolve = value; }));
+    const request = bridge.setSource('light');
+    updatedListener?.({}, lightSnapshot());
+    updatedListener?.({}, emberSnapshot());
+    resolve(lightSnapshot());
+    expect(await request).toEqual(emberSnapshot());
+    expect(bridge.getSnapshot()).toEqual(emberSnapshot());
+    expect(document.documentElement.dataset.floeShellTheme).toBe('ember');
+  });
+
+  it('rejects malformed responses while retaining the acknowledged snapshot', async () => {
+    const { bootstrapDesktopThemeBridge } = await import('./windowTheme');
+    bootstrapDesktopThemeBridge();
+    const bridge = exposedBridge<import('./windowTheme').DesktopThemeBridge>('redevenDesktopTheme');
+    ipcRendererInvoke.mockResolvedValueOnce({ source: 'dark' });
+    await expect(bridge.setSource('dark')).rejects.toThrow('Invalid Desktop theme response');
+    expect(bridge.getSnapshot()).toEqual(darkSnapshot());
   });
 
   it('updates the current document when the main process broadcasts a new window chrome snapshot', async () => {

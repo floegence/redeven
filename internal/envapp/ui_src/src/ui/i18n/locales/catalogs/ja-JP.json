@@ -411,6 +411,7 @@
       "systemResolvedDark": "現在、システムはダークモードを使用しています",
       "themesLabel": "テーマ",
       "changeFailed": "外観を更新できませんでした。もう一度お試しください。",
+      "switching": "外観を切り替えています…",
       "presets": {
         "classic-light": "クラシック ライト",
         "porcelain-light": "ポーセリン ライト",

@@ -11,6 +11,7 @@ import {
 import {
   builtInShellThemePresets,
   getShellThemePresetsForMode,
+  deferAfterPaint,
   type FloeShellThemeMode,
   type FloeThemePreset,
 } from '@floegence/floe-webapp-core';
@@ -32,8 +33,8 @@ export type DesktopThemePickerProps = Readonly<{
   openRequest: number;
   snapshot: DesktopThemePickerSnapshot;
   i18n: DesktopI18n;
-  onSourceChange: (source: DesktopThemeSource) => DesktopThemePickerSnapshot;
-  onShellThemeChange: (mode: FloeShellThemeMode, presetName: string) => DesktopThemePickerSnapshot;
+  onSourceChange: (source: DesktopThemeSource) => DesktopThemePickerSnapshot | Promise<DesktopThemePickerSnapshot>;
+  onShellThemeChange: (mode: FloeShellThemeMode, presetName: string) => DesktopThemePickerSnapshot | Promise<DesktopThemePickerSnapshot>;
 }>;
 
 const THEME_SOURCE_OPTIONS = ['system', 'light', 'dark'] as const satisfies readonly DesktopThemeSource[];
@@ -128,6 +129,9 @@ function DesktopThemePreview(props: Readonly<{ preset: FloeThemePreset }>) {
 export function DesktopThemePicker(props: DesktopThemePickerProps) {
   const [open, setOpen] = createSignal(false);
   const [error, setError] = createSignal('');
+  const [pending, setPending] = createSignal('');
+  let disposed = false;
+  onCleanup(() => { disposed = true; });
   const [themeGroupFocused, setThemeGroupFocused] = createSignal(false);
   const id = createUniqueId();
   const dialogID = `redeven-desktop-theme-picker-${id}`;
@@ -144,6 +148,11 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
   ));
   const presets = createMemo(() => desktopThemePresetsForMode(activeMode()));
   const selectedPresetName = createMemo(() => props.snapshot.shellThemes[activeMode()]);
+  const isReplacedPreset = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return false;
+    const name = target.closest<HTMLElement>('[data-desktop-theme-preset]')?.dataset.desktopThemePreset;
+    return Boolean(name && !presets().some((preset) => preset.name === name));
+  };
 
   const clearScrollFrame = () => {
     if (!scrollFrame) {
@@ -170,14 +179,12 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
   };
 
   const openPicker = () => {
-    setError('');
     setOpen(true);
     focusCurrentSource();
   };
 
   const closePicker = (restoreTrigger: boolean) => {
     setOpen(false);
-    setError('');
     if (restoreTrigger) {
       requestAnimationFrame(() => buttonRef?.focus());
     }
@@ -187,38 +194,52 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
     setError(props.i18n.t(translationKey('shell.themePicker.changeFailed')));
   };
 
-  const selectSource = (source: DesktopThemeSource) => {
+  const selectSource = async (source: DesktopThemeSource) => {
+    if (pending()) return;
     if (source === props.snapshot.source) {
       setError('');
       return;
     }
+    setError('');
+    setPending(`mode-${source}`);
     try {
-      const result = props.onSourceChange(source);
+      await new Promise<void>(deferAfterPaint);
+      if (disposed) return;
+      const result = await props.onSourceChange(source);
       if (result.source !== source) {
         showUpdateFailure();
         return;
       }
       setError('');
     } catch {
-      showUpdateFailure();
+      if (!disposed) showUpdateFailure();
+    } finally {
+      if (!disposed) setPending('');
     }
   };
 
-  const selectPreset = (preset: FloeThemePreset) => {
+  const selectPreset = async (preset: FloeThemePreset) => {
+    if (pending()) return;
     const mode = activeMode();
     if (preset.name === props.snapshot.shellThemes[mode]) {
       setError('');
       return;
     }
+    setError('');
+    setPending(preset.name);
     try {
-      const result = props.onShellThemeChange(mode, preset.name);
+      await new Promise<void>(deferAfterPaint);
+      if (disposed) return;
+      const result = await props.onShellThemeChange(mode, preset.name);
       if (result.shellThemes[mode] !== preset.name) {
         showUpdateFailure();
         return;
       }
       setError('');
     } catch {
-      showUpdateFailure();
+      if (!disposed) showUpdateFailure();
+    } finally {
+      if (!disposed) setPending('');
     }
   };
 
@@ -281,6 +302,7 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
         }}
         label={props.i18n.t(translationKey('shell.themePicker.openLabel'))}
         tooltip={props.i18n.t(translationKey('shell.themePicker.openLabel'))}
+        aria-busy={Boolean(pending())}
         aria-haspopup="dialog"
         aria-expanded={open() ? 'true' : 'false'}
         aria-controls={dialogID}
@@ -311,8 +333,9 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
           }}
           onFocusOut={(event) => {
             const nextTarget = event.relatedTarget;
+            if (isReplacedPreset(event.target) || !(nextTarget instanceof Node)) return;
             queueMicrotask(() => {
-              if (!open() || (nextTarget instanceof Node && overlayRef?.contains(nextTarget))) {
+              if (!open() || overlayRef?.contains(nextTarget) || isReplacedPreset(nextTarget)) {
                 return;
               }
               closePicker(false);
@@ -346,6 +369,8 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
                         aria-checked={selected() ? 'true' : 'false'}
                         tabIndex={selected() ? 0 : -1}
                         class="redeven-theme-picker__mode"
+                        aria-disabled={Boolean(pending())}
+                        aria-busy={pending() === `mode-${source}`}
                         onClick={() => selectSource(source)}
                         onKeyDown={(event) => {
                           const nextIndex = rovingRadioIndexForKey(event.key, index(), THEME_SOURCE_OPTIONS.length);
@@ -360,6 +385,7 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
                           }
                         }}
                       >
+                        <Show when={pending() === `mode-${source}`}><span class="redeven-theme-picker__spinner" aria-hidden="true" /></Show>
                         {props.i18n.t(sourceLabelKey(source))}
                       </button>
                     );
@@ -381,7 +407,9 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
               <div id={`${themeGroupID}-label`} class="redeven-theme-picker__section-label">
                 {props.i18n.t(translationKey('shell.themePicker.themesLabel'))}
               </div>
-              <span class="redeven-theme-picker__theme-count">{presets().length}</span>
+              <span class="redeven-theme-picker__theme-count" role="status" aria-live="polite">
+                {pending() ? props.i18n.t(translationKey('shell.themePicker.switching')) : presets().length}
+              </span>
             </div>
 
             <div
@@ -393,6 +421,7 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
               class="redeven-theme-picker__theme-scroll"
               onFocusIn={() => setThemeGroupFocused(true)}
               onFocusOut={(event) => {
+                if (isReplacedPreset(event.target)) return;
                 if (!(event.relatedTarget instanceof Node) || !themeGridRef?.contains(event.relatedTarget)) {
                   setThemeGroupFocused(false);
                 }
@@ -407,10 +436,13 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
                       <button
                         type="button"
                         id={optionID}
+                        data-desktop-theme-preset={preset.name}
                         role="radio"
                         aria-checked={selected() ? 'true' : 'false'}
                         tabIndex={selected() ? 0 : -1}
                         class="redeven-theme-picker__theme"
+                        aria-disabled={Boolean(pending())}
+                        aria-busy={pending() === preset.name}
                         onClick={() => selectPreset(preset)}
                         onKeyDown={(event) => {
                           const nextIndex = rovingRadioIndexForKey(event.key, index(), presets().length);
@@ -433,7 +465,9 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
                             {desktopThemePresetLabel(props.i18n, preset)}
                           </span>
                           <span class="redeven-theme-picker__check" aria-hidden="true">
-                            <Check class="h-3.5 w-3.5" />
+                            <Show when={pending() === preset.name} fallback={<Check class="h-3.5 w-3.5" />}>
+                              <span class="redeven-theme-picker__spinner" />
+                            </Show>
                           </span>
                         </span>
                       </button>

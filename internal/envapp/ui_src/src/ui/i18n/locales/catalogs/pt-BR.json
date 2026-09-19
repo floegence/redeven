@@ -411,6 +411,7 @@
       "systemResolvedDark": "O sistema está usando o modo escuro",
       "themesLabel": "Temas",
       "changeFailed": "Não foi possível atualizar a aparência. Tente novamente.",
+      "switching": "Alterando a aparência…",
       "presets": {
         "classic-light": "Clássico claro",
         "porcelain-light": "Porcelana clara",

@@ -5,7 +5,6 @@ import { builtInShellThemePresets } from '../shared/floeThemeMetadata';
 import {
   desktopShellThemeCatalog,
   desktopShellThemeSemanticCatalog,
-  desktopWindowThemeSnapshotForResolvedTheme,
 } from './desktopTheme';
 import {
   DESKTOP_SHELL_THEME_PRESETS,
@@ -101,13 +100,9 @@ describe('desktop shell theme native catalog', () => {
       const upstream = builtInShellThemePresets.find((preset) => preset.name === presetName);
       expect(upstream, presetName).toBeDefined();
       expect(entry.mode, presetName).toBe(upstream?.mode);
-      const expectedBackground = upstream?.inheritsBaseTokens
-        ? desktopWindowThemeSnapshotForResolvedTheme(entry.mode).backgroundColor
-        : upstream?.previewBackground.toLowerCase();
+      const expectedBackground = upstream?.previewBackground.toLowerCase();
       expect(entry.window.backgroundColor, presetName).toBe(expectedBackground);
-      const expectedSymbolColor = upstream?.inheritsBaseTokens
-        ? desktopWindowThemeSnapshotForResolvedTheme(entry.mode).symbolColor
-        : upstream?.foreground.toLowerCase();
+      const expectedSymbolColor = upstream?.foreground.toLowerCase();
       expect(entry.window.symbolColor, presetName).toBe(expectedSymbolColor);
     }
   });

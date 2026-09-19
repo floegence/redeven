@@ -113,8 +113,8 @@ export class DesktopThemeState {
       return this.snapshot;
     }
 
-    this.source = normalized;
     this.store.setRendererItem(DESKTOP_THEME_SOURCE_STATE_KEY, normalized);
+    this.source = normalized;
     this.nativeTheme.themeSource = normalized;
     this.refreshSnapshot();
     this.broadcastSnapshot();
@@ -133,7 +133,7 @@ export class DesktopThemeState {
       return this.snapshot;
     }
 
-    this.shellThemes = mode === 'light'
+    const nextSelection = mode === 'light'
       ? {
           ...this.shellThemes,
           light: presetName as DesktopLightShellThemePreset,
@@ -144,8 +144,9 @@ export class DesktopThemeState {
         };
     this.store.setRendererItem(
       DESKTOP_SHELL_THEME_SELECTION_STATE_KEY,
-      JSON.stringify(this.shellThemes),
+      JSON.stringify(nextSelection),
     );
+    this.shellThemes = nextSelection;
     this.refreshSnapshot();
     this.broadcastSnapshot();
     return this.snapshot;

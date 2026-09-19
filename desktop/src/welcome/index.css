@@ -475,6 +475,45 @@ html:not(.dark) .redeven-welcome-surface {
   visibility: visible;
 }
 
+/* Pending marks intent without claiming the unacknowledged theme is selected. */
+.redeven-theme-picker__mode[aria-disabled='true'],
+.redeven-theme-picker__theme[aria-disabled='true'] {
+  cursor: progress;
+}
+
+.redeven-theme-picker__mode[aria-busy='true'],
+.redeven-theme-picker__theme[aria-busy='true'] {
+  border-color: var(--primary);
+}
+
+.redeven-theme-picker__theme[aria-busy='true'] .redeven-theme-picker__check {
+  visibility: visible;
+}
+
+.redeven-theme-picker__spinner {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  flex-shrink: 0;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: redeven-theme-switch-spin 700ms linear infinite;
+}
+
+.redeven-theme-picker__mode .redeven-theme-picker__spinner {
+  margin-inline-end: 0.375rem;
+}
+
+@keyframes redeven-theme-switch-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-theme-picker__spinner { animation: none; }
+}
+
 .redeven-theme-picker__error {
   border-top: 1px solid color-mix(in srgb, var(--error) 24%, var(--border));
   background: color-mix(in srgb, var(--error) 8%, var(--popover));
@@ -959,8 +998,8 @@ html:not(.dark) .redeven-new-environment-card:hover {
   border-radius: 0.875rem;
   background: var(--popover);
   box-shadow:
-    0 2px 5px color-mix(in srgb, var(--redeven-surface-shadow-source, #000) 7%, transparent),
-    0 16px 44px -12px color-mix(in srgb, var(--redeven-surface-shadow-source, #000) 23%, transparent);
+    0 2px 5px color-mix(in srgb, var(--redeven-surface-shadow-source) 7%, transparent),
+    0 16px 44px -12px color-mix(in srgb, var(--redeven-surface-shadow-source) 23%, transparent);
   opacity: 1;
   transform: translateY(0);
   transition: opacity 180ms ease-out, transform 200ms cubic-bezier(0.22, 1, 0.36, 1);

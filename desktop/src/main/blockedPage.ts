@@ -3,7 +3,7 @@ import { desktopSemanticPaletteForShellTheme } from './desktopTheme';
 import { desktopWindowTitleBarInsetCSSValue } from '../shared/windowChromePlatform';
 import { createDesktopI18n, type DesktopI18n } from '../shared/i18n/desktopI18n';
 import type { RedevenLocale } from '../shared/i18n/localeMeta';
-import type { DesktopThemeSnapshot } from '../shared/desktopTheme';
+import { DESKTOP_SHELL_THEME_DEFAULTS, type DesktopThemeSnapshot } from '../shared/desktopTheme';
 
 const BLOCKED_ACTION_ORIGIN = 'https://redeven-desktop.invalid';
 
@@ -131,8 +131,8 @@ export function buildBlockedPageHTML(
     : escapeHTML(i18n.t('blockedPage.attachFailedDetail'));
   const titleBarInset = desktopWindowTitleBarInsetCSSValue(platform);
   const resolvedTheme = theme?.resolvedTheme ?? 'light';
-  const activeShellTheme = theme?.activeShellTheme ?? 'classic-light';
-  const palette = theme?.semantic ?? desktopSemanticPaletteForShellTheme('classic-light');
+  const activeShellTheme = theme?.activeShellTheme ?? DESKTOP_SHELL_THEME_DEFAULTS.light;
+  const palette = theme?.semantic ?? desktopSemanticPaletteForShellTheme(DESKTOP_SHELL_THEME_DEFAULTS.light);
 
   return `<!doctype html>
 <html lang="${escapeHTML(locale)}" data-floe-shell-theme="${activeShellTheme}" data-theme-palette-version="${palette.version}">
