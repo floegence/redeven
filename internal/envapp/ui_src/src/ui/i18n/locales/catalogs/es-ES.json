@@ -3913,19 +3913,20 @@
     "title": {
       "recovering": "Restaurando la conexión",
       "recovered": "Conexión restaurada",
-      "failed": "Conexión en pausa",
-      "offline": "Sin conexión a la red"
+      "failed": "La conexión requiere atención",
+      "offline": "Sin conexión a la red",
+      "paused": "Reconexión detenida"
     },
     "summary": {
       "recovering": "Tu espacio de trabajo sigue abierto. Volverás a él cuando la conexión se restablezca automáticamente.",
       "recovered": "La conexión se ha restablecido. Volviendo a tu espacio de trabajo.",
       "failed": "La recuperación automática se ha detenido. Inicia una nueva conexión para seguir trabajando.",
-      "offline": "La conexión se restablecerá cuando vuelva la red. Puedes dejar esta página abierta."
+      "offline": "La conexión se restablecerá cuando vuelva la red. Puedes dejar esta página abierta.",
+      "paused": "Tu espacio de trabajo se conserva aquí. Reanuda la conexión cuando quieras."
     },
     "steps": {
       "interrupted": "Conexión interrumpida",
       "desktopTransport": "Recuperación del transporte de Desktop",
-      "runtimeProbe": "Comprobación de disponibilidad del entorno de ejecución",
       "protocolConnect": "Establecimiento de la conexión de protocolo",
       "secureSession": "Recuperación de la sesión segura",
       "completed": "Conexión completada"
@@ -3951,7 +3952,12 @@
       "secureSessionFailed": "No se pudo reanudar la sesión segura.",
       "remoteCommandEnded": "Finalizó el comando original del puente del entorno de ejecución remoto.",
       "processIdentityChanged": "La identidad del proceso del entorno de ejecución remoto cambió, por lo que esta ventana no se puede volver a vincular de forma segura."
-    }
+    },
+    "stopRetry": "Detener reintentos",
+    "resumeRetry": "Reanudar conexión",
+    "automaticRetry": "Reconexión automática",
+    "connecting": "Conectando…",
+    "retryLimited": "El servidor solicita una breve espera antes de volver a intentarlo."
   },
   "debugConsole": {
     "windowTitle": "Consola de depuración",

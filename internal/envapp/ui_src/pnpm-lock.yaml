@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': 5.2.2
+  '@floegence/flowersec-core': 5.2.3
   '@babel/core': ^7.29.7
   brace-expansion: ^5.0.9
   dompurify: ^3.4.13
@@ -33,20 +33,20 @@ importers:
         specifier: ^0.0.5
         version: 0.0.5
       '@floegence/floe-webapp-boot':
-        specifier: 0.56.11
-        version: 0.56.11
+        specifier: 0.56.12
+        version: 0.56.12
       '@floegence/floe-webapp-core':
-        specifier: 0.56.11
-        version: 0.56.11(solid-js@1.9.13)
+        specifier: 0.56.12
+        version: 0.56.12(solid-js@1.9.13)
       '@floegence/floe-webapp-protocol':
-        specifier: 0.56.11
-        version: 0.56.11(solid-js@1.9.13)
+        specifier: 0.56.12
+        version: 0.56.12(solid-js@1.9.13)
       '@floegence/floeterm-terminal-web':
         specifier: 0.19.2
         version: 0.19.2
       '@floegence/flowersec-core':
-        specifier: 5.2.2
-        version: 5.2.2
+        specifier: 5.2.3
+        version: 5.2.3
       '@floegence/redeven-service-templates':
         specifier: https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz
         version: https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz
@@ -378,18 +378,18 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
-  '@floegence/floe-webapp-boot@0.56.11':
-    resolution: {integrity: sha512-GWlQamGjPyS7ry+39TUfopIFssl4nd0IlHKbQpVEwczub2WC3YXwgklVOOsmTPJ43ooK94IWIXmJDa3pUhF0eQ==}
+  '@floegence/floe-webapp-boot@0.56.12':
+    resolution: {integrity: sha512-aoH4SK4eWb4PgImrPjehbQ5Z7uabXEOdKy94sj/17WDJxtWEzY5keX2SocD10ag9OFCFbyF3lwrJ41PzO+PbEA==}
     engines: {node: '>=24.20.0'}
 
-  '@floegence/floe-webapp-core@0.56.11':
-    resolution: {integrity: sha512-RsA7EtCvKxUzjQ+/j0j4W8pwgz+ISdxGwZK5aB7DBkgnKUNQRhkFaCmarBX/L0ez2pXBXNotmWlRN/fm3jSAIg==}
+  '@floegence/floe-webapp-core@0.56.12':
+    resolution: {integrity: sha512-SsMAt9ce1eKEOpGpS45Yes2WGJIwQ/Cl/ywSY3brU63qxq7E2oDA6YWTmltt4MA20cZ3W2Xt+FDDgJB0WER4fg==}
     engines: {node: '>=24.20.0'}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floe-webapp-protocol@0.56.11':
-    resolution: {integrity: sha512-AJ7bfy16wAtIg7/Az9EzE3zYENzFFGdCRKwuVnuL1GCjMqwOke6lK0DXC2ThVObteHbLE3XTEFJhr55tJjWEhg==}
+  '@floegence/floe-webapp-protocol@0.56.12':
+    resolution: {integrity: sha512-zp4dlotVdE219a/NU2AZIJJX3/mrTmyZyA/ubAa9rfs1/XqWdeRM0pMCl8Q6i/QnWslb3xsSAL4Kw+vHjg8G7Q==}
     engines: {node: '>=24.20.0'}
     peerDependencies:
       solid-js: ^1.8.0
@@ -397,39 +397,39 @@ packages:
   '@floegence/floeterm-terminal-web@0.19.2':
     resolution: {integrity: sha512-9XbdmAl51tos2CGTBRcvwC9dW7Qe+BXgXqKAQDYzx9G7ovjRioXUt0fVUXPKgb8q63ltmPr0rum0+EAgrTaaMA==}
 
-  '@floegence/flowersec-core@5.2.2':
-    resolution: {integrity: sha512-4/4z8FxQwh5Aj9I2A+MvpGG+B6UfPHtuSwM+8UjbPZysp7V9XcBXk2behuCRYRc7J8yXbiTbk6m9sEA/Q0TMJA==}
+  '@floegence/flowersec-core@5.2.3':
+    resolution: {integrity: sha512-rAqQ9khVjCcmdfz5d4M4YB+gqslYSRlRhZYf/X3wKGMRV+kOrQdiTpjwGhT+3GqkUcTJr2Z3xKHwJrDiCYsROw==}
     engines: {node: '>=24.20.0'}
     hasBin: true
 
-  '@floegence/flowersec-node-native-darwin-arm64@5.2.2':
-    resolution: {integrity: sha512-q/JtRnnYMSaI6o7tJp9HDO3GIl+wH1rNU8FL2RZWpZpnpLN3UsOY5hHeHtyenw9YfNTc5EEaVceYhPYu1aI1gA==}
+  '@floegence/flowersec-node-native-darwin-arm64@5.2.3':
+    resolution: {integrity: sha512-2+ghZ0aK9MyA3RE49OfV3+/IOzYaBtVR6GXZHEOO6XluTC9ZVvakTyYhNeEkRE+rYjdtPhVfXA3J5GpjuyMTcA==}
     engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-darwin-x64@5.2.2':
-    resolution: {integrity: sha512-O6rWzZptbVJcxmBxrS3qxUuYCdrA3KVYMoxbku/WEB4U33BcPTVqMfcqVCYS4P3Z34x77Cq8eljuX9DDZ/yyeA==}
+  '@floegence/flowersec-node-native-darwin-x64@5.2.3':
+    resolution: {integrity: sha512-LoW1o/faSaqj2FONXjySvqLFJ+lcryA1EWKaBTbNIJ4sn8+DR4YB0hFb8PfoS7iK48+E5lWGgz4IICf2Cj83cQ==}
     engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@5.2.2':
-    resolution: {integrity: sha512-la2FZ4dnfg897wiVA3qXA8qsn+zYaPRIEXLG3J1nvtkSjsVfwm62qTZDF4xfQptFogbo/B9COHzsHlHOEaFi6g==}
+  '@floegence/flowersec-node-native-linux-arm64-gnu@5.2.3':
+    resolution: {integrity: sha512-itJS/2qYttmFLYtgHmbxaGIxxdIhEaGHDelaPkKMNEyrbVDCDatF6GsCJnLj0wajs8nXVs1os3Av4giXMM9iDw==}
     engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@5.2.2':
-    resolution: {integrity: sha512-PoDeBSGh4AN+jBbFrkNEYXoMIeHrwb7XWcEVlhRBMKAqoRkz3g94zJbvz085RzfeLWgaCTFLZN1YsfqBv6yQmA==}
+  '@floegence/flowersec-node-native-linux-x64-gnu@5.2.3':
+    resolution: {integrity: sha512-GfmFOj0K21g7z0LgfocM6WmZcdFEgie0UskFBbGUEYrxGKwHgjlbNBgyfQ18ml70oxboDBxq5HJCgBMysn7K1A==}
     engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@floegence/flowersec-node-native@5.2.2':
-    resolution: {integrity: sha512-E4ad4vhVszcZNp4HjE6P0zXCpncFMd9DDULvae9G7K+WKTPPKJNN80rKZVi/IwRsgNS+oAWiA/ynkmWyBFZ79g==}
+  '@floegence/flowersec-node-native@5.2.3':
+    resolution: {integrity: sha512-CkX0pXf3c7GI6oL5b/HteOvPvUWnZUXpR0K77E2ab0F3hJu/OGYMzeBJ5dRnciQo4gX1fM4g5MdO/NczjBCXxg==}
     engines: {node: '>=24.20.0'}
 
   '@floegence/redeven-service-templates@https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz':
@@ -2917,15 +2917,15 @@ snapshots:
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
 
-  '@floegence/floe-webapp-boot@0.56.11':
+  '@floegence/floe-webapp-boot@0.56.12':
     dependencies:
-      '@floegence/flowersec-core': 5.2.2
+      '@floegence/flowersec-core': 5.2.3
       '@noble/hashes': 2.4.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.56.11(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.56.12(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
@@ -2937,9 +2937,9 @@ snapshots:
       solid-motionone: 1.0.4(solid-js@1.9.13)
       tailwind-merge: 3.6.0
 
-  '@floegence/floe-webapp-protocol@0.56.11(solid-js@1.9.13)':
+  '@floegence/floe-webapp-protocol@0.56.12(solid-js@1.9.13)':
     dependencies:
-      '@floegence/flowersec-core': 5.2.2
+      '@floegence/flowersec-core': 5.2.3
       solid-js: 1.9.13
     transitivePeerDependencies:
       - bufferutil
@@ -2949,7 +2949,7 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.4.0
 
-  '@floegence/flowersec-core@5.2.2':
+  '@floegence/flowersec-core@5.2.3':
     dependencies:
       '@noble/ciphers': 2.4.0
       '@noble/curves': 2.4.0
@@ -2957,29 +2957,29 @@ snapshots:
       tr46: 6.0.0
       ws: 8.21.3
     optionalDependencies:
-      '@floegence/flowersec-node-native': 5.2.2
+      '@floegence/flowersec-node-native': 5.2.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/flowersec-node-native-darwin-arm64@5.2.2':
+  '@floegence/flowersec-node-native-darwin-arm64@5.2.3':
     optional: true
 
-  '@floegence/flowersec-node-native-darwin-x64@5.2.2':
+  '@floegence/flowersec-node-native-darwin-x64@5.2.3':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@5.2.2':
+  '@floegence/flowersec-node-native-linux-arm64-gnu@5.2.3':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@5.2.2':
+  '@floegence/flowersec-node-native-linux-x64-gnu@5.2.3':
     optional: true
 
-  '@floegence/flowersec-node-native@5.2.2':
+  '@floegence/flowersec-node-native@5.2.3':
     optionalDependencies:
-      '@floegence/flowersec-node-native-darwin-arm64': 5.2.2
-      '@floegence/flowersec-node-native-darwin-x64': 5.2.2
-      '@floegence/flowersec-node-native-linux-arm64-gnu': 5.2.2
-      '@floegence/flowersec-node-native-linux-x64-gnu': 5.2.2
+      '@floegence/flowersec-node-native-darwin-arm64': 5.2.3
+      '@floegence/flowersec-node-native-darwin-x64': 5.2.3
+      '@floegence/flowersec-node-native-linux-arm64-gnu': 5.2.3
+      '@floegence/flowersec-node-native-linux-x64-gnu': 5.2.3
     optional: true
 
   '@floegence/redeven-service-templates@https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz': {}

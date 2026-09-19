@@ -15,12 +15,12 @@ export type ConnectionRecoveryViewProps = Readonly<{
   snapshot: ConnectionRecoverySnapshot;
   environmentName: string;
   onRetry: () => Promise<void>;
+  onStop: () => Promise<void>;
 }>;
 
 const STEP_TRANSLATION_KEYS = {
   interrupted: 'connectionRecovery.steps.interrupted',
   desktop_transport: 'connectionRecovery.steps.desktopTransport',
-  runtime_probe: 'connectionRecovery.steps.runtimeProbe',
   protocol_connect: 'connectionRecovery.steps.protocolConnect',
   secure_session: 'connectionRecovery.steps.secureSession',
   completed: 'connectionRecovery.steps.completed',
@@ -33,8 +33,12 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
   const [nowMs, setNowMs] = createSignal(Date.now());
   const [copied, setCopied] = createSignal(false);
   const [retrying, setRetrying] = createSignal(false);
+  const [stopping, setStopping] = createSignal(false);
   let copyTimer: ReturnType<typeof setTimeout> | undefined;
   let failedHeading: HTMLHeadingElement | undefined;
+  let resumeButton: HTMLButtonElement | undefined;
+  let stopButton: HTMLButtonElement | undefined;
+  let previousState = props.snapshot.state;
   const offline = () => !online() && props.snapshot.state === 'recovering';
 
   onMount(() => {
@@ -48,25 +52,31 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
     });
   });
   createEffect(() => {
-    if (!props.snapshot.next_retry_at_unix_ms) return;
+    if (!props.snapshot.next_retry_at_unix_ms && !props.snapshot.retry_not_before_unix_ms) return;
     setNowMs(Date.now());
     const interval = window.setInterval(() => setNowMs(Date.now()), 1_000);
     onCleanup(() => window.clearInterval(interval));
   });
   createEffect(() => {
-    if (props.snapshot.state === 'failed') queueMicrotask(() => failedHeading?.focus());
+    const state = props.snapshot.state;
+    if (state === 'failed') queueMicrotask(() => failedHeading?.focus());
+    if (state === 'paused' && !stopping()) queueMicrotask(() => resumeButton?.focus());
+    if (state === 'recovering' && previousState === 'paused') queueMicrotask(() => stopButton?.focus());
+    previousState = state;
   });
 
   const title = createMemo(() => {
     if (offline()) return i18n.t('connectionRecovery.title.offline');
     if (props.snapshot.state === 'succeeded') return i18n.t('connectionRecovery.title.recovered');
     if (props.snapshot.state === 'failed') return i18n.t('connectionRecovery.title.failed');
+    if (props.snapshot.state === 'paused') return i18n.t('connectionRecovery.title.paused');
     return i18n.t('connectionRecovery.title.recovering');
   });
   const summary = createMemo(() => {
     if (offline()) return i18n.t('connectionRecovery.summary.offline');
     if (props.snapshot.state === 'succeeded') return i18n.t('connectionRecovery.summary.recovered');
     if (props.snapshot.state === 'failed') return i18n.t('connectionRecovery.summary.failed');
+    if (props.snapshot.state === 'paused') return i18n.t('connectionRecovery.summary.paused');
     return i18n.t('connectionRecovery.summary.recovering');
   });
   const failureReason = createMemo(() => {
@@ -92,8 +102,9 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
   const canRetry = createMemo(() => {
     if (offline() || props.snapshot.state !== 'recovering') return false;
     if (props.snapshot.phase === 'desktop_transport') return props.snapshot.desktop_transport?.actions.includes('retry_now') ?? false;
-    return props.snapshot.phase === 'runtime_probe' || props.snapshot.phase === 'protocol_connect';
+    return props.snapshot.next_retry_at_unix_ms !== undefined;
   });
+  const serverWait = () => (props.snapshot.retry_not_before_unix_ms ?? 0) > nowMs();
   const canOpenConnectionCenter = () => props.snapshot.state === 'failed'
     && props.snapshot.desktop_transport?.actions.includes('open_connection_center');
   const retry = async () => {
@@ -102,16 +113,22 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
     try { await props.onRetry(); } finally { setRetrying(false); }
   };
 
+  const stop = async () => {
+    if (stopping()) return;
+    setStopping(true);
+    try { await props.onStop(); } finally { setStopping(false); }
+  };
+
   return (
     <section
-      class={`absolute inset-0 z-20 flex overflow-auto px-5 py-8 sm:p-10 ${props.snapshot.state === 'failed' ? 'bg-background' : 'bg-background/85 backdrop-blur-sm'}`}
+      class={`absolute inset-0 z-20 flex overflow-auto px-4 py-6 sm:p-10 ${props.snapshot.state === 'failed' ? 'bg-background' : 'bg-background/90 backdrop-blur-sm'}`}
       data-testid="connection-recovery-view"
       data-recovery-state={props.snapshot.state}
     >
-      <div class="m-auto w-full max-w-[420px] text-center" data-recovery-content>
+      <div class="m-auto w-full max-w-[460px] rounded-3xl border border-border/60 bg-card/80 px-6 py-8 text-center shadow-sm sm:px-9 sm:py-10" data-recovery-content>
         <div>
-          <Show when={props.snapshot.state === 'failed'} fallback={(
-            <div class="mx-auto mb-7 flex h-12 w-12 items-center justify-center rounded-full bg-muted/50" aria-hidden="true">
+          <Show when={props.snapshot.state === 'failed' || props.snapshot.state === 'paused'} fallback={(
+            <div class="mx-auto mb-7 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/10 bg-primary/5" aria-hidden="true">
               {props.snapshot.state === 'succeeded' ? <Check class="h-6 w-6 text-success" />
                 : offline() ? <WifiOffIcon class="h-6 w-6 text-muted-foreground" />
                   : <Refresh class="h-6 w-6 text-primary motion-safe:animate-[spin_3s_linear_infinite]" />}
@@ -119,7 +136,7 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
           )}>
             <div class="mb-4"><ConnectionPausedIllustration /></div>
           </Show>
-          <p class="mx-auto mb-3 max-w-[340px] break-words text-xs font-medium leading-5 text-muted-foreground">{props.environmentName}</p>
+          <p class="mx-auto mb-3 w-fit max-w-full break-words rounded-full border border-border/50 bg-muted/30 px-3 py-1 text-[11px] font-medium leading-5 text-muted-foreground">{props.environmentName}</p>
           <div role={props.snapshot.state === 'failed' ? undefined : 'status'} aria-live="polite" aria-atomic="true">
             {/* This heading receives announcement focus; keyboard indicators remain on the actions. */}
             <h1 ref={failedHeading} class="text-2xl font-semibold leading-8 tracking-tight text-foreground outline-none" style={{ 'box-shadow': 'none' }}
@@ -128,19 +145,37 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
             </h1>
             <p class="mx-auto mt-3 max-w-[340px] text-[13px] leading-6 text-muted-foreground">{summary()}</p>
           </div>
-          <Show when={props.snapshot.state === 'recovering' && !offline()}>
-            <div class="mt-5 flex items-center justify-center gap-2 text-xs text-muted-foreground" data-recovery-activity>
-              <Loader2 class="h-3.5 w-3.5 shrink-0 motion-safe:animate-spin" />
-              <span>{retryRemainingSeconds() > 0
-                ? i18n.t('connectionRecovery.retryIn', { seconds: retryRemainingSeconds() })
-                : i18n.t(STEP_TRANSLATION_KEYS[presentation().active_step])}</span>
+          <Show when={props.snapshot.state === 'recovering'}>
+            <div class="mt-6 rounded-2xl border border-border/50 bg-muted/25 px-4 py-4" data-recovery-activity>
+              <p class="mb-2 text-[11px] font-medium text-muted-foreground">{i18n.t('connectionRecovery.automaticRetry')}</p>
+              <div class="flex items-center justify-center gap-2.5 text-sm font-medium text-foreground" role="timer" aria-live="off">
+                <Show when={!props.snapshot.next_retry_at_unix_ms} fallback={<span class="h-2 w-2 shrink-0 rounded-full bg-primary/65" aria-hidden="true" />}>
+                  <Loader2 class="h-4 w-4 shrink-0 text-primary motion-safe:animate-spin" aria-hidden="true" />
+                </Show>
+                <span class="tabular-nums">{retryRemainingSeconds() > 0
+                  ? i18n.t('connectionRecovery.retryIn', { seconds: retryRemainingSeconds() })
+                  : props.snapshot.phase === 'secure_session'
+                    ? i18n.t('connectionRecovery.steps.secureSession')
+                    : i18n.t('connectionRecovery.connecting')}</span>
+              </div>
+              <Show when={serverWait()}><p class="mt-2 text-xs leading-5 text-muted-foreground">{i18n.t('connectionRecovery.retryLimited')}</p></Show>
             </div>
           </Show>
-          <Show when={canRetry() || props.snapshot.state === 'failed'}>
+          <Show when={props.snapshot.state !== 'succeeded'}>
             <div class="mt-6 flex flex-wrap items-center justify-center gap-2" data-recovery-actions>
               <Show when={canRetry()}>
-                <Button class="cursor-pointer" size="sm" variant="outline" icon={Refresh} disabled={retrying()} onClick={() => void retry()}>
+                <Button class="min-h-10 cursor-pointer rounded-full px-5" size="sm" icon={Refresh} disabled={retrying() || serverWait()} onClick={() => void retry()}>
                   {i18n.t('connectionRecovery.retryNow')}
+                </Button>
+              </Show>
+              <Show when={props.snapshot.state === 'recovering'}>
+                <Button ref={stopButton} class="min-h-10 cursor-pointer rounded-full px-5" size="sm" variant="ghost" disabled={stopping()} onClick={() => void stop()}>
+                  {i18n.t('connectionRecovery.stopRetry')}
+                </Button>
+              </Show>
+              <Show when={props.snapshot.state === 'paused'}>
+                <Button ref={resumeButton} class="min-h-10 cursor-pointer rounded-full px-5" size="sm" icon={Refresh} disabled={stopping() || !online()} onClick={() => void retry()}>
+                  {i18n.t('connectionRecovery.resumeRetry')}
                 </Button>
               </Show>
               <Show when={canOpenConnectionCenter()}>

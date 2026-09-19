@@ -3913,19 +3913,20 @@
     "title": {
       "recovering": "Restaurando a conexão",
       "recovered": "Conexão restaurada",
-      "failed": "Conexão pausada",
-      "offline": "Você está offline"
+      "failed": "A conexão precisa de atenção",
+      "offline": "Você está offline",
+      "paused": "Reconexão interrompida"
     },
     "summary": {
       "recovering": "Seu espaço de trabalho continua aberto. A reconexão é automática e você voltará assim que estiver tudo pronto.",
       "recovered": "A conexão foi restabelecida. Voltando ao seu espaço de trabalho.",
       "failed": "A recuperação automática foi interrompida. Inicie uma nova conexão para continuar trabalhando.",
-      "offline": "A conexão será restabelecida quando a rede voltar. Você pode manter esta página aberta."
+      "offline": "A conexão será restabelecida quando a rede voltar. Você pode manter esta página aberta.",
+      "paused": "Seu espaço de trabalho está preservado aqui. Retome a conexão quando quiser."
     },
     "steps": {
       "interrupted": "Conexão interrompida",
       "desktopTransport": "Recuperação do transporte do Desktop",
-      "runtimeProbe": "Verificação da disponibilidade do ambiente de execução",
       "protocolConnect": "Conexão de protocolo",
       "secureSession": "Recuperação da sessão segura",
       "completed": "Conexão concluída"
@@ -3951,7 +3952,12 @@
       "secureSessionFailed": "Não foi possível retomar a sessão segura.",
       "remoteCommandEnded": "O comando original da ponte para o ambiente de execução remoto foi encerrado.",
       "processIdentityChanged": "A identidade do ambiente de execução remoto mudou, por isso esta janela não pode ser vinculada novamente com segurança."
-    }
+    },
+    "stopRetry": "Parar tentativas",
+    "resumeRetry": "Retomar conexão",
+    "automaticRetry": "Reconexão automática",
+    "connecting": "Conectando…",
+    "retryLimited": "O servidor solicita uma breve espera antes de uma nova tentativa."
   },
   "debugConsole": {
     "windowTitle": "Console de depuração",

@@ -221,6 +221,7 @@ import {
   readDesktopSessionContextSnapshot,
   readDesktopTransportRecoverySnapshot,
   requestDesktopTransportRecoveryNow,
+  stopDesktopTransportRecovery,
   subscribeDesktopTransportRecovery,
 } from './services/desktopSessionContext';
 import { controlPlaneOriginFromSandboxLocation } from './services/sandboxOrigins';
@@ -2827,10 +2828,10 @@ export function EnvAppShell() {
     }
 
     const attemptKey = ++accessRecoverySeq;
+    setAccessRecoveryBusy(true);
     setConnectionAttemptSeq((n) => n + 1);
     accessResumeClient = null;
     accessResumeInFlight = null;
-    setAccessRecoveryBusy(true);
     setCurrentAccessError(null);
     setManualError(null);
 
@@ -2905,7 +2906,7 @@ export function EnvAppShell() {
       await retryAccessConnection();
       return;
     }
-    if (reconnectController.snapshot().state === 'recovering') {
+    if (reconnectController.snapshot().state === 'recovering' || reconnectController.snapshot().state === 'paused') {
       await reconnectController.requestImmediateRetry();
       return;
     }
@@ -2917,10 +2918,33 @@ export function EnvAppShell() {
   };
 
   const reconnectController = createRuntimeReconnectController({
-    enabled: runtimeConnectionEstablished,
+    enabled: () => runtimeConnectionEstablished() || (desktopTransportRecovery()?.generation ?? 0) > 0,
     desktopTransport: desktopTransportRecovery,
     retryProtocolNow: () => protocol.retryNow(),
     requestDesktopRecoveryNow: requestDesktopTransportRecoveryNow,
+    stopRetry: async () => {
+      // Invalidate access preparation before closing the connection so a canceled
+      // attempt cannot publish an error or disconnect a later explicit resume.
+      accessRecoverySeq += 1;
+      setAccessRecoveryBusy(false);
+      accessResumeClient = null;
+      accessResumeInFlight = null;
+      const closing = protocol.disconnect();
+      const desktop = desktopTransportRecovery();
+      if (desktop?.phase === 'waiting' || desktop?.phase === 'connecting') {
+        const stopped = await stopDesktopTransportRecovery();
+        if (!stopped && desktopTransportRecovery()?.phase !== 'ready') {
+          throw new Error('Desktop transport recovery could not be stopped.');
+        }
+      }
+      await closing;
+    },
+    reconnect: async () => {
+      if (desktopTransportRecovery()?.phase === 'paused' && !await requestDesktopTransportRecoveryNow()) {
+        throw new Error('Desktop transport recovery could not be resumed.');
+      }
+      await replaceConnection();
+    },
   });
 
   const currentPingSource = createMemo(() => {
@@ -3257,6 +3281,7 @@ export function EnvAppShell() {
       return 'connecting';
     }
     if (recoverySnapshot().state === 'failed') return 'error';
+    if (recoverySnapshot().state === 'paused') return 'disconnected';
     if (recoveryVisible()) return 'connecting';
     if (manualError()) return 'error';
 	const current = protocol.status();
@@ -3281,11 +3306,11 @@ export function EnvAppShell() {
 
     switch (recoverySnapshot().phase) {
       case 'desktop_transport': return i18n.t('shell.status.retryingConnection');
-      case 'runtime_probe': return i18n.t('shell.status.waitingForRuntime');
       case 'protocol_connect': return i18n.t('shell.status.reconnecting');
       case 'secure_session': return i18n.t('shell.status.preparingSecureSession');
       case 'completed': return i18n.t('shell.framework.connected');
       case 'failed': return i18n.t('shell.status.connectionFailed');
+      case 'paused': return i18n.t('connectionRecovery.title.paused');
       default: return undefined;
     }
   });
@@ -3311,9 +3336,10 @@ export function EnvAppShell() {
       if (recoverySnapshot().phase === 'desktop_transport') {
         return !(recoverySnapshot().desktop_transport?.actions.includes('retry_now') ?? false);
       }
-      return recoverySnapshot().phase === 'secure_session';
+      return protocol.snapshot().state !== 'waiting';
     }
 
+    if (recoverySnapshot().state === 'paused') return false;
     return accessRecoveryBusy() || connecting();
   });
   const reconnectLabel = createMemo(() => {
@@ -3336,6 +3362,7 @@ export function EnvAppShell() {
         ? i18n.t('shell.status.reconnectingEllipsis')
         : i18n.t('shell.status.retryNow');
     }
+    if (recoverySnapshot().state === 'paused') return i18n.t('connectionRecovery.resumeRetry');
     return connecting() ? i18n.t('shell.status.connectingEllipsis') : i18n.t('shell.status.reconnect');
   });
 
@@ -3451,12 +3478,16 @@ export function EnvAppShell() {
       untrack(() => reconnectController.noteProtocolConnecting(protocolSnapshot.attempt));
       return;
     }
+    // An explicit replacement may briefly be idle while it closes its owner.
+    // Outside that operation, idle has no scheduler and must not imply retry.
+    if (protocolStatusValue === 'idle' && accessRecoveryBusy()) return;
     const retryDisposition = protocolSnapshot.retryDisposition;
     untrack(() => reconnectController.activateWaiting(failure, {
       attempt: protocolSnapshot.attempt,
-      terminal: retryDisposition?.kind === 'terminal' || protocolStatusValue === 'failed' || protocolStatusValue === 'closed',
+      terminal: retryDisposition?.kind === 'terminal' || protocolStatusValue === 'failed' || protocolStatusValue === 'closed' || protocolStatusValue === 'idle',
+      nextRetryAtUnixMs: protocolSnapshot.nextRetryAtUnixMilliseconds,
       ...(retryDisposition?.kind === 'retry_after'
-        ? { nextRetryAtUnixMs: retryDisposition.notBeforeUnixMilliseconds }
+        ? { retryNotBeforeUnixMs: retryDisposition.notBeforeUnixMilliseconds }
         : {}),
     }));
   });
@@ -3529,7 +3560,7 @@ export function EnvAppShell() {
   // Floe's acquisition lifecycle owns session liveness, including browser wake.
   // Only nudge an existing retry here; terminal failures need an explicit action.
   const resumeWaitingConnection = () => {
-    if (accessGateVisible() || accessRecoveryBusy() || protocol.snapshot().state !== 'waiting') return;
+    if (accessGateVisible() || reconnectController.snapshot().state === 'paused' || protocol.snapshot().state !== 'waiting') return;
     void reconnectController.requestImmediateRetry();
   };
 
@@ -3604,7 +3635,7 @@ export function EnvAppShell() {
       }
       setPersistReady(true);
 
-      if (accessLocked()) {
+      if (accessLocked() || reconnectController.snapshot().state === 'paused') {
         setManualError(null);
         return;
       }
@@ -4895,6 +4926,7 @@ export function EnvAppShell() {
                   snapshot={recoverySnapshot()}
                   environmentName={envSessionIdentity().displayName}
                   onRetry={() => reconnectController.requestImmediateRetry()}
+                  onStop={() => reconnectController.stopRetry()}
                 />
               )}
             >
@@ -4972,6 +5004,7 @@ export function EnvAppShell() {
               snapshot={recoverySnapshot()}
               environmentName={envSessionIdentity().displayName}
               onRetry={() => reconnectController.requestImmediateRetry()}
+              onStop={() => reconnectController.stopRetry()}
             />
           )}
         >

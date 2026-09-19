@@ -504,28 +504,23 @@ export async function createLocalDirectArtifactSource<
     fetch: async (_input, init) => {
       const signal = init?.signal ?? new AbortController().signal;
       await options.beforeAcquire?.({ signal });
-      let out: {
-        v?: number;
-        channel_id?: unknown;
-        connect_artifact?: string;
-        critical_scope_projection_json?: string;
-        spend_scope?: SpendBindingView & { v?: number };
-        plugin_session_credential?: unknown;
-      };
-      try {
-        out = await fetchLocalJSON('/api/local/direct/connect_artifact', {
-          method: 'POST',
-          signal,
-        });
-      } catch (error) {
-        if (!(error instanceof APIError) && !(error instanceof AccessUnlockError)) throw error;
+      const headers = new Headers();
+      applyLocalAccessResumeHeader(headers);
+      const response = await fetch('/api/local/direct/connect_artifact', {
+        method: 'POST', signal, headers, credentials: 'same-origin', cache: 'no-store',
+      });
+      const envelope = await response.json().catch(() => null);
+      if (!response.ok || envelope?.success === false) {
+        // Redeven API codes use uppercase; Floe's source accepts lowercase
+        // business codes and owns failure classification and Retry-After.
+        const failureHeaders = new Headers({ 'content-type': 'application/json' });
+        const retryAfter = response.headers.get('retry-after');
+        if (retryAfter !== null) failureHeaders.set('retry-after', retryAfter);
         return new Response(JSON.stringify({
-          error: { code: asString(error.code).toLowerCase() },
-        }), {
-          status: error.status,
-          headers: { 'content-type': 'application/json' },
-        });
+          error: { code: (asString(envelope?.error?.code) || 'HTTP_ERROR').toLowerCase() },
+        }), { status: response.ok ? 400 : response.status, headers: failureHeaders });
       }
+      const out = envelope?.data ?? envelope;
       const channelID = asString(out?.channel_id);
       if (!out?.connect_artifact || !out.critical_scope_projection_json || !out.spend_scope || !channelID) {
         throw new Error('Invalid local direct connect artifact');

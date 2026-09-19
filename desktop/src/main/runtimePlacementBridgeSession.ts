@@ -129,6 +129,7 @@ export type RuntimePlacementBridgeSession = RuntimePlacementBridgeSessionHandle 
   getRecoverySnapshot: () => DesktopSessionTransportRecoverySnapshot;
   subscribeRecovery: (listener: (snapshot: DesktopSessionTransportRecoverySnapshot) => void) => () => void;
   requestRecoveryNow: () => boolean;
+  stopRecovery: () => boolean;
   disconnect: () => Promise<void>;
   stop: () => Promise<void>;
 }>;
@@ -703,6 +704,7 @@ export async function startRuntimePlacementBridgeSession(
   let recoveryTask: Promise<void> | null = null;
   let recoveryWaitController: AbortController | null = null;
   let recoveryRetryRequested = false;
+  let recoveryPaused = false;
   const streams = new Map<string, BridgeStreamCallbacks>();
   const recoveryListeners = new Set<(snapshot: DesktopSessionTransportRecoverySnapshot) => void>();
   const recoveryBackoffMS = recoveryBackoff(args);
@@ -960,7 +962,7 @@ export async function startRuntimePlacementBridgeSession(
     }
     const wait = args.recovery_scheduler?.wait ?? waitForRecovery;
     let attempt = 0;
-    while (!closed && !sessionController.signal.aborted) {
+    while (!closed && !recoveryPaused && !sessionController.signal.aborted) {
       const delayMS = recoveryBackoffMS[Math.min(attempt, recoveryBackoffMS.length - 1)] ?? 30_000;
       if (!recoveryRetryRequested) {
         publishRecovery({
@@ -994,7 +996,7 @@ export async function startRuntimePlacementBridgeSession(
         }
       }
       recoveryRetryRequested = false;
-      if (closed || sessionController.signal.aborted) {
+      if (closed || recoveryPaused || sessionController.signal.aborted) {
         return;
       }
       attempt += 1;
@@ -1006,12 +1008,23 @@ export async function startRuntimePlacementBridgeSession(
         ...(recoverySnapshot.failure ? { failure: recoverySnapshot.failure } : {}),
         actions: [],
       });
+      const attemptController = new AbortController();
+      recoveryWaitController = attemptController;
+      const abortAttempt = () => attemptController.abort(sessionController.signal.reason ?? abortError());
+      sessionController.signal.addEventListener('abort', abortAttempt, { once: true });
       try {
+        if (closed || recoveryPaused || sessionController.signal.aborted) return;
         const transport = await openRemoteBridgeTransport(
           args,
-          sessionController.signal,
+          attemptController.signal,
           nextTransportID++,
         );
+        if (attemptController.signal.aborted || recoveryPaused || closed) {
+          transport.session.destroy();
+          transport.connection.destroy();
+          await closeStreamingCommand(transport.command);
+          return;
+        }
         if (!transport.identity || !bridgeProcessIdentityMatches(expectedIdentity, transport.identity)) {
           transport.session.destroy();
           transport.connection.destroy();
@@ -1031,6 +1044,7 @@ export async function startRuntimePlacementBridgeSession(
         });
         return;
       } catch (error) {
+        if (attemptController.signal.aborted || recoveryPaused || closed) return;
         const normalized = normalizeError(error);
         if (
           normalized instanceof RuntimePlacementBridgeIdentityChangedError
@@ -1051,16 +1065,20 @@ export async function startRuntimePlacementBridgeSession(
           failure: recoveryFailureFromError(normalized),
           actions: ['retry_now'],
         });
+      } finally {
+        sessionController.signal.removeEventListener('abort', abortAttempt);
+        if (recoveryWaitController === attemptController) recoveryWaitController = null;
       }
     }
   };
 
   function startRecovery(): void {
-    if (closed || recoveryTask) {
+    if (closed || recoveryPaused || recoveryTask) {
       return;
     }
     recoveryTask = recover().finally(() => {
       recoveryTask = null;
+      if (recoveryRetryRequested && !recoveryPaused && !closed) startRecovery();
     });
   }
 
@@ -1159,11 +1177,21 @@ export async function startRuntimePlacementBridgeSession(
       };
     },
     requestRecoveryNow: () => {
-      if (closed || recoverySnapshot.phase !== 'waiting') {
+      if (closed || (recoverySnapshot.phase !== 'waiting' && recoverySnapshot.phase !== 'paused')) {
         return false;
       }
+      recoveryPaused = false;
       recoveryRetryRequested = true;
       recoveryWaitController?.abort(new RuntimePlacementBridgeRetryNowError());
+      startRecovery();
+      return true;
+    },
+    stopRecovery: () => {
+      if (closed || (recoverySnapshot.phase !== 'waiting' && recoverySnapshot.phase !== 'connecting')) return false;
+      recoveryPaused = true;
+      recoveryRetryRequested = false;
+      recoveryWaitController?.abort(abortError());
+      publishRecovery({ ...recoverySnapshot, phase: 'paused', next_attempt_at_unix_ms: undefined, actions: ['retry_now'] });
       return true;
     },
     disconnect: stop,

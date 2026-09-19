@@ -3928,19 +3928,20 @@
     "title": {
       "recovering": "正在恢復連線",
       "recovered": "連線已恢復",
-      "failed": "連線已暫停",
-      "offline": "等待網路恢復"
+      "failed": "連線需要處理",
+      "offline": "等待網路恢復",
+      "paused": "已停止重新連線"
     },
     "summary": {
       "recovering": "工作區已保留，正在自動重新連線。連線恢復後即可繼續。",
       "recovered": "連線已恢復，正在返回工作區。",
       "failed": "自動復原已停止。重新連線至環境後，即可繼續工作。",
-      "offline": "網路恢復後會自動重新連線，請保持此頁面開啟。"
+      "offline": "網路恢復後會自動重新連線，請保持此頁面開啟。",
+      "paused": "工作區會保留在這裡。準備好後，即可繼續連線。"
     },
     "steps": {
       "interrupted": "連線已中斷",
       "desktopTransport": "恢復 Desktop 傳輸",
-      "runtimeProbe": "檢查執行階段可用性",
       "protocolConnect": "建立通訊協定連線",
       "secureSession": "恢復安全工作階段",
       "completed": "連線完成"
@@ -3966,7 +3967,12 @@
       "secureSessionFailed": "無法恢復安全工作階段。",
       "remoteCommandEnded": "原本用於橋接遠端執行階段的命令已結束。",
       "processIdentityChanged": "遠端執行階段身分已變更，因此無法安全地將此視窗重新繫結。"
-    }
+    },
+    "stopRetry": "停止重試",
+    "resumeRetry": "繼續連線",
+    "automaticRetry": "自動重新連線",
+    "connecting": "正在連線…",
+    "retryLimited": "伺服器要求稍候再重試。"
   },
   "debugConsole": {
     "windowTitle": "除錯主控台",

@@ -30,7 +30,7 @@ export type DesktopTransportRecoveryFailureCode =
 export type DesktopTransportRecoverySnapshot = Readonly<{
   generation: number;
   revision: number;
-  phase: 'ready' | 'waiting' | 'connecting' | 'failed';
+  phase: 'ready' | 'waiting' | 'connecting' | 'paused' | 'failed';
   attempt_count: number;
   started_at_unix_ms?: number;
   next_attempt_at_unix_ms?: number;
@@ -48,6 +48,7 @@ export interface DesktopSessionContextBridge {
   getTransportRecoverySnapshot?: () => DesktopTransportRecoverySnapshot | null;
   subscribeTransportRecovery?: (listener: (snapshot: DesktopTransportRecoverySnapshot) => void) => () => void;
   requestTransportRecoveryNow?: () => Promise<boolean>;
+  stopTransportRecovery?: () => Promise<boolean>;
   renewProviderSession?: () => Promise<boolean>;
   notifyAppReady?: (payload: {
     state: 'access_gate_interactive' | 'runtime_connected';
@@ -141,7 +142,7 @@ export function normalizeDesktopTransportRecoverySnapshot(
     generation === null
     || revision === null
     || attemptCount === null
-    || (phase !== 'ready' && phase !== 'waiting' && phase !== 'connecting' && phase !== 'failed')
+    || (phase !== 'ready' && phase !== 'waiting' && phase !== 'connecting' && phase !== 'paused' && phase !== 'failed')
   ) {
     return null;
   }
@@ -245,6 +246,11 @@ export function subscribeDesktopTransportRecovery(
     current = snapshot;
     listener(snapshot);
   });
+}
+
+export async function stopDesktopTransportRecovery(): Promise<boolean> {
+  const bridge = readDesktopHostBridge('redevenDesktopSessionContext', isDesktopSessionContextBridge);
+  return await bridge?.stopTransportRecovery?.() === true;
 }
 
 export async function requestDesktopTransportRecoveryNow(): Promise<boolean> {

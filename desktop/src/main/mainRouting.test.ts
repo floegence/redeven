@@ -331,9 +331,10 @@ describe('main routing', () => {
     expect(handlerStart).toBeGreaterThanOrEqual(0);
     expect(handlerEnd).toBeGreaterThan(handlerStart);
     const handlerSrc = mainSrc.slice(handlerStart, handlerEnd);
-    expect(handlerSrc.match(/sessionRecordForWebContentsID\(event\.sender\.id\)/gu)).toHaveLength(3);
+    expect(handlerSrc.match(/sessionRecordForWebContentsID\(event\.sender\.id\)/gu)).toHaveLength(4);
     expect(handlerSrc).toContain('event.returnValue = sessionRecord?.transport_recovery_snapshot ?? null;');
     expect(handlerSrc).toContain('return sessionRecord?.transport_recovery_session?.requestRecoveryNow() ?? false;');
+    expect(handlerSrc).toContain('return sessionRecord?.transport_recovery_session?.stopRecovery() ?? false;');
     expect(handlerSrc).not.toContain('sessionsByKey.get(');
     expect(handlerSrc).not.toContain('runtimePlacementBridgeByTargetID.get(');
   });

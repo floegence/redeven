@@ -114,6 +114,17 @@ describe('observeRuntimePlacementBridge', () => {
     expect(fixture.disconnect).not.toHaveBeenCalled();
   });
 
+  it('keeps paused recovery unavailable without probing or restarting it', async () => {
+    const registry = new RuntimePlacementBridgeRegistry(vi.fn());
+    const fixture = observationFixture('target-one');
+    fixture.setRecovery({ generation: 1, revision: 2, phase: 'paused', attempt_count: 1, actions: ['retry_now'] });
+    registry.trackOpening(fixture.record, 'target-one:open');
+    const probe = vi.fn();
+    expect(await observeRuntimePlacementBridge(registry, fixture.targetID, probe)).toMatchObject({ kind: 'unavailable', failure: { code: 'recovery_paused' } });
+    expect(probe).not.toHaveBeenCalled();
+    expect(fixture.disconnect).not.toHaveBeenCalled();
+  });
+
   it('returns recovery when interruption is published during a health probe', async () => {
     const registry = new RuntimePlacementBridgeRegistry(vi.fn());
     const fixture = observationFixture('target-one');

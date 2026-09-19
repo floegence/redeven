@@ -36,6 +36,9 @@ export async function observeRuntimePlacementBridge(
     if (beforeProbe.phase === 'waiting' || beforeProbe.phase === 'connecting') {
       return { kind: 'recovering', record: bridgeRecord, recovery: beforeProbe };
     }
+    if (beforeProbe.phase === 'paused') {
+      return { kind: 'unavailable', record: bridgeRecord, failure: { kind: 'network_error', code: 'recovery_paused' } };
+    }
     if (beforeProbe.phase === 'failed') {
       await bridgeRecord.session.closed;
       continue;
@@ -49,6 +52,9 @@ export async function observeRuntimePlacementBridge(
     const afterProbe = current.session.getRecoverySnapshot();
     if (afterProbe.phase === 'waiting' || afterProbe.phase === 'connecting') {
       return { kind: 'recovering', record: current, recovery: afterProbe };
+    }
+    if (afterProbe.phase === 'paused') {
+      return { kind: 'unavailable', record: current, failure: { kind: 'network_error', code: 'recovery_paused' } };
     }
     if (afterProbe.phase === 'failed') {
       await current.session.closed;
