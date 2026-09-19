@@ -5261,6 +5261,8 @@
       "connectionHint": "連線至 Chrome 後，目前的任務會自動繼續。",
       "noFrame": "尚無螢幕截圖",
       "frameConnecting": "正在連線畫面…",
+      "frameLoading": "正在載入畫面…",
+      "frameLoadingHint": "畫面準備就緒後會自動顯示在這裡",
       "frameDisconnected": "畫面連線已中斷",
       "frameStale": "最後擷取的畫面 · 非即時",
       "reveal": "在瀏覽器中檢視",

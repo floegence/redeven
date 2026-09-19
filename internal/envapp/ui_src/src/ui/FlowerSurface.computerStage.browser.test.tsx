@@ -82,7 +82,7 @@ describe('Flower computer stage', () => {
     const dispose = renderWithFloeLayout(() => <FlowerComputerStage
       snapshot={{ item: activityItem({ item_id: 'ime' }), status: 'waiting', targetID: 'browser-main', target: 'Managed browser', action: 'Sign in' }}
       frame={{ thread_id: 'fixture', target_id: 'browser-main', resource_ref: FRAME_REF, sha256: 'a'.repeat(64) }} loadFrame={async () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' })}
-      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: STAGE_STATES }}
+      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', loading: 'Loading the view…', loadingHint: 'The view will appear here when it’s ready.', retry: 'Retry', resumeControl: 'Resume control', state: STAGE_STATES }}
       open sessionState="awaiting_user" onRestore={() => undefined} onClose={() => undefined} onInput={input}
     />, host);
     try {
@@ -113,7 +113,7 @@ describe('Flower computer stage', () => {
     const dispose = renderWithFloeLayout(() => <FlowerComputerStage
       snapshot={{ item: activityItem({ item_id: 'frame', status: status() }), status: status(), targetID: 'browser-main', target: 'Managed browser', action: 'Screenshot' }}
       threadID={owner()} frame={{ thread_id: owner(), target_id: 'browser-main', resource_ref: frame(), sha256: frame().split('/').at(-1)! }} loadFrame={loadFrame}
-      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: STAGE_STATES }}
+      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', loading: 'Loading the view…', loadingHint: 'The view will appear here when it’s ready.', retry: 'Retry', resumeControl: 'Resume control', state: STAGE_STATES }}
       open sessionState={status() === 'success' ? 'completed' : 'running'} onRestore={() => undefined} onClose={() => undefined}
     />, host);
     try {

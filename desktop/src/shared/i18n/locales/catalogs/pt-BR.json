@@ -897,6 +897,8 @@
       "connectionHint": "Conecte o Chrome para continuar esta tarefa automaticamente.",
       "noFrame": "Nenhuma captura disponível",
       "frameConnecting": "Conectando à visualização…",
+      "frameLoading": "Carregando a visualização…",
+      "frameLoadingHint": "A visualização aparecerá aqui quando estiver pronta.",
       "frameDisconnected": "Conexão com a visualização interrompida",
       "frameStale": "Última captura · não está ao vivo",
       "reveal": "Ver no navegador",

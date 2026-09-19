@@ -5246,6 +5246,8 @@
       "connectionHint": "Verbinden Sie Chrome, um diese Aufgabe automatisch fortzusetzen.",
       "noFrame": "Kein Screenshot verfügbar",
       "frameConnecting": "Verbindung zur Ansicht wird hergestellt…",
+      "frameLoading": "Ansicht wird geladen…",
+      "frameLoadingHint": "Die Ansicht erscheint hier, sobald sie bereit ist.",
       "frameDisconnected": "Verbindung zur Ansicht unterbrochen",
       "frameStale": "Zuletzt erfasste Ansicht · nicht live",
       "reveal": "Im Browser anzeigen",

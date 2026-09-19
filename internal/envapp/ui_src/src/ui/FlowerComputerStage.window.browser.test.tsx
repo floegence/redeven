@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 import { expect, it, vi } from 'vitest';
-import { commands, page } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
@@ -12,6 +12,84 @@ import { FlowerComputerStage, type FlowerComputerStageSessionState } from '../..
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 const states = { awaiting_control: 'Waiting for you to take control', historical: 'Historical screenshot', stopped: 'Computer task stopped', disconnected: 'Connection lost', taking_control:'Taking control', user_control:'You are controlling', returning_control:'Returning control', paused:'Viewing paused', running: 'Computer running', awaiting_user: 'Waiting for input or approval', completed: 'Computer task completed', failed: 'Computer task failed' };
 const waitFor = async (predicate: () => boolean) => vi.waitFor(() => expect(predicate()).toBe(true), { timeout: 5000, interval: 16 });
+
+it.each([false, true])('centers a readable loading state and replaces it with assistance, retry and decoded pixels (projected=%s)', async projected => {
+  await page.viewport(1200, 900);
+  const host = document.createElement('div'); document.body.append(host);
+  const [boundary, setBoundary] = createSignal<HTMLElement>();
+  const [size, setSize] = createSignal({ width: 1000, height: 700 });
+  const [loading, setLoading] = createSignal(true);
+  const [blocked, setBlocked] = createSignal(false);
+  const [message, setMessage] = createSignal('正在连接画面…');
+  const [state, setState] = createSignal<FlowerComputerStageSessionState>('running');
+  const [frame, setFrame] = createSignal<{ thread_id: string; target_id: string; resource_ref: string; sha256: string }>();
+  let rejectFrame: (error: Error) => void = () => undefined;
+  const blob = new Blob([Uint8Array.from(atob(PNG), value => value.charCodeAt(0))], { type: 'image/png' });
+  const loadFrame = vi.fn(async () => blob).mockImplementationOnce(() => new Promise<Blob>((_resolve, reject) => { rejectFrame = reject; }));
+  const dispose = render(() => <FloeConfigProvider><LayoutProvider>
+    <div ref={setBoundary} data-floe-dialog-surface-host={projected ? 'true' : undefined}
+      style={{ position: 'relative', width: `${size().width}px`, height: `${size().height}px`, transform: projected ? 'scale(0.7)' : undefined, 'transform-origin': 'top left' }}>
+      <FlowerComputerStage threadID="loading-viewer" boundary={boundary()} open sessionState={state()} loading={loading()} blocked={blocked()} emptyMessage={message()} frame={frame()} loadFrame={loadFrame}
+        onFrameError={() => { setState('paused'); setMessage('画面连接已中断'); }} onRetry={() => setState('running')}
+        snapshot={{ item: { item_id: 'loading', kind: 'tool', status: 'running', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'running', targetID: 'browser-main', target: 'Chrome', action: 'Open the page' }}
+        copy={{ frameRate: '帧率', frameRateHint: 'Preview rate', receivedFrameRate: 'Receiving {fps} FPS', title: '电脑', close: '关闭', maximize: '最大化', restoreSize: '还原', zoomIn: '实际大小', zoomOut: '适应窗口', restore: 'Restore viewer', move: 'Move viewer', noFrame: '暂无截图', loading: '正在加载画面…', loadingHint: '画面就绪后会自动显示在这里', retry: '重试', resumeControl: '重新连接', state: states }}
+        onClose={() => {}} onRestore={() => {}} />
+    </div>
+  </LayoutProvider></FloeConfigProvider>, host);
+  try {
+    await waitFor(() => Boolean(document.querySelector('.flower-computer-stage-no-frame')));
+    const stage = document.querySelector<HTMLElement>('.flower-computer-stage')!;
+    const placeholder = stage.querySelector<HTMLElement>('.flower-computer-stage-no-frame')!;
+    expect(stage.querySelector('[data-floe-floating-window-footer]')).toBeNull();
+    const assertCentered = () => {
+      const content = stage.querySelector('[data-floe-floating-window-content]')!.getBoundingClientRect();
+      for (const element of [placeholder, placeholder.querySelector('.flower-computer-placeholder-art')!, placeholder.querySelector('[role="status"]')!]) {
+        const rect = element.getBoundingClientRect();
+        expect(Math.abs(rect.x + rect.width / 2 - content.x - content.width / 2)).toBeLessThan(1);
+        expect(rect.top).toBeGreaterThanOrEqual(content.top);
+        expect(rect.bottom).toBeLessThanOrEqual(content.bottom);
+      }
+      const rect = placeholder.getBoundingClientRect();
+      expect(Math.abs(rect.y + rect.height / 2 - content.y - content.height / 2)).toBeLessThan(1);
+      expect(placeholder.scrollWidth).toBeLessThanOrEqual(placeholder.clientWidth);
+    };
+    assertCentered();
+    expect(placeholder.textContent).toContain('画面就绪后会自动显示在这里');
+    expect(placeholder.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toBe('正在连接画面…');
+    const scenario = projected ? 'projected' : 'ordinary';
+    for (const dark of [false, true]) {
+      document.documentElement.classList.toggle('dark', dark);
+      await page.screenshot({ element: stage, path: `__screenshots__/computer-loading-${scenario}-${dark ? 'dark' : 'light'}.png` });
+    }
+    setSize({ width: 340, height: 270 });
+    await waitFor(() => stage.getBoundingClientRect().width < 340);
+    assertCentered();
+    await page.screenshot({ element: stage, path: `__screenshots__/computer-loading-${scenario}-compact.png` });
+    setMessage('Verbindung zur Ansicht wird hergestellt…');
+    assertCentered();
+    setBlocked(true); setMessage('请完成验证码');
+    expect(placeholder.textContent).toBe('请完成验证码');
+    expect(placeholder.querySelector('[data-floe-progress-shimmer]')).toBeNull();
+    expect(placeholder.querySelector('button')).toBeNull();
+    setBlocked(false); setLoading(false); setMessage('暂无截图');
+    expect(placeholder.textContent).toBe('暂无截图');
+    setFrame({ thread_id: 'loading-viewer', target_id: 'browser-main', resource_ref: `computer://browser-main/${'a'.repeat(64)}`, sha256: 'a'.repeat(64) });
+    await waitFor(() => loadFrame.mock.calls.length === 1);
+    expect(placeholder.querySelector('[role="status"]')?.textContent).toBe('正在加载画面…');
+    rejectFrame(new Error('Frame unavailable'));
+    await waitFor(() => Boolean(placeholder.querySelector('button')));
+    expect(placeholder.querySelector('[data-floe-progress-shimmer]')).toBeNull();
+    const retry = placeholder.querySelector<HTMLButtonElement>('button')!;
+    assertCentered();
+    expect(stage.querySelector('.flower-computer-header-actions button')).toBeNull();
+    expect(retry.textContent).toContain('重试');
+    expect(getComputedStyle(retry).cursor).toBe('pointer');
+    retry.focus(); await userEvent.keyboard('{Enter}');
+    await waitFor(() => stage.querySelector<HTMLImageElement>('img')?.naturalWidth === 1);
+    expect(stage.querySelector('.flower-computer-stage-no-frame')).toBeNull();
+    expect(loadFrame).toHaveBeenCalledTimes(2);
+  } finally { dispose(); host.remove(); document.documentElement.classList.remove('dark'); }
+});
 
 for (const [projected, portrait] of [[false, false], [true, false], [false, true], [true, true]]) {
   it(`fits the screenshot to the entire content area with a non-live notice (projected=${projected}, portrait=${portrait})`, async () => {
@@ -40,7 +118,7 @@ for (const [projected, portrait] of [[false, false], [true, false], [false, true
         <FlowerComputerStage threadID="screenshot-layout" boundary={boundary()} open historical sessionState="completed" staleLabel={staleLabel}
           frame={{ thread_id: 'screenshot-layout', target_id: 'browser-main', resource_ref: `computer://browser-main/${'a'.repeat(64)}`, sha256: 'a'.repeat(64) }} loadFrame={async () => blob}
           snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'success', targetID: 'browser-main', target: 'Chrome', action: 'Quarterly overview' }}
-          copy={{ frameRate: 'Frame rate', frameRateHint: 'Preview rate', receivedFrameRate: 'Receiving {fps} FPS', title: '历史截图', close: '关闭', maximize: '最大化', restoreSize: '还原', zoomIn: '实际大小', zoomOut: '适应窗口', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: states }}
+          copy={{ frameRate: 'Frame rate', frameRateHint: 'Preview rate', receivedFrameRate: 'Receiving {fps} FPS', title: '历史截图', close: '关闭', maximize: '最大化', restoreSize: '还原', zoomIn: '实际大小', zoomOut: '适应窗口', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', loading: 'Loading the view…', loadingHint: 'The view will appear here when it’s ready.', retry: 'Retry', resumeControl: 'Resume control', state: states }}
           onClose={() => {}} onRestore={() => {}} />
       </div>
     </LayoutProvider></FloeConfigProvider>, host);
@@ -105,7 +183,7 @@ for (const projected of [false, true]) {
         <FlowerComputerStage threadID={owner()} boundary={boundary()} launcherBoundary={launcherBoundary()} open={open()} sessionState={state()}
           snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'running', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'running', targetID: 'browser-main', target: 'Browser', action: 'Browse' }}
           frame={{ thread_id: "fixture", target_id: "browser-main", resource_ref: `computer://browser-main/${"a".repeat(64)}`, sha256: "a".repeat(64) }} loadFrame={async () => blob} onInput={input} onClose={() => setOpen(false)} onRestore={() => setOpen(true)}
-          copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer (arrow keys)', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
+          copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer (arrow keys)', noFrame: 'Loading', loading: 'Loading the view…', loadingHint: 'The view will appear here when it’s ready.', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
       </div>
     </LayoutProvider></FloeConfigProvider>, host);
     try {
@@ -179,7 +257,7 @@ it('returns focus to each restore entry and offers actual-size viewing without c
     <FlowerComputerStage threadID="focus-thread" boundary={boundary()} launcherBoundary={boundary()} open={open()} sessionState="failed"
       restoreFocus={source()} onRestore={restore} onClose={() => setOpen(false)} frame={{ thread_id: "fixture", target_id: "browser-main", resource_ref: `computer://browser-main/${"a".repeat(64)}`, sha256: "a".repeat(64) }} loadFrame={async () => blob} onInput={takeover() ? input : undefined}
       snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'success', targetID: 'browser-main', target: 'Browser', action: 'Browse' }}
-      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close viewer', maximize: 'Maximize viewer', restoreSize: 'Restore viewer size', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
+      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close viewer', maximize: 'Maximize viewer', restoreSize: 'Restore viewer size', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', loading: 'Loading the view…', loadingHint: 'The view will appear here when it’s ready.', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
   </LayoutProvider></FloeConfigProvider>, host);
   try {
     for (const selector of ['[data-testid="header-entry"]', '[data-testid="activity-entry"]', '.flower-computer-stage-ball']) {
@@ -215,7 +293,7 @@ it('does not show endless loading when a waiting conversation has no frame subsc
     <FlowerComputerStage threadID="waiting-thread" open sessionState="awaiting_user"
       snapshot={{ item: { item_id: 'observe', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'success', targetID: 'task-page', target: 'Flower managed browser', action: 'Read results' }}
       onClose={() => {}} onRestore={() => {}}
-      copy={{ frameRate: 'Frame rate', frameRateHint: 'Preview rate', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'No screenshot available', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
+      copy={{ frameRate: 'Frame rate', frameRateHint: 'Preview rate', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'No screenshot available', loading: 'Loading the view…', loadingHint: 'The view will appear here when it’s ready.', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
   </LayoutProvider></FloeConfigProvider>, host);
   try {
     await waitFor(() => Boolean(document.querySelector('.flower-computer-stage')));

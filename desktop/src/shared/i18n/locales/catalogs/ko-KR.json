@@ -897,6 +897,8 @@
       "connectionHint": "Chrome에 연결하면 이 작업이 자동으로 계속됩니다.",
       "noFrame": "스크린샷 없음",
       "frameConnecting": "화면에 연결 중…",
+      "frameLoading": "화면을 불러오는 중…",
+      "frameLoadingHint": "준비가 완료되면 여기에 화면이 표시됩니다.",
       "frameDisconnected": "화면 연결이 끊어졌습니다",
       "frameStale": "마지막 캡처 화면 · 실시간 아님",
       "reveal": "브라우저에서 보기",

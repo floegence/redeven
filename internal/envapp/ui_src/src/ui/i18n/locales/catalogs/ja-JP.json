@@ -5246,6 +5246,8 @@
       "connectionHint": "Chrome に接続すると、このタスクが自動的に再開します。",
       "noFrame": "スクリーンショットはありません",
       "frameConnecting": "画面に接続中…",
+      "frameLoading": "画面を読み込み中…",
+      "frameLoadingHint": "準備ができると、ここに画面が表示されます。",
       "frameDisconnected": "画面の接続が中断されました",
       "frameStale": "最後に取得した画面 · ライブではありません",
       "reveal": "ブラウザーで表示",
