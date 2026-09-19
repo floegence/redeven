@@ -125,6 +125,7 @@ describe('EnvAppThemePicker', () => {
 
       expect(trigger.getAttribute('aria-expanded')).toBe('true');
       expect(presets).toHaveLength(12);
+      expect(presets[0]?.dataset.envappThemePreset).toBe('porcelain-light');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('classic-light');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('github-light');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).not.toContain('classic-dark');
@@ -144,6 +145,7 @@ describe('EnvAppThemePicker', () => {
       const nord = host.querySelector<HTMLButtonElement>('[data-envapp-theme-preset="nord"]');
 
       expect(presets).toHaveLength(14);
+      expect(presets[0]?.dataset.envappThemePreset).toBe('porcelain-dark');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('classic-dark');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).not.toContain('classic-light');
       nord?.click();

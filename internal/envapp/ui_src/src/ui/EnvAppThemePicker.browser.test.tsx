@@ -45,6 +45,7 @@ it('paints feedback and keeps the workspace usable while the actual theme provid
   draft.setSelectionRange(2, 6);
   const trigger = host.querySelector<HTMLButtonElement>('[data-envapp-theme-trigger]')!;
   trigger.click();
+  expect(host.querySelector<HTMLElement>('[data-envapp-theme-preset]')?.dataset.envappThemePreset).toBe('porcelain-dark');
   const target = host.querySelector<HTMLButtonElement>('[data-envapp-theme-preset="nord"]')!;
   target.click();
   target.click();
@@ -70,4 +71,5 @@ it('paints feedback and keeps the workspace usable while the actual theme provid
   trigger.click();
   host.querySelector<HTMLButtonElement>('[id$="-mode-light"]')!.click();
   await expect.poll(() => document.documentElement.dataset.floeShellTheme).toBe('porcelain-light');
+  expect(host.querySelector<HTMLElement>('[data-envapp-theme-preset]')?.dataset.envappThemePreset).toBe('porcelain-light');
 });

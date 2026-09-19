@@ -48,6 +48,7 @@ function publishedPresets(): readonly PublishedPreset[] {
 const builtInShellThemePresets = publishedPresets();
 
 const LIGHT_PRESET_NAMES = [
+  'porcelain-light',
   'classic-light',
   'paper',
   'mist',
@@ -59,10 +60,10 @@ const LIGHT_PRESET_NAMES = [
   'solarized-light',
   'github-light',
   'hc-light',
-  'porcelain-light',
 ] as const;
 
 const DARK_PRESET_NAMES = [
+  'porcelain-dark',
   'classic-dark',
   'ink',
   'slate',
@@ -76,7 +77,6 @@ const DARK_PRESET_NAMES = [
   'abyss',
   'studio',
   'graphite',
-  'porcelain-dark',
 ] as const;
 
 const LOCALIZED_PRESET_NAMES = new Set<string>([
@@ -99,8 +99,8 @@ describe('DesktopThemePicker', () => {
 
     expect(lightPresets.map((preset) => preset.name)).toEqual(LIGHT_PRESET_NAMES);
     expect(darkPresets.map((preset) => preset.name)).toEqual(DARK_PRESET_NAMES);
-    expect(lightPresets[0]?.name).toBe('classic-light');
-    expect(darkPresets[0]?.name).toBe('classic-dark');
+    expect(lightPresets[0]?.name).toBe('porcelain-light');
+    expect(darkPresets[0]?.name).toBe('porcelain-dark');
     expect([...lightPresets, ...darkPresets]).toHaveLength(26);
   });
 
