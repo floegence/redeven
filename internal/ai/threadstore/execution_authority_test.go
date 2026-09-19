@@ -16,7 +16,7 @@ func TestExecutionAuthorityIsStableAndScopedToRequestOrTurn(t *testing.T) {
 	authority := ExecutionAuthority{
 		RequestKey: "send-request", ThreadID: "thread-authority", TurnID: "turn-1",
 		EndpointID: "endpoint-a", NamespacePublicID: "namespace-a", ChannelID: "channel-a",
-		UserPublicID: "user-b", UserEmail: "b@example.com",
+		PermissionType: "approval_required", UserPublicID: "user-b", UserEmail: "b@example.com",
 	}
 	if err := store.PutExecutionAuthority(context.Background(), authority); err != nil {
 		t.Fatal(err)
@@ -30,6 +30,7 @@ func TestExecutionAuthorityIsStableAndScopedToRequestOrTurn(t *testing.T) {
 		name   string
 		mutate func(*ExecutionAuthority)
 	}{
+		{name: "permission", mutate: func(value *ExecutionAuthority) { value.PermissionType = "full_access" }},
 		{name: "endpoint", mutate: func(value *ExecutionAuthority) { value.EndpointID = "endpoint-b" }},
 		{name: "namespace", mutate: func(value *ExecutionAuthority) { value.NamespacePublicID = "namespace-b" }},
 		{name: "channel", mutate: func(value *ExecutionAuthority) { value.ChannelID = "channel-b" }},
@@ -45,7 +46,7 @@ func TestExecutionAuthorityIsStableAndScopedToRequestOrTurn(t *testing.T) {
 		})
 	}
 	byRequest, err := store.GetExecutionAuthority(context.Background(), authority.RequestKey)
-	if err != nil || byRequest == nil || byRequest.UserPublicID != authority.UserPublicID {
+	if err != nil || byRequest == nil || byRequest.UserPublicID != authority.UserPublicID || byRequest.PermissionType != authority.PermissionType {
 		t.Fatalf("by request=%#v err=%v", byRequest, err)
 	}
 	byTurn, err := store.GetExecutionAuthorityByTurn(context.Background(), authority.ThreadID, authority.TurnID)
@@ -55,5 +56,18 @@ func TestExecutionAuthorityIsStableAndScopedToRequestOrTurn(t *testing.T) {
 	missing, err := store.GetExecutionAuthorityByTurn(context.Background(), authority.ThreadID, "foreign-turn")
 	if err != nil || missing != nil {
 		t.Fatalf("foreign turn lookup=%#v err=%v, want nil", missing, err)
+	}
+}
+
+func TestExecutionAuthorityRejectsMissingOrInvalidPermission(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	for _, value := range []string{"", "unknown"} {
+		if err := store.PutExecutionAuthority(t.Context(), ExecutionAuthority{RequestKey: "request", ThreadID: "thread", EndpointID: "env", UserPublicID: "user", PermissionType: value}); err == nil {
+			t.Fatalf("accepted permission %q", value)
+		}
 	}
 }

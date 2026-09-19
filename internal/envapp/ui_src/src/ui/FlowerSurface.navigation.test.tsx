@@ -607,7 +607,8 @@ describe('FlowerSurface navigation', () => {
       ?.getAttribute('data-flower-selected-thread-id') === 'thread-explicit-permission');
     const permissionTrigger = runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement;
     expect(permissionTrigger.getAttribute('data-permission-type')).toBe('approval_required');
-    expect(permissionTrigger.disabled).toBe(true);
+    expect(permissionTrigger.classList.contains('flower-permission-trigger-static')).toBe(true);
+    expect(runtime.querySelector('button.flower-permission-trigger')).toBeNull();
 
     detail.resolve(liveBootstrap(thread({
       thread_id: 'thread-explicit-permission',
@@ -617,6 +618,9 @@ describe('FlowerSurface navigation', () => {
     }), 2));
     await waitFor(() => (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement | null)
       ?.getAttribute('data-permission-type') === 'approval_required');
+    await flush();
+    await waitFor(() => runtime.querySelector<HTMLButtonElement>('button.flower-permission-trigger')?.disabled === false);
+    expect(surfaceAdapter.setThreadPermissionType).not.toHaveBeenCalled();
   });
 
   it('does not turn the temporary permission fallback into a new-thread override while settings load', async () => {

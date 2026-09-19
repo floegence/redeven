@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -122,36 +121,22 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 	if err := validateFloretEffectAuthorizationRequest(req); err != nil {
 		return err
 	}
-	policyRun, auditSnapshot, err := floretEffectAuthorizationContext(ctx, r, req)
+	currentSnapshot, err := floretEffectAuthorizationContext(ctx, r, req)
 	if err != nil {
 		return err
 	}
-	if err := validateFloretEffectRequestAgainstSnapshot(req, auditSnapshot); err != nil {
+	if err := validateFloretEffectRequestAgainstSnapshot(req, currentSnapshot); err != nil {
 		return err
 	}
 	authorityThreadID := strings.TrimSpace(req.HostContext[floretToolHostContextAuthorityThreadIDKey])
 	if authorityThreadID == "" {
 		return errors.New("floret effect permission authority is missing")
 	}
-	currentSnapshot, err := policyRun.refreshFloretEffectPermissionSnapshot(ctx, authorityThreadID, req)
-	if err != nil {
-		return err
+	if req.Permission.Mode == fltools.PermissionDeny {
+		return errors.New("permission denied: tool unavailable for admitted permission policy")
 	}
-	decision, err := floretEffectPolicyDecision(policyRun, currentSnapshot, req.ToolName)
-	if err != nil {
-		return err
-	}
-	if decision == ApprovalDecisionDeny {
-		return errors.New("permission denied: tool unavailable for current permission policy")
-	}
-	// Floret calls this gate only after its canonical approval decision is
-	// durable. Redeven therefore rechecks current product policy here but never
-	// creates or waits for a second user decision. If policy tightened from
-	// allow to ask after admission, the invocation has no matching Floret
-	// approval and must be rejected as stale.
-	if decision == ApprovalDecisionAsk && req.Permission.Mode != fltools.PermissionAsk {
-		return errors.New("floret effect authorization snapshot is stale")
-	}
+	// Floret settles the canonical approval. Revalidate only the admitted
+	// snapshot; a thread preference change cannot alter this turn's authority.
 	policyRevision := floretEffectPolicyRevision(authorityThreadID, currentSnapshot)
 	releaseAuthorization := func() {}
 	if !isFloretNativeTool(req.ToolName) {
@@ -229,24 +214,23 @@ func validateFloretEffectAuthorizationRequest(req flruntime.EffectAuthorizationR
 	return nil
 }
 
-func floretEffectAuthorizationContext(ctx context.Context, base *run, req flruntime.EffectAuthorizationRequest) (*run, PermissionSnapshot, error) {
+func floretEffectAuthorizationContext(ctx context.Context, base *run, req flruntime.EffectAuthorizationRequest) (PermissionSnapshot, error) {
 	ownerThreadID := strings.TrimSpace(string(req.ThreadID))
 	ownerRunID := strings.TrimSpace(string(req.RunID))
 	if childThreadID := strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey]); childThreadID != "" {
 		if ownerThreadID != childThreadID {
-			return nil, PermissionSnapshot{}, errors.New("floret child effect thread identity mismatch")
+			return PermissionSnapshot{}, errors.New("floret child effect thread identity mismatch")
 		}
 		ownerRunID = strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey])
 	}
 	snapshot, err := base.loadFloretPermissionSnapshot(ctx, req.HostContext, ownerThreadID, ownerRunID)
 	if err != nil {
-		return nil, PermissionSnapshot{}, err
+		return PermissionSnapshot{}, err
 	}
-	policyRun, err := floretEffectAuthorizationRunContext(ctx, base, req, snapshot)
-	if err != nil {
-		return nil, PermissionSnapshot{}, err
+	if _, err := floretEffectAuthorizationRunContext(ctx, base, req, snapshot); err != nil {
+		return PermissionSnapshot{}, err
 	}
-	return policyRun, snapshot, nil
+	return snapshot, nil
 }
 
 func validateFloretEffectRequestAgainstSnapshot(req flruntime.EffectAuthorizationRequest, snapshot PermissionSnapshot) error {
@@ -258,30 +242,6 @@ func validateFloretEffectRequestAgainstSnapshot(req flruntime.EffectAuthorizatio
 		return errors.New("floret effect permission mode differs from its admitted permission snapshot")
 	}
 	return nil
-}
-
-func (r *run) refreshFloretEffectPermissionSnapshot(ctx context.Context, authorityThreadID string, req flruntime.EffectAuthorizationRequest) (PermissionSnapshot, error) {
-	if r == nil {
-		return PermissionSnapshot{}, errors.New("current permission store is unavailable")
-	}
-	cfg := r.effectPermissionSurfaceConfig
-	cfg.IncludeControlSignalsInSnapshot = true
-	surface, err := r.prepareRunToolSurface(ctx, cfg)
-	if err != nil {
-		return PermissionSnapshot{}, fmt.Errorf("refresh current permission snapshot: %w", err)
-	}
-	return surface.PermissionSnapshot, nil
-}
-
-func floretEffectPolicyDecision(policyRun *run, snapshot PermissionSnapshot, toolName string) (ApprovalDecisionKind, error) {
-	if !permissionSnapshotActive(snapshot) {
-		return "", errors.New("current permission snapshot is unavailable")
-	}
-	policy, ok := snapshot.ToolPolicies[strings.TrimSpace(toolName)]
-	if !ok || !stringSliceContains(snapshot.FloretToolNames, toolName) {
-		return ApprovalDecisionDeny, nil
-	}
-	return policy.ApprovalDecision, nil
 }
 
 func floretEffectPolicyRevision(authorityThreadID string, snapshot PermissionSnapshot) string {

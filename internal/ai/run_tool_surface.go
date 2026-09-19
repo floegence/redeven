@@ -1,8 +1,6 @@
 package ai
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -21,66 +19,23 @@ type runToolSurface struct {
 }
 
 type runToolSurfaceConfig struct {
-	State                           *floretToolRuntimeState
-	HostLabels                      map[string]string
-	SupportsAskUserQuestionBatches  bool
-	IncludeControlSignalsInSnapshot bool
+	State                          *floretToolRuntimeState
+	HostLabels                     map[string]string
+	SupportsAskUserQuestionBatches bool
 }
 
 func (r *run) buildRunToolSurfaceConfig(capabilitySupportsAskUserBatches bool, state *floretToolRuntimeState, hostLabels map[string]string) runToolSurfaceConfig {
 	return runToolSurfaceConfig{
-		State:                           state,
-		HostLabels:                      cloneStringMap(hostLabels),
-		SupportsAskUserQuestionBatches:  capabilitySupportsAskUserBatches,
-		IncludeControlSignalsInSnapshot: true,
+		State:                          state,
+		HostLabels:                     cloneStringMap(hostLabels),
+		SupportsAskUserQuestionBatches: capabilitySupportsAskUserBatches,
 	}
 }
 
-func (r *run) currentThreadPermissionType(ctx context.Context) (FlowerPermissionType, error) {
-	if r == nil || r.product.currentSettings == nil {
-		return "", errors.New("thread permission store is unavailable")
-	}
-	endpointID := strings.TrimSpace(r.endpointID)
-	threadID := strings.TrimSpace(r.threadID)
-	if endpointID == "" || threadID == "" {
-		return "", errors.New("thread permission identity is incomplete")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	th, err := r.product.currentThreadSettings(ctx)
-	if err != nil {
-		return "", fmt.Errorf("read current thread permission: %w", err)
-	}
-	if th == nil {
-		return "", errors.New("current thread permission settings are missing")
-	}
-	raw := strings.TrimSpace(th.PermissionType)
-	if raw == "" {
-		return "", errors.New("current thread permission setting is empty")
-	}
-	permissionType, err := parsePermissionType(raw)
-	if err != nil {
-		return "", fmt.Errorf("parse current thread permission: %w", err)
-	}
-	return permissionType, nil
-}
-
-func (r *run) buildRunToolSurface(ctx context.Context, cfg runToolSurfaceConfig) (runToolSurface, error) {
-	return r.buildRunToolSurfaceWithSnapshotCommit(ctx, cfg, true)
-}
-
-func (r *run) prepareRunToolSurface(ctx context.Context, cfg runToolSurfaceConfig) (runToolSurface, error) {
-	return r.buildRunToolSurfaceWithSnapshotCommit(ctx, cfg, false)
-}
-
-func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg runToolSurfaceConfig, commitSnapshot bool) (runToolSurface, error) {
+// The admitted permission is independent of the thread's future-turn setting.
+func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType FlowerPermissionType) (runToolSurface, error) {
 	if r == nil {
 		return runToolSurface{}, fmt.Errorf("nil run")
-	}
-	permissionType, err := r.currentThreadPermissionType(ctx)
-	if err != nil {
-		return runToolSurface{}, err
 	}
 	registry := NewInMemoryToolRegistry()
 	if err := registerBuiltInTools(registry, r); err != nil {
@@ -90,26 +45,16 @@ func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg run
 	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
 	activeTools := permissionFilter.FilterTools(permissionType, registry.Snapshot())
 	activeSignals := permissionFilter.FilterTools(permissionType, builtInControlSignalDefinitions())
-	snapshotSignals := activeSignals
-	if !cfg.IncludeControlSignalsInSnapshot {
-		snapshotSignals = nil
-	}
-	permissionSnapshot := buildPermissionSnapshot(permissionType, activeTools, snapshotSignals)
+	permissionSnapshot := buildPermissionSnapshot(permissionType, activeTools, activeSignals)
 	if err := validatePermissionSnapshotConsistency(permissionSnapshot); err != nil {
 		return runToolSurface{}, err
 	}
-	if commitSnapshot {
-		permissionSnapshot, err = r.freezePermissionSnapshot(permissionSnapshot)
-	} else {
-		permissionSnapshot, err = r.preparePermissionSnapshot(permissionSnapshot)
-	}
+	permissionSnapshot, err := r.freezePermissionSnapshot(permissionSnapshot)
 	if err != nil {
 		return runToolSurface{}, err
 	}
 	activeTools = filterToolsByNames(activeTools, permissionSnapshot.FloretToolNames)
-	if cfg.IncludeControlSignalsInSnapshot {
-		activeSignals = filterToolsByNames(activeSignals, permissionSnapshot.PromptCapabilityNames)
-	}
+	activeSignals = filterToolsByNames(activeSignals, permissionSnapshot.PromptCapabilityNames)
 	var hosted []flprovider.HostedToolDefinition
 	_, searchAllowed := r.toolAllowlist["web_search"]
 	if r.webSearch.HostedTool() && (len(r.toolAllowlist) == 0 || searchAllowed) {

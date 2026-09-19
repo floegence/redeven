@@ -22,31 +22,48 @@ func TestComputerFullAccessIncludesForegroundWithoutSeparateGrants(t *testing.T)
 	}
 }
 
-func TestComputerAccessRechecksModeForEachOperation(t *testing.T) {
-	runtime, executor, store, _ := computerBindingFixture(t)
-	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "computer.observe"}
-	grants := ComputerAccess{Origins: []string{"https://example.test"}, Apps: []string{"dev.Notes"}}
-	if err := store.SetComputerAccess(t.Context(), call.ThreadID, grants); err != nil {
-		t.Fatal(err)
-	}
-	for _, mode := range []string{"full_access", "approval_required", "full_access", "readonly"} {
-		if err := store.UpdateThreadPermissionType(t.Context(), "env", call.ThreadID, mode); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := runtime.ExecuteTargetTool(t.Context(), call); err != nil {
-			t.Fatal(err)
-		}
-		got := executor.calls[len(executor.calls)-1]
-		if got.fullAccess != (mode == "full_access") || got.allowForeground != got.fullAccess {
-			t.Fatalf("incorrect authority for %s: %+v", mode, got)
-		}
-		if !got.fullAccess && (!reflect.DeepEqual(got.allowedOrigins, grants.Origins) || !reflect.DeepEqual(got.allowedApps, grants.Apps)) {
-			t.Fatalf("lost scoped grants in %s", mode)
-		}
+func TestComputerAccessKeepsAdmittedModeAndRechecksResourceGrants(t *testing.T) {
+	for _, admitted := range []string{"full_access", "approval_required", "readonly"} {
+		t.Run(admitted, func(t *testing.T) {
+			runtime, executor, store, _ := computerBindingFixture(t)
+			seedComputerTurnAuthority(t, store, "thread-first", "admitted", admitted)
+			call := TargetToolCall{ThreadID: "thread-first", TurnID: "admitted", RunID: "run", TargetID: "browser-main", ToolName: "computer.observe"}
+			grants := ComputerAccess{Origins: []string{"https://example.test"}, Apps: []string{"dev.Notes"}}
+			for _, mode := range []string{"full_access", "approval_required", "readonly"} {
+				if err := store.UpdateThreadPermissionType(t.Context(), "env", call.ThreadID, mode); err != nil {
+					t.Fatal(err)
+				}
+				for _, access := range []ComputerAccess{grants, {}} {
+					if err := store.SetComputerAccess(t.Context(), call.ThreadID, access); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := runtime.ExecuteTargetTool(t.Context(), call); err != nil {
+						t.Fatal(err)
+					}
+					got := executor.calls[len(executor.calls)-1]
+					if got.fullAccess != (admitted == "full_access") || got.allowForeground != got.fullAccess {
+						t.Fatalf("default %s changed admitted %s: %+v", mode, admitted, got)
+					}
+					if !got.fullAccess && (!reflect.DeepEqual(got.allowedOrigins, access.Origins) || !reflect.DeepEqual(got.allowedApps, access.Apps)) {
+						t.Fatalf("resource grants were not rechecked: %+v", got)
+					}
+				}
+			}
+		})
 	}
 }
 
-func TestComputerFullAccessKeepsExecutionAndSettingsChecks(t *testing.T) {
+func TestComputerAccessRejectsMissingTurnAuthority(t *testing.T) {
+	runtime, executor, _, _ := computerBindingFixture(t)
+	if _, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: "thread-first", TurnID: "missing", RunID: "run", TargetID: "browser-main", ToolName: "computer.observe"}); err == nil {
+		t.Fatal("missing admitted authority accepted")
+	}
+	if len(executor.calls) != 0 {
+		t.Fatal("rejected call reached adapter")
+	}
+}
+
+func TestComputerFullAccessKeepsExecutionAndAuthorityChecks(t *testing.T) {
 	runtime, executor, store, _ := computerBindingFixture(t)
 	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "computer.observe"}
 	denied := errors.New("invocation denied")
@@ -70,16 +87,16 @@ func TestComputerFullAccessRechecksAnExistingPermissionPause(t *testing.T) {
 	for _, full := range []bool{false, true} {
 		t.Run(map[bool]string{true: "full", false: "scoped"}[full], func(t *testing.T) {
 			runtime, executor, store, _ := computerBindingFixture(t)
+			turn := "turn"
 			if !full {
-				if err := store.UpdateThreadPermissionType(t.Context(), "env", "thread-first", "approval_required"); err != nil {
-					t.Fatal(err)
-				}
+				turn = "scoped-turn"
+				seedComputerTurnAuthority(t, store, "thread-first", turn, "approval_required")
 			}
 			control := runtime.controlForTarget("browser-main")
-			control.threadID, control.turnID, control.runID = "thread-first", "turn", "run"
+			control.threadID, control.turnID, control.runID = "thread-first", turn, "run"
 			control.pauseForUser()
 			control.pause = &InteractionSafetyDecision{Level: "takeover", RequiredOrigin: "https://example.test", RequiredApp: "dev.Notes", ReasonCodes: []string{"foreground_permission"}}
-			call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "computer.screenshot", controlReturn: true}
+			call := TargetToolCall{ThreadID: "thread-first", TurnID: turn, RunID: "run", TargetID: "browser-main", ToolName: "computer.screenshot", controlReturn: true}
 			_, err := runtime.ExecuteTargetTool(t.Context(), call)
 			if full {
 				var unavailable *TargetStartupError

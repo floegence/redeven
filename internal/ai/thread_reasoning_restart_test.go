@@ -36,6 +36,10 @@ func TestThreadReasoningOffSurvivesRestartAndWaitingContinuation(t *testing.T) {
 		if string(request["reasoning"]) != `{"effort":"none"}` {
 			t.Errorf("provider reasoning=%s, want explicit Off", request["reasoning"])
 		}
+		var surface map[string]any
+		encoded, _ := json.Marshal(request)
+		_ = json.Unmarshal(encoded, &surface)
+		assertPermissionProviderSurface(t, surface, "approval_required")
 		if calls.Add(1) == 1 {
 			args := `{"reason_code":"missing_external_input","required_from_user":["Choose a target."],"evidence_refs":["message:latest"],"questions":[{"id":"target","header":"Target","question":"Which target?","response_mode":"write","is_secret":false,"write_label":"Target","write_placeholder":"Type a target"}]}`
 			for _, event := range []string{"response.output_item.added", "response.output_item.done"} {
@@ -104,10 +108,17 @@ func TestThreadReasoningOffSurvivesRestartAndWaitingContinuation(t *testing.T) {
 	if err := svc.SetThreadReasoningSelection(t.Context(), meta, created.ThreadID, config.AIReasoningSelection{Level: config.AIReasoningLevelHigh}); !errors.Is(err, ErrThreadBusy) {
 		t.Fatalf("waiting reasoning change error=%v, want ErrThreadBusy", err)
 	}
+	if err := svc.SetThreadPermissionType(t.Context(), meta, created.ThreadID, "readonly"); err != nil {
+		t.Fatal(err)
+	}
 	if err := svc.Close(); err != nil {
 		t.Fatal(err)
 	}
 	svc = open()
+	settings, err := svc.snapshotThreadStore().GetThreadSettings(t.Context(), meta.EndpointID, created.ThreadID)
+	if err != nil || settings.PermissionType != "readonly" {
+		t.Fatalf("saved default lost: %+v %v", settings, err)
+	}
 	if _, err := svc.SubmitRequestUserInputResponse(context.Background(), meta, SubmitRequestUserInputResponseRequest{
 		ThreadID: created.ThreadID,
 		Response: RequestUserInputResponse{PromptID: waiting.WaitingPrompt.PromptID, Answers: map[string]RequestUserInputAnswer{"target": {Text: "staging"}}},

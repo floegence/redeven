@@ -13,7 +13,7 @@ import (
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v1"
 	threadstoreMinimumSchemaVersion = 1
-	threadstoreCurrentSchemaVersion = 9
+	threadstoreCurrentSchemaVersion = 10
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -44,6 +44,7 @@ func threadstoreSchemaSpecWithPendingInputMigration(ctx context.Context, migrate
 			{FromVersion: 6, ToVersion: 7, Apply: migrateThreadstoreV6ToV7},
 			{FromVersion: 7, ToVersion: 8, Apply: migrateThreadstoreV7ToV8},
 			{FromVersion: 8, ToVersion: 9, Apply: migrateThreadstoreV8ToV9},
+			{FromVersion: 9, ToVersion: 10, Apply: migrateThreadstoreV9ToV10},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -112,7 +113,7 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 	builders := []func(*sql.Tx) error{
 		createUploadTablesTx,
 		createUploadStagingScopesTableTx,
-		createFlowerExecutionAuthorityTableTx,
+		createFlowerExecutionAuthorityV10TableTx,
 		addComputerTargetColumnTx,
 		addPinRankColumnTx,
 		addComputerAccessColumnTx,
@@ -551,4 +552,62 @@ func migrateThreadstoreV8ToV9(tx *sql.Tx) error {
 		return err
 	}
 	return verifyProductSchemaVersion(tx, 9)
+}
+
+func createFlowerExecutionAuthorityV10TableTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE ai_flower_execution_authority (
+  request_key TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL,
+  turn_id TEXT NOT NULL DEFAULT '',
+  endpoint_id TEXT NOT NULL,
+  namespace_public_id TEXT NOT NULL DEFAULT '',
+  channel_id TEXT NOT NULL DEFAULT '',
+  user_public_id TEXT NOT NULL,
+  user_email TEXT NOT NULL DEFAULT '',
+  permission_type TEXT NOT NULL CHECK(permission_type IN ('readonly', 'approval_required', 'full_access')),
+  created_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX idx_ai_flower_execution_authority_thread_turn ON ai_flower_execution_authority(thread_id, turn_id, created_at_unix_ms DESC);
+CREATE INDEX idx_ai_flower_execution_authority_endpoint_thread ON ai_flower_execution_authority(endpoint_id, thread_id, created_at_unix_ms DESC);
+`)
+	return err
+}
+
+func migrateThreadstoreV9ToV10(tx *sql.Tx) error {
+	if err := verifyProductSchemaVersion(tx, 9); err != nil {
+		return err
+	}
+	var invalid int
+	if err := tx.QueryRow(`
+SELECT COUNT(*) FROM ai_flower_execution_authority a
+LEFT JOIN ai_thread_settings t ON t.thread_id = a.thread_id
+WHERE t.thread_id IS NULL OR t.endpoint_id <> a.endpoint_id
+   OR t.namespace_public_id <> a.namespace_public_id
+   OR t.permission_type NOT IN ('readonly', 'approval_required', 'full_access')
+`).Scan(&invalid); err != nil {
+		return err
+	}
+	if invalid != 0 {
+		return fmt.Errorf("threadstore v9 contains %d execution authorities without valid matching permission settings", invalid)
+	}
+	if _, err := tx.Exec(`
+ALTER TABLE ai_flower_execution_authority RENAME TO ai_flower_execution_authority_v9;
+DROP INDEX idx_ai_flower_execution_authority_thread_turn;
+DROP INDEX idx_ai_flower_execution_authority_endpoint_thread;
+`); err != nil {
+		return err
+	}
+	if err := createFlowerExecutionAuthorityV10TableTx(tx); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+INSERT INTO ai_flower_execution_authority(request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, permission_type, created_at_unix_ms)
+SELECT a.request_key, a.thread_id, a.turn_id, a.endpoint_id, a.namespace_public_id, a.channel_id, a.user_public_id, a.user_email, t.permission_type, a.created_at_unix_ms
+FROM ai_flower_execution_authority_v9 a JOIN ai_thread_settings t ON t.thread_id = a.thread_id;
+DROP TABLE ai_flower_execution_authority_v9;
+`); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 10)
 }

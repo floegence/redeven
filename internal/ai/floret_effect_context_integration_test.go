@@ -142,7 +142,7 @@ func TestHostedAgentRunLabelsAuthorizeParallelEffects(t *testing.T) {
 	requireAssistantTimelineTextContains(t, context.Background(), svc, meta, thread.ThreadID, "Both effects completed.")
 }
 
-func TestPermissionRefreshKeepsAdmittedSnapshotIdentity(t *testing.T) {
+func TestCanonicalRunIdentityKeepsAdmittedPermissionSnapshot(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{
@@ -156,16 +156,9 @@ func TestPermissionRefreshKeepsAdmittedSnapshotIdentity(t *testing.T) {
 	if err := r.observeFloretCanonicalIdentity("canonical_run", "thread_stable_snapshot", "canonical_turn"); err != nil {
 		t.Fatalf("observe canonical identity: %v", err)
 	}
-	refreshed, err := r.preparePermissionSnapshot(buildPermissionSnapshot(FlowerPermissionFullAccess, nil, nil))
-	if err != nil {
-		t.Fatalf("prepare current permission snapshot: %v", err)
-	}
-	if refreshed.SnapshotID != admitted.SnapshotID {
-		t.Fatalf("permission refresh rebound snapshot id from %q to %q", admitted.SnapshotID, refreshed.SnapshotID)
-	}
 	current := r.currentPermissionSnapshot()
 	if current.SnapshotID != admitted.SnapshotID || current.SnapshotHash != admitted.SnapshotHash {
-		t.Fatalf("permission refresh replaced admitted snapshot: current=%#v admitted=%#v", current, admitted)
+		t.Fatalf("canonical run identity replaced admitted snapshot: current=%#v admitted=%#v", current, admitted)
 	}
 }
 

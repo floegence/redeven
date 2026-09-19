@@ -48,15 +48,6 @@ func (r *run) loadFloretPermissionSnapshot(_ context.Context, hostContext map[st
 }
 
 func (r *run) freezePermissionSnapshot(snapshot PermissionSnapshot) (PermissionSnapshot, error) {
-	snapshot, err := r.preparePermissionSnapshot(snapshot)
-	if err != nil {
-		return PermissionSnapshot{}, err
-	}
-	r.setPermissionState(snapshot.PermissionType, snapshot)
-	return snapshot, nil
-}
-
-func (r *run) preparePermissionSnapshot(snapshot PermissionSnapshot) (PermissionSnapshot, error) {
 	if r == nil {
 		return PermissionSnapshot{}, errors.New("missing permission snapshot owner")
 	}
@@ -68,6 +59,7 @@ func (r *run) preparePermissionSnapshot(snapshot PermissionSnapshot) (Permission
 	if !permissionSnapshotActive(snapshot) || strings.TrimSpace(snapshot.SnapshotHash) == "" {
 		return PermissionSnapshot{}, errors.New("permission snapshot is empty")
 	}
+	r.setPermissionState(snapshot.PermissionType, snapshot)
 	return snapshot, nil
 }
 

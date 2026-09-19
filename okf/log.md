@@ -1,5 +1,17 @@
 # Redeven OKF Update Log
 
+## 2026-09-19 — Permission changes during Flower work
+
+- Keep the permission selector available during work, with pending protection,
+  authoritative response merging, and rollback; model and reasoning stay locked.
+- Freeze permission at admission for active and queued input, continuation,
+  retry, effects, computer actions, and restart recovery. Later defaults cannot
+  settle an existing approval or alter its provider surface.
+- Append threadstore v9-to-v10 with atomic authority backfill and verification;
+  remove dispatch-time permission reconstruction and the permission busy guard.
+- Use published Floret v7.16.2 contracts without an upstream API change. Keep
+  full-access fill, text, and keyboard focus while removing its warning border.
+
 ## 2026-09-18 — Chrome connection recovery
 
 - Keep native-host error categories through the extension and show specific

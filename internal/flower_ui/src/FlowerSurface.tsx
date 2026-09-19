@@ -1742,12 +1742,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     !selectedThreadDetailPending()
     && !selectedThreadReadOnly()
     && (Boolean(selectedThreadID()) || snapshot() !== null)
-    && (!selectedThreadID() || selectedThreadPermissionType() !== undefined)
+    && (!selectedThreadID() || (threadSettingsRevision(selectedThread()) > 0 && selectedThreadPermissionType() !== undefined))
     && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
   ));
   const composerPermissionInteractive = createMemo(() => (
     composerPermissionAvailable()
-    && selectedThreadPreferenceEditable()
+    && !permissionPatchPending()
   ));
   type ComposerDraftOperation = Readonly<{
     sessionKey: string;
@@ -2036,7 +2036,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (event.key === 'Escape') { event.preventDefault(); closeModelMenu(true); }
   };
   const openPermissionMenu = () => {
-    if (!composerPermissionInteractive() || permissionPatchPending()) return;
+    if (!composerPermissionInteractive()) return;
     const permissionType = composerPermissionType();
     if (!permissionType) return;
     setPermissionMenuIndexForType(permissionType);
@@ -2200,7 +2200,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const handlePermissionTriggerKeyDown = (event: KeyboardEvent) => {
-    if (!composerPermissionInteractive() || permissionPatchPending()) return;
+    if (!composerPermissionInteractive()) return;
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       openPermissionMenu();
@@ -2551,7 +2551,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   createEffect(() => {
     if (!permissionMenuOpen()) return;
-    if (!composerPermissionInteractive() || permissionPatchPending()) {
+    if (!composerPermissionInteractive()) {
       closePermissionMenu(false);
     }
   });
@@ -4444,7 +4444,8 @@ webSearch: model.web_search,
     }
     const waitingForCanonicalDetail = acceptTurnLaunchReceipt(receipt);
     const threadID = trimString(receipt.thread_id);
-    if (waitingForCanonicalDetail && selectedThreadID() === threadID) {
+    if (selectedThreadID() === threadID && (waitingForCanonicalDetail
+      || threadSettingsRevision(threadCache().views.get(threadID)?.thread) === 0)) {
       void requestThreadDetail(
         threadID,
         'user_action',
@@ -6177,7 +6178,7 @@ webSearch: model.web_search,
 
   const permissionSelector = () => {
     const canUseMenu = createMemo(() => composerPermissionAvailable());
-    const interactive = createMemo(() => composerPermissionInteractive() && !permissionPatchPending());
+    const interactive = createMemo(() => composerPermissionInteractive());
     const permissionLabel = createMemo(() => composerPermissionCopy()?.label ?? copy().chat.permissionSelectorLabel);
     return (
       <div

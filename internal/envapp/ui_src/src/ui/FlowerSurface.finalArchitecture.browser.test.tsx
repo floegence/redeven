@@ -1295,7 +1295,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(skillToggle.getAttribute('aria-expanded')).toBe('false');
     expect(skillRow.querySelector('.flower-activity-inline-chevron')).not.toBeNull();
     skillToggle.click();
-    await waitFor(() => skillRow.textContent?.includes('No additional details') === true);
+    await waitFor(() => skillRow.textContent?.includes('This record did not save result details.') === true);
 
     (okfToggle as HTMLButtonElement).click();
     await waitFor(() => okfRow.textContent?.includes('The current-view boundary.') === true);

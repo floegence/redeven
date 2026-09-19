@@ -1,5 +1,5 @@
 import '../index.css';
-import { userEvent } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -1141,33 +1141,94 @@ describe('Flower bottom decision surface', () => {
     expect(runtime.querySelector('.flower-composer-reference-menu')).toBeNull();
   });
 
-  it('disables permission changes while the selected thread is active', async () => {
+  it.each(['saved', 'failed'] as const)('allows an active permission change with pending protection and a %s response', async (outcome) => {
+    await page.viewport(1280, 900);
     const runningThread = thread({
-      thread_id: 'thread-active-permission',
-      status: 'running',
-      active_run_id: 'turn-active-permission',
-      permission_type: 'approval_required',
-      settings_revision: 10,
+      thread_id: 'thread-active-permission', status: 'running', active_run_id: 'turn-active-permission',
+      permission_type: 'approval_required', settings_revision: 10,
+      reasoning_capability: { kind: 'effort', supported_levels: ['low', 'high'], default_level: 'high' },
+      reasoning_selection: { level: 'high' },
     });
-    const loadThread = vi.fn(async () => liveBootstrap(runningThread, 21));
-    const setThreadPermissionType = vi.fn();
+    const response = deferred<ReturnType<typeof liveBootstrap>>();
+    const setThreadPermissionType = vi.fn(() => response.promise);
+    const setThreadModel = vi.fn();
+    const setThreadReasoningSelection = vi.fn();
     const runtime = renderSurfaceWithAdapter({
-      ...adapter(true),
-      listThreads: vi.fn(async () => [runningThread]),
-      loadThread,
-      setThreadPermissionType,
+      ...adapter(true), listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread, 21)),
+      setThreadPermissionType, setThreadModel, setThreadReasoningSelection,
     });
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${runningThread.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${runningThread.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger')));
-
-    const permissionTrigger = runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement;
-    expect(permissionTrigger.disabled).toBe(true);
-    permissionTrigger.click();
+    const trigger = () => runtime.querySelector<HTMLButtonElement>('.flower-permission-trigger')!;
+    expect(trigger().disabled).toBe(false);
+    expect(getComputedStyle(trigger()).cursor).toBe('pointer');
+    await waitFor(() => Boolean(runtime.querySelector('button.flower-model-reasoning-model-trigger')));
+    expect(runtime.querySelector<HTMLButtonElement>('button.flower-model-reasoning-model-trigger')?.disabled).toBe(true);
+    expect(runtime.querySelector('.flower-reasoning-segment-static')).not.toBeNull();
+    expect(runtime.querySelector('button.flower-reasoning-segment-button')).toBeNull();
+    trigger().click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
+    const option = runtime.querySelector<HTMLButtonElement>('.flower-permission-menu-item[data-permission-type="full_access"]')!;
+    option.click();
+    option.click();
+    await waitFor(() => setThreadPermissionType.mock.calls.length === 1);
+    expect(setThreadPermissionType).toHaveBeenCalledWith(runningThread.thread_id, 'full_access');
+    expect(trigger().disabled).toBe(true);
+    expect(trigger().getAttribute('data-permission-type')).toBe('full_access');
+    trigger().click();
     expect(runtime.querySelector('.flower-permission-menu')).toBeNull();
-    expect(setThreadPermissionType).not.toHaveBeenCalled();
-    expect(permissionTrigger.getAttribute('data-permission-type')).toBe('approval_required');
-    expect(loadThread).toHaveBeenCalledTimes(1);
+    if (outcome === 'saved') response.resolve(liveBootstrap({ ...runningThread, permission_type: 'full_access', settings_revision: 11 }, 21));
+    else response.reject(new Error('Permission save failed'));
+    await waitFor(() => !trigger().disabled);
+    expect(trigger().getAttribute('data-permission-type')).toBe(outcome === 'saved' ? 'full_access' : 'approval_required');
+    expect(setThreadPermissionType).toHaveBeenCalledTimes(1);
+    expect(setThreadModel).not.toHaveBeenCalled();
+    expect(setThreadReasoningSelection).not.toHaveBeenCalled();
+    if (outcome === 'saved') {
+      trigger().focus();
+      expect(getComputedStyle(trigger()).borderTopColor).toBe('rgba(0, 0, 0, 0)');
+      expect(getComputedStyle(trigger()).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    } else expect(flowerSurfaceNotifications().some((notice) => notice.tone === 'error')).toBe(true);
+  });
+
+  it.each(['approval_date', 'ask_rich'] as const)('preserves %s when a permission response arrives after the interaction', async (fixtureName) => {
+    const fixture = decisionFixtures[fixtureName] as FlowerRuntimeCurrentView;
+    const running = thread({ thread_id: fixture.thread_id, permission_type: 'approval_required', settings_revision: 10, status: 'running', active_run_id: fixture.run_id, messages: [], run_progress: { phase: 'streaming', run_id: fixture.run_id!, turn_id: fixture.turn_id! } });
+    const current = { ...runtimeCurrentView(running, 22), ...fixture, view_version: 22 };
+    const waiting = applyFlowerRuntimeCurrentView(running, current);
+    const response = deferred<ReturnType<typeof liveBootstrap>>();
+    let interactionVisible = false;
+    let eventDelivered = false;
+    const base = adapter(true);
+    const runtime = renderSurfaceWithAdapter({
+      ...base, listThreads: vi.fn(async () => [interactionVisible ? waiting : running]),
+      loadThread: vi.fn(async () => interactionVisible ? { thread: waiting, current } : liveBootstrap(running, current.view_version - 1)),
+      setThreadPermissionType: vi.fn(() => response.promise),
+      listThreadLiveEvents: vi.fn(async () => {
+        if (!interactionVisible || eventDelivered) return { stream_generation: 1, events: [], next_cursor: 0, retained_from_seq: 1 };
+        eventDelivered = true;
+        return { stream_generation: 1, events: [{ seq: 1 }], next_cursor: 1, retained_from_seq: 1 };
+      }),
+    });
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${running.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${running.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger')));
+    (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
+    (runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]') as HTMLButtonElement).click();
+    interactionVisible = true;
+    await waitFor(() => Boolean(runtime.querySelector('.flower-decision-surface')), 2000);
+    const surface = runtime.querySelector('.flower-decision-surface')!;
+    await flush();
+    const content = surface.textContent;
+    response.resolve(liveBootstrap({ ...running, permission_type: 'full_access', settings_revision: 11 }, current.view_version - 1));
+    await flush();
+    expect(runtime.querySelector('.flower-decision-surface')).toBe(surface);
+    expect(surface.textContent).toBe(content);
+    expect(base.submitApproval).not.toHaveBeenCalled();
+    expect(base.submitInput).not.toHaveBeenCalled();
   });
 
   it('uses the same single-layer decision contract in the narrow companion surface', async () => {

@@ -86,7 +86,7 @@ func (adapter *floretEffectAdapter) Agent(ctx context.Context, request flruntime
 		}
 	}
 	if request.RequestKey != "" && request.TurnID != "" {
-		if err := service.persistExecutionAuthority(ctx, &pending.meta, request.ThreadID.String(), request.RequestKey, request.TurnID.String()); err != nil {
+		if err := service.persistExecutionAuthority(ctx, &pending.meta, request.ThreadID.String(), request.RequestKey, request.TurnID.String(), pending.req.Options.PermissionType); err != nil {
 			return nil, err
 		}
 	}
@@ -125,10 +125,6 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 	if settings == nil {
 		return floretEffectRequest{}, errors.New("flower thread is not present in the product catalog")
 	}
-	permission, err := threadPermissionType(settings)
-	if err != nil {
-		return floretEffectRequest{}, err
-	}
 	authority, err := s.executionAuthorityForRequest(ctx, request)
 	if err != nil {
 		return floretEffectRequest{}, err
@@ -136,11 +132,15 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 	if authority == nil {
 		return floretEffectRequest{}, errors.New("flower execution authority is unavailable after restart")
 	}
+	if _, err := parsePermissionType(authority.PermissionType); err != nil {
+		return floretEffectRequest{}, err
+	}
+	// Admission requires RWX session authority; readonly is the frozen tool policy.
 	meta := session.Meta{
 		ChannelID: strings.TrimSpace(authority.ChannelID), EndpointID: strings.TrimSpace(authority.EndpointID),
 		NamespacePublicID: strings.TrimSpace(authority.NamespacePublicID), UserPublicID: strings.TrimSpace(authority.UserPublicID),
 		UserEmail: strings.TrimSpace(authority.UserEmail), CanRead: true,
-		CanWrite: permission != FlowerPermissionReadonly, CanExecute: permission != FlowerPermissionReadonly,
+		CanWrite: true, CanExecute: true,
 	}
 	canonicalInput, err := canonicalRunInputFromFloret(request)
 	if err != nil {
@@ -149,7 +149,7 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 	return floretEffectRequest{meta: meta, req: SendUserTurnRequest{
 		ClientRequestID: request.RequestKey, ThreadID: request.ThreadID.String(), Model: settings.ModelID,
 		Input: canonicalInput, Options: RunOptions{
-			NoUserInteraction: strings.TrimSpace(settings.ParentThreadID) != "", PermissionType: settings.PermissionType,
+			NoUserInteraction: strings.TrimSpace(settings.ParentThreadID) != "", PermissionType: authority.PermissionType,
 		},
 	}}, nil
 }

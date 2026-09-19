@@ -1675,7 +1675,6 @@
 }
 
 .flower-permission-trigger[data-permission-type='full_access'] {
-  border-color: var(--redeven-status-warning-border);
   background: var(--redeven-status-warning-soft);
   color: var(--redeven-status-warning-foreground);
 }
@@ -1683,7 +1682,6 @@
 .flower-permission-trigger[data-permission-type='full_access']:hover,
 .flower-permission-trigger[data-permission-type='full_access']:focus-visible,
 .flower-permission-trigger[data-permission-type='full_access'][aria-expanded='true'] {
-  border-color: var(--redeven-status-warning);
   background: color-mix(in srgb, var(--redeven-status-warning) 18%, transparent);
   color: var(--redeven-status-warning-foreground);
 }

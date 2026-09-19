@@ -227,7 +227,7 @@ func (service *Service) sendFloretSubagentInput(ctx context.Context, threads flr
 	if service == nil || threads == nil || service.floretEffects == nil {
 		return flruntime.ThreadView{}, errors.New("subagent input runtime is unavailable")
 	}
-	if err := service.persistExecutionAuthority(ctx, &request.meta, threadID.String(), requestKey, ""); err != nil {
+	if err := service.persistExecutionAuthority(ctx, &request.meta, threadID.String(), requestKey, "", request.req.Options.PermissionType); err != nil {
 		return flruntime.ThreadView{}, err
 	}
 	service.floretEffects.put(threadID, requestKey, request)
@@ -238,10 +238,11 @@ func (service *Service) sendFloretSubagentInput(ctx context.Context, threads flr
 		service.floretEffects.drop(threadID, requestKey)
 		return flruntime.ThreadView{}, err
 	}
-	if result.TurnID != "" {
+	_, queued := queuedInputFor(result, requestKey)
+	if result.TurnID != "" && !queued {
 		persistCtx, cancelPersist := context.WithTimeout(context.Background(), service.persistTimeout())
 		defer cancelPersist()
-		if err := service.persistExecutionAuthority(persistCtx, &request.meta, threadID.String(), requestKey, result.TurnID.String()); err != nil {
+		if err := service.persistExecutionAuthority(persistCtx, &request.meta, threadID.String(), requestKey, result.TurnID.String(), request.req.Options.PermissionType); err != nil {
 			return flruntime.ThreadView{}, err
 		}
 	}
@@ -266,6 +267,7 @@ func (service *Service) ensureChildThreadSettings(ctx context.Context, parent *r
 	child := *parentSettings
 	child.ThreadID = childID
 	child.ParentThreadID = parentID
+	child.PermissionType = permissionTypeString(parent.currentPermissionType())
 	if normalizeSubagentAgentType(agentType) != subagentAgentTypeWorker {
 		child.PermissionType = permissionTypeString(FlowerPermissionReadonly)
 	}

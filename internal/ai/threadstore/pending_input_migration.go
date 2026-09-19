@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // PendingInputMigrationRecord is one retired product queue item presented only
@@ -252,7 +253,7 @@ func persistPendingInputMigrationAuthorities(ctx context.Context, tx *sql.Tx, re
 			strings.TrimSpace(authority.EndpointID) != strings.TrimSpace(record.EndpointID) {
 			return fmt.Errorf("pending input migration authority %q conflicts with its retired source", record.RequestID)
 		}
-		if err := putExecutionAuthorityTx(ctx, tx, authority); err != nil {
+		if err := putV4ExecutionAuthorityTx(ctx, tx, authority); err != nil {
 			return fmt.Errorf("persist pending input migration authority %q: %w", record.RequestID, err)
 		}
 	}
@@ -278,4 +279,55 @@ DROP TABLE ai_upload_refs_v4;
 CREATE INDEX idx_ai_upload_refs_thread_upload ON ai_upload_refs(endpoint_id, thread_id, upload_id);
 `)
 	return err
+}
+
+// This writer belongs only to the permanent v4 -> v5 migration.
+func putV4ExecutionAuthorityTx(ctx context.Context, tx *sql.Tx, authority ExecutionAuthority) error {
+	if tx == nil {
+		return errors.New("store not initialized")
+	}
+	authority.RequestKey = strings.TrimSpace(authority.RequestKey)
+	authority.ThreadID = strings.TrimSpace(authority.ThreadID)
+	authority.TurnID = strings.TrimSpace(authority.TurnID)
+	authority.EndpointID = strings.TrimSpace(authority.EndpointID)
+	authority.NamespacePublicID = strings.TrimSpace(authority.NamespacePublicID)
+	authority.ChannelID = strings.TrimSpace(authority.ChannelID)
+	authority.UserPublicID = strings.TrimSpace(authority.UserPublicID)
+	authority.UserEmail = strings.TrimSpace(authority.UserEmail)
+	if authority.RequestKey == "" || authority.ThreadID == "" || authority.EndpointID == "" || authority.UserPublicID == "" {
+		return errors.New("execution authority identity is incomplete")
+	}
+	if authority.CreatedAtUnixMs <= 0 {
+		authority.CreatedAtUnixMs = time.Now().UnixMilli()
+	}
+	ctx = ctxOrBackground(ctx)
+	var existing ExecutionAuthority
+	err := tx.QueryRowContext(ctx, `SELECT request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, created_at_unix_ms FROM ai_flower_execution_authority WHERE request_key = ?`, authority.RequestKey).Scan(
+		&existing.RequestKey, &existing.ThreadID, &existing.TurnID, &existing.EndpointID, &existing.NamespacePublicID, &existing.ChannelID, &existing.UserPublicID, &existing.UserEmail, &existing.CreatedAtUnixMs,
+	)
+	switch {
+	case err == nil:
+		if existing.ThreadID != authority.ThreadID ||
+			existing.EndpointID != authority.EndpointID ||
+			existing.NamespacePublicID != authority.NamespacePublicID ||
+			existing.ChannelID != authority.ChannelID ||
+			existing.UserPublicID != authority.UserPublicID ||
+			existing.UserEmail != authority.UserEmail {
+			return ErrExecutionAuthorityConflict
+		}
+		if authority.TurnID != "" && existing.TurnID != authority.TurnID {
+			_, err = tx.ExecContext(ctx, `UPDATE ai_flower_execution_authority SET turn_id = ? WHERE request_key = ?`, authority.TurnID, authority.RequestKey)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO ai_flower_execution_authority(request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, created_at_unix_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, authority.RequestKey, authority.ThreadID, authority.TurnID, authority.EndpointID, authority.NamespacePublicID, authority.ChannelID, authority.UserPublicID, authority.UserEmail, authority.CreatedAtUnixMs)
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -613,6 +613,14 @@ func reviewedMigrationTable(query ThreadstoreQueryContract, table string) (colum
 	if query.ConsumerKind != "schema_maintenance" {
 		return nil, nil, false
 	}
+	if query.Function == "migrateThreadstoreV9ToV10" {
+		switch table {
+		case "ai_flower_execution_authority_v9":
+			return []string{"request_key", "thread_id", "turn_id", "endpoint_id", "namespace_public_id", "channel_id", "user_public_id", "user_email", "created_at_unix_ms"}, nil, true
+		case "ai_thread_settings", "ai_flower_execution_authority":
+			return nil, []string{"thread_id", "endpoint_id", "namespace_public_id", "permission_type"}, true
+		}
+	}
 	if query.Function == "migrateThreadstoreV1ToV2" && query.Action == "schema" {
 		switch table {
 		case "ai_child_permission_snapshots",

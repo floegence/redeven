@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -11,7 +12,7 @@ import (
 var ErrExecutionAuthorityConflict = errors.New("execution authority conflicts with an existing request")
 
 // ExecutionAuthority is the minimum durable host fact needed to rebuild one
-// provider execution after restart. It is not a second Agent lifecycle or
+// provider execution after restart, including its admission permission. It is not a second Agent lifecycle or
 // transcript store; Floret remains authoritative for all execution state.
 type ExecutionAuthority struct {
 	RequestKey        string
@@ -22,6 +23,7 @@ type ExecutionAuthority struct {
 	ChannelID         string
 	UserPublicID      string
 	UserEmail         string
+	PermissionType    string
 	CreatedAtUnixMs   int64
 }
 
@@ -58,6 +60,12 @@ func putExecutionAuthorityTx(ctx context.Context, tx *sql.Tx, authority Executio
 	authority.ChannelID = strings.TrimSpace(authority.ChannelID)
 	authority.UserPublicID = strings.TrimSpace(authority.UserPublicID)
 	authority.UserEmail = strings.TrimSpace(authority.UserEmail)
+	authority.PermissionType = strings.TrimSpace(strings.ToLower(authority.PermissionType))
+	canonicalPermission, err := canonicalPermissionType(authority.PermissionType)
+	if err != nil {
+		return fmt.Errorf("invalid execution authority permission: %w", err)
+	}
+	authority.PermissionType = canonicalPermission
 	if authority.RequestKey == "" || authority.ThreadID == "" || authority.EndpointID == "" || authority.UserPublicID == "" {
 		return errors.New("execution authority identity is incomplete")
 	}
@@ -66,8 +74,8 @@ func putExecutionAuthorityTx(ctx context.Context, tx *sql.Tx, authority Executio
 	}
 	ctx = ctxOrBackground(ctx)
 	var existing ExecutionAuthority
-	err := tx.QueryRowContext(ctx, `SELECT request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, created_at_unix_ms FROM ai_flower_execution_authority WHERE request_key = ?`, authority.RequestKey).Scan(
-		&existing.RequestKey, &existing.ThreadID, &existing.TurnID, &existing.EndpointID, &existing.NamespacePublicID, &existing.ChannelID, &existing.UserPublicID, &existing.UserEmail, &existing.CreatedAtUnixMs,
+	err = tx.QueryRowContext(ctx, `SELECT request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, permission_type, created_at_unix_ms FROM ai_flower_execution_authority WHERE request_key = ?`, authority.RequestKey).Scan(
+		&existing.RequestKey, &existing.ThreadID, &existing.TurnID, &existing.EndpointID, &existing.NamespacePublicID, &existing.ChannelID, &existing.UserPublicID, &existing.UserEmail, &existing.PermissionType, &existing.CreatedAtUnixMs,
 	)
 	switch {
 	case err == nil:
@@ -76,7 +84,8 @@ func putExecutionAuthorityTx(ctx context.Context, tx *sql.Tx, authority Executio
 			existing.NamespacePublicID != authority.NamespacePublicID ||
 			existing.ChannelID != authority.ChannelID ||
 			existing.UserPublicID != authority.UserPublicID ||
-			existing.UserEmail != authority.UserEmail {
+			existing.UserEmail != authority.UserEmail ||
+			existing.PermissionType != authority.PermissionType {
 			return ErrExecutionAuthorityConflict
 		}
 		if authority.TurnID != "" && existing.TurnID != authority.TurnID {
@@ -89,7 +98,7 @@ func putExecutionAuthorityTx(ctx context.Context, tx *sql.Tx, authority Executio
 	case !errors.Is(err, sql.ErrNoRows):
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO ai_flower_execution_authority(request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, created_at_unix_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, authority.RequestKey, authority.ThreadID, authority.TurnID, authority.EndpointID, authority.NamespacePublicID, authority.ChannelID, authority.UserPublicID, authority.UserEmail, authority.CreatedAtUnixMs)
+	_, err = tx.ExecContext(ctx, `INSERT INTO ai_flower_execution_authority(request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, permission_type, created_at_unix_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, authority.RequestKey, authority.ThreadID, authority.TurnID, authority.EndpointID, authority.NamespacePublicID, authority.ChannelID, authority.UserPublicID, authority.UserEmail, authority.PermissionType, authority.CreatedAtUnixMs)
 	if err != nil {
 		return err
 	}
@@ -97,7 +106,15 @@ func putExecutionAuthorityTx(ctx context.Context, tx *sql.Tx, authority Executio
 }
 
 func scanExecutionAuthority(row rowScanner, authority *ExecutionAuthority) error {
-	return row.Scan(&authority.RequestKey, &authority.ThreadID, &authority.TurnID, &authority.EndpointID, &authority.NamespacePublicID, &authority.ChannelID, &authority.UserPublicID, &authority.UserEmail, &authority.CreatedAtUnixMs)
+	if err := row.Scan(&authority.RequestKey, &authority.ThreadID, &authority.TurnID, &authority.EndpointID, &authority.NamespacePublicID, &authority.ChannelID, &authority.UserPublicID, &authority.UserEmail, &authority.PermissionType, &authority.CreatedAtUnixMs); err != nil {
+		return err
+	}
+	permissionType, err := canonicalPermissionType(authority.PermissionType)
+	if err != nil {
+		return fmt.Errorf("invalid execution authority permission: %w", err)
+	}
+	authority.PermissionType = permissionType
+	return nil
 }
 
 func (s *Store) GetExecutionAuthority(ctx context.Context, requestKey string) (*ExecutionAuthority, error) {
@@ -109,7 +126,7 @@ func (s *Store) GetExecutionAuthority(ctx context.Context, requestKey string) (*
 		return nil, errors.New("missing execution authority request key")
 	}
 	var authority ExecutionAuthority
-	err := scanExecutionAuthority(s.db.QueryRowContext(ctxOrBackground(ctx), `SELECT request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, created_at_unix_ms FROM ai_flower_execution_authority WHERE request_key = ?`, requestKey), &authority)
+	err := scanExecutionAuthority(s.db.QueryRowContext(ctxOrBackground(ctx), `SELECT request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, permission_type, created_at_unix_ms FROM ai_flower_execution_authority WHERE request_key = ?`, requestKey), &authority)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -125,7 +142,7 @@ func (s *Store) GetExecutionAuthorityByTurn(ctx context.Context, threadID, turnI
 		return nil, errors.New("execution authority turn identity is incomplete")
 	}
 	var authority ExecutionAuthority
-	err := scanExecutionAuthority(s.db.QueryRowContext(ctxOrBackground(ctx), `SELECT request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, created_at_unix_ms FROM ai_flower_execution_authority WHERE thread_id = ? AND turn_id = ? ORDER BY created_at_unix_ms DESC, request_key DESC LIMIT 1`, threadID, turnID), &authority)
+	err := scanExecutionAuthority(s.db.QueryRowContext(ctxOrBackground(ctx), `SELECT request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, permission_type, created_at_unix_ms FROM ai_flower_execution_authority WHERE thread_id = ? AND turn_id = ? ORDER BY created_at_unix_ms DESC, request_key DESC LIMIT 1`, threadID, turnID), &authority)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -141,7 +158,7 @@ func (s *Store) ListExecutionAuthoritiesPage(ctx context.Context, cursor Executi
 	}
 	rows, err := s.db.QueryContext(ctxOrBackground(ctx), `
 SELECT request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id,
-       user_public_id, user_email, created_at_unix_ms
+       user_public_id, user_email, permission_type, created_at_unix_ms
 FROM ai_flower_execution_authority
 WHERE thread_id > ? OR (thread_id = ? AND request_key > ?)
 ORDER BY thread_id, request_key
