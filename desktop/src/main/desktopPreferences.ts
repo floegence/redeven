@@ -1768,7 +1768,7 @@ export function markSavedRuntimeTargetUsed(
   });
 }
 
-export function deleteSavedControlPlane(
+export function signOutSavedControlPlane(
   preferences: DesktopPreferences,
   providerOrigin: string,
   providerID: string,

@@ -25,7 +25,7 @@ import {
   defaultDesktopPreferences,
   defaultDesktopPreferencesPaths,
   defaultSavedEnvironmentLabel,
-  deleteSavedControlPlane,
+  signOutSavedControlPlane,
   deleteSavedEnvironment,
   deleteSavedRuntimeTarget,
   desktopEnvironmentID,
@@ -1725,7 +1725,7 @@ describe('desktopPreferences', () => {
     }));
   });
 
-  it('deleting a control plane removes its provider environments even when pinned or recently used', () => {
+  it('signs out only the selected Cloud account while retaining runtime registrations and binding identity', () => {
     const provider = buildTestControlPlaneProvider();
     const otherProvider = buildTestControlPlaneProvider('https://other.example.invalid');
     const providerEnvironment = testProviderEnvironment('https://redeven.test', 'env_kept', {
@@ -1739,6 +1739,13 @@ describe('desktopPreferences', () => {
     });
     const preferencesWithProviderState = setProviderEnvironmentPinned(
       rememberProviderEnvironmentUse(testDesktopPreferences({
+        local_environment: testProviderBoundLocalEnvironment('https://redeven.test', 'env_kept'),
+        saved_runtime_targets: [{
+          schema_version: 1, id: 'ssh:host:devbox:cloud-sign-out', label: 'SSH devbox',
+          host_access: { kind: 'ssh_host', ssh: { ssh_destination: 'devbox', ssh_port: 22, auth_mode: 'key_agent', connect_timeout_seconds: 10 } },
+          placement: { kind: 'host_process', runtime_root: 'remote_default', bootstrap_strategy: 'desktop_upload', release_base_url: '' },
+          pinned: true, auto_runtime_probe_enabled: true, created_at_ms: 10, updated_at_ms: 20, last_used_at_ms: 20,
+        }],
         provider_environments: [
           testProviderEnvironment('https://redeven.test', 'env_removed'),
           providerEnvironment,
@@ -1763,7 +1770,7 @@ describe('desktopPreferences', () => {
       providerEnvironment.id,
       true,
     );
-    const next = deleteSavedControlPlane(preferencesWithProviderState, 'https://redeven.test', 'example_control_plane');
+    const next = signOutSavedControlPlane(preferencesWithProviderState, 'https://redeven.test', 'example_control_plane');
 
     expect(next.control_planes).toEqual([
       expect.objectContaining({
@@ -1785,7 +1792,10 @@ describe('desktopPreferences', () => {
         pinned: true,
       }),
     ]);
-    expect(next.local_environment.id).toBe('local');
+    expect(next.local_environment).toEqual(preferencesWithProviderState.local_environment);
+    expect(next.local_environment.current_provider_binding?.env_public_id).toBe('env_kept');
+    expect(next.saved_runtime_targets).toEqual(preferencesWithProviderState.saved_runtime_targets);
+    expect(next.saved_environments).toEqual(preferencesWithProviderState.saved_environments);
   });
 
   it('removes only unsupported local control-plane state for packaged Redeven Cloud', () => {

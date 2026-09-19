@@ -50,7 +50,7 @@ export type BusyAction =
   | 'delete_environment_registration'
   | 'set_provider_environment_pinned'
   | 'set_environment_registration_pinned'
-  | 'delete_control_plane'
+  | 'sign_out_control_plane'
   | 'cancel_launcher_operation'
   | 'dismiss_launcher_operation'
   | 'close_launcher_or_quit'
@@ -145,7 +145,7 @@ export function busyStateForLauncherRequest(request: DesktopLauncherActionReques
         progress: null,
       });
     case 'refresh_control_plane':
-    case 'delete_control_plane':
+    case 'sign_out_control_plane':
       return withRequestTimestamp({
         action: request.kind,
         environment_id: '',

@@ -267,9 +267,10 @@ type RuntimeUpdatePresentation = Readonly<{
 }>;
 
 export type ControlPlaneStatusModel = Readonly<{
-  label: string;
+  label_key: DesktopTranslationKey;
   tone: EnvironmentCardTone;
-  detail: string;
+  detail_key: DesktopTranslationKey;
+  recovery_action: 'refresh' | 'sign_in';
 }>;
 
 export const SPACIOUS_ENVIRONMENT_GRID_CARD_THRESHOLD = 4;
@@ -2082,48 +2083,30 @@ export function buildControlPlaneStatusModel(
 ): ControlPlaneStatusModel {
   switch (controlPlane.sync_state) {
     case 'syncing':
-      return {
-        label: 'Checking',
-        tone: 'primary',
-        detail: 'Refreshing the latest environment status from Redeven Cloud.',
-      };
+      return { label_key: 'environmentStatus.checking', tone: 'primary',
+        detail_key: 'runtimeMessage.providerRefreshingDetail', recovery_action: 'refresh' };
     case 'auth_required':
-      return {
-        label: 'Reconnect required',
-        tone: 'warning',
-        detail: 'Desktop authorization expired. Reconnect in your browser to refresh environments again.',
-      };
+      return { label_key: 'environmentCenter.cloudSignInRequired', tone: 'warning',
+        detail_key: 'environmentCenter.cloudSignInRequiredDetail', recovery_action: 'sign_in' };
     case 'provider_unreachable':
-      return {
-        label: 'Sync failed',
-        tone: 'warning',
-        detail: controlPlane.last_sync_error_message || 'Desktop could not reach Redeven Cloud.',
-      };
+      return { label_key: 'environmentStatus.syncFailed', tone: 'warning',
+        detail_key: 'runtimeMessage.providerReachFailedDetail', recovery_action: 'refresh' };
     case 'provider_invalid':
-      return {
-        label: 'Invalid response',
-        tone: 'warning',
-        detail: controlPlane.last_sync_error_message || 'Redeven Cloud returned an invalid response.',
-      };
+      return { label_key: 'environmentStatus.invalidResponse', tone: 'warning',
+        detail_key: 'runtimeMessage.providerInvalidResponseDetail', recovery_action: 'refresh' };
     case 'sync_error':
-      return {
-        label: 'Sync failed',
-        tone: 'warning',
-        detail: controlPlane.last_sync_error_message || 'Desktop could not refresh Redeven Cloud.',
-      };
+      return { label_key: 'environmentStatus.syncFailed', tone: 'warning',
+        detail_key: 'runtimeMessage.providerRefreshFailedDetail', recovery_action: 'refresh' };
     default:
-      if (controlPlane.catalog_freshness === 'stale') {
-        return {
-          label: 'Status stale',
-          tone: 'warning',
-          detail: 'The last Redeven Cloud sync is getting old. Refresh to confirm the latest environment status.',
-        };
+      if (controlPlane.catalog_freshness === 'unknown') {
+        return { label_key: 'environmentCenter.cloudAwaitingSync', tone: 'neutral',
+          detail_key: 'environmentCenter.cloudAwaitingSyncDetail', recovery_action: 'refresh' };
       }
-      return {
-        label: 'Authorized',
-        tone: 'success',
-        detail: 'Desktop has active Redeven Cloud authorization and a fresh environment catalog.',
-      };
+      return controlPlane.catalog_freshness === 'stale'
+        ? { label_key: 'environmentStatus.statusStale', tone: 'warning',
+          detail_key: 'runtimeMessage.providerStatusStaleDetail', recovery_action: 'refresh' }
+        : { label_key: 'environmentStatus.authorized', tone: 'success',
+          detail_key: 'runtimeMessage.providerAuthorizedDetail', recovery_action: 'refresh' };
   }
 }
 

@@ -27,6 +27,12 @@ Desktop may show Provider Connect or Disconnect for a directly managed Runtime t
 
 The retired Runtime management routes, permits, enrollment challenge/exchange, supervisor heartbeat, poll/respond transport, bindings, relays, cluster state, and authorization audit have no supported schema or compatibility shell. Because those contracts were not deployed, their migrations are removed rather than retained as dead production paths.
 
+## Desktop account sign-out
+
+Redeven Cloud is the official control plane, not a removable service. Desktop exposes Sign out for its saved account. The internal `sign_out_control_plane` request names the exact Provider origin and ID and returns `signed_out_control_plane`; the former delete action is not an alias. Sign-out marks the account's Launcher subject deleted so stale asynchronous work cannot restore it, commits removal of the saved account, refresh token and cached Provider Environments, and clears transient access, sync and pending authorization state. The committed snapshot is visible before background cleanup attempts authorization revocation and closes the captured Cloud sessions. Network failure does not delay clearing local sign-in state or restore the account.
+
+Sign-out does not delete the user's Cloud account or environments, remove Runtime registrations, disconnect Runtime-side links, or sign out the system browser. Its confirmation states the Desktop-local scope and best-effort revocation. A new explicit browser sign-in restores Cloud browsing. Missing saved identity is a typed failure. Environment registration ownership remains with [Desktop registrations](../desktop/desktop-environment-registrations.md).
+
 ## Desktop product and origin boundary
 
 Released Desktop builds accept only the canonical production Redeven Cloud HTTPS origin defined by the shared origin policy. Development builds may additionally accept `https://redeven.test`; no build accepts an arbitrary custom control-plane URL. The main process projects its allowed origins and each Runtime binding's origin-support decision into the Welcome snapshot. The Renderer offers only that projected list and does not infer policy from `process.env`, `import.meta.env`, or a second origin implementation. The main process repeats the same check before starting browser authorization and before saving an authorization result, so Launcher IPC and deep links cannot widen the product boundary.

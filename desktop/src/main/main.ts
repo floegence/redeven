@@ -86,7 +86,7 @@ import { createDesktopI18n } from '../shared/i18n/desktopI18n';
 import type { DesktopTranslationKey } from '../shared/i18n/locales/en-US';
 import {
   createSafeStorageSecretCodec,
-  deleteSavedControlPlane,
+  signOutSavedControlPlane,
   deleteSavedEnvironment,
   deleteSavedRuntimeTarget,
   defaultDesktopPreferencesPaths,
@@ -16429,8 +16429,8 @@ async function refreshControlPlaneFromLauncher(
   }
 }
 
-async function deleteControlPlaneFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'delete_control_plane' }>>,
+async function signOutControlPlaneFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'sign_out_control_plane' }>>,
 ): Promise<DesktopLauncherActionResult> {
   const preferences = await loadDesktopPreferencesCached();
   const controlPlane = savedControlPlaneByIdentity(preferences, request.provider_origin, request.provider_id);
@@ -16460,16 +16460,16 @@ async function deleteControlPlaneFromLauncher(
       && sessionRecord.target.provider_id === request.provider_id
     ))
     .map((sessionRecord) => sessionRecord.session_key);
-  await mutateDesktopPreferences((current) => deleteSavedControlPlane(current, request.provider_origin, request.provider_id));
+  await mutateDesktopPreferences((current) => signOutSavedControlPlane(current, request.provider_origin, request.provider_id));
   clearControlPlaneTransientState(request.provider_origin, request.provider_id);
-  void cleanupDeletedControlPlane(controlPlane, refreshToken, providerSessionKeys);
+  void cleanupSignedOutControlPlane(controlPlane, refreshToken, providerSessionKeys);
   resetLauncherIssueState();
-  return launcherActionSuccess('deleted_control_plane', {
+  return launcherActionSuccess('signed_out_control_plane', {
     utilityWindowKind: 'launcher',
   });
 }
 
-async function cleanupDeletedControlPlane(
+async function cleanupSignedOutControlPlane(
   controlPlane: DesktopSavedControlPlane,
   refreshToken: string,
   providerSessionKeys: readonly DesktopSessionKey[],
@@ -16478,14 +16478,14 @@ async function cleanupDeletedControlPlane(
     try {
       await revokeProviderDesktopAuthorization(controlPlane.provider, refreshToken);
     } catch (error) {
-      console.warn('Redeven Desktop failed to revoke a deleted provider authorization.', error);
+      console.warn('Redeven Desktop failed to revoke Redeven Cloud authorization after sign-out.', error);
     }
   }
   for (const sessionKey of providerSessionKeys) {
     try {
       await finalizeSessionClosure(sessionKey);
     } catch (error) {
-      console.warn('Redeven Desktop failed to close a deleted provider session.', error);
+      console.warn('Redeven Desktop failed to close a Redeven Cloud session after sign-out.', error);
     }
   }
 }
@@ -17347,8 +17347,8 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return openGatewayEnvironmentFromLauncher(request);
     case 'refresh_control_plane':
       return refreshControlPlaneFromLauncher(request);
-    case 'delete_control_plane':
-      return deleteControlPlaneFromLauncher(request);
+    case 'sign_out_control_plane':
+      return signOutControlPlaneFromLauncher(request);
     case 'upsert_gateway':
       try {
         await upsertGatewayFromLauncher(request);

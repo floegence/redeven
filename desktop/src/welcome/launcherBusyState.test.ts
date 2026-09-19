@@ -1720,3 +1720,14 @@ describe('launcherBusyState', () => {
     )).toBe(progress);
   });
 });
+
+
+describe('Cloud sign-out ownership', () => {
+  it('limits the pending sign-out to its exact Cloud account', () => {
+    const busy = busyStateForLauncherRequest({ kind: 'sign_out_control_plane', provider_origin: 'https://redeven.test', provider_id: 'redeven' });
+    expect(busyStateMatchesControlPlane(busy, 'https://redeven.test', 'redeven', ['sign_out_control_plane'])).toBe(true);
+    expect(busyStateMatchesControlPlane(busy, 'https://other.example.invalid', 'redeven', ['sign_out_control_plane'])).toBe(false);
+    expect(busyStateMatchesControlPlane(busy, 'https://redeven.test', 'other', ['sign_out_control_plane'])).toBe(false);
+    expect(busyStateMatchesEnvironment(busy, 'local')).toBe(false);
+  });
+});

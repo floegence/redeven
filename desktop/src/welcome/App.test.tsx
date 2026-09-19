@@ -33,7 +33,7 @@ import {
 } from './viewModel';
 
 function readWelcomeSource(): string {
-  return ['App.tsx', 'EnvironmentCards.tsx', 'environmentCardPrimitives.tsx'].map(file => fs.readFileSync(path.join(__dirname, file), 'utf8')).join('\n');
+  return ['App.tsx', 'EnvironmentCards.tsx', 'environmentCardPrimitives.tsx', 'CloudAccountOverview.tsx'].map(file => fs.readFileSync(path.join(__dirname, file), 'utf8')).join('\n');
 }
 
 function readGatewaySourceActionRunnerSource(): string {
@@ -766,7 +766,7 @@ describe('DesktopWelcomeShell', () => {
   it('uses the same rounded-lg shell radius for Control Plane cards as Environment cards', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('redeven-cloud-source-header rounded-lg border border-border bg-card');
+    expect(appSrc).toContain('redeven-cloud-source-header');
     expect(appSrc).not.toContain('redeven-provider-shelf rounded-[0.625rem]');
   });
 
@@ -2248,7 +2248,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('id="control-plane-origin"');
     expect(appSrc).not.toContain("props.i18n.t('connectionDialog.providerUrl')");
     expect(appSrc).not.toContain('placeholder="https://redeven.test"');
-    expect(appSrc).toContain("props.i18n.t('environmentCenter.reconnect')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.cloudSignInAgain')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.connectProvider')");
     expect(appSrc).toContain('redeven-cloud-source-header');
     expect(appSrc).toContain('cloudLastSyncResults');

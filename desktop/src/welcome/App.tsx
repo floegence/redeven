@@ -1,3 +1,4 @@
+import { CloudAccountOverview } from './CloudAccountOverview';
 import { EnvironmentCardsPanel, environmentActionUsesLifecycleOwner, type EnvironmentOwnerPresentation, type EnvironmentGuidanceActionResolution, type LifecycleProgressFocusRequest } from './EnvironmentCards';
 import { ConsoleActionIconButton, EnvironmentStatusIndicator } from './environmentCardPrimitives';
 import { EnvironmentConnectionRows } from './EnvironmentConnectionRows';
@@ -40,7 +41,6 @@ import {
   Shield,
   ShieldCheck,
   Stop,
-  Trash,
   X,
 } from '@floegence/floe-webapp-core/icons';
 import { BottomBarItem, TopBarIconButton } from '@floegence/floe-webapp-core/layout';
@@ -204,7 +204,6 @@ import {
   buildEnvironmentCardFactsModel,
   buildGatewaySourceRowModel,
   ICON_ENDPOINTS,
-  buildControlPlaneStatusModel,
   environmentOpenFlow,
   environmentLibraryCount,
   filterGatewayEnvironmentEntries,
@@ -232,7 +231,7 @@ import {
   type EnvironmentCenterTab,
   type EnvironmentPrimaryActionOverlayModel,
 } from './viewModel';
-import { buildEnvironmentLibraryDisplayGroups, environmentCloudSections, type EnvironmentCloudSection, type EnvironmentLibraryDisplayGroup } from './environmentLibraryProjection';
+import { buildEnvironmentLibraryDisplayGroups, environmentCloudSections, type EnvironmentLibraryDisplayGroup } from './environmentLibraryProjection';
 import {
   launcherActionFailurePresentation,
 } from './launcherActionFeedback';
@@ -317,7 +316,6 @@ import {
   busyStateWithActionProgress,
   reconcileBusyStateWithActionProgressSnapshot,
   busyStateMatchesAction,
-  busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
   busyStateMatchesGateway,
   IDLE_LAUNCHER_BUSY_STATE,
@@ -2683,7 +2681,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [deleteGatewayTarget, setDeleteGatewayTarget] = createSignal<DesktopGatewaySource | null>(null);
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
   const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
-  const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
+  const [signOutControlPlaneTarget, setSignOutControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
+  createEffect(() => {
+    const target = signOutControlPlaneTarget();
+    if (target && !snapshot().control_planes.some(source => (
+      source.provider.provider_origin === target.provider.provider_origin
+      && source.provider.provider_id === target.provider.provider_id
+    ))) setSignOutControlPlaneTarget(null);
+  });
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
   const flowerTurnLauncherViewportInsets = createAskFlowerWindowViewportInsets({
     open: flowerTurnLauncherOpen,
@@ -5968,19 +5973,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  async function deleteControlPlane(): Promise<void> {
-    const target = deleteControlPlaneTarget();
+  async function signOutControlPlane(): Promise<void> {
+    const target = signOutControlPlaneTarget();
     if (!target) {
       return;
     }
     const result = await performLauncherAction({
-      kind: 'delete_control_plane',
+      kind: 'sign_out_control_plane',
       provider_origin: target.provider.provider_origin,
       provider_id: target.provider.provider_id,
     });
-    if (result?.outcome === 'deleted_control_plane') {
-      setDeleteControlPlaneTarget(null);
-      showActionToast(i18n().t('environmentCenter.providerRemoved'));
+    if (result?.outcome === 'signed_out_control_plane') {
+      setSignOutControlPlaneTarget(null);
+      showActionToast(i18n().t('environmentCenter.cloudSignedOut'));
     }
   }
 
@@ -6350,7 +6355,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               viewGatewayEnvironments={focusGatewayEnvironments}
               reconnectControlPlane={reconnectControlPlane}
               refreshControlPlane={refreshControlPlane}
-              deleteControlPlane={setDeleteControlPlaneTarget}
+              signOutControlPlane={setSignOutControlPlaneTarget}
               deleteGateway={setDeleteGatewayTarget}
             />
           )}
@@ -6651,23 +6656,24 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       </ConfirmDialog>
 
       <ConfirmDialog
-        open={deleteControlPlaneTarget() !== null}
+        open={signOutControlPlaneTarget() !== null}
         onOpenChange={(open) => {
           if (!open) {
-            setDeleteControlPlaneTarget(null);
+            setSignOutControlPlaneTarget(null);
           }
         }}
-        title={i18n().t('confirm.removeProviderTitle')}
-        confirmText={i18n().t('confirm.removeProviderConfirm')}
-        variant="destructive"
-        loading={busyStateMatchesAction(busyState(), 'delete_control_plane')}
-        onConfirm={() => void deleteControlPlane()}
+        title={i18n().t('confirm.cloudSignOutTitle')}
+        confirmText={i18n().t('environmentCenter.cloudSignOut')}
+        cancelText={i18n().t('common.cancel')}
+        variant="default"
+        loading={busyStateMatchesAction(busyState(), 'sign_out_control_plane')}
+        onConfirm={() => void signOutControlPlane()}
       >
         <div class="space-y-2">
           <p class="text-sm">
-            {i18n().t('confirm.removeProviderQuestion', { label: deleteControlPlaneTarget() ? controlPlaneName(deleteControlPlaneTarget()!) : '' })}
+            {i18n().t('confirm.cloudSignOutQuestion', { label: signOutControlPlaneTarget()?.account.user_display_name || signOutControlPlaneTarget()?.display_label || 'Redeven Cloud' })}
           </p>
-          <p class="text-xs text-muted-foreground">{i18n().t('confirm.removeProviderDescription')}</p>
+          <p class="text-xs text-muted-foreground">{i18n().t('confirm.cloudSignOutDescription')}</p>
         </div>
       </ConfirmDialog>
 
@@ -7201,7 +7207,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   viewGatewayEnvironments: (gateway: DesktopGatewaySource) => void;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
-  deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
+  signOutControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
   deleteGateway: (gateway: DesktopGatewaySource) => void;
 }>) {
   const visibleEnvironmentCount = createMemo(() => (
@@ -7579,7 +7585,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 Grid={EnvironmentGrid}
                 reconnectControlPlane={props.reconnectControlPlane}
                 refreshControlPlane={props.refreshControlPlane}
-                deleteControlPlane={props.deleteControlPlane}
+                signOutControlPlane={props.signOutControlPlane}
               />
             </Show>
             <Show when={props.activeTab === 'gateways'}>
@@ -7622,19 +7628,6 @@ function ConsoleBadge(props: Readonly<{
 }>) {
   return <span class="redeven-console-badge">{props.children}</span>;
 }
-
-function ConsoleStatusBadge(props: Readonly<{
-  tone: 'neutral' | 'primary' | 'success' | 'warning';
-  children: JSX.Element;
-}>) {
-  return (
-    <span class="redeven-console-status" data-tone={props.tone}>
-      <span class="redeven-console-status__dot" aria-hidden="true" />
-      {props.children}
-    </span>
-  );
-}
-
 
 function BottomBarMetric(props: Readonly<{
   count: number;
@@ -9858,7 +9851,7 @@ function ControlPlanesPanel(props: Readonly<{
   openCreateControlPlaneDialog: (message?: string) => void;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
-  deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
+  signOutControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
 }>) {
   const sections = createMemo(() => environmentCloudSections(props.groups, props.controlPlanes));
   const sectionIDs = createMemo(() => sections().map(section => section.id));
@@ -9889,9 +9882,9 @@ function ControlPlanesPanel(props: Readonly<{
         const section = () => byID().get(id)!;
         const current = () => visibleByID().get(id) ?? { ...section(), visible_groups: [] };
         return <section id={`cloud-source:${id}`} data-cloud-source={id} hidden={!visibleByID().has(id)} class="space-y-3 scroll-mt-4">
-          <ControlPlaneShelf i18n={props.i18n} section={section()} busyState={props.busyState}
+          <CloudAccountOverview i18n={props.i18n} section={section()} lastSyncedLabel={formatLocalizedRelativeTimestamp(props.i18n, section().source.last_synced_at_ms)} busyState={props.busyState}
             reconnectControlPlane={props.reconnectControlPlane} refreshControlPlane={props.refreshControlPlane}
-            deleteControlPlane={props.deleteControlPlane} />
+            signOutControlPlane={props.signOutControlPlane} />
           <Show when={section().groups.length === 0} fallback={<props.Grid groups={current().visible_groups} scope={id} cloud />}>
             <div class="rounded-lg border border-dashed border-border px-5 py-6 text-center text-xs text-muted-foreground">
               {props.i18n.t(section().source.sync_state === 'ready' ? 'environmentCenter.cloudSourceEmpty' : 'environmentCenter.cloudSourceUnavailable')}
@@ -9983,71 +9976,6 @@ function localizedRuntimeServiceWorkload(
       : '',
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(i18n.t('providerRuntimeLink.workloadSeparator')) : i18n.t('providerRuntimeLink.noActiveWork');
-}
-
-function localizedControlPlaneStatusModel(
-  i18n: DesktopI18n,
-  model: ReturnType<typeof buildControlPlaneStatusModel>,
-): ReturnType<typeof buildControlPlaneStatusModel> {
-  return {
-    ...model,
-    label: localizedEnvironmentStatusLabel(i18n, model.label),
-    detail: localizedRuntimeMessage(i18n, model.detail),
-  };
-}
-
-function ControlPlaneShelf(props: Readonly<{
-  i18n: DesktopI18n;
-  section: EnvironmentCloudSection;
-  busyState: DesktopLauncherBusyState;
-  reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
-  refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
-  deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
-}>) {
-  const source = () => props.section.source;
-  const sourceName = () => source().display_label || controlPlaneName(source());
-  const status = createMemo(() => localizedControlPlaneStatusModel(props.i18n, buildControlPlaneStatusModel(source())));
-  const cloudOnlineCount = createMemo(() => props.section.groups.filter(group => {
-    const cloud = group.provider_entry ?? group.primary_entry;
-    return cloud.runtime_health.status === 'online';
-  }).length);
-  const reconnectBusy = () => busyStateMatchesControlPlane(props.busyState, source().provider.provider_origin, source().provider.provider_id, ['start_control_plane_connect']);
-  const refreshBusy = () => busyStateMatchesControlPlane(props.busyState, source().provider.provider_origin, source().provider.provider_id, ['refresh_control_plane']);
-  return (
-    <header class="redeven-cloud-source-header rounded-lg border border-border bg-card px-4 py-3">
-      <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
-        <div class="min-w-0 flex-1">
-          <div class="flex flex-wrap items-center gap-2">
-            <h2 class="max-w-full truncate text-sm font-semibold text-foreground" title={sourceName()}>{sourceName()}</h2>
-            <ConsoleStatusBadge tone={status().tone}>{status().label}</ConsoleStatusBadge>
-          </div>
-          <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>{source().account.user_display_name}</span>
-            <span class="max-w-full truncate font-mono text-[11px]" title={source().provider.provider_origin}>{source().provider.provider_origin}</span>
-            <span>{props.i18n.t('environmentCenter.providerSynced', { time: formatLocalizedRelativeTimestamp(props.i18n, source().last_synced_at_ms) })}</span>
-          </div>
-          <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" data-cloud-source-counts>
-            <span>{props.i18n.t('environmentCenter.providerEnvsBadge', { count: props.section.groups.length })}</span>
-            <span>{props.i18n.t('environmentCenter.cloudOnlineCount', { count: cloudOnlineCount() })}</span>
-            <span>{props.i18n.t('environmentCenter.cloudLinkedCount', { count: props.section.linked_runtime_count })}</span>
-            <Show when={source().sync_state !== 'ready' || source().catalog_freshness !== 'fresh'}><span>{props.i18n.t('environmentCenter.cloudLastSyncResults')}</span></Show>
-          </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-1.5">
-          <Button size="sm" variant="outline" loading={refreshBusy()} disabled={source().sync_state === 'syncing'} onClick={() => { void props.refreshControlPlane(source()); }}>
-            <Refresh class="mr-1 h-3.5 w-3.5" />{props.i18n.t('common.refresh')}
-          </Button>
-          <Button size="sm" variant="outline" loading={reconnectBusy()} onClick={() => { void props.reconnectControlPlane(source()); }}>
-            {props.i18n.t('environmentCenter.reconnect')}
-          </Button>
-          <ConsoleActionIconButton title={props.i18n.t('environmentCenter.removeProvider')} danger
-            aria-label={props.i18n.t('environmentCenter.removeProviderAriaLabel', { label: sourceName() })}
-            onClick={() => props.deleteControlPlane(source())}><Trash class="h-4 w-4" /></ConsoleActionIconButton>
-        </div>
-      </div>
-      <Show when={source().sync_state !== 'ready' && status().detail}><p class={cn("mt-2 text-xs", status().tone === 'warning' ? 'text-warning' : 'text-muted-foreground')} role="status">{status().detail}</p></Show>
-    </header>
-  );
 }
 
 function GatewaySourcesPanel(props: Readonly<{

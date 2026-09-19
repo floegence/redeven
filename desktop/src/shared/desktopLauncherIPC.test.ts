@@ -31,6 +31,14 @@ const operationSnapshotHasNoLegacyInterruptionFields: [
   : false = true;
 
 describe('desktopLauncherIPC', () => {
+  it('requires an exact Cloud account identity for sign-out and rejects the retired delete action', () => {
+    const identity = { provider_origin: 'https://redeven.test', provider_id: 'redeven' };
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'sign_out_control_plane', ...identity })).toEqual({ kind: 'sign_out_control_plane', ...identity });
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'sign_out_control_plane', provider_origin: identity.provider_origin })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'sign_out_control_plane', provider_id: identity.provider_id })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_control_plane', ...identity })).toBeNull();
+  });
+
   it('keeps interruption presentation out of Launcher progress snapshots', () => {
     expect(actionProgressHasNoLegacyInterruptionFields).toBe(true);
     expect(operationSnapshotHasNoLegacyInterruptionFields).toBe(true);
