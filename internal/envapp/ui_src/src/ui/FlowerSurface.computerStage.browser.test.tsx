@@ -195,7 +195,7 @@ describe('Flower computer stage', () => {
     const rate = document.querySelector<HTMLSelectElement>('.flower-computer-frame-rate select')!;
     expect(rate.value).toBe('3');
     expect([...rate.options].map(option => option.value)).toEqual(['3', '5', '10', '15', '30']);
-    expect(document.querySelector('[data-floe-floating-window-footer] .flower-computer-zoom')?.textContent).toBe('Actual size');
+    expect([...document.querySelectorAll('[data-floe-floating-window-footer] .flower-computer-zoom')].map(button => button.textContent)).toEqual(['Fit to window', 'Actual size']);
     expect(document.querySelector('.flower-computer-stage-frame')).not.toBeNull();
     expect(loadComputerFrame).toHaveBeenCalledWith(expect.objectContaining({
       thread_id: threadID, target_id: 'browser-main', resource_ref: FRAME_REF, sha256: 'a'.repeat(64),

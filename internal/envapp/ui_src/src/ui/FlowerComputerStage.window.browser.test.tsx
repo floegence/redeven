@@ -13,6 +13,76 @@ const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQU
 const states = { awaiting_control: 'Waiting for you to take control', historical: 'Historical screenshot', stopped: 'Computer task stopped', disconnected: 'Connection lost', taking_control:'Taking control', user_control:'You are controlling', returning_control:'Returning control', paused:'Viewing paused', running: 'Computer running', awaiting_user: 'Waiting for input or approval', completed: 'Computer task completed', failed: 'Computer task failed' };
 const waitFor = async (predicate: () => boolean) => vi.waitFor(() => expect(predicate()).toBe(true), { timeout: 5000, interval: 16 });
 
+for (const [projected, portrait] of [[false, false], [true, false], [false, true], [true, true]]) {
+  it(`fits the screenshot to the entire content area with a non-live notice (projected=${projected}, portrait=${portrait})`, async () => {
+    await page.viewport(1200, 900);
+    const host = document.createElement('div'); document.body.append(host);
+    const canvas = document.createElement('canvas'); canvas.width = portrait ? 720 : 1280; canvas.height = portrait ? 1280 : 720;
+    const context = canvas.getContext('2d')!;
+    context.fillStyle = '#f3f4f6'; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#ffffff'; context.fillRect(24, 24, canvas.width - 48, canvas.height - 48);
+    context.save(); context.scale(canvas.width / 1280, canvas.width / 1280);
+    context.fillStyle = '#25334a'; context.font = '500 40px sans-serif'; context.fillText('Quarterly overview', 64, 100);
+    context.fillStyle = '#64748b'; context.font = '24px sans-serif'; context.fillText('A captured browser view', 64, 148);
+    for (let index = 0; index < 8; index++) {
+      context.fillStyle = index === 7 ? '#315b83' : '#b9cfdf';
+      context.fillRect(64 + index * 145, 520 - index * 35, 100, 110 + index * 35);
+    }
+    context.restore();
+    context.strokeStyle = '#25334a'; context.lineWidth = 8; context.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+    const blob = await new Promise<Blob>(resolve => canvas.toBlob(value => resolve(value!)));
+    const [boundary, setBoundary] = createSignal<HTMLElement>();
+    const [width, setWidth] = createSignal(1000);
+    const staleLabel = '最后拍摄的画面 · 非实时';
+    const dispose = render(() => <FloeConfigProvider><LayoutProvider>
+      <div ref={setBoundary} data-floe-dialog-surface-host={projected ? 'true' : undefined}
+        style={{ position: 'relative', width: `${width()}px`, height: '700px', transform: projected ? 'scale(0.7)' : undefined, 'transform-origin': 'top left' }}>
+        <FlowerComputerStage threadID="screenshot-layout" boundary={boundary()} open historical sessionState="completed" staleLabel={staleLabel}
+          frame={{ thread_id: 'screenshot-layout', target_id: 'browser-main', resource_ref: `computer://browser-main/${'a'.repeat(64)}`, sha256: 'a'.repeat(64) }} loadFrame={async () => blob}
+          snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'success', targetID: 'browser-main', target: 'Chrome', action: 'Quarterly overview' }}
+          copy={{ frameRate: 'Frame rate', frameRateHint: 'Preview rate', receivedFrameRate: 'Receiving {fps} FPS', title: '历史截图', close: '关闭', maximize: '最大化', restoreSize: '还原', zoomIn: '实际大小', zoomOut: '适应窗口', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: states }}
+          onClose={() => {}} onRestore={() => {}} />
+      </div>
+    </LayoutProvider></FloeConfigProvider>, host);
+    try {
+      await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === canvas.width);
+      const stage = document.querySelector<HTMLElement>('.flower-computer-stage')!;
+      const content = stage.querySelector<HTMLElement>('[data-floe-floating-window-content]')!;
+      const image = stage.querySelector<HTMLImageElement>('img')!;
+      const assertFit = () => {
+        const available = content.getBoundingClientRect(), actual = image.getBoundingClientRect();
+        expect(Math.abs(actual.width - available.width), 'the notice must not take screenshot width').toBeLessThan(1);
+        expect(Math.abs(actual.height - available.height)).toBeLessThan(1);
+        expect(Math.abs(actual.left - available.left)).toBeLessThan(1);
+        expect(Math.abs(actual.top - available.top)).toBeLessThan(1);
+        expect(getComputedStyle(image).objectFit).toBe('contain');
+        expect(content.textContent?.trim()).toBe('');
+        const footer = stage.querySelector<HTMLElement>('[data-floe-floating-window-footer]')!;
+        expect(footer.textContent).toContain(staleLabel);
+        expect(footer.scrollWidth).toBeLessThanOrEqual(footer.clientWidth);
+      };
+      assertFit();
+      const scenario = `${projected ? 'projected' : 'ordinary'}-${portrait ? 'portrait' : 'landscape'}`;
+      for (const dark of [false, true]) {
+        document.documentElement.classList.toggle('dark', dark);
+        await page.screenshot({ element: stage, path: `__screenshots__/computer-screenshot-${scenario}-${dark ? 'dark' : 'light'}.png` });
+      }
+      const originalWidth = stage.getBoundingClientRect().width;
+      await (commands as unknown as { resizeComputerViewer: () => Promise<void> }).resizeComputerViewer();
+      expect(stage.getBoundingClientRect().width).toBeLessThan(originalWidth - 40);
+      assertFit();
+      stage.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="maximize"]')!.click();
+      await waitFor(() => content.getBoundingClientRect().width > (projected ? 600 : 900));
+      assertFit();
+      stage.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="maximize"]')!.click();
+      setWidth(340);
+      await waitFor(() => stage.getBoundingClientRect().width < 340);
+      assertFit();
+      await page.screenshot({ element: stage, path: `__screenshots__/computer-screenshot-${scenario}-narrow.png` });
+    } finally { dispose(); host.remove(); document.documentElement.classList.remove('dark'); }
+  });
+}
+
 for (const projected of [false, true]) {
   it(`moves across the Flower surface and preserves window and launcher geometry (projected=${projected})`, async () => {
     await page.viewport(1440, 1000);
@@ -116,11 +186,13 @@ it('returns focus to each restore entry and offers actual-size viewing without c
       const img = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!;
       await waitFor(() => img.naturalWidth === 960);
       expect(document.querySelector('.flower-computer-stage .flower-computer-state')?.textContent).toBe(states.failed);
-      const zoom = document.querySelector<HTMLButtonElement>('.flower-computer-zoom')!;
+      const [fit, zoom] = [...document.querySelectorAll<HTMLButtonElement>('.flower-computer-zoom')];
+      expect(fit.getAttribute('aria-pressed')).toBe('true');
       zoom.click();
       expect(zoom.getAttribute('aria-pressed')).toBe('true');
+      expect(fit.getAttribute('aria-pressed')).toBe('false');
       await waitFor(() => Math.abs(img.getBoundingClientRect().width - 960) < 0.1);
-      zoom.click();
+      fit.click();
       expect(img.getBoundingClientRect().width).toBeLessThan(960);
       document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
       await waitFor(() => document.activeElement === entry);

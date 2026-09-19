@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-async function dragViewerHandle(page, handle, dx, dy) {
+export async function dragViewerHandle(page, handle, dx, dy) {
   const box = await handle.boundingBox(); assert(box);
   const local = await handle.evaluate(element => element.getBoundingClientRect().toJSON());
   const scaleX = box.width / local.width; const scaleY = box.height / local.height;

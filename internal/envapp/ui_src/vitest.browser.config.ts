@@ -7,7 +7,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { CDPSession, Frame, Page } from 'playwright';
 import viteConfig from './vite.config';
-import { qualifyComputerLauncherTouch, qualifyComputerViewer, qualifyComputerViewerSurface } from './scripts/computerViewerInteraction.mjs';
+import { dragViewerHandle, qualifyComputerLauncherTouch, qualifyComputerViewer, qualifyComputerViewerSurface } from './scripts/computerViewerInteraction.mjs';
 
 const configuredBrowserPort = Number.parseInt(process.env.REDEVEN_VITEST_BROWSER_PORT ?? '', 10);
 const touchSessions = new WeakMap<Page, CDPSession>();
@@ -190,6 +190,11 @@ export default mergeConfig(viteConfig, defineConfig({
         exerciseComputerViewer: async ({ page }) => {
           const frame = await frameForSelector(page, '.flower-computer-stage');
           return qualifyComputerViewer({ page, root: frame });
+        },
+        resizeComputerViewer: async ({ page }) => {
+          const frame = await frameForSelector(page, '.flower-computer-stage');
+          const handle = frame.locator('[data-floe-floating-window-resize-handle="se"]');
+          await dragViewerHandle(page, handle, -80, -40);
         },
         exerciseComputerViewerSurface: async ({ page }, scenario: string) => {
           const frame = await frameForSelector(page, '.flower-computer-stage');
