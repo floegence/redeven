@@ -10,6 +10,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
+import { FileText } from '@floegence/floe-webapp-core/icons';
 import {
   useRedevenRpc,
   type GitCommitDiffPresentation,
@@ -845,47 +846,48 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
     <div data-git-diff-panel class={cn("git-diff-panel flex h-full min-h-0 min-w-0 flex-col", props.class)}>
       <div class="git-diff-panel__toolbar">
         <div class="git-diff-panel__identity">
-          <Show when={props.item}>
+          <Show when={props.item} fallback={<span class="text-[11px] font-medium text-muted-foreground">{i18n.t('gitDiff.title')}</span>}>
             <GitFileLabel path={props.item?.newPath || props.item?.path || props.item?.oldPath || ''} />
           </Show>
         </div>
-        <div
-          class={cn(
-            "git-diff-panel__modes",
-            redevenSurfaceRoleClass("segmented"),
-          )}
-        >
-          <button
-            type="button"
+        <Show when={props.item}>
+          <div
             class={cn(
-              gitDiffModeButtonClass,
-              redevenSegmentedItemClass(activeMode() === "patch"),
-              activeMode() === "patch"
-                ? "text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
+              "git-diff-panel__modes",
+              redevenSurfaceRoleClass("segmented"),
             )}
-            aria-pressed={activeMode() === "patch"}
-            onClick={() => setModeForCurrentSelection("patch")}
           >
-            {i18n.t('uiCopy.git.patch')}
-          </button>
-          <button
-            type="button"
-            class={cn(
-              gitDiffModeButtonClass,
-              redevenSegmentedItemClass(activeMode() === "full-context"),
-              activeMode() === "full-context"
-                ? "text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            aria-pressed={activeMode() === "full-context"}
-            disabled={!canLoadFullContext()}
-            onClick={() => setModeForCurrentSelection("full-context")}
-          >
-            {i18n.t('uiCopy.git.fullContext')}
-          </button>
-        </div>
-
+            <button
+              type="button"
+              class={cn(
+                gitDiffModeButtonClass,
+                redevenSegmentedItemClass(activeMode() === "patch"),
+                activeMode() === "patch"
+                  ? "text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              aria-pressed={activeMode() === "patch"}
+              onClick={() => setModeForCurrentSelection("patch")}
+            >
+              {i18n.t('uiCopy.git.patch')}
+            </button>
+            <button
+              type="button"
+              class={cn(
+                gitDiffModeButtonClass,
+                redevenSegmentedItemClass(activeMode() === "full-context"),
+                activeMode() === "full-context"
+                  ? "text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              aria-pressed={activeMode() === "full-context"}
+              disabled={!canLoadFullContext()}
+              onClick={() => setModeForCurrentSelection("full-context")}
+            >
+              {i18n.t('uiCopy.git.fullContext')}
+            </button>
+          </div>
+        </Show>
       </div>
       <Show when={commitPresentationBadge() || commitPresentationDetail()}>
         <div class="flex shrink-0 flex-wrap items-center gap-2 border-b px-2.5 py-1 text-[11px] text-muted-foreground">
@@ -938,11 +940,12 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
           </Match>
 
           <Match when={true}>
-            <GitStatePane
-              message={activeBodyEmptyMessage()}
-              surface
-              class="min-h-0 flex-1"
-            />
+            <div class="git-diff-panel__empty" data-git-diff-empty role="status">
+              <div class="git-diff-panel__empty-content">
+                <FileText class="h-6 w-6 opacity-50" aria-hidden="true" />
+                <p>{activeBodyEmptyMessage()}</p>
+              </div>
+            </div>
           </Match>
         </Switch>
 

@@ -1,8 +1,11 @@
 import type { JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { useI18n } from '../i18n';
+import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 /** Keep the Git file rail and its diff in the same constrained browsing surface. */
-export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element; class?: string }) {
+export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element; filesHeader?: JSX.Element; class?: string }) {
+  const i18n = useI18n();
   const navigateFiles: JSX.EventHandler<HTMLDivElement, KeyboardEvent> = (event) => {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     const target = event.target as HTMLElement;
@@ -29,9 +32,12 @@ export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element
     nextRow?.scrollIntoView?.({ block: 'nearest' });
   };
   return (
-    <div data-git-diff-split class={cn('git-diff-split', props.class)}>
+    <div data-git-diff-split class={cn('git-diff-split rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass(), props.class)}>
       <div class="git-diff-split__layout">
-        <div class="git-diff-split__files" onKeyDown={navigateFiles}>{props.children}</div>
+        <div class="git-diff-split__files" onKeyDown={navigateFiles}>
+          <div class="git-diff-split__files-header">{props.filesHeader ?? i18n.t('uiCopy.git.changedFiles')}</div>
+          {props.children}
+        </div>
         <div class="git-diff-split__detail">{props.detail}</div>
       </div>
     </div>

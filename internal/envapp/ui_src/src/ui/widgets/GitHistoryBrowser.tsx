@@ -600,6 +600,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                         </div>
 
                         <GitDiffSplit
+                          filesHeader={<>{i18n.t('uiCopy.git.filesInCommit')} · {commitFiles().length}</>}
                           detail={(
                             <GitDiffPanel
                               open={Boolean(diffItem())}
@@ -614,9 +615,6 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                             />
                           )}
                         >
-                          <div class="shrink-0 border-b border-border px-3 py-2 text-[11px] font-medium text-muted-foreground">
-                            {i18n.t('uiCopy.git.filesInCommit')} · {commitFiles().length}
-                          </div>
                           <CommitFilesCompactList
                             items={commitFiles()}
                             selectedKey={selectedFileIdentity(diffItem())}
