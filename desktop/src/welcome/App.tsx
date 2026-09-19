@@ -7376,7 +7376,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 </p>
               </div>
               <div class="redeven-center-actions flex min-w-0 flex-wrap items-center gap-2">
-                <div class="relative w-full sm:w-[14.5rem]">
+                <div class="redeven-center-search relative w-full sm:w-[14.5rem]">
                   <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Show
                     when={props.activeTab === 'gateways'}
@@ -7399,47 +7399,50 @@ function ConnectEnvironmentSurface(props: Readonly<{
                     />
                   </Show>
                 </div>
-                <Show when={props.activeTab === 'environments'}>
-                  <DesktopTooltip content={props.i18n.t('environmentCenter.refreshRuntimeStatuses')} placement="top">
-                    <span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        class="px-2.5"
-                        disabled={busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')}
-                        onClick={() => {
-                          void props.refreshAllEnvironmentRuntimes();
-                        }}
-                      >
-                        <Refresh class="h-3.5 w-3.5" />
-                      </Button>
-                    </span>
-                  </DesktopTooltip>
-                </Show>
-                <Show when={props.activeTab === 'environments'}>
-                  <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
-                    <Plus class="mr-1 h-3.5 w-3.5" />
-                    {props.i18n.t('environmentCenter.newEnvironmentShort')}
-                  </Button>
-                </Show>
-                <Show when={props.activeTab === 'control_planes'}>
-                  <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
-                    <Plus class="mr-1 h-3.5 w-3.5" />
-                    {props.i18n.t('environmentCenter.connectProvider')}
-                  </Button>
-                </Show>
-                <Show when={props.activeTab === 'gateways'}>
-                  <Button
-                    size="sm"
-                    variant="default"
-                    title={props.i18n.t('environmentCenter.addGateway')}
-                    aria-label={props.i18n.t('environmentCenter.addGateway')}
-                    onClick={() => props.openCreateGatewaySetup()}
-                  >
-                    <Plus class="mr-1 h-3.5 w-3.5" />
-                    {props.i18n.t('environmentCenter.addGatewayShort')}
-                  </Button>
-                </Show>
+                <div class="redeven-center-action-group flex min-w-0 max-w-full items-center gap-2">
+                  <Show when={props.activeTab === 'environments'}>
+                    <DesktopTooltip content={props.i18n.t('environmentCenter.refreshRuntimeStatuses')} placement="top">
+                      <span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          class="px-2.5"
+                          aria-label={props.i18n.t('environmentCenter.refreshRuntimeStatuses')}
+                          disabled={busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')}
+                          onClick={() => {
+                            void props.refreshAllEnvironmentRuntimes();
+                          }}
+                        >
+                          <Refresh class="h-3.5 w-3.5" />
+                        </Button>
+                      </span>
+                    </DesktopTooltip>
+                  </Show>
+                  <Show when={props.activeTab === 'environments'}>
+                    <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
+                      <Plus class="mr-1 h-3.5 w-3.5" />
+                      {props.i18n.t('environmentCenter.newEnvironmentShort')}
+                    </Button>
+                  </Show>
+                  <Show when={props.activeTab === 'control_planes'}>
+                    <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
+                      <Plus class="mr-1 h-3.5 w-3.5" />
+                      {props.i18n.t('environmentCenter.connectProvider')}
+                    </Button>
+                  </Show>
+                  <Show when={props.activeTab === 'gateways'}>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      title={props.i18n.t('environmentCenter.addGateway')}
+                      aria-label={props.i18n.t('environmentCenter.addGateway')}
+                      onClick={() => props.openCreateGatewaySetup()}
+                    >
+                      <Plus class="mr-1 h-3.5 w-3.5" />
+                      {props.i18n.t('environmentCenter.addGatewayShort')}
+                    </Button>
+                  </Show>
+                </div>
               </div>
             </div>
 
