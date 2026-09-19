@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -75,6 +75,29 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     const task = await context.newPage(); await task.goto(origin + '/task');
     await context.addCookies([{ name: 'login', value: 'present', url: origin }]);
     const popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html#dev.floegence.redeven.r123456789abcdef0`);
+    await t.test('shows Redeven Flower branding in the installed extension and connection page', async () => {
+      assert.equal(await popup.title(), 'Redeven Flower');
+      assert.equal(await popup.locator('h1').textContent(), 'Redeven Flower');
+      await popup.locator('header img').evaluate(image => image.decode());
+      assert.equal(await popup.evaluate(() => chrome.runtime.getManifest().action.default_title), 'Redeven Flower');
+      const extensions = await context.newPage();
+      try {
+        await extensions.goto('chrome://extensions/');
+        const card = extensions.locator(`extensions-item[id="${extensionID}"]`);
+        await card.waitFor({ state: 'visible' });
+        assert.equal((await card.locator('#name').textContent()).trim(), 'Redeven Flower');
+        const icon = card.locator('img#icon');
+        await icon.evaluate(image => image.decode());
+        assert(await icon.evaluate(image => image.naturalWidth > 0));
+        if (process.env.REDEVEN_EXTENSION_SCREENSHOT_DIR) {
+          const output = path.resolve(process.env.REDEVEN_EXTENSION_SCREENSHOT_DIR);
+          await mkdir(output, { recursive: true });
+          await card.screenshot({ path: path.join(output, 'redeven-flower-extension.png') });
+          await popup.bringToFront();
+          await popup.locator('main').screenshot({ path: path.join(output, 'redeven-flower-connect.png') });
+        }
+      } finally { await extensions.close(); }
+    });
     await popup.locator('#connect-button').click();
     await worker.evaluate(() => fixtureWait('hello'));
     await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 6 }));

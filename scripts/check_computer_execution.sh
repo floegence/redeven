@@ -15,6 +15,7 @@ REDEVEN_BROWSER_BRIDGE_BINARY="$temporary/redeven" node --test \
   internal/envapp/ui_src/scripts/computerManagedSandbox.node-test.mjs \
   internal/envapp/ui_src/scripts/computerPopup.node-test.mjs \
   internal/envapp/ui_src/scripts/computerExtensionLifecycle.node-test.mjs \
+  internal/envapp/ui_src/scripts/computerExtensionInstall.node-test.mjs \
   internal/envapp/ui_src/scripts/computerExtension.node-test.mjs \
   internal/envapp/ui_src/scripts/computerNativeMessaging.node-test.mjs
 REDEVEN_BROWSER_INTEGRATION=1 GOWORK=off go test ./internal/ai \
