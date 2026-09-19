@@ -1,7 +1,7 @@
 import { writeTextToClipboard } from '../utils/clipboard';
-import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, untrack } from 'solid-js';
 import { cn, useLayout, useNotification } from '@floegence/floe-webapp-core';
-import { Button, LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
+import { Button, PersistentHorizontalScrollbar } from '@floegence/floe-webapp-core/ui';
 import type { GitDiffFileContent } from '../protocol/redeven_v1';
 import {
   GIT_PATCH_PREVIEW_LINES,
@@ -33,32 +33,13 @@ export interface GitPatchViewerProps {
   mobilePatchViewportClass?: string;
 }
 
-type PatchScrollMetrics = {
-  clientWidth: number;
-  trackWidth: number;
-  scrollLeft: number;
-  scrollWidth: number;
-};
-
-const EMPTY_PATCH_SCROLL_METRICS: PatchScrollMetrics = {
-  clientWidth: 0,
-  trackWidth: 0,
-  scrollLeft: 0,
-  scrollWidth: 0,
-};
-
 export function GitPatchViewer(props: GitPatchViewerProps) {
   const i18n = useI18n();
   const layout = useLayout();
   const notification = useNotification();
   const [patchExpanded, setPatchExpanded] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
-  const [patchScrollMetrics, setPatchScrollMetrics] = createSignal<PatchScrollMetrics>(EMPTY_PATCH_SCROLL_METRICS);
-  const viewportId = createUniqueId();
-  let patchViewport: HTMLDivElement | undefined;
-  let patchScrollbarTrack: HTMLDivElement | undefined;
-  let patchResizeObserver: ResizeObserver | undefined;
-  let patchMetricsFrame: number | undefined;
+  const [patchViewport, setPatchViewport] = createSignal<HTMLDivElement>();
 
   const patchText = createMemo(() => String(props.item?.patchText ?? ''));
   const patchTruncated = createMemo(() => Boolean(props.item?.patchTruncated));
@@ -81,162 +62,16 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
     props.item?.isBinary ? i18n.t('git.patchViewer.binaryDiffUnavailable') : unavailableMessage()
   ));
 
-  const syncPatchScrollMetrics = () => {
-    const viewport = patchViewport;
-    if (!viewport) {
-      setPatchScrollMetrics(EMPTY_PATCH_SCROLL_METRICS);
-      return;
-    }
-    setPatchScrollMetrics({
-      clientWidth: viewport.clientWidth,
-      trackWidth: patchScrollbarTrack?.clientWidth ?? viewport.clientWidth,
-      scrollLeft: viewport.scrollLeft,
-      scrollWidth: viewport.scrollWidth,
-    });
-  };
-
-  const schedulePatchScrollMetrics = () => {
-    if (patchMetricsFrame !== undefined) return;
-    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
-      syncPatchScrollMetrics();
-      return;
-    }
-    patchMetricsFrame = window.requestAnimationFrame(() => {
-      patchMetricsFrame = undefined;
-      syncPatchScrollMetrics();
-    });
-  };
-
-  const setPatchScrollLeft = (nextScrollLeft: number) => {
-    const viewport = patchViewport;
-    if (!viewport) return;
-    const maximum = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-    viewport.scrollLeft = Math.max(0, Math.min(maximum, nextScrollLeft));
-    syncPatchScrollMetrics();
-  };
-
-  const horizontalScrollMaximum = createMemo(() => {
-    const metrics = patchScrollMetrics();
-    return Math.max(0, metrics.scrollWidth - metrics.clientWidth);
-  });
-  const horizontalScrollbarVisible = createMemo(() => horizontalScrollMaximum() > 1);
-  const horizontalThumbSize = createMemo(() => {
-    const metrics = patchScrollMetrics();
-    if (metrics.scrollWidth <= 0) return 100;
-    return Math.min(100, Math.max(28 / Math.max(1, metrics.trackWidth), metrics.clientWidth / metrics.scrollWidth) * 100);
-  });
-  const horizontalThumbStart = createMemo(() => {
-    const maximum = horizontalScrollMaximum();
-    if (maximum <= 0) return 0;
-    return Math.max(0, Math.min(1, patchScrollMetrics().scrollLeft / maximum)) * (100 - horizontalThumbSize());
-  });
-
-  const handlePatchScrollbarTrackPointerDown = (event: PointerEvent) => {
-    if (event.button !== 0 || !patchScrollbarTrack) return;
-    event.preventDefault();
-    patchScrollbarTrack.focus({ preventScroll: true });
-    const trackBounds = patchScrollbarTrack.getBoundingClientRect();
-    const thumb = patchScrollbarTrack.querySelector<HTMLElement>('[data-git-horizontal-scrollbar-thumb]');
-    const thumbWidth = thumb?.getBoundingClientRect().width
-      ?? (trackBounds.width * (horizontalThumbSize() / 100));
-    const trackTravel = Math.max(1, trackBounds.width - thumbWidth);
-    const target = Math.max(0, Math.min(trackTravel, event.clientX - trackBounds.left - (thumbWidth / 2)));
-    setPatchScrollLeft((target / trackTravel) * horizontalScrollMaximum());
-  };
-
-  let thumbDragStartX = 0;
-  let thumbDragStartScrollLeft = 0;
-
-  const handlePatchScrollbarThumbPointerDown = (event: PointerEvent) => {
-    if (event.button !== 0 || !patchScrollbarTrack) return;
-    const thumb = event.currentTarget as HTMLDivElement;
-    patchScrollbarTrack.focus({ preventScroll: true });
-    thumbDragStartX = event.clientX;
-    thumbDragStartScrollLeft = patchScrollMetrics().scrollLeft;
-    thumb.setPointerCapture(event.pointerId);
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  const handlePatchScrollbarThumbPointerMove = (event: PointerEvent) => {
-    const thumb = event.currentTarget as HTMLDivElement;
-    if (!thumb.hasPointerCapture(event.pointerId) || !patchScrollbarTrack) return;
-    const trackTravel = Math.max(1, patchScrollbarTrack.getBoundingClientRect().width - thumb.getBoundingClientRect().width);
-    const scrollDelta = ((event.clientX - thumbDragStartX) / trackTravel) * horizontalScrollMaximum();
-    setPatchScrollLeft(thumbDragStartScrollLeft + scrollDelta);
-  };
-
-  const handlePatchScrollbarThumbPointerUp = (event: PointerEvent) => {
-    const thumb = event.currentTarget as HTMLDivElement;
-    if (thumb.hasPointerCapture(event.pointerId)) thumb.releasePointerCapture(event.pointerId);
-  };
-
-  const handlePatchScrollbarKeyDown = (event: KeyboardEvent) => {
-    const metrics = patchScrollMetrics();
-    const step = 48;
-    let nextScrollLeft: number | undefined;
-    switch (event.key) {
-      case 'ArrowLeft':
-        nextScrollLeft = metrics.scrollLeft - step;
-        break;
-      case 'ArrowRight':
-        nextScrollLeft = metrics.scrollLeft + step;
-        break;
-      case 'Home':
-        nextScrollLeft = 0;
-        break;
-      case 'End':
-        nextScrollLeft = horizontalScrollMaximum();
-        break;
-      case 'PageUp':
-        nextScrollLeft = metrics.scrollLeft - metrics.clientWidth;
-        break;
-      case 'PageDown':
-        nextScrollLeft = metrics.scrollLeft + metrics.clientWidth;
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    setPatchScrollLeft(nextScrollLeft);
-  };
-
-  const setPatchViewportRef = (node: HTMLDivElement) => {
-    patchViewport = node;
-    schedulePatchScrollMetrics();
-  };
-
-  createEffect(() => {
-    // Content can widen after loading Full Context, expanding lines, or font loading.
-    void visiblePatchLines();
-    patchResizeObserver?.disconnect();
-    if (patchViewport && typeof ResizeObserver !== 'undefined') {
-      patchResizeObserver = new ResizeObserver(schedulePatchScrollMetrics);
-      patchResizeObserver.observe(patchViewport);
-      if (patchViewport.firstElementChild) patchResizeObserver.observe(patchViewport.firstElementChild);
-      if (patchScrollbarTrack) patchResizeObserver.observe(patchScrollbarTrack);
-    }
-    schedulePatchScrollMetrics();
-  });
-
   createEffect(() => {
     void props.item?.path;
     void props.item?.oldPath;
     void props.item?.newPath;
     setPatchExpanded(false);
     setCopied(false);
-    if (patchViewport) {
-      patchViewport.scrollTop = 0;
-      patchViewport.scrollLeft = 0;
-    }
-    schedulePatchScrollMetrics();
-  });
-
-  onCleanup(() => {
-    patchResizeObserver?.disconnect();
-    if (patchMetricsFrame !== undefined && typeof window !== 'undefined') {
-      window.cancelAnimationFrame(patchMetricsFrame);
+    const viewport = untrack(patchViewport);
+    if (viewport) {
+      viewport.scrollTop = 0;
+      viewport.scrollLeft = 0;
     }
   });
 
@@ -302,10 +137,8 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
               >
                 <Show when={visiblePatchLines().length > 0} fallback={<div class={cn('rounded-md border px-3 py-2 text-[11px] leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{i18n.t('git.patchViewer.noInlineDiffLines')}</div>}>
                   <div
-                    id={viewportId}
-                    ref={setPatchViewportRef}
+                    ref={setPatchViewport}
                     {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-                    onScroll={syncPatchScrollMetrics}
                     class={cn(
                       'git-patch-viewer__viewport min-h-0 overflow-auto rounded-md border bg-background p-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]',
                       redevenSurfaceRoleClass('control'),
@@ -324,43 +157,12 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                       </For>
                     </div>
                   </div>
-                  <Show when={horizontalScrollbarVisible()}>
-                    <div
-                      ref={(node) => {
-                        patchScrollbarTrack = node;
-                        patchResizeObserver?.observe(node);
-                        schedulePatchScrollMetrics();
-                      }}
-                      {...{ [LOCAL_INTERACTION_SURFACE_ATTR]: 'true' }}
-                      {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
-                      aria-controls={viewportId}
-                      aria-label={i18n.t('git.patchViewer.horizontalScrollbar')}
-                      aria-orientation="horizontal"
-                      aria-valuemax={Math.round(horizontalScrollMaximum())}
-                      aria-valuemin="0"
-                      aria-valuenow={Math.round(patchScrollMetrics().scrollLeft)}
-                      data-git-horizontal-scrollbar="true"
-                      role="scrollbar"
-                      tabIndex={0}
-                      class="git-patch-viewer__horizontal-scrollbar"
-                      onKeyDown={handlePatchScrollbarKeyDown}
-                      onPointerDown={handlePatchScrollbarTrackPointerDown}
-                    >
-                      <div
-                        aria-hidden="true"
-                        data-git-horizontal-scrollbar-thumb="true"
-                        class="git-patch-viewer__horizontal-scrollbar-thumb"
-                        onPointerDown={handlePatchScrollbarThumbPointerDown}
-                        onPointerMove={handlePatchScrollbarThumbPointerMove}
-                        onPointerUp={handlePatchScrollbarThumbPointerUp}
-                        onPointerCancel={handlePatchScrollbarThumbPointerUp}
-                        style={{
-                          left: `${horizontalThumbStart()}%`,
-                          width: `${horizontalThumbSize()}%`,
-                        }}
-                      />
-                    </div>
-                  </Show>
+                  <PersistentHorizontalScrollbar
+                    viewport={patchViewport()}
+                    aria-label={i18n.t('git.patchViewer.horizontalScrollbar')}
+                    {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
+                    class="git-patch-viewer__horizontal-scrollbar"
+                  />
                 </Show>
 
                 <Show when={patchTruncated()}>

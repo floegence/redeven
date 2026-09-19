@@ -167,9 +167,9 @@ export default mergeConfig(viteConfig, defineConfig({
           return result;
         },
         exerciseGitScrollbar: async ({ page }) => {
-          const frame = await frameForSelector(page, '[data-git-horizontal-scrollbar]');
-          const track = frame.locator('[data-git-horizontal-scrollbar]');
-          const thumb = track.locator('[data-git-horizontal-scrollbar-thumb]');
+          const frame = await frameForSelector(page, '[data-floe-horizontal-scrollbar]');
+          const track = frame.locator('[data-floe-horizontal-scrollbar]');
+          const thumb = track.locator('[data-floe-horizontal-scrollbar-thumb]');
           const trackBox = (await track.boundingBox())!;
           const thumbBox = (await thumb.boundingBox())!;
           const x = thumbBox.x + thumbBox.width / 2;

@@ -1012,7 +1012,7 @@ describe("GitHistoryBrowser interactions", () => {
     try {
       await flush();
       expect(host.textContent).toContain(
-        "Choose a commit from the left rail to load its details.",
+        "Select a commit to review its changes.",
       );
       expect(host.textContent).not.toContain(
         "Select a commit from the sidebar to inspect its details.",
