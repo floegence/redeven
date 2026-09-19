@@ -161,6 +161,7 @@ describe('ConnectionRecoveryView rendered layout', () => {
       { locale: 'en-US', theme: 'light', viewport: { width: 1440, height: 900 }, snapshot: { ...failedSnapshot(), desktop_transport: undefined, failure: { code: 'transport_unavailable', retryable: false, technical_detail: 'HTTP 502 Bad Gateway' } } },
       { locale: 'zh-CN', theme: 'dark', viewport: { width: 1280, height: 800 }, snapshot: { ...failedSnapshot(), desktop_transport: undefined, failure: { code: 'transport_unavailable', retryable: false, technical_detail: 'HTTP 502 Bad Gateway' } } },
       { locale: 'zh-CN', theme: 'dark', viewport: { width: 1280, height: 800 }, snapshot: recoveringSnapshot(false) },
+      { locale: 'zh-CN', theme: 'dark', viewport: { width: 1280, height: 800 }, snapshot: { ...recoveringSnapshot(false), next_retry_at_unix_ms: undefined } },
       { locale: 'zh-CN', theme: 'dark', viewport: { width: 1280, height: 800 }, snapshot: { ...recoveringSnapshot(false), state: 'paused', phase: 'paused', next_retry_at_unix_ms: undefined } },
       {
         locale: 'en-US',
@@ -218,7 +219,8 @@ describe('ConnectionRecoveryView rendered layout', () => {
       }
       expect(view!.querySelectorAll('li').length).toBe(testCase.snapshot.desktop_transport ? 5 : 4);
       if (import.meta.env.VITE_CONNECTION_RECOVERY_SCREENSHOTS === '1') {
-        await page.screenshot({ path: `__screenshots__/connection-${testCase.locale}-${testCase.theme}-${testCase.snapshot.state}.png` });
+        const state = host.querySelector<SVGSVGElement>('[data-connection-illustration]')!.dataset.connectionIllustration;
+        await page.screenshot({ path: `__screenshots__/connection-${testCase.locale}-${testCase.theme}-${state}.png` });
       } else {
         expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
       }
@@ -233,7 +235,7 @@ describe('ConnectionRecoveryView rendered layout', () => {
     const [snapshot, setSnapshot] = createSignal(recoveringSnapshot(false));
     let stops = 0;
     let resumes = 0;
-    await mountFixture({
+    const host = await mountFixture({
       locale: 'en-US', theme: 'light', viewport: { width: 390, height: 844 },
       get snapshot() { return snapshot(); },
       onStop: async () => {
@@ -245,29 +247,58 @@ describe('ConnectionRecoveryView rendered layout', () => {
         setSnapshot({ ...snapshot(), state: 'recovering', phase: 'protocol_connect' });
       },
     });
+    const illustration = host.querySelector<SVGSVGElement>('[data-connection-illustration]')!;
+    expect(illustration.dataset.connectionIllustration).toBe('waiting');
+    expect(illustration.getAnimations({ subtree: true })).toHaveLength(1);
     await page.getByRole('button', { name: 'Stop retrying', exact: true }).click();
     await expect.element(page.getByRole('heading', { name: 'Reconnection stopped' })).toBeVisible();
     await expect.element(page.getByRole('button', { name: 'Resume connection', exact: true })).toHaveFocus();
+    expect(illustration.dataset.connectionIllustration).toBe('paused');
+    expect(illustration.getAnimations({ subtree: true })).toHaveLength(0);
     await page.getByRole('button', { name: 'Resume connection', exact: true }).click();
     await expect.element(page.getByText('Connecting now…', { exact: true })).toBeVisible();
     await expect.element(page.getByRole('button', { name: 'Stop retrying', exact: true })).toHaveFocus();
+    expect(illustration.dataset.connectionIllustration).toBe('connecting');
+    const signals = illustration.querySelectorAll<SVGPathElement>('.connection-recovery-illustration__signal');
+    const animations = illustration.getAnimations({ subtree: true });
+    expect(animations).toHaveLength(2);
+    // Observe actual browser transforms, including opposite travel directions.
+    for (const animation of animations) {
+      animation.pause();
+      animation.currentTime = 100;
+    }
+    await settleFrames(1);
+    const startPositions = Array.from(signals, (signal) => new DOMMatrix(getComputedStyle(signal).transform).m41);
+    for (const animation of animations) animation.currentTime = 700;
+    await settleFrames(1);
+    const endPositions = Array.from(signals, (signal) => new DOMMatrix(getComputedStyle(signal).transform).m41);
+    expect(endPositions[0]).toBeGreaterThan(startPositions[0]);
+    expect(endPositions[1]).toBeLessThan(startPositions[1]);
     expect(stops).toBe(1);
     expect(resumes).toBe(1);
   });
 
   it('stops active-step motion for reduced motion and reveals diagnostics only on request', async () => {
     await mediaCommands.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'reduce' });
+    const [snapshot, setSnapshot] = createSignal(recoveringSnapshot(false));
     const recoveringHost = await mountFixture({
       locale: 'en-US',
       theme: 'dark',
       viewport: { width: 1440, height: 900 },
-      snapshot: recoveringSnapshot(true),
+      get snapshot() { return snapshot(); },
     });
-    const animatedIcons = recoveringHost.querySelectorAll<HTMLElement>('[class*="motion-safe:animate"]');
+    const animatedIcons = recoveringHost.querySelectorAll<SVGElement>('.connection-recovery-illustration__beacon');
     expect(animatedIcons.length).toBeGreaterThan(0);
     for (const icon of animatedIcons) {
       expect(getComputedStyle(icon).animationName).toBe('none');
     }
+    expect(recoveringHost.querySelector('svg')!.getAnimations({ subtree: true })).toHaveLength(0);
+    setSnapshot({ ...snapshot(), next_retry_at_unix_ms: undefined });
+    await settleFrames(1);
+    const signals = recoveringHost.querySelectorAll<SVGElement>('.connection-recovery-illustration__signal');
+    expect(signals).toHaveLength(2);
+    for (const signal of signals) expect(getComputedStyle(signal).animationName).toBe('none');
+    expect(recoveringHost.querySelector('svg')!.getAnimations({ subtree: true })).toHaveLength(0);
 
     disposers.pop()?.();
     recoveringHost.remove();
