@@ -24,7 +24,7 @@ import {
   buildEnvironmentCardFactsModel,
   buildProviderBackedEnvironmentActionModel,
   environmentLibraryCount,
-  filterEnvironmentLibrary,
+  filterEnvironmentLibraryDisplayGroups,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
   PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
   runtimeHasUnsupportedLegacyControlPlaneLink,
@@ -705,14 +705,14 @@ describe('DesktopWelcomeShell', () => {
     expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
     expect(environmentLibraryCount(snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
 
-    expect(filterEnvironmentLibrary(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toEqual([
+    expect(filterEnvironmentLibraryDisplayGroups(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER).map(group => group.primary_entry)).toEqual([
       expect.objectContaining({
         id: 'local',
         category: 'local',
         local_environment_kind: 'local',
       }),
     ]);
-    expect(filterEnvironmentLibrary(snapshot, 'stag')).toEqual([
+    expect(filterEnvironmentLibraryDisplayGroups(snapshot, 'stag').map(group => group.primary_entry)).toEqual([
       expect.objectContaining({
         id: 'http://192.168.1.12:24000/',
         label: 'Staging',
@@ -741,11 +741,11 @@ describe('DesktopWelcomeShell', () => {
     });
 
     expect(
-      filterEnvironmentLibrary(
+      filterEnvironmentLibraryDisplayGroups(
         snapshot,
         '',
         desktopControlPlaneKey('https://provider.example.invalid', 'example_control_plane'),
-      ),
+      ).map(group => group.primary_entry),
     ).toEqual([
       expect.objectContaining({
         kind: 'provider_environment',
@@ -819,7 +819,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('buildEnvironmentLibrarySummaryModel');
     expect(appSrc).toContain('const librarySummary = createMemo(() => (');
-    expect(appSrc).toContain('buildEnvironmentLibrarySummaryModel(snapshot(), libraryEntries())');
+    expect(appSrc).toContain('buildEnvironmentLibrarySummaryModel(snapshot(), libraryGroups().flatMap((group) => group.member_entries))');
     expect(appSrc).toContain('localizedVisibleLabel(i18n(), librarySummary().environment_count)');
     expect(appSrc).toContain('localizedWindowsLabel(i18n(), librarySummary().window_count)');
     expect(appSrc).toContain('count={librarySummary().ready_count}');
@@ -1340,7 +1340,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('function openEnvironmentFlowerSurface(');
     expect(appSrc).toContain('environment: DesktopEnvironmentEntry,');
     expect(appSrc).toContain('openEnvironmentFlowerSurface(props.environment');
-    expect(appSrc).toMatch(/props\.i18n\.t\('environmentCenter\.askFlowerForLabel',\s*\{\s*label: props\.environment\.label,?\s*\}\)/u);
+    expect(appSrc).toMatch(/props\.i18n\.t\('environmentCenter\.askFlowerForLabel',\s*\{\s*label: ownerLabel\(\),?\s*\}\)/u);
     expect(appSrc).toContain('<FlowerTurnLauncherWindow');
     expect(appSrc).toContain('intent={flowerTurnLauncherIntent()}');
     expect(appSrc).toContain('focusThreadRequest={flowerFocusThreadRequest()}');
@@ -1611,7 +1611,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("labelKey: 'desktop.provider'");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.searchPlaceholder')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.localFilter')");
-    expect(appSrc).toContain('<EnvironmentConnectionCard');
+    expect(appSrc).toContain('<EnvironmentOwnerSurface');
     expect(appSrc).toContain("props.i18n.t('environmentCenter.newEnvironmentTitle')");
     expect(appSrc).toContain('NewEnvironmentPlaceholderCard');
   });
@@ -1666,8 +1666,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('buildEnvironmentCardFactsModel');
     expect(appSrc).not.toContain('buildControlPlaneEnvironmentFactsModel');
     expect(appSrc).toContain('EndpointsPopover');
-    expect(appSrc).toContain('splitPinnedEnvironmentEntryIDs');
-    expect(appSrc).toContain('environmentLibraryEntryRecord');
+    expect(appSrc).toContain('filterEnvironmentLibraryDisplayGroups');
+    expect(appSrc).toContain('EnvironmentLibraryDisplayGroup');
     expect(appSrc).not.toContain('splitPinnedEnvironmentEntries(props.entries)');
     expect(appSrc).toContain('function EnvironmentLibrarySection');
     expect(appSrc).toContain('function EnvironmentCardFactsBlock');
@@ -1759,10 +1759,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('guidanceSessionState');
     expect(appSrc).toContain('reconcileEnvironmentLibraryOverlayState');
     expect(appSrc).toContain('reconcileEnvironmentGuidanceSession');
-    expect(appSrc).toContain('projectedEntriesByID');
-    expect(appSrc).toContain('projectedEntryIDs');
-    expect(appSrc).toContain('<For each={groupedEntryIDs().pinned_entry_ids}>');
-    expect(appSrc).toContain('environment={projectedEnvironment(environmentID)}');
+    expect(appSrc).toContain('<For each={groupedGroupIDs().pinned_group_ids}>');
+    expect(appSrc).toContain('environment={projectedEntriesByID()[environmentID]!}');
     expect(appSrc).toContain('guidanceOpen={props.primaryActionGuidanceOpen}');
     expect(appSrc).toContain('props.presentation.menu_button_label');
     expect(appSrc).toContain('menuContainsTarget');

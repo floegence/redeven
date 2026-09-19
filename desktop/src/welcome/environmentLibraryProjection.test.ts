@@ -3,16 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   testDesktopPreferences,
-  testLocalEnvironment,
+  testProviderBoundLocalEnvironment,
   testProviderEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
-  environmentLibraryEntryRecord,
-  gatewayLibraryRowRecord,
-  gatewayLibraryRows,
-  splitPinnedEnvironmentEntryIDs,
-  splitGatewayRowIDsByAttention,
+  buildEnvironmentLibraryDisplayGroups,
 } from './environmentLibraryProjection';
+import { gatewayLibraryRowRecord, gatewayLibraryRows, splitGatewayRowIDsByAttention } from './gatewayLibraryProjection';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 
 function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGatewaySource {
@@ -42,68 +39,141 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
 }
 
 describe('environmentLibraryProjection', () => {
-  it('builds an entry record keyed by stable environment id', () => {
-    const local = testLocalEnvironment({
-      label: 'Local',
+  it('projects a linked Runtime and Cloud Environment as one visual group', () => {
+    const local = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
+      label: 'Local Environment',
     });
-    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
-      label: 'Demo Local Serve',
+    const provider = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
+      label: 'Dev Local',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: local,
-        provider_environments: [providerEnvironment],
+        provider_environments: [provider],
       }),
     });
+    const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment')!;
+    const providerEntry = snapshot.environments.find((entry) => entry.kind === 'provider_environment')!;
+    const runtimeTarget = {
+      ...localEntry.provider_runtime_link_target!,
+      id: 'local:local' as const,
+      provider_link_state: 'linked' as const,
+      provider_connection_state: 'connected' as const,
+      provider_origin: provider.provider_origin,
+      provider_id: provider.provider_id,
+      env_public_id: provider.env_public_id,
+    };
+    const linkedLocal = { ...localEntry, provider_runtime_link_target: runtimeTarget };
+    const linkedProvider = {
+      ...providerEntry,
+      provider_linked_runtime_summary: {
+        runtime_target_id: runtimeTarget.id,
+        runtime_kind: 'local_environment' as const,
+        label: linkedLocal.label,
+        provider_connection_state: 'connected' as const,
+      },
+    };
+    const groups = buildEnvironmentLibraryDisplayGroups([linkedLocal, linkedProvider]);
+    const relation = groups.find((group) => group.provider_entry?.id === linkedProvider.id);
 
-    expect(environmentLibraryEntryRecord(snapshot.environments)).toEqual(Object.fromEntries(
-      snapshot.environments.map((environment) => [environment.id, environment] as const),
-    ));
+    expect(relation).toBeTruthy();
+    expect(relation?.primary_entry.kind).toBe('local_environment');
+    expect(relation?.primary_entry.id).toBe(linkedLocal.id);
+    expect(relation?.member_ids).toEqual([linkedLocal.id, linkedProvider.id]);
+    expect(relation?.pinned).toBe(false);
+    expect(groups.filter((group) => group.member_ids.includes(linkedLocal.id))).toHaveLength(1);
+    expect(groups.filter((group) => group.member_ids.includes(linkedProvider.id))).toHaveLength(1);
   });
 
-  it('splits visible entry ids into pinned and regular groups without losing order', () => {
-    const local = testLocalEnvironment({
-      label: 'Local',
-      pinned: true,
+  it('keeps a provider entry independent when the runtime target identity does not match', () => {
+    const local = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
+      label: 'Local Environment',
     });
-    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
-      label: 'Demo Local Serve',
-      pinned: false,
+    const provider = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
+      label: 'Dev Local',
+      pinned: true,
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: local,
-        provider_environments: [providerEnvironment],
+        provider_environments: [provider],
       }),
     });
-    const entryIDs = snapshot.environments.map((environment) => environment.id);
-    const entriesByID = environmentLibraryEntryRecord(snapshot.environments);
+    const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment')!;
+    const providerEntry = snapshot.environments.find((entry) => entry.kind === 'provider_environment')!;
+    const unpairedLocal = {
+      ...localEntry,
+      provider_runtime_link_target: {
+        ...localEntry.provider_runtime_link_target!,
+        id: 'local:local' as const,
+        provider_link_state: 'linked' as const,
+        provider_connection_state: 'connected' as const,
+        provider_origin: 'https://other.example.invalid',
+        provider_id: 'other_control_plane',
+        env_public_id: 'env_other',
+      },
+    };
+    const staleProvider = {
+      ...providerEntry,
+      provider_linked_runtime_summary: {
+        runtime_target_id: 'local:local' as const,
+        runtime_kind: 'local_environment' as const,
+        label: unpairedLocal.label,
+        provider_connection_state: 'connected' as const,
+      },
+    };
+    const groups = buildEnvironmentLibraryDisplayGroups([staleProvider, unpairedLocal]);
 
-    expect(splitPinnedEnvironmentEntryIDs(entryIDs, entriesByID)).toEqual({
-      pinned_entry_ids: [local.id],
-      regular_entry_ids: [providerEnvironment.id],
-    });
+    expect(groups).toHaveLength(2);
+    expect(groups[0].provider_entry).toBeUndefined();
+    expect(groups[1].provider_entry).toBeUndefined();
+    expect(groups.find((group) => group.primary_entry.id === staleProvider.id)?.pinned).toBe(true);
   });
 
-  it('ignores ids that are no longer present in the projected entry record', () => {
-    const local = testLocalEnvironment({
-      label: 'Local',
-      pinned: true,
+  it('dissolves a relationship when the Cloud entry is absent from a refreshed snapshot', () => {
+    const local = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
+      label: 'Local Environment',
+    });
+    const provider = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
+      label: 'Dev Local',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: local,
+        provider_environments: [provider],
       }),
     });
-    const entriesByID = environmentLibraryEntryRecord(snapshot.environments);
+    const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment')!;
+    const providerEntry = snapshot.environments.find((entry) => entry.kind === 'provider_environment')!;
+    const runtimeTarget = {
+      ...localEntry.provider_runtime_link_target!,
+      id: 'local:local' as const,
+      provider_link_state: 'linked' as const,
+      provider_connection_state: 'connected' as const,
+      provider_origin: provider.provider_origin,
+      provider_id: provider.provider_id,
+      env_public_id: provider.env_public_id,
+    };
+    const linkedLocal = { ...localEntry, provider_runtime_link_target: runtimeTarget };
+    const linkedProvider = {
+      ...providerEntry,
+      provider_linked_runtime_summary: {
+        runtime_target_id: runtimeTarget.id,
+        runtime_kind: 'local_environment' as const,
+        label: linkedLocal.label,
+        provider_connection_state: 'disconnecting' as const,
+      },
+    };
 
-    expect(splitPinnedEnvironmentEntryIDs(
-      ['missing_environment', local.id],
-      entriesByID,
-    )).toEqual({
-      pinned_entry_ids: [local.id],
-      regular_entry_ids: [],
+    expect(buildEnvironmentLibraryDisplayGroups([linkedLocal, linkedProvider])).toHaveLength(1);
+    const dissolved = buildEnvironmentLibraryDisplayGroups([linkedLocal]);
+    expect(dissolved).toHaveLength(1);
+    expect(dissolved[0]).toMatchObject({
+      id: linkedLocal.id,
+      primary_entry: linkedLocal,
+      member_ids: [linkedLocal.id],
     });
+    expect(dissolved[0].provider_entry).toBeUndefined();
   });
 
   it('projects Gateway rows with stable row ids and source labels', () => {

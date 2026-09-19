@@ -49,7 +49,7 @@ import {
   buildEnvironmentDisplayStateModel,
   buildEnvironmentLibrarySummaryModel,
   environmentLibraryCount,
-  filterEnvironmentLibrary,
+  filterEnvironmentLibraryDisplayGroups,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
   GATEWAY_ENVIRONMENT_LIBRARY_FILTER,
   filterGatewayEnvironmentEntries,
@@ -61,7 +61,6 @@ import {
   runtimeTargetEnvironmentLibraryFilterValue,
   SSH_ENVIRONMENT_LIBRARY_FILTER,
   URL_ENVIRONMENT_LIBRARY_FILTER,
-  splitPinnedEnvironmentEntries,
 } from './viewModel';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 
@@ -1267,11 +1266,11 @@ describe('buildEnvironmentCardModel', () => {
     expect(environmentLibraryCount(snapshot, '', URL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
     expect(environmentLibraryCount(snapshot, '', SSH_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
 
-    expect(filterEnvironmentLibrary(
+    expect(filterEnvironmentLibraryDisplayGroups(
       snapshot,
       '',
       desktopControlPlaneKey('https://redeven.test', 'example_control_plane'),
-    ).map((environment) => environment.kind)).toEqual([
+    ).map(group => group.primary_entry).map((environment) => environment.kind)).toEqual([
       'provider_environment',
     ]);
   });
@@ -2673,6 +2672,24 @@ describe('buildEnvironmentCardModel', () => {
     });
     const localOnlyProviderEntry = localOnlyLinkedSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const localOnlyEntry = localOnlyLinkedSnapshot.environments.find((environment) => environment.kind === 'local_environment');
+    const linkedGroups = filterEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot);
+    expect(linkedGroups).toHaveLength(1);
+    expect(linkedGroups[0]).toMatchObject({
+      primary_entry: expect.objectContaining({ kind: 'local_environment' }),
+      provider_entry: expect.objectContaining({ kind: 'provider_environment' }),
+      member_ids: [localOnlyEntry?.id, localOnlyProviderEntry?.id],
+    });
+    expect(filterEnvironmentLibraryDisplayGroups(
+      localOnlyLinkedSnapshot,
+      '',
+      PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
+    )).toHaveLength(1);
+    expect(filterEnvironmentLibraryDisplayGroups(
+      localOnlyLinkedSnapshot,
+      '',
+      runtimeTargetEnvironmentLibraryFilterValue('local:local'),
+    )).toHaveLength(1);
+    expect(filterEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot, 'env_demo')).toHaveLength(1);
     expect(buildEnvironmentCardFactsModel(localOnlyProviderEntry!)).toEqual(expect.arrayContaining([
       expect.objectContaining({
         label: 'LOCAL LINK',
@@ -2688,7 +2705,7 @@ describe('buildEnvironmentCardModel', () => {
     const localOnlyFilter = runtimeTargetEnvironmentLibraryFilterValue('local:local');
     expect(localOnlyFilter).toBe('__runtime_target__:local:local');
     expect(runtimeTargetEnvironmentLibraryFilterTargetID(localOnlyFilter)).toBe('local:local');
-    expect(filterEnvironmentLibrary(localOnlyLinkedSnapshot, '', localOnlyFilter)).toEqual([
+    expect(filterEnvironmentLibraryDisplayGroups(localOnlyLinkedSnapshot, '', localOnlyFilter).map(group => group.primary_entry)).toEqual([
       expect.objectContaining({
         kind: 'local_environment',
         provider_runtime_link_target: expect.objectContaining({ id: 'local:local' }),
@@ -3273,30 +3290,6 @@ describe('buildEnvironmentCardModel', () => {
     }));
   });
 
-  it('splits pinned entries ahead of the regular environment list', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment({ pinned: true }),
-        saved_environments: [{
-          id: 'http://192.168.1.12:24000/',
-          label: 'Staging',
-          local_ui_url: 'http://192.168.1.12:24000/',
-          pinned: true,
-          created_at_ms: 20,
-          last_used_at_ms: 20,
-        }],
-      }),
-    });
-
-    expect(splitPinnedEnvironmentEntries(snapshot.environments)).toEqual({
-      pinned_entries: expect.arrayContaining([
-        expect.objectContaining({ id: 'local' }),
-        expect.objectContaining({ id: 'http://192.168.1.12:24000/' }),
-      ]),
-      regular_entries: [],
-    });
-  });
-
   it('caps compact environment columns by the visible card count when the container is wide', () => {
     expect(buildEnvironmentLibraryLayoutModel({
       visible_card_count: 3,
@@ -3407,11 +3400,11 @@ describe('Gateway view models', () => {
         gateway_label: 'Office',
       }),
     ]);
-    expect(filterEnvironmentLibrary(
+    expect(filterEnvironmentLibraryDisplayGroups(
       snapshot,
       '',
       gatewaySourceFilterValue('office'),
-    )).toEqual([
+    ).map(group => group.primary_entry)).toEqual([
       expect.objectContaining({
         gateway_env_id: 'office-demo',
         gateway_label: 'Office',

@@ -1,93 +1,78 @@
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
-import type { GatewayRowModel } from './viewModel';
-import { buildGatewayRowModel } from './viewModel';
 
-export type EnvironmentLibraryEntryRecord = Readonly<Record<string, DesktopEnvironmentEntry>>;
-
-export type EnvironmentLibraryEntryGroups = Readonly<{
-  pinned_entry_ids: readonly string[];
-  regular_entry_ids: readonly string[];
+export type EnvironmentLibraryDisplayGroup = Readonly<{
+  id: string;
+  primary_entry: DesktopEnvironmentEntry;
+  provider_entry?: DesktopEnvironmentEntry;
+  member_entries: readonly DesktopEnvironmentEntry[];
+  member_ids: readonly string[];
+  search_text: string;
+  pinned: boolean;
+  highlighted_owner_id?: string;
 }>;
 
-export function environmentLibraryEntryRecord(
+export function environmentLibrarySearchText(entry: DesktopEnvironmentEntry): string {
+  return [
+    entry.label, entry.local_ui_url, ...(entry.local_ui_urls ?? []), entry.remote_environment_url,
+    entry.secondary_text, entry.control_plane_label, entry.provider_origin, entry.env_public_id,
+    entry.gateway_label, entry.gateway_env_id, entry.gateway_endpoint_label, entry.gateway_environment_origin?.label,
+    entry.ssh_details?.ssh_destination, entry.ssh_details?.runtime_root,
+    entry.ssh_details?.release_base_url, entry.ssh_details?.bootstrap_strategy,
+    entry.managed_runtime_host_access?.kind === 'wsl_host' ? entry.managed_runtime_host_access.distribution_name : '',
+  ].filter(Boolean).join('\n').toLowerCase();
+}
+
+function providerIdentityMatches(runtime: DesktopEnvironmentEntry, provider: DesktopEnvironmentEntry): boolean {
+  const target = runtime.provider_runtime_link_target;
+  return Boolean(target
+    && ['linked', 'linking', 'disconnecting'].includes(target.provider_link_state)
+    && target.provider_origin && target.provider_id && target.env_public_id
+    && target.id === provider.provider_linked_runtime_summary?.runtime_target_id
+    && target.provider_origin === provider.provider_origin
+    && target.provider_id === provider.provider_id
+    && target.env_public_id === provider.env_public_id);
+}
+
+/** One visual group, separate original entries and action owners. */
+export function buildEnvironmentLibraryDisplayGroups(
   entries: readonly DesktopEnvironmentEntry[],
-): EnvironmentLibraryEntryRecord {
-  const record: Record<string, DesktopEnvironmentEntry> = {};
+): readonly EnvironmentLibraryDisplayGroup[] {
+  const runtimes = entries.filter(entry => entry.provider_runtime_link_target
+    && ['local_environment', 'ssh_environment', 'wsl_environment'].includes(entry.kind));
+  const pairs = new Map<string, DesktopEnvironmentEntry>();
+  for (const provider of entries.filter(entry => entry.kind === 'provider_environment')) {
+    const runtime = runtimes.find(entry => !pairs.has(entry.id) && providerIdentityMatches(entry, provider));
+    if (runtime) {
+      pairs.set(runtime.id, provider);
+      pairs.set(provider.id, runtime);
+    }
+  }
+
+  const consumed = new Set<string>();
+  const groups: EnvironmentLibraryDisplayGroup[] = [];
   for (const entry of entries) {
-    record[entry.id] = entry;
+    if (consumed.has(entry.id)) continue;
+    const partner = pairs.get(entry.id);
+    const primary = partner && entry.kind === 'provider_environment' ? partner : entry;
+    const provider = partner ? (entry.kind === 'provider_environment' ? entry : partner) : undefined;
+    const members = provider ? [primary, provider] : [primary];
+    for (const member of members) consumed.add(member.id);
+    groups.push({
+      id: primary.id,
+      primary_entry: primary,
+      ...(provider ? { provider_entry: provider } : {}),
+      member_entries: members,
+      member_ids: members.map(member => member.id),
+      search_text: members.map(environmentLibrarySearchText).join('\n'),
+      pinned: members.some(member => member.pinned),
+    });
   }
-  return record;
+  return groups;
 }
 
-export function splitPinnedEnvironmentEntryIDs(
-  entryIDs: readonly string[],
-  entriesByID: Readonly<Record<string, DesktopEnvironmentEntry | undefined>>,
-): EnvironmentLibraryEntryGroups {
-  const pinnedEntryIDs: string[] = [];
-  const regularEntryIDs: string[] = [];
-
-  for (const entryID of entryIDs) {
-    const entry = entriesByID[entryID];
-    if (!entry) {
-      continue;
-    }
-    if (entry.pinned) {
-      pinnedEntryIDs.push(entryID);
-      continue;
-    }
-    regularEntryIDs.push(entryID);
-  }
-
+export function splitPinnedEnvironmentGroupIDs(groups: readonly EnvironmentLibraryDisplayGroup[]) {
   return {
-    pinned_entry_ids: pinnedEntryIDs,
-    regular_entry_ids: regularEntryIDs,
-  };
-}
-
-export type GatewayLibraryRowRecord = Readonly<Record<string, GatewayRowModel>>;
-
-export type GatewayLibraryRowGroups = Readonly<{
-  ready_row_ids: readonly string[];
-  attention_row_ids: readonly string[];
-}>;
-
-export function gatewayLibraryRows(
-  entries: readonly DesktopEnvironmentEntry[],
-): readonly GatewayRowModel[] {
-  return entries
-    .filter((entry) => entry.kind === 'gateway_environment')
-    .map(buildGatewayRowModel);
-}
-
-export function gatewayLibraryRowRecord(
-  rows: readonly GatewayRowModel[],
-): GatewayLibraryRowRecord {
-  const record: Record<string, GatewayRowModel> = {};
-  for (const row of rows) {
-    record[row.id] = row;
-  }
-  return record;
-}
-
-export function splitGatewayRowIDsByAttention(
-  rowIDs: readonly string[],
-  rowsByID: Readonly<Record<string, GatewayRowModel | undefined>>,
-): GatewayLibraryRowGroups {
-  const readyRowIDs: string[] = [];
-  const attentionRowIDs: string[] = [];
-  for (const rowID of rowIDs) {
-    const row = rowsByID[rowID];
-    if (!row) {
-      continue;
-    }
-    if (row.status_tone === 'warning') {
-      attentionRowIDs.push(rowID);
-      continue;
-    }
-    readyRowIDs.push(rowID);
-  }
-  return {
-    ready_row_ids: readyRowIDs,
-    attention_row_ids: attentionRowIDs,
+    pinned_group_ids: groups.filter(group => group.pinned).map(group => group.id),
+    regular_group_ids: groups.filter(group => !group.pinned).map(group => group.id),
   };
 }

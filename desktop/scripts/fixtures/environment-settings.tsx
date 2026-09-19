@@ -1,6 +1,6 @@
 import { render } from 'solid-js/web';
 import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from '../../src/welcome/App';
-import type { DesktopWelcomeSnapshot } from '../../src/shared/desktopLauncherIPC';
+import type { DesktopWelcomeSnapshot, DesktopLauncherActionRequest } from '../../src/shared/desktopLauncherIPC';
 import type { DesktopSettingsResult } from '../../src/shared/settingsIPC';
 import { buildDesktopSettingsSurfaceSnapshot } from '../../src/main/settingsPageContent';
 import '../../src/welcome/index.css';
@@ -8,7 +8,7 @@ import '../../src/welcome/index.css';
 declare global {
   interface Window {
     settingsFixtureSnapshot: DesktopWelcomeSnapshot;
-    settingsFixture: { loads: number; resolveOld: () => void; publish: (value: DesktopWelcomeSnapshot) => void };
+    settingsFixture: { requests: DesktopLauncherActionRequest[]; loads: number; resolveOld: () => void; publish: (value: DesktopWelcomeSnapshot) => void };
   }
 }
 document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '40px');
@@ -16,7 +16,7 @@ let snapshot = window.settingsFixtureSnapshot;
 const denyAccess = new URLSearchParams(location.search).has('deny-access');
 let receiveSnapshot: ((value: DesktopWelcomeSnapshot) => void) | undefined;
 let resolveOld: () => void = () => {};
-window.settingsFixture = { loads: 0, resolveOld: () => resolveOld(), publish(value) {
+window.settingsFixture = { requests: [], loads: 0, resolveOld: () => resolveOld(), publish(value) {
   snapshot = value;
   receiveSnapshot?.(value);
 } };
@@ -42,5 +42,5 @@ const settings: DesktopWelcomeRuntime['settings'] = {
 };
 render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{ settings, launcher: {
   getSnapshot: async () => snapshot, subscribeSnapshot: listener => { receiveSnapshot = listener; return () => { receiveSnapshot = undefined; }; }, getSSHConfigHosts: async () => [],
-  performAction: async () => ({ ok: true, outcome: 'saved_environment' }),
+  performAction: async request => { window.settingsFixture.requests.push(request); return { ok: true, outcome: 'saved_environment' }; },
 } }} />, document.getElementById('root')!);

@@ -44,6 +44,11 @@ import {
   desktopRuntimeMaintenanceRequiresRestart,
   desktopRuntimeMaintenanceRequiresUpdate,
 } from '../shared/desktopRuntimeHealth';
+import {
+  buildEnvironmentLibraryDisplayGroups,
+  environmentLibrarySearchText,
+  type EnvironmentLibraryDisplayGroup,
+} from './environmentLibraryProjection';
 
 export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
@@ -845,6 +850,17 @@ export function buildEnvironmentCardFactsModel(
   ]);
 }
 
+export function buildEnvironmentCloudConnectionFactsModel(
+  environment: DesktopEnvironmentEntry,
+): readonly EnvironmentCardFactModel[] {
+  return [
+    providerEnvironmentIDFact(environment),
+    buildEnvironmentCardFact('REMOTE', compact(environment.remote_environment_url) || 'UNKNOWN', {
+      endpoints: buildEnvironmentCardEndpointsModel(environment),
+    }),
+  ];
+}
+
 export function buildEnvironmentCardEndpointsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardEndpointModel[] {
@@ -874,19 +890,6 @@ export function buildEnvironmentCardEndpointsModel(
     return connectionAddressRows([environment.local_ui_url]);
   }
   return [];
-}
-
-export function splitPinnedEnvironmentEntries(
-  entries: readonly DesktopEnvironmentEntry[],
-): Readonly<{
-  pinned_entries: readonly DesktopEnvironmentEntry[];
-  regular_entries: readonly DesktopEnvironmentEntry[];
-}> {
-  const pinnedEntries = entries.filter((entry) => entry.pinned);
-  return {
-    pinned_entries: pinnedEntries,
-    regular_entries: entries.filter((entry) => !entry.pinned),
-  };
 }
 
 function runtimeUpdatePresentation(): RuntimeUpdatePresentation {
@@ -1120,7 +1123,8 @@ export function buildEnvironmentLibrarySummaryModel(
   snapshot: DesktopWelcomeSnapshot,
   entries: readonly DesktopEnvironmentEntry[],
 ): EnvironmentLibrarySummaryModel {
-  const visibleEnvironmentIDs = new Set(entries.map((environment) => environment.id));
+  const groups = buildEnvironmentLibraryDisplayGroups(entries);
+  const visibleEnvironmentIDs = new Set(groups.flatMap(group => group.member_ids));
   const summary: {
     ready_count: number;
     running_count: number;
@@ -1131,7 +1135,8 @@ export function buildEnvironmentLibrarySummaryModel(
     attention_count: 0,
   };
 
-  for (const environment of entries) {
+  for (const group of groups) {
+    const environment = group.primary_entry;
     if (environment.runtime_health.status === 'online') summary.running_count += 1;
     switch (buildEnvironmentDisplayStateModel(environment).summary_bucket) {
       case 'ready':
@@ -1150,7 +1155,7 @@ export function buildEnvironmentLibrarySummaryModel(
 
   return {
     scope: 'visible',
-    environment_count: entries.length,
+    environment_count: groups.length,
     window_count: snapshot.open_windows.filter((window) => visibleEnvironmentIDs.has(window.environment_id)).length,
     ready_count: summary.ready_count,
     running_count: summary.running_count,
@@ -2350,22 +2355,7 @@ export function environmentMatchesLibrarySearch(
   if (!clean) {
     return true;
   }
-  return [
-    environment.label,
-    environment.local_ui_url,
-    environment.secondary_text,
-    environment.control_plane_label ?? '',
-    environment.provider_origin ?? '',
-    environment.env_public_id ?? '',
-    environment.gateway_label ?? '',
-    environment.gateway_env_id ?? '',
-    environment.gateway_endpoint_label ?? '',
-    environment.gateway_environment_origin?.label ?? '',
-    environment.ssh_details?.ssh_destination ?? '',
-    environment.ssh_details?.runtime_root ?? '',
-    environment.ssh_details?.release_base_url ?? '',
-    environment.ssh_details?.bootstrap_strategy ?? '',
-  ].some((value) => value.toLowerCase().includes(clean));
+  return environmentLibrarySearchText(environment).includes(clean);
 }
 
 export function environmentProviderFilterValue(environment: DesktopEnvironmentEntry): string {
@@ -2400,10 +2390,6 @@ export function runtimeTargetEnvironmentLibraryFilterTargetID(
   return normalizeDesktopProviderRuntimeLinkTargetID(
     activeFilter.slice(RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX.length),
   );
-}
-
-function isVisibleEnvironmentLibraryEntry(environment: DesktopEnvironmentEntry): boolean {
-  return Boolean(environment);
 }
 
 export function environmentMatchesProviderFilter(
@@ -2444,26 +2430,31 @@ export function environmentMatchesProviderFilter(
   return false;
 }
 
-export function filterEnvironmentLibrary(
-  snapshot: DesktopWelcomeSnapshot,
-  query = '',
-  providerFilter = '',
-): readonly DesktopEnvironmentEntry[] {
-  return snapshot.environments.filter((environment) => (
-    isVisibleEnvironmentLibraryEntry(environment)
-    && (
-    environmentMatchesLibrarySearch(environment, query)
-    && environmentMatchesProviderFilter(environment, providerFilter)
-    )
-  ));
-}
-
 export function environmentLibraryCount(
   snapshot: DesktopWelcomeSnapshot,
   query = '',
   providerFilter = '',
 ): number {
-  return filterEnvironmentLibrary(snapshot, query, providerFilter).length;
+  return filterEnvironmentLibraryDisplayGroups(snapshot, query, providerFilter).length;
+}
+
+export function filterEnvironmentLibraryDisplayGroups(
+  snapshot: DesktopWelcomeSnapshot,
+  query = '',
+  providerFilter = '',
+): readonly EnvironmentLibraryDisplayGroup[] {
+  const search = query.trim().toLowerCase();
+  return buildEnvironmentLibraryDisplayGroups(snapshot.environments)
+    .filter(group => group.search_text.includes(search)
+      && group.member_entries.some(entry => environmentMatchesProviderFilter(entry, providerFilter)))
+    .map(group => {
+      if (!group.provider_entry) return group;
+      // A Cloud-specific filter emphasizes remote access even when both owners share that origin.
+      const highlighted = providerFilter.trim()
+        ? [group.provider_entry, group.primary_entry].find(entry => environmentMatchesProviderFilter(entry, providerFilter))
+        : search ? group.member_entries.find(entry => environmentMatchesLibrarySearch(entry, search)) : undefined;
+      return { ...group, highlighted_owner_id: highlighted?.id };
+    });
 }
 
 export type GatewaySourceFilterOption = Readonly<{
