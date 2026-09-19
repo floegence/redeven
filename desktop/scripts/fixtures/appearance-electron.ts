@@ -50,6 +50,7 @@ void app.whenReady().then(async () => {
       await waitFor(first, `document.querySelector('.redeven-theme-picker__theme') && document.activeElement?.getAttribute('role') === 'radio'`);
     };
     await openPicker();
+    assert.equal(await read(first, `document.querySelector('[data-desktop-theme-preset]').dataset.desktopThemePreset`), 'porcelain-dark');
     const beforeRequests = requests;
     const feedback = await read(first, `(async () => {
       const target = document.querySelector('[data-desktop-theme-preset="nord"]');
@@ -82,6 +83,7 @@ void app.whenReady().then(async () => {
     await read(first, `document.querySelector('[id$="-mode-light"]').click()`);
     await waitFor(first, `document.documentElement.dataset.floeShellTheme === 'porcelain-light' && !document.querySelector('[aria-haspopup="dialog"][aria-busy="true"]')`);
     await waitFor(second, `document.documentElement.dataset.floeShellTheme === 'porcelain-light'`);
+    assert.equal(await read(first, `document.querySelector('[data-desktop-theme-preset]').dataset.desktopThemePreset`), 'porcelain-light');
     await read(first, `document.querySelector('.redeven-theme-picker__close').click()`);
     await writeFile(path.join(output, 'porcelain-light.png'), (await first.webContents.capturePage()).toPNG());
     for (const win of windows) {
