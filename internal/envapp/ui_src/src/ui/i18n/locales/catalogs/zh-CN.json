@@ -5196,6 +5196,7 @@
       "setupChooseFolder": "在文件夹选择窗口中，从个人文件夹依次打开：",
       "setupHome": "个人文件夹",
       "setupFolderHint": "选中最后一个文件夹并确认。安装后请保留此文件夹。",
+      "setupDragFolderHint": "也可以点击「查看文件夹」，将整个扩展文件夹拖到 Chrome 扩展页完成安装。",
       "setupLabelsHint": "按钮名称随 Chrome 的语言和版本而变化。英文界面对应 Developer mode 和 Load unpacked。",
       "extensionPath": "扩展目录",
       "newTab": "新建后台标签页",

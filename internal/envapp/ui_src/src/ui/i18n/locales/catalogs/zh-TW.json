@@ -5196,6 +5196,7 @@
       "setupChooseFolder": "在資料夾選擇視窗中，從個人資料夾依序開啟：",
       "setupHome": "個人資料夾",
       "setupFolderHint": "選取最後一個資料夾並確認。安裝後請保留此資料夾。",
+      "setupDragFolderHint": "也可以點選「顯示資料夾」，將整個擴充功能資料夾拖曳到 Chrome 擴充功能頁面完成安裝。",
       "setupLabelsHint": "按鈕名稱會隨 Chrome 的語言與版本而變更。英文介面對應 Developer mode 和 Load unpacked。",
       "extensionPath": "擴充功能目錄",
       "newTab": "新增背景分頁",

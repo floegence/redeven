@@ -5181,6 +5181,7 @@
       "setupChooseFolder": "Dans le sélecteur de dossiers, partez de votre dossier personnel :",
       "setupHome": "Dossier personnel",
       "setupFolderHint": "Sélectionnez le dernier dossier et confirmez. Conservez-le ici après l’installation.",
+      "setupDragFolderHint": "Vous pouvez aussi cliquer sur « Afficher le dossier », puis faire glisser le dossier complet de l’extension sur la page des extensions de Chrome pour l’installer.",
       "setupLabelsHint": "Les noms des boutons varient selon la langue et la version de Chrome. En anglais : Developer mode et Load unpacked.",
       "extensionPath": "Dossier de l’extension",
       "newTab": "Nouvel onglet en arrière-plan",

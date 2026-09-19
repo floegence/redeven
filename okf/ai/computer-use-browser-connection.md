@@ -3,7 +3,7 @@ type: Product Interaction Contract
 title: Guided Chrome connection
 description: Prepare, install and confirm a same-host browser connection without exposing native-host configuration.
 tags: [ai, browser-use, chrome, onboarding]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-19T00:00:00Z
 ---
 # Summary
 
@@ -17,7 +17,8 @@ The **Connect Chrome** guide opens from canonical conversation assistance. It
 prepares the native connection automatically, shows the unpacked-extension
 installation steps and offers fixed actions to open Chrome extensions, the
 installation folder, or the extension's confirmation page. The package has no
-store listing: users enable Developer mode and use Load unpacked in Chrome.
+store listing: users enable Developer mode and either use Load unpacked or drag
+the entire extension folder onto Chrome's extensions page.
 The stable installation lives under the user's visible `Redeven` home folder.
 Its `Flower Browser <identity>` name derives from the Runtime profile root, so
 different Runtimes cannot overwrite each other and rebuilding preserves the
@@ -34,8 +35,10 @@ button and a visible home-to-folder route. Host-specific Home shortcuts assist
 normal picker navigation; hidden-file toggles and absolute path entry are not
 required. Show folder reveals the installation in Finder or opens its visible
 parent on Linux; it never selects a folder in Chrome's picker. Copying an absolute
-path remains optional inside help. Acknowledging installation advances only the
-guide. It does not establish a connection or resume the task. Long paths and
+path remains optional inside help. Beside Show folder, the installation guide
+also explains that users can drag the entire revealed extension folder onto
+Chrome's extensions page to install it. Acknowledging installation advances only
+the guide. It does not establish a connection or resume the task. Long paths and
 host/browser limitations remain available in collapsed help. Users can return to
 installation from the connection step. Conversation assistance uses one short
 sentence instead of repeating installation instructions.

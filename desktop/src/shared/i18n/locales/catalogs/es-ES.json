@@ -915,6 +915,7 @@
       "setupChooseFolder": "En el selector de carpetas, empieza por tu carpeta personal:",
       "setupHome": "Carpeta personal",
       "setupFolderHint": "Selecciona la última carpeta y confirma. Déjala aquí después de la instalación.",
+      "setupDragFolderHint": "También puedes hacer clic en «Mostrar carpeta» y arrastrar la carpeta completa de la extensión a la página de extensiones de Chrome para instalarla.",
       "setupLabelsHint": "Los nombres de los botones dependen del idioma y la versión de Chrome. En inglés son Developer mode y Load unpacked."
     }
   },

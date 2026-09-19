@@ -915,6 +915,7 @@
       "setupChooseFolder": "Öffnen Sie im Ordnerdialog ausgehend von Ihrem persönlichen Ordner:",
       "setupHome": "Persönlicher Ordner",
       "setupFolderHint": "Wählen Sie den letzten Ordner und bestätigen Sie. Behalten Sie ihn nach der Installation an diesem Ort.",
+      "setupDragFolderHint": "Alternativ können Sie auf „Ordner anzeigen“ klicken und den gesamten Erweiterungsordner zur Installation auf die Erweiterungsseite von Chrome ziehen.",
       "setupLabelsHint": "Die Schaltflächen hängen von der Sprache und Version von Chrome ab. Auf Englisch heißen sie Developer mode und Load unpacked."
     }
   },

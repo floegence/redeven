@@ -915,6 +915,7 @@
       "setupChooseFolder": "フォルダ選択画面で、ホームフォルダから順に開きます：",
       "setupHome": "ホーム",
       "setupFolderHint": "最後のフォルダを選択して確定します。インストール後もこの場所に残してください。",
+      "setupDragFolderHint": "「フォルダを表示」をクリックし、拡張機能のフォルダごと Chrome の拡張機能ページにドラッグ＆ドロップしてインストールすることもできます。",
       "setupLabelsHint": "ボタン名は Chrome の言語やバージョンによって異なります。英語では Developer mode と Load unpacked です。"
     }
   },

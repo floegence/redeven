@@ -113,6 +113,7 @@ export function FlowerChromeConnection(props: {
                   </li>}</For>
                 </ol>
                 <p class="mt-2 text-xs leading-relaxed text-muted-foreground">{props.copy.setupFolderHint}</p>
+                <p class="mt-2 text-xs leading-relaxed text-muted-foreground">{props.copy.setupDragFolderHint}</p>
                 <Button class="mt-2" size="sm" variant="outline" disabled={opening()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button>
               </div>
             </li>

@@ -26,6 +26,7 @@ export const computerUseEnUS = {
   setupChooseFolder: "In the folder picker, start from your home folder:",
   setupHome: "Home",
   setupFolderHint: "Select the last folder and confirm. Keep it here after installation.",
+  setupDragFolderHint: "You can also click Show folder, then drag the entire extension folder onto the Chrome extensions page to install it.",
   setupLabelsHint: "Button names may differ with Chrome’s language or version. In English, look for Developer mode and Load unpacked.",
   setupPreparing: 'Preparing the connection…',
   setupConfirming: 'Waiting for your confirmation in Chrome…',
