@@ -19,6 +19,10 @@ installation steps and offers fixed actions to open Chrome extensions, the
 installation folder, or the extension's confirmation page. The package has no
 store listing: users enable Developer mode and either use Load unpacked or drag
 the entire extension folder onto Chrome's extensions page.
+Chrome's extension list, toolbar action and connection page identify the package
+as **Redeven Flower**. Staging copies the canonical Redeven app icons at 16, 32,
+48 and 128 pixels into the extension bundle. The extension key and registered
+installation path remain stable across branding updates.
 The stable installation lives under the user's visible `Redeven` home folder.
 Its `Flower Browser <identity>` name derives from the Runtime profile root, so
 different Runtimes cannot overwrite each other and rebuilding preserves the
@@ -30,14 +34,18 @@ installation; it is not a temporary unpacking directory.
 
 Installation and connection appear as two separate steps, with one primary
 action at a time. The initial screen opens Chrome extensions or lets an existing
-installation skip ahead. Opening extensions reveals developer mode, the load
-button and a visible home-to-folder route. Host-specific Home shortcuts assist
-normal picker navigation; hidden-file toggles and absolute path entry are not
-required. Show folder reveals the installation in Finder or opens its visible
-parent on Linux; it never selects a folder in Chrome's picker. Copying an absolute
-path remains optional inside help. Beside Show folder, the installation guide
-also explains that users can drag the entire revealed extension folder onto
-Chrome's extensions page to install it. Acknowledging installation advances only
+installation skip ahead. The default installation instructions contain two
+actions: enable Developer mode, then use Show folder and drag the entire revealed
+folder onto Chrome's extensions page. A visible home-to-folder route identifies
+the exact directory, with a reminder to retain it after installation.
+Load unpacked is a separate, initially collapsed alternative; expanding it
+reveals the button instructions, folder selection and host-specific Home shortcut.
+It is never presented as a prerequisite for dragging. Both methods end when
+Redeven Flower appears in Chrome's extension list, followed by Installed, continue.
+Show folder reveals the installation in Finder or opens its visible parent on
+Linux; it never selects a folder in Chrome's picker. Hidden-file toggles and
+absolute path entry are not required. Copying an absolute path remains optional
+inside help. Acknowledging installation advances only
 the guide. It does not establish a connection or resume the task. Long paths and
 host/browser limitations remain available in collapsed help. Users can return to
 installation from the connection step. Conversation assistance uses one short
@@ -99,6 +107,13 @@ tool effects, private pixels and explicit Stop keep their existing boundaries.
 
 # Evidence
 
+The directory-drop path was checked on 2026-09-19 against Chromium's
+[drag handler](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/browser/resources/extensions/drag_and_drop_handler.ts):
+a dropped directory invokes `loadUnpackedFromDrag` directly, without the Load
+unpacked button or native folder picker. Browser tests cover the two guidance
+paths and the installed branding. CDP-synthesized drops lack Chrome's native
+drop data and are not evidence of real operating-system folder installation.
+
 Chrome labels were checked on 2026-09-18 against Chromium's
 [extension messages](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/app/extensions_strings.grdp)
 and the `generated_resources_<locale>.xtb` translations under
@@ -116,6 +131,9 @@ differ from Redeven; collapsed help includes the English labels.
 - `redeven:internal/flower_ui/src/FlowerChromeConnection.tsx` - bounded connection inventory observation and disposal.
 - `redeven:browser-extension/popup.mjs` - automatic configuration and explicit confirmation.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerComputerConnections.browser.test.tsx` - first connection, extra profiles, cancellation and retry.
+- `redeven:scripts/stage_browser_extension.mjs` - canonical brand assets in the packaged extension.
+- `redeven:internal/envapp/ui_src/scripts/computerExtensionInstall.node-test.mjs` - staged icon integrity and installation qualification.
+- `redeven:internal/envapp/ui_src/scripts/computerExtension.node-test.mjs` - installed extension branding and isolated browser behavior.
 - `redeven:internal/envapp/ui_src/scripts/installChromeExtensionThroughUI.mjs` - visible Chrome installation and the macOS native picker.
 - `redeven:internal/envapp/ui_src/scripts/checkDesktopSystemBrowser.mjs` - real product connection, independent task tab, Stage and continuation.
 - `redeven:internal/envapp/ui_src/scripts/computerManagedSandbox.node-test.mjs` - sandbox enabled in the actual managed browser process.

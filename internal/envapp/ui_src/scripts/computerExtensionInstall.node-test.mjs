@@ -8,6 +8,24 @@ import { chromium } from 'playwright';
 import { stageBrowserExtension } from '../../../../scripts/stage_browser_extension.mjs';
 import { installChromeExtensionThroughUI } from './installChromeExtensionThroughUI.mjs';
 
+test('staged extension ships Redeven branding and every declared icon from the canonical assets', async () => {
+  const extension = await mkdtemp(path.join(os.tmpdir(), 'redeven-extension-brand-'));
+  try {
+    stageBrowserExtension(extension);
+    const manifest = JSON.parse(await readFile(path.join(extension, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.name, 'Redeven Flower');
+    assert.equal(manifest.action.default_title, 'Redeven Flower');
+    assert.deepEqual(Object.keys(manifest.icons), ['16', '32', '48', '128']);
+    for (const [size, asset] of [...Object.entries(manifest.icons), ...Object.entries(manifest.action.default_icon)]) {
+      const icon = await readFile(path.join(extension, asset));
+      const canonical = await readFile(new URL(`../../../../assets/brand/redeven/png/app-icon-${size}.png`, import.meta.url));
+      assert.deepEqual(icon, canonical);
+      assert.equal(icon.readUInt32BE(16), Number(size));
+      assert.equal(icon.readUInt32BE(20), Number(size));
+    }
+  } finally { await rm(extension, { recursive: true, force: true }); }
+});
+
 test('Chrome installs and replaces an old extension from another visible folder', {
   skip: process.env.REDEVEN_CHROME_INSTALL_QUALIFICATION !== '1', timeout: 45000,
 }, async () => {
@@ -30,7 +48,7 @@ test('Chrome installs and replaces an old extension from another visible folder'
     await installChromeExtensionThroughUI(context, outdated, 'mgfbpkkmocckooenpdfpefknffjanjce', ['Redeven', path.basename(outdated)]);
     const page = await installChromeExtensionThroughUI(context, extension, 'mgfbpkkmocckooenpdfpefknffjanjce', homePath, '1.0.0');
     const popup = await context.newPage(); await popup.goto('chrome-extension://mgfbpkkmocckooenpdfpefknffjanjce/popup.html');
-    assert.equal(await popup.evaluate(() => chrome.runtime.getManifest().version), '1.0.1');
+    assert.equal(await popup.evaluate(() => chrome.runtime.getManifest().version), '1.0.2');
     assert.equal(await page.locator('extensions-item[id="mgfbpkkmocckooenpdfpefknffjanjce"]').count(), 1);
     process.stdout.write(`Chrome Load unpacked label: ${await page.locator('extensions-toolbar #loadUnpacked').textContent()}\n`);
   } finally {

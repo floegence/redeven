@@ -99,26 +99,34 @@ export function FlowerChromeConnection(props: {
           <Button disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>
         </div>
       </>}>
-        <Show when={extensionsOpened()} fallback={<p class="text-sm leading-relaxed text-muted-foreground">{updateRequired() ? props.copy.setupUpdateHint : props.copy.extensionHint}</p>}>
+        <Show when={extensionsOpened()} fallback={<p class="text-sm leading-relaxed text-muted-foreground">{updateRequired() ? props.copy.setupUpdateHint : props.copy.extensionHint}</p>}><div class="space-y-4">
           <ol class="list-decimal space-y-3 pl-5 text-sm leading-relaxed">
             <li>{props.copy.setupDeveloperMode}</li>
-            <li>{props.copy.setupLoadUnpacked}</li>
-            <li>{props.copy.setupChooseFolder}
+            <li>{props.copy.setupDragFolderHint}
               <div class="mt-2 rounded-md border border-border bg-muted/30 p-3" role="group" aria-label={props.copy.extensionPath}>
                 <ol class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-extension-folder-route>
-                  <li class="flex items-center gap-1.5 text-muted-foreground">{props.copy.setupHome}<kbd class="rounded border border-border px-1 py-0.5 text-[10px]">{setup()!.platform === 'darwin' ? '⌘⇧H' : 'Alt+Home'}</kbd></li>
+                  <li class="text-muted-foreground">{props.copy.setupHome}</li>
                   <For each={setup()!.extension_home_path}>{(part, index) => <li class="flex min-w-0 items-center gap-2">
                     <span aria-hidden="true" class="text-muted-foreground">›</span>
                     <span class="break-all" classList={{ 'font-medium': index() === setup()!.extension_home_path.length - 1 }}>{part}</span>
                   </li>}</For>
                 </ol>
                 <p class="mt-2 text-xs leading-relaxed text-muted-foreground">{props.copy.setupFolderHint}</p>
-                <p class="mt-2 text-xs leading-relaxed text-muted-foreground">{props.copy.setupDragFolderHint}</p>
                 <Button class="mt-2" size="sm" variant="outline" disabled={opening()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button>
               </div>
             </li>
           </ol>
-        </Show>
+          <details class="ml-5 text-xs leading-relaxed text-muted-foreground">
+            <summary class="w-fit cursor-pointer">{props.copy.setupManualInstall}</summary>
+            <ol class="mt-2 list-decimal space-y-2 pl-5">
+              <li>{props.copy.setupLoadUnpacked}</li>
+              <li>{props.copy.setupChooseFolder}
+                <span class="mt-1 flex items-center gap-2">{props.copy.setupHome}<kbd class="rounded border border-border px-1 py-0.5 text-[10px]">{setup()!.platform === 'darwin' ? '⌘⇧H' : 'Alt+Home'}</kbd></span>
+              </li>
+            </ol>
+          </details>
+          <p class="text-xs leading-relaxed text-muted-foreground">{props.copy.setupInstallDone}</p>
+        </div></Show>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <Show when={extensionsOpened()} fallback={<>
             <Show when={!updateRequired()}><Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('connect')}>{props.copy.setupAlreadyInstalled}</Button></Show>
