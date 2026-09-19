@@ -31,7 +31,11 @@ historical viewers can move across that surface; maximization fills it with a
 12px inset. Floe owns clamping and projected Workbench coordinates. The header
 uses `Link` for browser and desktop connection management and `MonitorPointer`
 for viewing, with distinct localized accessible labels. The Stage body contains
-decoded pixels only.
+decoded pixels only. Screenshots use the entire content box with proportional,
+centered fit; non-live notices never share or reduce the image's horizontal space.
+The footer places a quiet clock notice beside explicit Fit to window and Actual
+size choices, with the active choice exposed visually and through `aria-pressed`.
+On narrow windows the footer wraps without covering or cropping pixels.
 Closing a live viewer switches to a neutral 40px launcher with the published 20px
 `MonitorPointer` icon, an opaque theme surface, thin border, and a restrained
 black shadow. It has no glow, status ring or internal dot. Coarse pointers gain
@@ -78,8 +82,9 @@ and the launcher can restore it; close returns focus to the restoring entry.
 Terminal execution stops sampling and collapses the viewer. Historical viewing
 has no FPS, input carrier or launcher, and retains zoom, close, keyboard and
 window geometry controls. Reopening resolves a durable public screenshot.
-The viewer offers fit-to-window and scrollable actual-size pixels outside user
-takeover. Takeover retains its existing image coordinate, native IME, paste and
+The viewer defaults to fit-to-window and offers scrollable actual-size pixels
+outside user takeover. Fit responds to resize, maximization and projected
+Workbench placement. Takeover retains its existing image coordinate, native IME, paste and
 remote scroll semantics and keeps fit mode.
 Closing removes private input controls and retires the viewing subscription,
 without pausing execution, relinquishing user control, or recreating a target.

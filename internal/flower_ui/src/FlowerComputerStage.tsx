@@ -1,7 +1,7 @@
 import { COMPUTER_FRAME_RATES } from './computerViewer';
 import type { Component } from 'solid-js';
 import { Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
-import { MonitorPointer, Refresh } from '@floegence/floe-webapp-core/icons';
+import { Clock, MonitorPointer, Refresh } from '@floegence/floe-webapp-core/icons';
 
 import { FloatingWindow, SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
 
@@ -208,8 +208,17 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
           </label></Show>
           <Show when={props.sessionState === 'paused' || props.sessionState === 'disconnected'}><button type="button" aria-label={props.sessionState === 'disconnected' ? props.copy.resumeControl : props.copy.retry} title={props.sessionState === 'disconnected' ? props.copy.resumeControl : props.copy.retry} onClick={retryFrames}><Refresh class="h-4 w-4" /></button></Show>
         </div>}
-        footer={<Show when={!props.onInput && resolvedURL()}><button type="button" class="flower-computer-zoom" aria-pressed={actualSize()}
-          onClick={() => setActualSize(value => !value)}>{actualSize() ? props.copy.zoomOut : props.copy.zoomIn}</button></Show>}
+        footer={<Show when={resolvedURL() && (props.staleLabel || !props.onInput)}>
+          <div class="flower-computer-viewer-toolbar">
+            <Show when={props.staleLabel}><span class="flower-computer-frame-notice" role="status">
+              <Clock size={13} aria-hidden="true" /><span>{props.staleLabel}</span>
+            </span></Show>
+            <Show when={!props.onInput}><div class="flower-computer-zoom-options">
+              <button type="button" class="flower-computer-zoom" aria-pressed={!actualSize()} onClick={() => setActualSize(false)}>{props.copy.zoomOut}</button>
+              <button type="button" class="flower-computer-zoom" aria-pressed={actualSize()} onClick={() => setActualSize(true)}>{props.copy.zoomIn}</button>
+            </div></Show>
+          </div>
+        </Show>}
         class="flower-computer-stage">
     <div ref={frameWrap} class="flower-computer-stage-frame-wrap" data-zoomed={actualSize() ? 'true' : undefined} data-computer-viewer-thread={viewerThread} data-computer-target={targetID()}>
       <Show when={props.onInput}>
@@ -277,7 +286,6 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
         )}
       </Show>
     </div>
-    <Show when={resolvedURL() && props.staleLabel}><p class="px-3 py-1 text-xs text-muted-foreground" role="status">{props.staleLabel}</p></Show>
     </FloatingWindow>
       <Show when={!props.historical}><SurfaceFloatingPanel
         boundary={props.launcherBoundary}
