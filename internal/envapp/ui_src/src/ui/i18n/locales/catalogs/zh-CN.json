@@ -5045,7 +5045,7 @@
       "blocked": "已阻止",
       "allowed": "已允许",
       "providersTitle": "模型提供商",
-      "providersDescription": "模型提供商卡显示本地 AI 配置文件模型源和功能详细信息。",
+      "providersDescription": "连接模型提供商，管理 Flower 可用的模型。",
       "addProvider": "添加模型提供商",
       "noProviders": "还没有模型提供商。添加 OpenAI、Anthropic、Kimi、ChatGLM、DeepSeek、Qwen 或 OpenAI 兼容端点。",
       "defaultProvider": "默认",

@@ -567,7 +567,7 @@ export const flowerSurfaceEnUS = {
     blocked: 'Blocked',
     allowed: 'Allowed',
     providersTitle: 'Providers',
-    providersDescription: 'Provider cards show the Local AI Profile model sources and capability details.',
+    providersDescription: 'Connect model providers and manage the models available to Flower.',
     addProvider: 'Add provider',
     noProviders: 'No providers yet. Add OpenAI, Anthropic, Kimi, ChatGLM, DeepSeek, Qwen, or a OpenAI-compatible endpoint.',
     defaultProvider: 'Default',

@@ -35,13 +35,43 @@ describe('Flower setup browser presentation', () => {
       },
     }, { presentation: 'companion', companionOpen: true, engaged: true, transcriptVisible: true });
     Object.assign(runtime.style, { width: '544px', height: '544px' });
-    await waitFor(() => Boolean(runtime.querySelector('.flower-setup-inline [data-model-source-action]')));
-    const status = runtime.querySelector<HTMLElement>('.flower-setup-inline')!;
-    const message = status.querySelector<HTMLElement>('.flower-model-source-status-message')!;
+    await waitFor(() => Boolean(runtime.querySelector('.flower-setup-welcome [data-model-source-action]')));
+    const status = runtime.querySelector<HTMLElement>('.flower-setup-welcome')!;
+    const message = status.querySelector<HTMLElement>('.flower-setup-description')!;
     expect(message.getBoundingClientRect().width).toBeGreaterThan(200);
     for (const action of status.querySelectorAll<HTMLElement>('[data-model-source-action]')) {
       expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(status.getBoundingClientRect().right + 1);
     }
+  });
+
+  it('opens the local provider editor directly from the first setup action', async () => {
+    const runtime = renderSurfaceWithAdapter({ ...adapter(), listThreads: async () => [],
+      loadSettings: async () => ({ ...settingsSnapshot(), model_profile: null }),
+    });
+    await waitFor(() => Boolean(runtime.querySelector('.flower-setup-welcome')));
+    runtime.querySelector<HTMLButtonElement>('.flower-setup-action')!.click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-settings-providers-section')));
+    const add = [...runtime.querySelectorAll<HTMLButtonElement>('.flower-settings-providers-section button')]
+      .find(button => button.textContent?.includes('Add provider'))!;
+    add.click();
+    await waitFor(() => Boolean(document.querySelector('[role="dialog"]')));
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Provider type');
+  });
+
+  it('returns to the existing composer draft when model refresh completes setup', async () => {
+    let snapshot = { ...settingsSnapshot(), model_profile: null } as ReturnType<typeof settingsSnapshot>;
+    const runtime = renderSurfaceWithAdapter({ ...adapter(), listThreads: async () => [], loadSettings: async () => snapshot });
+    await waitFor(() => Boolean(runtime.querySelector('.flower-setup-welcome')));
+    const editor = runtime.querySelector<HTMLTextAreaElement>('textarea')!;
+    editor.value = 'Keep my workspace review draft';
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    snapshot = settingsSnapshot();
+    runtime.querySelector<HTMLButtonElement>('.flower-setup-refresh')!.click();
+    await waitFor(() => !runtime.querySelector('.flower-setup-welcome'));
+    expect(runtime.querySelector('textarea')).toBe(editor);
+    expect(editor.value).toBe('Keep my workspace review draft');
+    expect(getComputedStyle(runtime.querySelector('.flower-chat-bottom-dock')!).display).not.toBe('none');
+    expect(runtime.querySelector('.flower-empty-suggestions')).toBeTruthy();
   });
 
   it('shows server search reasons in the model menu without blocking ordinary model selection', async () => {
@@ -124,20 +154,23 @@ describe('Flower setup browser presentation', () => {
         connectionCenter: { label: 'Connection center', run: async () => undefined },
       },
     });
-    await waitFor(() => Boolean(runtime.querySelector('.flower-model-source-status-footer')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-setup-welcome')));
 
-    const status = runtime.querySelector('.flower-model-source-status-footer') as HTMLElement;
-    const message = status.querySelector('.flower-model-source-status-message') as HTMLElement;
-    const actions = status.querySelector('.flower-model-source-status-actions') as HTMLElement;
+    const status = runtime.querySelector('.flower-setup-welcome') as HTMLElement;
+    const message = status.querySelector('.flower-setup-description') as HTMLElement;
+    const actions = status.querySelector('.flower-setup-actions') as HTMLElement;
     const messageStyle = getComputedStyle(message);
 
     expect(messageStyle.overflow).toBe('visible');
-    expect(messageStyle.textOverflow).toBe('ellipsis');
     expect(messageStyle.whiteSpace).toBe('normal');
-    expect(message.title).toBe(message.textContent);
-    expect(actions.classList.contains('flower-model-source-status-actions')).toBe(true);
+    expect(actions.scrollWidth).toBeLessThanOrEqual(actions.clientWidth);
+    expect(getComputedStyle(runtime.querySelector('.flower-chat-bottom-dock')!).display).toBe('none');
     const setupActions = [...status.querySelectorAll<HTMLElement>('[data-model-source-action]')];
     expect(setupActions.map((item) => item.getAttribute('data-model-source-action'))).toEqual(['local_settings', 'remote_settings']);
+    for (const action of setupActions) {
+      expect(action.scrollWidth).toBeLessThanOrEqual(action.clientWidth);
+      expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    }
     setupActions[0]?.click();
     setupActions[1]?.click();
     await waitFor(() => openDesktopSettings.mock.calls.length === 1 && openRemoteSettings.mock.calls.length === 1);

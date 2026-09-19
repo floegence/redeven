@@ -5030,7 +5030,7 @@
       "blocked": "Blockiert",
       "allowed": "Erlaubt",
       "providersTitle": "Anbieter",
-      "providersDescription": "Anbieterkarten zeigen die Modellquellen und Funktionsdetails des lokalen KI-Profils.",
+      "providersDescription": "Verbinden Sie Modellanbieter und verwalten Sie die für Flower verfügbaren Modelle.",
       "addProvider": "Anbieter hinzufügen",
       "noProviders": "Noch keine Anbieter. Fügen Sie OpenAI, Anthropic, Kimi, ChatGLM, DeepSeek, Qwen oder einen OpenAI-kompatiblen Endpunkt hinzu.",
       "defaultProvider": "Standard",

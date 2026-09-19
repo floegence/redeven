@@ -33,7 +33,10 @@ it('retains the browser address and reports failed readiness without exposing tr
   (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
   await waitFor(() => Boolean(runtime.querySelector('.flower-settings-computer-connect-section input')));
   const section = runtime.querySelector('.flower-settings-computer-connect-section')!;
+  (section.querySelector('summary') as HTMLElement | null)?.click();
   const input = section.querySelector('input')!;
+  expect(parseFloat(getComputedStyle(input).borderTopWidth)).toBeGreaterThanOrEqual(1);
+  expect(input.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
   input.value = 'http://127.0.0.1:9222';
   input.dispatchEvent(new Event('input', { bubbles: true }));
   (section.querySelector('button') as HTMLButtonElement).click();

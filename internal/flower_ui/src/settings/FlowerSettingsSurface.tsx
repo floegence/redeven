@@ -3,13 +3,14 @@ import { computerUseEnUS, type FlowerComputerCopy } from '../computerUseCopy';
 import type { FlowerSurfaceAdapter } from '../contracts/flowerSurfaceContracts';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { flowerProviderSearchSummary } from '../webSearchCapability';
+import { FlowerIcon } from '../icons/FlowerIcon';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
 import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Bot, ChevronLeft, Pencil, Plus, Shield, Trash, Zap } from '@floegence/floe-webapp-core/icons';
+import { Bot, Check, ChevronDown, ChevronLeft, Pencil, Plus, Shield, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, Select } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerSettingsCopy } from '../copy';
@@ -539,8 +540,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
               </Show>
               <div class="min-w-0">
                 <div class="flex min-w-0 items-center gap-2">
-                  <Zap class="h-4 w-4 text-primary" />
-                  <h2 class="truncate text-base font-semibold text-foreground">{copy().title}</h2>
+                  <FlowerIcon class="h-5 w-5" />
+                  <h2 class="flower-settings-title">{copy().title}</h2>
                 </div>
                 <p class="mt-1 text-xs text-muted-foreground">
                   {copy().description}
@@ -558,8 +559,9 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
             </div>
           </header>
 
-          <Show when={currentModelID() && !activeModelOption()}><p role="alert" class="text-sm text-destructive">{copy().dialog.catalog.unavailable}</p></Show>
-          <section class="flower-settings-current-model">
+          <div class="flower-settings-models">
+            <Show when={currentModelID() && !activeModelOption()}><p role="alert" class="text-sm text-destructive">{copy().dialog.catalog.unavailable}</p></Show>
+            <section class="flower-settings-current-model">
               <div class="flower-settings-current-model-icon">
                 <Show when={activeModelOption()} fallback={<Bot class="h-6 w-6 text-muted-foreground" />}>
                   {(option) => <FlowerProviderBrandIcon type={option().provider_type} class="h-6 w-6" />}
@@ -575,7 +577,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                         onChange={(value) => { setCurrentModelID(trim(value)); markDirty(); }}
                         placeholder={copy().selectModelPlaceholder}
                         disabled={modelOptions().length === 0 || props.saving}
-                        class="mt-0.5 w-full max-w-[24rem]"
+                        class="flower-settings-model-select mt-1 w-full"
                       />
                       <div class="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                         <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().text}</span>
@@ -583,10 +585,10 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                           <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().imageInput}</span>
                         </Show>
                         <Show when={activeModelOption()?.contextWindow}>
-                          <span class="flower-settings-dot-pill">{formatFlowerTokenCount(activeModelOption()?.contextWindow)} context</span>
+                          <span class="flower-settings-dot-pill">{copy().dialog.contextWindow}: {formatFlowerTokenCount(activeModelOption()?.contextWindow)}</span>
                         </Show>
                         <Show when={activeModelOption()?.maxOutputTokens}>
-                          <span class="flower-settings-dot-pill">{formatFlowerTokenCount(activeModelOption()?.maxOutputTokens)} output</span>
+                          <span class="flower-settings-dot-pill">{copy().dialog.maxOutput}: {formatFlowerTokenCount(activeModelOption()?.maxOutputTokens)}</span>
                         </Show>
                       </div>
                       <Show when={activeProviderModel()?.reasoning_capability && reasoningCapabilitySupportsControl(activeProviderModel()?.reasoning_capability)}>
@@ -603,7 +605,82 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   </div>
                 </Show>
               </div>
-          </section>
+            </section>
+
+            <section class="flower-settings-section flower-settings-providers-section">
+              <FlowerSubSectionHeader
+                title={copy().providersTitle}
+                description={copy().providersDescription}
+                actions={(
+                  <Button size="sm" variant="default" icon={Plus} onClick={openAddProviderDialog}>
+                    {copy().addProvider}
+                  </Button>
+                )}
+              />
+              <div class="flower-settings-provider-gallery">
+                <For each={providers()} fallback={<div class="flower-settings-provider-empty">{copy().noProviders}</div>}>
+                  {(provider, index) => {
+                    const providerID = () => trim(provider.id);
+                    const modelNames = () => provider.models.map((model) => trim(model.model_name)).filter(Boolean);
+                    const hasImageInput = () => provider.models.some((model) => flowerModelSupportsImage(model.input_modalities));
+                    const isDefault = () => currentModelID().startsWith(`${providerID()}/`);
+                    const webSearch = () => flowerProviderSearchSummary(provider.models, copy().dialog.catalog);
+                    return (
+                      <div class="flower-settings-provider-card">
+                        <div class="flower-settings-provider-brand">
+                          <FlowerProviderBrandIcon type={provider.type} class="h-5 w-5" />
+                        </div>
+                        <div class="flower-settings-provider-body">
+                          <div class="flower-settings-provider-topline">
+                            <div class="flower-settings-provider-title">
+                              <span class="truncate text-sm font-semibold text-foreground">{providerDisplayName(provider, copy().providerTypeLabels)}</span>
+                              <Show when={providerDisplayName(provider, copy().providerTypeLabels) !== copy().providerTypeLabels[provider.type]}><span class="text-[11px] text-muted-foreground">{copy().providerTypeLabels[provider.type]}</span></Show>
+                              <Show when={isDefault()}><span class="flex-shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-medium text-primary">{copy().defaultProvider}</span></Show>
+                            </div>
+                            <div class="flower-settings-provider-actions">
+                              <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={(event) => { event.stopPropagation(); openEditProviderDialog(index()); }} aria-label={copy().editProvider}>
+                                <Pencil class="h-3.5 w-3.5" />
+                              </Button>
+                              <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(event) => { event.stopPropagation(); removeProvider(index()); }} disabled={providers().length <= 1} aria-label={copy().removeProvider}>
+                                <Trash class="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div class="mt-2 space-y-1.5">
+                            <div class="flower-settings-provider-fact">
+                              <span class="flower-settings-provider-fact-label">{copy().apiKey}</span>
+                              <span class={cn('flower-settings-dot-pill', (providerSecretConfigured(props.snapshot, provider.id) || trim(provider.provider_api_key)) && 'flower-settings-dot-pill-active')}>
+                                {provider.type === 'ollama' ? copy().dialog.catalog.optionalKey : providerSecretConfigured(props.snapshot, provider.id) || trim(provider.provider_api_key) ? copy().ready : copy().needsKey}
+                              </span>
+                            </div>
+                            <div class="flower-settings-provider-fact">
+                              <span class="flower-settings-provider-fact-label">{copy().models}</span>
+                              <div class="flex min-w-0 flex-wrap gap-1">
+                                <For each={modelNames().slice(0, 3)}>
+                                  {(name) => <code title={name} class={cn('flower-settings-model-code', currentModelID() === `${providerID()}/${name}` && 'flower-settings-model-code-active')}>{name}</code>}
+                                </For>
+                                <Show when={modelNames().length > 3}><span class="text-[11px] text-muted-foreground">+{modelNames().length - 3}</span></Show>
+                              </div>
+                            </div>
+                            <div class="flower-settings-provider-fact">
+                              <span class="flower-settings-provider-fact-label">{copy().web}</span>
+                              <span class={cn('flower-settings-dot-pill', webSearch().enabled && 'flower-settings-dot-pill-active')}>{webSearch().label}</span>
+                            </div>
+                            <Show when={hasImageInput()}>
+                              <div class="flower-settings-provider-fact">
+                                <span class="flower-settings-provider-fact-label">{copy().vision}</span>
+                                <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().imageInput}</span>
+                              </div>
+                            </Show>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </section>
+          </div>
 
           <section class="flower-settings-section flower-settings-policy-section">
               <FlowerSubSectionHeader
@@ -638,9 +715,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                         <span class="flower-settings-policy-card-row">
                           <span class="flower-settings-policy-card-icon"><Shield class="h-3.5 w-3.5" /></span>
                           <span class="flower-settings-policy-card-label">{item().label}</span>
-                          <Show when={active()}>
-                            <span class="flower-settings-policy-card-badge">{copy().defaultPermissionBadge ?? 'Default'}</span>
-                          </Show>
+                          <span class="flower-settings-policy-radio" aria-hidden="true"><Show when={active()}><Check class="h-3 w-3" /></Show></span>
                         </span>
                         <span class="flower-settings-policy-card-desc">{item().description}</span>
                       </button>
@@ -653,7 +728,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
               </Show>
           </section>
 
-          <Show when={props.onSaveComputerUseEnabled}>
+          <Show when={props.onSaveComputerUseEnabled || (props.onConnectComputerBrowser && props.onListComputerBrowserTabs)}>
             <section class="flower-settings-section flower-settings-computer-use-section">
               <FlowerSubSectionHeader
                 title={copy().computerUseTitle}
@@ -667,109 +742,36 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   />
                 )}
               />
-              <button
-                type="button"
-                class={cn('flower-settings-toggle-card', computerUseEnabled() && 'flower-settings-toggle-card-active')}
-                role="switch"
-                aria-checked={computerUseEnabled()}
-                disabled={computerUseSaving()}
-                onClick={() => void saveComputerUseEnabled(!computerUseEnabled())}
-              >
-                <span class="flower-settings-toggle-copy">
-                  <span class="flower-settings-toggle-label">{copy().computerUseLabel}</span>
-                </span>
-                <span class={cn('flower-settings-toggle-track', computerUseEnabled() && 'flower-settings-toggle-track-on')} aria-hidden="true">
-                  <span class="flower-settings-toggle-thumb" />
-                </span>
-              </button>
-              <Show when={computerUseError()}>
-                <p role="alert" class="mt-2 text-xs text-destructive">{computerUseError()}</p>
+              <Show when={props.onSaveComputerUseEnabled}>
+                <button
+                  type="button"
+                  class={cn('flower-settings-toggle-card', computerUseEnabled() && 'flower-settings-toggle-card-active')}
+                  role="switch"
+                  aria-checked={computerUseEnabled()}
+                  disabled={computerUseSaving()}
+                  onClick={() => void saveComputerUseEnabled(!computerUseEnabled())}
+                >
+                  <span class="flower-settings-toggle-copy">
+                    <span class="flower-settings-toggle-label">{copy().computerUseLabel}</span>
+                  </span>
+                  <span class={cn('flower-settings-toggle-track', computerUseEnabled() && 'flower-settings-toggle-track-on')} aria-hidden="true">
+                    <span class="flower-settings-toggle-thumb" />
+                  </span>
+                </button>
+                <Show when={computerUseError()}>
+                  <p role="alert" class="mt-2 text-xs text-destructive">{computerUseError()}</p>
+                </Show>
+              </Show>
+
+              <Show when={props.onConnectComputerBrowser && props.onListComputerBrowserTabs}>
+                <details class="flower-settings-computer-connect-section">
+                  <summary><ChevronDown class="h-3.5 w-3.5" aria-hidden="true" /><span>{(props.computerCopy ?? computerUseEnUS).advanced}</span></summary>
+                  <FlowerBrowserConnection copy={props.computerCopy ?? computerUseEnUS} listTabs={props.onListComputerBrowserTabs!} connect={props.onConnectComputerBrowser!} />
+                </details>
               </Show>
             </section>
           </Show>
 
-          <Show when={props.onConnectComputerBrowser && props.onListComputerBrowserTabs}>
-            <section class="flower-settings-section flower-settings-computer-connect-section">
-              <FlowerSubSectionHeader title={(props.computerCopy ?? computerUseEnUS).advanced} />
-              <FlowerBrowserConnection copy={props.computerCopy ?? computerUseEnUS} listTabs={props.onListComputerBrowserTabs!} connect={props.onConnectComputerBrowser!} />
-            </section>
-          </Show>
-
-          <section class="flower-settings-section flower-settings-providers-section">
-              <FlowerSubSectionHeader
-                title={copy().providersTitle}
-                description={copy().providersDescription}
-                actions={(
-                  <Button size="sm" variant="default" icon={Plus} onClick={openAddProviderDialog}>
-                    {copy().addProvider}
-                  </Button>
-                )}
-              />
-              <div class="flower-settings-provider-gallery">
-                <For each={providers()} fallback={<div class="flower-settings-provider-empty">{copy().noProviders}</div>}>
-                  {(provider, index) => {
-                    const providerID = () => trim(provider.id);
-                    const modelNames = () => provider.models.map((model) => trim(model.model_name)).filter(Boolean);
-                    const hasImageInput = () => provider.models.some((model) => flowerModelSupportsImage(model.input_modalities));
-                    const isDefault = () => currentModelID().startsWith(`${providerID()}/`);
-                    const webSearch = () => flowerProviderSearchSummary(provider.models, copy().dialog.catalog);
-                    return (
-                      <div
-                        class={cn('flower-settings-provider-card', isDefault() && 'flower-settings-provider-card-active')}
-                      >
-                        <div class="flower-settings-provider-brand">
-                          <FlowerProviderBrandIcon type={provider.type} class="h-5 w-5" />
-                        </div>
-                        <div class="flower-settings-provider-body">
-                          <div class="flower-settings-provider-topline">
-                            <div class="flower-settings-provider-title">
-                              <span class="truncate text-sm font-semibold text-foreground">{providerDisplayName(provider, copy().providerTypeLabels)}</span>
-                              <span class="text-[11px] text-muted-foreground">{copy().providerTypeLabels[provider.type]}</span>
-                              <Show when={isDefault()}><span class="flex-shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-medium text-primary">{copy().defaultProvider}</span></Show>
-                            </div>
-                            <div class="flower-settings-provider-actions">
-                              <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={(event) => { event.stopPropagation(); openEditProviderDialog(index()); }} aria-label={copy().editProvider}>
-                                <Pencil class="h-3.5 w-3.5" />
-                              </Button>
-                              <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(event) => { event.stopPropagation(); removeProvider(index()); }} disabled={providers().length <= 1} aria-label={copy().removeProvider}>
-                                <Trash class="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </div>
-                          <div class="mt-2 space-y-1.5">
-                            <div class="flex items-center gap-2 text-xs">
-                              <span class="w-16 flex-shrink-0 text-muted-foreground">{copy().apiKey}</span>
-                              <span class={cn('flower-settings-dot-pill', (providerSecretConfigured(props.snapshot, provider.id) || trim(provider.provider_api_key)) && 'flower-settings-dot-pill-active')}>
-                                {provider.type === 'ollama' ? copy().dialog.catalog.optionalKey : providerSecretConfigured(props.snapshot, provider.id) || trim(provider.provider_api_key) ? copy().ready : copy().needsKey}
-                              </span>
-                            </div>
-                            <div class="flex items-start gap-2 text-xs">
-                              <span class="w-16 flex-shrink-0 pt-0.5 text-muted-foreground">{copy().models}</span>
-                              <div class="flex min-w-0 flex-wrap gap-1">
-                                <For each={modelNames().slice(0, 3)}>
-                                  {(name) => <code class={cn('flower-settings-model-code', currentModelID() === `${providerID()}/${name}` && 'flower-settings-model-code-active')}>{name}</code>}
-                                </For>
-                                <Show when={modelNames().length > 3}><span class="text-[11px] text-muted-foreground">+{modelNames().length - 3}</span></Show>
-                              </div>
-                            </div>
-                            <div class="flex items-center gap-2 text-xs">
-                              <span class="w-16 flex-shrink-0 text-muted-foreground">{copy().web}</span>
-                              <span class={cn('flower-settings-dot-pill', webSearch().enabled && 'flower-settings-dot-pill-active')}>{webSearch().label}</span>
-                            </div>
-                            <Show when={hasImageInput()}>
-                              <div class="flex items-center gap-2 text-xs">
-                                <span class="w-16 flex-shrink-0 text-muted-foreground">{copy().vision}</span>
-                                <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().imageInput}</span>
-                              </div>
-                            </Show>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }}
-                </For>
-              </div>
-          </section>
         </div>
       </div>
 
