@@ -48,6 +48,9 @@ it('explains the exact site grant and grants it once before continuing without m
   const card = s.surface.querySelector('.flower-computer-control-heading')!.closest('section')!;
   expect(card.textContent).toContain('https://www.google.com');
   expect(card.textContent).toContain('Allow website access');
+  const entry = s.surface.querySelector('.flower-computer-entry')!;
+  expect(entry.textContent).toBe('Allow website access');
+  expect(entry.hasAttribute('data-floe-progress-shimmer')).toBe(false);
   const activity = s.surface.querySelector('.flower-activity-inline-title')!;
   expect(activity.textContent).toBe('Open page');
   expect(s.surface.querySelector('.flower-activity-waiting-clock')).not.toBeNull();

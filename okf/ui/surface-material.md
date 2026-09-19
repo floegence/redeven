@@ -130,6 +130,12 @@ running, canceling, or cleanup operation. The progress disclosure remains
 clickable; failure and confirmation use static attention. Flower running tool
 titles and the exact-run composer progress label use the `text` variant: paint
 is clipped to glyphs, with no row background, extra plate, or text duplicate.
+The [Computer viewer entry and launcher](../ai/computer-use-media.md) opt into
+the surface variant only during canonical running state, with a semantic blue
+tint and a readable blue text shimmer in the entry. Product token mappings keep
+the reflection subtle on those compact controls, with at least 4.5:1 text and
+3:1 icon contrast in every preset, including hover. Fixed-time browser captures
+verify visible brightening; waiting and settlement remove the opt-in immediately.
 State and placement belong to Redeven; cadence, paint, theme contrast, native
 selection, reduced motion, and forced colors belong to Floe. The moving peak
 must brighten its own carrier, including a dark primary button inside a light
@@ -137,7 +143,8 @@ theme. The accepted reflection only adds white in sRGB; a darker traveling
 stripe is not an accepted shimmer. Floe calibrates the busy button fill to keep
 its label readable. Text uses a 20%-wide bright core with soft shoulders, about
 320ms of peak exposure per glyph, and a pure white peak on dark themes. The
-26-theme matrix requires at least 4.5:1 text contrast and 0.2 OKLab separation
+26-theme matrix for Floe's default neutral text and primary-filled controls
+requires at least 4.5:1 text contrast and 0.2 OKLab separation
 for text (0.08 for surfaces), in both materials. Color difference alone does not prove this
 contract: fixed-time pixel samples must become brighter while glyph-only
 background pixels stay unchanged. Removing active

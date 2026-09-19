@@ -5789,7 +5789,6 @@ webSearch: model.web_search,
   });
   const requestedComputerAccess = createMemo<FlowerRequestedComputerAccess>(() => selectedComputerAssistance().requested);
   const computerExecutionMode = () => {
-    if (isComputerInput(selectedInputRequest())) return selectedComputerAssistance().title;
     const mode = selectedComputerStage()?.item.chips?.find(chip => chip.kind === 'execution_mode')?.value;
     return mode === 'foreground' ? copy().computer.usingDesktop : mode === 'background' ? copy().computer.background : '';
   };
@@ -5808,6 +5807,16 @@ webSearch: model.web_search,
     if (privateControlRequested() && isComputerInput(selectedInputRequest())) return computerControlReady() ? 'user_control' : 'taking_control';
     if (isComputerInput(selectedInputRequest())) return 'awaiting_control';
     return computerStageExecution()?.status === 'running' ? 'running' : 'awaiting_user';
+  });
+  const computerStageEntryLabel = createMemo(() => {
+    if (computerStageHistorical()) return copy().chat.computerViewLastScreenshot;
+    if (isComputerAssistanceInput(selectedInputRequest())) return selectedComputerAssistance().title;
+    const state = computerStageSessionState();
+    if (state === 'running') {
+      const mode = computerExecutionMode();
+      if (mode) return mode;
+    }
+    return copy().chat.computerStageStatus[state];
   });
   createEffect(() => {
     selectedThreadID();
@@ -11115,6 +11124,8 @@ webSearch: model.web_search,
             </Show>
             <Show when={computerStageAvailable() && selectedComputerStage()}>
               <button type="button" class="flower-computer-entry" aria-expanded={computerStageOpen()}
+                data-session-state={computerStageSessionState()}
+                data-floe-progress-shimmer={computerStageSessionState() === 'running' ? 'surface' : undefined}
                 title={`${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore} — ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
                 aria-label={`${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
                 onClick={(event) => {
@@ -11122,8 +11133,7 @@ webSearch: model.web_search,
                   restoreComputerStage(event.currentTarget);
                 }}>
                 <MonitorPointer size={15} aria-hidden="true" />
-                <span>{computerStageHistorical() ? copy().chat.computerViewLastScreenshot : (computerExecutionMode() || copy().chat.computerStageTitle)}</span>
-                <Show when={computerStageSessionState() !== 'historical' && !isComputerAssistanceInput(selectedInputRequest())}><span class="flower-computer-state" role="status" data-session-state={computerStageSessionState()}>{copy().chat.computerStageStatus[computerStageSessionState()]}</span></Show>
+                <span class="flower-computer-entry-label" role="status" data-floe-progress-shimmer={computerStageSessionState() === 'running' ? 'text' : undefined}>{computerStageEntryLabel()}</span>
               </button>
             </Show>
             <Show when={presentation() === 'companion'}>

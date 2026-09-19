@@ -128,7 +128,9 @@ export async function qualifyComputerViewer({ page, root = page, output }) {
   const ball = root.locator('.flower-computer-stage-ball');
   const settleBall = () => ball.evaluate(async element => {
     const animations = [...element.getAnimations({ subtree: true }), ...element.parentElement.getAnimations()];
-    await Promise.all(animations.map(animation => animation.finished.catch(() => undefined)));
+    // Geometry can settle while the running task's paint continues to shimmer.
+    await Promise.all(animations.filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+      .map(animation => animation.finished.catch(() => undefined)));
   });
   const waitForBall = async (predicate) => {
     let box;
@@ -157,7 +159,7 @@ export async function qualifyComputerViewer({ page, root = page, output }) {
     return { cursor: style.cursor, state: element.dataset.sessionState, border: style.borderColor, background: style.backgroundColor, shadow: style.boxShadow };
   });
   assert.equal(visual.cursor, 'grab');
-  assert(visual.state && visual.shadow !== 'none' && !visual.shadow.includes('inset'), `launcher uses a neutral raised surface: ${JSON.stringify(visual)}`);
+  assert(visual.state && visual.shadow !== 'none' && !visual.shadow.includes('inset'), `launcher uses a raised surface: ${JSON.stringify(visual)}`);
   if (output) await page.screenshot({ path: `${output}/viewer-minimized.png` });
 
   const boundary = await boxOf(root.locator('.flower-chat-transcript'));

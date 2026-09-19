@@ -5004,7 +5004,7 @@
   box-shadow: 0 3px 6px -1px var(--redeven-shadow-color);
   cursor: grab;
   -webkit-tap-highlight-color: transparent;
-  transition: background-color 120ms ease, transform 220ms cubic-bezier(.22,.7,.18,1);
+  transition: transform 220ms cubic-bezier(.22,.7,.18,1);
 }
 .flower-computer-stage-ball:hover { background: color-mix(in srgb, var(--foreground) 5%, var(--card)); }
 .flower-computer-stage-ball:active { transform: scale(.97); cursor: grabbing; transition-duration: 100ms; }
@@ -5020,6 +5020,32 @@
 .flower-computer-entry { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--text-strong); font-size: 11px; cursor: pointer; }
 .flower-computer-entry:hover { background: var(--surface-muted); }
 .flower-computer-entry > svg { flex: none; }
+.flower-computer-entry-label { min-width: 0; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flower-computer-entry[data-session-state='running'],
+.flower-computer-stage-ball[data-session-state='running'] {
+  /* Keep the theme's blue hue, with readable ink throughout the reflection. */
+  --floe-progress-text-base: oklch(from var(--redeven-status-info) 0.25 min(c, 0.1) h);
+  --floe-progress-text-peak: color-mix(in srgb, var(--floe-progress-text-base) 73%, var(--redeven-surface-highlight-source));
+  --floe-progress-primary-white-mix: 90%;
+  --floe-progress-surface-background: color-mix(in srgb, var(--redeven-status-info) 12%, var(--card));
+  color: var(--floe-progress-text-base);
+  background: var(--floe-progress-surface-background);
+}
+.flower-computer-stage-ball[data-session-state='running'] { --floe-progress-surface-background: color-mix(in srgb, var(--redeven-status-info) 32%, var(--card)); border-color: var(--redeven-status-info-border); }
+.flower-computer-entry[data-session-state='running']:hover { --floe-progress-surface-background: color-mix(in srgb, var(--redeven-status-info) 18%, var(--card)); }
+.flower-computer-stage-ball[data-session-state='running']:hover { --floe-progress-surface-background: color-mix(in srgb, var(--redeven-status-info) 38%, var(--card)); }
+.dark .flower-computer-entry[data-session-state='running'],
+.dark .flower-computer-stage-ball[data-session-state='running'] {
+  --floe-progress-text-base: oklch(from var(--redeven-status-info) 0.82 min(c, 0.1) h);
+  --floe-progress-text-peak: var(--redeven-surface-highlight-source);
+  --floe-progress-primary-white-mix: 8%;
+  --floe-progress-surface-background: color-mix(in srgb, var(--redeven-status-info) 8%, var(--background));
+}
+.dark .flower-computer-stage-ball[data-session-state='running'] { --floe-progress-surface-background: color-mix(in srgb, var(--redeven-status-info) 20%, var(--background)); }
+.dark .flower-computer-entry[data-session-state='running']:hover { --floe-progress-surface-background: color-mix(in srgb, var(--redeven-status-info) 10%, var(--background)); }
+.dark .flower-computer-stage-ball[data-session-state='running']:hover { --floe-progress-surface-background: color-mix(in srgb, var(--redeven-status-info) 26%, var(--background)); }
+.flower-computer-entry:is([data-session-state='awaiting_user'], [data-session-state='awaiting_control'], [data-session-state='disconnected']) { color: var(--redeven-status-warning); }
+.flower-computer-entry[data-session-state='failed'] { color: var(--redeven-status-error); }
 .flower-computer-entry:focus-visible, .flower-computer-zoom:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
 .flower-computer-state { display: block; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 10px; font-weight: 400; }
 .flower-computer-state[data-session-state='awaiting_user'],
@@ -5035,13 +5061,13 @@
 .flower-computer-zoom-options { display: flex; flex: none; gap: 2px; max-width: 100%; margin-inline-start: auto; padding: 2px; border: 1px solid var(--border); border-radius: 7px; background: color-mix(in srgb, var(--foreground) 3%, transparent); }
 .flower-computer-zoom { min-width: 0; border: 0; border-radius: 4px; padding: 4px 8px; color: var(--text-muted); background: transparent; font-size: 11px; line-height: 1.45; cursor: pointer; }
 .flower-computer-zoom:hover { color: var(--text-strong); background: color-mix(in srgb, var(--foreground) 5%, transparent); }
-.flower-computer-zoom[aria-pressed='true'] { color: var(--text-strong); background: var(--card); box-shadow: 0 1px 3px rgb(0 0 0 / 10%); }
+.flower-computer-zoom[aria-pressed='true'] { color: var(--text-strong); background: var(--card); box-shadow: 0 1px 3px var(--redeven-shadow-color); }
 @media (pointer: coarse) {
-  .flower-computer-stage-ball::before { content: ''; position: absolute; inset: -4px; border-radius: inherit; }
+  .flower-computer-stage-ball::after { content: ''; position: absolute; inset: -4px; border-radius: inherit; }
   .flower-computer-zoom { min-height: 40px; }
 }
 @container flower-chat (max-width: 560px) {
-  .flower-computer-entry .flower-computer-state { max-width: 5rem; }
+  .flower-computer-entry-label { max-width: 9rem; }
   .flower-chat-transcript[data-computer-launcher='true'] { padding-inline-end: 64px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -5049,7 +5075,8 @@
   .flower-computer-stage-ball:active, [data-floe-panel-dragging='true'] > .flower-computer-stage-ball { transform: none; }
 }
 @media (forced-colors: active) {
-  .flower-computer-stage-ball { border: 1px solid ButtonText; background: ButtonFace; color: ButtonText; box-shadow: none; }
+  .flower-computer-stage-ball, .flower-computer-stage-ball[data-session-state='running'] { border: 1px solid ButtonText; background: ButtonFace; color: ButtonText; box-shadow: none; }
+  .flower-computer-entry[data-session-state] { background: ButtonFace; color: ButtonText; }
   .flower-computer-zoom[aria-pressed='true'] { outline: 1px solid Highlight; outline-offset: -1px; }
 }
 
