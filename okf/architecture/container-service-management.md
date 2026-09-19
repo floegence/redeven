@@ -3,11 +3,11 @@ type: Architecture Contract
 title: Container service management
 description: Detect and safely manage the active local Docker or Podman implementation without exposing engine endpoints or elevation flows.
 tags: [architecture, containers, docker, podman, host-control]
-timestamp: 2026-08-31T00:00:00Z
+timestamp: 2026-09-19T00:00:00Z
 ---
 # Summary
 
-One `ContainerServiceController` owns Docker and Podman discovery, lifecycle,
+One `ContainerServiceController` owns Docker and Podman service discovery, lifecycle,
 configuration, preflight identity, and reconciliation. Stable opaque service
 IDs replace endpoints. Host mutations require full RWX and Admin, never elevate
 privileges, and fail closed when ownership, revision, or final state is unknown.
@@ -36,7 +36,10 @@ Implementation is derived from official observable state:
 The projection reports one implementation, state, and discriminated
 configuration access: `local` with ordered source IDs, or `unavailable` with a
 short reason. Host paths, addresses, unit details, and connection data never
-enter the service-list DTO. Runtime discovery consumes the same projection.
+enter the service-list DTO. This management projection is loaded when the user
+opens service management. The resource console uses the bounded engine-readiness
+contract in [Native container resources](container-resources-capability.md), so
+a slow host-management command cannot delay a stopped-daemon result.
 
 ## Lifecycle and authority
 
