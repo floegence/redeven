@@ -1742,7 +1742,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     !selectedThreadDetailPending()
     && !selectedThreadReadOnly()
     && (Boolean(selectedThreadID()) || snapshot() !== null)
-    && (!selectedThreadID() || (threadSettingsRevision(selectedThread()) > 0 && selectedThreadPermissionType() !== undefined))
+    && (!selectedThreadID() || (threadSettingsRevision(selectedThread() ?? undefined) > 0 && selectedThreadPermissionType() !== undefined))
     && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
   ));
   const composerPermissionInteractive = createMemo(() => (

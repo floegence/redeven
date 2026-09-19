@@ -21,11 +21,12 @@ import (
 )
 
 const (
-	flowersecGoModule    = "github.com/floegence/flowersec/flowersec-go/v5"
-	flowersecGoVersion   = "v5.2.2"
-	flowersecCorePackage = "@floegence/flowersec-core"
-	flowersecCoreVersion = "5.2.2"
-	floeWebappVersion    = "0.56.11"
+	flowersecGoModule       = "github.com/floegence/flowersec/flowersec-go/v5"
+	flowersecGoVersion      = "v5.2.2"
+	flowersecCorePackage    = "@floegence/flowersec-core"
+	flowersecCoreVersion    = "5.2.3"
+	flowersecCodeAppVersion = "5.2.2"
+	floeWebappVersion       = "0.56.12"
 )
 
 var flowersecNPMPackages = []string{
@@ -136,7 +137,8 @@ func TestFlowersecDependencyUsesPublishedRelease(t *testing.T) {
 		flowersecGoVersion: "https://pkg.go.dev/" + flowersecGoModule + "@" + flowersecGoVersion,
 	})
 	assertNoticeDependencies(t, notices, flowersecCorePackage, map[string]string{
-		flowersecCoreVersion: "https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/" + flowersecCoreVersion,
+		flowersecCoreVersion:    "https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/" + flowersecCoreVersion,
+		flowersecCodeAppVersion: "https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/" + flowersecCodeAppVersion,
 	})
 }
 
@@ -414,21 +416,21 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"\"@floegence/floe-webapp-core\": \"" + floeWebappVersion + "\"",
 			"\"@floegence/floe-webapp-protocol\": \"" + floeWebappVersion + "\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.19.2\"",
-			"\"@floegence/flowersec-core\": \"5.2.2\"",
+			"\"@floegence/flowersec-core\": \"5.2.3\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
 			"floe-webapp-boot-" + floeWebappVersion + ".tgz",
 			"floe-webapp-core-" + floeWebappVersion + ".tgz",
 			"floe-webapp-protocol-" + floeWebappVersion + ".tgz",
 			"floeterm-terminal-web-0.19.2.tgz",
-			"flowersec-core-5.2.2.tgz",
+			"flowersec-core-5.2.3.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
 			"@floegence/floe-webapp-boot@" + floeWebappVersion,
 			"@floegence/floe-webapp-core@" + floeWebappVersion,
 			"@floegence/floe-webapp-protocol@" + floeWebappVersion,
 			"@floegence/floeterm-terminal-web@0.19.2",
-			"@floegence/flowersec-core@5.2.2",
+			"@floegence/flowersec-core@5.2.3",
 		},
 		"internal/codeapp/ui_src/package.json": {
 			"\"@floegence/flowersec-core\": \"5.2.2\"",
@@ -448,13 +450,13 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"okf/architecture/runtime-transport-dependencies.md": {
 			"terminal-go v0.19.2",
 			"Flowersec Go v5.2.2",
-			"Runtime and browser surfaces consume Flowersec v5.2.2",
+			"Env App and Desktop consume Flowersec TypeScript v5.2.3",
 		},
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.19.2",
 			"semantic Presentation",
 			"Floe Webapp Boot, Core, and Protocol v" + floeWebappVersion,
-			"Flowersec Core v5.2.2",
+			"Flowersec Core v5.2.3",
 		},
 	}
 	for file, expectedMarkers := range expectedPackages {
@@ -660,7 +662,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"Published Floret v7.16.2",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
-			"published Flowersec Go and Core v5.2.2 plus Floe Webapp v" + floeWebappVersion,
+			"published Flowersec Go v5.2.2, Core v5.2.3 for Env App and Desktop, and Floe Webapp v" + floeWebappVersion,
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
@@ -1633,8 +1635,12 @@ func assertOnlyCurrentFlowersecNPMDependency(t *testing.T, root string, file str
 	if filepath.Base(file) == "package.json" {
 		packages = []string{flowersecCorePackage}
 	}
+	version := flowersecCoreVersion
+	if strings.HasPrefix(filepath.ToSlash(file), "internal/codeapp/ui_src/") {
+		version = flowersecCodeAppVersion
+	}
 	for _, packageName := range packages {
-		assertOnlyCurrentNPMDependency(t, root, file, packageName, flowersecCoreVersion)
+		assertOnlyCurrentNPMDependency(t, root, file, packageName, version)
 	}
 }
 
