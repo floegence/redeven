@@ -9382,6 +9382,7 @@ webSearch: model.web_search,
           mediaLabels={message().role === 'assistant' ? copy().chat.media : undefined}
           resolveMedia={(source, signal) => resolveFlowerMarkdownMedia(source, signal, {
             adapter: props.adapter, threadID: selectedThreadID(), workingDirectory: selectedThreadWorkingDirectory(),
+            copy: copy().chat.media, onActionError: error => notifyThreadActionError(getErrorMessage(error)),
           })}
           copyCodeLabel={copy().chat.copyCode}
           codeCopiedLabel={copy().chat.codeCopied}

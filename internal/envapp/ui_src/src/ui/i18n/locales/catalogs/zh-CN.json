@@ -4457,6 +4457,8 @@
     "chat": {
       "media": {
         "image": "图片",
+        "previewImage": "预览图片",
+        "revealInFolder": "打开所在目录",
         "video": "视频",
         "audio": "音频",
         "html": "交互预览",

@@ -82,6 +82,8 @@
     "chat": {
       "media": {
         "image": "Bild",
+        "previewImage": "Bildvorschau öffnen",
+        "revealInFolder": "Übergeordneten Ordner öffnen",
         "video": "Video",
         "audio": "Audio",
         "html": "Interaktive Vorschau",

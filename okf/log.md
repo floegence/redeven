@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-09-20
+
+* **Interaction**: Route Flower image clicks and preview actions through the existing file preview, add explicit containing-folder navigation, and adopt released Floe v0.58.0 floating previews for non-file images.
+
 ## 2026-09-19 — Inline Flower media previews
 
 - Consume released Floe media cards for assistant screenshots, images, video, audio, and self-contained interactive HTML.

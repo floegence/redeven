@@ -1,5 +1,4 @@
-import { markdownMediaEnUS } from './chat/markdown/mediaCopy';
-import type { MarkdownMediaLabels } from '@floegence/floe-webapp-core/chat';
+import { markdownMediaEnUS, type FlowerMarkdownMediaCopy } from './chat/markdown/mediaCopy';
 import { toolActivityEnUS, type FlowerToolActivityCopy } from './toolActivityCopy';
 import { computerUseEnUS, type FlowerComputerCopy } from './computerUseCopy';
 import { reasoningControlEnUS, type ReasoningControlCopy } from './i18n/reasoningControlMessages';
@@ -325,7 +324,7 @@ export type FlowerSurfaceCopy = Readonly<{
     modelSupportUnavailable: string;
   }>;
   chat: Readonly<{
-    media: MarkdownMediaLabels;
+    media: FlowerMarkdownMediaCopy;
     restoredInputTitle: string;
     restoredInputDescription: string;
     restoredInputCopy: string;

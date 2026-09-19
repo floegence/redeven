@@ -65,6 +65,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
     chat: {
       media: {
         image: t(i18n, k('chat.media.image')),
+        previewImage: t(i18n, k('chat.media.previewImage')),
+        revealInFolder: t(i18n, k('chat.media.revealInFolder')),
         video: t(i18n, k('chat.media.video')),
         audio: t(i18n, k('chat.media.audio')),
         html: t(i18n, k('chat.media.html')),

@@ -1,5 +1,6 @@
 import { safeMarkdownMediaURL, type MarkdownMediaSource } from '@floegence/floe-webapp-core/chat-media';
 import type { ResolvedMarkdownMedia } from '@floegence/floe-webapp-core/chat';
+import type { FlowerMarkdownMediaCopy } from './mediaCopy';
 import type { FlowerSurfaceAdapter } from '../../contracts/flowerSurfaceContracts';
 
 export function flowerMarkdownFilePath(source: string, workingDirectory: string): string | undefined {
@@ -19,7 +20,7 @@ export function flowerMarkdownFilePath(source: string, workingDirectory: string)
 export async function resolveFlowerMarkdownMedia(
   source: MarkdownMediaSource,
   signal: AbortSignal,
-  context: Readonly<{ adapter: FlowerSurfaceAdapter; threadID: string; workingDirectory: string }>,
+  context: Readonly<{ adapter: FlowerSurfaceAdapter; threadID: string; workingDirectory: string; copy: FlowerMarkdownMediaCopy; onActionError: (error: unknown) => void }>,
 ): Promise<ResolvedMarkdownMedia> {
   const remote = safeMarkdownMediaURL(source.src ?? '');
   if (remote) {
@@ -28,12 +29,14 @@ export async function resolveFlowerMarkdownMedia(
   }
   const frame = /^computer:\/\/([a-zA-Z0-9_-]+)\/([a-f0-9]{64})$/.exec(source.src ?? '');
   let blob: Blob;
+  let filePath: string | undefined;
   if (frame && source.kind === 'image' && context.adapter.loadComputerFrame) {
     blob = await context.adapter.loadComputerFrame({ thread_id: context.threadID, target_id: frame[1], sha256: frame[2], resource_ref: source.src!, signal });
   } else {
     const path = flowerMarkdownFilePath(source.src ?? '', context.workingDirectory);
     if (!path || !context.adapter.loadMessageFile) throw new Error('Media source is unavailable');
     blob = await context.adapter.loadMessageFile({ path, signal });
+    filePath = path;
   }
   signal.throwIfAborted();
   if (source.kind === 'html') {
@@ -43,5 +46,18 @@ export async function resolveFlowerMarkdownMedia(
   if (!blob.type.startsWith(`${source.kind}/`)) throw new Error('Media type does not match the preview');
   const src = URL.createObjectURL(blob);
   signal.addEventListener('abort', () => URL.revokeObjectURL(src), { once: true });
-  return { src, openURL: src };
+  const openFile = context.adapter.openMessageFile;
+  const path = filePath;
+  const select = (action: 'preview' | 'reveal') => {
+    if (!path || !openFile || signal.aborted) return;
+    void openFile({ path, action }).catch(context.onActionError);
+  };
+  return {
+    src,
+    ...(source.kind !== 'image' ? { openURL: src } : {}),
+    ...(path && openFile ? {
+      ...(source.kind === 'image' ? { preview: { label: context.copy.previewImage, onSelect: () => select('preview') } } : {}),
+      reveal: { label: context.copy.revealInFolder, onSelect: () => select('reveal') },
+    } : {}),
+  };
 }

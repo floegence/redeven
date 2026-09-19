@@ -111,6 +111,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
     },
     onSettingsChanged: env.bumpSettingsSeq,
     ...env.flowerWorkingDirectoryActions,
+    openMessageFile: env.openFlowerMessageFile,
     openFileBrowser: env.openFlowerFileBrowser,
     openFilePreview: env.openFlowerFilePreview,
     openCanonicalReferenceTarget: env.openFlowerCanonicalReferenceTarget,

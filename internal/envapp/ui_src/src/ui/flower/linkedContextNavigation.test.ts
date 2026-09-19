@@ -76,6 +76,17 @@ describe('Flower linked-context Env navigation', () => {
     });
   });
 
+  it('routes message images to the reusable preview and their parent directory', async () => {
+    const openFilePreview = vi.fn(async () => undefined);
+    const openFileBrowserAtPath = vi.fn(async () => undefined);
+    const navigation = createFlowerLinkedContextNavigation({ openFilePreview, openFileBrowserAtPath, notifyInvalidFilePath: vi.fn(), notifyInvalidDirectoryPath: vi.fn() });
+    await navigation.openMessageFile({ path: '/workspace/images/chart.png', action: 'preview' });
+    expect(openFilePreview).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: '/workspace/images/chart.png', type: 'file' }), { focus: true, reusePolicy: 'same_file_or_create' });
+    expect(openFileBrowserAtPath).not.toHaveBeenCalled();
+    await navigation.openMessageFile({ path: '/workspace/images/chart.png', action: 'reveal' });
+    expect(openFileBrowserAtPath).toHaveBeenCalledExactlyOnceWith('/workspace/images', expect.objectContaining({ openStrategy: 'focus_latest_or_create' }));
+    expect(openFilePreview).toHaveBeenCalledTimes(1);
+  });
   it('rejects invalid paths before invoking file hosts', async () => {
     const openFilePreview = vi.fn(async () => undefined);
     const openFileBrowserAtPath = vi.fn(async () => undefined);

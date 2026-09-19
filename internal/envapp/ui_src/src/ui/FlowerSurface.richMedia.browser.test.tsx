@@ -4,10 +4,16 @@ import previewVideo from '../../scripts/fixtures/media/preview.mp4?url';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
+import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
+import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
+import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
+import { FilePreviewSurface } from './widgets/FilePreviewSurface';
+import { floatingWindowStorageKey } from './widgets/PersistentFloatingWindow';
+import { removeUIStorageItem } from './services/uiStorage';
 import { FlowerMarkdownBlock } from '../../../../flower_ui/src/chat/markdown/FlowerMarkdownBlock';
 import { markdownMediaEnUS } from '../../../../flower_ui/src/chat/markdown/mediaCopy';
-import { adapter, liveBootstrap, renderSurfaceWithAdapter, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, liveBootstrap, renderSurfaceWithAdapter, thread, waitFor } from './FlowerSurface.media.test-support';
 
 async function imageBlob(): Promise<Blob> {
   const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 440;
@@ -27,6 +33,91 @@ async function imageBlob(): Promise<Blob> {
 }
 
 describe('Flower inline media', () => {
+  it.each(['light', 'dark'] as const)('opens the existing file preview and containing folder from a chat image in %s mode', async (mode) => {
+    await page.viewport(1200, 900);
+    document.documentElement.classList.add(mode);
+    document.documentElement.dataset.floeShellTheme = mode === 'dark' ? 'classic-dark' : 'paper';
+    removeUIStorageItem(floatingWindowStorageKey('file-preview'));
+    const blob = await imageBlob();
+    const imageURL = URL.createObjectURL(blob);
+    const [item, setItem] = createSignal<FileItem>();
+    const [open, setOpen] = createSignal(false);
+    const previewHost = document.createElement('div');
+    document.body.appendChild(previewHost);
+    const dispose = render(() => <FloeConfigProvider><LayoutProvider>
+      <FilePreviewSurface open={open()} onOpenChange={setOpen} item={item()} descriptor={{ mode: 'image' }} objectUrl={imageURL}
+        onCopyPath={async () => true} onDownload={vi.fn()} onAskFlower={vi.fn()} />
+    </LayoutProvider></FloeConfigProvider>, previewHost);
+    onTestFinished(() => {
+      dispose(); previewHost.remove(); URL.revokeObjectURL(imageURL);
+      document.documentElement.classList.remove(mode);
+      document.documentElement.removeAttribute('data-floe-shell-theme');
+      removeUIStorageItem(floatingWindowStorageKey('file-preview'));
+    });
+    const openFilePreview = vi.fn(async (file: FileItem) => { setItem(file); setOpen(true); });
+    const openFileBrowserAtPath = vi.fn(async () => undefined);
+    const navigation = createFlowerLinkedContextNavigation({
+      openFilePreview, openFileBrowserAtPath,
+      notifyInvalidFilePath: vi.fn(), notifyInvalidDirectoryPath: vi.fn(),
+    });
+    const seed = thread({ thread_id: 'image-actions', title: 'Workspace design', messages: [{
+      id: 'image-reply', role: 'assistant', status: 'complete', turn_id: 'turn-image', created_at_ms: 2,
+      content: 'Here is the updated workspace.\n\n![Workspace overview](/workspace/design/overview.png)\n\nOpen the image to take a closer look, or jump to its folder.',
+    }] });
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: async () => [seed],
+      loadThread: async () => liveBootstrap(seed, 1), loadMessageFile: async () => blob,
+      openMessageFile: navigation.openMessageFile,
+    });
+    runtime.style.height = '880px';
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="image-actions"] button')));
+    runtime.querySelector<HTMLButtonElement>('[data-thread-id="image-actions"] button')!.click();
+    await waitFor(() => Boolean(runtime.querySelector('.chat-media-image')));
+    const image = runtime.querySelector<HTMLImageElement>('.chat-media-image')!;
+    await waitFor(() => image.complete && image.naturalWidth > 0);
+    const media = image.closest<HTMLElement>('.chat-media')!;
+    const trigger = media.querySelector<HTMLButtonElement>('.chat-media-image-button')!;
+    const folder = media.querySelector<HTMLButtonElement>('button[aria-label="Open containing folder"]')!;
+    const preview = media.querySelector<HTMLButtonElement>('button[aria-label="Preview image"]')!;
+    expect(media.querySelector('a')).toBeNull();
+    expect(folder).toBeTruthy();
+    expect(preview).toBeTruthy();
+    expect(folder.title).toBe('Open containing folder');
+    expect(preview.title).toBe('Preview image');
+    await userEvent.hover(trigger);
+    await waitFor(() => getComputedStyle(folder.parentElement!).opacity === '1');
+    await page.screenshot({ path: `./__screenshots__/redeven-flower-image-actions-${mode}.png` });
+    await userEvent.click(folder);
+    expect(openFileBrowserAtPath).toHaveBeenCalledWith('/workspace/design', { title: 'design', openStrategy: 'focus_latest_or_create' });
+    expect(openFilePreview).not.toHaveBeenCalled();
+    expect(document.querySelector('.file-preview-floating-window')).toBeNull();
+    await userEvent.click(trigger);
+    await waitFor(() => Boolean(document.querySelector('.file-preview-floating-window .redeven-file-preview img')));
+    const window = document.querySelector<HTMLElement>('.file-preview-floating-window')!;
+    expect(openFilePreview).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/workspace/design/overview.png' }), { focus: true, reusePolicy: 'same_file_or_create' });
+    expect(window.querySelector('h2')!.textContent).toBe('overview.png');
+    expect(document.querySelector('.chat-media-preview-window')).toBeNull();
+    expect(document.querySelector('[aria-modal="true"]')).toBeNull();
+    const fullImage = window.querySelector<HTMLImageElement>('img')!;
+    await waitFor(() => fullImage.complete && fullImage.naturalWidth > 0 && getComputedStyle(window).opacity === '1');
+    await page.screenshot({ path: `./__screenshots__/redeven-flower-image-window-${mode}.png` });
+    // Repeated requests retain the same host surface.
+    preview.click();
+    expect(openFilePreview).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('.file-preview-floating-window')).toBe(window);
+    window.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
+    await waitFor(() => !document.querySelector('.file-preview-floating-window'));
+    preview.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => Boolean(document.querySelector('.file-preview-floating-window')));
+    expect(openFilePreview).toHaveBeenCalledTimes(3);
+    document.querySelector<HTMLButtonElement>('.file-preview-floating-window [data-floe-floating-window-control="close"]')!.click();
+    await waitFor(() => !document.querySelector('.file-preview-floating-window'));
+    await page.viewport(390, 844);
+    await waitFor(() => image.getBoundingClientRect().width <= 390);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+    expect(folder.getBoundingClientRect().right).toBeLessThanOrEqual(media.getBoundingClientRect().right);
+  });
+
   it('renders an assistant screenshot, file preview, and web link through the real conversation surface', async () => {
     await page.viewport(1200, 950);
     const ref = `computer://browser-main/${'a'.repeat(64)}`;
