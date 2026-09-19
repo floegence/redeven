@@ -59,6 +59,7 @@ import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } fro
 import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
+import { FlowerSetupWelcome } from './chat/FlowerSetupWelcome';
 import type { FlowerChatContextChip, FlowerChatContextSnapshotPreview } from './contracts/flowerChatContextTypes';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
 import type { FlowerSubagentsCopy, FlowerSurfaceCopy } from './copy';
@@ -2844,6 +2845,11 @@ webSearch: model.web_search,
     return null;
   });
   const needsSetup = createMemo(() => !!snapshot() && !anyModelReady());
+  const showSetupWelcome = createMemo(() => {
+    const source = unavailableModelSource();
+    return needsSetup() && !selectedThreadID() && !snapshot()?.model_profile?.providers.length
+      && (!source || source.state === 'not_configured' || source.state === 'empty');
+  });
   const companionCompactComposer = createMemo(() => (
     presentation() === 'companion'
     && !companionCollapsed()
@@ -10357,6 +10363,11 @@ webSearch: model.web_search,
     }
     if (selectedThreadLoading() || (selectedThreadID() && !selectedThread())) return threadLoadingState();
     if (selectedThread()) return threadEmptyState();
+    if (showSetupWelcome()) return (
+      <FlowerSetupWelcome copy={copy()} actions={noModelProfileSetupActions()} onOpenSettings={openSettings}
+        refreshing={modelSourceRefreshing()} onRefresh={() => void refreshModelSource()}
+        onAction={(action) => void action.run().catch((error) => notifyComposerError(getErrorMessage(error)))} />
+    );
     return warmupCanReplaceTranscript()
       ? warmupPanel()
       : (
@@ -11185,7 +11196,7 @@ webSearch: model.web_search,
         unavailableLabel={attachmentCopy().errorUnavailable}
         onClose={() => setAttachmentPreview(null)}
       />
-      <div class="flower-chat-main flower-chat-main">
+      <div class="flower-chat-main" data-setup-welcome={showSetupWelcome() && !companionCollapsed() ? 'true' : undefined}>
         <div
           ref={(node) => {
             setComputerStageBoundary(node);

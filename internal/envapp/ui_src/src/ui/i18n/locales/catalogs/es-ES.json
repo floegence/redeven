@@ -5030,7 +5030,7 @@
       "blocked": "Bloqueado",
       "allowed": "Permitido",
       "providersTitle": "Proveedores",
-      "providersDescription": "Las tarjetas de proveedores muestran las fuentes de modelos del perfil de IA local y los detalles de sus capacidades.",
+      "providersDescription": "Conecta proveedores de modelos y gestiona los modelos disponibles para Flower.",
       "addProvider": "Agregar proveedor",
       "noProviders": "Aún no hay proveedores. Agrega OpenAI, Anthropic, Kimi, ChatGLM, DeepSeek, Qwen o un punto de conexión compatible con OpenAI.",
       "defaultProvider": "Predeterminado",

@@ -181,6 +181,8 @@ main() {
         src/ui/FlowerSurface.inputSubmission.browser.test.tsx \
         src/ui/FlowerSurface.inputResponse.browser.test.tsx \
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
+        src/ui/FlowerSurface.settings.browser.test.tsx \
+        src/ui/FlowerSettingsSurface.presentation.browser.test.tsx \
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \
         src/ui/FlowerSurface.reasoningSelection.browser.test.tsx \
         src/ui/FlowerSurface.terminalActivity.browser.test.tsx \

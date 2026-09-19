@@ -1161,7 +1161,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       },
     },
     providersTitle: 'Providers',
-    providersDescription: 'Provider cards show the Local AI Profile model sources and capability details.',
+    providersDescription: 'Connect model providers and manage the models available to Flower.',
     addProvider: 'Add provider',
     noProviders: 'No providers yet. Add OpenAI, Anthropic, Kimi, ChatGLM, DeepSeek, Qwen, OpenRouter, xAI, Groq, Ollama, or a custom endpoint.',
     defaultProvider: 'Default',

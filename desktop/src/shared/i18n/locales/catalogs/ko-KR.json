@@ -680,7 +680,7 @@
       "blocked": "차단됨",
       "allowed": "허용됨",
       "providersTitle": "모델 제공업체",
-      "providersDescription": "모델 제공업체 카드에는 Local AI Profile의 모델 소스와 기능 세부 정보가 표시됩니다.",
+      "providersDescription": "모델 제공업체를 연결하고 Flower에서 사용할 모델을 관리하세요.",
       "addProvider": "모델 제공업체 추가",
       "noProviders": "아직 모델 제공업체가 없습니다. OpenAI, Anthropic, Kimi, ChatGLM, DeepSeek, Qwen 또는 OpenAI 호환 엔드포인트를 추가하세요.",
       "defaultProvider": "기본값",

@@ -680,7 +680,7 @@
       "blocked": "已阻止",
       "allowed": "已允許",
       "providersTitle": "模型供應商",
-      "providersDescription": "模型供應商卡片會顯示本機 AI 設定檔中的模型來源與功能詳細資訊。",
+      "providersDescription": "連接模型供應商，管理 Flower 可用的模型。",
       "addProvider": "新增模型供應商",
       "noProviders": "尚無模型供應商。新增 OpenAI、Anthropic、Kimi、ChatGLM、DeepSeek、Qwen 或 OpenAI 相容端點。",
       "defaultProvider": "預設",
