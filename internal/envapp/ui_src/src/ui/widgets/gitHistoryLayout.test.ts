@@ -167,24 +167,13 @@ describe('browser workspace layout wiring', () => {
     expect(navSrc).not.toContain('gitToneSelectableCardClass');
   });
 
-  it('keeps changes and branch compare on dialog-based diff flows while history stays patch-driven', () => {
-    const changesSrc = read('./GitChangesPanel.tsx');
-    const branchesSrc = read('./GitBranchesPanel.tsx');
-    const historySrc = read('./GitHistoryBrowser.tsx');
-    const commitDialogSrc = read('./GitCommitDialog.tsx');
-
-    expect(changesSrc).toMatch(/import\s+\{\s*GitDiffDialog\s*\}\s+from\s+["']\.\/GitDiffDialog["'];/);
-    expect(branchesSrc).toMatch(/import\s+\{\s*GitDiffDialog\s*\}\s+from\s+["']\.\/GitDiffDialog["'];/);
-    expect(historySrc).toMatch(/import\s+\{\s*GitDiffDialog\s*\}\s+from\s+["']\.\/GitDiffDialog["'];/);
-    expect(historySrc).not.toMatch(/import\s+\{\s*GitPatchViewer\s*\}\s+from\s+["']\.\/GitPatchViewer["'];/);
-    expect(changesSrc).toContain('gitChangePathClass(item.changeType)');
-    expect(branchesSrc).toContain('gitChangePathClass(item.changeType)');
-    expect(historySrc).toContain('gitChangePathClass(file.changeType)');
-    expect(commitDialogSrc).toContain('gitChangePathClass(item.changeType)');
-    expect(changesSrc).toContain('GitChangeStatusPill');
-    expect(branchesSrc).toContain('GitTableBadge tone={gitChangeTone(item.changeType ?? undefined)}');
-    expect(historySrc).toContain('GitChangeStatusPill');
-    expect(commitDialogSrc).toContain('GitChangeStatusPill');
+  it('shares inline inspection across workspace, branches, and commit history', () => {
+    for (const file of ['./GitChangesPanel.tsx', './GitBranchesPanel.tsx', './GitHistoryBrowser.tsx']) {
+      const source = read(file);
+      expect(source).toContain('<GitDiffSplit');
+      expect(source).toContain('<GitDiffPanel');
+      expect(source).not.toContain('<GitDiffDialog');
+    }
   });
 
 
@@ -201,10 +190,7 @@ describe('browser workspace layout wiring', () => {
     expect(historySrc).toContain('data-git-commit-overview-layout={commitOverviewLayout()}');
     expect(historySrc).toContain("i18n.t('uiCopy.git.filesInCommit')");
     expect(historySrc).not.toContain('Patch Preview');
-    expect(historySrc).toContain("i18n.t('uiCopy.git.clickFileDiff')");
-    expect(historySrc).toContain("title={i18n.t('uiCopy.git.commitDiff')}");
     expect(historySrc).toContain('aria-expanded={commitBodyExpanded()}');
-    expect(historySrc).toContain('class="space-y-3"');
     expect(historySrc).toContain('resolveGitBranchHeaderLayout');
     expect(historySrc).toContain('const [commitOverviewWidth, setCommitOverviewWidth] = createSignal(0);');
     expect(historySrc).toContain('new ResizeObserver(syncCommitOverviewWidth)');
@@ -218,7 +204,6 @@ describe('browser workspace layout wiring', () => {
     expect(historySrc).toContain('data-git-commit-files-list-layout="compact"');
     expect(historySrc).not.toContain('flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between');
     expect(historySrc).not.toContain('flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto');
-    expect(historySrc).toContain('min-w-[34rem] sm:min-w-[42rem] md:min-w-0');
   });
 
   it('routes branch review through status and history views with compare in a dialog', () => {
@@ -290,7 +275,7 @@ describe('browser workspace layout wiring', () => {
     expect(changesSrc).toContain('GitChangeStatusPill');
     expect(changesSrc).toContain('useI18n');
     expect(changesSrc).toContain('GitCommitDialog');
-    expect(changesSrc).toContain('GitDiffDialog');
+    expect(changesSrc).toContain('GitDiffPanel');
     expect(changesSrc).toContain('GitChangesBreadcrumb');
     expect(changesSrc).toContain('resolveGitChangesHeaderDensity');
     expect(changesSrc).toContain('buildGitChangesHeaderPresentation');
@@ -304,7 +289,6 @@ describe('browser workspace layout wiring', () => {
     expect(changesSrc).toContain('grid items-center gap-2 grid-cols-[auto_minmax(0,1fr)_auto]');
     expect(changesSrc).toContain('git-changes-toolbar-status-row mt-1.5 flex flex-wrap items-center justify-between gap-2');
     expect(changesSrc).toContain('flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground');
-    expect(changesSrc).toContain('min-w-[34rem] sm:min-w-[42rem] md:min-w-0');
     expect(changesHeaderLayoutSrc).toContain("export type GitChangesHeaderDensity = 'comfortable' | 'compact' | 'collapsed'");
     expect(changesHeaderLayoutSrc).toContain("export type GitChangesHeaderLayoutMode = 'default' | 'quiet_inline'");
     expect(changesHeaderLayoutSrc).toContain('GIT_CHANGES_HEADER_COMPACT_MIN_WIDTH = 620');
@@ -350,9 +334,7 @@ describe('browser workspace layout wiring', () => {
     expect(changesSrc).toContain('<GitTableFrame class="flex h-full min-h-0 flex-col rounded-none border-0">');
 
     expect(historySrc).toContain('GitPanelFrame');
-    expect(historySrc).toContain('GitTableFrame');
     expect(historySrc).toContain('<GitPanelFrame as="section" class="!px-4 !py-3">');
-    expect(historySrc).toContain('<GitTableFrame class="mt-2.5">');
 
     expect(branchesSrc).toContain('GitTableFrame');
     expect(branchesSrc).toContain('<GitTableFrame class="flex min-h-0 flex-1 flex-col">');
@@ -545,6 +527,7 @@ describe('browser workspace layout wiring', () => {
 
   it('keeps git diff surfaces aligned with floe-webapp dialog style', () => {
     const dialogSrc = read('./GitDiffDialog.tsx');
+    const panelSrc = read('./GitDiffPanel.tsx');
     const patchSrc = read('./GitPatchViewer.tsx');
     const patchUtilSrc = read('../utils/gitPatch.ts');
 
@@ -552,21 +535,19 @@ describe('browser workspace layout wiring', () => {
     expect(dialogSrc).toContain('rounded-md p-0');
     expect(dialogSrc).toContain('[&>div:last-child]:min-h-0');
     expect(dialogSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
-    expect(dialogSrc).toContain("i18n.t('uiCopy.git.fullContext')");
-    expect(dialogSrc).toContain("i18n.t('gitDiff.loadingFullContext')");
-    expect(dialogSrc).toContain("i18n.t('gitDiff.patchDescription')");
-    expect(dialogSrc).toContain("i18n.t('gitDiff.fullContextDescription')");
+    expect(panelSrc).toContain("i18n.t('uiCopy.git.fullContext')");
+    expect(panelSrc).toContain("i18n.t('gitDiff.loadingFullContext')");
     expect(dialogSrc).not.toContain('border-0');
     expect(dialogSrc).not.toContain('rounded-[20px]');
     expect(dialogSrc).not.toContain('rounded-xl');
     expect(patchSrc).toContain("import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';");
     expect(patchSrc).toContain("fallback={<div class={cn('rounded-md border px-3 py-2 text-xs leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{props.emptyMessage}</div>}");
-    expect(patchSrc).toContain('class="flex h-full min-h-0 flex-col gap-3 rounded-md bg-muted/[0.08] p-3"');
-    expect(patchSrc).toContain("const desktopPatchViewportClass = createMemo(() => props.desktopPatchViewportClass ?? 'max-h-[28rem]');");
+    expect(patchSrc).toContain('props.fillViewport && "git-patch-viewer--embedded"');
+    expect(patchSrc).toContain("props.fillViewport ? 'flex-1 max-h-none' : 'max-h-[28rem]'");
     expect(patchSrc).toContain("const mobilePatchViewportClass = createMemo(() => props.mobilePatchViewportClass ?? 'flex-1 max-h-none');");
     expect(patchSrc).toContain('layout.isMobile() ? mobilePatchViewportClass() : desktopPatchViewportClass()');
     expect(patchSrc).toContain("class={cn(");
-    expect(patchSrc).toContain("'min-h-0 overflow-auto rounded-md border bg-background p-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]'");
+    expect(patchSrc).toContain("'git-patch-viewer__viewport min-h-0 overflow-auto rounded-md border bg-background p-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]'");
     expect(patchSrc).toContain("redevenSurfaceRoleClass('control')");
     expect(patchSrc).toContain("i18n.t('git.patchViewer.mobileHorizontalHint')");
     expect(patchSrc).toContain('[touch-action:pan-x_pan-y_pinch-zoom]');
@@ -574,7 +555,7 @@ describe('browser workspace layout wiring', () => {
     expect(patchSrc).toContain('grid w-max min-w-full');
     expect(patchSrc).toContain('minmax(max-content,1fr)');
     expect(patchSrc).toContain('grid-cols-[2.25rem_2.25rem_minmax(max-content,1fr)]');
-    expect(patchSrc).toContain("class={cn('border-r px-1.5 text-right font-mono text-[10.5px] leading-[1.6] text-muted-foreground/60', redevenDividerRoleClass())}");
+    expect(patchSrc).toContain("props.fillViewport ? 'text-[11px] leading-5' : 'text-[10.5px] leading-[1.6]'");
     expect(patchSrc).toContain("class={cn('cursor-pointer rounded-md border px-2.5 py-2 text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 sm:py-1', redevenSurfaceRoleClass('controlMuted'))}");
     expect(patchSrc).not.toContain('chat-tool-apply-patch');
     expect(patchUtilSrc).toContain("export * from '../../../../../flower_ui/src/gitPatch';");
