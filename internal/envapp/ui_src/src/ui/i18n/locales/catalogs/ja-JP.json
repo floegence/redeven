@@ -4440,6 +4440,19 @@
       "modelSupportUnavailable": "添付ファイルの対応状況を確認できません"
     },
     "chat": {
+      "media": {
+        "image": "画像",
+        "video": "動画",
+        "audio": "音声",
+        "html": "インタラクティブプレビュー",
+        "loading": "プレビューを読み込み中…",
+        "unavailable": "プレビューを表示できません",
+        "retry": "再試行",
+        "expand": "プレビューを拡大",
+        "collapse": "プレビューを縮小",
+        "open": "元のファイルを開く",
+        "close": "プレビューを閉じる"
+      },
       "webSearch": {
         "search": "検索",
         "openPage": "ページを開く",

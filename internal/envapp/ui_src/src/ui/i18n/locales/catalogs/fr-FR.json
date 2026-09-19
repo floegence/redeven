@@ -4440,6 +4440,19 @@
       "modelSupportUnavailable": "Impossible de vérifier la prise en charge des pièces jointes"
     },
     "chat": {
+      "media": {
+        "image": "Image",
+        "video": "Vidéo",
+        "audio": "Audio",
+        "html": "Aperçu interactif",
+        "loading": "Chargement de l’aperçu…",
+        "unavailable": "Aperçu indisponible",
+        "retry": "Réessayer",
+        "expand": "Agrandir l’aperçu",
+        "collapse": "Réduire l’aperçu",
+        "open": "Ouvrir l’original",
+        "close": "Fermer l’aperçu"
+      },
       "webSearch": {
         "search": "Rechercher",
         "openPage": "Ouvrir la page",

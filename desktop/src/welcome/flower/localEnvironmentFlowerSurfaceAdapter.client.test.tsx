@@ -133,6 +133,18 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
+  it('loads local media through the bounded preview route and honors cancellation', async () => {
+    const bytes = new Uint8Array([0, 128, 255]);
+    const bridge = bridgeFor(() => ({ bytes, mime_type: 'video/mp4' }));
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+    const controller = new AbortController();
+    const blob = await adapter.loadMessageFile!({ path: '/project/a b.mp4', signal: controller.signal });
+    expect(blob.type).toBe('video/mp4');
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes);
+    expect(bridge.requestRuntimeFlower).toHaveBeenCalledWith({ method: 'GET', path: '/_redeven_proxy/api/fs/file?path=%2Fproject%2Fa+b.mp4&preview=1' });
+    controller.abort();
+    await expect(adapter.loadMessageFile!({ path: '/project/a b.mp4', signal: controller.signal })).rejects.toThrow();
+  });
   it('sends relative pin moves through the runtime bridge without loading detail', async () => {
     const pin = { thread_id: 'thread/source', pinned_at_unix_ms: 10, pin_rank: 3, settings_revision: 20 };
     const bridge = bridgeFor(() => ({ pins: [pin] }));

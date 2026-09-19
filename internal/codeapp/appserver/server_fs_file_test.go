@@ -514,3 +514,45 @@ func TestServerFSFileContentTypeFallbacks(t *testing.T) {
 		}
 	}
 }
+
+func TestFSFileChatHTMLPreviewIsInertAndBounded(t *testing.T) {
+	home := t.TempDir()
+	file := filepath.Join(home, "report.html")
+	content := []byte("<script>parent.compromised=true</script><h1>Report</h1>")
+	if err := os.WriteFile(file, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	srv, origin := newFSFileTestServer(t, home, session.Meta{CanRead: true}, nil)
+	rr := performFSAPIRequest(srv, http.MethodGet, fsFileResourcePath(file)+"&preview=1", origin, "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("preview status = %d: %s", rr.Code, rr.Body)
+	}
+	if rr.Header().Get("Content-Type") != "text/plain; charset=utf-8" || rr.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("active HTML must never be served on the application origin: %v", rr.Header())
+	}
+	if !bytes.Equal(rr.Body.Bytes(), content) {
+		t.Fatal("HTML source changed")
+	}
+	ordinary := performFSFileRequest(srv, http.MethodGet, file, origin, "")
+	if ordinary.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("ordinary HTML response = %d", ordinary.Code)
+	}
+	if err := os.WriteFile(file, bytes.Repeat([]byte("x"), 1_000_001), 0600); err != nil {
+		t.Fatal(err)
+	}
+	oversized := performFSAPIRequest(srv, http.MethodGet, fsFileResourcePath(file)+"&preview=1", origin, "")
+	if oversized.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized preview = %d", oversized.Code)
+	}
+	denied, deniedOrigin := newFSFileTestServer(t, home, session.Meta{}, nil)
+	if got := performFSAPIRequest(denied, http.MethodGet, fsFileResourcePath(file)+"&preview=1", deniedOrigin, ""); got.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized preview = %d", got.Code)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.html")
+	if err := os.WriteFile(outside, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := performFSAPIRequest(srv, http.MethodGet, fsFileResourcePath(outside)+"&preview=1", origin, ""); got.Code != http.StatusForbidden {
+		t.Fatalf("out of scope preview = %d", got.Code)
+	}
+}

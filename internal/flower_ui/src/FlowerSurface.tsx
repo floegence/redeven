@@ -62,6 +62,7 @@ import { FlowerEmptyState } from './chat/FlowerEmptyState';
 import { FlowerSetupWelcome } from './chat/FlowerSetupWelcome';
 import type { FlowerChatContextChip, FlowerChatContextSnapshotPreview } from './contracts/flowerChatContextTypes';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
+import { resolveFlowerMarkdownMedia } from './chat/markdown/flowerMarkdownMedia';
 import type { FlowerSubagentsCopy, FlowerSurfaceCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
 import type {
@@ -9369,6 +9370,10 @@ webSearch: model.web_search,
         <FlowerMarkdownBlock
           content={block().content}
           streaming={streaming()}
+          mediaLabels={message().role === 'assistant' ? copy().chat.media : undefined}
+          resolveMedia={(source, signal) => resolveFlowerMarkdownMedia(source, signal, {
+            adapter: props.adapter, threadID: selectedThreadID(), workingDirectory: selectedThreadWorkingDirectory(),
+          })}
           copyCodeLabel={copy().chat.copyCode}
           codeCopiedLabel={copy().chat.codeCopied}
         />

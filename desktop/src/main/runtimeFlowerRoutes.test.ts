@@ -5,6 +5,15 @@ import { runtimeFlowerMethodAllowed, runtimeFlowerPath } from './runtimeFlowerRo
 const base = '/_redeven_proxy/api/ai/computer';
 
 describe('Desktop computer management routes', () => {
+  it('allows bounded file previews with exactly one path and the inert preview flag', () => {
+    const path = '/_redeven_proxy/api/fs/file?path=%2Fproject%2Freport.html&preview=1';
+    expect(runtimeFlowerPath(path)).toBe(path);
+    expect(runtimeFlowerMethodAllowed(path, 'GET')).toBe(true);
+    expect(runtimeFlowerMethodAllowed(path, 'POST')).toBe(false);
+    for (const suffix of ['?path=x', '?path=x&preview=0', '?path=x&preview=1&preview=1', '?path=x&preview=1&secret=y']) {
+      expect(() => runtimeFlowerPath('/_redeven_proxy/api/fs/file' + suffix)).toThrow();
+    }
+  });
   it.each<[string, RuntimeFlowerRequestMethod[]]>([
     ['/candidates?thread_id=thread-1', ['GET']], ['/select', ['POST']], ['/reveal', ['POST']],
     ['/targets', ['GET']], ['/tabs', ['POST']], ['/disconnect', ['POST']],

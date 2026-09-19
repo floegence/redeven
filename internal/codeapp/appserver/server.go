@@ -2350,7 +2350,12 @@ func (g *Server) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 	resolvedPath := resolved.RealAbs
 
 	ct := fsFileContentType(resolvedPath)
-	if !isRenderableMime(ct) {
+	preview := r.URL.Query().Get("preview") == "1"
+	htmlPreview := preview && (strings.EqualFold(filepath.Ext(resolvedPath), ".html") || strings.EqualFold(filepath.Ext(resolvedPath), ".htm"))
+	if htmlPreview {
+		ct = "text/plain; charset=utf-8"
+	}
+	if !htmlPreview && !isRenderableMime(ct) {
 		http.Error(w, "unsupported file type", http.StatusUnsupportedMediaType)
 		return
 	}
@@ -2371,8 +2376,13 @@ func (g *Server) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not a file", http.StatusBadRequest)
 		return
 	}
+	if preview && (st.Size() > 64<<20 || (htmlPreview && st.Size() > 1_000_000)) {
+		http.Error(w, "preview is too large", http.StatusRequestEntityTooLarge)
+		return
+	}
 
 	w.Header().Set("Content-Type", ct)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, no-store")
 	http.ServeContent(w, r, filepath.Base(resolvedPath), st.ModTime(), f)
 }

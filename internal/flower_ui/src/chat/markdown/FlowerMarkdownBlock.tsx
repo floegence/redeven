@@ -4,6 +4,7 @@ import { render } from 'solid-js/web';
 import { Marked } from 'marked';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, Copy } from '@floegence/floe-webapp-core/icons';
+import { MarkdownMedia, readMarkdownMediaPlaceholder, type MarkdownMediaLabels, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 
 import { writeTextToClipboard } from '../../clipboard';
 import { createFlowerMarkdownRenderer } from './markedConfig';
@@ -20,17 +21,19 @@ export interface FlowerMarkdownBlockProps {
   streaming?: boolean;
   copyCodeLabel: string;
   codeCopiedLabel: string;
+  mediaLabels?: MarkdownMediaLabels;
+  resolveMedia?: MarkdownMediaProps['resolve'];
   class?: string;
 }
 
-const marked = new Marked<string, string>({
-  gfm: true,
-  breaks: false,
-  pedantic: false,
-});
-marked.use({ renderer: createFlowerMarkdownRenderer() });
-
 export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) => {
+  const marked = new Marked<string, string>({
+    gfm: true,
+    breaks: false,
+    pedantic: false,
+  });
+  marked.use({ renderer: createFlowerMarkdownRenderer({ media: props.mediaLabels !== undefined }) });
+
   const [copiedButton, setCopiedButton] = createSignal<HTMLButtonElement | null>(null);
   const displayContent = createMemo(() => normalizeMarkdownForDisplay(String(props.content ?? '')));
   const renderMarkdown = createMarkdownRenderModel(marked);
@@ -109,8 +112,9 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     });
   };
 
-  const decorateRegion = (element: Accessor<HTMLDivElement>, content: Accessor<unknown>) => {
+  const decorateRegion = (element: Accessor<HTMLDivElement>, content: Accessor<unknown>, mountMedia = true) => {
     let buttons: readonly HTMLButtonElement[] = [];
+    const media = new Map<HTMLElement, () => void>();
     const release = (button: HTMLButtonElement) => {
       iconCleanups.get(button)?.();
       iconCleanups.delete(button);
@@ -128,9 +132,23 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
           if (!root.contains(button)) release(button);
         }
         buttons = decorateFlowerMarkdownCodeBlocks(root, labels, mountCopyIcons);
+        for (const [node, dispose] of media) {
+          if (!root.contains(node)) { dispose(); media.delete(node); }
+        }
+        for (const node of root.querySelectorAll<HTMLElement>('[data-floe-markdown-media]')) {
+          if (media.has(node) || !props.mediaLabels) continue;
+          const source = readMarkdownMediaPlaceholder(node);
+          if (!source) continue;
+          if (!mountMedia) { node.textContent = source.title || source.src || props.mediaLabels.html; continue; }
+          media.set(node, render(() => <MarkdownMedia source={source} labels={props.mediaLabels!} resolve={props.resolveMedia} />, node));
+        }
       });
     });
-    onCleanup(() => { for (const button of buttons) release(button); });
+    onCleanup(() => {
+      for (const button of buttons) release(button);
+      for (const dispose of media.values()) dispose();
+      media.clear();
+    });
   };
 
   const HtmlSegment: Component<{ segmentKey: string }> = (segmentProps) => {
@@ -143,7 +161,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
   const TailFrame: Component = () => {
     let element!: HTMLDivElement;
     const tail = createMemo(() => snapshot().tail);
-    decorateRegion(() => element, () => tail().kind === 'html' ? tail() : null);
+    decorateRegion(() => element, () => tail().kind === 'html' ? tail() : null, false);
     return <div ref={element} class="flower-chat-md-tail-frame"><StreamingMarkdownTail tail={tail()} /></div>;
   };
 

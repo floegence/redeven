@@ -253,6 +253,7 @@ import {
   openRuntimeFlowerHTTPStream,
   runtimeFlowerPrivateBridgeHeaders,
   runtimeFlowerComputerFrame,
+  runtimeFlowerMessageFile,
 	runtimeFlowerInvalidJSONError,
   type RuntimeFlowerHTTPResponse,
 } from './runtimeFlowerHTTP';
@@ -10413,6 +10414,9 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   }
   if ((RUNTIME_FLOWER_COMPUTER_MEDIA_PATH.test(path) || path.startsWith('/_redeven_proxy/api/ai/computer/private-frame?')) && response.status === 200) {
     return { ok: true, data: runtimeFlowerComputerFrame(response) };
+  }
+  if (path.startsWith('/_redeven_proxy/api/fs/file?') && response.status === 200) {
+    return { ok: true, data: runtimeFlowerMessageFile(response) };
   }
   const invalidJSONError = runtimeFlowerInvalidJSONError(response, parsed);
   if (invalidJSONError) {

@@ -13,7 +13,7 @@ Redeven Desktop owns the global `system | light | dark` source and the remembere
 
 ## Catalog and authority
 
-The shared Desktop contract derives admitted ids, defaults, and semantic metadata from published Floe Webapp v0.56.17's browser-neutral `/themes` entry. Its 26 presets include 12 light and 14 dark choices, with Porcelain first in each mode and the other presets retaining their published relative order. Porcelain Light uses warm ivory surfaces and dark ink. Porcelain Dark uses near-black backgrounds, charcoal surfaces, and warm white text. Its idle input edges are deliberately quiet; the shared focus border provides stronger interaction feedback. Redeven must not copy the palette or weaken the upstream high-contrast and forced-color behavior.
+The shared Desktop contract derives admitted ids, defaults, and semantic metadata from published Floe Webapp v0.57.1's browser-neutral `/themes` entry. Its 26 presets include 12 light and 14 dark choices, with Porcelain first in each mode and the other presets retaining their published relative order. Porcelain Light uses warm ivory surfaces and dark ink. Porcelain Dark uses near-black backgrounds, charcoal surfaces, and warm white text. Its idle input edges are deliberately quiet; the shared focus border provides stronger interaction feedback. Redeven must not copy the palette or weaken the upstream high-contrast and forced-color behavior.
 
 The selection schema remains version 1, persisted separately from the source key. Invalid versions, unknown ids, and cross-mode ids normalize independently to the upstream per-mode defaults. Valid stored selections, including Classic presets, remain unchanged.
 

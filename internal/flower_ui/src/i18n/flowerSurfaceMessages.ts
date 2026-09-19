@@ -1,3 +1,4 @@
+import { markdownMediaEnUS } from '../chat/markdown/mediaCopy';
 import { toolActivityEnUS } from '../toolActivityCopy';
 import { computerUseEnUS } from '../computerUseCopy';
 import { reasoningControlEnUS } from './reasoningControlMessages';
@@ -50,6 +51,7 @@ export const flowerSurfaceEnUS = {
     modelSupportUnavailable: 'Could not check attachment support',
   },
   chat: {
+    media: markdownMediaEnUS,
     restoredInputTitle: "Input preserved after restore",
     restoredInputDescription: "This input will not run automatically. Copy it into a new task to run it again.",
     restoredInputCopy: "Copy input",

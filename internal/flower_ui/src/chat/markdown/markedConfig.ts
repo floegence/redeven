@@ -1,4 +1,5 @@
 import type { RendererObject, Token, Tokens } from 'marked';
+import { markdownMediaKind, markdownMediaPlaceholder } from '@floegence/floe-webapp-core/chat-media';
 
 type MarkdownInlineToken = Token & {
   href?: string;
@@ -83,18 +84,28 @@ function renderLink(token: MarkdownLinkToken): string {
   return `<a href="${escapeFlowerMarkdownHtml(safeHref)}" class="flower-chat-md-link"${externalAttrs}${titleAttr}>${label}</a>`;
 }
 
-export function createFlowerMarkdownRenderer(): RendererObject<string, string> {
+function safeMediaReference(href: string): boolean {
+  return ![...href].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 || char === '\\') && !href.startsWith('//')
+    && (!/^[a-z][a-z0-9+.-]*:/i.test(href) || /^(https?:\/\/|computer:\/\/)/i.test(href));
+}
+
+export function createFlowerMarkdownRenderer(options: { media?: boolean } = {}): RendererObject<string, string> {
   return {
     html(token: { text?: string; raw?: string }) {
       return escapeFlowerMarkdownHtml(String(token.text ?? token.raw ?? ''));
     },
     link(token: MarkdownLinkToken) {
+      const kind = markdownMediaKind(token.href);
+      if (options.media && kind && safeMediaReference(token.href)) return markdownMediaPlaceholder({ kind, src: token.href, title: token.text });
       return renderLink(token);
     },
     codespan(token: { text: string }) {
       return `<code class="flower-chat-md-inline-code">${escapeFlowerMarkdownHtml(token.text)}</code>`;
     },
     code(token: { text: string; lang?: string }) {
+      if (options.media && token.lang?.trim().toLowerCase() === 'html preview') {
+        return markdownMediaPlaceholder({ kind: 'html', html: token.text, title: '' });
+      }
       const langClass = normalizeLanguageClass(token.lang);
       return `<pre class="flower-chat-md-code-block"><code class="${langClass}">${escapeFlowerMarkdownHtml(token.text)}</code></pre>`;
     },
@@ -102,10 +113,13 @@ export function createFlowerMarkdownRenderer(): RendererObject<string, string> {
       return `<blockquote class="flower-chat-md-blockquote">${this.parser.parse(token.tokens)}</blockquote>`;
     },
     image(token: { href: string; title?: string | null; text: string }) {
-      const safeHref = safeFlowerMarkdownHref(token.href);
-      if (!safeHref) return escapeFlowerMarkdownHtml(token.text);
-      const titleAttr = token.title ? ` title="${escapeFlowerMarkdownHtml(token.title)}"` : '';
-      return `<img src="${escapeFlowerMarkdownHtml(safeHref)}" alt="${escapeFlowerMarkdownHtml(token.text)}" class="flower-chat-md-image"${titleAttr} />`;
+      if (!options.media) {
+        const href = safeFlowerMarkdownHref(token.href);
+        const titleAttr = token.title ? ` title="${escapeFlowerMarkdownHtml(token.title)}"` : '';
+        return href ? `<img src="${escapeFlowerMarkdownHtml(href)}" alt="${escapeFlowerMarkdownHtml(token.text)}" class="flower-chat-md-image"${titleAttr} />` : escapeFlowerMarkdownHtml(token.text);
+      }
+      if (!safeMediaReference(token.href)) return escapeFlowerMarkdownHtml(token.text);
+      return markdownMediaPlaceholder({ kind: markdownMediaKind(token.href) ?? 'image', src: token.href, title: token.text || token.title || '' });
     },
   };
 }
