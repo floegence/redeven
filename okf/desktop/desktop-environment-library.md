@@ -25,6 +25,8 @@ Tab selection switches the name, status, facts, primary action, refresh, pin, se
 
 Selection belongs to the page session. Search and equivalent snapshots preserve it, including search temporarily hiding a card. Changing source filters resets to that scope's default, after which users can select either perspective. Switching tabs closes old menus and endpoint popovers without cancelling work. Already-open settings and Flower contexts remain bound to their original owner. Popovers, QR, focus, and progress use real owner IDs; perspective selection uses group IDs. Removing an owner prunes its selection and interactive surfaces. Stable owner and tab nodes preserve focus and selection across snapshot replacement.
 
+The page header keeps refresh and creation controls together in a compact action group. Only the search field grows to fill available toolbar space; narrow layouts wrap the action group as a unit and keep it aligned to the right. Tooltip anchors never inherit search-field sizing.
+
 Cards retain the existing responsive column model and share a compact header, facts area, and footer. Cards in each grid have equal heights and aligned action footers. Retained perspectives contribute to the same layout cell, so switching views does not change card height; the inactive perspective is invisible, inert, and hidden from assistive technology. Long identity and address values truncate with full details available; translated controls and enlarged text wrap without overlapping or hiding actions.
 
 ## Cloud sources and counts

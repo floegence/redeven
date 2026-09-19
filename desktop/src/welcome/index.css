@@ -4490,7 +4490,9 @@ pre,
 .redeven-other-owner-pin { display: flex; align-items: center; gap: .375rem; padding: 0 1rem .5rem; font-size: .6875rem; color: var(--muted-foreground); }
 .redeven-environment-owner-tab > span:last-child { max-width: none; white-space: normal; overflow-wrap: anywhere; }
 
-.redeven-center-actions > .relative { flex: 1 1 14.5rem; min-width: 0; }
+.redeven-center-actions { justify-content: flex-end; }
+.redeven-center-search { flex: 1 1 14.5rem; min-width: 0; }
+.redeven-center-action-group { flex: 0 1 auto; }
 .redeven-center-actions button,
 .redeven-cloud-source-header button {
   height: auto;
