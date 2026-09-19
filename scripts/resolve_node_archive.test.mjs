@@ -21,10 +21,15 @@ const args = process.argv.slice(2);
 const stateFile = ${JSON.stringify(stateFile)};
 const state = JSON.parse(readFileSync(stateFile));
 const isArchive = args.at(-1).endsWith('.tar.gz');
+const failure = state[isArchive ? 'archiveFailures' : 'checksumFailures']?.shift();
 state.requests.push({ isArchive, args });
 writeFileSync(stateFile, JSON.stringify(state));
+if (failure) {
+  if (!isArchive) process.stdout.write('incomplete checksum response');
+  process.exit(failure);
+}
 if (!isArchive) {
-  if (state.checksumFailure) process.exit(22);
+  if (state.checksumFailure) process.exit(state.checksumFailure);
   process.stdout.write(state.missingChecksum ? '' : state.digest + '  ' + state.archiveName + '\n');
 } else {
   const output = args[args.indexOf('--output') + 1];
@@ -75,6 +80,47 @@ test('successive builds reuse the verified archive without downloading it again'
   assert.equal(f.state().requests.filter(request => !request.isArchive).length, 2);
 });
 
+test('a checksum TLS handshake failure retries and then reuses the verified archive', t => {
+  const f = fixture(t);
+  const archive = resolveNodeArchive(f.options);
+  f.update({ requests: [], checksumFailures: [35] });
+  assert.equal(resolveNodeArchive(f.options), archive);
+  const requests = f.state().requests;
+  assert.equal(requests.length, 2);
+  assert.ok(requests.every(request => !request.isArchive));
+  assert.equal(readFileSync(archive, 'utf8'), f.bytes);
+});
+
+test('a cold build recovers from checksum connection resets and archive TLS failures', t => {
+  const f = fixture(t, { checksumFailures: [56, 35], archiveFailures: [35] });
+  assert.equal(readFileSync(resolveNodeArchive(f.options), 'utf8'), f.bytes);
+  assert.deepEqual(f.state().requests.map(request => request.isArchive), [false, false, false, true, true]);
+  for (const { args } of f.state().requests) {
+    assert.equal(args[args.indexOf('--proto') + 1], '=https');
+    assert.equal(args[args.indexOf('--proto-redir') + 1], '=https');
+    assert.ok(!args.includes('--insecure') && !args.includes('-k'));
+    assert.ok(args.at(-1).startsWith('https://nodejs.org/dist/v26.7.0/'));
+  }
+});
+
+test('persistent checksum TLS failures stop after three attempts without trusting cached bytes', t => {
+  const f = fixture(t);
+  const archive = resolveNodeArchive(f.options);
+  f.update({ requests: [], checksumFailure: 35 });
+  assert.throws(() => resolveNodeArchive(f.options), /checksum/i);
+  assert.deepEqual(f.state().requests.map(request => request.isArchive), [false, false, false]);
+  assert.equal(readFileSync(archive, 'utf8'), f.bytes);
+});
+
+for (const status of [22, 60, 77]) {
+  test(`checksum HTTP or certificate failures stop immediately (curl ${status})`, t => {
+    const f = fixture(t, { checksumFailure: status });
+    assert.throws(() => resolveNodeArchive(f.options), /checksum/i);
+    assert.equal(f.state().requests.length, 1);
+    assert.deepEqual(f.cachedFiles(), []);
+  });
+}
+
 test('a corrupted cache entry is replaced only by a newly verified archive', t => {
   const f = fixture(t);
   const archive = resolveNodeArchive(f.options);
@@ -100,12 +146,14 @@ test('a reset connection resumes the same temporary archive and verifies the com
   assert.equal(requests[0].args[requests[0].args.indexOf('--output') + 1], requests[1].args[requests[1].args.indexOf('--output') + 1]);
 });
 
-test('a non-transient HTTP failure is not retried or cached', t => {
-  const f = fixture(t, { archiveFailure: 22 });
-  assert.throws(() => resolveNodeArchive(f.options), /download/i);
-  assert.equal(f.state().requests.filter(request => request.isArchive).length, 1);
-  assert.deepEqual(f.cachedFiles(), []);
-});
+for (const status of [22, 60, 77]) {
+  test(`archive HTTP or certificate failures stop immediately (curl ${status})`, t => {
+    const f = fixture(t, { archiveFailure: status });
+    assert.throws(() => resolveNodeArchive(f.options), /download/i);
+    assert.equal(f.state().requests.filter(request => request.isArchive).length, 1);
+    assert.deepEqual(f.cachedFiles(), []);
+  });
+}
 
 test('a downloaded checksum mismatch is rejected without publishing a cache entry', t => {
   const f = fixture(t, { corrupt: true });
@@ -127,7 +175,7 @@ test('an explicit archive is verified and never replaced by a network download',
 test('unavailable or missing official checksums fail before downloading an archive', t => {
   const f = fixture(t, { missingChecksum: true });
   assert.throws(() => resolveNodeArchive(f.options), /checksum is missing/i);
-  f.update({ missingChecksum: false, checksumFailure: true });
+  f.update({ missingChecksum: false, checksumFailure: 22 });
   assert.throws(() => resolveNodeArchive(f.options), /checksum|curl/i);
   assert.equal(f.state().requests.filter(request => request.isArchive).length, 0);
 });
@@ -135,7 +183,7 @@ test('unavailable or missing official checksums fail before downloading an archi
 test('a cached archive still requires successful official checksum retrieval', t => {
   const f = fixture(t);
   const archive = resolveNodeArchive(f.options);
-  f.update({ checksumFailure: true });
+  f.update({ checksumFailure: 22 });
   assert.throws(() => resolveNodeArchive(f.options), /checksum|curl/i);
   assert.equal(readFileSync(archive, 'utf8'), f.bytes);
   assert.equal(f.state().requests.filter(request => request.isArchive).length, 1);

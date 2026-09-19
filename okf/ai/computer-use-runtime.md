@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Computer and browser use runtime
 description: Keep target execution, authorization and observation under one Runtime owner while composing semantic actions in bounded scripts.
 tags: [ai, computer-use, browser-use, targets]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-09-19T00:00:00Z
 ---
 # Summary
 
@@ -98,6 +98,13 @@ not raw browser exceptions, credentials or page contents.
 
 Node acquisition still verifies official checksums, uses an atomic digest-keyed
 builder cache and bounds stalled transfers. The cache is not a Runtime input.
+Checksum retrieval and archive transfers each make at most three attempts for
+transient transport errors, including TLS handshake disconnects (curl 35), with
+one- and two-second delays. Checksums are fetched anew for each attempt; archive
+transfers resume only the current build's temporary file. HTTP rejection,
+certificate validation failures and checksum mismatches stop without retry.
+Even cached or explicitly supplied archives require successful retrieval of the
+official checksum and a matching SHA-256 before use.
 Relocated-bundle qualification must run both Chromium and QuickJS without source
 or a browser cache. Native window capture continues to respect Desktop-window
 exclusion and never substitutes an unrestricted display capture after failure.
@@ -121,3 +128,4 @@ Desktop qualification and exact-main integration remain required for delivery.
 - `redeven:internal/runtimeservice/compatibility_contract.json` - exact compatibility window.
 - `redeven:scripts/stage_computer_resources.mjs` - pinned, hash-inventoried resources.
 - `redeven:scripts/stage_computer_resources.test.mjs` - relocated Chromium and QuickJS qualification.
+- `redeven:scripts/resolve_node_archive.test.mjs` - bounded checksum and archive retries, verified cache reuse and integrity failures.
