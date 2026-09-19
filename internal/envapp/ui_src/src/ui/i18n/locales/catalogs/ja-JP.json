@@ -3913,19 +3913,20 @@
     "title": {
       "recovering": "接続を復旧しています",
       "recovered": "接続が復旧しました",
-      "failed": "接続が中断されています",
-      "offline": "ネットワークへの接続を待機中"
+      "failed": "接続の確認が必要です",
+      "offline": "ネットワークへの接続を待機中",
+      "paused": "再接続を停止しました"
     },
     "summary": {
       "recovering": "ワークスペースは保持されています。自動的に再接続し、準備ができ次第戻ります。",
       "recovered": "再接続しました。ワークスペースに戻ります。",
       "failed": "自動復旧が停止しました。作業を続けるには、新しい接続を開始してください。",
-      "offline": "ネットワークが復旧すると自動的に再接続します。このページを開いたままお待ちください。"
+      "offline": "ネットワークが復旧すると自動的に再接続します。このページを開いたままお待ちください。",
+      "paused": "ワークスペースはここに保持されています。準備ができたら接続を再開できます。"
     },
     "steps": {
       "interrupted": "接続が中断されました",
       "desktopTransport": "Desktop トランスポートの復旧",
-      "runtimeProbe": "ランタイムの可用性確認",
       "protocolConnect": "プロトコル接続",
       "secureSession": "セキュアセッションの復旧",
       "completed": "接続完了"
@@ -3951,7 +3952,12 @@
       "secureSessionFailed": "セキュアセッションを再開できませんでした。",
       "remoteCommandEnded": "元のリモートランタイムブリッジコマンドが終了しました。",
       "processIdentityChanged": "リモートランタイムの識別情報が変わったため、このウィンドウを安全に再バインドできません。"
-    }
+    },
+    "stopRetry": "再試行を停止",
+    "resumeRetry": "接続を再開",
+    "automaticRetry": "自動再接続",
+    "connecting": "接続しています…",
+    "retryLimited": "サーバーの指示により、再試行まで少しお待ちください。"
   },
   "debugConsole": {
     "windowTitle": "デバッグコンソール",

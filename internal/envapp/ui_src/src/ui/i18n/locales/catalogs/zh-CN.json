@@ -3928,19 +3928,20 @@
     "title": {
       "recovering": "正在恢复连接",
       "recovered": "连接已恢复",
-      "failed": "连接已暂停",
-      "offline": "等待网络恢复"
+      "failed": "连接需要处理",
+      "offline": "等待网络恢复",
+      "paused": "已停止重连"
     },
     "summary": {
       "recovering": "工作区已保留，正在自动重新连接。连接恢复后即可继续。",
       "recovered": "连接已恢复，正在返回工作区。",
       "failed": "自动恢复已停止。重新连接环境后，即可继续工作。",
-      "offline": "网络恢复后会自动重新连接，请保持此页面打开。"
+      "offline": "网络恢复后会自动重新连接，请保持此页面打开。",
+      "paused": "工作区会保留在这里。准备好后，可继续连接。"
     },
     "steps": {
       "interrupted": "连接已中断",
       "desktopTransport": "恢复 Desktop 连接通道",
-      "runtimeProbe": "检查运行时可用性",
       "protocolConnect": "建立协议连接",
       "secureSession": "恢复安全会话",
       "completed": "连接完成"
@@ -3966,7 +3967,12 @@
       "secureSessionFailed": "无法恢复安全会话。",
       "remoteCommandEnded": "原远程运行时桥接命令已经结束。",
       "processIdentityChanged": "远程运行时的进程标识已变化，因此无法安全地将此窗口重新绑定。"
-    }
+    },
+    "stopRetry": "停止重试",
+    "resumeRetry": "继续连接",
+    "automaticRetry": "自动重新连接",
+    "connecting": "正在连接…",
+    "retryLimited": "服务器要求稍候再重试。"
   },
   "debugConsole": {
     "windowTitle": "调试控制台",

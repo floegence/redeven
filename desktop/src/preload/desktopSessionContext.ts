@@ -8,6 +8,7 @@ import {
   DESKTOP_PROVIDER_SESSION_RENEW_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL,
+  DESKTOP_SESSION_TRANSPORT_RECOVERY_STOP_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_UPDATED_CHANNEL,
   normalizeDesktopSessionTransportRecoverySnapshot,
   type DesktopSessionAppReadyPayload,
@@ -21,6 +22,7 @@ export interface DesktopSessionContextBridge {
   getTransportRecoverySnapshot: () => DesktopSessionTransportRecoverySnapshot | null;
   subscribeTransportRecovery: (listener: (snapshot: DesktopSessionTransportRecoverySnapshot) => void) => () => void;
   requestTransportRecoveryNow: () => Promise<boolean>;
+  stopTransportRecovery: () => Promise<boolean>;
   renewProviderSession: () => Promise<boolean>;
   notifyAppReady: (payload: DesktopSessionAppReadyPayload) => void;
 }
@@ -120,6 +122,9 @@ export function bootstrapDesktopSessionContextBridge(): void {
         recoveryListeners.delete(listener);
       };
     },
+    stopTransportRecovery: async () => (
+      await ipcRenderer.invoke(DESKTOP_SESSION_TRANSPORT_RECOVERY_STOP_CHANNEL)
+    ) === true,
     requestTransportRecoveryNow: async () => (
       await ipcRenderer.invoke(DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL)
     ) === true,

@@ -259,5 +259,9 @@ describe('bootstrapDesktopSessionContextBridge', () => {
     expect(snapshots[1]).toMatchObject({ phase: 'ready', revision: 5, attempt_count: 2 });
     await expect(bridge.requestTransportRecoveryNow()).resolves.toBe(true);
     expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:session-transport-recovery-retry');
+    await expect(bridge.stopTransportRecovery()).resolves.toBe(true);
+    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:session-transport-recovery-stop');
+    eventListener({}, { generation: 2, revision: 6, phase: 'paused', attempt_count: 2, actions: ['retry_now'] });
+    expect(snapshots.at(-1)).toMatchObject({ phase: 'paused', revision: 6 });
   });
 });

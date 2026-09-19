@@ -322,6 +322,7 @@ function activityPluginProjection(count: number): PluginInventoryProjection {
 type ProtocolSnapshotMock = Readonly<{
   state: 'idle' | 'connecting' | 'connected' | 'waiting' | 'failed' | 'closed';
   attempt: number;
+  nextRetryAtUnixMilliseconds?: number;
   currentSession?: unknown;
   failure?: Readonly<{ phase: 'artifact' | 'connect' | 'session'; code: string }>;
   retryDisposition?: Readonly<
@@ -343,6 +344,7 @@ const publishProtocolSnapshot = (snapshot: ProtocolSnapshotMock, error: unknown 
 const publishProtocolWaiting = (error: unknown, retryAtUnixMs?: number) => {
   publishProtocolSnapshot({
     state: 'waiting',
+    nextRetryAtUnixMilliseconds: retryAtUnixMs ?? Date.now() + 5000,
     attempt: Math.max(1, protocolSnapshot.attempt),
     failure: { phase: 'artifact', code: 'agent_offline' },
     retryDisposition: retryAtUnixMs === undefined
@@ -4978,6 +4980,45 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   });
 
+  it.each(['local', 'remote'] as const)('stops automatic recovery, ignores browser wake, and resumes the retained %s workspace', async (mode) => {
+    if (mode === 'remote') {
+      getLocalRuntimeMock.mockResolvedValue(null);
+      getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
+      accessStatusMock.mockResolvedValue({ passwordRequired: false, unlocked: true });
+      getEnvAppAccessStatusMock.mockReset();
+      getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    }
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => protocolSnapshot.state === 'connected');
+      const workspace = host.querySelector('[data-testid="workbench-page"]');
+      publishProtocolWaiting(new Error('Runtime restarting'));
+      await flushAsync();
+      expect(host.textContent).toContain('Retrying in 5s');
+      const stop = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Stop retrying');
+      expect(stop).toBeTruthy();
+      stop!.click();
+      await flushAsync();
+      expect(disconnectMock).toHaveBeenCalledOnce();
+      expect(host.querySelector('[data-recovery-state="paused"]')).toBeTruthy();
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('focus'));
+      await flushAsync();
+      expect(retryNowMock).not.toHaveBeenCalled();
+      expect(replaceConnectionMock).not.toHaveBeenCalled();
+      const resume = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Resume connection');
+      resume!.click();
+      await flushUntil(() => protocolSnapshot.state === 'connected');
+      expect(replaceConnectionMock).toHaveBeenCalledOnce();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBe(workspace);
+      expect(host.querySelector('[data-recovery-state="succeeded"]')).toBeTruthy();
+    } finally { dispose(); }
+  });
+
   it('nudges the existing waiting controller on browser wake without replacing its authority', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     const host = document.createElement('div');
@@ -4993,6 +5034,23 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(retryNowMock).toHaveBeenCalledTimes(1);
       expect(replaceConnectionMock).not.toHaveBeenCalled();
       expect(connectMock).toHaveBeenCalledTimes(1);
+    } finally { dispose(); }
+  });
+
+  it('does not claim to retry after the connection owner has disconnected', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => protocolSnapshot.state === 'connected');
+      await flushAsync();
+      publishProtocolSnapshot({ state: 'idle', attempt: 0 });
+      await flushAsync();
+      expect(host.querySelector('[data-recovery-state="failed"]')).toBeTruthy();
+      expect(host.textContent).not.toContain('Reconnecting');
+      expect(host.querySelector('[data-recovery-activity]')).toBeNull();
     } finally { dispose(); }
   });
 
@@ -5015,7 +5073,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(replaceConnectionMock).not.toHaveBeenCalled();
       expect(connectMock).toHaveBeenCalledTimes(1);
       expect(host.querySelector('[data-recovery-state="failed"]')).not.toBeNull();
-      expect(host.textContent).toContain('Connection paused');
+      expect(host.textContent).toContain('Connection needs attention');
       expect(host.textContent).not.toContain('Reconnecting');
     } finally { dispose(); }
   });

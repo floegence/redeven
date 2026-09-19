@@ -3913,19 +3913,20 @@
     "title": {
       "recovering": "Restauration de la connexion",
       "recovered": "Connexion restaurée",
-      "failed": "Connexion suspendue",
-      "offline": "Vous êtes hors ligne"
+      "failed": "La connexion nécessite votre attention",
+      "offline": "Vous êtes hors ligne",
+      "paused": "Reconnexion arrêtée"
     },
     "summary": {
       "recovering": "Votre espace de travail reste ouvert. La connexion sera rétablie automatiquement.",
       "recovered": "La connexion est rétablie. Retour à votre espace de travail.",
       "failed": "La récupération automatique est arrêtée. Établissez une nouvelle connexion pour continuer à travailler.",
-      "offline": "La reconnexion sera automatique dès le retour du réseau. Vous pouvez laisser cette page ouverte."
+      "offline": "La reconnexion sera automatique dès le retour du réseau. Vous pouvez laisser cette page ouverte.",
+      "paused": "Votre espace de travail est conservé ici. Reprenez la connexion quand vous le souhaitez."
     },
     "steps": {
       "interrupted": "Connexion interrompue",
       "desktopTransport": "Restauration du transport Desktop",
-      "runtimeProbe": "Vérification de la disponibilité de l'environnement d'exécution",
       "protocolConnect": "Connexion au protocole",
       "secureSession": "Restauration de la session sécurisée",
       "completed": "Connexion rétablie"
@@ -3951,7 +3952,12 @@
       "secureSessionFailed": "La session sécurisée n'a pas pu être reprise.",
       "remoteCommandEnded": "La commande d'origine assurant le pont avec l'environnement d'exécution distant s'est terminée.",
       "processIdentityChanged": "L'identité de l'environnement d'exécution distant a changé ; cette fenêtre ne peut donc pas y être réassociée en toute sécurité."
-    }
+    },
+    "stopRetry": "Arrêter les tentatives",
+    "resumeRetry": "Reprendre la connexion",
+    "automaticRetry": "Reconnexion automatique",
+    "connecting": "Connexion en cours…",
+    "retryLimited": "Le serveur demande un court délai avant une nouvelle tentative."
   },
   "debugConsole": {
     "windowTitle": "Console de débogage",

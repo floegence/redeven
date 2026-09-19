@@ -328,6 +328,53 @@ describe('runtime placement HTTP/2 session lifecycle', () => {
     }
   });
 
+  it('cancels a retry wait and resumes only on explicit retry', async () => {
+    const first = await createMockBridgeCommand();
+    const second = await createMockBridgeCommand();
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const wait = vi.fn((_delay: number, signal: AbortSignal) => new Promise<void>((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }));
+    const session = await startRuntimePlacementBridgeSession(sshArgs(wait));
+    try {
+      first.goaway();
+      await waitForCondition(() => wait.mock.calls.length === 1);
+      expect(session.stopRecovery()).toBe(true);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(session.getRecoverySnapshot()).toMatchObject({ phase: 'paused', next_attempt_at_unix_ms: undefined });
+      expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledTimes(1);
+      expect(session.requestRecoveryNow()).toBe(true);
+      await waitForCondition(() => session.getRecoverySnapshot().phase === 'ready');
+      expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledTimes(2);
+    } finally {
+      await session.disconnect();
+    }
+  });
+
+  it('cancels an in-flight acquisition and serializes an immediate resume', async () => {
+    const first = await createMockBridgeCommand();
+    const resumed = await createMockBridgeCommand();
+    let attemptSignal!: AbortSignal;
+    hostAccessMocks.spawnSSHRuntimeHostCommand
+      .mockResolvedValueOnce(first)
+      .mockImplementationOnce((_manager, _host, _command, options) => new Promise((_resolve, reject) => {
+        attemptSignal = options.signal;
+        attemptSignal.addEventListener('abort', () => reject(attemptSignal.reason), { once: true });
+      }))
+      .mockResolvedValueOnce(resumed);
+    const session = await startRuntimePlacementBridgeSession(sshArgs());
+    try {
+      first.goaway();
+      await waitForCondition(() => hostAccessMocks.spawnSSHRuntimeHostCommand.mock.calls.length === 2);
+      expect(session.getRecoverySnapshot().phase).toBe('connecting');
+      expect(session.stopRecovery()).toBe(true);
+      expect(attemptSignal.aborted).toBe(true);
+      expect(session.requestRecoveryNow()).toBe(true);
+      await waitForCondition(() => session.getRecoverySnapshot().phase === 'ready');
+      expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledTimes(3);
+    } finally { await session.disconnect(); }
+  });
+
   it('fails closed when recovery reaches a different Runtime process identity', async () => {
     const first = await createMockBridgeCommand();
     const replacement = await createMockBridgeCommand({ runtimeControlToken: 'replacement-token' });

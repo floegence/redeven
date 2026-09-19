@@ -288,16 +288,22 @@ SOFTWARE.
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
-| @floegence/floe-webapp-boot | 0.56.11 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.56.11 |  |
-| @floegence/floe-webapp-core | 0.56.11 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.56.11 |  |
-| @floegence/floe-webapp-protocol | 0.56.11 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.56.11 |  |
+| @floegence/floe-webapp-boot | 0.56.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.56.12 |  |
+| @floegence/floe-webapp-core | 0.56.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.56.12 |  |
+| @floegence/floe-webapp-protocol | 0.56.12 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.56.12 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
-| @floegence/flowersec-core | 5.2.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.2.2 |  |
-| @floegence/flowersec-node-native-darwin-arm64 | 5.2.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.2.2 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native-darwin-x64 | 5.2.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.2.2 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native-linux-arm64-gnu | 5.2.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.2.2 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native-linux-x64-gnu | 5.2.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.2.2 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native | 5.2.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.2.2 |  |
+| @floegence/flowersec-core | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.2.2 |  |
+| @floegence/flowersec-core | 5.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.2.3 |  |
+| @floegence/flowersec-node-native-darwin-arm64 | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.2.2 | License verified from the exact registry package manifest. |
+| @floegence/flowersec-node-native-darwin-arm64 | 5.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.2.3 |  |
+| @floegence/flowersec-node-native-darwin-x64 | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.2.2 | License verified from the exact registry package manifest. |
+| @floegence/flowersec-node-native-darwin-x64 | 5.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.2.3 |  |
+| @floegence/flowersec-node-native-linux-arm64-gnu | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.2.2 | License verified from the exact registry package manifest. |
+| @floegence/flowersec-node-native-linux-arm64-gnu | 5.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.2.3 |  |
+| @floegence/flowersec-node-native-linux-x64-gnu | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.2.2 | License verified from the exact registry package manifest. |
+| @floegence/flowersec-node-native-linux-x64-gnu | 5.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.2.3 |  |
+| @floegence/flowersec-node-native | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.2.2 |  |
+| @floegence/flowersec-node-native | 5.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.2.3 |  |
 | @floegence/redeven-service-templates | 0.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fredeven-service-templates/v/0.6.0 | Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.6.0 source release. The SDK manifest omits its license field. |
 | @floegence/redevplugin-contracts | 3.0.32 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.32 |  |
 | @floegence/redevplugin-ui | 3.0.32 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.32 | License inherited from floegence/redevplugin root LICENSE. |

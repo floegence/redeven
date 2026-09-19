@@ -5,9 +5,10 @@ export const DESKTOP_PROVIDER_SESSION_RENEW_CHANNEL = 'redeven-desktop:provider-
 export const DESKTOP_SESSION_APP_READY_CHANNEL = 'redeven-desktop:session-app-ready';
 export const DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL = 'redeven-desktop:session-transport-recovery-get';
 export const DESKTOP_SESSION_TRANSPORT_RECOVERY_UPDATED_CHANNEL = 'redeven-desktop:session-transport-recovery-updated';
+export const DESKTOP_SESSION_TRANSPORT_RECOVERY_STOP_CHANNEL = 'redeven-desktop:session-transport-recovery-stop';
 export const DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL = 'redeven-desktop:session-transport-recovery-retry';
 
-export type DesktopSessionTransportRecoveryPhase = 'ready' | 'waiting' | 'connecting' | 'failed';
+export type DesktopSessionTransportRecoveryPhase = 'ready' | 'waiting' | 'connecting' | 'paused' | 'failed';
 
 export type DesktopSessionTransportRecoveryFailureCode =
   | 'transport_interrupted'
@@ -91,7 +92,7 @@ export function normalizeDesktopSessionTransportRecoverySnapshot(
     generation === null
     || revision === null
     || attemptCount === null
-    || (phase !== 'ready' && phase !== 'waiting' && phase !== 'connecting' && phase !== 'failed')
+    || (phase !== 'ready' && phase !== 'waiting' && phase !== 'connecting' && phase !== 'paused' && phase !== 'failed')
   ) {
     return null;
   }

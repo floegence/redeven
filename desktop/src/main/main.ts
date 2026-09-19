@@ -645,6 +645,7 @@ import {
   DESKTOP_PROVIDER_SESSION_RENEW_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL,
+  DESKTOP_SESSION_TRANSPORT_RECOVERY_STOP_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_UPDATED_CHANNEL,
   type DesktopSessionAppReadyPayload,
   type DesktopSessionContextSnapshot,
@@ -17957,6 +17958,10 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
     markSessionAppReady(sessionRecord, readyPayload);
+  });
+  ipcMain.handle(DESKTOP_SESSION_TRANSPORT_RECOVERY_STOP_CHANNEL, (event) => {
+    const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
+    return sessionRecord?.transport_recovery_session?.stopRecovery() ?? false;
   });
   ipcMain.handle(DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL, (event) => {
     const sessionRecord = sessionRecordForWebContentsID(event.sender.id);

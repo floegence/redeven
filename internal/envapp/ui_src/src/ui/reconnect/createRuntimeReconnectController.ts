@@ -26,21 +26,21 @@ export type ReconnectFailure = Readonly<{
 export type ConnectionRecoveryPhase =
   | 'interrupted'
   | 'desktop_transport'
-  | 'runtime_probe'
   | 'protocol_connect'
   | 'secure_session'
+  | 'paused'
   | 'completed'
   | 'failed';
 
 export type ConnectionRecoverySnapshot = Readonly<{
   generation: number;
   revision: number;
-  state: 'idle' | 'recovering' | 'succeeded' | 'failed';
+  state: 'idle' | 'recovering' | 'succeeded' | 'failed' | 'paused';
   phase: ConnectionRecoveryPhase;
   started_at_unix_ms?: number;
   recovered_at_unix_ms?: number;
   next_retry_at_unix_ms?: number;
-  runtime_probe_attempt_count: number;
+  retry_not_before_unix_ms?: number;
   protocol_attempt_count: number;
   availability_status: ReconnectAvailabilityStatus;
   protocol_connected: boolean;
@@ -53,6 +53,7 @@ export type ProtocolWaitingPresentation = Readonly<{
   attempt: number;
   terminal: boolean;
   nextRetryAtUnixMs?: number;
+  retryNotBeforeUnixMs?: number;
 }>;
 
 export type RuntimeReconnectController = Readonly<{
@@ -62,6 +63,7 @@ export type RuntimeReconnectController = Readonly<{
   noteProtocolConnected: () => void;
   noteSecureSession: (state: 'recovering' | 'ready' | 'failed', failure?: ReconnectFailure) => void;
   requestImmediateRetry: () => Promise<void>;
+  stopRetry: () => Promise<void>;
 }>;
 
 type CreateRuntimeReconnectControllerArgs = Readonly<{
@@ -69,6 +71,8 @@ type CreateRuntimeReconnectControllerArgs = Readonly<{
   desktopTransport: Accessor<DesktopTransportRecoverySnapshot | null>;
   retryProtocolNow: () => boolean;
   requestDesktopRecoveryNow: () => Promise<boolean>;
+  reconnect: () => Promise<void>;
+  stopRetry: () => void | Promise<void>;
   successHoldMs?: number;
 }>;
 
@@ -95,7 +99,6 @@ function idleSnapshot(generation = 0, revision = 0): ConnectionRecoverySnapshot 
     revision,
     state: 'idle',
     phase: 'interrupted',
-    runtime_probe_attempt_count: 0,
     protocol_attempt_count: 0,
     availability_status: 'unknown',
     protocol_connected: false,
@@ -173,6 +176,7 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
 
 export function createRuntimeReconnectController(args: CreateRuntimeReconnectControllerArgs): RuntimeReconnectController {
   const [snapshot, setSnapshot] = createSignal<ConnectionRecoverySnapshot>(idleSnapshot());
+  let stopOperation: Promise<void> | undefined;
   let successTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
   const publish = (next: Omit<ConnectionRecoverySnapshot, 'revision'>) => {
@@ -194,7 +198,7 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
 
   const ensureRecovery = (phase: ConnectionRecoveryPhase, failure?: ReconnectFailure) => {
     const current = snapshot();
-    if (current.state === 'failed') {
+    if (current.state === 'failed' || current.state === 'paused') {
       return;
     }
     if (current.state === 'recovering') {
@@ -213,7 +217,6 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
       state: 'recovering',
       phase,
       started_at_unix_ms: Date.now(),
-      runtime_probe_attempt_count: 0,
       protocol_attempt_count: 0,
       availability_status: 'unknown',
       protocol_connected: false,
@@ -244,7 +247,7 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
 
   const completeRecovery = () => {
     const current = snapshot();
-    if (current.state === 'idle' || current.state === 'succeeded') return;
+    if (current.state === 'idle' || current.state === 'succeeded' || current.state === 'paused') return;
     if (current.state === 'failed' && !isRecoverableAuthenticationFailure(current)) return;
     clearSuccessTimer();
     publish({
@@ -253,6 +256,7 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
       phase: 'completed',
       recovered_at_unix_ms: Date.now(),
       next_retry_at_unix_ms: undefined,
+      retry_not_before_unix_ms: undefined,
       protocol_connected: true,
       secure_session: 'ready',
       failure: undefined,
@@ -260,9 +264,9 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
     successTimer = globalThis.setTimeout(reset, Math.max(0, args.successHoldMs ?? RECOVERY_SUCCESS_HOLD_MS));
   };
 
-  const desktopTransportBlocksProbe = () => {
+  const desktopTransportBlocksProtocol = () => {
     const phase = args.desktopTransport()?.phase;
-    return phase === 'waiting' || phase === 'connecting' || phase === 'failed';
+    return phase === 'waiting' || phase === 'connecting' || phase === 'paused' || phase === 'failed';
   };
 
   createEffect(on([args.enabled, args.desktopTransport], ([enabled, desktop]) => {
@@ -272,6 +276,16 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
       return;
     }
     if (!desktop) return;
+    if (currentSnapshot.state === 'failed' && desktop.phase !== 'failed') return;
+    if (currentSnapshot.state === 'paused' && desktop.phase !== 'failed') {
+      publish({ ...currentSnapshot, desktop_transport: desktop });
+      return;
+    }
+    if (desktop.phase === 'paused') {
+      ensureRecovery('desktop_transport');
+      publish({ ...snapshot(), state: 'paused', phase: 'paused', desktop_transport: desktop, next_retry_at_unix_ms: undefined });
+      return;
+    }
     if (desktop.phase === 'waiting' || desktop.phase === 'connecting') {
       ensureRecovery('desktop_transport', desktop.failure ? {
         code: desktop.failure.code === 'authentication_failed' ? 'authentication_failed' : 'transport_unavailable',
@@ -313,33 +327,36 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
   return {
     snapshot,
     activateWaiting: (failure, protocol) => {
-      if (!args.enabled()) return;
+      if (!args.enabled() || snapshot().state === 'paused' || snapshot().state === 'failed') return;
       if (!failure.retryable || protocol.terminal) {
         failRecovery(failure);
         return;
       }
-      ensureRecovery(desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect', failure);
+      ensureRecovery(desktopTransportBlocksProtocol() ? 'desktop_transport' : 'protocol_connect', failure);
       const current = snapshot();
       publish({
         ...current,
-        phase: desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect',
+        phase: desktopTransportBlocksProtocol() ? 'desktop_transport' : 'protocol_connect',
         protocol_attempt_count: Math.max(current.protocol_attempt_count, positiveInteger(protocol.attempt)),
-        next_retry_at_unix_ms: protocol.nextRetryAtUnixMs,
+        next_retry_at_unix_ms: desktopTransportBlocksProtocol() ? args.desktopTransport()?.next_attempt_at_unix_ms : protocol.nextRetryAtUnixMs,
+        retry_not_before_unix_ms: protocol.retryNotBeforeUnixMs,
       });
     },
     noteProtocolConnecting: (attempt) => {
-      if (!args.enabled() || snapshot().state === 'idle') return;
+      if (!args.enabled() || snapshot().state === 'paused' || snapshot().state === 'failed') return;
+      ensureRecovery('protocol_connect');
       const current = snapshot();
       publish({
         ...current,
-        phase: desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect',
+        phase: desktopTransportBlocksProtocol() ? 'desktop_transport' : 'protocol_connect',
         protocol_attempt_count: Math.max(current.protocol_attempt_count, positiveInteger(attempt)),
-        next_retry_at_unix_ms: undefined,
+        next_retry_at_unix_ms: desktopTransportBlocksProtocol() ? args.desktopTransport()?.next_attempt_at_unix_ms : undefined,
+        retry_not_before_unix_ms: undefined,
       });
     },
     noteProtocolConnected: () => {
       const current = snapshot();
-      if (current.state === 'idle') return;
+      if (current.state === 'idle' || current.state === 'paused') return;
       if (current.state === 'failed' && !isRecoverableAuthenticationFailure(current)) return;
       publish({
         ...current,
@@ -347,12 +364,13 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
         protocol_connected: true,
         availability_status: 'online',
         next_retry_at_unix_ms: undefined,
+        retry_not_before_unix_ms: undefined,
       });
       if (snapshot().secure_session === 'ready') completeRecovery();
     },
     noteSecureSession: (state, failure) => {
       const beforeUpdate = snapshot();
-      if (beforeUpdate.state === 'idle') return;
+      if (beforeUpdate.state === 'idle' || beforeUpdate.state === 'paused') return;
       if (beforeUpdate.state === 'failed' && !isRecoverableAuthenticationFailure(beforeUpdate)) return;
       if (state === 'failed') {
         failRecovery(failure ?? {
@@ -372,13 +390,45 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
     },
     requestImmediateRetry: async () => {
       if (snapshot().state === 'failed') return;
+      if (snapshot().state === 'paused') {
+        await stopOperation?.catch(() => undefined);
+        if (snapshot().state !== 'paused') return;
+        publish({
+          ...snapshot(), state: 'recovering', phase: 'protocol_connect',
+          protocol_connected: false, secure_session: 'pending',
+          next_retry_at_unix_ms: undefined, retry_not_before_unix_ms: undefined,
+        });
+        try {
+          await args.reconnect();
+        } catch (error) {
+          failRecovery(classifyReconnectFailure(error));
+        }
+        return;
+      }
       const desktop = args.desktopTransport();
       if (desktop?.phase === 'waiting' && desktop.actions.includes('retry_now')) {
         await args.requestDesktopRecoveryNow();
         return;
       }
-      if (desktopTransportBlocksProbe()) return;
+      if (desktopTransportBlocksProtocol()) return;
       args.retryProtocolNow();
+    },
+    stopRetry: async () => {
+      if (snapshot().state !== 'recovering') return;
+      clearSuccessTimer();
+      publish({
+        ...snapshot(), state: 'paused', phase: 'paused',
+        next_retry_at_unix_ms: undefined, retry_not_before_unix_ms: undefined,
+        protocol_connected: false, secure_session: 'pending',
+      });
+      try {
+        stopOperation = Promise.resolve(args.stopRetry());
+        await stopOperation;
+      } catch (error) {
+        failRecovery(classifyReconnectFailure(error));
+      } finally {
+        stopOperation = undefined;
+      }
     },
   };
 }

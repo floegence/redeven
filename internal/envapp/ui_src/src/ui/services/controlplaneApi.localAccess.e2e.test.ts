@@ -339,6 +339,16 @@ describe('controlplaneApi local access flow', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves the server retry deadline on local artifact failures', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 429, headers: { 'retry-after': '12' } })));
+    const mod = await import('./controlplaneApi');
+    await mod.createLocalDirectArtifactSource({ transport: 'public_tls' });
+    const options = createControlplaneArtifactSource.mock.calls[0]![0] as { fetch: typeof fetch };
+    const response = await options.fetch('ignored');
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('12');
+  });
+
   it('preserves local access expiry as a terminal artifact-source response', async () => {
     const fetchMock = vi.fn(async () => errorResponse('access password required', 423, {
       code: 'ACCESS_PASSWORD_REQUIRED',

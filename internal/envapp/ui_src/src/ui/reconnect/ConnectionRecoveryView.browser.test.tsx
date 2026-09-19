@@ -1,5 +1,6 @@
 import '../../index.css';
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import { commands, page } from 'vitest/browser';
@@ -17,6 +18,8 @@ type RecoveryFixture = Readonly<{
   theme: Theme;
   viewport: Readonly<{ width: number; height: number }>;
   snapshot: ConnectionRecoverySnapshot;
+  onStop?: () => Promise<void>;
+  onRetry?: () => Promise<void>;
 }>;
 
 const disposers: Array<() => void> = [];
@@ -33,10 +36,9 @@ function recoveringSnapshot(withDesktopTransport = true): ConnectionRecoverySnap
     generation: 4,
     revision: 12,
     state: 'recovering',
-    phase: withDesktopTransport ? 'desktop_transport' : 'runtime_probe',
+    phase: withDesktopTransport ? 'desktop_transport' : 'protocol_connect',
     started_at_unix_ms: Date.now() - 18_000,
     next_retry_at_unix_ms: retryAt,
-    runtime_probe_attempt_count: withDesktopTransport ? 0 : 12,
     protocol_attempt_count: 3,
     availability_status: withDesktopTransport ? 'unknown' : 'offline',
     protocol_connected: false,
@@ -69,7 +71,6 @@ function succeededSnapshot(): ConnectionRecoverySnapshot {
     phase: 'completed',
     started_at_unix_ms: Date.now() - 4_000,
     recovered_at_unix_ms: Date.now(),
-    runtime_probe_attempt_count: 2,
     protocol_attempt_count: 1,
     availability_status: 'online',
     protocol_connected: true,
@@ -84,7 +85,6 @@ function failedSnapshot(): ConnectionRecoverySnapshot {
     state: 'failed',
     phase: 'failed',
     started_at_unix_ms: Date.now() - 42_000,
-    runtime_probe_attempt_count: 4,
     protocol_attempt_count: 2,
     availability_status: 'unknown',
     protocol_connected: false,
@@ -134,10 +134,10 @@ async function mountFixture(fixture: RecoveryFixture): Promise<HTMLElement> {
   document.body.appendChild(host);
   disposers.push(render(() => (
     <I18nProvider>
-      <ConnectionRecoveryView
+      <ConnectionRecoveryView onStop={fixture.onStop ?? (async () => undefined)}
         environmentName="Remote Build Environment with a deliberately long name"
         snapshot={fixture.snapshot}
-        onRetry={async () => undefined}
+        onRetry={fixture.onRetry ?? (async () => undefined)}
       />
     </I18nProvider>
   ), host));
@@ -161,6 +161,7 @@ describe('ConnectionRecoveryView rendered layout', () => {
       { locale: 'en-US', theme: 'light', viewport: { width: 1440, height: 900 }, snapshot: { ...failedSnapshot(), desktop_transport: undefined, failure: { code: 'transport_unavailable', retryable: false, technical_detail: 'HTTP 502 Bad Gateway' } } },
       { locale: 'zh-CN', theme: 'dark', viewport: { width: 1280, height: 800 }, snapshot: { ...failedSnapshot(), desktop_transport: undefined, failure: { code: 'transport_unavailable', retryable: false, technical_detail: 'HTTP 502 Bad Gateway' } } },
       { locale: 'zh-CN', theme: 'dark', viewport: { width: 1280, height: 800 }, snapshot: recoveringSnapshot(false) },
+      { locale: 'zh-CN', theme: 'dark', viewport: { width: 1280, height: 800 }, snapshot: { ...recoveringSnapshot(false), state: 'paused', phase: 'paused', next_retry_at_unix_ms: undefined } },
       {
         locale: 'en-US',
         theme: 'light',
@@ -215,7 +216,7 @@ describe('ConnectionRecoveryView rendered layout', () => {
         expect(diagnostic).toBeNull();
         expect(host.textContent).not.toContain('HTTP 502');
       }
-      expect(view!.querySelectorAll('li').length).toBe(testCase.snapshot.desktop_transport ? 6 : 5);
+      expect(view!.querySelectorAll('li').length).toBe(testCase.snapshot.desktop_transport ? 5 : 4);
       if (import.meta.env.VITE_CONNECTION_RECOVERY_SCREENSHOTS === '1') {
         await page.screenshot({ path: `__screenshots__/connection-${testCase.locale}-${testCase.theme}-${testCase.snapshot.state}.png` });
       } else {
@@ -226,6 +227,32 @@ describe('ConnectionRecoveryView rendered layout', () => {
       host.remove();
       await settleFrames(1);
     }
+  });
+
+  it('keeps keyboard focus on the next recovery action when stopping and resuming', async () => {
+    const [snapshot, setSnapshot] = createSignal(recoveringSnapshot(false));
+    let stops = 0;
+    let resumes = 0;
+    await mountFixture({
+      locale: 'en-US', theme: 'light', viewport: { width: 390, height: 844 },
+      get snapshot() { return snapshot(); },
+      onStop: async () => {
+        stops += 1;
+        setSnapshot({ ...snapshot(), state: 'paused', phase: 'paused', next_retry_at_unix_ms: undefined });
+      },
+      onRetry: async () => {
+        resumes += 1;
+        setSnapshot({ ...snapshot(), state: 'recovering', phase: 'protocol_connect' });
+      },
+    });
+    await page.getByRole('button', { name: 'Stop retrying', exact: true }).click();
+    await expect.element(page.getByRole('heading', { name: 'Reconnection stopped' })).toBeVisible();
+    await expect.element(page.getByRole('button', { name: 'Resume connection', exact: true })).toHaveFocus();
+    await page.getByRole('button', { name: 'Resume connection', exact: true }).click();
+    await expect.element(page.getByText('Connecting now…', { exact: true })).toBeVisible();
+    await expect.element(page.getByRole('button', { name: 'Stop retrying', exact: true })).toHaveFocus();
+    expect(stops).toBe(1);
+    expect(resumes).toBe(1);
   });
 
   it('stops active-step motion for reduced motion and reveals diagnostics only on request', async () => {

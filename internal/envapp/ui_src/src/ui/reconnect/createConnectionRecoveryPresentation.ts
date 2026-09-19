@@ -3,7 +3,6 @@ import type { ConnectionRecoverySnapshot, ReconnectFailure } from './createRunti
 export type ConnectionRecoveryStepID =
   | 'interrupted'
   | 'desktop_transport'
-  | 'runtime_probe'
   | 'protocol_connect'
   | 'secure_session'
   | 'completed';
@@ -33,7 +32,7 @@ function failedStepID(snapshot: ConnectionRecoverySnapshot): ConnectionRecoveryS
   }
   if (snapshot.protocol_connected) return 'secure_session';
   if (snapshot.protocol_attempt_count > 0) return 'protocol_connect';
-  return 'runtime_probe';
+  return 'protocol_connect';
 }
 
 function stepStatus(
@@ -47,10 +46,6 @@ function stepStatus(
     case 'desktop_transport':
       if (snapshot.desktop_transport?.phase === 'ready' && snapshot.desktop_transport.recovered_at_unix_ms) return 'complete';
       if (snapshot.phase === 'desktop_transport') return 'active';
-      return 'pending';
-    case 'runtime_probe':
-      if (snapshot.availability_status === 'online' || snapshot.protocol_connected) return 'complete';
-      if (snapshot.phase === 'runtime_probe') return 'active';
       return 'pending';
     case 'protocol_connect':
       if (snapshot.protocol_connected) return 'complete';
@@ -68,7 +63,6 @@ function stepStatus(
 function stepAttemptCount(snapshot: ConnectionRecoverySnapshot, id: ConnectionRecoveryStepID): number {
   switch (id) {
     case 'desktop_transport': return snapshot.desktop_transport?.attempt_count ?? 0;
-    case 'runtime_probe': return snapshot.runtime_probe_attempt_count;
     case 'protocol_connect': return snapshot.protocol_attempt_count;
     default: return 0;
   }
@@ -78,7 +72,6 @@ function activeStepID(snapshot: ConnectionRecoverySnapshot): ConnectionRecoveryS
   if (snapshot.state === 'failed') return failedStepID(snapshot);
   switch (snapshot.phase) {
     case 'desktop_transport': return 'desktop_transport';
-    case 'runtime_probe': return 'runtime_probe';
     case 'protocol_connect': return 'protocol_connect';
     case 'secure_session': return 'secure_session';
     case 'completed': return 'completed';
@@ -92,7 +85,6 @@ export function createConnectionRecoveryPresentation(
   const stepIDs: ConnectionRecoveryStepID[] = [
     'interrupted',
     ...(snapshot.desktop_transport ? ['desktop_transport' as const] : []),
-    'runtime_probe',
     'protocol_connect',
     'secure_session',
     'completed',
@@ -116,7 +108,6 @@ export function createConnectionRecoveryPresentation(
       phase: snapshot.phase,
       started_at_unix_ms: snapshot.started_at_unix_ms,
       recovered_at_unix_ms: snapshot.recovered_at_unix_ms,
-      runtime_probe_attempt_count: snapshot.runtime_probe_attempt_count,
       protocol_attempt_count: snapshot.protocol_attempt_count,
       availability_status: snapshot.availability_status,
       secure_session: snapshot.secure_session,

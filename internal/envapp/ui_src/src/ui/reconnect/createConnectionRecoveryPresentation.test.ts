@@ -8,10 +8,9 @@ function snapshot(overrides: Partial<ConnectionRecoverySnapshot> = {}): Connecti
     generation: 1,
     revision: 1,
     state: 'recovering',
-    phase: 'runtime_probe',
+    phase: 'protocol_connect',
     started_at_unix_ms: 100,
-    runtime_probe_attempt_count: 1,
-    protocol_attempt_count: 0,
+    protocol_attempt_count: 1,
     availability_status: 'offline',
     protocol_connected: false,
     secure_session: 'pending',
@@ -25,12 +24,11 @@ describe('createConnectionRecoveryPresentation', () => {
 
     expect(presentation.steps.map((step) => step.id)).toEqual([
       'interrupted',
-      'runtime_probe',
       'protocol_connect',
       'secure_session',
       'completed',
     ]);
-    expect(presentation.steps.find((step) => step.id === 'runtime_probe')).toMatchObject({
+    expect(presentation.steps.find((step) => step.id === 'protocol_connect')).toMatchObject({
       status: 'active',
       attempt_count: 1,
     });
@@ -40,7 +38,6 @@ describe('createConnectionRecoveryPresentation', () => {
   it('uses only real completed steps and exact attempt counts for Desktop recovery', () => {
     const presentation = createConnectionRecoveryPresentation(snapshot({
       phase: 'desktop_transport',
-      runtime_probe_attempt_count: 0,
       desktop_transport: {
         generation: 4,
         revision: 8,
@@ -53,7 +50,7 @@ describe('createConnectionRecoveryPresentation', () => {
       next_retry_at_unix_ms: 5_000,
     }));
 
-    expect(presentation.steps).toHaveLength(6);
+    expect(presentation.steps).toHaveLength(5);
     expect(presentation.steps.find((step) => step.id === 'desktop_transport')).toMatchObject({
       status: 'active',
       attempt_count: 3,
@@ -69,7 +66,6 @@ describe('createConnectionRecoveryPresentation', () => {
       availability_status: 'online',
       protocol_connected: true,
       secure_session: 'ready',
-      runtime_probe_attempt_count: 2,
       protocol_attempt_count: 3,
       recovered_at_unix_ms: 400,
     }));

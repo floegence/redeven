@@ -60,12 +60,49 @@ describe('createRuntimeReconnectController', () => {
     vi.useRealTimers();
   });
 
+  it('stops pending work, ignores stale events, and resumes only after explicit intent', async () => {
+    const stopRetry = vi.fn();
+    const reconnect = vi.fn(async () => undefined);
+    const retryProtocolNow = vi.fn(() => true);
+    let controller!: RuntimeReconnectController;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createRuntimeReconnectController({
+        enabled: () => true,
+        desktopTransport: () => null,
+        retryProtocolNow,
+        requestDesktopRecoveryNow: async () => false,
+        reconnect,
+        stopRetry,
+      });
+      return disposeRoot;
+    });
+    controller.activateWaiting(OFFLINE_FAILURE, { attempt: 4, terminal: false, nextRetryAtUnixMs: 12_345 });
+    controller.stopRetry();
+    expect(stopRetry).toHaveBeenCalledOnce();
+    expect(controller.snapshot()).toMatchObject({ state: 'paused', next_retry_at_unix_ms: undefined });
+    controller.activateWaiting(OFFLINE_FAILURE, { attempt: 5, terminal: true });
+    controller.noteProtocolConnecting(5);
+    controller.noteProtocolConnected();
+    controller.noteSecureSession('ready');
+    expect(controller.snapshot().state).toBe('paused');
+    await controller.requestImmediateRetry();
+    expect(reconnect).toHaveBeenCalledOnce();
+    expect(retryProtocolNow).not.toHaveBeenCalled();
+    expect(controller.snapshot()).toMatchObject({ state: 'recovering', protocol_connected: false, secure_session: 'pending' });
+    controller.noteProtocolConnected();
+    controller.noteSecureSession('ready');
+    expect(controller.snapshot().state).toBe('succeeded');
+    dispose();
+  });
+
   it('projects Flowersec waiting state without scheduling product retries', async () => {
     const retryProtocolNow = vi.fn(() => true);
 
     let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createRuntimeReconnectController({
+        reconnect: async () => undefined,
+        stopRetry: () => undefined,
         enabled: () => true,
         desktopTransport: () => null,
         retryProtocolNow,
@@ -78,12 +115,34 @@ describe('createRuntimeReconnectController', () => {
     expect(controller.snapshot()).toMatchObject({
       state: 'recovering',
       phase: 'protocol_connect',
-      runtime_probe_attempt_count: 0,
       protocol_attempt_count: 4,
       next_retry_at_unix_ms: 12_345,
     });
     await controller.requestImmediateRetry();
     expect(retryProtocolNow).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it('waits for cancellation before a rapid resume and coalesces duplicate resume intent', async () => {
+    let finishStop!: () => void;
+    const stopping = new Promise<void>((resolve) => { finishStop = resolve; });
+    const reconnect = vi.fn(async () => undefined);
+    let controller!: RuntimeReconnectController;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createRuntimeReconnectController({
+        enabled: () => true, desktopTransport: () => null, retryProtocolNow: () => true,
+        requestDesktopRecoveryNow: async () => false, reconnect, stopRetry: () => stopping,
+      });
+      return disposeRoot;
+    });
+    controller.activateWaiting(OFFLINE_FAILURE, { attempt: 1, terminal: false });
+    const stop = controller.stopRetry();
+    const resume = controller.requestImmediateRetry();
+    const duplicate = controller.requestImmediateRetry();
+    expect(reconnect).not.toHaveBeenCalled();
+    finishStop();
+    await Promise.all([stop, resume, duplicate]);
+    expect(reconnect).toHaveBeenCalledOnce();
     dispose();
   });
 
@@ -103,6 +162,8 @@ describe('createRuntimeReconnectController', () => {
     let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createRuntimeReconnectController({
+        reconnect: async () => undefined,
+        stopRetry: () => undefined,
         enabled: () => true,
         desktopTransport,
         retryProtocolNow,
@@ -113,6 +174,11 @@ describe('createRuntimeReconnectController', () => {
     await flushAsync();
 
     expect(controller.snapshot()).toMatchObject({ state: 'recovering', phase: 'desktop_transport' });
+    controller.noteProtocolConnecting(2);
+    expect(controller.snapshot()).toMatchObject({
+      phase: 'desktop_transport',
+      next_retry_at_unix_ms: 200,
+    });
     await controller.requestImmediateRetry();
     expect(requestDesktopRecoveryNow).toHaveBeenCalledTimes(1);
 
@@ -135,6 +201,8 @@ describe('createRuntimeReconnectController', () => {
     let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createRuntimeReconnectController({
+        reconnect: async () => undefined,
+        stopRetry: () => undefined,
         enabled: () => true,
         desktopTransport: () => null,
         retryProtocolNow: () => true,
@@ -166,6 +234,8 @@ describe('createRuntimeReconnectController', () => {
     let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createRuntimeReconnectController({
+        reconnect: async () => undefined,
+        stopRetry: () => undefined,
         enabled: () => true,
         desktopTransport: () => null,
         retryProtocolNow: () => true,
@@ -191,6 +261,8 @@ describe('createRuntimeReconnectController', () => {
     let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createRuntimeReconnectController({
+        reconnect: async () => undefined,
+        stopRetry: () => undefined,
         enabled: () => true,
         desktopTransport: () => null,
         retryProtocolNow: () => true,
@@ -221,6 +293,8 @@ describe('createRuntimeReconnectController', () => {
     let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createRuntimeReconnectController({
+        reconnect: async () => undefined,
+        stopRetry: () => undefined,
         enabled: () => true,
         desktopTransport,
         retryProtocolNow: () => true,
@@ -247,6 +321,8 @@ describe('createRuntimeReconnectController', () => {
     let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createRuntimeReconnectController({
+        reconnect: async () => undefined,
+        stopRetry: () => undefined,
         enabled: () => true,
         desktopTransport: () => null,
         retryProtocolNow: () => true,

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,7 +30,6 @@ function failedSnapshot(): ConnectionRecoverySnapshot {
     state: 'failed',
     phase: 'failed',
     started_at_unix_ms: 100,
-    runtime_probe_attempt_count: 1,
     protocol_attempt_count: 0,
     availability_status: 'unknown',
     protocol_connected: false,
@@ -63,11 +63,41 @@ afterEach(() => {
 });
 
 describe('ConnectionRecoveryView', () => {
+  it('counts down, respects server minimums, and keeps stop available during connection work', async () => {
+    vi.useFakeTimers();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [snapshot, setSnapshot] = createSignal<ConnectionRecoverySnapshot>({
+      ...failedSnapshot(), desktop_transport: undefined, state: 'recovering', phase: 'protocol_connect',
+      next_retry_at_unix_ms: Date.now() + 3_000, retry_not_before_unix_ms: Date.now() + 2_000,
+    });
+    const retry = vi.fn(async () => undefined);
+    const stop = vi.fn(async () => { setSnapshot({ ...snapshot(), state: 'paused', phase: 'paused', next_retry_at_unix_ms: undefined }); });
+    const dispose = render(() => <I18nProvider><ConnectionRecoveryView environmentName="Dev" snapshot={snapshot()} onRetry={retry} onStop={stop} /></I18nProvider>, host);
+    const button = (text: string) => Array.from(host.querySelectorAll('button')).find((node) => node.textContent === text)!;
+    try {
+      expect(host.textContent).toContain('Retrying in 3s');
+      expect(button('Retry now').disabled).toBe(true);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(host.textContent).toContain('Retrying in 1s');
+      expect(button('Retry now').disabled).toBe(false);
+      setSnapshot({ ...snapshot(), next_retry_at_unix_ms: undefined, retry_not_before_unix_ms: undefined });
+      expect(host.textContent).toContain('Connecting now');
+      button('Stop retrying').click();
+      await Promise.resolve();
+      expect(stop).toHaveBeenCalledOnce();
+      expect(host.textContent).toContain('Reconnection stopped');
+      expect(host.querySelector('[data-recovery-activity]')).toBeNull();
+      button('Resume connection').click();
+      expect(retry).toHaveBeenCalledOnce();
+    } finally { dispose(); vi.useRealTimers(); }
+  });
+
   it('offers a fresh environment session when automatic recovery has stopped', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const retry = vi.fn(async () => undefined);
-    const dispose = render(() => <I18nProvider><ConnectionRecoveryView environmentName="Dev Local" onRetry={retry}
+    const dispose = render(() => <I18nProvider><ConnectionRecoveryView onStop={async () => undefined} environmentName="Dev Local" onRetry={retry}
       snapshot={{ ...failedSnapshot(), desktop_transport: undefined }} /></I18nProvider>, host);
     try {
       const reopen = Array.from(host.querySelectorAll('button')).find(button => button.textContent === 'Reopen environment');
@@ -85,7 +115,7 @@ describe('ConnectionRecoveryView', () => {
     const retry = vi.fn(async () => undefined);
     const dispose = render(() => (
       <I18nProvider>
-        <ConnectionRecoveryView
+        <ConnectionRecoveryView onStop={async () => undefined}
           environmentName="Build Environment"
           onRetry={retry}
           snapshot={{
@@ -95,7 +125,6 @@ describe('ConnectionRecoveryView', () => {
             phase: 'desktop_transport',
             started_at_unix_ms: 100,
             next_retry_at_unix_ms: Date.now() + 2_000,
-            runtime_probe_attempt_count: 0,
             protocol_attempt_count: 0,
             availability_status: 'unknown',
             protocol_connected: false,
@@ -138,7 +167,7 @@ describe('ConnectionRecoveryView', () => {
     document.body.appendChild(host);
     const dispose = render(() => (
       <I18nProvider>
-        <ConnectionRecoveryView
+        <ConnectionRecoveryView onStop={async () => undefined}
           environmentName="Build Environment"
           onRetry={async () => undefined}
           snapshot={{
@@ -147,7 +176,6 @@ describe('ConnectionRecoveryView', () => {
             state: 'recovering',
             phase: 'desktop_transport',
             started_at_unix_ms: 100,
-            runtime_probe_attempt_count: 0,
             protocol_attempt_count: 0,
             availability_status: 'unknown',
             protocol_connected: false,
@@ -180,7 +208,7 @@ describe('ConnectionRecoveryView', () => {
     const retry = vi.fn(async () => undefined);
     const dispose = render(() => (
       <I18nProvider>
-        <ConnectionRecoveryView
+        <ConnectionRecoveryView onStop={async () => undefined}
           environmentName="Build Environment"
           onRetry={retry}
           snapshot={{
@@ -190,7 +218,6 @@ describe('ConnectionRecoveryView', () => {
             phase: 'protocol_connect',
             started_at_unix_ms: 100,
             next_retry_at_unix_ms: Date.now() + 2_000,
-            runtime_probe_attempt_count: 0,
             protocol_attempt_count: 2,
             availability_status: 'offline',
             protocol_connected: false,
@@ -220,8 +247,8 @@ describe('ConnectionRecoveryView', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const retry = vi.fn(async () => undefined);
-    const dispose = render(() => <I18nProvider><ConnectionRecoveryView environmentName="Dev Local" onRetry={retry}
-      snapshot={{ ...failedSnapshot(), state: 'recovering', phase: 'protocol_connect', desktop_transport: undefined }} /></I18nProvider>, host);
+    const dispose = render(() => <I18nProvider><ConnectionRecoveryView onStop={async () => undefined} environmentName="Dev Local" onRetry={retry}
+      snapshot={{ ...failedSnapshot(), state: 'recovering', phase: 'protocol_connect', next_retry_at_unix_ms: Date.now() + 2000, desktop_transport: undefined }} /></I18nProvider>, host);
     try {
       expect(host.querySelector('h1')?.textContent).toContain("You're offline");
       expect(host.querySelector('details')?.open).toBe(false);
@@ -244,7 +271,7 @@ describe('ConnectionRecoveryView', () => {
     });
     const dispose = render(() => (
       <I18nProvider>
-        <ConnectionRecoveryView
+        <ConnectionRecoveryView onStop={async () => undefined}
           environmentName="Remote Build"
           onRetry={async () => undefined}
           snapshot={failedSnapshot()}
@@ -255,7 +282,7 @@ describe('ConnectionRecoveryView', () => {
 
     try {
       const heading = host.querySelector('h1[role="alert"]') as HTMLHeadingElement | null;
-      expect(heading?.textContent).toContain('Connection paused');
+      expect(heading?.textContent).toContain('Connection needs attention');
       expect(document.activeElement).toBe(heading);
       const details = host.querySelector('details');
       expect(details?.open).toBe(false);
