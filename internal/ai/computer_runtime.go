@@ -79,7 +79,11 @@ type TargetStartupError struct{ Code, Reason string }
 func (e *TargetStartupError) Error() string { return e.Code + ": " + e.Reason }
 
 func NewComputerUseRuntime(registry *TargetRegistry, executors map[string]TargetToolExecutor, mediaDirectory string) *ComputerUseRuntime {
-	return &ComputerUseRuntime{registry: registry, executors: executors, media: computerMediaStore{directory: mediaDirectory}}
+	r := &ComputerUseRuntime{registry: registry, executors: executors, media: computerMediaStore{directory: mediaDirectory}}
+	if err := r.restoreComputerExtension(context.Background()); err != nil {
+		slog.Warn("browser extension registration could not be restored", "error", err)
+	}
+	return r
 }
 func (r *ComputerUseRuntime) ResolveTarget(ctx context.Context, alias string) (TargetDescriptor, error) {
 	return r.registry.ResolveTarget(ctx, alias)

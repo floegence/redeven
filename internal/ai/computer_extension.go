@@ -37,6 +37,7 @@ type ComputerExtensionProfile struct {
 }
 type ComputerExtensionStatus struct {
 	Profiles []ComputerExtensionProfile `json:"profiles"`
+	Prepared bool                       `json:"prepared,omitempty"`
 	Error    string                     `json:"error,omitempty"`
 }
 
@@ -63,8 +64,8 @@ type computerExtensionClient struct {
 	pending  map[string]chan json.RawMessage
 }
 
-// Extension setup is an explicit local user command. Installing a native-host
-// manifest never binds a tab or creates a thread authorization grant.
+// Initial setup is an explicit local user command. Later Runtime starts restore
+// that registration; neither path binds a tab or creates a thread grant.
 func (s *Service) SetupComputerExtension(ctx context.Context, meta *session.Meta) (ComputerExtensionSetup, error) {
 	if err := requireRWX(meta); err != nil {
 		return ComputerExtensionSetup{}, err
@@ -159,6 +160,35 @@ func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (Comput
 	hub.connectionError = ""
 	hub.mu.Unlock()
 	return setup, nil
+}
+
+// The stable staged package records prior setup, not Chrome installation or a
+// live connection. Chrome must still confirm a protocol-compatible native hello.
+func (r *ComputerUseRuntime) restoreComputerExtension(ctx context.Context) error {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		return nil
+	}
+	managed, ok := r.executors["browser-main"].(*PlaywrightTargetExecutor)
+	if !ok {
+		return nil
+	}
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	setup := computerExtensionInstallLocation(userHome, managed.ProfileDir)
+	info, err := os.Lstat(filepath.Join(setup.ExtensionPath, "manifest.json"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("invalid browser extension installation manifest")
+	}
+	_, err = r.setupComputerExtension(ctx)
+	return err
 }
 
 func computerExtensionInstallLocation(userHome, profileDir string) ComputerExtensionSetup {
@@ -420,6 +450,7 @@ func (r *ComputerUseRuntime) extensionStatus() ComputerExtensionStatus {
 	status := ComputerExtensionStatus{Profiles: []ComputerExtensionProfile{}}
 	if hub != nil {
 		hub.mu.Lock()
+		status.Prepared = !hub.closed && hub.manifestPath != ""
 		status.Error = hub.connectionError
 		for _, client := range hub.profiles {
 			status.Profiles = append(status.Profiles, client.profile)

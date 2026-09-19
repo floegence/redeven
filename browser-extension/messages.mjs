@@ -1,7 +1,7 @@
 // Explicit popup catalogs. Browser profile names remain user content.
 export const messages = {
   "en-US": {
-    "intro": "Connect this Chrome profile to Flower. Flower will use a separate task tab and follow the permissions in your conversation.",
+    "intro": "Connect this Chrome profile to Flower. Flower will use a separate task tab and follow the permissions in your conversation. Once connected, this profile reconnects to the same environment automatically. Disconnect turns this off.",
     "profile": "Profile name (optional)",
     "connect": "Connect",
     "disconnect": "Disconnect",
@@ -18,7 +18,7 @@ export const messages = {
     "updateExtension": "Update extension"
   },
   "zh-CN": {
-    "intro": "将此 Chrome 配置连接到 Flower。Flower 会使用独立任务标签页，并遵循对话中的权限设置。",
+    "intro": "将此 Chrome 配置连接到 Flower。Flower 会使用独立任务标签页，并遵循对话中的权限设置。首次连接成功后，此配置会自动重新连接到同一环境。点击“断开连接”可关闭自动重连。",
     "profile": "配置名称（可选）",
     "connect": "连接",
     "disconnect": "断开连接",
@@ -35,7 +35,7 @@ export const messages = {
     "updateExtension": "更新扩展"
   },
   "zh-TW": {
-    "intro": "將此 Chrome 設定檔連線至 Flower。Flower 會使用獨立工作分頁，並遵循對話中的權限設定。",
+    "intro": "將此 Chrome 設定檔連線至 Flower。Flower 會使用獨立工作分頁，並遵循對話中的權限設定。首次連線成功後，此設定檔會自動重新連線至同一環境。按一下「中斷連線」即可關閉自動重連。",
     "profile": "設定檔名稱（選填）",
     "connect": "連線",
     "disconnect": "中斷連線",
@@ -52,7 +52,7 @@ export const messages = {
     "updateExtension": "更新擴充功能"
   },
   "ja-JP": {
-    "intro": "この Chrome プロファイルを Flower に接続します。Flower は専用タブを使用し、会話の権限設定に従います。",
+    "intro": "この Chrome プロファイルを Flower に接続します。Flower は専用タブを使用し、会話の権限設定に従います。接続後は、同じ環境に自動で再接続します。「切断」で自動再接続を無効にできます。",
     "profile": "プロファイル名（任意）",
     "connect": "接続",
     "disconnect": "切断",
@@ -69,7 +69,7 @@ export const messages = {
     "updateExtension": "拡張機能を更新"
   },
   "ko-KR": {
-    "intro": "이 Chrome 프로필을 Flower에 연결합니다. Flower는 별도 작업 탭을 사용하며 대화의 권한 설정을 따릅니다.",
+    "intro": "이 Chrome 프로필을 Flower에 연결합니다. Flower는 별도 작업 탭을 사용하며 대화의 권한 설정을 따릅니다. 연결된 후에는 같은 환경에 자동으로 다시 연결됩니다. 연결을 해제하면 자동 재연결이 꺼집니다.",
     "profile": "프로필 이름(선택 사항)",
     "connect": "연결",
     "disconnect": "연결 해제",
@@ -86,7 +86,7 @@ export const messages = {
     "updateExtension": "확장 프로그램 업데이트"
   },
   "fr-FR": {
-    "intro": "Connectez ce profil Chrome à Flower. Flower utilisera un onglet dédié et respectera les autorisations de votre conversation.",
+    "intro": "Connectez ce profil Chrome à Flower. Flower utilisera un onglet dédié et respectera les autorisations de votre conversation. Une fois connecté, ce profil se reconnecte automatiquement au même environnement. Déconnectez-le pour désactiver cette fonction.",
     "profile": "Nom du profil (facultatif)",
     "connect": "Connecter",
     "disconnect": "Déconnecter",
@@ -103,7 +103,7 @@ export const messages = {
     "updateExtension": "Mettre à jour l’extension"
   },
   "de-DE": {
-    "intro": "Verbinden Sie dieses Chrome-Profil mit Flower. Flower verwendet einen eigenen Tab und beachtet die Berechtigungen Ihrer Unterhaltung.",
+    "intro": "Verbinden Sie dieses Chrome-Profil mit Flower. Flower verwendet einen eigenen Tab und beachtet die Berechtigungen Ihrer Unterhaltung. Nach der ersten Verbindung verbindet sich dieses Profil automatisch erneut mit derselben Umgebung. Trennen Sie die Verbindung, um dies zu deaktivieren.",
     "profile": "Profilname (optional)",
     "connect": "Verbinden",
     "disconnect": "Trennen",
@@ -120,7 +120,7 @@ export const messages = {
     "updateExtension": "Erweiterung aktualisieren"
   },
   "es-ES": {
-    "intro": "Conecta este perfil de Chrome a Flower. Flower usará una pestaña independiente y respetará los permisos de tu conversación.",
+    "intro": "Conecta este perfil de Chrome a Flower. Flower usará una pestaña independiente y respetará los permisos de tu conversación. Una vez conectado, este perfil volverá a conectarse automáticamente al mismo entorno. Desconéctalo para desactivar esta función.",
     "profile": "Nombre del perfil (opcional)",
     "connect": "Conectar",
     "disconnect": "Desconectar",
@@ -137,7 +137,7 @@ export const messages = {
     "updateExtension": "Actualizar extensión"
   },
   "pt-BR": {
-    "intro": "Conecte este perfil do Chrome ao Flower. O Flower usará uma aba separada e seguirá as permissões da sua conversa.",
+    "intro": "Conecte este perfil do Chrome ao Flower. O Flower usará uma aba separada e seguirá as permissões da sua conversa. Após a conexão, este perfil se reconecta automaticamente ao mesmo ambiente. Desconecte para desativar essa função.",
     "profile": "Nome do perfil (opcional)",
     "connect": "Conectar",
     "disconnect": "Desconectar",
@@ -154,7 +154,7 @@ export const messages = {
     "updateExtension": "Atualizar extensão"
   },
   "ru-RU": {
-    "intro": "Подключите этот профиль Chrome к Flower. Flower будет использовать отдельную вкладку и соблюдать разрешения вашей беседы.",
+    "intro": "Подключите этот профиль Chrome к Flower. Flower будет использовать отдельную вкладку и соблюдать разрешения вашей беседы. После подключения профиль будет автоматически подключаться к той же среде повторно. Нажмите «Отключить», чтобы отключить эту функцию.",
     "profile": "Имя профиля (необязательно)",
     "connect": "Подключить",
     "disconnect": "Отключить",

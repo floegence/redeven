@@ -8,10 +8,16 @@ let lastError = '';
 let pending = new Map();
 let ready = false;
 let lifecycle = Promise.resolve();
+const reconnectAlarm = 'redeven-native-reconnect';
 const schedule = operation => {
   const result = lifecycle.then(operation);
   lifecycle = result.catch(() => {});
   return result;
+};
+const notifyConnectionChanged = () => {
+  // A popup may be closed. Its listener reads the canonical status after the
+  // current lifecycle operation; never wait for it from inside that operation.
+  void chrome.runtime.sendMessage({ type: 'connection_changed' }).catch(() => {});
 };
 
 class TabTransport {
@@ -79,6 +85,7 @@ async function disconnect() {
   // A retired bind may still be awaiting Chrome. Let its cancellation cleanup
   // finish before another connection can bind the same tab.
   await Promise.allSettled([...retired.values()].map(task => task.finished));
+  notifyConnectionChanged();
 }
 async function attach(tabId, selection) {
   if (!Number.isSafeInteger(tabId) || tabId < 0) throw new Error('invalid tab');
@@ -164,17 +171,22 @@ async function execute(message, task) {
     default: throw new Error('unknown command');
   }
 }
-async function connect(name, label) {
-  if (!/^dev\.floegence\.redeven\.r[a-f0-9]{16}$/u.test(name) || !label.trim() || label.length > 120) throw new Error('invalid connection');
+async function connect(name, label, remember = false) {
+  if (typeof name !== 'string' || !/^dev\.floegence\.redeven\.r[a-f0-9]{16}$/u.test(name)
+    || typeof label !== 'string' || !label.trim() || label.length > 120) throw new Error('invalid connection');
   await disconnect();
   const settings = await chrome.storage.local.get('profile');
   profile = settings.profile || { id: crypto.randomUUID() };
   profile.name = label.trim();
-  await chrome.storage.local.set({ profile, nativeName: name });
+  if (remember) await chrome.storage.local.set({ profile, nativeName: name, autoConnect: false });
   nativeName = name; lastError = '';
   const port = chrome.runtime.connectNative(name); native = port;
   const requests = new Map(); pending = requests;
-  const disconnectPort = () => schedule(() => native === port ? disconnect() : undefined);
+  const disconnectPort = () => schedule(async () => {
+    if (native !== port) return;
+    await disconnect();
+    await restoreConnection();
+  });
   let accepted, rejected;
   const handshake = new Promise((resolve, reject) => { accepted = resolve; rejected = reject; });
   const failure = code => Object.assign(new Error(code), { code });
@@ -217,17 +229,48 @@ async function connect(name, label) {
     })();
   });
   port.postMessage({ type: 'hello', protocol_version: 6, profile_id: profile.id, profile_name: profile.name });
-  try { await handshake; }
+  try {
+    await handshake;
+    if (remember) await chrome.storage.local.set({ autoConnect: true });
+    await ensureReconnectAlarm();
+    notifyConnectionChanged();
+  }
   catch (error) { lastError = error.code || 'connection_failed'; if (native === port) await disconnect(); throw error; }
   finally { clearTimeout(timeout); }
 
 }
+
+async function ensureReconnectAlarm() {
+  if (!await chrome.alarms.get(reconnectAlarm)) await chrome.alarms.create(reconnectAlarm, { periodInMinutes: 0.5 });
+}
+
+async function restoreConnection() {
+  const saved = await chrome.storage.local.get(['profile', 'nativeName', 'autoConnect']);
+  if (saved.autoConnect !== true) { await chrome.alarms.clear(reconnectAlarm); return; }
+  await ensureReconnectAlarm();
+  if (native || ready) return;
+  // This restores only the confirmed host transport. Runtime still owns every
+  // tab binding and permission; cancelled commands are never replayed.
+  try { await connect(saved.nativeName, saved.profile?.name); }
+  catch { /* The classified connection error remains available to the popup. */ }
+}
+
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === reconnectAlarm) void schedule(restoreConnection);
+});
+chrome.runtime.onStartup.addListener(() => { void schedule(restoreConnection); });
+void schedule(restoreConnection);
+
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  // Only this extension's own UI can set up or disconnect its native port.
+  // Only this extension's own UI can confirm a host or disable reconnection.
   if (sender.id !== chrome.runtime.id || sender.url?.split('#')[0] !== chrome.runtime.getURL('popup.html')) return false;
   const run = async () => {
-    if (message.command === 'connect') await connect(message.nativeHost, message.profileName);
-    else if (message.command === 'disconnect') { await disconnect(); lastError = ''; }
+    if (message.command === 'connect') await connect(message.nativeHost, message.profileName, true);
+    else if (message.command === 'disconnect') {
+      await chrome.storage.local.set({ autoConnect: false });
+      await chrome.alarms.clear(reconnectAlarm);
+      await disconnect(); lastError = '';
+    }
     else if (message.command !== 'status') throw new Error('invalid command');
     const saved = await chrome.storage.local.get(['profile', 'nativeName']);
     return { connected: Boolean(native) && ready, nativeHost: nativeName || saved.nativeName || '', profileName: profile?.name || saved.profile?.name || '', tabs: bindings.size, error: lastError };

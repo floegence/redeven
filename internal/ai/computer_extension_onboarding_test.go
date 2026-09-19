@@ -2,11 +2,16 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/floegence/redeven/internal/browserbridge"
 )
 
 func TestExtensionOnboardingOpensOnlyFixedDestinations(t *testing.T) {
@@ -160,6 +165,9 @@ func TestExtensionSetupRepairsRegistrationAndAssetsAfterRestart(t *testing.T) {
 		return host
 	}
 	host := create()
+	if host.extension != nil || host.extensionStatus().Prepared {
+		t.Fatal("fresh runtime prepared Chrome without a previous setup")
+	}
 	setup, err := host.setupComputerExtension(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -196,6 +204,43 @@ func TestExtensionSetupRepairsRegistrationAndAssetsAfterRestart(t *testing.T) {
 		t.Fatalf("closed registration remains: %v", err)
 	}
 	restarted := create()
+	if restarted.extension == nil || !restarted.extensionStatus().Prepared {
+		t.Fatal("restart did not restore the previously prepared native registration")
+	}
+	if len(restarted.extensionStatus().Profiles) != 0 {
+		t.Fatal("restart implicitly connected Chrome")
+	}
+	// A previously confirmed extension can handshake on the restored socket
+	// before any user repeats setup. Preparation alone cannot admit a profile.
+	peer, err := net.Dial("unix", restarted.extension.listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer peer.Close()
+	if err := peer.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	for _, message := range []map[string]any{
+		{"type": "native_host", "protocol_version": browserbridge.ProtocolVersion, "extension_id": browserbridge.ExtensionID},
+		{"type": "hello", "protocol_version": browserbridge.ProtocolVersion, "profile_id": "12345678-1234-1234-1234-123456789abc", "profile_name": "Work"},
+	} {
+		if err := browserbridge.WriteMessage(peer, message, 1<<20); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := browserbridge.ReadMessage(peer, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ready struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &ready); err != nil || ready.Type != "ready" {
+		t.Fatalf("restored handshake: %s %v", raw, err)
+	}
+	if profiles := restarted.extensionStatus().Profiles; len(profiles) != 1 || profiles[0].Name != "Work" {
+		t.Fatalf("restored connection not admitted: %+v", profiles)
+	}
 	resumed, err := restarted.setupComputerExtension(context.Background())
 	if err != nil || !reflect.DeepEqual(resumed, setup) {
 		t.Fatalf("restart: %+v %v", resumed, err)
@@ -203,7 +248,7 @@ func TestExtensionSetupRepairsRegistrationAndAssetsAfterRestart(t *testing.T) {
 	if _, err := os.Stat(restarted.extension.manifestPath); err != nil {
 		t.Fatal(err)
 	}
-	if len(restarted.extensionStatus().Profiles) != 0 {
-		t.Fatal("restart implicitly connected Chrome")
+	if len(restarted.extensionStatus().Profiles) != 1 {
+		t.Fatal("repeated setup retired the restored connection")
 	}
 }

@@ -30,4 +30,9 @@ byID('connect').addEventListener('submit', async event => {
 });
 byID('disconnect').addEventListener('click', async () => show(await chrome.runtime.sendMessage({ command: 'disconnect' })));
 byID('repair').addEventListener('click', () => void chrome.tabs.create({ url: 'chrome://extensions/' }));
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (sender.id === chrome.runtime.id && message.type === 'connection_changed') {
+    void chrome.runtime.sendMessage({ command: 'status' }).then(show).catch(() => show({ error: true }));
+  }
+});
 show(await chrome.runtime.sendMessage({ command: 'status' }));

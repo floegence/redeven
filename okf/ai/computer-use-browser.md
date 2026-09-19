@@ -61,8 +61,10 @@ a later authorized file/command tool handles data processing.
 The MV3 extension uses Native Messaging and `chrome.debugger` bound to an exact
 tab. Setup registers a native host for the current machine; the relay forwards
 framed protocol-6 messages over a private local Unix socket to the Runtime.
-Only the packaged extension origin and its own popup UI may establish this
-connection. Setup does not create a thread grant or attach any tab.
+Only the packaged extension origin may establish this connection. Its own popup
+confirms the first connection; later starts restore that exact confirmed host as
+described in the [connection guide](computer-use-browser-connection.md). Setup
+and transport recovery do not create a thread grant or attach any tab.
 
 The extension requires a completed Runtime handshake before reporting connected.
 Its webNavigation creation events retain bounded, in-memory popup source facts;

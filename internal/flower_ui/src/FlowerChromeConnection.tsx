@@ -25,7 +25,10 @@ export function FlowerChromeConnection(props: {
     const connection = await props.management.loadExtensionStatus!();
     const profiles = connection.profiles;
     if (disposed || completing) return true;
-    if (!initialProfiles) initialProfiles = new Set(profiles.map(profile => profile.id));
+    if (!initialProfiles) {
+      initialProfiles = new Set(profiles.map(profile => profile.id));
+      if (props.reuseConnected && connection.prepared) setStep('connect');
+    }
     if (connection.error === 'extension_update_required') {
       if (!updateRequired()) {
         setUpdateRequired(true); setStep('install'); setExtensionsOpened(false); setPhase('waiting');

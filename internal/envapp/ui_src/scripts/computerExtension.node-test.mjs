@@ -1,4 +1,4 @@
-/* global chrome, document, fixtureResponses, fixtureWaiters, fixtureWait, fixtureDeliver */
+/* global chrome, document, fixtureResponses, fixtureWaiters, fixtureWait, fixtureDeliver, fixtureDisconnect */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -230,5 +230,33 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.equal(await task.locator('input').inputValue(), 'Continued');
     await task.close();
     assert.equal((await execute('computer.observe')).error, 'TARGET_CONNECTION_REQUIRED');
+    await t.test('reconnect updates an open popup without restoring tab authority', async () => {
+      const activeTabs = await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id));
+      const profile = await worker.evaluate(async () => (await chrome.storage.local.get('profile')).profile);
+      await worker.evaluate(() => { fixtureResponses.length = 0; fixtureDisconnect(); });
+      await worker.evaluate(() => fixtureWait('hello'));
+      await worker.evaluate(() => fixtureDeliver({ type: 'connection_error', code: 'extension_update_required' }));
+      await popup.locator('#repair').waitFor({ state: 'visible' });
+      await popup.locator('#connect-button').waitFor({ state: 'visible' });
+      await worker.evaluate(async () => {
+        fixtureResponses.length = 0;
+        await chrome.alarms.create('redeven-native-reconnect', { when: Date.now() });
+      });
+      await worker.evaluate(() => fixtureWait('hello'));
+      await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 6 }));
+      await popup.locator('#disconnect').waitFor({ state: 'visible' });
+      await popup.locator('#repair').waitFor({ state: 'hidden' });
+      await popup.locator('#connect-button').waitFor({ state: 'hidden' });
+      const state = await popup.evaluate(() => chrome.runtime.sendMessage({ command: 'status' }));
+      assert.equal(state.connected, true); assert.equal(state.tabs, 0); assert.equal(state.error, '');
+      assert.deepEqual(await worker.evaluate(async () => (await chrome.storage.local.get('profile')).profile), profile);
+      assert.deepEqual(await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id)), activeTabs);
+      assert.equal((await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer.observe', args: {} } })).error, 'TARGET_CONNECTION_REQUIRED');
+      await popup.bringToFront();
+      await popup.locator('#disconnect').click();
+      await popup.locator('#connect-button').waitFor({ state: 'visible' });
+      assert.equal(await worker.evaluate(async () => (await chrome.storage.local.get('autoConnect')).autoConnect), false);
+      assert.equal(await worker.evaluate(() => chrome.alarms.get('redeven-native-reconnect')), undefined);
+    });
   } finally { await browser.close(); server.close(); }
 });
