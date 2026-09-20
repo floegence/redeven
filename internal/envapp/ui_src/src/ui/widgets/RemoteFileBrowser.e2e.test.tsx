@@ -505,6 +505,8 @@ vi.mock('./FileBrowserWorkspace', () => ({
     resetKey?: number;
     captureTypingFromPage?: boolean;
     toolbarEndActions?: JSX.Element;
+    contentNotice?: JSX.Element;
+    contentUnavailable?: boolean;
     onModeChange?: (mode: string) => void;
     onPreviewGitMode?: () => void;
     onResize?: (delta: number) => void;
@@ -661,6 +663,8 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <div>files:{props.mode}:{props.currentPath}:{props.width ?? 0}:{localCount()}:{props.captureTypingFromPage ? 'page' : 'scoped'}</div>
         <div data-testid="mock-path-edit-request-key">{props.pathEditRequestKey ?? 0}</div>
         <div>{props.toolbarEndActions}</div>
+        {props.contentNotice}
+        <div data-testid="mock-content-unavailable">{String(props.contentUnavailable)}</div>
         <div data-testid="mock-folder-menu-order">{describeMenuItems(folderItems())}</div>
         <div data-testid="mock-background-menu-order">{describeMenuItems(backgroundItems())}</div>
         <div data-testid="mock-file-menu-order">{describeMenuItems(fileItems())}</div>
@@ -1694,6 +1698,52 @@ afterEach(() => {
 });
 
 describe('RemoteFileBrowser persistence', () => {
+  it.each([
+    ['/Volumes/Removed/project', 404, 'not found'],
+    ['/workspace', 404, 'not found'],
+    ['/Volumes/Removed/project', 400, 'path is not a directory'],
+    ['/Volumes/Removed/project', 403, 'host filesystem permission denied'],
+    ['/Volumes/Removed/project', 503, 'connection lost'],
+  ])('settles a failed restored directory %s (%s) without retrying or emitting notifications', async (missingPath, code, message) => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': missingPath },
+      pageModeByEnv: { 'env-1': 'files' },
+    };
+    mockRpc.fs.getPathContext.mockResolvedValue({
+      homePathAbs: '/workspace', defaultRootId: 'home', roots: [
+        { id: 'home', label: 'Home', pathAbs: '/workspace', kind: 'home', permissions: { read: true, write: true } },
+        { id: 'computer', label: 'Computer', pathAbs: '/', kind: 'computer', permissions: { read: true, write: false } },
+      ],
+    });
+    let missingRequests = 0;
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      if (path !== missingPath) return { entries: [] };
+      missingRequests += 1;
+      // Bound the old retry loop so the regression fails without starving the runner.
+      if (missingRequests > 1) return new Promise(() => {});
+      throw new RpcError({ typeId: 1001, code, message });
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider><EnvContext.Provider value={createEnvContext()}>
+        <RemoteFileBrowser widgetId="widget-1" />
+      </EnvContext.Provider></LayoutProvider>
+    ), host);
+    try {
+      await flush();
+      await flush();
+      expect(missingRequests).toBe(1);
+      const panel = host.querySelector('[data-testid="file-browser-navigation-failure"]');
+      expect(panel?.textContent).toContain(missingPath);
+      expect(panel?.textContent).toContain('Retry');
+      expect(notificationStore.error).toEqual([]);
+      expect(widgetStateStore.updateCalls).toEqual([]);
+    } finally {
+      dispose();
+    }
+  });
+
   it('uses filesystem scope default roots instead of cached Home when mounting at Computer root', async () => {
     widgetStateStore.values['widget-1'] = {
       browserSidebarWidth: 312,
@@ -3156,7 +3206,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('recovers to the nearest existing ancestor after a cached directory disappears', async () => {
+  it('keeps a disappeared cached directory uncommitted until explicit parent recovery', async () => {
     widgetStateStore.values['widget-1'] = {
       lastPathByEnv: { 'env-1': '/workspace/repo' },
       showHiddenByEnv: { 'env-1': false },
@@ -3231,6 +3281,13 @@ describe('RemoteFileBrowser persistence', () => {
       navMissingButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
+      expect(mockRpc.fs.list.mock.calls.map((call) => call[0]?.path)).toEqual(['/workspace/repo/missing']);
+      expect(host.querySelector('[data-testid="mock-content-unavailable"]')?.textContent).toBe('true');
+      expect(notificationStore.error).toEqual([]);
+      expect(widgetStateStore.values['widget-1'].lastPathByEnv).toEqual({ 'env-1': '/workspace/repo' });
+      const openParent = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Open parent folder')!;
+      openParent.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
       expect(mockRpc.fs.list.mock.calls.map((call) => call[0]?.path)).toEqual([
         '/workspace/repo/missing',
         '/workspace/repo',
@@ -3246,7 +3303,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('keeps the deleted current directory rendered until the fallback ancestor is ready', async () => {
+  it('keeps the deleted current directory stable until explicit parent recovery is ready', async () => {
     widgetStateStore.values['widget-1'] = {
       browserSidebarWidth: 312,
       lastPathByEnv: { 'env-1': '/workspace/repo/missing' },
@@ -3315,6 +3372,14 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.textContent).toContain('Refreshing...');
       expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
 
+      await flush();
+      expect(mockRpc.fs.list.mock.calls.map(([request]) => request.path)).toEqual(['/workspace/repo/missing']);
+      expect(host.querySelector('[data-testid="mock-content-unavailable"]')?.textContent).toBe('true');
+      const openParent = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Open parent folder')!;
+      openParent.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      expect(host.textContent).toContain('files:files:/workspace/repo/missing:312:0');
+      expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
       repoFallbackLoad.resolve({
         entries: [
           { name: 'renamed', path: '/workspace/repo/renamed', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },

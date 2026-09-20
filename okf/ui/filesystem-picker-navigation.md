@@ -70,6 +70,22 @@ controller. File items, identifiers, menu callbacks, drag targets, and reveal
 requests pass through the workspace with their original absolute paths and
 identity. There is no Home-relative display tree or reverse path conversion.
 
+Files treats a failed directory load as a settled outcome in its existing view
+state. A deleted saved location, unmounted volume, denied directory, or connection
+failure cannot restart hydration merely because no snapshot is available. The
+content area displays one localized recovery panel with the requested path and
+explicit Retry, Home, and applicable parent-directory actions. Unavailable
+contents are not presented as an empty folder; the roots and path controls remain
+available. A previously loaded snapshot may remain visible during a transient
+connection failure, accompanied by the recovery panel.
+
+Files never probes ancestors or rewrites a failed target to Home automatically.
+Retry, navigation, or a new runtime session may initiate a new request. The latest
+successful response alone commits path callbacks and persistence; optimistic
+cache display does neither. A deterministic failure invalidates the affected
+cached subtree. Recovery uses the same request, cancellation, and commit owner,
+without a notification loop, retry timer, or separate recovery controller.
+
 Flower opens a directory modal at the draft directory and commits only on
 confirmation. Canceling leaves the composer draft unchanged. A created
 conversation keeps its immutable runtime-normalized directory. The default shown
