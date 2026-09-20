@@ -238,27 +238,12 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 	if err != nil {
 		return inventory, err
 	}
-	appendCandidate := func(view ComputerCandidate, connection *ComputerBrowserConnection) error {
-		if len(inventory.Candidates) >= 1024 {
-			return errors.New("computer inventory exceeds its limit")
-		}
-		candidate, err := r.rememberComputerCandidate(call.ThreadID, view, connection)
-		if err == nil {
-			for i, prior := range inventory.Candidates {
-				if view.TargetID != "" && prior.TargetID == view.TargetID {
-					inventory.Candidates[i] = candidate
-					return nil
-				}
-			}
-			inventory.Candidates = append(inventory.Candidates, candidate)
-		}
-		return err
-	}
+
 	for _, target := range targets {
 		if !targetAllowedByPolicy(policy, target.ID) || target.ID == "browser-main" || (source == "system" && target.Kind != "browser.connected") || (source == "managed" && target.Kind != "browser.managed") {
 			continue
 		}
-		if err := appendCandidate(ComputerCandidate{TargetID: target.ID, Kind: target.Kind, DisplayName: target.DisplayName, URL: target.CurrentURL, AppBundleID: target.AppBundleID, State: r.computerTargetState(target, call.ThreadID)}, nil); err != nil {
+		if err := r.appendComputerCandidate(&inventory, call.ThreadID, ComputerCandidate{TargetID: target.ID, Kind: target.Kind, DisplayName: target.DisplayName, URL: target.CurrentURL, AppBundleID: target.AppBundleID, State: r.computerTargetState(target, call.ThreadID)}, nil); err != nil {
 			return inventory, err
 		}
 	}
@@ -272,7 +257,7 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 			managed, managedErr := r.managedProfilesLocked()
 			r.connectMu.Unlock()
 			if managedErr != nil {
-				if err := appendCandidate(ComputerCandidate{Kind: "browser.managed", DisplayName: "Flower managed browser", State: "setup_required"}, nil); err != nil {
+				if err := r.appendComputerCandidate(&inventory, call.ThreadID, ComputerCandidate{Kind: "browser.managed", DisplayName: "Flower managed browser", State: "setup_required"}, nil); err != nil {
 					return inventory, err
 				}
 			}
@@ -289,7 +274,7 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 			if tabsErr != nil {
 				state = "connection_required"
 			}
-			if err := appendCandidate(ComputerCandidate{Kind: profile.kind, DisplayName: computerBrowserDisplayName(profile), ProfileName: profile.name, NewTab: true, State: state}, &connection); err != nil {
+			if err := r.appendComputerCandidate(&inventory, call.ThreadID, ComputerCandidate{Kind: profile.kind, DisplayName: computerBrowserDisplayName(profile), ProfileName: profile.name, NewTab: true, State: state}, &connection); err != nil {
 				return inventory, err
 			}
 			if state == "ready" && computerProfileIdentity(connection) == computerProfileIdentity(defaultProfile.connection) {
@@ -314,7 +299,7 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 				view := ComputerCandidate{TargetID: targetID, Kind: profile.kind, DisplayName: computerBrowserDisplayName(profile), ProfileName: profile.name, Title: tab.Title, URL: tab.URL, OpenerTabID: tab.OpenerTabID, State: r.computerTargetState(target, call.ThreadID)}
 				tabConnection := connection
 				tabConnection.NewTab, tabConnection.TabID, tabConnection.TabTitle, tabConnection.TabURL = false, tab.ID, tab.Title, tab.URL
-				if err := appendCandidate(view, &tabConnection); err != nil {
+				if err := r.appendComputerCandidate(&inventory, call.ThreadID, view, &tabConnection); err != nil {
 					return inventory, err
 				}
 			}
@@ -598,4 +583,21 @@ func defaultComputerBrowserProfile(profiles []computerBrowserProfile) (computerB
 		return managed, nil
 	}
 	return computerBrowserProfile{}, &targetToolPolicyError{code: "target_connection_required"}
+}
+
+func (r *ComputerUseRuntime) appendComputerCandidate(inventory *ComputerTargetInventory, threadID string, view ComputerCandidate, connection *ComputerBrowserConnection) error {
+	if len(inventory.Candidates) >= 1024 {
+		return errors.New("computer inventory exceeds its limit")
+	}
+	candidate, err := r.rememberComputerCandidate(threadID, view, connection)
+	if err == nil {
+		for i, prior := range inventory.Candidates {
+			if view.TargetID != "" && prior.TargetID == view.TargetID {
+				inventory.Candidates[i] = candidate
+				return nil
+			}
+		}
+		inventory.Candidates = append(inventory.Candidates, candidate)
+	}
+	return err
 }

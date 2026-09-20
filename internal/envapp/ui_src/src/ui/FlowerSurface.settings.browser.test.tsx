@@ -21,39 +21,16 @@ it('loads settings on first use and preserves the mounted panel when returning t
   expect(runtime.querySelector('.flower-settings-providers-section')).toBe(providers);
 });
 
-it('retains the browser address and reports failed readiness without exposing transport details', async () => {
-  const connect = vi.fn().mockResolvedValue({ id: 'browser-connected', kind: 'browser.connected', display_name: 'Connected Chrome', ready: false, state: 'connection_required' });
-  const listBrowserTabs = vi.fn().mockResolvedValue([{ id: 'tab-one', profile_id: 'personal', title: 'Example', url: 'https://example.com' }]);
-  const runtime = renderSurfaceWithAdapter({ ...adapter(true), connectComputerBrowser: connect, computerManagement: { listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(),
-    listTargets: vi.fn().mockResolvedValue([]), listBrowserTabs,
-    loadAccess: vi.fn().mockResolvedValue({ origins: [], apps: [], allow_foreground: false }), saveAccess: vi.fn(),
-    loadTarget: vi.fn().mockResolvedValue({ target_id: '' }), selectTarget: vi.fn(),
-  } });
-  await waitFor(() => Boolean(runtime.querySelector('button[aria-label="Flower settings"]')));
+it('opens the same computer dialog from global settings without a separate connection form', async () => {
+  const management = { listCandidates: vi.fn().mockResolvedValue({ current_target_id: '', candidates: [] }), selectCandidate: vi.fn(),
+    loadAccess: vi.fn(), saveAccess: vi.fn(),
+  };
+  const runtime = renderSurfaceWithAdapter({ ...adapter(true), computerManagement: management });
+  await waitFor(() => !!runtime.querySelector('button[aria-label="Flower settings"]'));
   (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
-  await waitFor(() => Boolean(runtime.querySelector('.flower-settings-computer-connect-section input')));
-  const section = runtime.querySelector('.flower-settings-computer-connect-section')!;
-  (section.querySelector('summary') as HTMLElement | null)?.click();
-  const input = section.querySelector('input')!;
-  expect(parseFloat(getComputedStyle(input).borderTopWidth)).toBeGreaterThanOrEqual(1);
-  expect(input.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
-  input.value = 'http://127.0.0.1:9222';
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-  (section.querySelector('button') as HTMLButtonElement).click();
-  await waitFor(() => section.querySelectorAll('select').length === 2);
-  expect(connect).not.toHaveBeenCalled();
-  const [profile, tab] = Array.from(section.querySelectorAll('select'));
-  profile.value = 'personal'; profile.dispatchEvent(new Event('change', { bubbles: true }));
-  tab.value = 'tab-one'; tab.dispatchEvent(new Event('change', { bubbles: true }));
-  const connectButton = () => Array.from(section.querySelectorAll('button')).find(button => button.textContent === 'Connect tab')!;
-  connectButton().click();
-  expect(connect).toHaveBeenCalledWith({ cdp_url: 'http://127.0.0.1:9222', profile_id: 'personal', tab_id: 'tab-one' });
-  await waitFor(() => Boolean(section.querySelector('[role="alert"]')));
-  expect(input.value).toBe('http://127.0.0.1:9222');
-  expect(section.textContent).toContain('Unable to update the connection.');
-  connect.mockRejectedValueOnce(new Error('Authorization: private-connection-secret'));
-  connectButton().click();
-  await waitFor(() => connect.mock.calls.length === 2);
-  await waitFor(() => !(section.querySelector('button') as HTMLButtonElement).disabled);
-  expect(section.textContent).not.toContain('private-connection-secret');
+  await waitFor(() => !![...runtime.querySelectorAll<HTMLButtonElement>('.flower-settings-computer-use-section button')].find(button => button.textContent === 'Browser and desktop'));
+  expect(runtime.querySelector('.flower-settings-computer-use-section input[type="url"]')).toBeNull();
+  ([...runtime.querySelectorAll<HTMLButtonElement>('.flower-settings-computer-use-section button')].find(button => button.textContent === 'Browser and desktop') as HTMLButtonElement).click();
+  await waitFor(() => !!document.querySelector('[data-flower-computer-panel="overview"]'));
+  expect(management.selectCandidate).not.toHaveBeenCalled();
 });

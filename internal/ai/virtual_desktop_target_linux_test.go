@@ -4,6 +4,9 @@ package ai
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -49,5 +52,26 @@ func TestX11ActionAcceptsTypedActions(t *testing.T) {
 	}
 	if !strings.Contains(x11KeyPattern.String(), "A") {
 		t.Fatal("key contract missing")
+	}
+}
+
+func TestX11SetupInspectionDoesNotStartDesktop(t *testing.T) {
+	e := NewXvfbTargetExecutor(t.TempDir())
+	for _, path := range []*string{&e.paths.xvfb, &e.paths.windowManager, &e.paths.input, &e.paths.capture, &e.paths.auth, &e.paths.properties, &e.paths.dbus, &e.paths.atspi} {
+		*path = "/bin/sh"
+	}
+	if err := e.CheckComputerSetup(); err != nil {
+		t.Fatal(err)
+	}
+	if e.ready || e.display != "" || e.sessionDirectory != "" || len(e.processes) != 0 || e.atspi != nil {
+		t.Fatal("inspection started a private desktop")
+	}
+	if _, err := os.Stat(e.directory); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("inspection created state: %v", err)
+	}
+	e.paths.auth = filepath.Join(t.TempDir(), "missing")
+	var startup *TargetStartupError
+	if err := e.CheckComputerSetup(); !errors.As(err, &startup) || startup.Reason != "xauth_missing" {
+		t.Fatalf("missing dependency: %v", err)
 	}
 }

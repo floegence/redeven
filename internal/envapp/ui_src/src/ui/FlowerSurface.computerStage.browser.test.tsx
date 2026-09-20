@@ -52,7 +52,7 @@ describe('Flower computer stage', () => {
         computerManagement: { openExtension: vi.fn(), loadExtensionStatus: vi.fn(async () => ({ profiles: [] })), setupExtension: vi.fn(),
           listCandidates, selectCandidate: vi.fn(),
           loadAccess: vi.fn(async () => ({ origins: [], apps: [], allow_foreground: false })), saveAccess: vi.fn(),
-          listTargets: vi.fn(async () => []), loadTarget: vi.fn(async () => ({ target_id: 'browser-main' })), selectTarget: vi.fn(), listBrowserTabs: vi.fn(async () => []),
+
         },
         listThreads: vi.fn(async () => [current]), loadThread: vi.fn(async () => computerBootstrap(current)),
       }, { focusThreadRequest: { request_id: 'focus-surface-viewer', thread_id: threadID }, layout: true });

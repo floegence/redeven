@@ -837,7 +837,6 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       return snapshot;
     },
     computerManagement: computerManagementAdapter((method, path, body) => fetchLocalApiJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })),
-    connectComputerBrowser: (connection) => fetchLocalApiJSON('/_redeven_proxy/api/ai/computer/connect', { method: 'POST', body: JSON.stringify(connection) }),
     saveComputerUseEnabled: async (enabled) => {
       await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/computer_use', {
         method: 'PUT',

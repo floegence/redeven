@@ -52,12 +52,13 @@ async function mount(locale: RedevenLocale = 'en-US', width = 1000) {
   host = document.createElement('div');
   Object.assign(host.style, { width: `${width}px`, height: '940px' });
   document.body.append(host);
+  const openComputerSettings = vi.fn();
   dispose = render(() => <FloeProvider><FlowerSettingsSurface snapshot={snapshot()} copy={copy.settings} computerCopy={copy.computer}
     onSaveDefaultPermission={savePermission} onSaveComputerUseEnabled={saveComputer}
     onSaveModelProfile={async draft => { const next = { ...snapshot(), ...draft }; setSnapshot(next); return next; }}
-    onListComputerBrowserTabs={async () => []} onConnectComputerBrowser={async () => { throw new Error('No tab selected'); }}
+    onOpenComputerSettings={openComputerSettings}
   /></FloeProvider>, host);
-  return { copy, savePermission, saveComputer };
+  return { copy, savePermission, saveComputer, openComputerSettings };
 }
 
 for (const [locale, dark, width] of [
@@ -65,7 +66,7 @@ for (const [locale, dark, width] of [
   ['en-US', false, 320], ['de-DE', true, 390], ['zh-TW', true, 544],
 ] as const) {
   it(`keeps ${locale} settings readable in a ${width}px ${dark ? 'dark' : 'light'} container`, async () => {
-    const { copy } = await mount(locale, width);
+    const { copy, openComputerSettings } = await mount(locale, width);
     document.documentElement.classList.toggle('dark', dark);
     const frame = host.querySelector<HTMLElement>('.flower-settings-frame')!;
     expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth);
@@ -95,16 +96,11 @@ for (const [locale, dark, width] of [
     expect(providerDetails.open).toBe(true);
     expect(providerDetails.scrollWidth).toBeLessThanOrEqual(providerDetails.clientWidth);
     providerDetails.querySelector('summary')!.click();
-    const advanced = frame.querySelector<HTMLDetailsElement>('.flower-settings-computer-connect-section')!;
-    expect(advanced.open).toBe(false);
-    advanced.querySelector('summary')!.click();
-    expect(advanced.open).toBe(true);
-    const input = advanced.querySelector('input')!;
-    expect(input.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
-    expect(parseFloat(getComputedStyle(input).borderTopWidth)).toBe(1);
-    expect(input.getBoundingClientRect().right).toBeLessThanOrEqual(frame.getBoundingClientRect().right);
+    const computer = [...frame.querySelectorAll<HTMLButtonElement>('.flower-settings-computer-use-section button')].find(button => button.textContent === copy.computer.title)!;
+    expect(computer.querySelector('input')).toBeNull();
+    computer.click();
+    expect(openComputerSettings).toHaveBeenCalledTimes(1);
     if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') {
-      advanced.open = false;
       await page.screenshot({ element: frame, path: `__screenshots__/flower-settings-${locale}-${width}.png` });
     }
   });

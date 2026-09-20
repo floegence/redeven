@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Computer target selection across threads
 description: Resolve logical targets without side effects and preserve each authorized thread selection across turns and restart.
 tags: [ai, computer-use, targets, permissions]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 # Summary
 
@@ -59,10 +59,16 @@ another active owner; it is distinct from insufficient permission. A rejected
 selection leaves the previous binding and ownership intact. Confirmed actions
 remain confirmed even if later work fails; no click or partial script is replayed.
 
-The connection panel shows the current page/application and connection state.
-Optional switching groups searchable browser pages and application windows;
-connection setup stays behind Manage connections. Real ambiguities are resolved
-in the conversation. Full access hides redundant per-resource grant controls.
+The shared Browser and desktop dialog shows the saved current page/application.
+A missing saved identity remains unavailable; it never appears as an unselected
+automatic task. One searchable picker groups browser pages and application
+windows. A radio choice is a local draft until the user confirms; cancellation
+performs no binding. Rejected selections retain the previous binding and require
+fresh discovery when identity changed. A lost selection response is unconfirmed;
+users refresh inventory to inspect the current binding, without retrying the write. Advanced endpoint discovery uses this same
+picker and never connects a page by itself. Real ambiguities are resolved in the
+conversation. Environment setup and permissions follow the
+[environment settings contract](computer-use-environment-settings.md).
 
 ## Persistence and fork
 
@@ -103,4 +109,6 @@ prove readiness, foreground safety or platform qualification.
 
 - `redeven:internal/ai/computer_candidates.go` - bounded candidate identities and shared selection.
 - `redeven:internal/ai/computer_autonomous_integration_test.go` - real Chromium through the production Floret tool loop.
-- `redeven:internal/flower_ui/src/FlowerComputerConnections.tsx` - optional grouped target switcher.
+- `redeven:internal/flower_ui/src/FlowerComputerConnections.tsx` - staged grouped target picker.
+
+- `redeven:internal/envapp/ui_src/src/ui/FlowerComputerDialog.browser.test.tsx` - cancellation, stale selection, thread changes and keyboard switching.

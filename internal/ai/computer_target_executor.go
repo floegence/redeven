@@ -85,6 +85,22 @@ func NewPlaywrightTargetExecutor(nodeBinary, helperPath, profileDir string) *Pla
 	return &PlaywrightTargetExecutor{shutdown: make(chan struct{}), NodeBinary: nodeBinary, HelperPath: helperPath, ProfileDir: profileDir, Timeout: 30 * time.Second, clients: map[string]*playwrightTargetClient{}, media: map[string][]byte{}}
 }
 
+// CheckComputerSetup reports installed entrypoints without launching Chromium.
+func (e *PlaywrightTargetExecutor) CheckComputerSetup() error {
+	for _, resource := range []struct {
+		path, reason string
+		executable   bool
+	}{
+		{e.NodeBinary, "browser_node_missing", true}, {e.HelperPath, "browser_helper_missing", false},
+	} {
+		info, err := os.Stat(resource.path)
+		if !filepath.IsAbs(resource.path) || err != nil || !info.Mode().IsRegular() || (resource.executable && info.Mode()&0111 == 0) {
+			return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: resource.reason}
+		}
+	}
+	return nil
+}
+
 func (e *PlaywrightTargetExecutor) EnsureTargetReady(ctx context.Context, targetID string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()

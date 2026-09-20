@@ -76,7 +76,7 @@ export function FlowerChromeConnection(props: {
   };
   onMount(() => void prepare());
   const status = () => ({ preparing: props.copy.setupPreparing, waiting: '',
-    confirming: props.copy.setupConfirming, connected: props.copy.setupConnected,
+    confirming: props.copy.setupConfirming, connected: props.reuseConnected ? props.copy.setupConnected : props.copy.pairingSaved,
     failed: props.copy.setupFailed, timeout: props.copy.setupTimeout }[phase()]);
   const changeStep = (next: 'install' | 'connect') => {
     setStep(next); setOpenFailed(false);
@@ -96,7 +96,7 @@ export function FlowerChromeConnection(props: {
     <Show when={status()}><p class="text-sm" role={phase() === 'failed' ? 'alert' : 'status'} aria-live="polite">{status()}</p></Show>
     <Show when={setup() && (phase() === 'waiting' || phase() === 'confirming')}>
       <Show when={step() === 'install'} fallback={<>
-        <p class="text-sm leading-relaxed text-muted-foreground">{props.copy.setupConfirmHint}</p>
+        <p class="text-sm leading-relaxed text-muted-foreground">{props.reuseConnected ? props.copy.setupConfirmHint : props.copy.pairingConfirmHint}</p>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('install')}>{props.copy.setupBack}</Button>
           <Button disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>

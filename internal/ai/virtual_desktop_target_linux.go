@@ -64,6 +64,32 @@ func NewXvfbTargetExecutor(stateDirectory string) *XvfbTargetExecutor {
 	return &XvfbTargetExecutor{directory: filepath.Join(stateDirectory, "computer", "x11"), paths: paths}
 }
 
+// CheckComputerSetup validates configured resources without starting a session.
+func (e *XvfbTargetExecutor) CheckComputerSetup() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.checkSetupLocked()
+}
+func (e *XvfbTargetExecutor) checkSetupLocked() error {
+	if e.closed {
+		return &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "x11_closed"}
+	}
+	for _, dependency := range []struct{ name, path string }{
+		{"xvfb", e.paths.xvfb}, {"window_manager", e.paths.windowManager}, {"x11_input", e.paths.input},
+		{"x11_capture", e.paths.capture}, {"xauth", e.paths.auth}, {"x11_properties", e.paths.properties},
+		{"private_dbus", e.paths.dbus}, {"atspi", e.paths.atspi},
+	} {
+		info, err := os.Stat(dependency.path)
+		if !filepath.IsAbs(dependency.path) || err != nil || !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
+			return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: dependency.name + "_missing"}
+		}
+	}
+	if !filepath.IsAbs(e.directory) {
+		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_state_path_not_absolute"}
+	}
+	return nil
+}
+
 func (e *XvfbTargetExecutor) EnsureTargetReady(ctx context.Context, _ string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -93,18 +119,8 @@ func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
 			return err
 		}
 	}
-	for _, dependency := range []struct{ name, path string }{
-		{"xvfb", e.paths.xvfb}, {"window_manager", e.paths.windowManager}, {"x11_input", e.paths.input},
-		{"x11_capture", e.paths.capture}, {"xauth", e.paths.auth}, {"x11_properties", e.paths.properties},
-		{"private_dbus", e.paths.dbus}, {"atspi", e.paths.atspi},
-	} {
-		info, err := os.Stat(dependency.path)
-		if !filepath.IsAbs(dependency.path) || err != nil || !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
-			return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: dependency.name + "_missing"}
-		}
-	}
-	if !filepath.IsAbs(e.directory) {
-		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_state_path_not_absolute"}
+	if err := e.checkSetupLocked(); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(e.directory, 0700); err != nil {
 		return err

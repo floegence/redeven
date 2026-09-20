@@ -32,7 +32,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' = 'site
   const loadAccess = vi.fn(async () => ({ origins: ['https://existing.test'], apps: ['dev.Notes'], allow_foreground: false }));
   const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:step', current: { ...current, view_version: 2, activity: 'idle' as const, last_outcome: 'completed' as const, interactions: [] } }));
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput,
-    computerManagement: { openExtension: vi.fn(), loadExtensionStatus, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess, listTargets: vi.fn(async () => []), loadTarget: vi.fn(async () => ({ target_id: 'browser-main' })), selectTarget: vi.fn(), listBrowserTabs: vi.fn(async () => []) },
+    computerManagement: { openExtension: vi.fn(), loadExtensionStatus, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess,     },
     listThreads: vi.fn(async () => [snapshot, other]), loadThread: vi.fn(async id => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(other)),
     connectLiveStream: async function* ({ signal }) {
       yield { schema_version: 1 as const, kind: 'ready' as const, observer_id: 'assistance-observer', summaries: [snapshot, other] };
@@ -201,5 +201,14 @@ it('closes the connection guide when its conversation changes during a connectio
   await waitFor(() => !document.querySelector('[role="dialog"]'));
   check.resolve({ profiles: [{ id: 'personal', name: 'Personal' }] });
   await new Promise(resolve => setTimeout(resolve, 30));
+  expect(s.submitInput).not.toHaveBeenCalled();
+});
+
+it('opens management without resuming a conversation that is waiting for Chrome', async () => {
+  const s = await setup('connection', 'full_access');
+  s.surface.querySelector<HTMLButtonElement>('button[aria-label="Browser and desktop"]')!.click();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(document.querySelector('[data-flower-computer-panel="overview"]')).not.toBeNull();
+  expect(s.loadExtensionStatus).not.toHaveBeenCalled();
   expect(s.submitInput).not.toHaveBeenCalled();
 });
