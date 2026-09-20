@@ -783,7 +783,7 @@ func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 		return nil, errors.New("nil provider")
 	}
 	if req.PreviousState != nil {
-		return nil, errors.New("Moonshot does not support opaque continuation state")
+		return nil, errors.New("opaque continuation state is not supported by Moonshot")
 	}
 	if strings.TrimSpace(req.Model) == "" {
 		return nil, errors.New("missing model")
@@ -1807,7 +1807,7 @@ func (p *anthropicProvider) prepareTurn(ctx context.Context, req ModelGatewayReq
 		return nil, errors.New("nil provider")
 	}
 	if req.PreviousState != nil {
-		return nil, errors.New("Anthropic does not support opaque continuation state")
+		return nil, errors.New("opaque continuation state is not supported by Anthropic")
 	}
 	if strings.TrimSpace(req.Model) == "" {
 		return nil, errors.New("missing model")
