@@ -15,9 +15,6 @@ import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surf
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import './host-applications.css';
 
-const categoryKeys = ['all', 'Development', 'Office', 'Graphics', 'Network', 'AudioVideo', 'Utility'] as const;
-type Category = typeof categoryKeys[number];
-
 function ApplicationIcon(props: { app: HostApplication }) {
   return <span class="host-app-icon" aria-hidden="true">
     <Show when={props.app.icon.startsWith('data:image/png;base64,')} fallback={<ActivityBarHostApplicationsIcon class="w-6 h-6" />}>
@@ -36,7 +33,7 @@ export function EnvHostApplicationsPage() {
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal('');
   const [query, setQuery] = createSignal('');
-  const [category, setCategory] = createSignal<Category>('all');
+  const [category, setCategory] = createSignal('');
   const [busy, setBusy] = createSignal<Record<string, boolean>>({});
   const [appErrors, setAppErrors] = createSignal<Record<string, string>>({});
   const [ending, setEnding] = createSignal<HostApplicationSession | null>(null);
@@ -89,14 +86,14 @@ export function EnvHostApplicationsPage() {
   const running = createMemo(() => (catalog()?.sessions ?? []).filter(s => s.state === 'starting' || s.state === 'running'));
   const runningByApp = createMemo(() => new Map(running().map(s => [s.application.id, s])));
   const starting = (appID: string) => Boolean(busy()[appID] || runningByApp().get(appID)?.state === 'starting');
-  const categories = createMemo(() => categoryKeys.filter(key => key === 'all' || catalog()?.applications.some(app => app.categories.includes(key))));
+  const categories = createMemo(() => [...new Set((catalog()?.applications ?? []).flatMap(app => app.categories))].sort((a, b) => a.localeCompare(b, i18n.locale())));
+  createEffect(() => { if (category() && !categories().includes(category())) setCategory(''); });
   const apps = createMemo(() => {
     const needle = query().trim().toLocaleLowerCase();
     return (catalog()?.applications ?? []).filter(app =>
-      (category() === 'all' || app.categories.includes(category()))
+      (!category() || app.categories.includes(category()))
       && (!needle || `${app.name} ${app.description}`.toLocaleLowerCase().includes(needle)));
   });
-  const categoryLabel = (value: Category) => i18n.t(`hostApplications.categories.${value}`);
 
   const open = async (app: HostApplication) => {
     if (!canLaunch() || busy()[app.id]) return;
@@ -184,14 +181,24 @@ export function EnvHostApplicationsPage() {
             </section>
           </Show>
           <section class="host-apps-library" aria-label={i18n.t('hostApplications.library')}>
-            <div class="host-apps-library-heading"><div class="host-apps-section-title"><h2>{i18n.t('hostApplications.library')}</h2><span>{catalog()!.applications.length}</span></div><div class="host-apps-search"><Search class="w-3.5 h-3.5" /><Input value={query()} onInput={e => setQuery(e.currentTarget.value)} placeholder={i18n.t('hostApplications.search')} aria-label={i18n.t('hostApplications.search')} /></div></div>
-            <div class="host-apps-categories" role="group" aria-label={i18n.t('hostApplications.category')}><For each={categories()}>{value => <button aria-pressed={category() === value} onClick={() => setCategory(value)}>{categoryLabel(value)}</button>}</For></div>
+            <div class="host-apps-library-heading">
+              <div class="host-apps-section-title"><h2>{i18n.t('hostApplications.library')}</h2><span>{catalog()!.applications.length}</span></div>
+              <div class="host-apps-filters">
+                <Show when={categories().length}>
+                  <select class="host-apps-category" value={category()} onChange={e => setCategory(e.currentTarget.value)} aria-label={i18n.t('hostApplications.category')}>
+                    <option value="">{i18n.t('hostApplications.allApplications')}</option>
+                    <For each={categories()}>{value => <option value={value}>{value}</option>}</For>
+                  </select>
+                </Show>
+                <div class="host-apps-search"><Search class="w-3.5 h-3.5" /><Input value={query()} onInput={e => setQuery(e.currentTarget.value)} placeholder={i18n.t('hostApplications.search')} aria-label={i18n.t('hostApplications.search')} /></div>
+              </div>
+            </div>
             <Show when={apps().length} fallback={<div class="host-apps-empty"><Search class="w-8 h-8" /><h2>{i18n.t(query() ? 'hostApplications.noResults' : 'hostApplications.emptyTitle')}</h2><p>{i18n.t(query() ? 'hostApplications.noResultsDescription' : 'hostApplications.emptyDescription')}</p></div>}>
               <div class="host-apps-grid"><For each={apps()}>{app => <div class="host-app-tile-wrap">
                 <button class={`host-app-tile ${redevenSurfaceRoleClass('panelInteractive')}`} aria-busy={starting(app.id)} disabled={!canLaunch() || !catalog()!.availability.ready || busy()[app.id]} onClick={() => void open(app)} aria-label={`${i18n.t(runningByApp().has(app.id) ? 'hostApplications.resume' : 'hostApplications.open')} · ${app.name}`}>
-                  <div class="host-app-tile-top"><ApplicationIcon app={app} /><Show when={runningByApp().get(app.id)?.state === 'running'}><span class="host-app-status-dot" /></Show></div>
-                  <strong>{app.name}</strong><p title={app.description}>{app.description || categoryLabel(categoryKeys.find(key => app.categories.includes(key)) ?? 'Utility')}</p>
-                  <span class="host-app-tile-action" role={starting(app.id) ? 'status' : undefined}>{i18n.t(starting(app.id) ? 'hostApplications.starting' : runningByApp().has(app.id) ? 'hostApplications.resume' : 'hostApplications.open')}<Show when={starting(app.id)} fallback={<ExternalLink class="w-3 h-3" />}><span class="host-app-launch-indicator" aria-hidden="true" /></Show></span>
+                  <div class="host-app-tile-top"><ApplicationIcon app={app} /><span class="host-app-tile-affordance" aria-hidden="true"><Show when={runningByApp().get(app.id)?.state === 'running'}><span class="host-app-status-dot" /></Show><ExternalLink class="host-app-open-icon w-3.5 h-3.5" /></span></div>
+                  <strong>{app.name}</strong><Show when={app.description}><p title={app.description}>{app.description}</p></Show>
+                  <Show when={starting(app.id)}><span class="host-app-tile-action" role="status"><span class="host-app-launch-indicator" aria-hidden="true" />{i18n.t('hostApplications.starting')}</span></Show>
                 </button>
                 <Show when={appErrors()[app.id] || catalog()?.sessions.find(s => s.application.id === app.id)?.state === 'failed'}><p class="host-app-error" role="alert">{appErrors()[app.id] || i18n.t('hostApplications.errors.failed')}</p></Show>
               </div>}</For></div>

@@ -6220,14 +6220,6 @@
     "title": "Applications de l’hôte",
     "unsupportedDescription": "Cette fonctionnalité nécessite actuellement un environnement d’exécution Linux. Connectez-vous à un hôte Linux pour l’utiliser.",
     "unsupportedTitle": "Hôte Linux requis",
-    "categories": {
-      "all": "Toutes les applications",
-      "Development": "Développement",
-      "Office": "Bureautique",
-      "Graphics": "Graphisme",
-      "Network": "Internet",
-      "AudioVideo": "Audio et vidéo",
-      "Utility": "Utilitaires"
-    }
+    "allApplications": "Toutes les applications"
   }
 }

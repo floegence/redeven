@@ -6335,14 +6335,6 @@
     "title": "Приложения хоста",
     "unsupportedDescription": "Сейчас эта функция требует среды выполнения Linux. Для её использования подключитесь к хосту Linux.",
     "unsupportedTitle": "Требуется хост Linux",
-    "categories": {
-      "all": "Все приложения",
-      "Development": "Разработка",
-      "Office": "Офис",
-      "Graphics": "Графика",
-      "Network": "Интернет",
-      "AudioVideo": "Аудио и видео",
-      "Utility": "Утилиты"
-    }
+    "allApplications": "Все приложения"
   }
 }

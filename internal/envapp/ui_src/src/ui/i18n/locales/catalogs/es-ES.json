@@ -6220,14 +6220,6 @@
     "title": "Aplicaciones del host",
     "unsupportedDescription": "Actualmente, esta función requiere un entorno de ejecución Linux. Conéctate a un host Linux para utilizarla.",
     "unsupportedTitle": "Se requiere un host Linux",
-    "categories": {
-      "all": "Todas las aplicaciones",
-      "Development": "Desarrollo",
-      "Office": "Ofimática",
-      "Graphics": "Gráficos",
-      "Network": "Internet",
-      "AudioVideo": "Audio y vídeo",
-      "Utility": "Utilidades"
-    }
+    "allApplications": "Todas las aplicaciones"
   }
 }

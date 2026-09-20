@@ -6220,14 +6220,6 @@
     "title": "Host-Anwendungen",
     "unsupportedDescription": "Diese Funktion erfordert derzeit eine Linux-Laufzeit. Verbinden Sie sich mit einem Linux-Host.",
     "unsupportedTitle": "Linux-Host erforderlich",
-    "categories": {
-      "all": "Alle Anwendungen",
-      "Development": "Entwicklung",
-      "Office": "Büro",
-      "Graphics": "Grafik",
-      "Network": "Internet",
-      "AudioVideo": "Audio und Video",
-      "Utility": "Dienstprogramme"
-    }
+    "allApplications": "Alle Anwendungen"
   }
 }

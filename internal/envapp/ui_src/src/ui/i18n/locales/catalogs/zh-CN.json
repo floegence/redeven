@@ -6231,14 +6231,6 @@
     "title": "主机应用",
     "unsupportedDescription": "此功能目前需要 Linux 运行时。请连接 Linux 主机后使用。",
     "unsupportedTitle": "需要 Linux 主机",
-    "categories": {
-      "all": "全部应用",
-      "Development": "开发",
-      "Office": "办公",
-      "Graphics": "图形",
-      "Network": "互联网",
-      "AudioVideo": "影音",
-      "Utility": "实用工具"
-    }
+    "allApplications": "全部应用"
   }
 }

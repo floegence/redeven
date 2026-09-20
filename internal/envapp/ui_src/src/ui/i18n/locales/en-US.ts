@@ -55,15 +55,7 @@ export const enUS = defineDictionary({
     "title": "Host Applications",
     "unsupportedDescription": "Host applications currently require a Linux runtime. Connect to a Linux host to use this feature.",
     "unsupportedTitle": "Linux host required",
-    "categories": {
-      "all": "All applications",
-      "Development": "Development",
-      "Office": "Office",
-      "Graphics": "Graphics",
-      "Network": "Internet",
-      "AudioVideo": "Audio & video",
-      "Utility": "Utilities"
-    }
+    "allApplications": "All applications"
   },
   flowerSurface: flowerSurfaceEnUS,
   document: {
