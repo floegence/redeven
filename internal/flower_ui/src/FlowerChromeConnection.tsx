@@ -3,12 +3,13 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import type { FlowerChromeDiagnostic, FlowerChromeStatus, FlowerComputerExtensionSetup, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
 
-import { chromeConnectionDiagnostic, chromeConnectionError, chromeDiagnosticPresentation } from './chromeConnectionDiagnostic';
+import { FlowerChromeReadiness } from './FlowerChromeReadiness';
+import { chromeConnectionDiagnostic, chromeConnectionError } from './chromeConnectionDiagnostic';
 
 // This guide observes Runtime connection inventory. It never binds a tab or
 // creates a conversation lifecycle; the caller resumes the original interaction.
 export function FlowerChromeConnection(props: {
-  environmentName?: string; reuseConnected?: boolean; management: FlowerComputerManagement; copy: FlowerComputerCopy; onConnected: () => Promise<void>;
+  environmentName?: string; platform?: string; reuseConnected?: boolean; management: FlowerComputerManagement; copy: FlowerComputerCopy; onConnected: () => Promise<void>;
 }) {
   const [setup, setSetup] = createSignal<FlowerComputerExtensionSetup>();
   const [phase, setPhase] = createSignal<'preparing' | 'waiting' | 'confirming' | 'connected' | 'failed' | 'timeout'>('preparing');
@@ -17,9 +18,6 @@ export function FlowerChromeConnection(props: {
   const [opening, setOpening] = createSignal(false);
   const [diagnostic, setDiagnostic] = createSignal<FlowerChromeDiagnostic>();
   const [connectionStatus, setConnectionStatus] = createSignal<FlowerChromeStatus>();
-  const [diagnosticCopied, setDiagnosticCopied] = createSignal(false);
-  const [copyFailed, setCopyFailed] = createSignal(false);
-  let diagnosticInput: HTMLTextAreaElement | undefined;
   const [updateRequired, setUpdateRequired] = createSignal(false);
   const [linkCopied, setLinkCopied] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
@@ -65,7 +63,7 @@ export function FlowerChromeConnection(props: {
   const prepare = async () => {
     if (opening() || disposed) return;
     const epoch = ++generation;
-    clearTimeout(timer); completing = false; setPhase('preparing'); setDiagnostic(undefined); setDiagnosticCopied(false);
+    clearTimeout(timer); completing = false; setPhase('preparing'); setDiagnostic(undefined);
     try { if (await check(epoch) || disposed) return; }
     catch (error) { if (!disposed && epoch === generation) { setDiagnostic(chromeConnectionError(error, 'check')); setPhase('failed'); } return; }
     if (diagnostic()?.stage === 'prepare') { setPhase('failed'); return; }
@@ -108,28 +106,12 @@ export function FlowerChromeConnection(props: {
     observeConfirmation();
     void navigator.clipboard.writeText(connectionURL()).then(() => { if (!disposed) setLinkCopied(true); }, () => { if (!disposed) { connectionInput?.closest('details')?.setAttribute('open', ''); connectionInput?.focus(); connectionInput?.select(); } });
   };
-  const presentation = () => diagnostic() ? chromeDiagnosticPresentation(diagnostic()!, props.copy) : undefined;
-  const diagnosticText = () => JSON.stringify({ environment: connectionStatus()?.hostname || props.environmentName,
-    runtime_version: connectionStatus()?.runtime_version, platform: connectionStatus()?.platform, browser_installed: connectionStatus()?.browser_installed,
-    ...diagnostic() }, null, 2);
   const retryLabel = () => diagnostic()?.stage === 'continue' ? props.copy.continueTask
     : ['browser_resources_missing', 'browser_extension_missing', 'chrome_not_installed', 'desktop_session_unavailable'].includes(diagnostic()?.reason ?? '') ? props.copy.chromeCheckAfterRepair
     : diagnostic()?.stage === 'prepare' ? props.copy.chromeRetryPrepare : props.copy.retryConnection;
   return <section class="space-y-5" data-flower-chrome-connection>
-    <Show when={connectionStatus()?.hostname || props.environmentName}><div class="space-y-1 text-xs text-muted-foreground">
-      <p>{props.copy.environmentTitle} · <span class="font-medium text-foreground">{connectionStatus()?.hostname || props.environmentName}</span></p>
-      <Show when={connectionStatus()?.browser_installed !== undefined}><p>{connectionStatus()?.browser_installed ? props.copy.chromeBrowserDetected : props.copy.chromeBrowserMissing}</p></Show>
-    </div></Show>
-    <Show when={diagnostic()}>{value => <div class="space-y-3 rounded-lg border border-border bg-muted/30 p-4" data-chrome-diagnostic>
-      <div role="alert" class="space-y-1 text-sm"><Show when={presentation()?.title}><p class="font-medium">{presentation()!.title}</p></Show><p class="leading-relaxed text-muted-foreground">{presentation()!.hint}</p></div>
-      <Show when={presentation()?.help}><details class="text-sm"><summary class="w-fit cursor-pointer font-medium">{presentation()!.help}</summary><p class="mt-2 leading-relaxed text-muted-foreground">{presentation()!.steps}</p></details></Show>
-      <details class="text-xs text-muted-foreground"><summary class="w-fit cursor-pointer">{props.copy.chromeDiagnostics}</summary>
-        <textarea ref={diagnosticInput} readOnly aria-label={props.copy.chromeDiagnostics} class="flower-settings-text-input mt-2 min-h-32 w-full resize-y font-mono text-xs" value={diagnosticText()} onFocus={event => event.currentTarget.select()} />
-        <Button class="mt-2" size="sm" variant="ghost" onClick={() => { void navigator.clipboard.writeText(diagnosticText()).then(() => { if (!disposed) { setDiagnosticCopied(true); setCopyFailed(false); } }, () => { if (!disposed) { setCopyFailed(true); diagnosticInput?.focus(); diagnosticInput?.select(); } }); }}>{diagnosticCopied() ? props.copy.chromeDiagnosticCopied : props.copy.chromeCopyDiagnostics}</Button>
-        <Show when={copyFailed()}><p role="status">{props.copy.chromeDiagnosticCopyFailed}</p></Show>
-      </details>
-      <Button size="sm" variant={setup() && value().stage !== 'continue' ? 'outline' : 'primary'} disabled={opening()} onClick={() => void prepare()}>{retryLabel()}</Button>
-    </div>}</Show>
+    <FlowerChromeReadiness status={connectionStatus()} diagnostic={diagnostic()} environmentName={props.environmentName} platform={props.platform} copy={props.copy}
+      onRetry={diagnostic() ? () => void prepare() : undefined} retryLabel={retryLabel()} retryDisabled={opening()} />
     <Show when={diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}><ol class="grid grid-cols-2 gap-4 text-sm">
       <li aria-current={step() === 'install' ? 'step' : undefined}
         class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'install', 'border-border text-muted-foreground': step() !== 'install' }}>

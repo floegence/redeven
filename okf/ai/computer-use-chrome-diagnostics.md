@@ -39,8 +39,20 @@ consent, website grants and database schemas are unchanged.
 
 # Recovery on the environment host
 
-The guide names the actual environment and shows Chrome detection independently
-of the failure. Missing helpers or extension assets direct users to update or
+The Chrome overview and connection guide share one compact readiness surface.
+Both consume the existing Runtime snapshot, including diagnostics embedded in
+`environment.chrome`; the overview must not reduce an explicit blocker to a
+generic disconnected state. The surface names the environment once, distinguishes
+Chrome detection from extension connectivity, and shows the cause plus one short
+recovery instruction. Pairing rules, detailed instructions and copyable technical
+diagnostics are disclosed on demand. Installation steps retain their own flow
+below this summary.
+
+An absent launch context means this Runtime cannot access a desktop, not that the
+machine has no graphical desktop or that Chrome is missing. Product copy must not
+infer the user's login state from display environment variables.
+
+Missing helpers or extension assets direct users to update or
 reinstall the complete Runtime while keeping data; retry checks readiness after
 that repair. Self-managed installations use the matching complete Runtime suite.
 The browser installation contract owns [package completeness](computer-use-browser-installation.md).
@@ -76,4 +88,6 @@ after installation, timeout or a failed check.
 - `redeven:internal/codeapp/appserver/computer_extension_diagnostics.go` - safe error envelope and correlated logs.
 - `redeven:internal/codeapp/appserver/computer_extension_diagnostics_test.go` - diagnostic contract without private error disclosure.
 - `redeven:internal/flower_ui/src/FlowerChromeConnection.tsx` - retained guidance, manual host connection and continuation recovery.
+- `redeven:internal/flower_ui/src/FlowerChromeReadiness.tsx` - shared cause-first summary with progressive disclosure.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerComputerDialog.browser.test.tsx` - overview blocker visibility, unique environment identity and compact narrow presentation.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerComputerConnections.browser.test.tsx` - diagnosis, narrow layout, stale results and handshake-only continuation.

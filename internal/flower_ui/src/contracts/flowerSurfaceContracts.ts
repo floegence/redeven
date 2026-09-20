@@ -1205,7 +1205,7 @@ export type FlowerComputerCapability = Readonly<{ state: 'ready' | 'on_demand' |
 export type FlowerComputerEnvironment = Readonly<{
   hostname: string; platform: string;
   managed: FlowerComputerCapability; desktop: FlowerComputerCapability;
-  chrome: Readonly<{ profiles: readonly Readonly<{ id: string; name: string }>[]; prepared?: boolean; error?: string }>;
+  chrome: FlowerChromeStatus;
 }>;
 
 export type FlowerComputerAccess = Readonly<{

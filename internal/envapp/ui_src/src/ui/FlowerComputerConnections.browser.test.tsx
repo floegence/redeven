@@ -275,6 +275,7 @@ it('explains missing Chrome resources before preparation and copies only safe di
   expect(dialog.innerText).not.toContain(zhCN.flowerSurface.computer.setupFailed);
   expect(management.setupExtension).not.toHaveBeenCalled();
   expect(continued).not.toHaveBeenCalled();
+  [...dialog.querySelectorAll('summary')].find(item => item.textContent === zhCN.flowerSurface.computer.details)!.click();
   const details = [...dialog.querySelectorAll('summary')].find(item => item.textContent === zhCN.flowerSurface.computer.chromeDiagnostics)!;
   details.click();
   const diagnostic = dialog.querySelector('textarea')!;

@@ -57,6 +57,39 @@ function mount(options: { current?: string; fullAccess?: boolean; readonly?: boo
 async function ready() { await waitFor(() => !!button(copy.switchTarget) && !button(copy.switchTarget).disabled); }
 async function picker() { button(copy.switchTarget).click(); await waitFor(() => radios().length > 0 && !radios()[0].disabled); }
 
+for (const width of [1000, 390]) {
+  it(`shows the actual Chrome blocker once above the unchanged installation guide at ${width}px`, async () => {
+    await page.viewport(width, 850);
+    document.documentElement.classList.add('dark');
+    const localized = zhCN.flowerSurface.computer;
+    const chrome = { profiles: [], hostname: 'udesk26', platform: 'linux', browser_installed: true,
+      diagnostic: { stage: 'open' as const, reason: 'desktop_session_unavailable' } };
+    const { management } = mount({ copy: localized, environment: { ...environment, hostname: 'udesk26', platform: 'linux', chrome } });
+    await waitFor(() => !!button(localized.switchTarget) && !button(localized.switchTarget).disabled);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const card = [...dialog.querySelectorAll('section')].find(item => item.querySelector('h4')?.textContent === localized.chromeTitle)!;
+    card.querySelector('button')!.click();
+    expect(dialog.innerText).toContain(localized.chromeDesktopTitle);
+    expect(dialog.innerText).toContain(localized.chromeBrowserDetected);
+    expect(dialog.innerText).not.toContain(localized.pairingPersistence);
+    expect(management.setupExtension).not.toHaveBeenCalled();
+    if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/chrome-readiness-overview-${width}.png` });
+    management.loadExtensionStatus.mockResolvedValue(chrome);
+    management.setupExtension.mockResolvedValue({ extension_path: '/home/tang/Redeven/Flower Browser fixture', extension_home_path: ['Redeven', 'Flower Browser fixture'], platform: 'linux', extension_id: 'fixture', native_host: 'fixture.host' });
+    button(localized.setupChrome).click();
+    await waitFor(() => !!button(localized.setupInstalled));
+    expect(dialog.innerText.match(/udesk26/gu)).toHaveLength(1);
+    const readiness = dialog.querySelector<HTMLElement>('[data-chrome-readiness]')!;
+    expect(readiness.innerText).toContain(localized.chromeDesktopTitle);
+    expect(readiness.getBoundingClientRect().height).toBeLessThan(260);
+    expect(dialog.innerText).toContain(localized.setupDeveloperMode);
+    expect(dialog.innerText).toContain(localized.setupDragFolderHint);
+    expect(dialog.querySelector('[data-extension-folder-route]')?.textContent).toContain('Flower Browser fixture');
+    expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+    if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/chrome-readiness-setup-${width}.png` });
+  });
+}
+
 it('keeps a long picker compact with search and confirmation outside the list scroll', async () => {
   await page.viewport(1280, 900);
   const { management } = mount({ current: 'page-0' });
