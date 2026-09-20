@@ -448,6 +448,7 @@
       "newChat": "新对话",
       "workingDirPickerHomeLabel": "主目录",
       "workingDirPickerTitle": "选择工作目录",
+      "workingDirPickerRecent": "最近使用",
       "workingDirPickerConfirm": "选择",
       "linkedContextLabel": "已关联上下文",
       "toolApprovalApproveBatch": "允许全部",

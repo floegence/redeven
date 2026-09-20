@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower working directory navigation
 description: Select a new Flower draft directory and browse its files from the header, with shared conversation menu navigation.
 tags: [ui, flower, filesystem, terminal, workbench]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-21T00:00:00Z
 ---
 # Summary
 
@@ -37,7 +37,9 @@ error and restores the connected header origin.
 
 Before creation, the welcome area places a muted working-directory label beside
 a blue folder/name/chevron selector. It opens the existing directory picker at
-the current draft path. Only confirmation updates the draft; cancellation keeps
+the current draft path. A Recently used tab beside Home/Root offers up to three
+unique recent root-conversation directories ranked by update time. [Picker navigation](filesystem-picker-navigation.md)
+owns validation; only confirmation updates the draft. Cancellation keeps
 it unchanged and restores the selector. The selector is absent after creation.
 The composer footer and More panel contain no working-directory control.
 

@@ -1904,6 +1904,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     typeof props.adapter.getWorkingDirectoryPathContext === 'function'
     && typeof props.adapter.listWorkingDirectoryEntries === 'function'
   ));
+  const recentWorkingDirectories = createMemo(() => {
+    if (!workingDirectoryPickerOpen()) return [];
+    const recent = threads()
+      .filter((thread) => !thread.parent_thread_id)
+      .sort((left, right) => right.updated_at_ms - left.updated_at_ms || right.created_at_ms - left.created_at_ms);
+    return [...new Set(recent.map((thread) => normalizeAbsolutePath(thread.working_dir)).filter(Boolean))].slice(0, 3);
+  });
   let filesystemRevision = 0;
   const filesystemScopeKey = createMemo(() => {
     void props.adapter;
@@ -12090,6 +12097,8 @@ webSearch: model.web_search,
         scopeKey={filesystemScopeKey()}
         scrollViewportProps={props.filesystemScrollViewportProps}
         initialPath={draftWorkingDirectory() || undefined}
+        suggestedPaths={recentWorkingDirectories()}
+        suggestedPathsLabel={copy().chat.workingDirPickerRecent}
         loadPathContext={async () => {
           if (!props.adapter.getWorkingDirectoryPathContext) throw new Error('Filesystem context unavailable');
           return mapFilesystemPickerContext(await props.adapter.getWorkingDirectoryPathContext(), copy().filesystemPicker);

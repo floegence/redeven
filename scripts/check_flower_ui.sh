@@ -59,6 +59,7 @@ main() {
       src/ui/FlowerSurface.emptyStatePresentation.test.tsx \
       src/ui/FlowerSurface.navigation.test.tsx \
       src/ui/FlowerSurface.directoryActions.test.tsx \
+      src/ui/FlowerSurface.directoryPicker.test.tsx \
       src/ui/FlowerSurface.fork.test.tsx \
       src/ui/FlowerSurface.title.test.tsx \
       src/ui/FlowerSurface.orderedPresentation.test.tsx \
@@ -173,6 +174,7 @@ main() {
         src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \
         src/ui/FlowerDirectoryMenus.browser.test.tsx \
         src/ui/FlowerWorkingDirectory.browser.test.tsx \
+        src/ui/FlowerSurface.directoryPicker.browser.test.tsx \
         src/ui/FlowerSurface.fork.browser.test.tsx \
         src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
         src/ui/FlowerSurface.composerAttachments.browser.test.tsx \

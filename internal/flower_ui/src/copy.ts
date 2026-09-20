@@ -576,6 +576,7 @@ export type FlowerSurfaceCopy = Readonly<{
     newChat: string;
     workingDirPickerHomeLabel: string;
     workingDirPickerTitle: string;
+    workingDirPickerRecent: string;
     workingDirPickerConfirm: string;
   }>;
   threadList: FlowerThreadListCopy;
@@ -914,6 +915,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     newChat: 'New chat',
     workingDirPickerHomeLabel: 'Home',
     workingDirPickerTitle: 'Select working directory',
+    workingDirPickerRecent: 'Recently used',
     workingDirPickerConfirm: 'Select',
   },
   threadList: {

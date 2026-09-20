@@ -35,6 +35,7 @@ export const FlowerHeroBadge: Component<{ class?: string }> = (props) => (
   <span class={cn('flower-empty-hero-badge mb-5 inline-flex h-20 w-20 items-center justify-center', props.class)}>
     <FlowerSoftAuraIcon
       class="redeven-flower-soft-aura-lg h-16 w-16"
+      iconClass="redeven-flower-icon-spin"
     />
   </span>
 );

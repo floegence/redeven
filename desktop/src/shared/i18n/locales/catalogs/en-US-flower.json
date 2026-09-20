@@ -417,6 +417,7 @@
     "newChat": "New chat",
     "workingDirPickerHomeLabel": "Home",
     "workingDirPickerTitle": "Select working directory",
+    "workingDirPickerRecent": "Recently used",
     "workingDirPickerConfirm": "Select",
     "toolApprovalApproveBatch": "Allow all",
     "toolApprovalApproveBatchAction": "Allow all {count} pending tool approvals",
