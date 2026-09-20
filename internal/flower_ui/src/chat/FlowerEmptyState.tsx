@@ -1,4 +1,4 @@
-import type { Component } from 'solid-js';
+import type { Component, JSX } from 'solid-js';
 import { For, Show } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Code, FolderOpen, GitBranch, Sparkles } from '@floegence/floe-webapp-core/icons';
@@ -27,6 +27,7 @@ export type FlowerEmptyStateProps = Readonly<{
   disabled?: boolean;
   copy?: FlowerEmptyStateCopy;
   showSuggestions?: boolean;
+  workingDirectory?: JSX.Element;
   onSuggestionClick: (prompt: string) => void;
 }>;
 
@@ -51,6 +52,7 @@ export const FlowerEmptyState: Component<FlowerEmptyStateProps> = (props) => {
         <FlowerHeroBadge />
         <h2 class="mb-3 text-xl font-semibold text-foreground">{copy().title}</h2>
         <p class="text-sm leading-relaxed text-muted-foreground">{copy().description}</p>
+        {props.workingDirectory}
       </div>
 
       <Show when={suggestionsVisible()}>

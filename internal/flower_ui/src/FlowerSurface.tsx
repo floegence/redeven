@@ -59,6 +59,7 @@ import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } fro
 import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
+import { FlowerWorkingDirectoryControl } from './chat/FlowerWorkingDirectoryControl';
 import { FlowerSetupWelcome } from './chat/FlowerSetupWelcome';
 import type { FlowerChatContextChip, FlowerChatContextSnapshotPreview } from './contracts/flowerChatContextTypes';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
@@ -290,7 +291,7 @@ function latestThreadFailureIsUserRejectedTool(thread: FlowerThreadSnapshot | nu
   return latestFailedMessage ? messageHasUserRejectedTool(latestFailedMessage) : false;
 }
 
-type FlowerComposerControlID = 'working_dir' | 'permission' | 'model_reasoning' | 'read_only';
+type FlowerComposerControlID = 'permission' | 'model_reasoning' | 'read_only';
 type FlowerComposerControlLocation = 'inline' | 'overflow';
 type FlowerComposerControlLayout = Readonly<{
   availableWidth: number;
@@ -380,8 +381,8 @@ const PENDING_NEW_THREAD_ID = '__new_thread__';
 const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
 const FLOWER_COMPOSER_COMMAND_MENU_ID = 'flower-composer-command-menu';
 const FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID = 'flower-composer-command-compact-context';
-const FLOWER_COMPOSER_CONTROL_ORDER: readonly FlowerComposerControlID[] = ['working_dir', 'permission', 'model_reasoning', 'read_only'];
-const FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER: readonly FlowerComposerControlID[] = ['working_dir', 'model_reasoning', 'read_only', 'permission'];
+const FLOWER_COMPOSER_CONTROL_ORDER: readonly FlowerComposerControlID[] = ['permission', 'model_reasoning', 'read_only'];
+const FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER: readonly FlowerComposerControlID[] = ['model_reasoning', 'read_only', 'permission'];
 const FLOWER_COMPOSER_CONTROL_GAP_PX = 6;
 const MESSAGE_COPY_RESET_MS = 1600;
 const FLOWER_COMPOSER_REFERENCE_MENU_ID = 'flower-composer-reference-menu';
@@ -839,7 +840,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [attachmentPreview, setAttachmentPreview] = createSignal<FlowerAttachmentPreviewSource | null>(null);
   const [failedMessageImages, setFailedMessageImages] = createSignal<ReadonlySet<string>>(new Set());
   const [workingDirectoryPickerOpen, setWorkingDirectoryPickerOpen] = createSignal(false);
-  const [workingDirectoryCopied, setWorkingDirectoryCopied] = createSignal(false);
   const [composerMoreOpen, setComposerMoreOpen] = createSignal(false);
   const [attachmentStateRevision, setAttachmentStateRevision] = createSignal(0);
   const [attachmentDragActive, setAttachmentDragActive] = createSignal(false);
@@ -850,35 +850,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     availableWidth: 0,
     itemWidths: {},
   });
-  let workingDirectoryCopyResetTimer: number | undefined;
   const terminalVisibleOutputStore = createTerminalVisibleOutputStore();
-
-  const clearWorkingDirectoryCopyTimer = () => {
-    if (workingDirectoryCopyResetTimer !== undefined) {
-      window.clearTimeout(workingDirectoryCopyResetTimer);
-      workingDirectoryCopyResetTimer = undefined;
-    }
-  };
-
-  const clearWorkingDirectoryCopyConfirmation = () => {
-    clearWorkingDirectoryCopyTimer();
-    setWorkingDirectoryCopied(false);
-  };
-
-  const confirmWorkingDirectoryCopied = () => {
-    clearWorkingDirectoryCopyConfirmation();
-    setWorkingDirectoryCopied(true);
-    workingDirectoryCopyResetTimer = window.setTimeout(() => {
-      setWorkingDirectoryCopied(false);
-      workingDirectoryCopyResetTimer = undefined;
-    }, MESSAGE_COPY_RESET_MS);
-  };
 
   createEffect(on(
     () => selectedThreadID(),
     (threadID) => {
       setContextSnapshotPreview(null);
-      clearWorkingDirectoryCopyConfirmation();
       const active = untrack(activeSubagentDetail);
       if (active && active.parentThreadID !== trimString(threadID)) closeSubagentOverlays();
     },
@@ -1950,8 +1927,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const draftWorkingDirectory = createMemo(() => normalizeAbsolutePath(currentComposerSessionDraft().workingDirDraft ?? ''));
   const displayedWorkingDirectory = createMemo(() => {
     if (selectedThreadDetailPending()) return '';
-    const threadPath = selectedThreadWorkingDirectory();
-    if (threadPath) return threadPath;
+    if (selectedThreadID()) return selectedThreadWorkingDirectory();
     const draftPath = draftWorkingDirectory();
     if (draftPath) return draftPath;
     return defaultWorkingDirectory();
@@ -1964,36 +1940,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && workingDirectoryPickerAvailable()
     && !surfaceWarmupActive()
   ));
-  const workingDirectoryChipInteractive = createMemo(() => (
-    !selectedThreadDetailPending()
-    && (selectedThreadID() ? displayedWorkingDirectory() !== '' : canPickWorkingDirectory())
+  const workingDirectoryPickerTitle = createMemo(() => (
+    `${copy().chat.workingDirPickerTitle}: ${displayedWorkingDirectory() || copy().threadList.workingDirectoryLabel}`
   ));
-  const workingDirectoryChipTitle = createMemo(() => {
-    const path = displayedWorkingDirectory();
-    if (!path) return copy().threadList.workingDirectoryLabel;
-    if (selectedThreadID()) return `${copy().threadList.copyWorkingDirectory}: ${path}`;
-    return `${copy().threadList.workingDirectoryLabel}: ${path}`;
-  });
   const openWorkingDirectoryPicker = () => {
     if (canPickWorkingDirectory()) setWorkingDirectoryPickerOpen(true);
-  };
-  const handleWorkingDirectoryChipClick = async () => {
-    if (selectedThreadDetailPending()) return;
-    if (selectedThreadID()) {
-      const path = displayedWorkingDirectory();
-      if (!path) return;
-      setComposerMoreOpen(false);
-      try {
-        await writeClipboardText(path, copy().threadList.workingDirectoryLabel);
-        confirmWorkingDirectoryCopied();
-      } catch (error) {
-        notifyThreadActionError(getErrorMessage(error));
-      }
-      return;
-    }
-    setComposerMoreOpen(false);
-    clearWorkingDirectoryCopyConfirmation();
-    await openWorkingDirectoryPicker();
   };
   createEffect(() => {
     if (!canPickWorkingDirectory() || props.engaged === false) setWorkingDirectoryPickerOpen(false);
@@ -2866,9 +2817,8 @@ webSearch: model.web_search,
   const composerControlIDs = createMemo<readonly FlowerComposerControlID[]>(() => {
     if (bottomActionMode() !== 'chat') return [];
     if (needsSetup()) return [];
-    if (selectedThreadReadOnly()) return ['working_dir', 'permission', 'read_only'];
+    if (selectedThreadReadOnly()) return ['permission', 'read_only'];
     return [
-      'working_dir',
       'permission',
       'model_reasoning',
     ];
@@ -2953,8 +2903,6 @@ webSearch: model.web_search,
   });
   createEffect(() => {
     void composerControlIDs().join('|');
-    void displayedWorkingDirectoryLabel();
-    void workingDirectoryChipTitle();
     void composerPermissionType();
     void composerPermissionCopy()?.label;
     void selectedThreadModelLabel();
@@ -3875,6 +3823,28 @@ webSearch: model.web_search,
       ...(props.adapter.openWorkingDirectoryInTerminal ? { terminal: state?.terminal ?? { enabled: true } } : {}),
     };
   });
+  const workingDirectoryBrowseDisabledReason = createMemo(() => {
+    if (!displayedWorkingDirectory()) return copy().threadList.workingDirectoryUnavailable;
+    const availability = directoryMenuAvailability().browse;
+    return availability?.enabled ? '' : availability?.reason || copy().threadList.workingDirectoryUnavailable;
+  });
+  const workingDirectoryBrowseTitle = createMemo(() => (
+    [copy().threadList.browseWorkingDirectory, displayedWorkingDirectory(), workingDirectoryBrowseDisabledReason()]
+      .filter(Boolean).join(' — ')
+  ));
+  const browseWorkingDirectory = async (request: FlowerWorkingDirectoryOpenRequest, origin?: HTMLElement) => {
+    try {
+      const path = normalizeAbsolutePath(request.path);
+      const availability = directoryMenuAvailability().browse;
+      if (!path || !availability?.enabled) throw new Error(availability?.reason || copy().threadList.workingDirectoryUnavailable);
+      // The destination captures this origin before taking focus and owns loading errors.
+      if (origin?.isConnected) origin.focus({ preventScroll: true });
+      await props.adapter.openWorkingDirectoryInFileBrowser?.({ ...request, path });
+    } catch (error) {
+      notifyThreadActionError(getErrorMessage(error));
+      restoreThreadMenuFocus(origin);
+    }
+  };
   const handleDirectoryMenuAction = async (
     action: FlowerDirectoryMenuAction,
     request: FlowerWorkingDirectoryOpenRequest,
@@ -3889,13 +3859,13 @@ webSearch: model.web_search,
         restoreThreadMenuFocus(restore);
         return;
       }
-      const availability = directoryMenuAvailability()[action === 'browse_workdir' ? 'browse' : 'terminal'];
-      if (!availability?.enabled) throw new Error(availability?.reason || copy().threadList.workingDirectoryUnavailable);
       if (action === 'browse_workdir') {
-        // The floating window captures this origin before taking focus.
-        if (restore?.isConnected) restore.focus({ preventScroll: true });
-        await props.adapter.openWorkingDirectoryInFileBrowser?.(target);
-      } else await props.adapter.openWorkingDirectoryInTerminal?.(target);
+        await browseWorkingDirectory(target, restore);
+        return;
+      }
+      const availability = directoryMenuAvailability().terminal;
+      if (!availability?.enabled) throw new Error(availability?.reason || copy().threadList.workingDirectoryUnavailable);
+      await props.adapter.openWorkingDirectoryInTerminal?.(target);
     } catch (error) {
       notifyThreadActionError(getErrorMessage(error));
       restoreThreadMenuFocus(restore);
@@ -5619,7 +5589,6 @@ webSearch: model.web_search,
       window.clearTimeout(copiedApprovalResetTimer);
       copiedApprovalResetTimer = undefined;
     }
-    clearWorkingDirectoryCopyTimer();
   });
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
@@ -10395,6 +10364,21 @@ webSearch: model.web_search,
             copy={copy().emptyState}
             disabled={!readyForChat()}
             showSuggestions={presentation() !== 'companion'}
+            workingDirectory={(
+              <Show when={workingDirectoryPickerAvailable()}>
+                <div class="flower-new-working-directory">
+                  <span class="flower-new-working-directory-label">{copy().threadList.workingDirectoryLabel}</span>
+                  <FlowerWorkingDirectoryControl
+                    variant="select"
+                    name={displayedWorkingDirectoryLabel()}
+                    title={workingDirectoryPickerTitle()}
+                    disabled={!canPickWorkingDirectory()}
+                    expanded={workingDirectoryPickerOpen()}
+                    onClick={openWorkingDirectoryPicker}
+                  />
+                </div>
+              </Show>
+            )}
             onSuggestionClick={(prompt) => updateComposerSessionText(currentComposerSessionKey(), prompt)}
           />
         );
@@ -10421,33 +10405,6 @@ webSearch: model.web_search,
         </div>
       </div>
     </div>
-  );
-
-  const workingDirectoryChip = (location: FlowerComposerControlLocation = 'inline') => (
-    <button
-      type="button"
-      class={cn(
-        'flower-working-dir-chip',
-        `flower-composer-control-${location}`,
-        workingDirectoryChipInteractive() && 'flower-working-dir-chip-interactive',
-      )}
-      data-flower-composer-control="working_dir"
-      data-copied={workingDirectoryCopied() ? 'true' : 'false'}
-      title={workingDirectoryChipTitle()}
-      aria-label={workingDirectoryChipTitle()}
-      aria-disabled={workingDirectoryChipInteractive() ? undefined : 'true'}
-      tabIndex={workingDirectoryChipInteractive() ? 0 : -1}
-      onClick={() => {
-        if (!workingDirectoryChipInteractive()) return;
-        void handleWorkingDirectoryChipClick();
-      }}
-    >
-      <span class="flower-working-dir-chip-icon" aria-hidden="true">
-        <FolderOpen class="flower-working-dir-chip-icon-idle h-3.5 w-3.5" />
-        <Check class="flower-working-dir-chip-icon-copied h-3.5 w-3.5" />
-      </span>
-      <span class="flower-working-dir-chip-label">{displayedWorkingDirectoryLabel()}</span>
-    </button>
   );
 
   const modelMenuItem = (option: ComposerModelOption) => {
@@ -10676,8 +10633,6 @@ webSearch: model.web_search,
 
   const composerControlLabel = (id: FlowerComposerControlID): string => {
     switch (id) {
-      case 'working_dir':
-        return copy().threadList.workingDirectoryLabel;
       case 'permission':
         return copy().chat.permissionSelectorLabel;
       case 'model_reasoning':
@@ -10693,13 +10648,6 @@ webSearch: model.web_search,
 
   const composerControlMeasure = (id: FlowerComposerControlID) => {
     switch (id) {
-      case 'working_dir':
-        return (
-          <span class="flower-working-dir-chip flower-composer-control-measure">
-            <FolderOpen class="h-3.5 w-3.5" aria-hidden="true" />
-            <span class="flower-working-dir-chip-label">{displayedWorkingDirectoryLabel()}</span>
-          </span>
-        );
       case 'permission':
         return (
           <span class="flower-permission-trigger flower-composer-control-measure" data-permission-type={composerPermissionType()}>
@@ -10744,8 +10692,6 @@ webSearch: model.web_search,
 
   const composerControl = (id: FlowerComposerControlID, location: FlowerComposerControlLocation) => {
     switch (id) {
-      case 'working_dir':
-        return workingDirectoryChip(location);
       case 'permission':
         return permissionSelector();
       case 'model_reasoning':
@@ -11123,6 +11069,18 @@ webSearch: model.web_search,
             <Show when={!companionCollapsed()}>{companionHeaderIdentity()}</Show>
           </Show>
           <div class="flower-chat-header-actions">
+            <FlowerWorkingDirectoryControl
+              variant="browse"
+              name={displayedWorkingDirectoryLabel()}
+              title={workingDirectoryBrowseTitle()}
+              disabled={Boolean(workingDirectoryBrowseDisabledReason())}
+              onClick={(event) => {
+                const path = displayedWorkingDirectory();
+                if (workingDirectoryBrowseDisabledReason()) return;
+                const threadID = selectedThreadID();
+                void browseWorkingDirectory({ path, ...(threadID ? { thread_id: threadID } : {}) }, event.currentTarget);
+              }}
+            />
             <Show when={selectedThreadID() && props.adapter.computerManagement}>
               <button type="button" class="flower-header-icon-button" aria-label={copy().computer.title} title={copy().computer.title}
                 aria-haspopup="dialog" aria-expanded={computerDialog() !== null} onClick={() => setComputerDialog('settings')}><Link class="h-4 w-4" aria-hidden="true" /></button>

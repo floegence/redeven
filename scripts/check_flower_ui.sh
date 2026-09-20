@@ -149,7 +149,6 @@ main() {
       internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts \
       internal/flower_ui/src/FlowerSurface.activityRunningSheen.test.ts \
       internal/flower_ui/src/FlowerSurface.approvalCommand.test.ts \
-      internal/flower_ui/src/FlowerSurface.workingDirectory.test.ts \
       internal/flower_ui/src/FlowerSurface.modelStatusIndicator.test.ts \
       internal/flower_ui/src/FlowerSurface.markdownRendering.test.ts \
       internal/flower_ui/src/FlowerSurface.markdownReadability.test.ts \
@@ -173,6 +172,7 @@ main() {
         src/ui/FlowerMarkdown.streamingStability.browser.test.tsx \
         src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \
         src/ui/FlowerDirectoryMenus.browser.test.tsx \
+        src/ui/FlowerWorkingDirectory.browser.test.tsx \
         src/ui/FlowerSurface.fork.browser.test.tsx \
         src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
         src/ui/FlowerSurface.composerAttachments.browser.test.tsx \
