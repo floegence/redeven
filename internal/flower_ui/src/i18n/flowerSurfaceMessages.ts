@@ -337,6 +337,7 @@ export const flowerSurfaceEnUS = {
     newChat: 'New chat',
     workingDirPickerHomeLabel: 'Home',
     workingDirPickerTitle: 'Select working directory',
+    workingDirPickerRecent: 'Recently used',
     workingDirPickerConfirm: 'Select',
   },
   threadList: {

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower setup and settings
 description: First-time model setup and the shared provider, permission, and computer settings surface.
 tags: [ai, flower, settings, onboarding]
-timestamp: 2026-09-19T00:00:00Z
+timestamp: 2026-09-21T00:00:00Z
 ---
 # Summary
 
@@ -35,6 +35,12 @@ Configured profiles with missing credentials and actual Desktop connection or
 protocol failures use the existing composer and model-menu recovery contracts in
 [model and navigation presentation](flower-model-navigation.md). Refresh failure
 uses host feedback and never clears drafts or silently selects another source.
+
+The configured new-conversation empty state uses the original one-shot welcome
+flower rotation: a 1.2-second turn with a small overshoot and scale rebound,
+after a 150 ms delay. It finishes at rest and does not replay on directory or
+draft edits. Reduced motion disables it. The shared icon artwork stays bare,
+without restoring the removed glow or a continuous animation.
 
 # Settings composition
 
@@ -82,6 +88,7 @@ Computer-use save failures restore the confirmed switch and expose the error.
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/FlowerWorkingDirectory.browser.test.tsx` - One-shot welcome rotation, overshoot, stable draft edits, and reduced motion.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:2846` - First-time setup eligibility and retained composer ownership.
 - `redeven:internal/flower_ui/src/chat/FlowerSetupWelcome.tsx:7` - Setup destinations and model refresh presentation.
 - `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx:174` - Shared settings actions and save controllers.

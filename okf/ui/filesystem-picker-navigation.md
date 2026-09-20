@@ -3,7 +3,7 @@ type: UI Contract
 title: Absolute filesystem directory selection
 description: Select authorized directories through one navigation core in Flower, Spaces, and other filesystem pickers.
 tags: [ui, filesystem, flower, spaces, workbench]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-21T00:00:00Z
 ---
 # Summary
 
@@ -92,7 +92,17 @@ cached subtree. Recovery uses the same request, cancellation, and commit owner,
 without a notification loop, retry timer, or separate recovery controller.
 
 Flower opens a directory modal at the draft directory and commits only on
-confirmation. Canceling leaves the composer draft unchanged. A created
+confirmation. Its default Recently used tab sits beside the root tabs and shares
+their content area; choosing a suggestion opens directory browsing with path-input
+focus. Suggestions derive from current workspace root conversation summaries,
+sorted by latest update and deduplicated by absolute
+path; pinned order does not change recency. The list contains at most three
+directories and disappears when empty. No separate browser history or cross-host
+path store is introduced. The published picker's `suggestedPaths` entry points
+display directory names and full-path hints, and navigate through the same
+loader as typed paths. A deleted or denied recent directory stays unconfirmed
+with normal recovery; historical use grants no access. Canceling leaves the
+composer draft unchanged. A created
 conversation keeps its immutable runtime-normalized directory. The default shown
 for a new conversation and its creation request use the declared default root;
 a context from an earlier runtime session cannot supply that default.

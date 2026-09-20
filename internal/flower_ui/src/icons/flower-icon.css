@@ -12,3 +12,18 @@
 .redeven-flower-soft-aura-workbench-svg { width: 84%; height: 84%; }
 .redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-svg { width: 86%; height: 86%; }
 .redeven-flower-soft-aura-lg .redeven-flower-soft-aura-svg { width: 64%; height: 64%; }
+
+@keyframes redeven-flower-intro-spin {
+  0% { transform: rotate(0deg) scale(1); }
+  70% { transform: rotate(390deg) scale(1.12); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+.redeven-flower-icon-spin {
+  transform-origin: 50% 50%;
+  animation: redeven-flower-intro-spin 1.2s cubic-bezier(0.22, 1, 0.36, 1) 0.15s 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-flower-icon-spin { animation: none; transform: none; }
+}

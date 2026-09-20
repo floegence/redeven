@@ -42,6 +42,7 @@ async function fixture(overrides: Partial<FlowerSurfaceAdapter> = {}) {
 describe('Flower working directory actions', () => {
   it('opens the loaded conversation directory from the header without copying or reclaiming focus', async () => {
     const { surface, a, openFiles } = await fixture();
+    await waitFor(() => document.activeElement === surface.querySelector('textarea'));
     const writeText = vi.fn();
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     const destination = document.createElement('input');

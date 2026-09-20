@@ -447,6 +447,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       newChat: t(i18n, k('chat.newChat')),
       workingDirPickerHomeLabel: t(i18n, k('chat.workingDirPickerHomeLabel')),
       workingDirPickerTitle: t(i18n, k('chat.workingDirPickerTitle')),
+      workingDirPickerRecent: t(i18n, k('chat.workingDirPickerRecent')),
       workingDirPickerConfirm: t(i18n, k('chat.workingDirPickerConfirm')),
     },
     threadList: {
