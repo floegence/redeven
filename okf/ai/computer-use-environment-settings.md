@@ -32,6 +32,15 @@ conversation it exposes only environment settings. Opening management always
 shows the overview, even when the conversation is waiting for Chrome. Only the
 explicit connection-assistance action opens a guide that may resume that request.
 
+The current conversation object is the overview's primary action area. A missing
+object has a warning treatment and an explicit switch action. Environment entries
+use equal-width cards with textual status badges and visible outlined management
+buttons aligned along the bottom; narrow surfaces stack the cards. Help and
+advanced discovery are secondary navigation, and conversation permissions remain
+in the footer. Status color supplements the label and never represents a new
+state owner. Shared Floe buttons retain their keyboard and disabled behavior;
+product layout uses theme tokens in both light and dark appearances.
+
 Target selection follows the single
 [target selection contract](computer-use-target-selection.md). Per-resource grants
 are edited on a separate conversation-permissions page. Full access hides
