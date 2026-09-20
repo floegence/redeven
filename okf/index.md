@@ -15,6 +15,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.
 - [Web Services interface](architecture/web-services-interface.md) - Read service status, open archives, and resolve exceptions in compact, accessible Activity and Workbench panels.
 - [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first opens, persisted proxy choice, and isolated Desktop loopback compatibility.
+- [Host Applications](architecture/host-applications.md) - Browse native Linux applications and open owned Xpra sessions in authorized windows.
 - [Desktop loopback Web Service access](architecture/web-service-desktop-loopback.md) - Give one HTTP service a protected numeric-loopback Origin in its isolated Desktop window.
 - [Web Service system-browser authorization](architecture/web-service-browser-authorization.md) - Exchange a Desktop-private route for one exact, bounded browser session without a public fallback.
 - [Managed Web Service Templates](architecture/managed-web-service-templates.md) - Verify and map one released external catalog without retaining service-specific content in Redeven.

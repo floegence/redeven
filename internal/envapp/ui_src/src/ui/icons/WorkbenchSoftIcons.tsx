@@ -76,6 +76,18 @@ export function CompositionWorkbenchIcon(props: { class?: string }) {
   );
 }
 
+export function HostApplicationsWorkbenchIcon(props: { class?: string }) {
+  return (
+    <WorkbenchIconTile name="host-applications" class={props.class}>
+      <rect x="10" y="9" width="23" height="23" rx="4" fill="var(--muted-foreground)" opacity=".28" />
+      <rect x="15" y="16" width="24" height="24" rx="4" fill="var(--card)" stroke="var(--muted-foreground)" stroke-opacity=".4" />
+      <path d="M15 23h24" stroke="var(--muted-foreground)" stroke-opacity=".3" />
+      <circle cx="19" cy="19.5" r="1" fill="var(--muted-foreground)" />
+      <path d="m24 28 7 4-7 4z" fill="var(--primary)" opacity=".72" />
+    </WorkbenchIconTile>
+  );
+}
+
 export function PluginsWorkbenchIcon(props: { class?: string }) {
   const fillId = `app-fill-${createUniqueId()}`;
 

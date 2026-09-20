@@ -1039,6 +1039,12 @@
     "unknown": "未知",
     "moreInformation": "更多信息"
   },
+  "hostApplications": {
+    "unavailableTitle": "连接已中断",
+    "unavailableSummary": "请检查网络连接，然后重新连接应用。此操作不会重启会话。",
+    "retry": "重新连接",
+    "retrying": "正在重新连接…"
+  },
   "webServiceBrowser": {
     "title": "Web Service",
     "addressLabel": "Web Service 地址",

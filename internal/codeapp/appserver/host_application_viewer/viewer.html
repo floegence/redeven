@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="{{.Locale}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{.Name}}</title>
+  <style nonce="{{.Nonce}}">{{.Style}}</style>
+</head>
+<body data-state="starting">
+  <iframe id="application" title="{{.Name}}" allow="clipboard-read; clipboard-write" aria-hidden="true" tabindex="-1"></iframe>
+  <main id="connection" aria-live="polite" aria-busy="true">
+    <div class="app-identity" aria-hidden="true">
+      <img id="icon" hidden alt="">
+      <svg id="fallback-icon" viewBox="0 0 32 32" fill="none"><rect x="5" y="6" width="22" height="20" rx="4"/><path d="M5 12h22M10 9h.1M13 9h.1"/></svg>
+      <span class="connection-mark"><svg viewBox="0 0 16 16" fill="none"><path d="M8 4v5m0 3h.01"/></svg></span>
+    </div>
+    <h1>{{.Name}}</h1>
+    <p id="status"></p>
+    <div class="progress" aria-hidden="true"><span></span></div>
+    <p id="hint"></p>
+    <button id="retry" type="button" hidden><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16 4v5h-5M16 9a6 6 0 1 0-.6 4"/></svg><span></span></button>
+  </main>
+  <script nonce="{{.Nonce}}">const config = {{.Config}};
+{{.Script}}
+  </script>
+</body>
+</html>

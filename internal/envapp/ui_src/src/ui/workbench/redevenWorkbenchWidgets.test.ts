@@ -42,6 +42,7 @@ describe('redevenWorkbenchWidgets source contract', () => {
       'redeven.monitor',
       'redeven.codespaces',
       'redeven.ports',
+      'redeven.applications',
       'redeven.containers',
       'redeven.ai',
     ]);

@@ -47,6 +47,7 @@ const VISIBLE_ATTRIBUTES = new Set([
 ]);
 
 const EXCEPTIONS: readonly Exception[] = [
+  { file: 'src/ui/pages/EnvHostApplicationsPage.tsx', kind: 'placeholder', text: '/usr/bin/gedit', reason: 'Literal example of an absolute Linux executable path.' },
   { file: 'src/ui/pages/GitTemplateImport.tsx', kind: 'placeholder', text: 'https://github.com/owner/repository', reason: 'Literal GitHub HTTPS repository URL example.' },
   { file: 'src/ui/pages/GitTemplateImport.tsx', kind: 'text', text: 'SHA-256:', reason: 'Standard content-digest algorithm identifier shown with the reviewed file hash.' },
   { file: 'src/ui/EnvAppShell.tsx', kind: 'alt', text: 'Redeven', reason: 'Protected product name used as the logo alternative text.' },

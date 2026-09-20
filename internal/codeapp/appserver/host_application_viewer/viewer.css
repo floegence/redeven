@@ -1,0 +1,28 @@
+:root { color-scheme:light dark; font:14px/1.5 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; --background:light-dark(#f7f8fa,#181b20); --surface:light-dark(#fff,#24282f); --foreground:light-dark(#26303d,#e6eaf0); --muted:light-dark(#707988,#a0a9b7); --line:light-dark(#e2e6ec,#353c48); --accent:light-dark(#536b85,#9db7d4); }
+* { box-sizing:border-box; }
+[hidden] { display:none!important; }
+html,body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--background); color:var(--foreground); }
+body { display:grid; place-items:center; }
+#application { position:fixed; inset:0; width:100%; height:100%; border:0; opacity:0; pointer-events:none; transition:opacity .22s ease; }
+main { position:relative; width:min(400px,100%); padding:40px 28px; text-align:center; animation:arrive .3s ease-out; }
+.app-identity { position:relative; display:grid; place-items:center; margin:0 auto 25px; width:76px; height:76px; border:1px solid var(--line); border-radius:21px; background:var(--surface); box-shadow:0 4px 10px light-dark(#26303d06,#00000016); }
+.app-identity>img { width:48px; height:48px; object-fit:contain; }
+#fallback-icon { width:37px; height:37px; stroke:var(--accent); stroke-width:1.5; stroke-linecap:round; }
+h1 { font-size:20px; font-weight:600; letter-spacing:-.025em; line-height:1.35; margin:0 0 9px; overflow-wrap:anywhere; }
+#status { margin:0; color:var(--muted); font-size:13px; }
+#hint { color:var(--muted); font-size:12px; line-height:1.7; margin:20px auto 0; max-width:290px; text-wrap:pretty; }
+.progress { margin:21px auto 0; width:88px; height:2px; border-radius:2px; background:var(--line); overflow:hidden; }
+.progress span { display:block; width:40%; height:100%; border-radius:inherit; background:var(--accent); animation:travel 1.6s ease-in-out infinite; }
+.connection-mark { display:none; position:absolute; right:-4px; bottom:-4px; width:23px; height:23px; border:3px solid var(--background); border-radius:50%; background:light-dark(#b88037,#d2a365); color:var(--surface); }
+.connection-mark svg { width:100%; height:100%; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; }
+button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; margin-top:23px; padding:0 15px; border:1px solid var(--line); border-radius:8px; font:inherit; font-size:12px; font-weight:500; background:var(--surface); color:var(--foreground); cursor:pointer; transition:background .15s,border-color .15s; }
+button:hover { border-color:var(--accent); }
+button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+button svg { width:16px; height:16px; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+body[data-state="active"] #application { opacity:1; pointer-events:auto; }
+body[data-state="active"] main { display:none; }
+body:is([data-state="disconnected"],[data-state="failed"]) .connection-mark { display:block; }
+body:is([data-state="disconnected"],[data-state="failed"],[data-state="ended"]) .progress { display:none; }
+@keyframes travel { 0% { transform:translateX(-110%); } 100% { transform:translateX(360%); } }
+@keyframes arrive { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+@media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; } .progress span { width:100%; opacity:.5; } }

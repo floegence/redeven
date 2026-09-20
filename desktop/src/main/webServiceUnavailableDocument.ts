@@ -27,6 +27,7 @@ export function buildWebServiceUnavailableDocumentURL(
   copy: WebServiceUnavailableCopy,
   targetAddress: string,
   theme: DesktopThemeSnapshot,
+  presentation: 'browser' | 'application' = 'browser',
 ): string {
   const palette = theme.semantic;
   const document = `<!doctype html>
@@ -54,6 +55,12 @@ export function buildWebServiceUnavailableDocumentURL(
       --primary-hover: color-mix(in srgb, var(--primary) 88%, var(--foreground));
       --primary-focus: color-mix(in srgb, var(--primary) 70%, var(--foreground));
     }
+    .application main { max-width:440px; text-align:center; }
+    .application .signal { margin:0 auto 24px; border-color:var(--border); background:var(--surface); color:var(--muted-foreground); border-radius:16px; width:64px; height:64px; }
+    .application h1 { font-size:20px; letter-spacing:-.025em; }
+    .application .summary { font-size:13px; margin:12px 0 0; }
+    .application .actions { justify-content:center; margin-top:24px; }
+    .application .retry { background:var(--surface); color:var(--foreground); border-color:var(--border); border-radius:8px; cursor:pointer; }
     * { box-sizing: border-box; }
     html, body { min-width: 100%; min-height: 100%; margin: 0; }
     body { display: grid; place-items: center; background: var(--background); color: var(--foreground); }
@@ -90,15 +97,15 @@ export function buildWebServiceUnavailableDocumentURL(
     }
   </style>
 </head>
-<body>
+<body class="${presentation}">
   <main>
     <div class="signal" aria-hidden="true">
       <svg viewBox="0 0 24 24"><path d="M9.5 14.5 14.5 9.5"/><path d="m7 17-1.2 1.2a3.5 3.5 0 0 1-5-5L5 9a3.5 3.5 0 0 1 5 0"/><path d="m17 7 1.2-1.2a3.5 3.5 0 0 1 5 5L19 15a3.5 3.5 0 0 1-5 0"/></svg>
     </div>
-    <p class="eyebrow">${htmlEscape(copy.eyebrow)}</p>
+    ${presentation === 'browser' ? `<p class="eyebrow">${htmlEscape(copy.eyebrow)}</p>` : ''}
     <h1>${htmlEscape(copy.title)}</h1>
     <p class="summary">${htmlEscape(copy.summary)}</p>
-    <div class="target">
+    ${presentation === 'browser' ? `<div class="target">
       <span class="target-label">${htmlEscape(copy.targetLabel)}</span>
       <code title="${htmlEscape(targetAddress)}">${htmlEscape(targetAddress)}</code>
     </div>
@@ -106,7 +113,7 @@ export function buildWebServiceUnavailableDocumentURL(
       <h2 id="checks-title">${htmlEscape(copy.checksTitle)}</h2>
       <p>${htmlEscape(copy.serviceCheck)}</p>
       <p>${htmlEscape(copy.portCheck)}</p>
-    </section>
+    </section>` : ''}
     <div class="actions">
       <a id="retry" class="retry" href="#retry" aria-live="polite">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M19 11a7 7 0 1 0 1 5"/></svg>

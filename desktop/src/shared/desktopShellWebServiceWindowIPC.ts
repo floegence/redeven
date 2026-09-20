@@ -1,12 +1,14 @@
 export const DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL = 'redeven-desktop:shell-open-web-service-window';
 
 export type WebServiceAccessMode = 'unified_proxy' | 'desktop_loopback';
+export type ForwardWindowPresentation = 'browser' | 'application';
 
 export type DesktopShellOpenWebServiceWindowRequest = Readonly<{
   url: string;
   forward_id: string;
   target_url: string;
   access_mode?: WebServiceAccessMode;
+  presentation?: ForwardWindowPresentation;
 }>;
 
 export type NormalizedDesktopShellOpenWebServiceWindowRequest = Readonly<{
@@ -14,6 +16,7 @@ export type NormalizedDesktopShellOpenWebServiceWindowRequest = Readonly<{
   forward_id: string;
   target_url: string;
   access_mode: WebServiceAccessMode;
+  presentation: ForwardWindowPresentation;
 }>;
 
 export type DesktopShellOpenWebServiceWindowResponse = Readonly<{
@@ -52,7 +55,9 @@ export function normalizeDesktopShellOpenWebServiceWindowRequest(value: unknown)
     const accessMode = compact(candidate.access_mode) || 'unified_proxy';
     if (accessMode !== 'unified_proxy' && accessMode !== 'desktop_loopback') return null;
     if (accessMode === 'desktop_loopback' && targetURL.protocol !== 'http:') return null;
-    return { url: url.toString(), forward_id: forwardID, target_url: targetURL.toString(), access_mode: accessMode };
+    const presentation = compact(candidate.presentation) || 'browser';
+    if (presentation !== 'browser' && presentation !== 'application') return null;
+    return { url: url.toString(), forward_id: forwardID, target_url: targetURL.toString(), access_mode: accessMode, presentation };
   } catch {
     return null;
   }

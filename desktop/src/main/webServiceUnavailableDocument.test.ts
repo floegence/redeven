@@ -56,6 +56,15 @@ describe('webServiceUnavailableDocument', () => {
     expect(document).not.toContain('upstream unavailable');
   });
 
+  it('offers application reconnection without service addresses or browser instructions', () => {
+    const document = decodeDataDocument(buildWebServiceUnavailableDocumentURL(copy, 'http://localhost:3000', theme, 'application'));
+    expect(document).not.toContain('<code');
+    expect(document).not.toContain('http://localhost:3000');
+    expect(document).not.toContain('Make sure the service is running.');
+    expect(document).toContain('href="#retry"');
+    expect(document).toContain('class="application"');
+  });
+
   it('escapes localized copy and the displayed target', () => {
     const document = decodeDataDocument(buildWebServiceUnavailableDocumentURL({
       ...copy,

@@ -1048,6 +1048,12 @@
     "unknown": "Неизвестно",
     "moreInformation": "дополнительная информация"
   },
+  "hostApplications": {
+    "unavailableTitle": "Соединение прервано",
+    "unavailableSummary": "Проверьте соединение и подключитесь к приложению снова. Сеанс не будет перезапущен.",
+    "retry": "Подключиться снова",
+    "retrying": "Повторное подключение…"
+  },
   "webServiceBrowser": {
     "title": "Web Service",
     "addressLabel": "Адрес Web Service",
