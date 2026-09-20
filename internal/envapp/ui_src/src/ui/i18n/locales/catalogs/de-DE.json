@@ -332,7 +332,10 @@
   "gitDiff": {
     "refresh": "Diff aktualisieren",
     "empty": "Der ausgewählte Diff enthält keine Änderungen für diese Datei.",
-    "unavailableDetail": "Die Datei, das Repository oder der Diff ist möglicherweise nicht mehr verfügbar. Aktualisieren Sie den Diff, um es erneut zu versuchen.",
+    "waitingForConnection": "Warten auf Verbindung…",
+    "sourceUnavailable": "Der ausgewählte Diff oder seine Quelle ist nicht mehr verfügbar. Aktualisieren Sie den Diff, um erneut zu prüfen.",
+    "permissionDenied": "Sie haben keine Berechtigung, diesen Diff zu lesen.",
+    "requestFailedDetail": "Aktualisieren Sie den Diff, um es erneut zu versuchen.",
     "title": "Unterschiede",
     "directoryUnavailable": "Für Verzeichnisse ist keine Diff-Vorschau verfügbar.",
     "patchUnavailable": "Für diese Datei ist keine Patch-Vorschau verfügbar.",

@@ -483,7 +483,8 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
 
     expect(historySrc).toContain('GitStatePane');
-    expect(historySrc).toContain("i18n.t('uiCopy.git.loadingCommitDetails')");
+    expect(historySrc).toContain('loading={detailLoading()}');
+    expect(historySrc).toContain('<GitDiffSplit');
     expect(historySrc).not.toContain('GitInlineLoadingStatus');
     expect(historySrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
 
@@ -533,7 +534,7 @@ describe('browser workspace layout wiring', () => {
 
     expect(dialogSrc).toContain('flex max-w-none flex-col overflow-hidden rounded-md p-0');
     expect(dialogSrc).toContain('rounded-md p-0');
-    expect(dialogSrc).toContain('[&>div:last-child]:min-h-0');
+    expect(dialogSrc).toContain('contentClass="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"');
     expect(dialogSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
     expect(panelSrc).toContain("i18n.t('uiCopy.git.fullContext')");
     expect(panelSrc).toContain("i18n.t('gitDiff.loadingFullContext')");

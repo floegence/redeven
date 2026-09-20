@@ -332,7 +332,10 @@
   "gitDiff": {
     "refresh": "重新整理差異",
     "empty": "所選差異中沒有此檔案的變更。",
-    "unavailableDetail": "檔案、儲存庫或差異可能已不存在。請重新整理後再試。",
+    "waitingForConnection": "正在等待連線…",
+    "sourceUnavailable": "所選差異或其來源已無法使用。請重新整理差異後再檢查。",
+    "permissionDenied": "你沒有讀取此差異的權限。",
+    "requestFailedDetail": "請重新整理差異後再試。",
     "title": "差異",
     "directoryUnavailable": "資料夾不支援差異預覽。",
     "patchUnavailable": "此檔案不支援修補程式預覽。",

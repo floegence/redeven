@@ -10,9 +10,10 @@ import type { GitSeededWorkspaceChange } from '../utils/gitWorkbench';
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
 
+const rpcTransport = vi.hoisted(() => ({}));
 vi.mock('@floegence/floe-webapp-protocol', async () => ({
   ...await vi.importActual<typeof import('@floegence/floe-webapp-protocol')>('@floegence/floe-webapp-protocol'),
-  useProtocol: () => ({ session: () => ({ connected: true }) }),
+  useProtocol: () => ({ rpcTransport: () => rpcTransport, session: () => ({ connected: true }) }),
 }));
 vi.mock('../protocol/redeven_v1', async () => ({
   ...await vi.importActual<typeof import('../protocol/redeven_v1')>('../protocol/redeven_v1'),

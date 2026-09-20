@@ -332,7 +332,10 @@
   "gitDiff": {
     "refresh": "Actualizar diferencias",
     "empty": "No hay cambios de este archivo en las diferencias seleccionadas.",
-    "unavailableDetail": "Es posible que el archivo, el repositorio o las diferencias ya no estén disponibles. Actualiza para volver a intentarlo.",
+    "waitingForConnection": "Esperando conexión…",
+    "sourceUnavailable": "Las diferencias seleccionadas o su origen ya no están disponibles. Actualiza las diferencias para comprobarlo de nuevo.",
+    "permissionDenied": "No tienes permiso para leer estas diferencias.",
+    "requestFailedDetail": "Actualiza las diferencias para volver a intentarlo.",
     "title": "Diferencias",
     "directoryUnavailable": "La vista previa de diferencias no está disponible para carpetas.",
     "patchUnavailable": "La vista previa del parche no está disponible para este archivo.",

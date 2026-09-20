@@ -13,6 +13,11 @@ const mockGetCommitDetail = vi.fn();
 const mockGetBranchCompare = vi.fn();
 const mockListWorkspacePage = vi.fn();
 const mockGetDiffContent = vi.fn();
+const rpcTransport = vi.hoisted(() => ({}));
+vi.mock('@floegence/floe-webapp-protocol', async () => ({
+  ...await vi.importActual<typeof import('@floegence/floe-webapp-protocol')>('@floegence/floe-webapp-protocol'),
+  useProtocol: () => ({ rpcTransport: () => rpcTransport }),
+}));
 
 vi.mock("../protocol/redeven_v1", async () => {
   const actual = await vi.importActual<typeof import("../protocol/redeven_v1")>(
