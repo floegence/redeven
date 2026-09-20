@@ -32,7 +32,7 @@ func (s *Service) OpenComputerExtension(ctx context.Context, meta *session.Meta,
 	if runtime.GOOS == "linux" && action != "folder" {
 		name, err = exec.LookPath(name)
 		if err != nil {
-			return errors.New("Google Chrome is not installed")
+			return errors.New("cannot open Google Chrome: browser is not installed")
 		}
 	}
 	// Linux Chrome may remain attached when it starts a new process. Reap it
