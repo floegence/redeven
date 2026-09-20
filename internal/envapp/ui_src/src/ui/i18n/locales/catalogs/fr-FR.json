@@ -1635,6 +1635,8 @@
     "filteredView": "Vue filtrée",
     "openingPath": "Chemin d'ouverture...",
     "pathEditHint": "Entrée pour ouvrir / Échap pour annuler",
+    "pathInputInvalid": "Saisissez un chemin absolu, ~ ou un chemin commençant par ~/.",
+    "pathHomeUnavailable": "Le répertoire personnel est indisponible. Saisissez un chemin absolu.",
     "folderTree": "Arborescence des dossiers",
     "compactDepth": "Profondeur compacte",
     "roots": "Racines",

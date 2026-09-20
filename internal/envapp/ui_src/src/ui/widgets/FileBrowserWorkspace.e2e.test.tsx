@@ -91,16 +91,11 @@ function dispatchPointerDown(target: EventTarget, options: {
   target.dispatchEvent(event);
 }
 
-function expectCodeBadgeForFile(host: HTMLElement, fileName: string, label: string, tone: string) {
-  const fileButton = Array.from(host.querySelectorAll('button'))
-    .find((node) => node.textContent?.includes(fileName));
-
-  expect(fileButton, `expected rendered file entry for ${fileName}`).toBeTruthy();
-
-  const badge = fileButton?.querySelector('[data-code-badge-label]') as HTMLElement | null;
-  expect(badge, `expected code badge for ${fileName}`).toBeTruthy();
-  expect(badge?.getAttribute('data-code-badge-label')).toBe(label);
-  expect(badge?.getAttribute('data-code-badge-tone')).toBe(tone);
+function expectPublishedIconForFile(host: HTMLElement, fileName: string, kind: string) {
+  const row = Array.from(host.querySelectorAll<HTMLElement>('[data-file-browser-item-path]'))
+    .find((node) => node.dataset.fileBrowserItemPath === `/${fileName}`);
+  expect(row, `expected rendered file entry for ${fileName}`).toBeTruthy();
+  expect(row?.querySelector('[data-file-icon-kind]')?.getAttribute('data-file-icon-kind')).toBe(kind);
 }
 
 function findGridLabel(tile: HTMLButtonElement | null, name: string) {
@@ -1241,9 +1236,9 @@ describe('FileBrowserWorkspace interactions', () => {
       await flush();
 
       expect(host.querySelector('input[aria-label="Go to path"]')).toBeTruthy();
-      expect(host.textContent).toContain('Use "/" or "~" to enter a path.');
+      expect(host.textContent).toContain('Enter an absolute path, ~, or a path starting with ~/.');
       const headerStatus = host.querySelector('[data-testid="file-browser-header-status"]') as HTMLElement | null;
-      expect(headerStatus?.textContent).toBe('Use "/" or "~" to enter a path.');
+      expect(headerStatus?.textContent).toBe('Enter an absolute path, ~, or a path starting with ~/.');
       expect(headerStatus?.querySelector('[aria-hidden="true"]')).toBeNull();
     } finally {
       dispose();
@@ -1473,7 +1468,7 @@ describe('FileBrowserWorkspace interactions', () => {
         .map((node) => node.textContent?.trim())
         .filter(Boolean);
 
-      expect(visibleButtons).toContain('Home');
+      expect(visibleButtons).toContain('Root');
       expect(visibleButtons).toContain('assets');
       expect(visibleButtons).toContain('icons');
       expect(visibleButtons).toContain('…');
@@ -1483,7 +1478,7 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
-  it('treats homePath as the navigation root and maps navigate-up back to the absolute home path', async () => {
+  it('navigates to the absolute parent without rebasing paths to Home', async () => {
     let navigatedPath = '';
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1522,7 +1517,7 @@ describe('FileBrowserWorkspace interactions', () => {
       await Promise.resolve();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(navigatedPath).toBe('/Users/tester');
-      expect(host.textContent).toContain('Home');
+      expect(host.textContent).toContain('Root');
     } finally {
       dispose();
     }
@@ -2526,7 +2521,7 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
-  it('renders published code badges for representative code files in the agent workspace', async () => {
+  it('renders published file icons for representative code files in the agent workspace', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const codeFiles: FileItem[] = [
@@ -2570,20 +2565,20 @@ describe('FileBrowserWorkspace interactions', () => {
       await flush();
 
       const expectations = [
-        ['eslint.config.mjs', 'JS', 'warning'],
-        ['server.ts', 'TS', 'primary'],
-        ['Dockerfile', 'DKR', 'info'],
-        ['Dockerfile.dev', 'DKR', 'info'],
-        ['deploy.dockerfile', 'DKR', 'info'],
-        ['Makefile', 'MAKE', 'warning'],
-        ['CMakeLists.txt', 'CMK', 'primary'],
-        ['.zshrc', 'SH', 'success'],
-        ['deploy.ps1', 'PS', 'primary'],
-        ['build.gradle', 'GRV', 'success'],
+        ['eslint.config.mjs', 'js'],
+        ['server.ts', 'ts'],
+        ['Dockerfile', 'docker'],
+        ['Dockerfile.dev', 'docker'],
+        ['deploy.dockerfile', 'docker'],
+        ['Makefile', 'make'],
+        ['CMakeLists.txt', 'cmake'],
+        ['.zshrc', 'shell'],
+        ['deploy.ps1', 'powershell'],
+        ['build.gradle', 'gradle'],
       ] as const;
 
-      for (const [fileName, label, tone] of expectations) {
-        expectCodeBadgeForFile(host, fileName, label, tone);
+      for (const [fileName, kind] of expectations) {
+        expectPublishedIconForFile(host, fileName, kind);
       }
     } finally {
       dispose();
@@ -2626,7 +2621,7 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
-  it('maps absolute reveal requests through the workspace shell and keeps selection feedback in the status bar only', async () => {
+  it('passes absolute reveal requests through the workspace shell and keeps selection feedback in the status bar only', async () => {
     const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
     const consumed = vi.fn();
     let setRevealRequest!: (request: FileBrowserRevealRequest | null) => void;

@@ -15,7 +15,7 @@ import {
   type ContextMenuItem,
   type FileItem,
 } from '@floegence/floe-webapp-core/file-browser';
-import { Button, SegmentedControl, type SurfaceFloatingBoundary } from '@floegence/floe-webapp-core/ui';
+import { Button, SegmentedControl, formatPickerPath, parsePickerPath, type SurfaceFloatingBoundary } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { FileBrowserPathControl, type FileBrowserPathControlMode } from './FileBrowserPathControl';
 import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
@@ -25,20 +25,9 @@ import { resolveFileBrowserToolbarLayout } from './fileBrowserPathLayout';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
-import { formatFileBrowserPathInputValue, parseFileBrowserPathInput } from '../utils/fileBrowserPathInput';
 import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
 import { matchFilesystemRoot } from '../utils/filesystemRoots';
 import { useI18n } from '../i18n';
-import {
-  mapContextMenuCallbacksToAbsolute,
-  mapContextMenuEventToAbsolutePath,
-  mapContextMenuItemsToAbsolute,
-  mapFileItemToAbsolutePath,
-  mapFileItemsToDisplayPath,
-  mapRevealRequestToDisplayPath,
-  toFileBrowserAbsolutePath,
-  toFileBrowserDisplayPath,
-} from '../utils/fileBrowserDisplayPath';
 
 const FILE_WORKSPACE_TOOLBAR_FIELD_CLASS =
   cn('h-7 min-w-0 rounded-md border px-2.5', redevenSurfaceRoleClass('controlMuted'));
@@ -320,7 +309,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   const [pathDraft, setPathDraft] = createSignal('');
   const [pathError, setPathError] = createSignal('');
   const [pathSubmitting, setPathSubmitting] = createSignal(false);
-  const formattedCurrentPath = createMemo(() => formatFileBrowserPathInputValue(props.currentPath, props.homePath));
+  const formattedCurrentPath = createMemo(() => formatPickerPath(props.currentPath, props.homePath));
   const currentRoot = createMemo(() => matchFilesystemRoot(props.currentPath, props.roots ?? []));
   const pathStatus = createMemo(() => {
     if (pathControlMode() !== 'edit') return null;
@@ -358,15 +347,17 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   const submitPathEditor = async () => {
     if (pathSubmitting()) return;
 
-    const parsed = parseFileBrowserPathInput(pathDraft(), props.homePath);
-    if (parsed.kind === 'error') {
-      setPathError(parsed.message);
+    const rawPath = pathDraft().trim();
+    const absolutePath = parsePickerPath(rawPath, props.homePath);
+    if (!absolutePath) {
+      const homeUnavailable = (rawPath === '~' || rawPath.startsWith('~/')) && !parsePickerPath(props.homePath ?? '');
+      setPathError(i18n.t(homeUnavailable ? 'files.pathHomeUnavailable' : 'files.pathInputInvalid'));
       focusPathInput();
       return;
     }
 
     if (!props.onPathSubmit) {
-      browser.setCurrentPath(toFileBrowserDisplayPath(parsed.absolutePath, props.homePath));
+      browser.setCurrentPath(absolutePath);
       setPathControlMode('read');
       setPathError('');
       return;
@@ -375,7 +366,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
     setPathSubmitting(true);
     setPathError('');
     try {
-      const result = await props.onPathSubmit(parsed.absolutePath);
+      const result = await props.onPathSubmit(absolutePath);
       if (result.status === 'error') {
         setPathError(result.message);
         focusPathInput();
@@ -575,43 +566,19 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
 
 export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
   const i18n = useI18n();
-  const displayFiles = createMemo(() => mapFileItemsToDisplayPath(props.files, props.homePath));
-  const displayCurrentPath = createMemo(() => toFileBrowserDisplayPath(props.currentPath, props.homePath));
-  const displayPendingNavigationPath = createMemo(() => (
-    props.pendingNavigationPath === undefined
-      ? undefined
-      : toFileBrowserDisplayPath(props.pendingNavigationPath, props.homePath)
-  ));
-  const displayInitialPath = createMemo(() => toFileBrowserDisplayPath(props.initialPath, props.homePath));
-  const displayContextMenuCallbacks = createMemo(() => mapContextMenuCallbacksToAbsolute(props.contextMenuCallbacks, props.homePath));
-  const displayOverrideContextMenuItems = createMemo(() => mapContextMenuItemsToAbsolute(props.overrideContextMenuItems, props.homePath));
-  const displayRevealRequest = createMemo(() => mapRevealRequestToDisplayPath(props.revealRequest, props.homePath));
-  const resolveDisplayOverrideContextMenuItems = (event: ContextMenuEvent | null) => (
-    mapContextMenuItemsToAbsolute(
-      props.resolveOverrideContextMenuItems?.(
-        mapContextMenuEventToAbsolutePath(event, props.homePath),
-      ),
-      props.homePath,
-    )
-  );
-
-  const toAbsolutePath = (path: string): string => {
-    return toFileBrowserAbsolutePath(path, props.homePath) || props.currentPath || props.homePath || '';
-  };
-
   return (
     <Show when={props.resetKey + 1} keyed>
       <FileBrowserProvider
-        files={displayFiles()}
-        path={displayCurrentPath()}
-        initialPath={displayInitialPath()}
+        files={props.files}
+        path={props.currentPath}
+        initialPath={props.initialPath}
         initialViewMode="grid"
         persistenceKey={props.persistenceKey}
-        homeLabel={i18n.t('files.homeLabel')}
-        onNavigate={(path) => props.onNavigate?.(toAbsolutePath(path))}
-        onPathChange={(path, source) => props.onPathChange?.(toAbsolutePath(path), source)}
-        onOpen={(item) => props.onOpen?.(mapFileItemToAbsolutePath(item, props.homePath))}
-        revealRequest={displayRevealRequest()}
+        homeLabel={i18n.t('files.rootLabel')}
+        onNavigate={props.onNavigate}
+        onPathChange={props.onPathChange}
+        onOpen={props.onOpen}
+        revealRequest={props.revealRequest}
         onRevealRequestConsumed={props.onRevealRequestConsumed}
       >
         <FileBrowserWorkspaceInner
@@ -622,7 +589,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           gitHistoryDisabledReason={props.gitHistoryDisabledReason}
           captureTypingFromPage={props.captureTypingFromPage}
           currentPath={props.currentPath}
-          pendingNavigationPath={displayPendingNavigationPath()}
+          pendingNavigationPath={props.pendingNavigationPath}
           homePath={props.homePath}
           roots={props.roots}
           width={props.width}
@@ -637,17 +604,12 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           instanceId={props.instanceId}
           onPathSubmit={props.onPathSubmit}
           pathEditRequestKey={props.pathEditRequestKey}
-          onDragMove={props.onDragMove
-            ? (items, targetPath) => props.onDragMove?.(
-                items.map((item) => mapFileItemToAbsolutePath(item, props.homePath)),
-                toAbsolutePath(targetPath),
-              )
-            : undefined}
+          onDragMove={props.onDragMove}
           toolbarEndActions={props.toolbarEndActions}
           contextMenuBottomLimit={props.contextMenuBottomLimit}
-          contextMenuCallbacks={displayContextMenuCallbacks()}
-          overrideContextMenuItems={displayOverrideContextMenuItems()}
-          resolveOverrideContextMenuItems={props.resolveOverrideContextMenuItems ? resolveDisplayOverrideContextMenuItems : undefined}
+          contextMenuCallbacks={props.contextMenuCallbacks}
+          overrideContextMenuItems={props.overrideContextMenuItems}
+          resolveOverrideContextMenuItems={props.resolveOverrideContextMenuItems}
           class={props.class}
         />
       </FileBrowserProvider>

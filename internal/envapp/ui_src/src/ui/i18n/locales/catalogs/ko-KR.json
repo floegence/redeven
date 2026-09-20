@@ -1635,6 +1635,8 @@
     "filteredView": "필터링된 보기",
     "openingPath": "열려 있는 경로...",
     "pathEditHint": "열기 위해 Enter / 취소하려면 Esc",
+    "pathInputInvalid": "절대 경로, ~ 또는 ~/로 시작하는 경로를 입력하세요.",
+    "pathHomeUnavailable": "홈 디렉터리를 사용할 수 없습니다. 절대 경로를 입력하세요.",
     "folderTree": "폴더 트리",
     "compactDepth": "컴팩트 깊이",
     "roots": "루트",

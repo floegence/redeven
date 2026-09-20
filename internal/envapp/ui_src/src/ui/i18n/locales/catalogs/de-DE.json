@@ -1635,6 +1635,8 @@
     "filteredView": "Gefilterte Ansicht",
     "openingPath": "Öffnungspfad...",
     "pathEditHint": "Eingabetaste zum Öffnen / Esc zum Abbrechen",
+    "pathInputInvalid": "Geben Sie einen absoluten Pfad, ~ oder einen mit ~/ beginnenden Pfad ein.",
+    "pathHomeUnavailable": "Das Home-Verzeichnis ist nicht verfügbar. Geben Sie einen absoluten Pfad ein.",
     "folderTree": "Ordnerbaum",
     "compactDepth": "Kompakte Tiefe",
     "roots": "Roots",

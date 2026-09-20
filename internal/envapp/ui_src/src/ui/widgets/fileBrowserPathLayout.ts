@@ -21,13 +21,13 @@ export interface FileBrowserPathLayoutResult {
 export const FILE_BROWSER_PATH_CURRENT_MIN_WIDTH = 96;
 export const FILE_BROWSER_WORKSPACE_INLINE_MIN_WIDTH = 640;
 
-export function buildFileBrowserPathSegments(path: string, homeLabel: string): FileBrowserPathSegment[] {
+export function buildFileBrowserPathSegments(path: string, rootLabel: string): FileBrowserPathSegment[] {
   if (path === '/' || path === '') {
-    return [{ name: homeLabel, path: '/' }];
+    return [{ name: rootLabel, path: '/' }];
   }
 
   const parts = path.split('/').filter(Boolean);
-  const result: FileBrowserPathSegment[] = [{ name: homeLabel, path: '/' }];
+  const result: FileBrowserPathSegment[] = [{ name: rootLabel, path: '/' }];
 
   let currentPath = '';
   for (const part of parts) {
