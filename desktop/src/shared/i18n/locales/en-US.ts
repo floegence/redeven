@@ -3,6 +3,10 @@ import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
   flowerRuntime: {
+    "preparingDetail": "Flower is preparing its AI service. Conversations will appear automatically when it is ready. You can return to Environments at any time.",
+    "unavailableTitle": "Flower is unavailable",
+    "unavailableDetail": "Flower’s AI service is not ready to accept requests. Return to Environments to check the runtime status. Your conversations and unsent draft are kept.",
+
     "runtimeTitle": "Update the runtime to use Flower",
     "desktopTitle": "Update Desktop to use Flower",
     "runtimeDetail": "This runtime is incompatible with Desktop Flower. Update it to continue. Your draft is kept; the environment’s own app remains available.",

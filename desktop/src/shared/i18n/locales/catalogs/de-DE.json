@@ -2836,6 +2836,9 @@
     "loopbackHelp": "Diese Loopback-Adresse gehört zu {host}. Verschiedene Hosts können denselben Port verwenden. Sie ist kein Browserzugang zu dieser Umgebung auf Ihrem Gerät."
   },
   "flowerRuntime": {
+    "preparingDetail": "Flower bereitet den KI-Dienst vor. Sobald er bereit ist, werden die Unterhaltungen automatisch angezeigt. Sie können jederzeit zur Umgebungsübersicht zurückkehren.",
+    "unavailableTitle": "Flower ist nicht verfügbar",
+    "unavailableDetail": "Der KI-Dienst von Flower kann derzeit keine Anfragen verarbeiten. Kehren Sie zur Umgebungsübersicht zurück, um den Status der Laufzeit zu prüfen. Ihre Unterhaltungen und Ihr ungesendeter Entwurf bleiben erhalten.",
     "runtimeTitle": "Laufzeit aktualisieren, um Flower zu nutzen",
     "desktopTitle": "Desktop aktualisieren, um Flower zu nutzen",
     "runtimeDetail": "Diese Laufzeit ist mit Desktop Flower nicht kompatibel. Aktualisieren Sie sie, um fortzufahren. Ihr Entwurf bleibt erhalten; die eigene App der Umgebung ist weiterhin verfügbar.",

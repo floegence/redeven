@@ -2831,6 +2831,9 @@
     "loopbackHelp": "このループバックアドレスは {host} 自身を指します。異なるホストでは同じポートを使用できます。このデバイスのブラウザーからこの環境にアクセスするためのアドレスではありません。"
   },
   "flowerRuntime": {
+    "preparingDetail": "Flower の AI サービスを準備しています。準備が整うと会話が自動的に表示されます。環境一覧にはいつでも戻れます。",
+    "unavailableTitle": "Flower を利用できません",
+    "unavailableDetail": "Flower の AI サービスは現在リクエストを処理できません。環境一覧に戻り、ランタイムの状態を確認してください。会話と未送信の下書きは保持されます。",
     "runtimeTitle": "Flower を使うにはランタイムを更新してください",
     "desktopTitle": "Flower を使うには Desktop を更新してください",
     "runtimeDetail": "このランタイムは Desktop Flower と互換性がありません。ランタイムを更新して続行してください。下書きは保持され、環境に付属するアプリは引き続き利用できます。",

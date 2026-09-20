@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop runtime readiness
 description: Direct Runtime health, access readiness, and Open recovery boundaries.
 tags: [desktop, runtime, startup, readiness]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-21T00:00:00Z
 ---
 # Summary
 
@@ -76,6 +76,25 @@ WSL uses the same check and update presentation. Development attachment logs
 report both the validated bundle identity and actual connected Runtime identity.
 Desktop restart alone is not evidence that the background Runtime changed.
 
+## Desktop Flower AI preparation
+
+Welcome admits Flower only when the compatible, openable Runtime reports AI
+`ready` or `degraded`. Shell readiness alone does not admit settings, model,
+thread, attachment, or workspace-stream requests. Transitional AI states show
+localized preparation with an always-available return action; blocked,
+unavailable, or missing AI facts remain explicit and cannot admit requests.
+The [AI lifecycle owner](../architecture/ai-readiness-lifecycle.md) defines these
+facts and recovery authority.
+
+The existing Welcome health observer supplies updates. Transitional AI
+observations bypass its 30-second cache, so the next regular health tick can
+observe publication. Current presence and the latest health snapshot take
+precedence over historical startup reports, including while a probe is pending.
+Ready publication mounts Flower automatically; later AI loss disposes that
+subtree while the shell-owned draft coordinator retains unsent content. Ordinary
+navigation and stable ready/degraded updates keep the same Flower instance.
+There is no renderer readiness poller, API-error retry loop, or inferred repair.
+
 # Evidence
 
 - `redeven:desktop/src/main/desktopBundle.ts:1` - Runtime-only bundle identity and file validation.
@@ -91,3 +110,6 @@ Desktop restart alone is not evidence that the background Runtime changed.
 - `redeven:desktop/src/shared/environmentManagementPrinciples.ts:1` - Direct managed versus access-only capability boundary.
 - `redeven:desktop/src/welcome/viewModel.test.ts:1` - Unknown versus explicitly stopped Runtime card evidence.
 - `redeven:desktop/src/welcome/App.tsx:1` - Localized action menu, progress, and recovery presentation.
+- `redeven:desktop/src/welcome/flower/DesktopFlowerRuntimeBoundary.client.test.tsx` - AI admission, preparation, blocked states, and draft preservation through recovery.
+- `redeven:desktop/src/main/desktopWelcomeRuntimeHealth.test.ts` - Preparation cache bypass on the existing observer.
+- `redeven:desktop/src/main/desktopWelcomeState.test.ts` - Current readiness wins over historical startup during refresh.

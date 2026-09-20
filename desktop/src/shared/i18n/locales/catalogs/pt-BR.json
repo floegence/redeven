@@ -2837,6 +2837,9 @@
     "loopbackHelp": "Este endereço de loopback pertence a {host}. Hosts diferentes podem usar a mesma porta. Ele não é um endereço para acessar este ambiente no navegador do seu dispositivo."
   },
   "flowerRuntime": {
+    "preparingDetail": "O Flower está preparando o serviço de IA. As conversas aparecerão automaticamente quando ele estiver pronto. Você pode voltar à lista de ambientes a qualquer momento.",
+    "unavailableTitle": "O Flower está indisponível",
+    "unavailableDetail": "O serviço de IA do Flower não pode processar solicitações no momento. Volte à lista de ambientes para verificar o status do ambiente de execução. Suas conversas e o rascunho não enviado serão preservados.",
     "runtimeTitle": "Atualize o ambiente de execução para usar o Flower",
     "desktopTitle": "Atualize o Desktop para usar o Flower",
     "runtimeDetail": "Este ambiente de execução é incompatível com o Desktop Flower. Atualize-o para continuar. Seu rascunho será mantido e o aplicativo do ambiente continuará disponível.",

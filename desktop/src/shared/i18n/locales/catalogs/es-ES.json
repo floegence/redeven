@@ -2837,6 +2837,9 @@
     "loopbackHelp": "Esta dirección de bucle local pertenece a {host}. Distintos hosts pueden usar el mismo puerto. No es una dirección para acceder a este entorno desde el navegador de tu dispositivo."
   },
   "flowerRuntime": {
+    "preparingDetail": "Flower está preparando su servicio de IA. Las conversaciones aparecerán automáticamente cuando esté listo. Puedes volver a la lista de entornos en cualquier momento.",
+    "unavailableTitle": "Flower no está disponible",
+    "unavailableDetail": "El servicio de IA de Flower no puede procesar solicitudes en este momento. Vuelve a la lista de entornos para comprobar el estado del entorno de ejecución. Tus conversaciones y el borrador sin enviar se conservan.",
     "runtimeTitle": "Actualiza el entorno de ejecución para usar Flower",
     "desktopTitle": "Actualiza Desktop para usar Flower",
     "runtimeDetail": "Este entorno de ejecución es incompatible con Desktop Flower. Actualízalo para continuar. Tu borrador se conserva y la aplicación del entorno sigue disponible.",

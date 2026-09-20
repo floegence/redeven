@@ -7818,6 +7818,12 @@
           "title": "Flower storage ownership and migrations"
         },
         {
+          "label": "Desktop runtime readiness",
+          "path": "desktop/desktop-runtime-readiness.md",
+          "concept_id": "desktop.desktop-runtime-readiness",
+          "title": "Desktop runtime readiness"
+        },
+        {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
@@ -14384,7 +14390,7 @@
         "runtime",
         "startup"
       ],
-      "timestamp": "2026-08-27T00:00:00Z",
+      "timestamp": "2026-09-21T00:00:00Z",
       "frontmatter": {
         "description": "Direct Runtime health, access readiness, and Open recovery boundaries.",
         "tags": [
@@ -14393,11 +14399,11 @@
           "runtime",
           "startup"
         ],
-        "timestamp": "2026-08-27T00:00:00Z",
+        "timestamp": "2026-09-21T00:00:00Z",
         "title": "Desktop runtime readiness",
         "type": "Desktop Contract"
       },
-      "body_length": 10000,
+      "body_length": 11551,
       "summary": "Desktop derives managed Runtime readiness from the exact Local, SSH, or container target, while access-only Gateway/Provider/URL readiness remains separate. A managed Environment opens only after the current Runtime reports compatible service and Local UI readiness. Missing, stopped, old, or damaged Runtime state selects a direct Desktop Start, Update, or reinstall recovery; it never invokes Gateway or Provider lifecycle. A transient status gap during startup is observed within the bounded readiness deadline and is not treated as process exit.",
       "sections": [
         {
@@ -14411,8 +14417,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Read-only health probes do not start, stop, repair, or reconnect Runtime. Access endpoints are not management channels. Runtime handles its internal sessions and graceful signal cleanup, but it exposes no Provider/Gateway lifecycle authority. Desktop is the only component that decides and executes a managed Runtime recovery.\n\n## Desktop Flower compatibility\n\nDesktop's bundled Flower client uses\n[one protocol check](../../desktop/src/shared/runtimeFlowerAccess.ts) for HTTP\ncommands, workspace subscriptions, computer frames and attachment entrypoints.\nThe actual Runtime must report the supported protocol and compatibility epoch.\nMissing or malformed identity blocks before submission; a newer epoch requires\nDesktop update. Different commits within the supported window remain usable.\nThe Runtime's own Env App, terminals and files retain their independent opening\nboundary. A missing protocol is never normalized into a compatible claim.\n\nThe Flower entry displays the connected version/commit and an update action.\nThe existing Desktop lifecycle coordinator retains workload confirmation and\nre-probes the replacement process. Failed updates leave the action available;\nsuccess re-evaluates the observed Runtime snapshot. Composer drafts remain in\nthe existing composer draft coordinator while the incompatible client is unmounted.\nWSL uses the same check and update presentation. Development attachment logs\nreport both the validated bundle identity and actual connected Runtime identity.\nDesktop restart alone is not evidence that the background Runtime changed.",
-          "char_count": 1572
+          "body": "Read-only health probes do not start, stop, repair, or reconnect Runtime. Access endpoints are not management channels. Runtime handles its internal sessions and graceful signal cleanup, but it exposes no Provider/Gateway lifecycle authority. Desktop is the only component that decides and executes a managed Runtime recovery.\n\n## Desktop Flower compatibility\n\nDesktop's bundled Flower client uses\n[one protocol check](../../desktop/src/shared/runtimeFlowerAccess.ts) for HTTP\ncommands, workspace subscriptions, computer frames and attachment entrypoints.\nThe actual Runtime must report the supported protocol and compatibility epoch.\nMissing or malformed identity blocks before submission; a newer epoch requires\nDesktop update. Different commits within the supported window remain usable.\nThe Runtime's own Env App, terminals and files retain their independent opening\nboundary. A missing protocol is never normalized into a compatible claim.\n\nThe Flower entry displays the connected version/commit and an update action.\nThe existing Desktop lifecycle coordinator retains workload confirmation and\nre-probes the replacement process. Failed updates leave the action available;\nsuccess re-evaluates the observed Runtime snapshot. Composer drafts remain in\nthe existing composer draft coordinator while the incompatible client is unmounted.\nWSL uses the same check and update presentation. Development attachment logs\nreport both the validated bundle identity and actual connected Runtime identity.\nDesktop restart alone is not evidence that the background Runtime changed.\n\n## Desktop Flower AI preparation\n\nWelcome admits Flower only when the compatible, openable Runtime reports AI\n`ready` or `degraded`. Shell readiness alone does not admit settings, model,\nthread, attachment, or workspace-stream requests. Transitional AI states show\nlocalized preparation with an always-available return action; blocked,\nunavailable, or missing AI facts remain explicit and cannot admit requests.\nThe [AI lifecycle owner](../architecture/ai-readiness-lifecycle.md) defines these\nfacts and recovery authority.\n\nThe existing Welcome health observer supplies updates. Transitional AI\nobservations bypass its 30-second cache, so the next regular health tick can\nobserve publication. Current presence and the latest health snapshot take\nprecedence over historical startup reports, including while a probe is pending.\nReady publication mounts Flower automatically; later AI loss disposes that\nsubtree while the shell-owned draft coordinator retains unsent content. Ordinary\nnavigation and stable ready/degraded updates keep the same Flower instance.\nThere is no renderer readiness poller, API-error retry loop, or inferred repair.",
+          "char_count": 2713
         }
       ],
       "evidence": [
@@ -14493,9 +14499,32 @@
           "source": "redeven:desktop/src/welcome/App.tsx",
           "line": 1,
           "description": "Localized action menu, progress, and recovery presentation."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/flower/DesktopFlowerRuntimeBoundary.client.test.tsx:0:ai admission, preparation, blocked states, and draft preservation through recovery.",
+          "source": "redeven:desktop/src/welcome/flower/DesktopFlowerRuntimeBoundary.client.test.tsx",
+          "description": "AI admission, preparation, blocked states, and draft preservation through recovery."
+        },
+        {
+          "id": "redeven:desktop/src/main/desktopWelcomeRuntimeHealth.test.ts:0:preparation cache bypass on the existing observer.",
+          "source": "redeven:desktop/src/main/desktopWelcomeRuntimeHealth.test.ts",
+          "description": "Preparation cache bypass on the existing observer."
+        },
+        {
+          "id": "redeven:desktop/src/main/desktopWelcomeState.test.ts:0:current readiness wins over historical startup during refresh.",
+          "source": "redeven:desktop/src/main/desktopWelcomeState.test.ts",
+          "description": "Current readiness wins over historical startup during refresh."
         }
       ],
       "snippet": "Desktop derives managed Runtime readiness from the exact Local, SSH, or container target, while access-only Gateway/Provider/URL readiness remains separate. A managed Environment opens only after the current Runtime reports compatible servi",
+      "links": [
+        {
+          "label": "AI lifecycle owner",
+          "path": "architecture/ai-readiness-lifecycle.md",
+          "concept_id": "architecture.ai-readiness-lifecycle",
+          "title": "AI readiness and service generation lifecycle"
+        }
+      ],
       "backlinks": [
         {
           "label": "Desktop runtime bridge",
@@ -15183,7 +15212,7 @@
         "title": "Desktop Welcome navigation",
         "type": "UI Contract"
       },
-      "body_length": 3464,
+      "body_length": 3780,
       "summary": "The Desktop Welcome renderer owns navigation inside its existing window. Opening\nFlower or returning to Environments changes the visible page on the click without\nwaiting for Launcher IPC, an environment snapshot, or runtime preparation. Visited\npages retain their state. Runtime readiness and compatibility still determine\nwhether Flower can use its runtime; a blocked or loading runtime never prevents\nreturning to Environments.",
       "sections": [
         {
@@ -15197,8 +15226,8 @@
           "id": "retained-pages",
           "title": "Retained pages",
           "level": 1,
-          "body": "Environments and Flower mount on their first visit and remain mounted until\nWelcome is disposed. Hiding a page removes it from layout, accessibility, and\nkeyboard interaction through `display: none`, `aria-hidden`, and `inert`.\nIf navigation hides or removes the focused control, focus moves to the visible\nheader navigation button without scrolling the page.\nEnvironment card selection and scroll state, the current Flower conversation,\nand unsent composer content survive navigation.\n\nHidden Flower receives `engaged=false` and `transcriptVisible=false` through its\nexisting visibility contract. It retains one Desktop workspace stream while\nforeground reads, focus, and transcript presentation follow engagement. Returning\ndoes not reload settings, recreate the thread list, or reconnect the workspace\nstream; the selected current view may refresh through normal engagement behavior.\nDisposing Welcome releases Flower and its stream. Changing the selected runtime\nidentity remounts the Flower boundary so the previous runtime's cached conversation\ndoes not become the new runtime's view.",
-          "char_count": 1090
+          "body": "Environments and Flower mount on their first visit and remain mounted until\nWelcome is disposed. Hiding a page removes it from layout, accessibility, and\nkeyboard interaction through `display: none`, `aria-hidden`, and `inert`.\nIf navigation hides or removes the focused control, focus moves to the visible\nheader navigation button without scrolling the page.\nEnvironment card selection and scroll state, the current Flower conversation,\nand unsent composer content survive navigation.\n\nHidden Flower receives `engaged=false` and `transcriptVisible=false` through its\nexisting visibility contract. It retains one Desktop workspace stream while\nforeground reads, focus, and transcript presentation follow engagement. Returning\ndoes not reload settings, recreate the thread list, or reconnect the workspace\nstream; the selected current view may refresh through normal engagement behavior.\nBefore AI is operational, the retained page shows preparation without mounting\nFlower. The [Desktop readiness boundary](desktop-runtime-readiness.md) admits the\nsurface automatically when AI becomes ready and preserves drafts during recovery.\nDisposing Welcome releases Flower and its stream. Changing the selected runtime\nidentity remounts the Flower boundary so the previous runtime's cached conversation\ndoes not become the new runtime's view.",
+          "char_count": 1333
         },
         {
           "id": "boundaries",
@@ -15230,13 +15259,19 @@
           "description": "Pending IPC, immediate return, retained instances, and explicit host requests."
         },
         {
-          "id": "redeven:desktop/scripts/check-flower-navigation.mjs:0:browser paint timing, draft and selection retention, inert pages, and workspace stream lifetime.",
+          "id": "redeven:desktop/scripts/check-flower-navigation.mjs:0:browser paint timing, delayed ai admission, draft and selection retention, inert pages, and workspace stream lifetime using a fixture that rejects premature ai requests.",
           "source": "redeven:desktop/scripts/check-flower-navigation.mjs",
-          "description": "Browser paint timing, draft and selection retention, inert pages, and workspace stream lifetime."
+          "description": "Browser paint timing, delayed AI admission, draft and selection retention, inert pages, and workspace stream lifetime using a fixture that rejects premature AI requests."
         }
       ],
       "snippet": "The Desktop Welcome renderer owns navigation inside its existing window. Opening Flower or returning to Environments changes the visible page on the click without waiting for Launcher IPC, an environment snapshot, or runtime preparation. Vi",
       "links": [
+        {
+          "label": "Desktop readiness boundary",
+          "path": "desktop/desktop-runtime-readiness.md",
+          "concept_id": "desktop.desktop-runtime-readiness",
+          "title": "Desktop runtime readiness"
+        },
         {
           "label": "runtime readiness contract",
           "path": "desktop/desktop-runtime-readiness.md",
@@ -22576,5 +22611,5 @@
       ]
     }
   ],
-  "source_sha256": "773fb645f203bd25fa6b6f80cb841c878667e8003011e66898e7a6289805c7d9"
+  "source_sha256": "4be3c6e30ba0af802cca25dfef001196b6ec4629601435a186eb6c5acdc84c9b"
 }

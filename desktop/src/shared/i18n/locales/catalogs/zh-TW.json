@@ -2831,6 +2831,9 @@
     "loopbackHelp": "此回環位址屬於 {host} 本身。不同主機可以使用相同連接埠；它不是此裝置存取該環境的瀏覽器入口。"
   },
   "flowerRuntime": {
+    "preparingDetail": "Flower 正在準備 AI 服務，就緒後會自動顯示對話。你可以隨時返回環境清單。",
+    "unavailableTitle": "Flower 暫時無法使用",
+    "unavailableDetail": "Flower 的 AI 服務目前無法處理請求。請返回環境清單檢查執行階段狀態。你的對話和未傳送的草稿會保留。",
     "runtimeTitle": "更新執行階段後使用 Flower",
     "desktopTitle": "更新 Desktop 後使用 Flower",
     "runtimeDetail": "此執行階段與 Desktop Flower 不相容。請更新執行階段後繼續。草稿已保留，仍可使用環境內建的應用程式。",

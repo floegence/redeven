@@ -1,6 +1,7 @@
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
+import { runtimeServiceAIIsPreparing } from '../shared/runtimeService';
 
 export type DesktopWelcomeRuntimeHealthSlot =
   | 'local_environment'
@@ -85,6 +86,7 @@ export function desktopWelcomeRuntimeHealthIsFresh(
   freshHealthTTLMS: number = DEFAULT_FRESH_HEALTH_TTL_MS,
 ): health is DesktopRuntimeHealth {
   return health?.freshness === 'fresh'
+    && !runtimeServiceAIIsPreparing(health.runtime_service)
     && nowUnixMS - health.checked_at_unix_ms < freshHealthTTLMS;
 }
 

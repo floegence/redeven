@@ -2837,6 +2837,9 @@
     "loopbackHelp": "Cette adresse de bouclage appartient à {host}. Des hôtes différents peuvent utiliser le même port. Elle ne permet pas d’accéder à cet environnement dans le navigateur de votre appareil."
   },
   "flowerRuntime": {
+    "preparingDetail": "Flower prépare son service d’IA. Les conversations s’afficheront automatiquement dès qu’il sera prêt. Vous pouvez revenir à la liste des environnements à tout moment.",
+    "unavailableTitle": "Flower est indisponible",
+    "unavailableDetail": "Le service d’IA de Flower ne peut pas traiter les requêtes pour le moment. Revenez à la liste des environnements pour vérifier l’état de l’environnement d’exécution. Vos conversations et votre brouillon non envoyé sont conservés.",
     "runtimeTitle": "Mettez à jour le moteur d’exécution pour utiliser Flower",
     "desktopTitle": "Mettez à jour Desktop pour utiliser Flower",
     "runtimeDetail": "Ce moteur d’exécution est incompatible avec Desktop Flower. Mettez-le à jour pour continuer. Votre brouillon est conservé ; l’application propre à l’environnement reste disponible.",

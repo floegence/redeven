@@ -5,7 +5,7 @@ import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
-import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
+import { normalizeRuntimeServiceSnapshot, RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import {
   REDEVEN_CLOUD_DEVELOPMENT_ORIGIN,
   REDEVEN_CLOUD_ORIGIN,
@@ -2993,4 +2993,15 @@ it('does not project Local access settings into a Cloud settings selection', () 
   });
   expect(snapshot).not.toHaveProperty('settings_surface');
   expect(snapshot).toHaveProperty('settings_environment_id', cloud.id);
+});
+
+it.each(['fresh', 'checking'] as const)('keeps current AI readiness over the startup report while health is %s', freshness => {
+  const service = normalizeRuntimeServiceSnapshot({ compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
+    protocol_version: 'redeven-runtime-v2', compatibility: 'compatible', open_readiness: { state: 'openable' }, ai_readiness: { state: 'inspecting' } });
+  const preferences = testDesktopPreferences({ local_environment: testLocalEnvironment({ currentRuntime: { runtime_service: service } }) });
+  const snapshot = buildDesktopWelcomeSnapshot({ preferences, localRuntimeHealth: {
+    [preferences.local_environment.id]: { status: 'online', source: 'local_runtime_probe', checked_at_unix_ms: Date.now(), freshness,
+      runtime_service: { ...service, ai_readiness: { state: 'ready' } } },
+  } });
+  expect(snapshot.environments.find(entry => entry.kind === 'local_environment')?.runtime_service?.ai_readiness?.state).toBe('ready');
 });
