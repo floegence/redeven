@@ -241,7 +241,7 @@ describe('shared Flower UI boundary', () => {
     const controlSrc = readText(path.join(flowerRoot, 'ReasoningControl.tsx'));
     const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
 
-		expect(surfaceSrc).toContain("type FlowerComposerControlID = 'working_dir' | 'permission' | 'model_reasoning' | 'read_only'");
+		expect(surfaceSrc).toContain("type FlowerComposerControlID = 'permission' | 'model_reasoning' | 'read_only'");
 		expect(surfaceSrc).toContain("data-flower-composer-control=\"model_reasoning\"");
 		expect(surfaceSrc).toContain("data-has-reasoning={composerReasoningEnabled() || composerReasoningLoading() ? 'true' : 'false'}");
 		expect(surfaceSrc).toContain('variant="segment"');

@@ -19,7 +19,7 @@ export function createFlowerWorkingDirectoryNavigation(options: Readonly<{
     const availability = options.availability()[action];
     if (!availability.enabled) throw new Error(availability.reason || options.invalidDirectoryMessage());
     const path = normalizeAbsolutePath(request.path);
-    if (!request.thread_id.trim() || !path) throw new Error(options.invalidDirectoryMessage());
+    if (!path || (action === 'terminal' && !request.thread_id?.trim())) throw new Error(options.invalidDirectoryMessage());
     return path;
   };
   return {

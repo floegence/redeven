@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  adapter, deferred, flush, liveBootstrap, renderSurfaceWithAdapter, thread, waitFor,
+  adapter, deferred, flush, flowerSurfaceNotifications, liveBootstrap, renderSurfaceWithAdapter, thread, waitFor,
 } from './FlowerSurface.navigation.testHarness';
 import type { FlowerSurfaceAdapter } from '../../../../flower_ui/src';
 
@@ -40,6 +40,25 @@ async function fixture(overrides: Partial<FlowerSurfaceAdapter> = {}) {
 }
 
 describe('Flower working directory actions', () => {
+  it('opens the loaded conversation directory from the header without copying or reclaiming focus', async () => {
+    const { surface, a, openFiles } = await fixture();
+    const writeText = vi.fn();
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const destination = document.createElement('input');
+    document.body.appendChild(destination);
+    openFiles.mockImplementation(async () => { destination.focus(); });
+    const browse = surface.querySelector<HTMLButtonElement>('.flower-chat-header .flower-working-directory-browse');
+    expect(browse).not.toBeNull();
+    expect(browse!.title).toContain(a.working_dir);
+    expect(surface.querySelector('[data-flower-composer-control="working_dir"]')).toBeNull();
+    expect(surface.querySelector('.flower-working-directory-select')).toBeNull();
+    browse!.click();
+    await flush();
+    expect(openFiles).toHaveBeenCalledExactlyOnceWith({ thread_id: a.thread_id, path: a.working_dir });
+    expect(writeText).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(destination);
+  });
+
   it('opens the right-clicked thread directory without selecting or loading that thread', async () => {
     const { surface, b, openFiles, loadThread } = await fixture();
     openMenu(surface.querySelector('[data-thread-id="directory-b"]')!);
@@ -48,6 +67,48 @@ describe('Flower working directory actions', () => {
     expect(openFiles).toHaveBeenCalledExactlyOnceWith({ thread_id: b.thread_id, path: b.working_dir });
     expect(loadThread.mock.calls.map(([id]) => id)).not.toContain(b.thread_id);
     expect(surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id')).toBe('directory-a');
+  });
+
+  it('exposes read-denial reasons in the header and never dispatches a disabled action', async () => {
+    const { surface, openFiles } = await fixture({
+      workingDirectoryActionAvailability: () => ({
+        browse: { enabled: false, reason: 'Read permission required' }, terminal: { enabled: true },
+      }),
+    });
+    const browse = surface.querySelector<HTMLButtonElement>('.flower-working-directory-browse')!;
+    expect(browse.disabled).toBe(true);
+    expect(browse.title).toContain('Read permission required');
+    expect(browse.title).toContain('/workspace/a');
+    browse.click();
+    expect(openFiles).not.toHaveBeenCalled();
+  });
+
+  it('reports dispatch failures and restores focus to the header entry', async () => {
+    const { surface, openFiles } = await fixture();
+    openFiles.mockRejectedValueOnce(new Error('Environment disconnected'));
+    const browse = surface.querySelector<HTMLButtonElement>('.flower-working-directory-browse')!;
+    browse.click();
+    await flush();
+    expect(flowerSurfaceNotifications().at(-1)?.message).toContain('Environment disconnected');
+    expect(document.activeElement).toBe(browse);
+  });
+
+  it('does not substitute the default directory when a loaded conversation has no directory', async () => {
+    const snapshot = thread({ thread_id: 'missing-directory', working_dir: '' });
+    const openFiles = vi.fn(async () => undefined);
+    const surface = renderSurfaceWithAdapter({
+      ...adapter(), listThreads: async () => [snapshot], loadThread: async () => liveBootstrap(snapshot),
+      getWorkingDirectoryPathContext: async () => ({ agentHomePathAbs: '/home/test', homePathAbs: '/home/test', defaultRootId: 'home', roots: [{ id: 'home', label: 'Home', pathAbs: '/home/test', kind: 'home', permissions: { read: true, write: true } }] }),
+      openWorkingDirectoryInFileBrowser: openFiles,
+    });
+    await waitFor(() => !!surface.querySelector('[data-thread-id="missing-directory"] button'));
+    surface.querySelector<HTMLButtonElement>('[data-thread-id="missing-directory"] button')!.click();
+    await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
+    const browse = surface.querySelector<HTMLButtonElement>('.flower-working-directory-browse')!;
+    expect(browse.disabled).toBe(true);
+    expect(browse.title).not.toContain('/home/test');
+    browse.click();
+    expect(openFiles).not.toHaveBeenCalled();
   });
 
   it('uses the selected thread directory from the transcript and does not reclaim handed-off focus', async () => {
@@ -132,17 +193,21 @@ describe('Flower working directory actions', () => {
   it('disables a pending transcript directory instead of using the previous thread path', async () => {
     const pending = deferred<ReturnType<typeof liveBootstrap>>();
     const { surface, openFiles } = await fixture({
-      loadThread: async (id) => id === 'directory-b' ? pending.promise : liveBootstrap(thread({ thread_id: id, working_dir: '/workspace/a' })),
+      loadThread: async (id) => id === 'directory-b' ? pending.promise : liveBootstrap(thread({ thread_id: id, title: 'Task A', working_dir: '/workspace/a' })),
     });
     (surface.querySelector('[data-thread-id="directory-b"] button') as HTMLButtonElement).click();
     await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === 'directory-b');
+    const header = surface.querySelector<HTMLButtonElement>('.flower-working-directory-browse')!;
+    expect(header.disabled).toBe(true);
+    expect(header.title).not.toContain('/workspace/a');
+    header.click();
     openMenu(surface.querySelector('.flower-chat-transcript')!);
     const browse = menuAction('Browse working directory');
     expect(browse.getAttribute('aria-disabled')).toBe('true');
     expect(document.querySelector('.flower-directory-menu-path')?.textContent).not.toContain('/workspace/a');
     browse.click();
     expect(openFiles).not.toHaveBeenCalled();
-    pending.resolve(liveBootstrap(thread({ thread_id: 'directory-b', working_dir: '/workspace/b' })));
+    pending.resolve(liveBootstrap(thread({ thread_id: 'directory-b', title: 'Task B', working_dir: '/workspace/b' })));
     await flush();
   });
 
@@ -156,6 +221,10 @@ describe('Flower working directory actions', () => {
     expect(terminal.getAttribute('aria-disabled')).toBe('true');
     terminal.click();
     expect(openTerminal).not.toHaveBeenCalled();
+    surface.querySelector<HTMLButtonElement>('.flower-working-directory-browse')!.click();
+    await flush();
+    expect(openFiles).toHaveBeenCalledExactlyOnceWith({ thread_id: 'directory-a', path: '/workspace/a' });
+    openFiles.mockClear();
     menuAction('Browse working directory').click();
     await flush();
     expect(openFiles).toHaveBeenCalledTimes(1);

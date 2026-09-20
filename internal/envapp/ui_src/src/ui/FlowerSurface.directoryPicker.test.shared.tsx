@@ -9,12 +9,12 @@ const context = { agentHomePathAbs: home, homePathAbs: home, defaultRootId: 'hom
 ] };
 function button(label: string) { return Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.trim() === label)!; }
 async function setup(pathContext = context) {
-  const a = { ...adapter(), getWorkingDirectoryPathContext: vi.fn(async () => pathContext), listWorkingDirectoryEntries: vi.fn(async (_input: { path: string; showHidden?: boolean }) => []) };
+  const a = { ...adapter(), openWorkingDirectoryInFileBrowser: vi.fn(async () => undefined), getWorkingDirectoryPathContext: vi.fn(async () => pathContext), listWorkingDirectoryEntries: vi.fn(async (_input: { path: string; showHidden?: boolean }) => []) };
   const drafts = createFlowerComposerDraftCoordinator();
   const host = renderSurfaceWithDraftCoordinator(a, drafts);
-  await waitFor(() => host.querySelector<HTMLElement>('[data-flower-composer-control="working_dir"]')?.title.includes(pathContext.roots.find((root) => root.id === pathContext.defaultRootId)!.pathAbs) === true);
+  await waitFor(() => host.querySelector<HTMLElement>('.flower-working-directory-select')?.title.includes(pathContext.roots.find((root) => root.id === pathContext.defaultRootId)!.pathAbs) === true);
   const open = async () => {
-    host.querySelector<HTMLButtonElement>('[data-flower-composer-control="working_dir"]')!.click();
+    host.querySelector<HTMLButtonElement>('.flower-working-directory-select')!.click();
     await waitFor(() => !!document.querySelector('input[aria-label="Directory path"]'));
     await flush();
   };
@@ -33,6 +33,18 @@ async function setup(pathContext = context) {
   return { a, host, open, navigate, send };
 }
 describe('Flower published absolute directory picker', () => {
+  it('browses the draft from the header without changing the draft or opening its picker', async () => {
+    const f = await setup();
+    expect(f.host.querySelector('[data-flower-composer-control="working_dir"]')).toBeNull();
+    expect(f.host.querySelector('.flower-empty-hero .flower-working-directory-select')).not.toBeNull();
+    f.host.querySelector<HTMLButtonElement>('.flower-chat-header .flower-working-directory-browse')!.click();
+    await flush();
+    expect(f.a.openWorkingDirectoryInFileBrowser).toHaveBeenCalledExactlyOnceWith({ path: home });
+    expect(document.querySelector('input[aria-label="Directory path"]')).toBeNull();
+    await f.send();
+    expect(f.a.launchTurn).toHaveBeenCalledWith(expect.objectContaining({ working_dir: home }));
+  });
+
   it('uses the declared default root for both display and creation', async () => {
     const f = await setup({ ...context, defaultRootId: 'project', roots: [
       { id: 'project', label: 'Project', pathAbs: target, kind: 'custom', permissions: { read: true, write: false } },
@@ -43,9 +55,12 @@ describe('Flower published absolute directory picker', () => {
   it('commits an external path to the draft only on confirmation, and reopens at that path', async () => {
     const f = await setup(); await f.open(); await f.navigate(target);
     button('Cancel').click(); await flush();
-    expect(f.host.querySelector<HTMLElement>('[data-flower-composer-control="working_dir"]')?.title).toContain(home);
+    expect(f.host.querySelector<HTMLElement>('.flower-working-directory-select')?.title).toContain(home);
     await f.open(); await f.navigate(target); button('Select').click(); await flush();
-    expect(f.host.querySelector<HTMLElement>('[data-flower-composer-control="working_dir"]')?.title).toContain(target);
+    expect(f.host.querySelector<HTMLElement>('.flower-working-directory-select')?.title).toContain(target);
+    f.host.querySelector<HTMLButtonElement>('.flower-working-directory-browse')!.click();
+    await flush();
+    expect(f.a.openWorkingDirectoryInFileBrowser).toHaveBeenCalledExactlyOnceWith({ path: target });
     await f.open();
     expect(f.a.listWorkingDirectoryEntries).toHaveBeenLastCalledWith({ path: target, showHidden: false });
     expect(f.a.listWorkingDirectoryEntries.mock.calls.some(([input]) => input.path.includes('/Users/alice/Volumes'))).toBe(false);

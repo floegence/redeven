@@ -1309,7 +1309,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
     }
   });
 
-  it('routes Flower directory actions through Activity without replacing existing terminal input', async () => {
+  it.each([true, false])('routes Flower directory actions through Activity for draft=%s without replacing existing terminal input', async (draft) => {
     desktopViewMode = 'activity';
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1320,7 +1320,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
       fileBrowserOpenSurfaceMock.mockClear();
       const request = { thread_id: 'thread-directory', path: '/workspace/flower' };
-      await directoryNavigationContext.flowerWorkingDirectoryActions.openWorkingDirectoryInFileBrowser(request);
+      await directoryNavigationContext.flowerWorkingDirectoryActions.openWorkingDirectoryInFileBrowser(draft ? { path: request.path } : request);
       expect(fileBrowserOpenSurfaceMock).toHaveBeenCalledExactlyOnceWith({ path: request.path, homePath: undefined, title: 'flower' });
       expect(directoryNavigationContext.openTerminalInDirectoryRequest()).toBeNull();
       await directoryNavigationContext.flowerWorkingDirectoryActions.openWorkingDirectoryInTerminal(request);
@@ -1330,7 +1330,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
     } finally { dispose(); }
   });
 
-  it('creates Flower file and terminal widgets at the viewport center despite a recent pointer anchor', async () => {
+  it.each([true, false])('creates Flower file and terminal widgets for draft=%s at the viewport center despite a recent pointer anchor', async (draft) => {
     desktopViewMode = 'workbench';
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1341,7 +1341,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
       window.dispatchEvent(new MouseEvent('contextmenu', { clientX: 777, clientY: 444 }));
       const request = { thread_id: 'thread-directory', path: '/workspace/flower' };
-      await directoryNavigationContext.flowerWorkingDirectoryActions.openWorkingDirectoryInFileBrowser(request);
+      await directoryNavigationContext.flowerWorkingDirectoryActions.openWorkingDirectoryInFileBrowser(draft ? { path: request.path } : request);
       expect(directoryNavigationContext.workbenchSurfaceActivation()).toMatchObject({ surfaceId: 'files', openStrategy: 'create_new', ensureVisible: true, fileBrowserPayload: { path: request.path } });
       const filesID = directoryNavigationContext.workbenchSurfaceActivation().requestId;
       await directoryNavigationContext.flowerWorkingDirectoryActions.openWorkingDirectoryInTerminal(request);

@@ -1081,7 +1081,8 @@ export type FlowerTurnLauncherIntent = Readonly<{
 }>;
 
 export type FlowerWorkingDirectoryOpenRequest = Readonly<{
-  thread_id: string;
+  /** Absent when browsing the current new-conversation draft directory. */
+  thread_id?: string;
   path: string;
 }>;
 

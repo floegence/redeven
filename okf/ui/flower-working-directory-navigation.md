@@ -1,15 +1,17 @@
 ---
 type: UI Contract
 title: Flower working directory navigation
-description: Open a conversation's working directory in Files or Terminal from consistent Flower menus.
+description: Select a new Flower draft directory and browse its files from the header, with shared conversation menu navigation.
 tags: [ui, flower, filesystem, terminal, workbench]
-timestamp: 2026-09-08T00:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 # Summary
 
-Flower owns the conversation target and menu intent; Env App owns Activity and
-Workbench navigation. Right-clicking a conversation row, its more button, or the
-current transcript exposes the same working-directory actions. Each open menu
+Flower owns the draft or conversation directory and navigation intent; Env App
+owns Activity and Workbench destinations. The header browses the displayed
+directory; the new-conversation welcome selects the draft directory. Created
+conversation directories remain immutable. Right-clicking a conversation row,
+its more button, or the current transcript exposes the same directory actions. Each open menu
 captures the target thread ID and directory, so summary replacement cannot
 retarget an action or select a different conversation. Activity opens the shared
 Files floating window or a new Terminal session. Workbench creates a new Files
@@ -20,14 +22,37 @@ presentation; opening never injects commands into an existing shell.
 
 # Contract
 
-Directory selection for a new draft is owned by [absolute filesystem directory selection](filesystem-picker-navigation.md). This concept owns navigation from an existing conversation.
+Directory validation and selection state are owned by [absolute filesystem directory selection](filesystem-picker-navigation.md). This concept owns Flower entry points and destination navigation.
+
+## Header and new-conversation entry points
+
+The top-right header uses a compact, borderless folder-and-name button to browse
+the current directory. Clicking it neither copies the path nor edits the draft.
+The current draft uses its selected directory or the runtime-declared default
+root. A selected conversation uses only its identity-matching loaded detail:
+pending or missing detail cannot substitute a previous, draft, or Home path.
+An unavailable target or browse capability disables the button with an explicit
+reason. Successful dispatch hands focus to Files; a dispatch failure reports the
+error and restores the connected header origin.
+
+Before creation, the welcome area places a muted working-directory label beside
+a blue folder/name/chevron selector. It opens the existing directory picker at
+the current draft path. Only confirmation updates the draft; cancellation keeps
+it unchanged and restores the selector. The selector is absent after creation.
+The composer footer and More panel contain no working-directory control.
+
+Both entries adapt to available width. Long names truncate in the middle while
+retaining their identifying suffix, and full absolute paths remain available in
+the accessible label and tooltip. The selector uses blue in light and dark
+themes, a faint hover surface, and a visible keyboard focus outline. Full paths
+are not permanent secondary text in the welcome area.
 
 ## Directory and menu ownership
 
 The row menu uses the right-clicked conversation's working directory without
 loading, selecting, or acknowledging that conversation. The transcript uses the
 identity-matching loaded conversation detail. A pending detail has no usable
-directory, and a new composer without a conversation has no directory actions.
+directory, and a new composer without a conversation has no transcript directory menu.
 Neither draft nor Home nor text inside a message can substitute for the target.
 
 An open row menu retains its ThreadID identity across summary updates and row
@@ -76,6 +101,9 @@ tool file actions and linked-file navigation retain their own authorization and
 reuse contracts; their callbacks are not repurposed for conversation directories.
 The adapter promise acknowledges host dispatch, not completed filesystem loading
 or process activation. Destination components own progress, errors, and retry.
+Draft browsing passes an absolute path without a thread ID. Created-conversation
+browsing includes its thread ID; menu actions and terminal launch still require
+a conversation identity.
 
 ## Availability and recovery
 
@@ -111,12 +139,18 @@ AI execution. These existing owners retain their respective boundaries:
 - `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - ThreadID-owned
   row menus retain a captured working directory across summary replacement.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Transcript selection,
-  directory target resolution, capability dispatch, and destination focus handoff.
+  draft and conversation target resolution, capability dispatch, and destination focus handoff.
+- `redeven:internal/flower_ui/src/chat/FlowerWorkingDirectoryControl.tsx` -
+  Shared accessible header and selector presentation with suffix-preserving names.
 - `redeven:internal/envapp/ui_src/src/ui/flower/workingDirectoryNavigation.ts` -
   Host routing requests new components and explicitly centered terminals.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryActions.test.tsx` -
   Cross-thread isolation, exact selection copying, and focus regression coverage.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerDirectoryMenus.browser.test.tsx` -
   Chromium coverage for transformed placement, snapshot stability, and keyboard entry.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerWorkingDirectory.browser.test.tsx` -
+  Narrow layouts, Unicode paths, light/dark blue, and projected picker focus.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.directoryPicker.test.shared.tsx` -
+  Header draft browsing, confirmation-only selection, and launch directory parity.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.desktopFloatingSurfaces.e2e.test.tsx` -
   Activity dispatch and Workbench placement through the real shell controllers.

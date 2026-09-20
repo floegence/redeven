@@ -2,6 +2,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFlowerWorkingDirectoryNavigation } from './workingDirectoryNavigation';
 
 describe('Flower working directory host navigation', () => {
+  it('opens a draft directory without requiring a created conversation', async () => {
+    const openFileBrowserAtPath = vi.fn(async () => undefined);
+    const navigation = createFlowerWorkingDirectoryNavigation({
+      availability: () => ({ browse: { enabled: true }, terminal: { enabled: true } }),
+      invalidDirectoryMessage: () => 'Unavailable directory',
+      openFileBrowserAtPath, openTerminalInDirectory: vi.fn(),
+    });
+    await navigation.openWorkingDirectoryInFileBrowser!({ path: '/workspace/draft' });
+    expect(openFileBrowserAtPath).toHaveBeenCalledExactlyOnceWith('/workspace/draft', {
+      title: 'draft', openStrategy: 'create_new',
+    });
+    await expect(navigation.openWorkingDirectoryInTerminal!({ thread_id: '', path: '/workspace/draft' })).rejects.toThrow('Unavailable directory');
+  });
   it('requests new components and explicitly centers terminals without serializing a shell command', async () => {
     const openFileBrowserAtPath = vi.fn(async () => undefined);
     const openTerminalInDirectory = vi.fn();
