@@ -46,6 +46,8 @@ Usage: ./scripts/dev_desktop.sh [options] [-- <electron-args>]
 Build and start Redeven Desktop from this checkout/worktree. The bundled runtime
 is built from the same uncommitted source tree before Electron starts.
 The embedded Env App Plugin UI is enabled for this development launch.
+After building, keep the three newest development bundles plus the selected
+bundle and any older bundles still referenced by running processes.
 
 Options:
   --no-devtools             Do not open Desktop DevTools automatically.
@@ -709,6 +711,10 @@ prepare_instance_bundle_snapshot() {
 	export REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT="$snapshot_root"
 	ui_pkg_log "Development bundle snapshot: $snapshot_root"
 	ui_pkg_log "Development bundle manifest SHA-256: $manifest_digest"
+	if ! node "$SCRIPT_DIR/prune_dev_desktop_bundles.mjs" \
+		--state-root "$DEVELOPMENT_STATE_ROOT" --current-bundle "$snapshot_root"; then
+		ui_pkg_log "WARNING: development bundle cleanup was incomplete; older bundles may still occupy disk space."
+	fi
 }
 
 start_desktop() {
@@ -760,6 +766,7 @@ start_desktop() {
   if [ "$DRY_RUN" -eq 1 ]; then
     printf 'Would run in %q: npm run build\n' "$DESKTOP_DIR"
 		printf 'Would build an immutable development bundle snapshot below %q\n' "$DEVELOPMENT_STATE_ROOT/desktop/bundles"
+		printf 'Would retain the three newest bundles, the selected bundle, and bundles referenced by running processes.\n'
     printf 'Would run in %q: ' "$DESKTOP_DIR"
     print_command "${cmd[@]}"
     return 0

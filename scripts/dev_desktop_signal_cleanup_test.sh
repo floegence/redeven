@@ -29,6 +29,7 @@ trap cleanup EXIT
 
 mkdir -p "$FAKE_DESKTOP/node_modules/electron" "$FAKE_SCRIPTS" "$FAKE_BIN" "$TEST_HOME"
 cp "$ROOT_DIR/scripts/dev_desktop.sh" "$ROOT_DIR/scripts/ui_package_common.sh" "$FAKE_SCRIPTS/"
+cp "$ROOT_DIR/scripts/prune_dev_desktop_bundles.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
 printf '%s\n' '{"name":"@floegence/redeven-desktop"}' > "$FAKE_DESKTOP/package.json"
 printf '%s\n' 'module.exports = process.env.FAKE_ELECTRON_PATH;' > "$FAKE_DESKTOP/node_modules/electron/index.js"
@@ -62,6 +63,19 @@ printf '%s\n' \
 chmod 700 "$FAKE_BIN/npm"
 
 export FAKE_ELECTRON_PATH FAKE_ELECTRON_STARTED FAKE_ELECTRON_STOPPED FAKE_RUNTIME_STOPPED
+node --input-type=module - "$STATE_ROOT" <<'JS'
+import { createHash } from 'node:crypto';
+import { chmodSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+for (let i = 0; i < 6; i++) {
+  const manifest = JSON.stringify({ schema_version: 1, old_bundle: i });
+  const path = join(process.argv[2], 'desktop/bundles', createHash('sha256').update(manifest).digest('hex'));
+  mkdirSync(path, { recursive: true });
+  writeFileSync(join(path, 'desktop-bundle-manifest.json'), manifest);
+  chmodSync(path, 0o500);
+  utimesSync(path, i + 1, i + 1);
+}
+JS
 export PATH="$FAKE_BIN:$PATH"
 export HOME="$TEST_HOME"
 export REDEVEN_STATE_ROOT="$STATE_ROOT"
@@ -92,6 +106,13 @@ done
 if [ ! -f "$FAKE_ELECTRON_STARTED" ]; then
   cat "$TEST_ROOT/session.log" >&2
   printf 'dev Desktop did not reach the Electron process\n' >&2
+  exit 1
+fi
+
+bundle_count=$(node -e 'process.stdout.write(String(require("node:fs").readdirSync(process.argv[1]).filter(name => /^[a-f0-9]{64}$/.test(name)).length))' "$STATE_ROOT/desktop/bundles")
+if [ "$bundle_count" -ne 3 ]; then
+  cat "$TEST_ROOT/session.log" >&2
+  printf 'expected launch to retain three development bundles, got %s\n' "$bundle_count" >&2
   exit 1
 fi
 
