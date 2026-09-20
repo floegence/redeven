@@ -448,6 +448,8 @@ export type DesktopEnvironmentEntry = Readonly<{
 export type DesktopWelcomeSnapshot = Readonly<{
   snapshot_revision?: number;
   snapshot_generation?: number;
+  /** Explicit host navigation; ordinary snapshot refreshes do not change pages. */
+  navigation_revision?: number;
   flower_settings_focus_revision?: number;
   platform_capabilities: DesktopPlatformCapabilities;
   wsl_discovery: DesktopWSLDiscoverySnapshot | null;

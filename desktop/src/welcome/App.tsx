@@ -2724,7 +2724,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   let sshConfigHostsRequestID = 0;
   let runtimeContainerOptionsRequestID = 0;
 
-  const visibleSurface = createMemo<DesktopLauncherSurface>(() => settingsSession() ? 'environment_settings' : snapshot().surface);
+  // The renderer owns in-window navigation. Host snapshots carry explicit open
+  // requests separately from environment/progress refreshes.
+  const [activeSurface, setActiveSurface] = createSignal(props.snapshot.surface);
+  const flowerVisible = () => activeSurface() === 'flower';
+  const flowerVisited = createMemo((visited: boolean) => visited || flowerVisible(), false);
+  const environmentsVisited = createMemo((visited: boolean) => visited || !flowerVisible(), false);
+  const visibleSurface = createMemo<DesktopLauncherSurface>(() => settingsSession() ? 'environment_settings' : activeSurface());
   const i18n = createMemo(() => createDesktopI18n(languageSnapshot().resolved_locale));
   const sshConfigHostsLoadKey = createMemo(() => {
     const connectionState = connectionDialogState();
@@ -3124,7 +3130,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     onCleanup(unsubscribeActionProgress);
   }
 
-  createEffect(on(() => `${snapshot().surface}:${snapshot().settings_environment_id}`, () => {
+  createEffect(on(() => snapshot().navigation_revision ?? 0, (revision, previous) => {
+    if (previous !== undefined && revision <= previous) return;
+    navigateWelcomeSurface(snapshot().surface);
     if (snapshot().surface === 'environment_settings' && snapshot().settings_environment_id) {
       openSettingsSurface(snapshot().settings_environment_id);
     }
@@ -3665,16 +3673,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogError('');
     setGatewaySetupDialogError('');
     setControlPlaneDialogError('');
-    if (snapshot().surface === 'connect_environment') {
-      return;
-    }
-    if (typeof window.redevenDesktopShell?.openConnectionCenter === 'function') {
-      void window.redevenDesktopShell.openConnectionCenter();
-      return;
-    }
-    if (typeof window.redevenDesktopShell?.openWindow === 'function') {
-      void window.redevenDesktopShell.openWindow('connection_center');
-    }
+    openEnvironmentCenterSurface();
   }
 
   function openRedevenDashboard(): void {
@@ -3707,7 +3706,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     message = '',
     preferredKind: ConnectionDialogKind = 'external_local_ui',
   ): void {
-    if (snapshot().surface !== 'connect_environment') {
+    if (activeSurface() !== 'connect_environment') {
       showConnectEnvironment(message || i18n().t('environmentCenter.addConnectionLauncherPrompt'));
       return;
     }
@@ -3758,7 +3757,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus): void {
-    if (snapshot().surface !== 'connect_environment') {
+    if (activeSurface() !== 'connect_environment') {
       showConnectEnvironment(i18n().t('environmentCenter.addGatewayLauncherPrompt'));
       return;
     }
@@ -3866,7 +3865,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function openCreateControlPlaneDialog(message = ''): void {
-    if (snapshot().surface !== 'connect_environment') {
+    if (activeSurface() !== 'connect_environment') {
       showConnectEnvironment(message || i18n().t('environmentCenter.addProviderLauncherPrompt'));
       return;
     }
@@ -6004,10 +6003,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  async function openFlowerSurface(): Promise<void> {
-    await performLauncherAction({
-      kind: 'open_flower',
-    });
+  function navigateWelcomeSurface(surface: DesktopLauncherSurface): void {
+    const focused = document.activeElement;
+    setActiveSurface(surface);
+    if (focused instanceof HTMLElement && (!focused.isConnected || focused.closest('[inert]'))) {
+      document.querySelector<HTMLButtonElement>(surface === 'flower'
+        ? '.redeven-flower-back-button' : '.redeven-flower-topbar-button')?.focus({ preventScroll: true });
+    }
+  }
+
+  function openFlowerSurface(): void {
+    navigateWelcomeSurface('flower');
   }
 
   function buildEnvironmentFlowerTurnLauncherIntent(environment: DesktopEnvironmentEntry): EnvironmentFlowerTurnLauncherIntent {
@@ -6069,23 +6075,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       thread_id: threadID,
     });
     closeFlowerTurnLauncher();
-    await openFlowerSurface();
+    openFlowerSurface();
   }
 
-  async function openEnvironmentCenterSurface(): Promise<void> {
-    await performLauncherAction({
-      kind: 'open_environment_center',
-    });
+  function openEnvironmentCenterSurface(): void {
+    navigateWelcomeSurface('connect_environment');
   }
 
   const topBarLogoLabel = () => (
-    snapshot().surface === 'flower'
+    flowerVisible()
       ? i18n().t('shell.backToEnvironments')
       : i18n().t('shell.openRedevenDashboard')
   );
   const deleteTargetIsGatewayEnvironment = createMemo(() => deleteTarget()?.kind === 'gateway_environment');
   const activateTopBarLogo = () => {
-    if (snapshot().surface === 'flower') {
+    if (flowerVisible()) {
       void openEnvironmentCenterSurface();
       return;
     }
@@ -6141,7 +6145,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
         trailingActions={(
           <div class="flex items-center gap-1">
-            <Show when={snapshot().surface === 'flower'}>
+            <Show when={flowerVisible()}>
               <button
                 type="button"
                 class="redeven-flower-back-button"
@@ -6153,7 +6157,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 <span>{i18n().t('shell.backToEnvironments')}</span>
               </button>
             </Show>
-            <Show when={snapshot().surface !== 'flower'}>
+            <Show when={!flowerVisible()}>
               <button
                 type="button"
                 class="redeven-flower-topbar-button"
@@ -6267,9 +6271,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </div>
         )}
       >
-        <Show
-          when={snapshot().surface === 'flower'}
-          fallback={(
+        <Show when={environmentsVisited()}>
+          <div class="h-full min-h-0" style={{ display: flowerVisible() ? 'none' : undefined }}
+            data-desktop-page="environments" aria-hidden={flowerVisible() ? 'true' : undefined} inert={flowerVisible()}>
             <ConnectEnvironmentSurface
               i18n={i18n()}
               snapshot={snapshot()}
@@ -6358,54 +6362,62 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               signOutControlPlane={setSignOutControlPlaneTarget}
               deleteGateway={setDeleteGatewayTarget}
             />
-          )}
-        >
-          <DesktopFlowerRuntimeBoundary
-            snapshot={environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment())}
-            i18n={i18n()}
-            onBack={() => void openEnvironmentCenterSurface()}
-            onRecover={async (code) => {
-              const environment = flowerRuntimeEnvironment();
-              if (!environment) return;
-              await triggerLocalEnvironmentAction(environment, { intent: code === 'desktop_update_required' ? 'update_desktop' : 'update_runtime', label: '', enabled: true, variant: 'default' });
-              await refreshSnapshot();
-            }}
-          >
-            <FlowerSurface
-              draftCoordinator={flowerDraftCoordinator}
-              filesystemScopeKey={flowerFilesystemScopeKey()}
-              adapter={createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
-                runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment'),
-                runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
-                onSettingsChanged: refreshSnapshot,
-              })}
-              notify={(notice) => {
-                showActionToast(notice.message, notice.tone, {
-                  ...(notice.title ? { title: notice.title } : {}),
-                });
-              }}
-              copy={createDesktopFlowerSurfaceCopy(i18n())}
-              warmup={flowerWarmupState()}
-              settingsFocusRequest={snapshot().flower_settings_focus_revision}
-              focusThreadRequest={flowerFocusThreadRequest()}
-              sidebarLeadingAction={(
-                <button
-                  type="button"
-                  class="flower-sidebar-leading-action"
-                  aria-label={i18n().t('shell.backToEnvironments')}
-                  title={i18n().t('shell.backToEnvironments')}
-                  onClick={() => void openEnvironmentCenterSurface()}
-                >
-                  <ArrowLeft class="h-4 w-4" />
-                </button>
-              )}
-              onFocusThreadRequestConsumed={(requestID) => {
-                setFlowerFocusThreadRequest((current) => (
-                  current?.request_id === requestID ? null : current
-                ));
-              }}
-            />
-          </DesktopFlowerRuntimeBoundary>
+          </div>
+        </Show>
+        <Show when={flowerVisited()}>
+          <div class="h-full min-h-0" style={{ display: flowerVisible() ? undefined : 'none' }}
+            data-desktop-page="flower" aria-hidden={!flowerVisible() ? 'true' : undefined} inert={!flowerVisible()}>
+            <Show keyed when={flowerRuntimeEnvironment()?.id || 'default'}>
+              <DesktopFlowerRuntimeBoundary
+                snapshot={environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment())}
+                i18n={i18n()}
+                onBack={() => void openEnvironmentCenterSurface()}
+                onRecover={async (code) => {
+                  const environment = flowerRuntimeEnvironment();
+                  if (!environment) return;
+                  await triggerLocalEnvironmentAction(environment, { intent: code === 'desktop_update_required' ? 'update_desktop' : 'update_runtime', label: '', enabled: true, variant: 'default' });
+                  await refreshSnapshot();
+                }}
+              >
+                <FlowerSurface
+                  engaged={flowerVisible()}
+                  transcriptVisible={flowerVisible()}
+                  draftCoordinator={flowerDraftCoordinator}
+                  filesystemScopeKey={flowerFilesystemScopeKey()}
+                  adapter={createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                    runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment'),
+                    runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
+                    onSettingsChanged: refreshSnapshot,
+                  })}
+                  notify={(notice) => {
+                    showActionToast(notice.message, notice.tone, {
+                      ...(notice.title ? { title: notice.title } : {}),
+                    });
+                  }}
+                  copy={createDesktopFlowerSurfaceCopy(i18n())}
+                  warmup={flowerWarmupState()}
+                  settingsFocusRequest={snapshot().flower_settings_focus_revision}
+                  focusThreadRequest={flowerVisible() ? flowerFocusThreadRequest() : null}
+                  sidebarLeadingAction={(
+                    <button
+                      type="button"
+                      class="flower-sidebar-leading-action"
+                      aria-label={i18n().t('shell.backToEnvironments')}
+                      title={i18n().t('shell.backToEnvironments')}
+                      onClick={() => void openEnvironmentCenterSurface()}
+                    >
+                      <ArrowLeft class="h-4 w-4" />
+                    </button>
+                  )}
+                  onFocusThreadRequestConsumed={(requestID) => {
+                    setFlowerFocusThreadRequest((current) => (
+                      current?.request_id === requestID ? null : current
+                    ));
+                  }}
+                />
+              </DesktopFlowerRuntimeBoundary>
+            </Show>
+          </div>
         </Show>
       </DesktopLauncherShell>
 

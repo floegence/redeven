@@ -786,6 +786,7 @@ type DesktopUtilityWindowState = Readonly<{
   entryReason: DesktopWelcomeEntryReason;
   issue: DesktopWelcomeIssue | null;
   selectedEnvironmentID: string;
+  navigationRevision: number;
   flowerSettingsFocusRevision: number;
 }>;
 
@@ -978,6 +979,7 @@ const utilityWindowState = new Map<DesktopUtilityWindowKind, DesktopUtilityWindo
     entryReason: 'app_launch',
     issue: null,
     selectedEnvironmentID: '',
+    navigationRevision: 0,
     flowerSettingsFocusRevision: 0,
   }],
 ]);
@@ -4285,6 +4287,7 @@ function currentUtilityWindowState(kind: DesktopUtilityWindowKind): DesktopUtili
     entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
     issue: null,
     selectedEnvironmentID: '',
+    navigationRevision: 0,
     flowerSettingsFocusRevision: 0,
   };
 }
@@ -5250,8 +5253,8 @@ async function buildCurrentDesktopWelcomeSnapshot(
         }
       : {}),
   };
-  const state = currentUtilityWindowState(kind);
   const gatewaySources = await loadGatewaySourcesForWelcome();
+  const state = currentUtilityWindowState(kind);
   const snapshot = buildDesktopWelcomeSnapshot({
     preferences,
     controlPlanes: currentControlPlaneSummaries(preferences),
@@ -5267,6 +5270,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
     entryReason: overrides.entryReason ?? state.entryReason,
     issue: overrides.issue ?? state.issue,
     selectedEnvironmentID: state.selectedEnvironmentID,
+    navigationRevision: state.navigationRevision,
     flowerSettingsFocusRevision: state.flowerSettingsFocusRevision,
     platformCapabilities: desktopPlatformCapabilities,
     wslDiscovery: desktopWSLDiscoverySnapshot,
@@ -8141,6 +8145,7 @@ function setLauncherViewState(options: OpenDesktopWelcomeOptions = {}): DesktopU
     entryReason: options.entryReason ?? (openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch'),
     issue: options.issue === undefined ? current.issue : options.issue,
     selectedEnvironmentID: options.selectedEnvironmentID ?? current.selectedEnvironmentID,
+    navigationRevision: current.navigationRevision + 1,
     flowerSettingsFocusRevision: options.focusFlowerSettings
       ? current.flowerSettingsFocusRevision + 1
       : current.flowerSettingsFocusRevision,
@@ -8150,8 +8155,8 @@ function setLauncherViewState(options: OpenDesktopWelcomeOptions = {}): DesktopU
 }
 
 function resetLauncherIssueState(): void {
-  setLauncherViewState({
-    surface: currentUtilityWindowState('launcher').surface,
+  setUtilityWindowState('launcher', {
+    ...currentUtilityWindowState('launcher'),
     entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
     issue: null,
   });
