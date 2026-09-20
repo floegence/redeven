@@ -27,7 +27,14 @@ addresses. The application's files, OS permissions, executable, and home directo
 remain those of the Runtime user. This display separation is not an OS sandbox.
 
 GIO supplies standard application metadata, localized names, visibility, executable
-resolution, and field expansion. Terminal-only desktop entries are excluded.
+resolution, and field expansion. Descriptions and category identifiers come directly
+from each host desktop entry. The library derives its entire category filter from
+that inventory, preserving unfamiliar identifiers without a product taxonomy or
+category-to-description substitution. Missing descriptions remain absent; custom
+entries receive no invented categories or icons. Icon lookup uses the host's active
+GTK theme, or GTK's standard installed icon paths when no display is available;
+Redeven does not force an icon theme. An unresolved icon uses a neutral application
+glyph. Terminal-only desktop entries are excluded.
 For entries declaring D-Bus activation, a private launch copy disables activation
 so GIO executes the declared command within the new display/bus environment; this
 avoids delegation to the existing desktop through user systemd services.
@@ -90,7 +97,7 @@ address field. Both window documents and the application view have no Desktop
 preload or bridge. Browser popups retain browser-owned chrome.
 
 The localized bootstrap owns connection presentation. It uses the host application's
-icon, quiet progress motion, and distinct starting, connecting, disconnected,
+unframed icon, quiet progress motion, and distinct starting, connecting, disconnected,
 reconnecting, ended, and failed states. Application content appears only after a
 successful Xpra paint acknowledgement. Reduced-motion preferences disable motion.
 A broken connection provides explicit reconnection, reseeding credentials from the
@@ -110,8 +117,11 @@ stretching or cropping substitutes for application resize. Fixed-size or minimum
 applications can still constrain their own layout. Xpra owns keyboard and clipboard
 transport. This path does not create a native OS window per X11 child window.
 
-The library keeps the application identity visible during launch, with a small
-progress indicator and explicit status text. Its overlapping-window navigation
+The library cards show host-supplied identity and description. The whole card opens
+the application, with an accessible action label and a hover/focus affordance;
+cards do not repeat a visible opening instruction. During launch, the application
+identity remains visible with a small progress indicator and transient status text.
+Its overlapping-window navigation
 icon is distinct from the plugin catalog icon. Application inventory loading uses
 layout-preserving skeleton cards rather than a competing animated app glyph.
 

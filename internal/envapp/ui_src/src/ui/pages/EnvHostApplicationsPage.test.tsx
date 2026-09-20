@@ -67,4 +67,30 @@ describe('host application interaction', () => {
     expect(host.textContent).toContain('No matching applications');
     expect(state.catalog).toHaveBeenCalledTimes(1);
   });
+  it('shows only host metadata on cards while retaining accessible launch actions', async () => {
+    state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [{ ...app, description: '', categories: [] }], sessions: [] });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    const tile = button('Open in new window · Text Editor');
+    expect(tile.textContent).toBe('Text Editor');
+    expect(tile.querySelector('p')).toBeNull();
+    expect(host.textContent).not.toContain('Open in new window');
+  });
+  it('filters every host category, including unknown categories and a literal all category', async () => {
+    state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [
+      app,
+      { ...app, id: 'lab.desktop', name: 'Host Lab', categories: ['X-Host-Laboratory', 'all'] },
+      { ...app, id: 'custom:tool.desktop', name: 'Uncategorized Tool', categories: [] },
+    ], sessions: [] });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    const filter = host.querySelector<HTMLSelectElement>('select[aria-label="Application category"]')!;
+    expect(filter).not.toBeNull();
+    expect([...filter.options].map(option => option.value)).toEqual(['', 'all', 'Utility', 'X-Host-Laboratory']);
+    filter.value = 'X-Host-Laboratory'; filter.dispatchEvent(new Event('change', { bubbles: true })); await settle();
+    expect([...host.querySelectorAll('.host-app-tile strong')].map(el => el.textContent)).toEqual(['Host Lab']);
+    filter.value = 'all'; filter.dispatchEvent(new Event('change', { bubbles: true })); await settle();
+    expect(host.querySelectorAll('.host-app-tile')).toHaveLength(1);
+    filter.value = ''; filter.dispatchEvent(new Event('change', { bubbles: true })); await settle();
+    expect(host.querySelectorAll('.host-app-tile')).toHaveLength(3);
+    expect(state.catalog).toHaveBeenCalledTimes(1);
+  });
 });

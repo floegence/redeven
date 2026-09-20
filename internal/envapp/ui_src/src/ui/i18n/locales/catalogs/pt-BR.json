@@ -6220,14 +6220,6 @@
     "title": "Aplicativos do host",
     "unsupportedDescription": "No momento, este recurso requer um ambiente de execução Linux. Conecte-se a um host Linux para utilizá-lo.",
     "unsupportedTitle": "Host Linux necessário",
-    "categories": {
-      "all": "Todos os aplicativos",
-      "Development": "Desenvolvimento",
-      "Office": "Escritório",
-      "Graphics": "Gráficos",
-      "Network": "Internet",
-      "AudioVideo": "Áudio e vídeo",
-      "Utility": "Utilitários"
-    }
+    "allApplications": "Todos os aplicativos"
   }
 }

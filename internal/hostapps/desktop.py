@@ -31,8 +31,9 @@ def icon_data(app):
     if not icon:
         return ""
     try:
-        theme = Gtk.IconTheme.new()
-        theme.set_custom_theme("Adwaita")
+        # Use the host's active GTK theme. With no display, GTK's standalone
+        # lookup still resolves file icons and the standard installed icon paths.
+        theme = Gtk.IconTheme.get_default() if Gtk.Settings.get_default() else Gtk.IconTheme.new()
         info = theme.lookup_by_gicon(icon, 64, Gtk.IconLookupFlags.FORCE_SIZE)
         if not info:
             return ""
@@ -79,7 +80,6 @@ def add_application(directory, identity, request):
     key.set_string("Desktop Entry", "Type", "Application")
     key.set_string("Desktop Entry", "Name", request["name"])
     key.set_string("Desktop Entry", "Exec", command)
-    key.set_string("Desktop Entry", "Categories", "Utility;")
     destination = pathlib.Path(directory) / (identity + ".desktop")
     destination.write_text(key.to_data()[0], encoding="utf-8")
     destination.chmod(0o600)

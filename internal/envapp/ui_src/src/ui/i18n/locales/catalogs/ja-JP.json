@@ -6216,14 +6216,6 @@
     "title": "ホストアプリ",
     "unsupportedDescription": "この機能は現在 Linux ランタイムが必要です。Linux ホストに接続してご利用ください。",
     "unsupportedTitle": "Linux ホストが必要です",
-    "categories": {
-      "all": "すべてのアプリ",
-      "Development": "開発",
-      "Office": "オフィス",
-      "Graphics": "グラフィックス",
-      "Network": "インターネット",
-      "AudioVideo": "音声・動画",
-      "Utility": "ユーティリティ"
-    }
+    "allApplications": "すべてのアプリ"
   }
 }
