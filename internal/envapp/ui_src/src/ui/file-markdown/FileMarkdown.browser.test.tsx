@@ -38,6 +38,7 @@ function applyTheme(preset: 'classic-dark' | 'classic-light', mode: 'dark' | 'li
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   document.body.replaceChildren();
   document.documentElement.classList.remove('dark', 'light');
   document.documentElement.removeAttribute('data-floe-shell-theme');
@@ -45,6 +46,44 @@ afterEach(() => {
 });
 
 describe('FileMarkdown rich rendering', () => {
+  it('skips canvas readback for ordinary Markdown on open, content update, and theme change', async () => {
+    applyTheme('classic-dark', 'dark');
+    const readback = vi.spyOn(CanvasRenderingContext2D.prototype, 'getImageData');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [content, setContent] = createSignal('# README\n\n```ts\nconst value = 1;\n```');
+    const dispose = render(() => <FileMarkdown content={content()} filePath="/workspace/README.md" />, host);
+
+    try {
+      await vi.waitFor(() => {
+        expect(host.querySelector('pre.fm-code-block-shiki')).toBeTruthy();
+      });
+      expect(host.querySelector('.mermaid')).toBeNull();
+      expect.soft(readback).not.toHaveBeenCalled();
+      readback.mockClear();
+
+      setContent('# Updated README\n\n```ts\nconst value = 2;\n```');
+      await vi.waitFor(() => {
+        expect(host.querySelector('h1')?.textContent).toBe('Updated README');
+        expect(host.querySelector('pre.fm-code-block-shiki')?.textContent).toContain('const value = 2;');
+      });
+      expect.soft(readback).not.toHaveBeenCalled();
+      readback.mockClear();
+
+      const codeBlock = host.querySelector<HTMLElement>('pre.fm-code-block-shiki')!;
+      const darkCodeColor = codeBlock.style.getPropertyValue('--fm-code-base-color');
+      expect(darkCodeColor).not.toBe('');
+      applyTheme('classic-light', 'light');
+      await vi.waitFor(() => {
+        expect(codeBlock.style.getPropertyValue('--fm-code-base-color')).not.toBe(darkCodeColor);
+      });
+      expect.soft(readback).not.toHaveBeenCalled();
+      expect(host.querySelector('.fm-preview-warning')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
   it('scales document typography while preserving rendered content and scroll', async () => {
     applyTheme('classic-dark', 'dark');
     const host = document.createElement('div');
@@ -107,6 +146,7 @@ describe('FileMarkdown rich rendering', () => {
 
   it('projects CSS Color 4 theme tokens to Mermaid-compatible sRGB colors', () => {
     applyTheme('classic-dark', 'dark');
+    const readback = vi.spyOn(CanvasRenderingContext2D.prototype, 'getImageData');
 
     const sourceColor = getComputedStyle(document.documentElement)
       .getPropertyValue('--redeven-categorical-graph-6')
@@ -119,6 +159,10 @@ describe('FileMarkdown rich rendering', () => {
     expect(Object.values(theme.variables)).not.toHaveLength(0);
     for (const color of Object.values(theme.variables)) {
       expect(color).toMatch(/^#[\da-f]{6}(?:[\da-f]{2})?$/u);
+    }
+    expect(readback).toHaveBeenCalled();
+    for (const context of readback.mock.contexts) {
+      expect((context as CanvasRenderingContext2D).getContextAttributes().willReadFrequently).toBe(true);
     }
   });
 

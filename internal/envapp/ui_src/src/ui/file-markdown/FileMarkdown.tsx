@@ -19,10 +19,7 @@ import {
 import 'katex/dist/katex.min.css';
 import './FileMarkdown.css';
 import { extractMath, reinjectMath } from './mathPlugin';
-import {
-  resolveMermaidThemeContext,
-  runMermaid,
-} from './mermaidPlugin';
+import { runMermaid } from './mermaidPlugin';
 import { extractFrontmatter } from './frontmatterParser';
 import { buildToc, type TocItem } from './tocBuilder';
 import { postProcess } from './postProcess';
@@ -482,8 +479,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
 
     void (async () => {
       try {
-        const theme = resolveMermaidThemeContext();
-        await runMermaid(target, { shouldContinue: isCurrentTask, theme });
+        await runMermaid(target, { shouldContinue: isCurrentTask });
       } catch (error) {
         if (!isCurrentTask()) return;
         console.error('Markdown preview Mermaid theme refresh failed:', error);
