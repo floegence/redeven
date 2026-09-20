@@ -17,6 +17,7 @@ describe('desktopShellWebServiceWindowIPC', () => {
       forward_id: 'demo',
       target_url: 'http://localhost:3000/',
       access_mode: 'desktop_loopback',
+      presentation: 'browser',
     });
   });
 
@@ -60,6 +61,13 @@ describe('desktopShellWebServiceWindowIPC', () => {
       forward_id: 'demo',
       target_url: 'http://localhost:3000/admin',
     })).toBeNull();
+  });
+
+  it('accepts application presentation without changing route authorization and rejects unknown presentations', () => {
+    const request = {url:'http://127.0.0.1:43123/pf/demo/_redeven_host_app/', forward_id:'demo', target_url:'http://localhost:3000'};
+    expect(normalizeDesktopShellOpenWebServiceWindowRequest({...request, presentation:'application'})?.presentation).toBe('application');
+    expect(normalizeDesktopShellOpenWebServiceWindowRequest({...request, presentation:'frameless'})).toBeNull();
+    expect(normalizeDesktopShellOpenWebServiceWindowRequest({...request, presentation:'application', target_url:'https://evil.example'})).toBeNull();
   });
 
   it('normalizes missing responses as a closed failure', () => {

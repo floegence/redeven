@@ -23,6 +23,7 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	envui "github.com/floegence/redeven/internal/envapp/ui"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/hostapps"
 	"github.com/floegence/redeven/internal/managedwebservice"
 	"github.com/floegence/redeven/internal/notes"
 	"github.com/floegence/redeven/internal/pluginmarket"
@@ -101,6 +102,7 @@ type Service struct {
 	reg        *registry.Registry
 	pf         *portforward.Service
 	managed    *managedwebservice.Manager
+	hostApps   *hostapps.Manager
 	containers *containerresource.Service
 	runner     *codeserver.Runner
 	runtime    *codeserver.RuntimeManager
@@ -349,7 +351,9 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = aiReady.Close()
 		return nil, err
 	}
+	hostApps := hostapps.New(stateAbs, agentHomeDir, pfSvc)
 	appSrv, err := appserver.New(appserver.Options{
+		HostApplications:      hostApps,
 		Logger:                logger,
 		DistFS:                mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
 		Backend:               svc,
@@ -397,6 +401,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = aiReady.Close()
 		return nil, err
 	}
+	svc.hostApps = hostApps
 	svc.appSrv = appSrv
 	svc.notes = notesSvc
 	svc.layouts = workbenchLayoutSvc
@@ -420,6 +425,9 @@ func (s *Service) Close() error {
 		_ = s.managed.Close()
 	}
 
+	if s.hostApps != nil {
+		_ = s.hostApps.Close()
+	}
 	if s.appSrv != nil {
 		_ = s.appSrv.Close()
 	}

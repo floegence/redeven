@@ -980,6 +980,7 @@ type DesktopWebServiceBrowserController = Readonly<{
   refreshUnavailableTheme: () => void;
   snapshot: () => DesktopWebServiceBrowserState;
   accessMode: NormalizedDesktopShellOpenWebServiceWindowRequest['access_mode'];
+  presentation: NormalizedDesktopShellOpenWebServiceWindowRequest['presentation'];
   targetURL: string;
   navigateProtectedRoute: (url: string) => DesktopWebServiceBrowserActionResponse;
 }>;
@@ -8587,22 +8588,22 @@ function webServiceBrowserDocumentURL(): string {
   }, desktopThemeState().getSnapshot());
 }
 
-function webServiceUnavailableDocumentURL(targetAddress: string): string {
+function webServiceUnavailableDocumentURL(targetAddress: string, applicationWindow = false): string {
   const locale = desktopLanguageState().getSnapshot().resolved_locale;
   const i18n = createDesktopI18n(locale);
   return buildWebServiceUnavailableDocumentURL({
     locale,
-    documentTitle: i18n.t('webServiceBrowser.unavailableDocumentTitle'),
+    documentTitle: i18n.t(applicationWindow ? 'hostApplications.unavailableTitle' : 'webServiceBrowser.unavailableDocumentTitle'),
     eyebrow: i18n.t('webServiceBrowser.unavailableEyebrow'),
-    title: i18n.t('webServiceBrowser.unavailableTitle'),
-    summary: i18n.t('webServiceBrowser.unavailableSummary'),
+    title: i18n.t(applicationWindow ? 'hostApplications.unavailableTitle' : 'webServiceBrowser.unavailableTitle'),
+    summary: i18n.t(applicationWindow ? 'hostApplications.unavailableSummary' : 'webServiceBrowser.unavailableSummary'),
     targetLabel: i18n.t('webServiceBrowser.unavailableTargetLabel'),
     checksTitle: i18n.t('webServiceBrowser.unavailableChecksTitle'),
     serviceCheck: i18n.t('webServiceBrowser.unavailableServiceCheck'),
     portCheck: i18n.t('webServiceBrowser.unavailablePortCheck'),
-    retryLabel: i18n.t('webServiceBrowser.retry'),
-    retryingLabel: i18n.t('webServiceBrowser.retrying'),
-  }, targetAddress, desktopThemeState().getSnapshot());
+    retryLabel: i18n.t(applicationWindow ? 'hostApplications.retry' : 'webServiceBrowser.retry'),
+    retryingLabel: i18n.t(applicationWindow ? 'hostApplications.retrying' : 'webServiceBrowser.retrying'),
+  }, targetAddress, desktopThemeState().getSnapshot(), applicationWindow ? 'application' : 'browser');
 }
 
 function createWebServiceBrowserController(
@@ -8620,13 +8621,16 @@ function createWebServiceBrowserController(
   let loadingUnavailablePage = false;
   const webSession = session.fromPartition(partition);
   const targetAddress = new URL(request.target_url).origin;
+  const applicationWindow = request.presentation === 'application';
   const windowRecord = createBrowserWindow({
-    targetURL: webServiceBrowserDocumentURL(),
+    targetURL: applicationWindow ? 'about:blank' : webServiceBrowserDocumentURL(),
     stateKey: sessionWebServiceWindowStateKey(sessionRecord.session_key, request.forward_id),
     role: 'web_service_child',
     diagnostics: sessionRecord.diagnostics,
-    preload: 'web_service_browser',
+    chrome: applicationWindow ? 'native' : 'desktop',
+    preload: applicationWindow ? 'none' : 'web_service_browser',
     stealAppFocus: true,
+    presentOnReadyToShow: !applicationWindow,
     onClosed: (closedWindow) => {
       webServiceBrowserByToolbarWebContentsID.delete(closedWindow.webContentsID);
       sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
@@ -8661,7 +8665,7 @@ function createWebServiceBrowserController(
   const layoutContent = (): void => {
     if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;
     const [width, height] = win.getContentSize();
-    contentView.setBounds(webServiceBrowserContentBounds(width, height));
+    contentView.setBounds(webServiceBrowserContentBounds(width, height, request.presentation));
   };
   win.on('resize', layoutContent);
   layoutContent();
@@ -8690,6 +8694,7 @@ function createWebServiceBrowserController(
     };
   };
   const publishState = (): void => {
+    if (applicationWindow) return;
     if (win.isDestroyed() || win.webContents.isDestroyed()) return;
     win.webContents.send(DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL, snapshot());
   };
@@ -8736,7 +8741,7 @@ function createWebServiceBrowserController(
   const refreshUnavailableTheme = (): void => {
     if (win.isDestroyed()) return;
     if (!unavailablePageURL || contentView.webContents.isDestroyed()) return;
-    unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress);
+    unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow);
     loadingUnavailablePage = true;
     void contentView.webContents.loadURL(unavailablePageURL);
   };
@@ -8845,6 +8850,13 @@ function createWebServiceBrowserController(
     event.preventDefault();
     blockExternalNavigation(targetURL);
   });
+  if (applicationWindow) {
+    // An empty native host document does not reliably emit ready-to-show.
+    // Present when the isolated bootstrap can paint its own loading state.
+    contentView.webContents.once('dom-ready', () => {
+      if (!win.isDestroyed()) presentAppWindow(win, { stealAppFocus: true });
+    });
+  }
   contentView.webContents.on('did-start-loading', () => {
     pendingExternalURL = '';
     errorMessage = '';
@@ -8880,11 +8892,18 @@ function createWebServiceBrowserController(
     const cleanTitle = compact(title);
     const browserTitle = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
       .t('webServiceBrowser.title');
-    win.setTitle(cleanTitle ? `${cleanTitle} - ${browserTitle}` : browserTitle);
+    win.setTitle(applicationWindow ? cleanTitle : cleanTitle ? `${cleanTitle} - ${browserTitle}` : browserTitle);
     publishState();
   });
   contentView.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _url, isMainFrame) => {
     if (!isMainFrame || errorCode === -3) return;
+    if (applicationWindow && !loadingUnavailablePage) {
+      unavailableRequestURL = requestedURL;
+      unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, true);
+      loadingUnavailablePage = true;
+      void contentView.webContents.loadURL(unavailablePageURL);
+      return;
+    }
     errorMessage = compact(errorDescription)
       || createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale).t('webServiceBrowser.loadFailed');
     publishState();
@@ -8919,7 +8938,7 @@ function createWebServiceBrowserController(
     setImmediate(() => {
       if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;
       unavailableRequestURL = failedRequestURL;
-      unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress);
+      unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow);
       loadingUnavailablePage = true;
       pendingExternalURL = '';
       errorMessage = '';
@@ -8936,6 +8955,7 @@ function createWebServiceBrowserController(
     refreshUnavailableTheme,
     snapshot,
     accessMode: request.access_mode,
+    presentation: request.presentation,
     targetURL: request.target_url,
     navigateProtectedRoute,
   };
@@ -8962,7 +8982,7 @@ async function openWebServiceWindowFromShellNow(
   const existingWindow = liveTrackedBrowserWindow(existing);
   if (existing && existingWindow) {
     const controller = webServiceBrowserByToolbarWebContentsID.get(existing.webContentsID);
-    if (controller?.accessMode === request.access_mode && controller.targetURL === request.target_url) {
+    if (controller?.accessMode === request.access_mode && controller.targetURL === request.target_url && controller.presentation === request.presentation) {
       const response = controller.navigateProtectedRoute(request.url);
       if (!response.ok) return response;
       presentAppWindow(existingWindow, { stealAppFocus: true });
@@ -9029,7 +9049,7 @@ async function openWebServiceWindowFromShellNow(
   const preparedExistingWindow = liveTrackedBrowserWindow(preparedExisting);
   if (preparedExisting && preparedExistingWindow) {
     const controller = webServiceBrowserByToolbarWebContentsID.get(preparedExisting.webContentsID);
-    if (controller?.accessMode === request.access_mode && controller.targetURL === request.target_url) {
+    if (controller?.accessMode === request.access_mode && controller.targetURL === request.target_url && controller.presentation === request.presentation) {
       sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
       await loopbackGateway?.close();
       const response = controller.navigateProtectedRoute(request.url);

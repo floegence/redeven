@@ -403,8 +403,10 @@ describe('main routing', () => {
       helperSrc.indexOf('const controller = createWebServiceBrowserController(sessionRecord, request, partition, loopbackGateway);'),
     );
     expect(helperSrc).toContain("role: 'web_service_child'");
-    expect(helperSrc).toContain("preload: 'web_service_browser'");
-    expect(helperSrc).not.toContain("chrome: 'native'");
+    expect(helperSrc).toContain("preload: applicationWindow ? 'none' : 'web_service_browser'");
+    expect(helperSrc).toContain("chrome: applicationWindow ? 'native' : 'desktop'");
+    expect(helperSrc).toContain("targetURL: applicationWindow ? 'about:blank' : webServiceBrowserDocumentURL()");
+    expect(helperSrc).toContain('webServiceBrowserContentBounds(width, height, request.presentation)');
     expect(helperSrc).toContain('const contentView = new WebContentsView({');
     expect(helperSrc).toContain('const contentViewIdentity = snapshotWebContentsIdentity(contentView.webContents);');
     expect(helperSrc).toContain(
@@ -427,12 +429,12 @@ describe('main routing', () => {
     expect(helperSrc).toContain("contentView.webContents.openDevTools({ mode: 'detach' });");
     expect(helperSrc).toContain("contentView.webContents.on('before-input-event', handleDevToolsShortcut);");
     expect(helperSrc).toContain('isMarkedWebServiceUpstreamUnavailable(details)');
-    expect(helperSrc).toContain('webServiceUnavailableDocumentURL(targetAddress)');
+    expect(helperSrc).toContain('webServiceUnavailableDocumentURL(targetAddress, applicationWindow)');
     expect(helperSrc).toContain('callback({ cancel: true });');
     expect(helperSrc).toContain('WEB_SERVICE_BROWSER_RETRY_FEEDBACK_MS');
     expect(helperSrc).toContain('const refreshUnavailableTheme = (): void => {');
     expect(helperSrc).not.toContain('void win.loadURL(webServiceBrowserDocumentURL());');
-    expect(helperSrc).toContain('unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress);');
+    expect(helperSrc).toContain('unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow);');
     expect(helperSrc).toContain('if (unavailablePageURL !== retryPageURL) return;');
     expect(helperSrc).toContain('if (contentView.webContents.getURL() !== `${retryPageURL}#retry`) return;');
     expect(helperSrc).toContain('await openWebServiceInSystemBrowser({');

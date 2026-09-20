@@ -1039,6 +1039,12 @@
     "unknown": "Unbekannt",
     "moreInformation": "weitere Informationen"
   },
+  "hostApplications": {
+    "unavailableTitle": "Verbindung unterbrochen",
+    "unavailableSummary": "Prüfen Sie Ihre Netzwerkverbindung und verbinden Sie sich erneut mit der Anwendung. Die Sitzung wird dabei nicht neu gestartet.",
+    "retry": "Erneut verbinden",
+    "retrying": "Verbindung wird wiederhergestellt…"
+  },
   "webServiceBrowser": {
     "title": "Web Service",
     "addressLabel": "Web-Service-Adresse",

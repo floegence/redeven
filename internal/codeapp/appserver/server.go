@@ -39,6 +39,7 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	runtimefs "github.com/floegence/redeven/internal/fs"
+	"github.com/floegence/redeven/internal/hostapps"
 	"github.com/floegence/redeven/internal/managedwebservice"
 	"github.com/floegence/redeven/internal/notes"
 	"github.com/floegence/redeven/internal/pathutil"
@@ -60,6 +61,7 @@ type Options struct {
 	Backend              Backend
 	PortForward          PortForwardBackend
 	ManagedWebServices   managedwebservice.Backend
+	HostApplications     hostapps.Backend
 	ContainerResources   *containerresource.Service
 	AIServiceProvider    AIServiceProvider
 	Notes                *notes.Service
@@ -224,6 +226,7 @@ type Server struct {
 	backend    Backend
 	pf         PortForwardBackend
 	managed    managedwebservice.Backend
+	hostApps   hostapps.Backend
 	containers *containerresource.Service
 	aiProvider AIServiceProvider
 	notes      *notes.Service
@@ -421,6 +424,7 @@ func New(opts Options) (*Server, error) {
 		backend:               opts.Backend,
 		pf:                    opts.PortForward,
 		managed:               opts.ManagedWebServices,
+		hostApps:              opts.HostApplications,
 		containers:            opts.ContainerResources,
 		aiProvider:            opts.AIServiceProvider,
 		notes:                 opts.Notes,
@@ -2481,6 +2485,9 @@ func isRenderableMime(ct string) bool {
 }
 
 func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
+	if g.handleHostApplicationsAPI(w, r) {
+		return
+	}
 	if g.handleWorkbenchLayoutAPI(w, r) {
 		return
 	}
@@ -6706,6 +6713,10 @@ func (g *Server) handlePortForwardProxy(w http.ResponseWriter, r *http.Request) 
 	}
 	if fw == nil {
 		http.Error(w, "port forward not found", http.StatusNotFound)
+		return
+	}
+
+	if g.guardHostApplicationForward(w, r, fw.TargetURL, localPrefix) {
 		return
 	}
 

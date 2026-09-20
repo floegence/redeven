@@ -9,7 +9,7 @@ import { Show, createEffect, createMemo, createSignal, lazy, onCleanup, type JSX
 
 import { CodespacesWorkbenchIcon } from '../icons/CodespacesIcon';
 import { ContainersWorkbenchIcon } from '../icons/ContainersIcon';
-import { WebServicesWorkbenchIcon } from '../icons/WorkbenchSoftIcons';
+import { HostApplicationsWorkbenchIcon, WebServicesWorkbenchIcon } from '../icons/WorkbenchSoftIcons';
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
@@ -30,6 +30,7 @@ import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
 const FRONTABLE_WORKBENCH_RENDER_MODE = 'projected_surface';
 const EnvCodespacesPage = lazy(() => import('../pages/EnvCodespacesPage').then((module) => ({ default: module.EnvCodespacesPage })));
 const EnvContainersPage = lazy(() => import('../pages/EnvContainersPage').then((module) => ({ default: module.EnvContainersPage })));
+const EnvHostApplicationsPage = lazy(() => import('../pages/EnvHostApplicationsPage').then((module) => ({ default: module.EnvHostApplicationsPage })));
 const EnvPortForwardsPage = lazy(() => import('../pages/EnvPortForwardsPage').then((module) => ({ default: module.EnvPortForwardsPage })));
 const RemoteFileBrowser = lazy(() => import('../widgets/RemoteFileBrowser').then((module) => ({ default: module.RemoteFileBrowser })));
 const RuntimeMonitorPanel = lazy(() => import('../widgets/RuntimeMonitorPanel').then((module) => ({ default: module.RuntimeMonitorPanel })));
@@ -188,6 +189,10 @@ function CodespacesWidget() {
       <EnvCodespacesPage />
     </div>
   );
+}
+
+function HostApplicationsWidget() {
+  return <div {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS} class="redeven-workbench-body-surface h-full min-h-0 overflow-hidden"><EnvHostApplicationsPage /></div>;
 }
 
 function PortsWidget() {
@@ -354,6 +359,17 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     projectedSurfaceScaleBehavior: 'settle_sharp_zoom',
   },
   {
+    type: 'redeven.applications',
+    label: 'Host Applications',
+    icon: HostApplicationsWorkbenchIcon,
+    body: HostApplicationsWidget,
+    defaultTitle: 'Host Applications',
+    defaultSize: { width: 960, height: 680 },
+    group: 'runtime',
+    singleton: true,
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
+  },
+  {
     type: 'redeven.containers',
     label: 'Containers',
     icon: ContainersWorkbenchIcon,
@@ -398,6 +414,8 @@ function localizedWorkbenchWidgetCopy(
       return { label: t('workbench.widgets.codespaces.label'), defaultTitle: t('workbench.widgets.codespaces.defaultTitle') };
     case 'redeven.ports':
       return { label: t('workbench.widgets.ports.label'), defaultTitle: t('workbench.widgets.ports.defaultTitle') };
+    case 'redeven.applications':
+      return { label: t('hostApplications.title'), defaultTitle: t('hostApplications.title') };
     case 'redeven.containers':
       return { label: t('workbench.widgets.containers.label'), defaultTitle: t('workbench.widgets.containers.defaultTitle') };
     case 'redeven.ai':
@@ -420,6 +438,7 @@ export const redevenWorkbenchFilterBarWidgetTypes: readonly WorkbenchWidgetType[
   'redeven.monitor',
   'redeven.codespaces',
   'redeven.ports',
+  'redeven.applications',
   'redeven.containers',
   'redeven.ai',
 ];

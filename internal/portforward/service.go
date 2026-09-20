@@ -65,6 +65,7 @@ type Service struct {
 }
 
 type ephemeralForward struct {
+	owned          bool
 	forward        registry.Forward
 	lastAccessedAt time.Time
 }
@@ -124,7 +125,28 @@ func (s *Service) GetForward(ctx context.Context, forwardID string) (*registry.F
 	return ephemeral, nil
 }
 
+// OpenOwnedForwardSession pins a private runtime service route until its owner
+// releases it. It cannot be saved as a persistent web service or shared by owners.
+func (s *Service) OpenOwnedForwardSession(ctx context.Context, target string) (*ForwardSession, error) {
+	return s.openForwardSession(ctx, OpenForwardSessionRequest{Target: target, AccessMode: "unified_proxy"}, true)
+}
+
+func (s *Service) ReleaseOwnedForwardSession(id string) {
+	s.ephemeralMu.Lock()
+	defer s.ephemeralMu.Unlock()
+	if f, ok := s.ephemeralByID[id]; ok && f.owned {
+		delete(s.ephemeralByID, id)
+		if s.ephemeralIDByTarget[f.forward.TargetURL] == id {
+			delete(s.ephemeralIDByTarget, f.forward.TargetURL)
+		}
+	}
+}
+
 func (s *Service) OpenForwardSession(ctx context.Context, req OpenForwardSessionRequest) (*ForwardSession, error) {
+	return s.openForwardSession(ctx, req, false)
+}
+
+func (s *Service) openForwardSession(ctx context.Context, req OpenForwardSessionRequest, owned bool) (*ForwardSession, error) {
 	if s == nil || s.reg == nil {
 		return nil, errors.New("portforward not ready")
 	}
@@ -151,6 +173,9 @@ func (s *Service) OpenForwardSession(ctx context.Context, req OpenForwardSession
 		if forward.TargetURL != targetURL {
 			continue
 		}
+		if owned {
+			return nil, errors.New("service address already has a route")
+		}
 		if !IsValidForwardID(forward.ForwardID) {
 			return nil, errors.New("saved forward_id is invalid")
 		}
@@ -171,6 +196,9 @@ func (s *Service) OpenForwardSession(ctx context.Context, req OpenForwardSession
 	s.removeExpiredEphemeralLocked(now)
 	if existingID := s.ephemeralIDByTarget[targetURL]; existingID != "" {
 		if existing, ok := s.ephemeralByID[existingID]; ok {
+			if owned {
+				return nil, errors.New("service address already has a route")
+			}
 			existing.lastAccessedAt = now
 			existing.forward.LastOpenedAtUnixMs = now.UnixMilli()
 			s.ephemeralByID[existingID] = existing
@@ -190,7 +218,7 @@ func (s *Service) OpenForwardSession(ctx context.Context, req OpenForwardSession
 		LastOpenedAtUnixMs: now.UnixMilli(),
 		AccessMode:         accessMode,
 	}
-	s.ephemeralByID[forward.ForwardID] = ephemeralForward{forward: forward, lastAccessedAt: now}
+	s.ephemeralByID[forward.ForwardID] = ephemeralForward{forward: forward, lastAccessedAt: now, owned: owned}
 	s.ephemeralIDByTarget[targetURL] = forward.ForwardID
 	return &ForwardSession{Forward: forward, AppPath: appPath, Ephemeral: true}, nil
 }
@@ -225,6 +253,9 @@ func (s *Service) SaveForwardSession(ctx context.Context, forwardID string, req 
 	ephemeral, ok := s.ephemeralByID[id]
 	if !ok {
 		return nil, ErrForwardNotFound
+	}
+	if ephemeral.owned {
+		return nil, errors.New("application routes cannot be saved")
 	}
 	originalTargetURL := ephemeral.forward.TargetURL
 	targetURL := originalTargetURL
@@ -509,7 +540,7 @@ func (s *Service) getEphemeralForwardLocked(forwardID string) *registry.Forward 
 
 func (s *Service) removeExpiredEphemeralLocked(now time.Time) {
 	for id, ephemeral := range s.ephemeralByID {
-		if now.Sub(ephemeral.lastAccessedAt) < ephemeralForwardTTL {
+		if ephemeral.owned || now.Sub(ephemeral.lastAccessedAt) < ephemeralForwardTTL {
 			continue
 		}
 		delete(s.ephemeralByID, id)

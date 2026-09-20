@@ -73,6 +73,17 @@ export function ActivityBarPortsIcon(props: { class?: string }) {
   );
 }
 
+export function ActivityBarHostApplicationsIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
+      <rect x="3" y="3" width="14" height="14" rx="3" fill="currentColor" fill-opacity=".12" stroke="currentColor" stroke-opacity=".4" />
+      <rect x="7" y="7" width="14" height="14" rx="3" fill="var(--background)" stroke="currentColor" stroke-opacity=".8" stroke-width="1.4" />
+      <path d="M7 12h14" stroke="currentColor" stroke-opacity=".4" />
+      <path d="m12 14 5 2.5-5 2.5z" fill="currentColor" fill-opacity=".8" />
+    </svg>
+  );
+}
+
 export function ActivityBarContainersIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">

@@ -23,6 +23,20 @@ When the port-forward proxy cannot connect to its upstream, it returns a non-cac
 
 Target navigation and popups may remain in the isolated window only while the exact Environment and forward constraints continue to hold. In unified mode, only the user's explicit Open in browser action may hand a retained external target or Runtime-minted browser entry to the system browser. Mint failure, response mismatch, or URL validation failure leaves the Desktop window in place and opens no URL. The target document never receives the Redeven Desktop bridge, Env App preload, or parent Environment partition.
 
+# Host application presentation
+
+The semantic forward-window request optionally selects `presentation: application`.
+The default remains the browser presentation described above. Application presentation
+uses native OS chrome, no browser toolbar, no shell preload, and a target view
+filling the complete content area. Its title is the application document title
+without the Web Service suffix. The same forward admission, isolated partition,
+request routing, window reuse, and teardown remain authoritative. Presentation is
+part of reuse identity so opening a different presentation cannot silently retain
+an inappropriate window shell. Initial navigation failures provide a scriptless
+localized reconnect action without service addresses or browser instructions.
+The [host application contract](../architecture/host-applications.md) owns Xpra
+geometry, application progress, disconnection, and session lifecycle.
+
 # Boundaries
 
 Desktop isolation is a B-level browsing surface over Redeven's existing authorized route; it is not Remote Browser Isolation and does not claim a general-purpose browser security boundary. The browser-only Env App path remains an explicit popup route. Redeven must not label a same-page iframe as complete isolated browsing, copy a reusable RBI implementation into this repository, or bypass the published-dependency policy to obtain one.

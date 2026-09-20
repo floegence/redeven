@@ -1,0 +1,126 @@
+---
+type: Runtime Contract
+title: Host application catalog and Xpra sessions
+description: Browse Linux host applications and open owned, reconnectable graphical sessions through existing authorized windows.
+tags: [runtime, desktop, applications, security, ui]
+timestamp: 2026-09-20T00:00:00Z
+---
+# Summary
+
+Redeven owns the host application catalog, launch authorization, session lifecycle,
+and private forward. Installed GIO owns desktop-entry resolution and launch;
+installed Xpra owns X11 rendering and interactive transport. Applications execute
+as the Runtime's host OS user, without a container or virtual machine. Each live
+application session has one owner and one authorized window route. Closing its
+viewer preserves the application; ending the session or stopping the Runtime
+closes it. Sessions are not durable across Runtime restarts. Missing dependencies,
+launch failures, and insufficient permissions fail explicitly.
+
+# Host and application boundary
+
+The supported host is Linux with Xpra 6 or newer and the separately installed
+Xpra HTML5 v20 client, Xvfb, D-Bus, xauth, and Python GIO/GTK 3 bindings. These remain
+external host dependencies; Redeven does not vendor or download Xpra. A desktop
+environment and physical display are unnecessary. The launcher creates a private
+virtual X11 display and D-Bus session, clearing inherited desktop display and bus
+addresses. The application's files, OS permissions, executable, and home directory
+remain those of the Runtime user. This display separation is not an OS sandbox.
+
+GIO supplies standard application metadata, localized names, visibility, executable
+resolution, and field expansion. Terminal-only desktop entries are excluded.
+For entries declaring D-Bus activation, a private launch copy disables activation
+so GIO executes the declared command within the new display/bus environment; this
+avoids delegation to the existing desktop through user systemd services.
+Applications without a desktop entry can be registered by absolute executable
+path and arguments. Redeven stores these entries in its private application
+directory, without changing the host's system menu. Arguments never pass through
+a shell; literal percent signs and Desktop Entry quoting are preserved. Custom
+entries are shared within this Runtime's host-user catalog.
+
+Applications must support X11 (including GTK/Qt applications with an X11 backend).
+Wayland-only applications, applications requiring a full desktop service stack,
+singletons that redirect through their own shared profile, hardware-accelerated
+graphics, and privileged system controls may require application-specific setup.
+The initial integration does not provide audio, microphone, webcam, printing,
+file-transfer, or remote notification forwarding. Xpra owns clipboard and keyboard
+behavior; browser permissions and reserved shortcuts still apply.
+
+# Authorization and lifecycle
+
+Catalog and session listing require read permission. Adding an application,
+launching, ending, and every forwarded request including the WebSocket require
+read, write, and execute permissions under the existing
+[Runtime permission gates](runtime-session-permission-gates.md). Ownership comes
+from authorized session metadata, never a request-provided user ID. Only the owner
+can access or end a session. A per-session Xpra credential independently protects
+the loopback WebSocket and is never placed in URLs or catalog responses.
+
+Launching an already active application for the same owner resumes its session.
+A launch gets a private D-Bus session, virtual X server, authenticated loopback
+listener, and process group. A GIO launch receipt, responding HTML5 endpoint, and a nonempty Xpra window
+inventory must all be ready before the session becomes running. Startup has a bounded
+deadline; failure stops the owned process group and removes its route and secret.
+The Runtime limits concurrent sessions to twelve and retains at most forty-eight
+session records per Runtime lifetime. Completed session records expose failure
+status so a failed launch cannot disappear silently from the library.
+
+The [Web Service session owner](web-service-browser-sessions.md) provides an
+owned ephemeral route that is pinned until application termination, is absent
+from saved Web Services, and cannot be saved as a persistent service. It is
+released on termination. The manager's target guard also applies to alternative
+forward openings to the same target. Runtime shutdown prevents new launches and
+terminates its owned sessions. Network loss and viewer closure do not terminate
+applications. Runtime crash recovery and attachment to applications previously
+started on another display are outside this contract.
+
+# Interaction
+
+Host Applications is available in Activity navigation and the Workbench launcher.
+The surface combines searchable category-filtered application cards with running
+sessions and explicit resume/end controls. Refresh re-reads host metadata;
+visible-session observation uses a lightweight session endpoint. Read-only users
+can browse while launch and process controls are disabled. Ending a session asks
+for confirmation because unsaved application data may be lost.
+
+Opening uses an application presentation of the existing
+[Desktop isolated forward window](../desktop/web-service-browser-window.md), or a
+synchronously reserved popup in browser mode. Desktop uses a native title bar,
+application title, and full content bounds without browser navigation or an
+address field. Both window documents and the application view have no Desktop
+preload or bridge. Browser popups retain browser-owned chrome.
+
+The localized bootstrap owns connection presentation. It uses the host application's
+icon, quiet progress motion, and distinct starting, connecting, disconnected,
+reconnecting, ended, and failed states. Application content appears only after a
+successful Xpra paint acknowledgement. Reduced-motion preferences disable motion.
+A broken connection provides explicit reconnection, reseeding credentials from the
+authorized state endpoint without starting another application process. Stale
+callbacks cannot restore a disconnected or superseded view. Terminated sessions
+show their ended state instead of an unusable retry. A failed initial Desktop
+navigation also has a localized, bridge-free reconnect page.
+
+The adapter integrates the separately installed HTML5 v20 client. Primary normal
+windows fill the viewer and track its size through Xpra's window geometry API;
+Xpra decorations, wallpaper, toolbar, and loading UI are hidden. Native viewer
+chrome owns primary-window movement and minimization. The application still owns
+its own client-side header and controls. Transient dialogs retain their stacking, close controls, and input behavior;
+oversized dialogs negotiate a bounded size so their actions remain reachable.
+Menus and popups keep their ordinary window geometry. No pixel
+stretching or cropping substitutes for application resize. Fixed-size or minimum-size
+applications can still constrain their own layout. Xpra owns keyboard and clipboard
+transport. This path does not create a native OS window per X11 child window.
+
+The library keeps the application identity visible during launch, with a small
+progress indicator and explicit status text. Its overlapping-window navigation
+icon is distinct from the plugin catalog icon. Application inventory loading uses
+layout-preserving skeleton cards rather than a competing animated app glyph.
+
+# Evidence
+
+- `internal/hostapps/manager.go` and `desktop.py`: host discovery, process ownership, and Xpra launch.
+- `internal/hostapps/manager_test.go` and `desktop_test.py`: lifecycle, installed-stack launch/resume/stop, and literal argument preservation.
+- `internal/codeapp/appserver/host_applications.go`, `host_application_viewer/`, and `host_applications_test.go`: API, permission/owner gates, and escaped private bootstrap.
+- `internal/portforward/owned_session_test.go`: pinned route lifetime and persistence rejection.
+- `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.tsx` and its tests: library, session controls, permission states, and window opening.
+- `internal/envapp/ui_src/src/ui/services/webServiceWindows.ts`: shared authorized window route.
+- `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts`: primary/transient geometry, first-paint visibility, reconnect credentials, and stale callback exclusion.

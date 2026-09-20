@@ -6,6 +6,9 @@ describe('Web Service content placement', () => {
     expect(webServiceBrowserContentBounds(1100, 740)).toEqual({ x: 0, y: 94, width: 1100, height: 646 });
     expect(webServiceBrowserContentBounds(640, 480)).toEqual({ x: 0, y: 94, width: 640, height: 386 });
   });
+  it('fills the native application content area without browser chrome', () => {
+    expect(webServiceBrowserContentBounds(1100, 740, 'application')).toEqual({ x: 0, y: 0, width: 1100, height: 740 });
+  });
   it('retains valid view dimensions during a transient collapsed resize', () => {
     expect(webServiceBrowserContentBounds(0, 0)).toEqual({ x: 0, y: 94, width: 1, height: 1 });
   });

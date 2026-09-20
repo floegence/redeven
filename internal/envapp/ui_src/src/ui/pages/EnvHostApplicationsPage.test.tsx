@@ -1,0 +1,70 @@
+// @vitest-environment jsdom
+import { render } from 'solid-js/web';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
+
+const state = vi.hoisted(() => ({ full: true, catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
+vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
+  env: () => ({ permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
+  env_id: () => 'host', localRuntime: () => ({}),
+}) }));
+vi.mock('../services/hostApplicationsApi', () => ({ listHostApplications: state.catalog, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, stopHostApplication: state.stop, addHostApplication: state.add }));
+vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => true }));
+vi.mock('../services/desktopSessionContext', () => ({ readDesktopSessionContextSnapshot: () => null }));
+vi.mock('../services/webServiceWindows', () => ({ resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
+
+const app = { id: 'editor.desktop', name: 'Text Editor', description: 'Edit documents', categories: ['Utility'], icon: '', custom: false };
+const forward = { forward: { forward_id: 'one', target_url: 'http://127.0.0.1:40201' }, app_path: '/_redeven_host_app/', ephemeral: true };
+let host: HTMLDivElement;
+let dispose: (() => void) | undefined;
+const settle = () => new Promise(resolve => setTimeout(resolve, 30));
+function button(label: string) { return [...host.querySelectorAll('button')].find(el => el.getAttribute('aria-label') === label)!; }
+beforeEach(() => {
+  vi.clearAllMocks(); state.full = true;
+  state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
+  state.sessions.mockResolvedValue([{ id: 'session', application: app, state: 'running', forward }]);
+  state.launch.mockResolvedValue({ id: 'session', application: app, state: 'starting', forward });
+  state.open.mockResolvedValue(undefined);
+  host = document.createElement('div'); document.body.append(host);
+});
+afterEach(() => { dispose?.(); host.remove(); });
+
+describe('host application interaction', () => {
+  it('opens the authorized forward in a Desktop window and resumes a running session', async () => {
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(state.catalog).toHaveBeenCalledTimes(1);
+    button('Open in new window · Text Editor').click(); await settle();
+    expect(state.launch).toHaveBeenCalledWith('editor.desktop', 'en-US', expect.objectContaining({ starting: 'Starting application…' }));
+    expect(state.open).toHaveBeenCalledWith(expect.anything(), 'one', 'http://127.0.0.1:40201', 'unified_proxy', '/_redeven_host_app/', true, expect.any(Function), expect.anything(), null, 'application');
+    expect(host.textContent).toContain('Running applications');
+    expect(state.catalog).toHaveBeenCalledTimes(1);
+    expect(state.sessions).toHaveBeenCalledTimes(1);
+    button('Resume · Text Editor').click(); await settle();
+    expect(state.launch).toHaveBeenCalledTimes(2);
+  });
+  it('keeps application identity visible and exposes launch progress on the card', async () => {
+    state.launch.mockReturnValue(new Promise(() => {}));
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    const launchButton = button('Open in new window · Text Editor');
+    launchButton.click(); await settle();
+    expect(launchButton.getAttribute('aria-busy')).toBe('true');
+    expect(launchButton.textContent).toContain('Text Editor');
+    expect(launchButton.textContent).toContain('Starting application…');
+    expect(launchButton.querySelector('.host-app-launch-indicator')).not.toBeNull();
+  });
+  it('allows browsing with read permission and disables process control', async () => {
+    state.full = false;
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(host.textContent).toContain('Text Editor');
+    expect(button('Open in new window · Text Editor').disabled).toBe(true);
+    button('Open in new window · Text Editor').click();
+    expect(state.launch).not.toHaveBeenCalled();
+  });
+  it('filters applications without requesting another host inventory', async () => {
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    const input = host.querySelector<HTMLInputElement>('input[aria-label="Search applications…"]')!;
+    input.value = 'missing'; input.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    expect(host.textContent).toContain('No matching applications');
+    expect(state.catalog).toHaveBeenCalledTimes(1);
+  });
+});

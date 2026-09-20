@@ -185,6 +185,7 @@ describe('redevenWorkbenchWidgets default geometry', () => {
       'redeven.plugin': { width: 1120, height: 760 },
       'redeven.monitor': { width: 1040, height: 800 },
       'redeven.codespaces': { width: 1040, height: 660 },
+      'redeven.applications': { width: 960, height: 680 },
       'redeven.containers': { width: 1120, height: 720 },
       'redeven.ports': { width: 1000, height: 620 },
       'redeven.ai': { width: 1200, height: 760 },

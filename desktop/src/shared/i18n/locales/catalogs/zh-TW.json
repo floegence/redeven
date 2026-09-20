@@ -1039,6 +1039,12 @@
     "unknown": "未知",
     "moreInformation": "更多資訊"
   },
+  "hostApplications": {
+    "unavailableTitle": "連線已中斷",
+    "unavailableSummary": "請檢查網路連線，然後重新連線至應用程式。此操作不會重新啟動工作階段。",
+    "retry": "重新連線",
+    "retrying": "正在重新連線…"
+  },
   "webServiceBrowser": {
     "title": "Web Service",
     "addressLabel": "Web Service 位址",

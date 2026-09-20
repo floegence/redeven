@@ -87,6 +87,12 @@ export const enUS = {
     preflightFailedDetail: 'Redeven could not check this environment. Try again.',
     openFailedDetail: 'The environment started, but Redeven could not open the workspace. Try again.',
   },
+  hostApplications: {
+    unavailableTitle: "Connection interrupted",
+    unavailableSummary: "Check your connection, then reconnect to your application. This does not restart the session.",
+    retry: "Reconnect",
+    retrying: "Reconnecting…",
+  },
   webServiceBrowser: {
     title: 'Web Service',
     addressLabel: 'Web Service address',

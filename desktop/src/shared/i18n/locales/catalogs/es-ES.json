@@ -1039,6 +1039,12 @@
     "unknown": "Desconocido",
     "moreInformation": "más información"
   },
+  "hostApplications": {
+    "unavailableTitle": "Conexión interrumpida",
+    "unavailableSummary": "Comprueba tu conexión y vuelve a conectar con la aplicación. La sesión no se reiniciará.",
+    "retry": "Volver a conectar",
+    "retrying": "Volviendo a conectar…"
+  },
   "webServiceBrowser": {
     "title": "Web Service",
     "addressLabel": "Dirección del Web Service",

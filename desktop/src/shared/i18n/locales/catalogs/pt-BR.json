@@ -1039,6 +1039,12 @@
     "unknown": "Desconhecido",
     "moreInformation": "mais informações"
   },
+  "hostApplications": {
+    "unavailableTitle": "Conexão interrompida",
+    "unavailableSummary": "Verifique sua conexão e reconecte ao aplicativo. A sessão não será reiniciada.",
+    "retry": "Reconectar",
+    "retrying": "Reconectando…"
+  },
   "webServiceBrowser": {
     "title": "Web Service",
     "addressLabel": "Endereço do Web Service",
