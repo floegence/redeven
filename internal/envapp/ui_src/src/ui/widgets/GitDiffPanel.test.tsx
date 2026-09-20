@@ -18,6 +18,26 @@ const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
 afterEach(() => { document.body.replaceChildren(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
 describe('GitDiffPanel request ownership', () => {
+  it.each(['preview', 'full'])('settles an absent %s result without stale patch content or a loading loop', async (mode) => {
+    getDiffContent.mockImplementation(async (request) => request.mode === mode
+      ? { repoRootPath: '/repo', mode }
+      : { repoRootPath: '/repo', mode: 'preview', file: { path: 'gone.ts', patchText: '@@ -1 +1 @@\n-old\n+obsoleteValue' } });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <LayoutProvider><NotificationProvider><GitDiffPanel open item={{ path: 'gone.ts' }} source={{ kind: 'workspace', repoRootPath: '/repo', workspaceSection: 'unstaged' }} emptyMessage="No changes remain" /></NotificationProvider></LayoutProvider>, host);
+    try {
+      await flush();
+      if (mode === 'full') {
+        Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.toLowerCase() === 'full context')!.click();
+        await flush();
+      }
+      expect(host.querySelector('[data-git-diff-empty]'), host.textContent ?? '').not.toBeNull();
+      expect(host.textContent).not.toContain('obsoleteValue');
+      expect(host.textContent).not.toContain('Loading');
+      expect(getDiffContent).toHaveBeenCalledTimes(mode === 'full' ? 2 : 1);
+    } finally { dispose(); }
+  });
+
   it('loads when mounted open, rejects late file results, and reloads refreshed summaries at the same path', async () => {
     const pending: Array<(value: GitGetDiffContentResponse) => void> = [];
     getDiffContent.mockImplementation(() => new Promise((resolve) => pending.push(resolve)));

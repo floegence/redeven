@@ -4,6 +4,10 @@ import { Show, createContext, createEffect, createSignal, useContext } from 'sol
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const testDiffTarget = { repoRootPath: '/workspace', workspaceSection: 'unstaged' as const, path: 'demo.txt' };
+
+vi.mock('./widgets/GitDiffDialog', () => ({ GitDiffDialog: (props: any) => <div data-testid="file-diff-window" data-floating={String(props.desktopFloatingWindow)}>{props.source?.repoRootPath}:{props.item?.path}</div> }));
+
 const EnvContextMock = createContext({} as any);
 const FilePreviewContextMock = createContext({} as any);
 const FileBrowserSurfaceContextMock = createContext({} as any);
@@ -172,6 +176,10 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
         </button>
         <button
           type="button"
+          data-testid="activity-open-diff"
+          onClick={() => env.openFileDiff(testDiffTarget)}
+        >Open diff</button>
+        <button type="button"
           data-testid="open-preview"
           onClick={() => void filePreview.openPreview({
             id: '/workspace/demo.txt',
@@ -434,6 +442,11 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
       <div>
         <button
           type="button"
+          data-testid="workbench-open-diff"
+          onClick={() => env.openFileDiff(testDiffTarget)}
+        >Open diff</button>
+        <div data-testid="workbench-diff-activation">{env.workbenchGitDiffActivation()?.target.path ?? ''}</div>
+        <button type="button"
           data-testid="workbench-open-preview"
           onClick={() => void filePreview.openPreview({
             id: '/workspace/demo.txt',
@@ -788,6 +801,29 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell desktop floating surfaces', () => {
+  it('routes diff inspection by mode and hides the Activity window while Workbench is active', async () => {
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushAsync(); await flushAsync();
+      (host.querySelector('[data-testid="activity-open-diff"]') as HTMLButtonElement).click();
+      await flushAsync();
+      expect(host.querySelector('[data-testid="file-diff-window"]')?.textContent).toBe('/workspace:demo.txt');
+      expect(host.querySelector('[data-testid="file-diff-window"]')?.getAttribute('data-floating')).toBe('true');
+      (host.querySelector('[data-testid="activity-switch-workbench"]') as HTMLButtonElement).click();
+      await flushAsync();
+      expect(host.querySelector('[data-testid="file-diff-window"]')).toBeNull();
+      (host.querySelector('[data-testid="workbench-open-diff"]') as HTMLButtonElement).click();
+      await flushAsync();
+      expect(host.querySelector('[data-testid="workbench-diff-activation"]')?.textContent).toBe('demo.txt');
+      expect(host.querySelector('[data-testid="file-diff-window"]')).toBeNull();
+      (host.querySelector('[data-testid="workbench-switch-activity"]') as HTMLButtonElement).click();
+      await flushAsync();
+      expect(host.querySelector('[data-testid="file-diff-window"]')?.textContent).toBe('/workspace:demo.txt');
+    } finally { dispose(); }
+  });
+
   it('opens file preview through the in-app floating host without spawning a system window', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

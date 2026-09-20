@@ -104,6 +104,24 @@ func (s *Service) buildDiffContentArgs(ctx context.Context, repo repoContext, re
 
 	switch strings.TrimSpace(req.SourceKind) {
 	case "workspace":
+		if strings.TrimSpace(req.WorkspaceSection) == "untracked" && len(pathspecs) > 0 {
+			// A persisted inspection can outlive this section membership. No-index
+			// diff alone would still synthesize an addition after the file is staged.
+			listed, err := s.runGitRead(ctx, repo.repoRootReal, "--literal-pathspecs", "ls-files", "--others", "--exclude-standard", "-z", "--", pathspecs[0])
+			if err != nil {
+				return nil, nil, gitCommitDiffPresentation{}, err
+			}
+			available := false
+			for _, candidate := range strings.Split(string(listed), "\x00") {
+				if candidate == pathspecs[0] {
+					available = true
+					break
+				}
+			}
+			if !available {
+				return nil, nil, gitCommitDiffPresentation{}, errors.New("file not found in diff")
+			}
+		}
 		args, allowedExitCodes, err := buildWorkspaceDiffContentArgs(req.WorkspaceSection, pathspecs, unifiedArg)
 		return args, allowedExitCodes, gitCommitDiffPresentation{}, err
 	case "commit":

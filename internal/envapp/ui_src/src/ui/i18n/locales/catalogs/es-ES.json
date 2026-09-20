@@ -330,6 +330,9 @@
     "notificationTitle": "Flower"
   },
   "gitDiff": {
+    "refresh": "Actualizar diferencias",
+    "empty": "No hay cambios de este archivo en las diferencias seleccionadas.",
+    "unavailableDetail": "Es posible que el archivo, el repositorio o las diferencias ya no estén disponibles. Actualiza para volver a intentarlo.",
     "title": "Diferencias",
     "directoryUnavailable": "La vista previa de diferencias no está disponible para carpetas.",
     "patchUnavailable": "La vista previa del parche no está disponible para este archivo.",

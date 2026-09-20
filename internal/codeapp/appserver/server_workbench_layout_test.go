@@ -895,3 +895,29 @@ func TestServerWorkbenchPluginPlacementAndRemoval(t *testing.T) {
 		t.Fatalf("incomplete removal: %#v", snapshot)
 	}
 }
+
+func TestServerWorkbenchOpenGitDiffAction(t *testing.T) {
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: true, Write: true})
+	route := "/_redeven_proxy/api/workbench/actions/open_git_diff"
+	body := `{"diff":{"repoRootPath":"/missing-repo","workspaceSection":"unstaged","path":"deleted.txt","changeType":"deleted"}}`
+	response := performWorkbenchLayoutRequest(t, srv, http.MethodPost, route, body)
+	if response.Code != http.StatusOK {
+		t.Fatalf("open: %d %s", response.Code, response.Body.String())
+	}
+	placed := decodeWorkbenchLayoutResponse[workbenchlayout.OpenGitDiffResponse](t, response)
+	if !placed.Created || len(placed.Snapshot.WidgetStates) != 1 {
+		t.Fatal("incomplete diff placement")
+	}
+	repeated := decodeWorkbenchLayoutResponse[workbenchlayout.OpenGitDiffResponse](t, performWorkbenchLayoutRequest(t, srv, http.MethodPost, route, body))
+	if repeated.Created || repeated.WidgetID != placed.WidgetID {
+		t.Fatal("duplicate diff placement")
+	}
+	readonly := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: true})
+	if response := performWorkbenchLayoutRequest(t, readonly, http.MethodPost, route, body); response.Code != http.StatusForbidden {
+		t.Fatal("placement allowed without write permission")
+	}
+	if response := performWorkbenchLayoutRequest(t, srv, http.MethodPost, route, `{"diff":null}`); response.Code != http.StatusBadRequest {
+		t.Fatal("invalid target accepted")
+	}
+}

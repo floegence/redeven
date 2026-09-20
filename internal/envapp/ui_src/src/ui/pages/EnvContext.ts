@@ -10,6 +10,7 @@ import type {
   FlowerTurnLauncherIntent,
 } from '../../../../../flower_ui/src';
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
+import type { RuntimeWorkbenchGitDiffTarget } from '../workbench/runtimeWorkbenchLayout';
 import type { FilePreviewOpenOptions } from '../widgets/FilePreviewContext';
 import type { FlowerCanonicalReferenceNavigationTarget } from '../flower/linkedContextNavigation';
 import type { FlowerWorkingDirectoryNavigation } from '../flower/workingDirectoryNavigation';
@@ -108,6 +109,9 @@ export type EnvContextValue = {
   workbenchOverviewEntrySeq: () => number;
   workbenchOverviewEntry: () => EnvWorkbenchOverviewEntryRequest | null;
   consumeWorkbenchOverviewEntry: (requestId: string) => void;
+  openFileDiff: (target: RuntimeWorkbenchGitDiffTarget) => void;
+  workbenchGitDiffActivation: () => { requestId: string; target: RuntimeWorkbenchGitDiffTarget } | null;
+  consumeWorkbenchGitDiffActivation: (requestId: string) => void;
   workbenchFilePreviewActivationSeq: () => number;
   workbenchFilePreviewActivation: () => EnvWorkbenchFilePreviewActivationRequest | null;
   consumeWorkbenchFilePreviewActivation: (requestId: string) => void;

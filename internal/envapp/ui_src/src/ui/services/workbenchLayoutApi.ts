@@ -8,6 +8,8 @@ import {
   normalizeRuntimeWorkbenchWidgetState,
   type RuntimeWorkbenchLayoutEvent,
   type RuntimeWorkbenchOpenPreviewRequest,
+  type RuntimeWorkbenchOpenGitDiffRequest,
+  type RuntimeWorkbenchOpenGitDiffResponse,
   type RuntimeWorkbenchOpenPreviewResponse,
   type RuntimeWorkbenchOpenPluginRequest,
   type RuntimeWorkbenchOpenPluginResponse,
@@ -192,6 +194,19 @@ export async function putWorkbenchWidgetState(
     throw new Error('Invalid workbench widget state response');
   }
   return state;
+}
+
+export async function openWorkbenchGitDiff(input: RuntimeWorkbenchOpenGitDiffRequest): Promise<RuntimeWorkbenchOpenGitDiffResponse> {
+  const data = await fetchWorkbenchLayoutJSON<RuntimeWorkbenchOpenGitDiffResponse>('/_redeven_proxy/api/workbench/actions/open_git_diff', {
+    method: 'POST', body: JSON.stringify(input),
+  });
+  const snapshot = normalizeRuntimeWorkbenchLayoutSnapshot(data.snapshot);
+  const state = normalizeRuntimeWorkbenchWidgetState(data.widget_state);
+  if (!state || state.widget_type !== 'redeven.git-diff' || state.state.kind !== 'git_diff' || state.widget_id !== data.widget_id
+    || !snapshot.widgets.some((widget) => widget.widget_id === data.widget_id && widget.widget_type === 'redeven.git-diff')) {
+    throw new Error('Invalid workbench diff open response');
+  }
+  return { ...data, snapshot, widget_state: state };
 }
 
 export async function openWorkbenchPreview(

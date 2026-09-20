@@ -18,11 +18,13 @@ const (
 	WidgetTypeFiles    = "redeven.files"
 	WidgetTypeTerminal = "redeven.terminal"
 	WidgetTypePreview  = "redeven.preview"
+	WidgetTypeGitDiff  = "redeven.git-diff"
 	WidgetTypePlugin   = "redeven.plugin"
 
 	WidgetStateKindFiles    = "files"
 	WidgetStateKindTerminal = "terminal"
 	WidgetStateKindPreview  = "preview"
+	WidgetStateKindGitDiff  = "git_diff"
 	WidgetStateKindPlugin   = "plugin"
 
 	OpenPreviewStrategySameFileOrCreate    = "same_file_or_create"
@@ -149,18 +151,19 @@ type WidgetState struct {
 }
 
 type WidgetStateData struct {
-	Kind                       string       `json:"kind"`
-	CurrentPath                string       `json:"current_path,omitempty"`
-	RootID                     string       `json:"root_id,omitempty"`
-	SessionIDs                 []string     `json:"session_ids,omitempty"`
-	FontSize                   *int         `json:"font_size,omitempty"`
-	FontFamilyID               string       `json:"font_family_id,omitempty"`
-	Item                       *PreviewItem `json:"item,omitempty"`
-	PluginInstanceID           string       `json:"plugin_instance_id,omitempty"`
-	PluginID                   string       `json:"plugin_id,omitempty"`
-	SurfaceID                  string       `json:"surface_id,omitempty"`
-	DisplayName                string       `json:"display_name,omitempty"`
-	ExpectedManagementRevision int64        `json:"expected_management_revision,omitempty"`
+	Diff                       *GitDiffTarget `json:"diff,omitempty"`
+	Kind                       string         `json:"kind"`
+	CurrentPath                string         `json:"current_path,omitempty"`
+	RootID                     string         `json:"root_id,omitempty"`
+	SessionIDs                 []string       `json:"session_ids,omitempty"`
+	FontSize                   *int           `json:"font_size,omitempty"`
+	FontFamilyID               string         `json:"font_family_id,omitempty"`
+	Item                       *PreviewItem   `json:"item,omitempty"`
+	PluginInstanceID           string         `json:"plugin_instance_id,omitempty"`
+	PluginID                   string         `json:"plugin_id,omitempty"`
+	SurfaceID                  string         `json:"surface_id,omitempty"`
+	DisplayName                string         `json:"display_name,omitempty"`
+	ExpectedManagementRevision int64          `json:"expected_management_revision,omitempty"`
 	presentJSONFields          map[string]struct{}
 }
 
@@ -668,6 +671,8 @@ func widgetStateKindForType(widgetType string) (string, bool) {
 		return WidgetStateKindTerminal, true
 	case WidgetTypePreview:
 		return WidgetStateKindPreview, true
+	case WidgetTypeGitDiff:
+		return WidgetStateKindGitDiff, true
 	case WidgetTypePlugin:
 		return WidgetStateKindPlugin, true
 	default:
@@ -685,6 +690,15 @@ func normalizeWidgetStateData(widgetType string, state WidgetStateData) (WidgetS
 	}
 
 	switch kind {
+	case WidgetStateKindGitDiff:
+		if err := rejectUnexpectedWidgetStateFields(state, "kind", "diff"); err != nil {
+			return WidgetStateData{}, err
+		}
+		target, err := normalizeGitDiffTarget(state.Diff)
+		if err != nil {
+			return WidgetStateData{}, err
+		}
+		return WidgetStateData{Kind: kind, Diff: target}, nil
 	case WidgetStateKindFiles:
 		if err := rejectUnexpectedWidgetStateFields(state, "kind", "current_path", "root_id"); err != nil {
 			return WidgetStateData{}, err
@@ -924,6 +938,9 @@ func basename(path string) string {
 }
 
 func widgetStateDataEqual(left WidgetStateData, right WidgetStateData) bool {
+	if !gitDiffTargetsEqual(left.Diff, right.Diff) {
+		return false
+	}
 	if left.PluginInstanceID != right.PluginInstanceID || left.PluginID != right.PluginID || left.SurfaceID != right.SurfaceID || left.DisplayName != right.DisplayName || left.ExpectedManagementRevision != right.ExpectedManagementRevision {
 		return false
 	}

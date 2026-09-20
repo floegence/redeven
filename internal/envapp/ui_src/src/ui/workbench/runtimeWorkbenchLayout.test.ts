@@ -14,6 +14,7 @@ import {
   extractRuntimeWorkbenchLayoutFromSurfaceState,
   normalizeRuntimeWorkbenchLayoutSnapshot,
   normalizeRuntimeWorkbenchOpenPreviewResponse,
+  normalizeRuntimeWorkbenchWidgetState,
   projectWorkbenchStateFromRuntimeLayout,
   REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_FONT_SIZE,
   runtimeWorkbenchAnnotationsEqual,
@@ -51,6 +52,11 @@ const widgetDefinitions = [
 const sansTextFont = WORKBENCH_TEXT_FONT_OPTIONS.find((option) => option.id === 'sans') ?? WORKBENCH_TEXT_FONT_OPTIONS[0]!;
 
 describe('runtimeWorkbenchLayout', () => {
+  it('restores a diff target without persisting patch snapshots or trimming Git paths', () => {
+    const state = { kind: 'git_diff', diff: { repoRootPath: '/repo', workspaceSection: 'unstaged', path: ' spaced.ts ', oldPath: 'old.ts', newPath: ' spaced.ts ', changeType: 'renamed' } };
+    expect(normalizeRuntimeWorkbenchWidgetState({ widget_id: 'diff-1', widget_type: 'redeven.git-diff', revision: 1, updated_at_unix_ms: 1, state })?.state).toEqual(state);
+  });
+
   it('treats only untouched empty runtime layouts as pristine', () => {
     expect(runtimeWorkbenchLayoutIsPristine({
       seq: 0,

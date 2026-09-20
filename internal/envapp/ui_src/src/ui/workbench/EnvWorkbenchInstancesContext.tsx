@@ -11,7 +11,7 @@ import type {
   WorkbenchOpenFilePreviewRequest,
   WorkbenchOpenTerminalRequest,
 } from './workbenchInstanceState';
-import type { RuntimeWorkbenchPluginWidgetState, RuntimeWorkbenchPreviewItem } from './runtimeWorkbenchLayout';
+import type { RuntimeWorkbenchGitDiffTarget, RuntimeWorkbenchPluginWidgetState, RuntimeWorkbenchPreviewItem } from './runtimeWorkbenchLayout';
 
 export type EnvWorkbenchInstancesContextValue = Readonly<{
   latestWidgetIdByType: Accessor<Partial<Record<WorkbenchWidgetType, string>>>;
@@ -45,6 +45,7 @@ export type EnvWorkbenchInstancesContextValue = Readonly<{
   dispatchFileBrowserOpenRequest: (request: WorkbenchOpenFileBrowserRequest) => void;
   consumeFileBrowserOpenRequest: (requestId: string) => void;
   updateFileBrowserPath: (widgetId: string, path: string, rootId?: string) => void;
+  gitDiffTarget: (widgetId: string) => RuntimeWorkbenchGitDiffTarget | null;
   previewItem: (widgetId: string) => FileItem | null;
   pendingSyncedPreviewItem: (widgetId: string) => RuntimeWorkbenchPreviewItem | null;
   setPendingSyncedPreviewItem: (widgetId: string, item: RuntimeWorkbenchPreviewItem | null) => void;

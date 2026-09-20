@@ -57,6 +57,7 @@ const layoutApiMocks = vi.hoisted(() => ({
     state: input?.state,
   })),
   openWorkbenchPlugin: vi.fn(),
+  openWorkbenchGitDiff: vi.fn(),
   openWorkbenchPreview: vi.fn(async (input: any): Promise<any> => {
     const widgetId = 'widget-preview-command';
     const now = 400;
@@ -221,6 +222,7 @@ const [workbenchOverviewEntrySeq, setWorkbenchOverviewEntrySeq] = createSignal(0
 const [workbenchOverviewEntry, setWorkbenchOverviewEntry] = createSignal<any>(null);
 const [workbenchSurfaceActivationSeq, setWorkbenchSurfaceActivationSeq] = createSignal(0);
 const [workbenchSurfaceActivation, setWorkbenchSurfaceActivation] = createSignal<any>(null);
+const [workbenchGitDiffActivation, setWorkbenchGitDiffActivation] = createSignal<any>(null);
 const [workbenchFilePreviewActivationSeq, setWorkbenchFilePreviewActivationSeq] = createSignal(0);
 const [workbenchFilePreviewActivation, setWorkbenchFilePreviewActivation] = createSignal<any>(null);
 const [testLocale, setTestLocale] = createSignal('en-US');
@@ -483,6 +485,8 @@ vi.mock('../pages/EnvContext', () => ({
     workbenchOverviewEntry,
     workbenchSurfaceActivationSeq,
     workbenchSurfaceActivation,
+    workbenchGitDiffActivation,
+    consumeWorkbenchGitDiffActivation: () => setWorkbenchGitDiffActivation(null),
     workbenchFilePreviewActivationSeq,
     workbenchFilePreviewActivation,
     consumeWorkbenchOverviewEntry: (requestId: string) => {
@@ -551,6 +555,7 @@ vi.mock('../services/workbenchLayoutApi', () => ({
   putWorkbenchLayout: layoutApiMocks.putWorkbenchLayout,
   putWorkbenchWidgetState: layoutApiMocks.putWorkbenchWidgetState,
   openWorkbenchPlugin: layoutApiMocks.openWorkbenchPlugin,
+  openWorkbenchGitDiff: layoutApiMocks.openWorkbenchGitDiff,
   openWorkbenchPreview: layoutApiMocks.openWorkbenchPreview,
   createWorkbenchTerminalSession: layoutApiMocks.createWorkbenchTerminalSession,
   deleteWorkbenchTerminalSession: layoutApiMocks.deleteWorkbenchTerminalSession,
@@ -598,6 +603,7 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       defaultSize: { width: 900, height: 620 },
       singleton: false,
     },
+    { type: 'redeven.git-diff', label: 'Diff', defaultTitle: 'Diff', icon: () => null, body: () => null, defaultSize: { width: 1080, height: 700 }, singleton: false },
     {
       type: 'redeven.plugin',
       label: 'Plugin',
@@ -645,6 +651,7 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       defaultSize: { width: 900, height: 620 },
       singleton: false,
     },
+    { type: 'redeven.git-diff', label: 'Diff', defaultTitle: 'Diff', icon: () => null, body: () => null, defaultSize: { width: 1080, height: 700 }, singleton: false },
     {
       type: 'redeven.plugin',
       label: 'Plugin',
@@ -758,6 +765,23 @@ vi.mock('./surface/RedevenWorkbenchSurface', () => ({
 }));
 
 describe('EnvWorkbenchPage', () => {
+  it('opens diff targets through the atomic layout command and focuses the saved canvas component', async () => {
+    const host = document.createElement('div'); document.body.append(host);
+    const widget = { id: 'diff-1', type: 'redeven.git-diff', title: 'Diff', x: 50, y: 50, width: 900, height: 600, z_index: 1, created_at_unix_ms: 1 };
+    const target = { repoRootPath: '/repo', workspaceSection: 'unstaged', path: 'gone.ts', changeType: 'deleted' };
+    const saved = { widget_id: widget.id, widget_type: widget.type, revision: 1, updated_at_unix_ms: 1, state: { kind: 'git_diff', diff: target } };
+    layoutApiMocks.openWorkbenchGitDiff.mockResolvedValue({ widget_id: widget.id, created: true, widget_state: saved, snapshot: { seq: 100, revision: 100, updated_at_unix_ms: 1, widgets: [{ ...widget, widget_id: widget.id, widget_type: widget.type }], widget_states: [saved], sticky_notes: [], annotations: [], background_layers: [] } });
+    surfaceApiMocks.findWidgetById.mockReturnValue(widget as any);
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    setWorkbenchGitDiffActivation({ requestId: 'open-diff', target });
+    await flushMicrotasks();
+    expect(layoutApiMocks.openWorkbenchGitDiff).toHaveBeenCalledWith(expect.objectContaining({ diff: target }));
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
+    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(widget, { centerViewport: true });
+    expect(workbenchGitDiffActivation()).toBeNull();
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
     ensureCSSEscape();
@@ -769,6 +793,8 @@ describe('EnvWorkbenchPage', () => {
     setWorkbenchOverviewEntrySeq(0);
     setWorkbenchSurfaceActivation(null);
     setWorkbenchSurfaceActivationSeq(0);
+    setWorkbenchGitDiffActivation(null);
+    layoutApiMocks.openWorkbenchGitDiff.mockReset();
     setWorkbenchFilePreviewActivation(null);
     setWorkbenchFilePreviewActivationSeq(0);
     setTestLocale('en-US');
@@ -4225,3 +4251,8 @@ describe('EnvWorkbenchPage', () => {
       .toBe('widget-plugin-1');
   });
 });
+
+vi.mock('@floegence/floe-webapp-core', async (original) => ({
+  ...(await original<typeof import('@floegence/floe-webapp-core')>()),
+  useNotification: () => ({ error: vi.fn() }),
+}));

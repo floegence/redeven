@@ -187,21 +187,7 @@ const gitStashWindowRenderStore = vi.hoisted(() => ({
   onConfirmReview: undefined as (() => void) | undefined,
 }));
 
-const gitDiffDialogRenderStore = vi.hoisted(() => ({
-  snapshots: [] as Array<{
-    open: boolean;
-    desktopFloatingWindow: boolean;
-    itemPath?: string;
-    itemOldPath?: string;
-    itemNewPath?: string;
-    itemSection?: string;
-    sourceKind?: string;
-    sourceRepoRootPath?: string;
-    sourceWorkspaceSection?: string;
-    title?: string;
-    description?: string;
-  }>,
-}));
+const openFileDiff = vi.hoisted(() => vi.fn());
 
 const workspaceLifecycleStore = vi.hoisted(() => ({
   filesMounts: 0,
@@ -1205,52 +1191,6 @@ vi.mock('./GitWorkspace', () => ({
   },
 }));
 
-vi.mock('./GitDiffDialog', () => ({
-  GitDiffDialog: (props: {
-    open: boolean;
-    desktopFloatingWindow?: boolean;
-    item?: {
-      path?: string;
-      oldPath?: string;
-      newPath?: string;
-      section?: string;
-    } | null;
-    source?: {
-      kind?: string;
-      repoRootPath?: string;
-      workspaceSection?: string;
-    } | null;
-    title?: string;
-    description?: string;
-    onOpenChange?: (open: boolean) => void;
-  }) => {
-    createEffect(() => {
-      gitDiffDialogRenderStore.snapshots.push({
-        open: Boolean(props.open),
-        desktopFloatingWindow: Boolean(props.desktopFloatingWindow),
-        itemPath: props.item?.path,
-        itemOldPath: props.item?.oldPath,
-        itemNewPath: props.item?.newPath,
-        itemSection: props.item?.section,
-        sourceKind: props.source?.kind,
-        sourceRepoRootPath: props.source?.repoRootPath,
-        sourceWorkspaceSection: props.source?.workspaceSection,
-        title: props.title,
-        description: props.description,
-      });
-    });
-
-    return (
-      <Show when={props.open}>
-        <div data-testid="git-diff-dialog">
-          <div>diff-source:{props.source?.kind ?? ''}:{props.source?.workspaceSection ?? ''}</div>
-          <div>diff-path:{props.item?.path ?? ''}</div>
-          <button type="button" onClick={() => props.onOpenChange?.(false)}>mock-close-diff</button>
-        </div>
-      </Show>
-    );
-  },
-}));
 
 vi.mock('./GitStashWindow', () => ({
   GitStashWindow: (props: {
@@ -1368,6 +1308,9 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canWrit
     workbenchSurfaceActivation: () => null,
     consumeWorkbenchOverviewEntry: () => {},
     consumeWorkbenchSurfaceActivation: () => {},
+    openFileDiff,
+    workbenchGitDiffActivation: () => null,
+    consumeWorkbenchGitDiffActivation: () => {},
     workbenchFilePreviewActivationSeq: () => 0,
     workbenchFilePreviewActivation: () => null,
     consumeWorkbenchFilePreviewActivation: () => {},
@@ -1448,7 +1391,7 @@ beforeEach(() => {
   gitStashWindowRenderStore.onRequestApply = undefined;
   gitStashWindowRenderStore.onAskFlower = undefined;
   gitStashWindowRenderStore.onConfirmReview = undefined;
-  gitDiffDialogRenderStore.snapshots = [];
+  openFileDiff.mockReset();
   workspaceLifecycleStore.filesMounts = 0;
   workspaceLifecycleStore.filesUnmounts = 0;
   workspaceLifecycleStore.gitMounts = 0;
@@ -1867,7 +1810,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('opens Files context menu diffs in a floating window without preloading diff content', async () => {
+  it.each(['activity', 'workbench'] as const)('routes Files context menu diffs through the shell in %s without preloading content', async (viewMode) => {
     widgetStateStore.values['widget-1'] = {
       browserSidebarWidth: 312,
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
@@ -1899,7 +1842,7 @@ describe('RemoteFileBrowser persistence', () => {
 
     const dispose = render(() => (
       <LayoutProvider>
-        <EnvContext.Provider value={createEnvContext()}>
+        <EnvContext.Provider value={createEnvContext({ viewMode })}>
           <RemoteFileBrowser widgetId="widget-1" />
         </EnvContext.Provider>
       </LayoutProvider>
@@ -1917,16 +1860,10 @@ describe('RemoteFileBrowser persistence', () => {
       viewDiffButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(host.querySelector('[data-testid="git-diff-dialog"]')).toBeTruthy();
-      expect(gitDiffDialogRenderStore.snapshots.at(-1)).toMatchObject({
-        open: true,
-        desktopFloatingWindow: true,
-        itemPath: 'src/.env',
-        itemSection: 'unstaged',
-        sourceKind: 'workspace',
-        sourceRepoRootPath: '/workspace/repo',
-        sourceWorkspaceSection: 'unstaged',
-      });
+      expect(host.querySelector('[role="dialog"]')).toBeNull();
+      expect(openFileDiff).toHaveBeenCalledWith(expect.objectContaining({
+        path: 'src/.env', repoRootPath: '/workspace/repo', workspaceSection: 'unstaged',
+      }));
       expect(mockRpc.git.getDiffContent).not.toHaveBeenCalled();
     } finally {
       dispose();
@@ -2023,12 +1960,7 @@ describe('RemoteFileBrowser persistence', () => {
       stagedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(gitDiffDialogRenderStore.snapshots.at(-1)).toMatchObject({
-        open: true,
-        itemPath: 'src/.env',
-        itemSection: 'staged',
-        sourceWorkspaceSection: 'staged',
-      });
+      expect(openFileDiff).toHaveBeenCalledWith(expect.objectContaining({ path: 'src/.env', workspaceSection: 'staged' }));
     } finally {
       dispose();
     }

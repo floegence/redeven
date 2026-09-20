@@ -200,6 +200,7 @@ function renderPreviewWidget(options: {
           dispatchFileBrowserOpenRequest: vi.fn(),
           consumeFileBrowserOpenRequest: vi.fn(),
           updateFileBrowserPath: vi.fn(),
+          gitDiffTarget: () => null,
           previewItem: () => sharedItem(),
           pendingSyncedPreviewItem: () => pendingItem(),
           setPendingSyncedPreviewItem: workbenchStore.setPendingSyncedPreviewItem,

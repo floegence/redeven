@@ -2,8 +2,6 @@ package workbenchlayout
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -114,7 +112,7 @@ func (s *Store) openPlugin(ctx context.Context, req OpenPluginRequest) (OpenPlug
 	if err := upsertWidgetStateRowTx(ctx, tx, widgetState); err != nil {
 		return OpenPluginResponse{}, Event{}, err
 	}
-	snapshot, event, err := commitPluginLayoutTx(ctx, tx, current.Revision, now)
+	snapshot, event, err := commitWidgetLayoutTx(ctx, tx, current.Revision, now)
 	if err != nil {
 		return OpenPluginResponse{}, Event{}, err
 	}
@@ -151,30 +149,5 @@ func (s *Store) removePluginWidgets(ctx context.Context, pluginInstanceID string
 	if err := deleteWidgetStatesTx(ctx, tx, ids); err != nil {
 		return Snapshot{}, Event{}, err
 	}
-	return commitPluginLayoutTx(ctx, tx, current.Revision, time.Now().UnixMilli())
-}
-
-func commitPluginLayoutTx(ctx context.Context, tx *sql.Tx, revision, now int64) (Snapshot, Event, error) {
-	seq, err := insertEventRowTx(ctx, tx, EventTypeLayoutReplaced, now)
-	if err != nil {
-		return Snapshot{}, Event{}, err
-	}
-	if err := updateSnapshotHeadTx(ctx, tx, revision+1, seq, now); err != nil {
-		return Snapshot{}, Event{}, err
-	}
-	snapshot, err := snapshotTx(ctx, tx)
-	if err != nil {
-		return Snapshot{}, Event{}, err
-	}
-	payload, err := json.Marshal(snapshot)
-	if err != nil {
-		return Snapshot{}, Event{}, err
-	}
-	if err := updateEventPayloadTx(ctx, tx, seq, payload); err != nil {
-		return Snapshot{}, Event{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return Snapshot{}, Event{}, err
-	}
-	return snapshot, Event{Seq: seq, Type: EventTypeLayoutReplaced, CreatedAtUnixMs: now, Payload: payload}, nil
+	return commitWidgetLayoutTx(ctx, tx, current.Revision, time.Now().UnixMilli())
 }

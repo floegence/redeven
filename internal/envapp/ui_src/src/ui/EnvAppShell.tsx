@@ -149,6 +149,7 @@ import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
 import { resolveNotesOverlayViewportHosts } from './notes/notesOverlayShellViewport';
 import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';
+import type { RuntimeWorkbenchGitDiffTarget } from './workbench/runtimeWorkbenchLayout';
 import { createFilePreviewController } from './widgets/createFilePreviewController';
 import { FileBrowserSurfaceContext } from './widgets/FileBrowserSurfaceContext';
 import { FilePreviewContext, type FilePreviewOpenOptions } from './widgets/FilePreviewContext';
@@ -306,6 +307,7 @@ const DebugConsoleWindow = lazy(() => import('./debugConsole/DebugConsoleWindow'
 
 const AuditLogDialog = lazy(() => import('./widgets/AuditLogDialog').then((module) => ({ default: module.AuditLogDialog })));
 const FlowerTurnLauncherWindow = lazy(() => import('./widgets/FlowerTurnLauncherWindow').then((module) => ({ default: module.FlowerTurnLauncherWindow })));
+const GitDiffDialog = lazy(() => import('./widgets/GitDiffDialog').then((module) => ({ default: module.GitDiffDialog })));
 const FilePreviewHost = lazy(() => import('./widgets/FilePreviewHost').then((module) => ({ default: module.FilePreviewHost })));
 const FileBrowserSurfaceHost = lazy(() => import('./widgets/FileBrowserSurfaceHost').then((module) => ({ default: module.FileBrowserSurfaceHost })));
 const EnvWorkbenchPage = lazy(() => import('./workbench/EnvWorkbenchPage').then((module) => ({ default: module.EnvWorkbenchPage })));
@@ -974,6 +976,18 @@ export function EnvAppShell() {
   const [workbenchSurfaceActivation, setWorkbenchSurfaceActivation] = createSignal<EnvWorkbenchSurfaceActivationRequest | null>(null);
   const [workbenchOverviewEntrySeq, setWorkbenchOverviewEntrySeq] = createSignal(0);
   const [workbenchOverviewEntry, setWorkbenchOverviewEntry] = createSignal<EnvWorkbenchOverviewEntryRequest | null>(null);
+  const [activityGitDiff, setActivityGitDiff] = createSignal<RuntimeWorkbenchGitDiffTarget | null>(null);
+  const [workbenchGitDiffActivation, setWorkbenchGitDiffActivation] = createSignal<{ requestId: string; target: RuntimeWorkbenchGitDiffTarget } | null>(null);
+  const openFileDiff = (target: RuntimeWorkbenchGitDiffTarget) => {
+    if (!layout.isMobile() && viewMode() === 'workbench') {
+      setWorkbenchGitDiffActivation({ requestId: crypto.randomUUID(), target });
+    } else {
+      setActivityGitDiff({ ...target });
+    }
+  };
+  const consumeWorkbenchGitDiffActivation = (requestId: string) => {
+    setWorkbenchGitDiffActivation((current) => current?.requestId === requestId ? null : current);
+  };
   const [workbenchFilePreviewActivationSeq, setWorkbenchFilePreviewActivationSeq] = createSignal(0);
   const [workbenchFilePreviewActivation, setWorkbenchFilePreviewActivation] = createSignal<EnvWorkbenchFilePreviewActivationRequest | null>(null);
   const [filesMobileSidebarOpen, setFilesMobileSidebarOpen] = createSignal(false);
@@ -5126,6 +5140,9 @@ export function EnvAppShell() {
         workbenchOverviewEntrySeq,
         workbenchOverviewEntry,
         consumeWorkbenchOverviewEntry,
+        openFileDiff,
+        workbenchGitDiffActivation,
+        consumeWorkbenchGitDiffActivation,
         workbenchFilePreviewActivationSeq,
         workbenchFilePreviewActivation,
         consumeWorkbenchFilePreviewActivation,
@@ -5225,6 +5242,18 @@ export function EnvAppShell() {
                   onError={reportPluginSurfaceRetirementError}
                 />
                 {renderMainShell()}
+                  <Show when={viewMode() !== 'workbench' && activityGitDiff()}>
+                    <GitDiffDialog
+                      open
+                      onOpenChange={(open) => { if (!open) setActivityGitDiff(null); }}
+                      item={activityGitDiff()}
+                      source={activityGitDiff() ? { kind: 'workspace', repoRootPath: activityGitDiff()!.repoRootPath, workspaceSection: activityGitDiff()!.workspaceSection } : null}
+                      title={i18n.t('git.changes.workspaceDiffTitle')}
+                      description={activityGitDiff()?.newPath || activityGitDiff()?.path || activityGitDiff()?.oldPath}
+                      emptyMessage={i18n.t('gitDiff.empty')}
+                      desktopFloatingWindow
+                    />
+                  </Show>
                   <Show when={viewMode() !== 'workbench' && filePreviewHostRequested()}>
                     <FilePreviewHost />
                   </Show>

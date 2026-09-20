@@ -1682,3 +1682,28 @@ func removedWidgetIDs(previous []WidgetLayout, next []WidgetLayout) []string {
 	}
 	return removed
 }
+
+func commitWidgetLayoutTx(ctx context.Context, tx *sql.Tx, revision, now int64) (Snapshot, Event, error) {
+	seq, err := insertEventRowTx(ctx, tx, EventTypeLayoutReplaced, now)
+	if err != nil {
+		return Snapshot{}, Event{}, err
+	}
+	if err := updateSnapshotHeadTx(ctx, tx, revision+1, seq, now); err != nil {
+		return Snapshot{}, Event{}, err
+	}
+	snapshot, err := snapshotTx(ctx, tx)
+	if err != nil {
+		return Snapshot{}, Event{}, err
+	}
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return Snapshot{}, Event{}, err
+	}
+	if err := updateEventPayloadTx(ctx, tx, seq, payload); err != nil {
+		return Snapshot{}, Event{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Snapshot{}, Event{}, err
+	}
+	return snapshot, Event{Seq: seq, Type: EventTypeLayoutReplaced, CreatedAtUnixMs: now, Payload: payload}, nil
+}
