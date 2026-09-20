@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview viewport and rendering
 description: Fit documents and images to their actual reading area and isolate asynchronous renderer work.
 tags: [ui, files, preview, viewport, rendering]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 # Summary
 
@@ -14,6 +14,8 @@ including enlargement above 100%. Container changes update automatic fit modes;
 manual zoom keeps its chosen scale. Each PDF canvas has one rendering owner and
 old document work cannot replace the current document. Normal cancellation is not
 an error. A genuine PDF page failure stays local to that page and can be retried.
+Markdown enhancement work follows document content: previews without Mermaid
+diagrams do not sample diagram theme colors, including after theme changes.
 
 # Contract
 
@@ -78,6 +80,15 @@ styles back into the current surface. Layout observers belong to that source and
 are disconnected on removal. Image load and error callbacks must match the
 currently displayed resource.
 
+## Markdown enhancements
+
+Mermaid processing checks for diagram elements before resolving theme colors or
+allocating a rendering sandbox. Initial rendering, content updates, and theme
+changes share this decision. Ordinary Markdown still receives syntax highlighting
+and theme updates without diagram-related canvas readback. When diagrams need
+theme colors, their sampling canvas declares frequent reads at context creation.
+Diagram rendering retains theme-specific caching and rejects stale document work.
+
 # Boundaries
 
 The [window actions contract](file-preview-window-actions.md) owns title-bar file
@@ -95,3 +106,5 @@ or native attachment PDF behavior.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/ImagePreviewPane.tsx` - Container-responsive image geometry and resource guards.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.test.tsx` - Pending acquisition, cancellation settlement, replacement, budget and retry regression tests.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSizing.browser.test.tsx` - Real-renderer fit, projection, small-container and host integration checks.
+- `redeven:internal/envapp/ui_src/src/ui/file-markdown/mermaidPlugin.ts` - Content-gated theme sampling and serialized, theme-specific diagram rendering.
+- `redeven:internal/envapp/ui_src/src/ui/file-markdown/FileMarkdown.browser.test.tsx` - Ordinary Markdown avoids readback across content and theme changes; diagrams retain browser-resolved colors and theme updates.

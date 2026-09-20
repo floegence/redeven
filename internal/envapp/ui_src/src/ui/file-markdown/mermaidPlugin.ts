@@ -55,7 +55,7 @@ function resolveMermaidColors(root: HTMLElement): Record<string, string> {
   const canvas = document.createElement('canvas');
   canvas.width = 1;
   canvas.height = 1;
-  const context = canvas.getContext('2d');
+  const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) {
     probe.remove();
     throw new Error('Mermaid theme color projection requires a 2D canvas context.');
@@ -289,8 +289,10 @@ export async function runMermaid(root: HTMLElement, options: MermaidRunOptions =
   const shouldContinue = options.shouldContinue ?? (() => true);
   if (!shouldContinue() || !root.isConnected) return;
 
-  const theme = options.theme ?? resolveMermaidThemeContext();
   const elements = root.querySelectorAll<HTMLElement>('.mermaid');
+  if (elements.length === 0) return;
+
+  const theme = options.theme ?? resolveMermaidThemeContext();
   const sandbox = document.createElement('div');
   sandbox.style.cssText = 'position:fixed;left:-99999px;top:0;width:1200px;';
   sandbox.className = 'file-markdown-body';

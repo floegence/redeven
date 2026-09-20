@@ -14,12 +14,6 @@ const actualBuildToc = vi.hoisted(() => ({
 }));
 
 vi.mock('./mermaidPlugin', () => ({
-  resolveMermaidThemeContext: vi.fn(() => ({
-    key: 'midnight|dark',
-    mode: 'dark',
-    preset: 'midnight',
-    variables: {},
-  })),
   runMermaid: (...args: unknown[]) => runMermaidMock(...args),
 }));
 
@@ -241,9 +235,8 @@ describe('FileMarkdown', () => {
 
       expect(postProcessMock).toHaveBeenCalledTimes(2);
       expect(runMermaidMock).toHaveBeenCalledTimes(2);
-      expect(runMermaidMock.mock.calls[1]?.[1]).toMatchObject({
-        theme: expect.objectContaining({ preset: 'midnight' }),
-      });
+      expect(shouldContinueForRun(0)?.()).toBe(false);
+      expect(shouldContinueForRun(1)?.()).toBe(true);
     } finally {
       dispose();
     }
