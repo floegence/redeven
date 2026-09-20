@@ -280,7 +280,8 @@ import {
   routeWebServiceTargetRequest,
   webServiceBrowserDisplayURL,
 } from './navigation';
-import { resolveBundledRuntimePath, resolveDesktopBundleRoot, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
+import { resolveBundledRuntimePath, resolveDesktopBundleRoot, resolveHostApplicationWindowPreloadPath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
+import { attachHostApplicationWindow } from './hostApplicationWindow';
 import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
 import { webServiceBrowserContentBounds } from '../shared/webServiceBrowserLayout';
 import { openWebServiceInSystemBrowser } from './webServiceBrowserExternal';
@@ -8651,6 +8652,7 @@ function createWebServiceBrowserController(
   const contentView = new WebContentsView({
     webPreferences: {
       partition,
+      ...(applicationWindow ? { preload: resolveHostApplicationWindowPreloadPath({ appPath: app.getAppPath() }) } : {}),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -8661,6 +8663,7 @@ function createWebServiceBrowserController(
   const contentViewIdentity = snapshotWebContentsIdentity(contentView.webContents);
   sessionKeyByWebContentsID.set(contentViewIdentity.webContentsID, sessionRecord.session_key);
   win.contentView.addChildView(contentView);
+  if (applicationWindow) attachHostApplicationWindow(win, contentView.webContents, browserEntryURL);
 
   const layoutContent = (): void => {
     if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;

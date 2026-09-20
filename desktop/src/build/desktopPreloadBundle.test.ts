@@ -33,6 +33,11 @@ describe('buildDesktopPreloads', () => {
     const utilityOutput = await fs.readFile(path.join(outDir, 'utility.js'), 'utf8');
     const sessionOutput = await fs.readFile(path.join(outDir, 'session.js'), 'utf8');
     const webServiceBrowserOutput = await fs.readFile(path.join(outDir, 'web-service-browser.js'), 'utf8');
+    const hostApplicationOutput = await fs.readFile(path.join(outDir, 'host-application-window.js'), 'utf8');
+    expect(hostApplicationOutput).toContain('redevenHostApplicationWindow');
+    expect(hostApplicationOutput).not.toContain('redevenDesktopShell');
+    expect(hostApplicationOutput).not.toContain('redevenDesktopSessionContext');
+    expect([...new Set(bundledRequireSpecifiers(hostApplicationOutput))]).toEqual(['electron']);
 
     expect(utilityOutput).toContain('redevenDesktopLauncher');
     expect(utilityOutput).toContain('redevenDesktopSettings');

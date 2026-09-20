@@ -408,6 +408,8 @@ describe('main routing', () => {
     expect(helperSrc).toContain("targetURL: applicationWindow ? 'about:blank' : webServiceBrowserDocumentURL()");
     expect(helperSrc).toContain('webServiceBrowserContentBounds(width, height, request.presentation)');
     expect(helperSrc).toContain('const contentView = new WebContentsView({');
+    expect(helperSrc).toContain('applicationWindow ? { preload: resolveHostApplicationWindowPreloadPath(');
+    expect(helperSrc).toContain('if (applicationWindow) attachHostApplicationWindow(win, contentView.webContents, browserEntryURL);');
     expect(helperSrc).toContain('const contentViewIdentity = snapshotWebContentsIdentity(contentView.webContents);');
     expect(helperSrc).toContain(
       'sessionKeyByWebContentsID.set(contentViewIdentity.webContentsID, sessionRecord.session_key);',

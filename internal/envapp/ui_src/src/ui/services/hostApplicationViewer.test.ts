@@ -13,11 +13,18 @@ let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.close(); });
 
-async function viewer(deferredInitialization = false) {
+async function viewer(deferredInitialization = false, native = false) {
   dom = new JSDOM(html, { url:'http://localhost/pf/test/_redeven_host_app/', runScripts:'outside-only', pretendToBeVisual:true });
   const fetch = vi.fn().mockResolvedValue({ok:true, json:async () => ({state:'running', password:'private'})});
   dom.window.fetch = fetch;
   dom.window.requestAnimationFrame = cb => { cb(0); return 1; };
+  let windowStateChanged: (state: { maximized: boolean; minimized: boolean }) => void = () => {};
+  const nativeWindow = { request: vi.fn(), subscribe: vi.fn((listener: typeof windowStateChanged) => {
+    windowStateChanged = listener;
+    listener({ maximized: false, minimized: false });
+    return vi.fn();
+  }) };
+  if (native) Object.assign(dom.window, { redevenHostApplicationWindow: nativeWindow });
   dom.window.eval(`const config = ${JSON.stringify({base:'/pf/test', copy, icon:''})};\n${source}`);
   await drain();
   const frame = dom.window.document.querySelector('iframe')!;
@@ -28,7 +35,7 @@ async function viewer(deferredInitialization = false) {
     const win = {
       wid:id, div:doc.createElement('div'), metadata, windowtype:[type], override_redirect:false, tray:false,
       has_windowtype:(types: string[]) => types.includes(type), screen_resized:vi.fn(),
-      set_maximized:vi.fn(), set_minimized:vi.fn(), initiate_moveresize:vi.fn(),
+      set_maximized:vi.fn(), set_minimized:vi.fn(), initiate_moveresize:vi.fn(), move_resize:vi.fn(),
       update_metadata:vi.fn(), handle_resized:vi.fn(), w:1096, h:856, x:100, y:100,
       leftoffset:1, rightoffset:1, topoffset:30, bottomoffset:1,
     };
@@ -42,7 +49,7 @@ async function viewer(deferredInitialization = false) {
   };
   if (!deferredInitialization) Object.assign(frame.contentWindow!, {client});
   frame.dispatchEvent(new dom.window.Event('load'));
-  return {frame, doc, client, appWindow, fetch, state:() => dom.window.document.body.dataset.state};
+  return {frame, doc, client, appWindow, fetch, nativeWindow, windowStateChanged: (state: { maximized: boolean; minimized: boolean }) => windowStateChanged(state), state:() => dom.window.document.body.dataset.state};
 }
 
 describe('host application viewer', () => {
@@ -52,7 +59,7 @@ describe('host application viewer', () => {
     const dialog = v.appWindow(2, {'transient-for':1}, 'DIALOG');
     const popup = v.appWindow(3, {}, 'POPUP_MENU');
     v.client._new_window(1); v.client._new_window(2); v.client._new_window(3);
-    expect(primary.update_metadata).toHaveBeenCalledWith({decorations:false, maximized:true});
+    expect(primary.update_metadata).toHaveBeenCalledWith({decorations:false});
     expect(dialog.update_metadata).not.toHaveBeenCalled();
     expect(dialog.w).toBe(974);
     expect(dialog.h).toBe(625);
@@ -103,5 +110,71 @@ describe('host application viewer', () => {
     await drain();
     expect(v.state()).toBe('ended');
     expect(dom.window.document.querySelector('button')!.hidden).toBe(true);
+  });
+
+  it('closes the native viewer only after the active application session has ended', async () => {
+    const v = await viewer(false, true);
+    v.appWindow(1); v.client._new_window(1);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    v.fetch.mockResolvedValue({ok:false, status:404});
+    v.doc.dispatchEvent(new dom.window.Event('connection-lost'));
+    await drain();
+    expect(v.nativeWindow.request).toHaveBeenCalledWith('close');
+  });
+
+  it('closes a browser popup after its active application ends', async () => {
+    const v = await viewer();
+    const close = vi.spyOn(dom.window, 'close').mockImplementation(() => {});
+    try {
+      v.appWindow(1); v.client._new_window(1);
+      v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+      v.fetch.mockResolvedValue({ok:false, status:410});
+      v.doc.dispatchEvent(new dom.window.Event('connection-lost')); await drain();
+      expect(close).toHaveBeenCalledOnce();
+    } finally { close.mockRestore(); }
+  });
+
+  it('keeps native windows open during network loss or an application confirmation dialog', async () => {
+    const v = await viewer(false, true);
+    v.appWindow(1); v.client._new_window(1);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    const dialog = v.appWindow(2, {'transient-for':1}, 'DIALOG'); v.client._new_window(2);
+    dialog.set_minimized(true);
+    expect(v.nativeWindow.request).not.toHaveBeenCalled();
+    v.fetch.mockRejectedValue(new Error('offline'));
+    v.doc.dispatchEvent(new dom.window.Event('connection-lost'));
+    await drain();
+    expect(v.nativeWindow.request).not.toHaveBeenCalledWith('close');
+    expect(v.state()).toBe('disconnected');
+  });
+
+  it('ignores window control events from a disconnected client', async () => {
+    const v = await viewer(false, true);
+    const primary = v.appWindow(1); v.client._new_window(1);
+    v.doc.dispatchEvent(new dom.window.Event('connection-lost')); await drain();
+    primary.set_maximized(true); primary.set_minimized(true);
+    expect(v.nativeWindow.request).not.toHaveBeenCalled();
+  });
+
+  it('maps application controls to native window state without treating acknowledgements as new actions', async () => {
+    const v = await viewer(false, true);
+    const primary = v.appWindow(1); v.client._new_window(1);
+    expect(v.client.send_configure_window).toHaveBeenCalledWith(primary, {maximized:false, iconified:false}, false);
+    primary.set_maximized(true);
+    expect(v.nativeWindow.request).toHaveBeenLastCalledWith('maximize');
+    v.windowStateChanged({maximized:true, minimized:false});
+    v.nativeWindow.request.mockClear();
+    primary.set_maximized(true);
+    expect(v.nativeWindow.request).not.toHaveBeenCalled();
+    primary.set_maximized(false);
+    expect(v.nativeWindow.request).toHaveBeenLastCalledWith('unmaximize');
+    primary.set_minimized(true);
+    expect(v.nativeWindow.request).toHaveBeenLastCalledWith('minimize');
+    v.windowStateChanged({maximized:false, minimized:true});
+    v.nativeWindow.request.mockClear();
+    primary.set_minimized(true);
+    expect(v.nativeWindow.request).not.toHaveBeenCalled();
+    v.windowStateChanged({maximized:false, minimized:false});
+    expect(v.client.send_configure_window).toHaveBeenLastCalledWith(primary, {maximized:false, iconified:false}, false);
   });
 });
