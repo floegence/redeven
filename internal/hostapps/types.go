@@ -81,6 +81,12 @@ type AddRequest struct {
 }
 
 type Backend interface {
+	SetupStatus(string) (SetupStatus, error)
+	WatchSetup() (<-chan struct{}, func(), error)
+	StartSetup(string, string, string, int64) (SetupStatus, error)
+	CancelSetup(string, string) (SetupStatus, error)
+	WriteSetup(string, string, int64, []byte) (SetupStatus, error)
+	CompleteSetup(string, string) (SetupStatus, error)
 	Catalog(context.Context, string, string) (Catalog, error)
 	Sessions(string) []Session
 	Launch(context.Context, string, LaunchRequest) (Session, error)

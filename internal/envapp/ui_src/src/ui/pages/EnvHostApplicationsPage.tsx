@@ -6,7 +6,9 @@ import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { useEnvContext } from './EnvContext';
-import { addHostApplication, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, stopHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSession } from '../services/hostApplicationsApi';
+import { addHostApplication, cancelHostApplicationSetup, getHostApplicationSetup, hostApplicationSetupActive, observeHostApplicationSetup, startHostApplicationSetup, uploadHostApplicationSetup, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, stopHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSession, type HostApplicationSetup } from '../services/hostApplicationsApi';
+import { HostApplicationSetupPanel, hostApplicationSetupHeading, hostApplicationSetupProgress } from './HostApplicationSetupPanel';
+import { hostApplicationPreparationDocument, updateHostApplicationPreparationDocument, type HostApplicationPreparationView } from '../../../../../../desktop/src/shared/hostApplicationPreparation';
 import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopShellBridge';
 import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
 import { LocalApiError } from '../services/localApi';
@@ -46,7 +48,12 @@ export function EnvHostApplicationsPage() {
   const requestPermission = async (permission: 'screen_recording' | 'accessibility') => {
     if (!canLaunch() || permissionBusy()) return;
     setPermissionBusy(true);
-    try {await requestHostApplicationPermission(permission);await refresh();}
+    try {
+      const app = selectedApplication();
+      if (app) await reserveApplication(app);
+      await requestHostApplicationPermission(permission);
+      await refresh();
+    }
     catch (e) {setError(translateError(e));}
     finally {setPermissionBusy(false);}
   };
@@ -56,6 +63,24 @@ export function EnvHostApplicationsPage() {
   const [category, setCategory] = createSignal('');
   const [busy, setBusy] = createSignal<Record<string, boolean>>({});
   const [appErrors, setAppErrors] = createSignal<Record<string, string>>({});
+  const [setup, setSetup] = createSignal<HostApplicationSetup | null>(null);
+  const [setupBusy, setSetupBusy] = createSignal(false);
+  const [setupDisconnected, setSetupDisconnected] = createSignal(false);
+  const [setupDialog, setSetupDialog] = createSignal(false);
+  const [selectedApplication, setSelectedApplication] = createSignal<HostApplication | null>(null);
+  type PendingApplication = { app: HostApplication; popup: Window | null; preparationID?: string; active: boolean };
+  const pendingApplications = new Map<string, PendingApplication>();
+  let setupObserver: AbortController | undefined;
+  let setupTransfer: AbortController | undefined;
+  let setupRequestID = '';
+  let setupRequestSignature = '';
+  let setupOperationID = '';
+  let setupCancelled = false;
+  let relayTried = false;
+  let relaying = false;
+  let relaySourceOperation = '';
+  let relaySourceReceiving = false;
+  let completingSetup = false;
   const [ending, setEnding] = createSignal<HostApplicationSession | null>(null);
   const [stopBusy, setStopBusy] = createSignal(false);
   const [addOpen, setAddOpen] = createSignal(false);
@@ -83,7 +108,13 @@ export function EnvHostApplicationsPage() {
     try {
       const current = untrack(catalog);
       const next = quiet && current ? { ...current, sessions: await listHostApplicationSessions(controller.signal) } : await listHostApplications(i18n.locale(), controller.signal);
-      if (!disposed && !controller.signal.aborted) { setCatalog(next); setError(''); }
+      if (disposed || controller.signal.aborted) return;
+      setCatalog(next); setError('');
+      if (ready() && pendingApplications.size) void continuePreparedApplications();
+      if (!quiet && next.availability.supported && next.availability.backend !== 'macos' && !next.availability.ready) {
+        acceptSetup(await getHostApplicationSetup(controller.signal));
+        observeSetup();
+      }
     } catch (e) {
       if (!disposed && !controller.signal.aborted) setError(translateError(e));
     } finally {
@@ -98,10 +129,224 @@ export function EnvHostApplicationsPage() {
     void locale;
     if (!canRead() || !active) return;
     void refresh();
-    const timer = window.setInterval(() => { if (document.visibilityState !== 'hidden') void refresh(true); }, 8000);
+    const timer = window.setInterval(() => { if (document.visibilityState !== 'hidden') void refresh(!(isMac() && pendingApplications.size > 0)); }, 8000);
     onCleanup(() => { window.clearInterval(timer); request?.abort(); request = null; });
   });
-  onCleanup(() => { disposed = true; request?.abort(); });
+  const resumeMacPreparation = () => { if (isMac() && pendingApplications.size) void refresh(); };
+  window.addEventListener('focus', resumeMacPreparation);
+  onCleanup(() => window.removeEventListener('focus', resumeMacPreparation));
+  const removePreparationClosedListener = window.redevenDesktopShell?.onApplicationPreparationClosed?.(id => {
+    for (const pending of pendingApplications.values()) {
+      if (pending.preparationID === id) { pending.active = false; pendingApplications.delete(pending.app.id); }
+    }
+  });
+  onCleanup(() => {
+    disposed = true; request?.abort(); setupObserver?.abort(); setupTransfer?.abort(); removePreparationClosedListener?.();
+    for (const pending of pendingApplications.values()) closePending(pending);
+    pendingApplications.clear();
+    if (relaying) void window.redevenDesktopShell?.applicationComponents?.({ action: 'cancel' });
+  });
+
+  const preparationView = (app: HostApplication): HostApplicationPreparationView => ({
+    title: app.name, icon: app.icon, locale: i18n.locale(),
+    heading: i18n.t(isMac() ? 'hostApplications.macPermissions' : setupDisconnected() ? 'hostApplications.disconnected' : hostApplicationSetupHeading(setup())),
+    detail: i18n.t(setupDisconnected() ? 'hostApplications.prepare.connectionHint' : 'hostApplications.prepare.background'),
+    progress: hostApplicationSetupProgress(setup()), failed: setup()?.state === 'failed',
+  });
+  const closePending = (pending: PendingApplication) => {
+    pending.active = false;
+    pending.popup?.close();
+    if (pending.preparationID) void window.redevenDesktopShell?.applicationPreparation?.({ action: 'close', id: pending.preparationID });
+  };
+  const pendingIsOpen = async (pending: PendingApplication) => {
+    if (!pending.active || disposed) return false;
+    const open = pending.preparationID
+      ? (await window.redevenDesktopShell?.applicationPreparation?.({ action: 'check', id: pending.preparationID }))?.ok === true
+      : Boolean(pending.popup && !pending.popup.closed);
+    return open && pending.active && !disposed;
+  };
+  const updatePending = async () => {
+    for (const pending of pendingApplications.values()) {
+      if (!await pendingIsOpen(pending)) { pending.active = false; pendingApplications.delete(pending.app.id); continue; }
+      const view = preparationView(pending.app);
+      if (pending.preparationID) await window.redevenDesktopShell?.applicationPreparation?.({ action: 'update', id: pending.preparationID, view });
+      else if (pending.popup) updateHostApplicationPreparationDocument(view, pending.popup.document);
+    }
+  };
+  const continuePreparedApplications = async () => {
+    if (disposed || completingSetup) return;
+    completingSetup = true;
+    try {
+      const current = await listHostApplications(i18n.locale());
+      if (disposed) return;
+      setCatalog(current);
+      if (!ready()) return;
+      setSetupDialog(false);
+      for (const pending of [...pendingApplications.values()]) {
+        const app = current.applications.find(app => app.id === pending.app.id);
+        if (app && await pendingIsOpen(pending)) await open(app, pending);
+        else closePending(pending);
+        pendingApplications.delete(pending.app.id);
+      }
+    } catch (e) { if (!disposed) setError(translateError(e)); }
+    finally { completingSetup = false; }
+  };
+  const acceptSetup = (next: HostApplicationSetup) => {
+    if (disposed) return;
+    setSetup(next); setSetupDisconnected(false);
+    void updatePending().catch(() => { if (!disposed) setSetupDisconnected(true); });
+    if (next.state === 'ready') void continuePreparedApplications();
+    if (next.state === 'failed' && next.error_code === 'download_failed' && next.operation_id === setupOperationID && !setupCancelled && !relayTried && window.redevenDesktopShell?.applicationComponents) void relayPreparation(next);
+  };
+  const observeSetup = () => {
+    if (disposed || setupObserver) return;
+    const controller = new AbortController(); setupObserver = controller;
+    setSetupDisconnected(false);
+    void observeHostApplicationSetup(next => {
+      if (!controller.signal.aborted && !(relaying && next.state === 'failed')) acceptSetup(next);
+    }, controller.signal).catch(() => {
+      if (!disposed && !controller.signal.aborted) { setSetupDisconnected(true); void updatePending().catch(() => {}); }
+    }).finally(() => { if (setupObserver === controller) setupObserver = undefined; });
+  };
+  const reserveApplication = async (app: HostApplication): Promise<PendingApplication> => {
+    const existing = pendingApplications.get(app.id);
+    if (existing && (existing.preparationID ? await pendingIsOpen(existing) : existing.active && !existing.popup?.closed)) return existing;
+    const view = preparationView(app);
+    const prepare = window.redevenDesktopShell?.applicationPreparation;
+    let pending: PendingApplication;
+    if (desktopShellWebServiceWindowOpenAvailable()) {
+      if (!prepare) throw new Error('Desktop application preparation is unavailable.');
+      const result = await prepare({ action: 'create', application_id: app.id, view });
+      if (!result.ok || !result.id) throw new Error('Desktop application preparation could not open.');
+      pending = { app, popup: null, preparationID: result.id, active: true };
+    } else {
+      const popup = window.open('about:blank', `redeven-host-app-${ctx.env_id()}-${encodeURIComponent(app.id)}`);
+      if (!popup) throw new Error('The application window was blocked.');
+      const style = getComputedStyle(document.documentElement);
+      const color = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+      popup.document.open();
+      popup.document.write(hostApplicationPreparationDocument(view, { background: color('--background', '#fafafa'), foreground: color('--foreground', '#18181b'), muted: color('--muted-foreground', '#71717a'), border: color('--border', '#e4e4e7'), primary: color('--primary', '#52525b'), colorScheme: style.colorScheme || 'light dark' }));
+      popup.document.close();
+      pending = { app, popup, active: true };
+    }
+    if (disposed) { closePending(pending); throw new Error('The application page was closed.'); }
+    pendingApplications.set(app.id, pending);
+    return pending;
+  };
+  const prepare = async (file?: File) => {
+    if (!canLaunch() || setupBusy() || relaying) return;
+    setSetupBusy(true);
+    setupCancelled = false;
+    setError('');
+    try {
+      if (file && (!setup()?.package || file.size < setup()!.package!.size_bytes || file.size > setup()!.package!.size_bytes + 2 * 1048576)) throw new Error('The component package does not match this host.');
+      const app = selectedApplication();
+      // Reserve browser popups in the original click before awaiting network work.
+      if (app) await reserveApplication(app);
+      setSetupDialog(false);
+      let next = setup();
+      if (!hostApplicationSetupActive(setup())) {
+        const signature = `${file ? 'upload' : 'download'}:${file?.size ?? 0}`;
+        if (!setupRequestID || setupRequestSignature !== signature || (setup() && ['failed', 'cancelled', 'interrupted'].includes(setup()!.state))) {
+          setupRequestID = crypto.randomUUID(); relayTried = false;
+        }
+        setupRequestSignature = signature;
+        next = await startHostApplicationSetup(setupRequestID, file ? 'upload' : 'download', file?.size ?? 0);
+        setupOperationID = next.operation_id ?? '';
+        if (setupCancelled || (disposed && file)) {
+          if (next.can_cancel && next.operation_id) await cancelHostApplicationSetup(next.operation_id);
+          return;
+        }
+        if (disposed) return;
+        acceptSetup(next);
+      }
+      if (next?.state === 'receiving' && next.can_cancel) {
+        if (file) {
+          if (!next.operation_id || file.size !== next.expected_bytes) throw new Error('The component package does not match this host.');
+          setupTransfer = new AbortController();
+          observeSetup();
+          acceptSetup(await uploadHostApplicationSetup(next.operation_id, file, setupTransfer.signal));
+          setupTransfer = undefined;
+        } else if (window.redevenDesktopShell?.applicationComponents) await relayPreparation(next);
+      }
+      observeSetup();
+    } catch (e) {
+      if (!disposed && !setupTransfer?.signal.aborted) {
+        if (e instanceof LocalApiError && e.code === 'HOST_APP_SETUP_BUSY') {
+          try { acceptSetup(await getHostApplicationSetup()); observeSetup(); }
+          catch { setSetupDisconnected(true); }
+        } else setError(translateError(e));
+      }
+    }
+    finally { if (!relaying) setupTransfer = undefined; if (!disposed) setSetupBusy(false); }
+  };
+  const relayPreparation = async (failed: HostApplicationSetup) => {
+    const bridge = window.redevenDesktopShell;
+    const acquire = bridge?.applicationComponents;
+    if (!canLaunch() || !acquire || !failed.package || relaying || disposed) return;
+    relayTried = true; relaying = true; relaySourceOperation = failed.operation_id ?? ''; relaySourceReceiving = failed.state === 'receiving';
+    setSetupBusy(true);
+    const transfer = new AbortController(); setupTransfer = transfer;
+    const remove = bridge.onApplicationComponentsProgress?.(progress => {
+      if (!disposed && !transfer.signal.aborted) acceptSetup({ ...failed, ...progress, state: 'downloading', error_code: undefined, can_cancel: true });
+    });
+    acceptSetup({ ...failed, state: 'downloading', received_bytes: 0, error_code: undefined, can_cancel: true });
+    try {
+      const bundle = await acquire({ action: 'acquire', architecture: failed.package.architecture });
+      if (disposed || transfer.signal.aborted) return;
+      if (!bundle.ok || !bundle.size) throw new Error('Desktop component acquisition failed.');
+      if (failed.state === 'receiving' && bundle.size !== failed.expected_bytes) throw new Error('The component package does not match this transfer.');
+      if (failed.state !== 'receiving') { setupRequestID = crypto.randomUUID(); setupRequestSignature = `upload:${bundle.size}`; }
+      const next = failed.state === 'receiving' ? failed : await startHostApplicationSetup(setupRequestID, 'upload', bundle.size);
+      if (disposed || transfer.signal.aborted) {
+        if (next.can_cancel && next.operation_id) await cancelHostApplicationSetup(next.operation_id);
+        return;
+      }
+      setupOperationID = next.operation_id ?? '';
+      acceptSetup(next);
+      if (next.state === 'receiving' && next.operation_id) {
+        acceptSetup(await uploadHostApplicationSetup(next.operation_id, { size: bundle.size, read: async offset => {
+          const chunk = await acquire({ action: 'read', offset });
+          if (!chunk.ok || !chunk.data) throw new Error('Desktop component transfer failed.');
+          return new Blob([Uint8Array.from(chunk.data)]);
+        } }, transfer.signal));
+      }
+    } catch {
+      if (!disposed && !transfer.signal.aborted) {
+        setSetupDisconnected(true);
+        // Refresh the authoritative operation after an uncertain upload result.
+        try { acceptSetup(await getHostApplicationSetup()); } catch { /* Reconnect remains available. */ }
+      }
+    } finally {
+      remove?.(); await acquire({ action: 'cancel' });
+      if (setupTransfer === transfer) setupTransfer = undefined;
+      relaying = false;
+      if (!disposed) setSetupBusy(false);
+    }
+  };
+  const cancelPreparation = async () => {
+    if (!setup()?.operation_id || !canLaunch()) return;
+    const operationID = setup()!.operation_id!;
+    setupCancelled = true;
+    const localAcquisitionOnly = relaying && !relaySourceReceiving && setup()?.operation_id === relaySourceOperation;
+    setupTransfer?.abort();
+    for (const pending of pendingApplications.values()) closePending(pending);
+    pendingApplications.clear();
+    setSelectedApplication(null);
+    if (relaying) {
+      await window.redevenDesktopShell?.applicationComponents?.({ action: 'cancel' });
+      setSetup(value => value ? { ...value, state: 'cancelled', can_cancel: false } : value);
+      if (localAcquisitionOnly) return;
+    }
+    try {
+      acceptSetup(await cancelHostApplicationSetup(operationID));
+    } catch (e) { setError(translateError(e)); }
+  };
+
+  const preparationPanel = () => <HostApplicationSetupPanel setup={setup()} allowed={canLaunch()} submitting={setupBusy()}
+    canRelay={Boolean(window.redevenDesktopShell?.applicationComponents)}
+    disconnected={setupDisconnected()} applicationName={selectedApplication()?.name}
+    onStart={() => void prepare()} onCancel={() => void cancelPreparation()} onReconnect={observeSetup} onUpload={file => void prepare(file)} />;
 
   const running = createMemo(() => (catalog()?.sessions ?? []).filter(s => s.state === 'starting' || s.state === 'running'));
   const runningByApp = createMemo(() => new Map(running().map(s => [s.application.id, s])));
@@ -115,20 +360,31 @@ export function EnvHostApplicationsPage() {
       && (!needle || `${app.name} ${app.description}`.toLocaleLowerCase().includes(needle)));
   });
 
-  const open = async (app: HostApplication) => {
+  const open = async (app: HostApplication, prepared?: PendingApplication) => {
     if (!canLaunch() || busy()[app.id]) return;
+    if (!ready()) {
+      setSelectedApplication(app);
+      if (hostApplicationSetupActive(setup())) {
+        try { await reserveApplication(app); observeSetup(); if (setup()?.state === 'ready') void continuePreparedApplications(); }
+        catch (e) { if (!disposed) setAppErrors(v => ({ ...v, [app.id]: translateError(e) })); }
+      } else setSetupDialog(true);
+      return;
+    }
+    if (prepared && !await pendingIsOpen(prepared)) return;
     const existing = windows.get(app.id);
     if (existing && !existing.closed && runningByApp().has(app.id)) { existing.focus(); return; }
     const desktop = desktopShellWebServiceWindowOpenAvailable();
     const localNative = nativeLaunch();
-    const popup = desktop || localNative ? null : window.open('about:blank', `redeven-host-app-${ctx.env_id()}-${encodeURIComponent(app.id)}`);
+    const popup = prepared?.popup ?? (desktop || localNative ? null : window.open('about:blank', `redeven-host-app-${ctx.env_id()}-${encodeURIComponent(app.id)}`));
     if (!desktop && !localNative && !popup) { setAppErrors(v => ({ ...v, [app.id]: i18n.t('webServices.errors.popupBlocked') })); return; }
-    if (popup) {
+    if (popup && !prepared) {
       popup.document.title = app.name;
       popup.document.body.textContent = i18n.t('hostApplications.starting');
       popup.document.body.style.cssText = 'font:14px system-ui;margin:0;min-height:100vh;display:grid;place-items:center;color-scheme:light dark';
     }
     setBusy(v => ({ ...v, [app.id]: true })); setAppErrors(v => ({ ...v, [app.id]: '' }));
+    let launched: HostApplicationSession | undefined;
+    const wasRunning = runningByApp().has(app.id);
     try {
       const result = await launchHostApplication(app.id, i18n.locale(), {
         locale: i18n.locale(),
@@ -139,7 +395,12 @@ export function EnvHostApplicationsPage() {
         starting: i18n.t('hostApplications.starting'), failed: i18n.t('hostApplications.errors.failed'),
         ended: i18n.t('hostApplications.ended'), retry: i18n.t('hostApplications.retry'),
       }, localNative ? 'native' : 'stream');
-      if (result.mode === 'native') {await refresh(true);return;}
+      launched = result;
+      if (disposed || (prepared && !await pendingIsOpen(prepared)) || popup?.closed) {
+        if (!wasRunning && result.mode !== 'native') await stopHostApplication(result.id);
+        return;
+      }
+      if (result.mode === 'native') {if (prepared) closePending(prepared); await refresh(true);return;}
       if (!result.forward) throw new Error('Missing application forward');
       const { forward, app_path: appPath } = result.forward;
       const route = resolveWebServiceOpenRoute({ forwardID: forward.forward_id, localRuntime: ctx.localRuntime(), desktopContext: readDesktopSessionContextSnapshot(), appPath, desktopWindowAvailable: desktop });
@@ -147,12 +408,14 @@ export function EnvHostApplicationsPage() {
         missingEnvContext: i18n.t('webServices.errors.missingEnvContext'), opening: i18n.t('hostApplications.starting'),
         openingLocalProxy: i18n.t('webServices.status.openingLocalProxy'), requestingEntryTicket: i18n.t('webServices.status.requestingEntryTicket'),
         updating: i18n.t('webServices.status.updating'), desktopWindowFailed: i18n.t('webServices.errors.desktopWindowFailed'), popupBlocked: i18n.t('webServices.errors.popupBlocked'),
-      }, popup, 'application');
+      }, popup, 'application', ...(prepared?.preparationID ? [prepared.preparationID] : []));
       if (popup) windows.set(app.id, popup);
       await refresh(true);
     } catch (e) {
-      popup?.close(); setAppErrors(v => ({ ...v, [app.id]: translateError(e) }));
-    } finally { setBusy(v => ({ ...v, [app.id]: false })); }
+      popup?.close(); if (prepared) closePending(prepared);
+      if (launched && !wasRunning && launched.mode !== 'native') await stopHostApplication(launched.id).catch(() => {});
+      if (!disposed) setAppErrors(v => ({ ...v, [app.id]: translateError(e) }));
+    } finally { if (!disposed) setBusy(v => ({ ...v, [app.id]: false })); }
   };
 
   const stop = async () => {
@@ -186,10 +449,9 @@ export function EnvHostApplicationsPage() {
       <Show when={!canRead()}><div class="host-apps-empty"><ActivityBarHostApplicationsIcon class="w-9 h-9" /><h2>{i18n.t('hostApplications.permissionTitle')}</h2><p>{i18n.t('hostApplications.readPermission')}</p></div></Show>
       <Show when={canRead()}>
         <Show when={catalog()} fallback={<div role="status" aria-label={i18n.t('hostApplications.loading')} class="host-apps-skeleton"><div class="host-apps-skeleton-heading" aria-hidden="true" /><div class="host-apps-grid" aria-hidden="true"><For each={[0,1,2,3,4,5]}>{() => <div class="host-app-skeleton-tile"><span /><i /><i /><i /></div>}</For></div></div>}>
-          <Show when={!ready()}>
+          <Show when={!ready() && catalog()!.availability.supported && !isMac()}>{preparationPanel()}</Show>
+          <Show when={!ready() && (isMac() || !catalog()!.availability.supported)}>
             <div class="host-apps-notice"><ActivityBarHostApplicationsIcon class="w-5 h-5 shrink-0" /><div><strong>{i18n.t(catalog()!.availability.supported ? 'hostApplications.setupTitle' : 'hostApplications.unsupportedTitle')}</strong><p>{i18n.t(availabilityDescription())}</p>
-              <Show when={catalog()!.availability.requirements?.length}><p>{i18n.t('hostApplications.setupRequirements', { requirements: catalog()!.availability.requirements!.join(', ') })}</p></Show>
-              <Show when={catalog()!.availability.supported && !isMac()}><a class="host-apps-setup-guide" href="https://github.com/Xpra-org/xpra/wiki/Download" target="_blank" rel="noopener noreferrer">{i18n.t('hostApplications.setupGuide')}<ExternalLink class="w-3 h-3" /></a></Show>
               <Show when={isMac() && catalog()!.availability.reason === 'macos_permissions'}><div class="flex flex-wrap gap-2 mt-3">
                 <Show when={!catalog()!.availability.permissions?.screen_recording}><Button variant="outline" size="sm" disabled={!canLaunch() || permissionBusy()} onClick={() => void requestPermission('screen_recording')}>{i18n.t('hostApplications.macAllowScreen')}</Button></Show>
                 <Show when={!catalog()!.availability.permissions?.accessibility}><Button variant="outline" size="sm" disabled={!canLaunch() || permissionBusy()} onClick={() => void requestPermission('accessibility')}>{i18n.t('hostApplications.macAllowAccessibility')}</Button></Show>
@@ -211,7 +473,7 @@ export function EnvHostApplicationsPage() {
               }</For></div>
             </section>
           </Show>
-          <Show when={catalog()!.availability.supported}><section class="host-apps-library" aria-label={i18n.t('hostApplications.library')}>
+          <Show when={catalog()!.availability.supported && (ready() || catalog()!.applications.length > 0)}><section class="host-apps-library" aria-label={i18n.t('hostApplications.library')}>
             <div class="host-apps-library-heading">
               <div class="host-apps-section-title"><h2>{i18n.t('hostApplications.library')}</h2><span>{catalog()!.applications.length}</span></div>
               <div class="host-apps-filters">
@@ -224,9 +486,9 @@ export function EnvHostApplicationsPage() {
                 <div class="host-apps-search"><Search class="w-3.5 h-3.5" /><Input value={query()} onInput={e => setQuery(e.currentTarget.value)} placeholder={i18n.t('hostApplications.search')} aria-label={i18n.t('hostApplications.search')} /></div>
               </div>
             </div>
-            <Show when={apps().length} fallback={<div class="host-apps-empty"><Search class="w-8 h-8" /><h2>{i18n.t(query() ? 'hostApplications.noResults' : 'hostApplications.emptyTitle')}</h2><p>{i18n.t(query() ? 'hostApplications.noResultsDescription' : 'hostApplications.emptyDescription')}</p></div>}>
+            <Show when={apps().length} fallback={<Show when={ready()}><div class="host-apps-empty"><Search class="w-8 h-8" /><h2>{i18n.t(query() ? 'hostApplications.noResults' : 'hostApplications.emptyTitle')}</h2><p>{i18n.t(query() ? 'hostApplications.noResultsDescription' : 'hostApplications.emptyDescription')}</p></div></Show>}>
               <div class="host-apps-grid"><For each={apps()}>{app => <div class="host-app-tile-wrap">
-                <button class={`host-app-tile ${redevenSurfaceRoleClass('panelInteractive')}`} aria-busy={starting(app.id)} disabled={!canLaunch() || !ready() || busy()[app.id]} onClick={() => void open(app)} aria-label={`${i18n.t(runningByApp().has(app.id) ? 'hostApplications.resume' : 'hostApplications.open')} · ${app.name}`}>
+                <button class={`host-app-tile ${redevenSurfaceRoleClass('panelInteractive')}`} aria-busy={starting(app.id)} disabled={!canLaunch() || busy()[app.id]} onClick={() => void open(app)} aria-label={`${i18n.t(runningByApp().has(app.id) ? 'hostApplications.resume' : 'hostApplications.open')} · ${app.name}`}>
                   <div class="host-app-tile-top"><ApplicationIcon app={app} /><span class="host-app-tile-affordance" aria-hidden="true"><Show when={runningByApp().get(app.id)?.state === 'running'}><span class="host-app-status-dot" /></Show><ExternalLink class="host-app-open-icon w-3.5 h-3.5" /></span></div>
                   <strong>{app.name}</strong><Show when={app.description}><p title={app.description}>{app.description}</p></Show>
                   <Show when={starting(app.id)}><span class="host-app-tile-action" role="status"><span class="host-app-launch-indicator" aria-hidden="true" />{i18n.t('hostApplications.starting')}</span></Show>
@@ -238,6 +500,14 @@ export function EnvHostApplicationsPage() {
         </Show>
       </Show>
     </div>
+    <Dialog open={setupDialog()} onOpenChange={setSetupDialog} title={selectedApplication()?.name ?? i18n.t('hostApplications.prepare.title')}>
+      <Show when={!isMac()} fallback={<div class="space-y-4"><p class="text-sm text-muted-foreground">{i18n.t(availabilityDescription())}</p>
+        <Show when={catalog()?.availability.reason === 'macos_permissions'}>
+          <Show when={!catalog()?.availability.permissions?.screen_recording}><Button disabled={permissionBusy()} onClick={() => void requestPermission('screen_recording')}>{i18n.t('hostApplications.macAllowScreen')}</Button></Show>
+          <Show when={!catalog()?.availability.permissions?.accessibility}><Button disabled={permissionBusy()} onClick={() => void requestPermission('accessibility')}>{i18n.t('hostApplications.macAllowAccessibility')}</Button></Show>
+        </Show>
+      </div>}>{preparationPanel()}</Show>
+    </Dialog>
     <ConfirmDialog open={Boolean(ending())} onOpenChange={value => { if (!value && !stopBusy()) setEnding(null); }} title={i18n.t('hostApplications.stopTitle')} description={i18n.t(isMac() ? 'hostApplications.macStopDescription' : 'hostApplications.stopDescription')} confirmText={i18n.t('hostApplications.stop')} cancelText={i18n.t('hostApplications.cancel')} variant="destructive" loading={stopBusy()} onConfirm={() => void stop()} />
     <Dialog open={addOpen()} onOpenChange={value => { if (!addBusy()) setAddOpen(value); }} title={i18n.t('hostApplications.addTitle')} footer={<><Button variant="ghost" onClick={() => setAddOpen(false)} disabled={addBusy()}>{i18n.t('hostApplications.cancel')}</Button><Button onClick={() => void add()} disabled={addBusy() || (!isMac() && !name().trim()) || !executable().trim()}>{i18n.t('hostApplications.add')}</Button></>}>
       <div class="space-y-4"><p class="text-sm text-muted-foreground">{i18n.t(isMac() ? 'hostApplications.macAddDescription' : 'hostApplications.addDescription')}</p>

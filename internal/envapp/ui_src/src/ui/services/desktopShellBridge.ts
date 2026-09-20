@@ -1,3 +1,4 @@
+import type { HostApplicationComponentsRequest, HostApplicationComponentsResult, HostApplicationComponentsProgress } from '../../../../../../desktop/src/shared/hostApplicationComponents';
 import {
   normalizeDesktopShellWindowCommandResponse,
   type DesktopShellWindowCommandResponse,
@@ -6,6 +7,7 @@ import {
   type DesktopShellOpenCodespaceWindowRequest,
 } from '../../../../../../desktop/src/shared/desktopShellCodespaceWindowIPC';
 import type { DesktopShellOpenWebServiceWindowRequest } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
+import type { HostApplicationPreparationRequest, HostApplicationPreparationResult } from '../../../../../../desktop/src/shared/hostApplicationPreparation';
 import {
   normalizeDesktopShellRuntimeActionResponse,
   normalizeDesktopShellRuntimeMaintenanceContext,
@@ -47,6 +49,10 @@ export interface DesktopShellBridge {
   openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
   openCodespaceWindow?: (request: DesktopShellCodespaceWindowOpenRequest) => Promise<DesktopShellCodespaceWindowOpenResult>;
   openWebServiceWindow?: (request: DesktopShellOpenWebServiceWindowRequest) => Promise<DesktopShellCodespaceWindowOpenResult>;
+  applicationComponents?: (request: HostApplicationComponentsRequest) => Promise<HostApplicationComponentsResult>;
+  onApplicationComponentsProgress?: (listener: (value: HostApplicationComponentsProgress) => void) => () => void;
+  applicationPreparation?: (request: HostApplicationPreparationRequest) => Promise<HostApplicationPreparationResult>;
+  onApplicationPreparationClosed?: (listener: (id: string) => void) => () => void;
   openDashboard?: () => Promise<DesktopShellExternalURLOpenResult>;
   getRuntimeMaintenanceContext?: () => Promise<DesktopShellRuntimeMaintenanceContext>;
   notifyRuntimeMaintenanceStarted?: (kind: 'restart' | 'update') => void;

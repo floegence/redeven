@@ -9,8 +9,8 @@ timestamp: 2026-09-20T00:00:00Z
 
 Redeven owns the host application catalog, launch authorization, session lifecycle,
 and private forward. The [macOS contract](macos-host-applications.md) defines native
-launch and window streaming. On Linux, installed GIO owns desktop-entry resolution and launch;
-installed Xpra owns X11 rendering and interactive transport. Applications execute
+launch and window streaming. On Linux, GIO owns desktop-entry resolution and launch;
+Xpra owns X11 rendering and interactive transport. Applications execute
 as the Runtime's host OS user, without a container or virtual machine. Each live
 application session has one owner and one authorized window route. Closing its
 viewer preserves the application. Linux session termination closes its owned
@@ -20,9 +20,10 @@ launch failures, and insufficient permissions fail explicitly.
 
 # Host and application boundary
 
-The Linux backend uses Xpra 6.x and a separately installed
-Xpra HTML5 v20 or v21 client, Xvfb, D-Bus, xauth, and Python GIO/GTK 3 bindings. These remain
-external host dependencies; Redeven does not vendor or download Xpra. The
+The Linux backend uses Xpra 6.x with an HTML5 v20 or v21 client, Xvfb, D-Bus,
+xauth, and Python GIO/GTK 3 bindings. The [managed preparation contract](host-application-preparation.md)
+owns one-action private component acquisition through the published upstream.
+An already compatible complete system installation remains usable. The
 [platform and initialization contract](host-application-platforms.md) owns capability
 detection, installation boundaries, and distribution validation. A desktop
 environment and physical display are unnecessary. The launcher creates a private
@@ -113,7 +114,7 @@ callbacks cannot restore a disconnected or superseded view. Terminated sessions
 cannot offer an unusable retry. A failed initial Desktop
 navigation also has a localized, bridge-free reconnect page.
 
-The adapter integrates the separately installed HTML5 v20/v21 client. It reads
+The adapter integrates the selected HTML5 v20/v21 client. It reads
 the client binding inside the upstream document, including v21’s lexical global,
 without modifying installed upstream assets. Primary normal
 windows fill the viewer and track its size through Xpra's window geometry API;

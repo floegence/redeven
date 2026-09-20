@@ -109,7 +109,18 @@ def main():
                 launch_entry.write_text(entry.to_data()[0], encoding="utf-8")
                 launch_entry.chmod(0o600)
                 app = Gio.DesktopAppInfo.new_from_filename(str(launch_entry))
-            if not app.launch([], Gio.AppLaunchContext.new()):
+            context = Gio.AppLaunchContext.new()
+            # Support components use their own loader and Python resources. Restore
+            # the host environment before GIO executes the user's application.
+            saved = json.loads(os.environ.get("FLOE_NATIVE_APPLICATION_ENV", "{}"))
+            for key, value in saved.items():
+                if value is None:
+                    context.unsetenv(key)
+                else:
+                    context.setenv(key, value)
+            context.unsetenv("FLOE_NATIVE_APPLICATION_ENV")
+            context.unsetenv("FLOE_NATIVE_ROOT")
+            if not app.launch([], context):
                 raise ValueError("The application could not be started.")
             result = {"ok": True}
         except Exception as error:

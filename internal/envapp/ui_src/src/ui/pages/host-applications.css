@@ -61,3 +61,18 @@
 
 .host-apps-setup-guide { display:inline-flex; align-items:center; gap:6px; margin-top:10px; color:var(--primary); cursor:pointer; }
 .host-apps-setup-guide:hover { text-decoration:underline; }
+.host-apps-preparation { padding: 24px 0; margin-bottom: 26px; border-bottom: 1px solid var(--border); }
+.host-apps-preparation h2 { font-size: 15px; font-weight: 600; letter-spacing: -.02em; margin: 0 0 8px; }
+.host-apps-preparation p { font-size: 13px; line-height: 1.65; color: var(--muted-foreground); margin: 0; max-width: 68ch; }
+.host-apps-preparation .host-apps-preparation-target { margin-top: 10px; color: var(--foreground); }
+.host-apps-preparation-track { height: 2px; background: var(--border); overflow: hidden; margin-top: 22px; }
+.host-apps-preparation-track span { display: block; height: 100%; background: var(--primary); transition: width .2s ease; }
+.host-apps-preparation-track.indeterminate span { animation: host-app-preparation-progress 1.5s ease-in-out infinite; }
+.host-apps-preparation-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; }
+.host-apps-preparation-size { color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
+.host-apps-preparation-actions { display: flex; gap: 8px; }
+.host-apps-preparation-details { margin-top: 14px; font-size: 12px; color: var(--muted-foreground); }
+.host-apps-preparation-details summary { cursor: pointer; width: fit-content; }
+.host-apps-preparation-details p { margin: 12px 0; }
+@keyframes host-app-preparation-progress { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
+@media (prefers-reduced-motion: reduce) { .host-apps-preparation-track span { animation: none !important; transition: none; } }

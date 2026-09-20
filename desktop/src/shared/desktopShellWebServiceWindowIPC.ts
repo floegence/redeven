@@ -9,6 +9,7 @@ export type DesktopShellOpenWebServiceWindowRequest = Readonly<{
   target_url: string;
   access_mode?: WebServiceAccessMode;
   presentation?: ForwardWindowPresentation;
+  preparation_id?: string;
 }>;
 
 export type NormalizedDesktopShellOpenWebServiceWindowRequest = Readonly<{
@@ -17,6 +18,7 @@ export type NormalizedDesktopShellOpenWebServiceWindowRequest = Readonly<{
   target_url: string;
   access_mode: WebServiceAccessMode;
   presentation: ForwardWindowPresentation;
+  preparation_id?: string;
 }>;
 
 export type DesktopShellOpenWebServiceWindowResponse = Readonly<{
@@ -57,7 +59,9 @@ export function normalizeDesktopShellOpenWebServiceWindowRequest(value: unknown)
     if (accessMode === 'desktop_loopback' && targetURL.protocol !== 'http:') return null;
     const presentation = compact(candidate.presentation) || 'browser';
     if (presentation !== 'browser' && presentation !== 'application') return null;
-    return { url: url.toString(), forward_id: forwardID, target_url: targetURL.toString(), access_mode: accessMode, presentation };
+    const preparationID = compact(candidate.preparation_id);
+    if (preparationID && (presentation !== 'application' || !/^[a-f0-9-]{36}$/u.test(preparationID))) return null;
+    return { url: url.toString(), forward_id: forwardID, target_url: targetURL.toString(), access_mode: accessMode, presentation, ...(preparationID ? { preparation_id: preparationID } : {}) };
   } catch {
     return null;
   }

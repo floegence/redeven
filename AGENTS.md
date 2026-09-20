@@ -482,14 +482,14 @@ Rules:
 
 ## Published Dependency Policy
 
-- `redeven` is a downstream consumer of `floeterm`, `floe-webapp`, `flowersec`, and `redevplugin`.
+- `redeven` is a downstream consumer of `floeterm`, `floe-webapp`, `flowersec`, `redevplugin`, and `floe-native-apps`.
 - **General capability upstream-first is a hard requirement.** When Redeven needs
   a capability that is reusable, host-neutral, or likely useful across more than
   one product or workflow, implement and release it in the appropriate upstream
   source repository first. Redeven should keep only thin product adapters,
   business orchestration, placement, policy mapping, and UI integration.
 - This applies to shared capabilities owned by `floeterm`, `floe-webapp`,
-  `flowersec`, and `redevplugin`. Do not turn a general-purpose dependency gap
+  `flowersec`, `redevplugin`, and `floe-native-apps`. Do not turn a general-purpose dependency gap
   into Redeven-local helper code, copied contracts, hidden compatibility shims,
   local package wiring, or one-off product-specific platform logic.
 - Never reference local sibling checkouts through package manifests, lockfiles,
@@ -516,6 +516,23 @@ Rules:
   - confirm the release artifacts are available;
   - then upgrade `redeven` to the published version;
   - keep Redeven changes limited to product integration and business behavior.
+
+## Native Application Component Boundary
+
+- `floe-native-apps` owns the pinned graphical component catalog, acquisition,
+  integrity and extraction, native tool environment, durable preparation, and
+  display/input self-check. Consume its released Go module; do not duplicate an
+  installer, package verifier, or component operation store in Redeven.
+- Redeven owns authenticated routes, private state placement, host application
+  inventory and sessions, Desktop transfer/window ownership, localized progress,
+  and launch continuation. Production applications execute directly on the host;
+  preparation must not install system packages, change security policy, or require
+  a container or virtual machine.
+- Desktop may acquire original pinned archives through its bundled Runtime and
+  transfer them to the host. The receiving host independently verifies and
+  qualifies them. Renderer input must never select artifact URLs or local paths.
+- macOS continues to use the bundled native helper and explicit OS permissions;
+  Linux component preparation must not become a macOS application execution path.
 
 ## ReDevPlugin Boundary
 

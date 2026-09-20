@@ -1,6 +1,8 @@
 /// <reference lib="dom" />
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRESS, type HostApplicationComponentsRequest, type HostApplicationComponentsResult, type HostApplicationComponentsProgress } from '../shared/hostApplicationComponents';
+import { HOST_APPLICATION_PREPARATION_CHANNEL, HOST_APPLICATION_PREPARATION_CLOSED_CHANNEL, type HostApplicationPreparationRequest, type HostApplicationPreparationResult } from '../shared/hostApplicationPreparation';
 
 import {
   DESKTOP_SHELL_OPEN_WINDOW_CHANNEL,
@@ -81,6 +83,21 @@ export function bootstrapDesktopShellBridge(): void {
     openWebServiceWindow: async (request: unknown) => normalizeDesktopShellOpenWebServiceWindowResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL, request),
     ),
+    applicationComponents: async (request: HostApplicationComponentsRequest): Promise<HostApplicationComponentsResult> => ipcRenderer.invoke(HOST_APPLICATION_COMPONENTS_CHANNEL, request),
+    onApplicationComponentsProgress: (listener: (value: HostApplicationComponentsProgress) => void) => {
+      const receive = (_event: unknown, value: HostApplicationComponentsProgress) => listener(value);
+      ipcRenderer.on(HOST_APPLICATION_COMPONENTS_PROGRESS, receive);
+      return () => ipcRenderer.removeListener(HOST_APPLICATION_COMPONENTS_PROGRESS, receive);
+    },
+    applicationPreparation: async (request: HostApplicationPreparationRequest): Promise<HostApplicationPreparationResult> => {
+      const result = await ipcRenderer.invoke(HOST_APPLICATION_PREPARATION_CHANNEL, request);
+      return { ok: result?.ok === true, ...(typeof result?.id === 'string' ? { id: result.id } : {}) };
+    },
+    onApplicationPreparationClosed: (listener: (id: string) => void) => {
+      const receive = (_event: unknown, id: unknown) => { if (typeof id === 'string') listener(id); };
+      ipcRenderer.on(HOST_APPLICATION_PREPARATION_CLOSED_CHANNEL, receive);
+      return () => ipcRenderer.removeListener(HOST_APPLICATION_PREPARATION_CLOSED_CHANNEL, receive);
+    },
     openDashboard: async () => normalizeDesktopShellOpenExternalURLResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL),
     ),

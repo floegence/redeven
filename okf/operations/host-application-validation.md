@@ -14,6 +14,34 @@ A passing userspace check proves the tested Xpra/GIO/runtime combination only;
 missing subscriptions, CPU translation and untested host policy remain explicit.
 Administrators retain the [setup route](host-application-setup.md) for their host.
 
+# Managed component qualification
+
+The published `floe-native-apps` v0.1.2 stack passed real Xpra window discovery,
+picture decoding, a live private D-Bus connection and button input receipt on Ubuntu 22.04 arm64 and Debian 11
+amd64 hosts. Its installed directory also passed clean Debian 13 and Alpine 3.23
+fixtures on both architectures, plus Arch Linux, Rocky Linux 9, AlmaLinux 9 and
+RHEL UBI 9 on amd64, under an existing unprivileged account. The fixtures had no installed
+desktop or display. Containers were disposable test environments only.
+
+The same musl component closure and explicit loader run on both glibc and musl
+hosts. These checks qualify graphical support, not every host application,
+SELinux/AppArmor policy combination, GPU workload or RHEL subscription image.
+RHEL evidence is specifically its UBI 9 userland. Repeat using the upstream's
+`floe-native-apps -check` command and `scripts/qualify.sh` against the installed
+component directory. The managed preparation acceptance installs the original archive ZIP, catalogs
+and launches a host Python/GTK application, verifies private session/environment
+isolation, resumes it, and stops it. Run with `REDEVEN_TEST_NATIVE_BUNDLE` pointing
+to the upstream-generated ZIP and select `TestManagedPreparationAndHostApplication`.
+Product preparation additionally exercises owner permission,
+SSE status, cancellation, same-window continuation and Desktop relay tests.
+
+The Desktop preparation/adoption check uses a task-owned Runtime and HTTP fixture.
+It verifies that the original preparation document remains in the same physical
+window, the isolated application view fills that window and follows its native
+resize, and the application's close action destroys both surfaces. This is window
+integration evidence; the separate managed native launch test establishes actual
+host application execution.
+
 # Distribution validation
 
 The September 2026 focused matrix covers userspace installations without a

@@ -1,0 +1,81 @@
+import { Show } from 'solid-js';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { useI18n, type EnvAppTranslationKey } from '../i18n';
+import { hostApplicationSetupActive, type HostApplicationSetup } from '../services/hostApplicationsApi';
+
+export function hostApplicationSetupHeading(setup: HostApplicationSetup | null): EnvAppTranslationKey {
+  const keys: Partial<Record<HostApplicationSetup['state'], EnvAppTranslationKey>> = {
+    checking: 'hostApplications.prepare.checking', downloading: 'hostApplications.prepare.downloading', receiving: 'hostApplications.prepare.receiving',
+    verifying: 'hostApplications.prepare.verifying', installing: 'hostApplications.prepare.installing', validating: 'hostApplications.prepare.validating',
+    ready: 'hostApplications.prepare.ready', failed: 'hostApplications.prepare.failed', interrupted: 'hostApplications.prepare.interrupted', cancelled: 'hostApplications.prepare.cancelled',
+    unsupported: 'hostApplications.prepare.unsupported',
+  };
+  return (setup && keys[setup.state]) || 'hostApplications.prepare.title';
+}
+
+export function hostApplicationSetupError(code: string | undefined): EnvAppTranslationKey {
+  const keys: Record<string, EnvAppTranslationKey> = {
+    download_failed: 'hostApplications.prepare.networkError', invalid_archive: 'hostApplications.prepare.archiveError',
+    disk_full: 'hostApplications.prepare.diskError', permission_denied: 'hostApplications.prepare.accessError',
+    validation_failed: 'hostApplications.prepare.validationError', unsupported_platform: 'hostApplications.prepare.unsupported',
+  };
+  return keys[code ?? ''] || 'hostApplications.prepare.retryHint';
+}
+
+export function hostApplicationSetupProgress(setup: HostApplicationSetup | null): number | undefined {
+  if (!setup || !['downloading', 'receiving'].includes(setup.state) || setup.expected_bytes <= 0) return undefined;
+  return Math.min(1, Math.max(0, setup.received_bytes / setup.expected_bytes));
+}
+
+export function HostApplicationSetupPanel(props: {
+  setup: HostApplicationSetup | null;
+  allowed: boolean;
+  submitting: boolean;
+  canRelay: boolean;
+  disconnected: boolean;
+  applicationName?: string;
+  onStart: () => void;
+  onCancel: () => void;
+  onReconnect: () => void;
+  onUpload: (file: File) => void;
+}) {
+  const i18n = useI18n();
+  const active = () => hostApplicationSetupActive(props.setup);
+  const progress = () => hostApplicationSetupProgress(props.setup);
+  let fileInput: HTMLInputElement | undefined;
+  return <section class="host-apps-preparation" aria-label={i18n.t('hostApplications.prepare.title')}>
+    <div class="host-apps-preparation-copy">
+      <h2 aria-live="polite">{i18n.t(props.disconnected ? 'hostApplications.disconnected' : hostApplicationSetupHeading(props.setup))}</h2>
+      <p>{i18n.t(props.setup?.state === 'failed' ? hostApplicationSetupError(props.setup.error_code) : 'hostApplications.prepare.description')}</p>
+      <Show when={props.applicationName}><p class="host-apps-preparation-target">{i18n.t('hostApplications.prepare.openAfter', { name: props.applicationName ?? '' })}</p></Show>
+    </div>
+    <Show when={active()}>
+      <div class={`host-apps-preparation-track ${progress() === undefined ? 'indeterminate' : ''}`} role="progressbar" aria-label={i18n.t(hostApplicationSetupHeading(props.setup))} aria-valuenow={progress() === undefined ? undefined : Math.round(progress()! * 100)} aria-valuemin={0} aria-valuemax={100}>
+        <span style={{ width: progress() === undefined ? '35%' : `${progress()! * 100}%` }} />
+      </div>
+    </Show>
+    <div class="host-apps-preparation-footer">
+      <span class="host-apps-preparation-size"><Show when={props.setup?.package}>{new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 }).format(Math.ceil((props.setup?.package?.size_bytes ?? 0) / 1000000))}</Show></span>
+      <div class="host-apps-preparation-actions">
+        <Show when={props.disconnected} fallback={
+          <Show when={active()} fallback={
+            <Button size="sm" disabled={!props.allowed || props.submitting || props.setup?.state === 'unsupported'} onClick={props.onStart}>
+              {i18n.t(props.submitting ? 'hostApplications.prepare.checking' : props.applicationName ? 'hostApplications.prepare.prepareAndOpen' : props.setup && ['failed', 'interrupted', 'cancelled'].includes(props.setup.state) ? 'hostApplications.prepare.continue' : 'hostApplications.prepare.start')}
+            </Button>
+          }>
+            <Show when={props.setup?.state === 'receiving' && props.setup.can_cancel && !props.submitting && props.canRelay}>
+              <Button size="sm" disabled={!props.allowed} onClick={props.onStart}>{i18n.t('hostApplications.prepare.continue')}</Button>
+            </Show>
+            <Show when={props.setup?.can_cancel}><Button variant="ghost" size="sm" disabled={!props.allowed} onClick={props.onCancel}>{i18n.t('hostApplications.cancel')}</Button></Show>
+          </Show>
+        }><Button size="sm" onClick={props.onReconnect}>{i18n.t('hostApplications.reconnect')}</Button></Show>
+      </div>
+    </div>
+    <Show when={(!active() && props.setup?.state !== 'unsupported') || (props.setup?.state === 'receiving' && props.setup.can_cancel && !props.submitting)}><details class="host-apps-preparation-details">
+      <summary>{i18n.t('hostApplications.prepare.offline')}</summary>
+      <p>{i18n.t('hostApplications.prepare.offlineHint')}</p>
+      <input ref={fileInput} type="file" accept=".zip" hidden onChange={event => { const file = event.currentTarget.files?.[0]; if (file) props.onUpload(file); event.currentTarget.value = ''; }} />
+      <Button variant="outline" size="sm" disabled={!props.allowed || props.submitting} onClick={() => fileInput?.click()}>{i18n.t('hostApplications.prepare.choosePackage')}</Button>
+    </details></Show>
+  </section>;
+}

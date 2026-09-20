@@ -1,4 +1,18 @@
-import { fetchLocalApiJSON } from './localApi';
+import { fetchLocalApi, fetchLocalApiJSON } from './localApi';
+
+export type HostApplicationSetup = Readonly<{
+  state: 'available' | 'checking' | 'downloading' | 'receiving' | 'verifying' | 'installing' | 'validating' | 'ready' | 'failed' | 'cancelled' | 'interrupted' | 'unsupported';
+  operation_id?: string;
+  received_bytes: number;
+  expected_bytes: number;
+  error_code?: string;
+  can_cancel: boolean;
+  package?: Readonly<{ id: string; architecture: 'amd64' | 'arm64'; size_bytes: number; installed_bytes: number }>;
+}>;
+
+export function hostApplicationSetupActive(setup: HostApplicationSetup | null | undefined): boolean {
+  return Boolean(setup && ['checking', 'downloading', 'receiving', 'verifying', 'installing', 'validating'].includes(setup.state));
+}
 
 export type HostApplication = Readonly<{
   id: string;
@@ -54,4 +68,40 @@ export function listHostApplicationSessions(signal?: AbortSignal) {
 
 export function requestHostApplicationPermission(permission: 'screen_recording' | 'accessibility') {
   return fetchLocalApiJSON(`${base}/permissions`, {method: 'POST', body: JSON.stringify({permission})});
+}
+
+export function getHostApplicationSetup(signal?: AbortSignal) {
+  return fetchLocalApiJSON<HostApplicationSetup>(`${base}/setup`, { method: 'GET', signal });
+}
+
+export function startHostApplicationSetup(requestID: string, source: 'download' | 'upload' = 'download', sizeBytes = 0) {
+  return fetchLocalApiJSON<HostApplicationSetup>(`${base}/setup`, { method: 'POST', body: JSON.stringify({ request_id: requestID, source, size_bytes: sizeBytes }) });
+}
+
+export function cancelHostApplicationSetup(operationID: string) {
+  return fetchLocalApiJSON<HostApplicationSetup>(`${base}/setup/${encodeURIComponent(operationID)}`, { method: 'DELETE' });
+}
+
+export async function observeHostApplicationSetup(onUpdate: (setup: HostApplicationSetup) => void, signal: AbortSignal) {
+  const { fetchServerSentEvents } = await import('@floegence/floe-webapp-boot');
+  for await (const event of fetchServerSentEvents(`${base}/setup/events`, {
+    signal, fetch: (url, init) => fetchLocalApi(String(url), init),
+    maxFrameBytes: 16 * 1024, maxBufferBytes: 32 * 1024,
+  })) {
+    if (event.event === 'setup') onUpdate(JSON.parse(event.data) as HostApplicationSetup);
+  }
+  if (!signal.aborted) throw new Error('Host application preparation stream ended.');
+}
+
+export async function uploadHostApplicationSetup(operationID: string, file: Blob | { size: number; read: (offset: number) => Promise<Blob> }, signal: AbortSignal) {
+  const url = `${base}/setup/${encodeURIComponent(operationID)}`;
+  const chunkSize = 256 * 1024;
+  for (let offset = 0; offset < file.size; offset += chunkSize) {
+    const response = await fetchLocalApi(`${url}/content?offset=${offset}`, {
+      method: 'PUT', body: 'read' in file ? await file.read(offset) : file.slice(offset, offset + chunkSize), signal,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    });
+    if (!response.ok) throw new Error('Host application component transfer failed.');
+  }
+  return fetchLocalApiJSON<HostApplicationSetup>(`${url}/complete`, { method: 'POST', signal });
 }
