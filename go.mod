@@ -6,7 +6,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/bodgit/sevenzip v1.6.1
 	github.com/creack/pty v1.1.24
-	github.com/floegence/floe-native-apps v0.1.2
+	github.com/floegence/floe-native-apps v0.1.3
 	github.com/floegence/floeterm/terminal-go v0.19.2
 	github.com/floegence/floret/v7 v7.18.0
 	github.com/floegence/flowersec/flowersec-go/v5 v5.2.2
@@ -21,10 +21,10 @@ require (
 	github.com/shirou/gopsutil/v4 v4.25.12
 	github.com/yeka/zip v0.0.0-20231116150916-03d6312748a9
 	golang.org/x/crypto v0.55.0
-	golang.org/x/mod v0.40.0
+	golang.org/x/mod v0.41.0
 	golang.org/x/net v0.58.0
-	golang.org/x/sync v0.22.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sync v0.23.0
+	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.45.0
 	golang.org/x/text v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
