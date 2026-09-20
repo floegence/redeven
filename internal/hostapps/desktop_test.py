@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import sys
 from pathlib import Path
 import tempfile
 import time
@@ -59,7 +60,7 @@ class DesktopEntryTests(unittest.TestCase):
             root = Path(directory)
             executable = root / "record arguments"
             output = root / "result.json"
-            executable.write_text("#!/usr/bin/python3\nimport json, sys\nfrom pathlib import Path\nPath(sys.argv[1]).write_text(json.dumps(sys.argv[2:]))\n")
+            executable.write_text("#!" + sys.executable + "\nimport json, sys\nfrom pathlib import Path\nPath(sys.argv[1]).write_text(json.dumps(sys.argv[2:]))\n")
             executable.chmod(0o700)
             expected = ["two words", "%f", "100%", "$(touch NOT_EXECUTED)", 'a"b', "a\\b", "a'b", ""]
             arguments = " ".join(desktop.GLib.shell_quote(arg) for arg in [str(output), *expected])

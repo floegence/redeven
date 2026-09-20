@@ -60,6 +60,20 @@ describe('host application interaction', () => {
     button('Open in new window · Text Editor').click();
     expect(state.launch).not.toHaveBeenCalled();
   });
+  it('explains missing host components without suggesting an application can launch', async () => {
+    state.catalog.mockResolvedValue({ availability: { supported: true, ready: false, requirements: ['Xpra X11 server', 'Xpra HTML5 v20 / v21'] }, applications: [app], sessions: [] });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(host.textContent).toContain('Needs attention: Xpra X11 server, Xpra HTML5 v20 / v21');
+    expect(host.querySelector('a[href="https://github.com/Xpra-org/xpra/wiki/Download"]')).not.toBeNull();
+    expect(button('Open in new window · Text Editor').disabled).toBe(true);
+  });
+  it('explains unsupported hosts without inviting Linux application installation', async () => {
+    state.catalog.mockResolvedValue({ availability: { supported: false, ready: false, reason: 'unsupported_platform' }, applications: [], sessions: [] });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(host.textContent).toContain('Linux host required');
+    expect(host.textContent).not.toContain('No applications yet');
+    expect(host.textContent).not.toContain('Installation guide');
+  });
   it('filters applications without requesting another host inventory', async () => {
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
     const input = host.querySelector<HTMLInputElement>('input[aria-label="Search applications…"]')!;

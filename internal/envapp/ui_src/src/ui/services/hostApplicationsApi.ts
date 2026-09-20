@@ -19,7 +19,7 @@ export type HostApplicationSession = Readonly<{
 }>;
 
 export type HostApplicationCatalog = Readonly<{
-  availability: { supported: boolean; ready: boolean; reason?: string; version?: string };
+  availability: { supported: boolean; ready: boolean; reason?: string; version?: string; requirements?: string[] };
   applications: HostApplication[];
   sessions: HostApplicationSession[];
 }>;

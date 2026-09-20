@@ -2,6 +2,7 @@ package hostapps
 
 import (
 	"context"
+	_ "embed"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,30 @@ import (
 	"github.com/floegence/redeven/internal/portforward/registry"
 )
 
+//go:embed desktop_test.py
+var desktopTests []byte
+
+func TestInstalledGIOCatalogAndArguments(t *testing.T) {
+	if os.Getenv("REDEVEN_TEST_HOST_APPLICATIONS") != "1" {
+		t.Skip("requires installed Python GIO/GTK 3 on Linux")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	python := desktopPython(ctx, os.Environ())
+	if python == "" {
+		t.Fatal("Python GIO/GTK 3 is unavailable")
+	}
+	dir := t.TempDir()
+	for name, data := range map[string][]byte{"desktop.py": desktopHelper, "desktop_test.py": desktopTests} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := exec.CommandContext(ctx, python, filepath.Join(dir, "desktop_test.py")).CombinedOutput(); err != nil {
+		t.Fatalf("GIO catalog/argument checks: %v\n%s", err, out)
+	}
+}
+
 func TestVersionAndApplicationEnvironment(t *testing.T) {
 	for info, want := range map[string]bool{"state.windows=1\n": true, "state.windows=0\n": false, "state.windows=unknown": false, "": false} {
 		if infoHasWindows(info) != want {
@@ -25,7 +50,7 @@ func TestVersionAndApplicationEnvironment(t *testing.T) {
 			t.Fatalf("unsupported version decision for %q", version)
 		}
 	}
-	got := applicationEnvironment([]string{"DISPLAY=:0", "WAYLAND_DISPLAY=wayland-0", "DBUS_SESSION_BUS_ADDRESS=unix:old", "PULSE_SERVER=old", "QT_QPA_PLATFORM=wayland", "HOME=/host/user", "PATH=/usr/bin"})
+	got := applicationEnvironment([]string{"DISPLAY=:0", "XAUTHORITY=/desktop/auth", "XDG_RUNTIME_DIR=/run/user/1000", "DESKTOP_STARTUP_ID=old", "WAYLAND_DISPLAY=wayland-0", "DBUS_SESSION_BUS_ADDRESS=unix:old", "PULSE_SERVER=old", "QT_QPA_PLATFORM=wayland", "HOME=/host/user", "PATH=/usr/bin"})
 	want := []string{"HOME=/host/user", "PATH=/usr/bin", "GDK_BACKEND=x11", "QT_QPA_PLATFORM=xcb"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("application inherited desktop session: %v", got)
@@ -133,9 +158,41 @@ func TestInstalledXpraLaunchResumeAndStop(t *testing.T) {
 	defer m.Close()
 	appID := os.Getenv("REDEVEN_TEST_HOST_APPLICATION_ID")
 	if appID == "" {
-		appID = "debian-xterm.desktop"
+		executable, err := exec.LookPath("xterm")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Add(context.Background(), AddRequest{Name: "Compatibility terminal", Executable: executable}); err != nil {
+			t.Fatal(err)
+		}
+		catalog, err := m.Catalog(context.Background(), "alice", "en-US")
+		if err != nil || !catalog.Availability.Ready {
+			t.Fatalf("host dependencies: %+v %v", catalog.Availability, err)
+		}
+		for _, app := range catalog.Applications {
+			if app.Custom && app.Name == "Compatibility terminal" {
+				appID = app.ID
+				break
+			}
+		}
+		if appID == "" {
+			t.Fatal("custom terminal absent from GIO catalog")
+		}
 	}
 	req := LaunchRequest{ApplicationID: appID, Locale: "en-US", Presentation: Presentation{Locale: "en-US", Starting: "Starting", Failed: "Failed", Ended: "Ended", Retry: "Retry", Connecting: "Connecting", Reconnecting: "Reconnecting", Disconnected: "Disconnected", ConnectionHint: "Reconnect to continue", Reconnect: "Reconnect"}}
+	// Distribution and user Xpra configurations must not add another application
+	// or a network listener to a Redeven-owned session.
+	conf := filepath.Join(state, "unrelated-xpra-config")
+	if err := os.MkdirAll(conf, 0700); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(state, "unrelated-command")
+	config := []byte("start=touch " + quoteArgv([]string{marker}) + "\nbind-tcp=0.0.0.0:23001\n")
+	if err := os.WriteFile(filepath.Join(conf, "xpra.conf"), config, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XPRA_USER_CONF_DIRS", conf)
+	t.Setenv("XPRA_SYSTEM_CONF_DIRS", conf)
 	first, err := m.Launch(context.Background(), "alice", req)
 	if err != nil {
 		t.Fatal(err)
@@ -155,8 +212,14 @@ func TestInstalledXpraLaunchResumeAndStop(t *testing.T) {
 	if m.Sessions("alice")[0].State != "running" {
 		t.Fatal("application did not start")
 	}
-	if !sessionHasWindows(m.sessions[first.ID].socketDir) {
+	if !sessionHasWindows(m.sessions[first.ID].tools.xpra, m.sessions[first.ID].socketDir) {
 		t.Fatal("running session has no application windows")
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("inherited Xpra configuration started an unrelated command")
+	}
+	if data, err := os.ReadFile(filepath.Join(conf, "xpra.conf")); err != nil || string(data) != string(config) {
+		t.Fatal("host Xpra configuration was modified")
 	}
 	second, err := m.Launch(context.Background(), "alice", req)
 	if err != nil || second.ID != first.ID {

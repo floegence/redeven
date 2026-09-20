@@ -34,6 +34,7 @@ type ownedSession struct {
 	done      chan struct{}
 	stopping  bool
 	socketDir string
+	tools     hostTools
 }
 
 type Manager struct {
@@ -65,46 +66,13 @@ func (m *Manager) prepare() error {
 	return m.prepareErr
 }
 
-func helperCommand(ctx context.Context, helper, custom, action, locale string, extra ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "python3", append([]string{helper, action, custom}, extra...)...)
+func helperCommand(ctx context.Context, python, helper, custom, action, locale string, extra ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, python, append([]string{helper, action, custom}, extra...)...)
 	cmd.Env = os.Environ()
 	if locale != "" {
 		cmd.Env = append(cmd.Env, "LANGUAGE="+strings.ReplaceAll(locale, "-", "_"))
 	}
 	return cmd
-}
-
-func (m *Manager) availability(ctx context.Context) Availability {
-	a := Availability{Supported: runtime.GOOS == "linux"}
-	if !a.Supported {
-		a.Reason = "unsupported_platform"
-		return a
-	}
-	for _, name := range []string{"xpra", "python3", "Xvfb", "dbus-run-session", "xauth"} {
-		if _, err := exec.LookPath(name); err != nil {
-			a.Reason = "missing_dependencies"
-			return a
-		}
-	}
-	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
-	defer cancel()
-	version, err := exec.CommandContext(ctx, "xpra", "--version").Output()
-	if err != nil {
-		a.Reason = "missing_dependencies"
-		return a
-	}
-	a.Version = strings.TrimSpace(string(version))
-	if !supportedVersion(a.Version) {
-		a.Reason = "unsupported_version"
-		return a
-	}
-	// GIO uses the host's desktop metadata and is independent of Xpra's Python.
-	if err := exec.CommandContext(ctx, "python3", "-c", "import gi; gi.require_version('Gtk', '3.0'); from gi.repository import Gio, Gtk").Run(); err != nil {
-		a.Reason = "missing_dependencies"
-		return a
-	}
-	a.Ready = true
-	return a
 }
 
 func (m *Manager) Sessions(owner string) []Session {
@@ -121,25 +89,31 @@ func (m *Manager) Sessions(owner string) []Session {
 }
 
 func (m *Manager) Catalog(ctx context.Context, owner, locale string) (Catalog, error) {
-	result := Catalog{Availability: m.availability(ctx), Applications: []Application{}, Sessions: m.Sessions(owner)}
-	if !result.Availability.Supported {
-		return result, nil
+	catalog, _, err := m.catalog(ctx, owner, locale)
+	return catalog, err
+}
+
+func (m *Manager) catalog(ctx context.Context, owner, locale string) (Catalog, hostTools, error) {
+	availability, tools := detectDependencies(ctx, runtime.GOOS, os.Environ())
+	result := Catalog{Availability: availability, Applications: []Application{}, Sessions: m.Sessions(owner)}
+	if !availability.Supported || tools.python == "" {
+		return result, tools, nil
 	}
 	if err := m.prepare(); err != nil {
-		return result, err
+		return result, tools, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	data, err := helperCommand(ctx, m.helper, m.custom, "catalog", locale).Output()
+	data, err := helperCommand(ctx, tools.python, m.helper, m.custom, "catalog", locale).Output()
 	if err != nil {
 		result.Availability.Ready = false
 		result.Availability.Reason = "catalog_unavailable"
-		return result, nil
+		return result, tools, nil
 	}
 	if err := json.Unmarshal(data, &result.Applications); err != nil {
-		return result, err
+		return result, tools, err
 	}
-	return result, nil
+	return result, tools, nil
 }
 
 func (m *Manager) Add(ctx context.Context, req AddRequest) error {
@@ -151,7 +125,11 @@ func (m *Manager) Add(ctx context.Context, req AddRequest) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	cmd := helperCommand(ctx, m.helper, m.custom, "add", "", randomID())
+	python := desktopPython(ctx, os.Environ())
+	if python == "" {
+		return ErrUnavailable
+	}
+	cmd := helperCommand(ctx, python, m.helper, m.custom, "add", "", randomID())
 	data, _ := json.Marshal(req)
 	cmd.Stdin = bytes.NewReader(data)
 	if err := cmd.Run(); err != nil {
@@ -179,7 +157,7 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 		}
 	}
 	m.mu.Unlock()
-	catalog, err := m.Catalog(ctx, owner, locale)
+	catalog, tools, err := m.catalog(ctx, owner, locale)
 	if err != nil {
 		return Session{}, err
 	}
@@ -256,7 +234,7 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 		return Session{}, err
 	}
 	view := Session{ID: id, Application: app, State: "starting", StartedAt: time.Now().UnixMilli(), Forward: forward, Presentation: req.Presentation}
-	s := &ownedSession{view: view, owner: owner, password: password, socketDir: socketDir, done: make(chan struct{})}
+	s := &ownedSession{view: view, owner: owner, password: password, socketDir: socketDir, tools: tools, done: make(chan struct{})}
 	m.sessions[id] = s
 	_ = listener.Close()
 	go m.run(s, dir, address)
@@ -264,18 +242,18 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 }
 
 func (m *Manager) run(s *ownedSession, dir, address string) {
-	args := []string{"xpra", "seamless", "--daemon=no", "--systemd-run=no", "--bind-ws=" + address,
-		"--ws-auth=file:filename=" + filepath.Join(dir, "password"), "--html=on", "--socket-dir=" + s.socketDir,
+	args := []string{s.tools.xpra, "start", "--daemon=no", "--systemd-run=no", "--attach=no", "--use-display=no", "--bind-ws=" + address,
+		"--ws-auth=file:filename=" + filepath.Join(dir, "password"), "--html=" + s.tools.html, "--sessions-dir=" + filepath.Join(s.socketDir, "sessions"), "--socket-dir=" + s.socketDir,
 		"--socket-dirs=" + s.socketDir, "--exit-with-client=no", "--exit-with-windows=yes", "--exit-with-children=no",
 		"--terminate-children=yes", "--start-new-commands=no", "--sharing=no", "--mdns=no", "--pulseaudio=no",
 		"--speaker=off", "--microphone=off", "--webcam=no", "--printing=no", "--file-transfer=no",
 		"--notifications=no", "--dbus-launch=", "--session-name=" + s.view.Application.Name,
-		"--xvfb=Xvfb -screen 0 3840x2160x24 -nolisten tcp -noreset +extension Composite",
-		"--start-child=" + quoteArgv([]string{"python3", m.helper, "launch", m.custom, s.view.Application.ID, filepath.Join(dir, "launch.json")}),
+		"--xvfb=" + quoteArgv([]string{s.tools.xvfb, "-screen", "0", "3840x2160x24", "-nolisten", "tcp", "-noreset", "+extension", "Composite", "-auth", "$XAUTHORITY"}),
+		"--start-child=" + quoteArgv([]string{s.tools.python, m.helper, "launch", m.custom, s.view.Application.ID, filepath.Join(dir, "launch.json")}),
 	}
-	cmd := exec.Command("dbus-run-session", append([]string{"--"}, args...)...)
+	cmd := exec.Command(s.tools.dbus, append([]string{"--"}, args...)...)
 	cmd.Dir = m.home
-	cmd.Env = applicationEnvironment(os.Environ())
+	cmd.Env = append(xpraEnvironment(applicationEnvironment(os.Environ())), "XDG_RUNTIME_DIR="+s.socketDir)
 	configureProcess(cmd)
 	log, err := os.OpenFile(filepath.Join(dir, "session.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
@@ -356,7 +334,7 @@ func (m *Manager) waitReady(s *ownedSession, dir, address string) {
 			}
 			// A successful GIO launch alone can still redirect a singleton to
 			// another display. Read Xpra's own inventory before reporting ready.
-			if !sessionHasWindows(s.socketDir) {
+			if !sessionHasWindows(s.tools.xpra, s.socketDir) {
 				continue
 			}
 			m.mu.Lock()
@@ -369,7 +347,7 @@ func (m *Manager) waitReady(s *ownedSession, dir, address string) {
 	}
 }
 
-func sessionHasWindows(socketDir string) bool {
+func sessionHasWindows(xpra, socketDir string) bool {
 	entries, err := os.ReadDir(socketDir)
 	if err != nil {
 		return false
@@ -379,7 +357,7 @@ func sessionHasWindows(socketDir string) bool {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		out, err := exec.CommandContext(ctx, "xpra", "info", "socket://"+filepath.Join(socketDir, entry.Name())).Output()
+		out, err := commandOutput(ctx, xpraEnvironment(os.Environ()), xpra, "info", "socket://"+filepath.Join(socketDir, entry.Name()))
 		cancel()
 		if err == nil && infoHasWindows(string(out)) {
 			return true
@@ -494,7 +472,7 @@ func applicationEnvironment(env []string) []string {
 	for _, item := range env {
 		key, _, _ := strings.Cut(item, "=")
 		switch key {
-		case "DISPLAY", "WAYLAND_DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "SESSION_MANAGER", "PULSE_SERVER", "GDK_BACKEND", "QT_QPA_PLATFORM":
+		case "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "DESKTOP_STARTUP_ID", "DBUS_SESSION_BUS_ADDRESS", "SESSION_MANAGER", "PULSE_SERVER", "GDK_BACKEND", "QT_QPA_PLATFORM":
 			continue
 		}
 		out = append(out, item)
@@ -510,5 +488,5 @@ func supportedVersion(version string) bool {
 		return false
 	}
 	major, _ := strconv.Atoi(parts[1])
-	return major >= 6
+	return major == 6
 }

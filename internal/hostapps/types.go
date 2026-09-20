@@ -19,10 +19,11 @@ type Application struct {
 }
 
 type Availability struct {
-	Supported bool   `json:"supported"`
-	Ready     bool   `json:"ready"`
-	Reason    string `json:"reason,omitempty"`
-	Version   string `json:"version,omitempty"`
+	Supported    bool     `json:"supported"`
+	Ready        bool     `json:"ready"`
+	Reason       string   `json:"reason,omitempty"`
+	Version      string   `json:"version,omitempty"`
+	Requirements []string `json:"requirements,omitempty"`
 }
 
 type Catalog struct {

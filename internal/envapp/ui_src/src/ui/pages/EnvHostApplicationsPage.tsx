@@ -163,7 +163,9 @@ export function EnvHostApplicationsPage() {
       <Show when={canRead()}>
         <Show when={catalog()} fallback={<div role="status" aria-label={i18n.t('hostApplications.loading')} class="host-apps-skeleton"><div class="host-apps-skeleton-heading" aria-hidden="true" /><div class="host-apps-grid" aria-hidden="true"><For each={[0,1,2,3,4,5]}>{() => <div class="host-app-skeleton-tile"><span /><i /><i /><i /></div>}</For></div></div>}>
           <Show when={!catalog()!.availability.ready}>
-            <div class="host-apps-notice"><ActivityBarHostApplicationsIcon class="w-5 h-5 shrink-0" /><div><strong>{i18n.t(catalog()!.availability.supported ? 'hostApplications.setupTitle' : 'hostApplications.unsupportedTitle')}</strong><p>{i18n.t(catalog()!.availability.supported ? 'hostApplications.setupDescription' : 'hostApplications.unsupportedDescription')}</p></div></div>
+            <div class="host-apps-notice"><ActivityBarHostApplicationsIcon class="w-5 h-5 shrink-0" /><div><strong>{i18n.t(catalog()!.availability.supported ? 'hostApplications.setupTitle' : 'hostApplications.unsupportedTitle')}</strong><p>{i18n.t(!catalog()!.availability.supported ? 'hostApplications.unsupportedDescription' : catalog()!.availability.reason === 'catalog_unavailable' ? 'hostApplications.catalogUnavailable' : 'hostApplications.setupDescription')}</p>
+              <Show when={catalog()!.availability.requirements?.length}><p>{i18n.t('hostApplications.setupRequirements', { requirements: catalog()!.availability.requirements!.join(', ') })}</p></Show>
+              <Show when={catalog()!.availability.supported}><a class="host-apps-setup-guide" href="https://github.com/Xpra-org/xpra/wiki/Download" target="_blank" rel="noopener noreferrer">{i18n.t('hostApplications.setupGuide')}<ExternalLink class="w-3 h-3" /></a></Show></div></div>
           </Show>
           <Show when={canRead() && !canLaunch()}><div class="host-apps-notice">{i18n.t('hostApplications.launchPermission')}</div></Show>
           <Show when={running().length}>
@@ -180,7 +182,7 @@ export function EnvHostApplicationsPage() {
               }</For></div>
             </section>
           </Show>
-          <section class="host-apps-library" aria-label={i18n.t('hostApplications.library')}>
+          <Show when={catalog()!.availability.supported}><section class="host-apps-library" aria-label={i18n.t('hostApplications.library')}>
             <div class="host-apps-library-heading">
               <div class="host-apps-section-title"><h2>{i18n.t('hostApplications.library')}</h2><span>{catalog()!.applications.length}</span></div>
               <div class="host-apps-filters">
@@ -203,7 +205,7 @@ export function EnvHostApplicationsPage() {
                 <Show when={appErrors()[app.id] || catalog()?.sessions.find(s => s.application.id === app.id)?.state === 'failed'}><p class="host-app-error" role="alert">{appErrors()[app.id] || i18n.t('hostApplications.errors.failed')}</p></Show>
               </div>}</For></div>
             </Show>
-          </section>
+          </section></Show>
         </Show>
       </Show>
     </div>

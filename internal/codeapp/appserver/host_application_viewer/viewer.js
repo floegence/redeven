@@ -1,4 +1,4 @@
-// Xpra HTML5 v20 owns rendering, input, clipboard and transient-window stacking.
+// Xpra HTML5 v20/v21 owns rendering, input, clipboard and transient-window stacking.
 // This adapter owns the application's viewport and one reconnectable viewer.
 (() => {
   const frame = document.getElementById('application');
@@ -89,7 +89,7 @@
 
   function installClient(attempt) {
     const doc = frame.contentDocument;
-    const xpra = frame.contentWindow.client;
+    const xpra = frame.contentWindow.redevenXpraClient();
     if (xpra && client === xpra) return;
     if (!xpra || typeof xpra._new_window !== 'function' || typeof xpra.do_send_damage_sequence !== 'function') throw new Error('Unsupported Xpra HTML5 client');
     client = xpra;
@@ -202,7 +202,14 @@
       if (frame.contentWindow.location.pathname !== config.base + '/index.html') { connectionLost(attempt); return; }
       // The upstream page initializes after an asynchronous defaults request;
       // document load can precede client creation on a cached reload.
-      if (frame.contentWindow.client) installClient(attempt);
+      // Upstream v21 declares client with let, which is not a window property.
+      // Read the page's global binding inside its own realm, without eval or
+      // altering installed upstream files. This also supports v20's var binding.
+      const bridge = frame.contentDocument.createElement('script');
+      bridge.textContent = 'window.redevenXpraClient = () => typeof client === "undefined" ? null : client;';
+      frame.contentDocument.head.append(bridge);
+      bridge.remove();
+      if (frame.contentWindow.redevenXpraClient()) installClient(attempt);
       else frame.contentDocument.addEventListener('connection-established', () => {
         if (attempt !== generation) return;
         try { installClient(attempt); }

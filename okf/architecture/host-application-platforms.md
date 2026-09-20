@@ -1,0 +1,138 @@
+---
+type: Runtime Contract
+title: Host application platforms and initialization
+description: Capability-based Linux initialization, dependency diagnostics, distribution evidence, and macOS host limitations.
+tags: [runtime, applications, linux, desktop]
+timestamp: 2026-09-20T08:00:00Z
+---
+# Summary
+
+Redeven's host application backend supports Linux by installed capability, not by
+distribution name. The Runtime owns dependency detection and isolated session
+initialization; the administrator owns installation of host software and Xpra.
+Missing or incompatible components prevent launch and are reported in the library.
+A desktop environment, systemd user session, and physical monitor are unnecessary.
+macOS can be a viewer but cannot host this X11 seamless backend. Existing
+[application permissions and lifecycle](host-applications.md) remain authoritative.
+
+# Required installed capabilities
+
+The integration accepts Xpra 6.x with local X11 server and command-line client
+support, HTML5 client v20 or v21, Xvfb, xauth, dbus-run-session, dbus-daemon, and a
+Python 3 interpreter with working GIO/GTK 3 introspection. Other Xpra major versions
+and HTML5 generations need explicit adapter validation before being advertised.
+
+The Runtime checks actual executable availability, Xpra's version and advertised
+local server commands, imports the GIO/GTK bindings, and validates the installed
+HTML5 version and principal assets. It obtains the resource root from `xpra
+path-info` and selects its `www` or `html5` directory, passing that exact directory
+to the session's HTTP server. A nonstandard installation must expose its assets
+under that resource root; Xpra's `XPRA_RESOURCES_DIR` override is respected. Neither
+the client nor application metadata is copied into Redeven.
+
+GIO need not share Xpra's interpreter. Python candidates come from absolute PATH
+directories and are tested in order, so an unrelated virtual environment without
+GIO does not hide the installed system bindings. The chosen interpreter is used
+consistently for catalog reads, custom entries, and application launch. Relative
+PATH directories are excluded. The service account must have the required
+executables on PATH; an interactive shell's environment does not imply that a
+system service inherits it.
+
+Detection is a prerequisite check, not a promise that every application will work.
+The actual launch still requires a GIO receipt, an HTTP endpoint, and Xpra's
+nonempty window inventory. Application-specific failures retain the bounded
+startup and cleanup contract. Library refresh reruns detection after installation.
+Redeven does not elevate privileges, change package repositories, install system
+packages, or disable SELinux/AppArmor automatically.
+
+# Headless initialization
+
+Each application gets a private XDG runtime directory, X11 server, X authorization,
+D-Bus session, socket directory, and Xpra session directory. Inherited display,
+Wayland, X authority, startup notification, and desktop bus addresses cannot direct
+the new application into an unrelated graphical login. GTK and Qt select X11.
+The session does not require a running systemd user manager or `/run/user/<uid>`.
+
+Xpra default, system, and user configuration directories are excluded for owned
+sessions and probes. A host configuration must not add startup applications,
+listeners, or attachment to an existing display. The host's files are unchanged;
+Redeven passes its own bounded settings and disables automatic client attachment
+and existing-display reuse. Xvfb uses an authorization file and has TCP disabled.
+
+The application remains native host software with the Runtime user's home,
+files, permissions, and installed toolkit libraries. Virtual display isolation is
+not a container or security sandbox. The application must support X11. Wayland-only
+programs, desktop-service dependencies, singleton profile redirection, Flatpak/Snap
+integration, hardware acceleration, and privileged dialogs require separate
+application-specific verification. Application discovery follows GIO and the
+service's XDG environment, including exported package desktop entries when present.
+
+# Distribution validation
+
+The September 2026 focused matrix covers ARM64 userspace installations without a
+desktop environment or monitor. Debian, Fedora, and openSUSE checks run as an
+unprivileged user in disposable test images. These images are a test harness;
+the product runs applications directly on its host. Container checks cannot
+certify a distribution's boot, kernel, SELinux/AppArmor, GPU, or login policies.
+
+| Environment | Installed stack | Evidence scope |
+| --- | --- | --- |
+| Ubuntu 22.04, orange host | Xpra 6.5.3, HTML5 v20 | Native host application acceptance, browser/Desktop window controls, input and reconnect |
+| Debian 13 | Upstream Xpra 6.5.3 packages with explicit `xpra-x11`, HTML5 v21 | GIO checks; X11 launch/resume/stop; browser display, input, reconnect and application-exit closure |
+| Fedora 43 | Distribution Xpra 6.5.3, separately installed HTML5 v20 | Same installed-stack and GIO checks |
+| openSUSE Tumbleweed | Distribution Xpra 6.5.3, separately installed HTML5 v20 | Same installed-stack and GIO checks |
+
+Observed packaging differences must remain visible in installation guidance:
+
+- Debian 13's tested default repository did not supply Xpra. The upstream signed
+  repository supplied it, with `xpra-x11` needed explicitly when recommendations
+  were disabled. Installing `xpra-server` alone did not enable seamless X11.
+- The tested Fedora minimal installation needed `gobject-introspection` in
+  addition to Python GObject and GTK to supply `xlib-2.0.typelib`.
+- The tested Fedora/openSUSE repositories did not supply `xpra-html5`; the
+  separately released v20 assets were installed in Xpra's resource directory.
+- Enterprise Linux can package Xpra against a newer Python than the system
+  interpreter. Upstream package repositories and prerequisite repositories vary
+  by release and architecture; installing the LTS Xpra 5.x line does not satisfy
+  this integration.
+
+Arch, RHEL/Rocky/AlmaLinux, Alpine, NixOS, other versions, and x86_64 are not certified
+by this matrix. They are not blocked by a distribution allowlist; their exact
+packages, libc/runtime requirements, filesystem layout, policies, and application
+backends must satisfy the same checks. Do not describe all Linux distributions or
+all graphical applications as verified.
+
+Run the reusable installed-stack checks on a prepared Linux host with Go and xterm:
+
+```sh
+REDEVEN_TEST_HOST_APPLICATIONS=1 GOWORK=off go test ./internal/hostapps -run TestInstalled -count=1 -v
+```
+
+The tests create their own custom entry, state, configuration fixture, and
+processes. They do not assume a distribution-specific desktop-entry identifier.
+
+# macOS boundary
+
+Redeven Desktop or a browser on macOS can operate applications on a supported
+Linux host. macOS as the application host returns unsupported before probing Linux
+dependencies and does not show Linux application installation empty states.
+
+Native AppKit applications do not become X11 applications by installing XQuartz.
+Xpra's macOS shadow mode shares an existing graphical desktop; it is not an
+equivalent isolated per-application session and must not silently replace this
+backend. A native macOS implementation would need its own window discovery,
+ScreenCaptureKit capture, authorized input/window control, and lifecycle adapter.
+It would operate in a logged-in graphical session with screen-recording and
+accessibility permissions. It could not claim Linux-style independent headless
+displays or input isolation. That backend is not implemented here.
+
+# Evidence
+
+- `internal/hostapps/dependencies.go` and `dependencies_test.go`: installed capability, interpreter, resource path, and version checks.
+- `internal/hostapps/manager.go` and `manager_test.go`: isolated environment and opt-in installed-stack verification.
+- `internal/hostapps/desktop_test.py`: actual GIO metadata, icons, executable paths and literal arguments.
+- `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.tsx` and its tests: missing component guidance and unsupported-host presentation.
+- `internal/codeapp/appserver/host_application_viewer/viewer.js` and `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts`: v20/v21 client binding and viewer lifecycle adapter.
+- [Xpra installation](https://github.com/Xpra-org/xpra/wiki/Download): upstream repositories, split packages, and Python requirements.
+- [Xpra seamless mode](https://github.com/Xpra-org/xpra/blob/master/docs/Usage/Seamless.md) and [shadow mode](https://github.com/Xpra-org/xpra/blob/master/docs/Usage/Shadow.md): operating-system boundaries.
+- [Apple ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit/capturing-screen-content-in-macos): native window capture and permission requirements.
