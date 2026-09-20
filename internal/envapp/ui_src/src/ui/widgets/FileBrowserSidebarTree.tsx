@@ -181,8 +181,8 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
           onPointerCancel={longPress.onPointerCancel}
         >
           <span class={cn('flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground', isCurrent() && 'text-sidebar-accent-foreground')}>
-            <Show when={hasChildren() && isExpanded()} fallback={<FileItemIcon item={props.item} class="h-3.5 w-3.5" />}>
-              <FileItemIcon item={props.item} open class="h-3.5 w-3.5" />
+            <Show when={hasChildren() && isExpanded()} fallback={<FileItemIcon size={14} item={props.item} class="h-3.5 w-3.5" />}>
+              <FileItemIcon size={14} item={props.item} open class="h-3.5 w-3.5" />
             </Show>
           </span>
           <span class="min-w-0 flex-1 truncate">{props.item.name}</span>
@@ -421,7 +421,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                       onClick={() => props.onRootSelect?.(root.pathAbs)}
                     >
                       <span class="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
-                        <FileItemIcon item={{ name: root.label, type: 'folder' }} class="h-3.5 w-3.5" />
+                        <FileItemIcon size={14} item={{ name: root.label, type: 'folder' }} class="h-3.5 w-3.5" />
                       </span>
                       <span class="min-w-0 flex-1 truncate">{root.label}</span>
                     </button>
