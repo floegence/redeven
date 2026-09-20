@@ -253,6 +253,105 @@ if (process.argv[3] === 'closed_tab') {
 	}
 }
 
+func TestManagedBrowserDiscoveryRecoversLostPagesWithoutDesktopSetup(t *testing.T) {
+	if os.Getenv("REDEVEN_BROWSER_INTEGRATION") != "1" {
+		t.Skip("requires pinned Chromium")
+	}
+	for _, loss := range []string{"closed_tab", "crashed_browser"} {
+		t.Run(loss, func(t *testing.T) {
+			node, err := exec.LookPath("node")
+			if err != nil {
+				t.Fatal(err)
+			}
+			helper, err := filepath.Abs("../envapp/ui_src/scripts/redevenComputerHost.mjs")
+			if err != nil {
+				t.Fatal(err)
+			}
+			host, _, store, _ := computerBindingFixture(t)
+			host.executors["browser-main"] = NewPlaywrightTargetExecutor(node, helper, t.TempDir())
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			defer cancel()
+			target, err := host.ConnectBrowser(ctx, ComputerBrowserConnection{ManagedProfileID: "browser-main", NewTab: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := store.SetComputerTarget(ctx, "thread-first", target.ID); err != nil {
+				t.Fatal(err)
+			}
+			restricted := ToolTargetPolicy{AllowedTargetIDs: []string{target.ID}}
+			permitted, err := host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.targets"}, restricted)
+			if err != nil || len(permitted.Candidates) != 1 || permitted.Candidates[0].TargetID != target.ID {
+				t.Fatalf("restricted discovery: %+v %v", permitted, err)
+			}
+			if _, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.select_target"}, permitted.Candidates[0].CandidateRef, restricted); err != nil {
+				t.Fatalf("permitted page could not be selected: %v", err)
+			}
+			executor := host.executors[target.ID].(*PlaywrightTargetExecutor)
+			command := exec.CommandContext(ctx, node, "--input-type=module", "-e", `import {chromium} from 'playwright';
+const browser = await chromium.connectOverCDP(process.argv[1], {noDefaults:true});
+const session = await browser.newBrowserCDPSession();
+if (process.argv[3] === 'closed_tab') await session.send('Target.closeTarget', {targetId:process.argv[2]});
+else {
+  const {processInfo} = await session.send('SystemInfo.getProcessInfo');
+  const owner = processInfo.find(item => item.type === 'browser');
+  if (!owner) throw new Error('owned browser process unavailable');
+  process.kill(owner.id, 'SIGKILL');
+}
+await browser.close();`, executor.CDPURL, executor.TabID, loss)
+			command.Dir = filepath.Dir(filepath.Dir(helper))
+			if output, err := command.CombinedOutput(); err != nil {
+				t.Fatalf("loss injection: %s %v", output, err)
+			}
+			inventory, err := host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.targets"}, ToolTargetPolicy{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var fresh ComputerCandidate
+			for _, candidate := range inventory.Candidates {
+				if candidate.TargetID == target.ID && candidate.State == "ready" {
+					t.Error("closed page is still presented as ready")
+				}
+				if candidate.CandidateRef == inventory.DefaultCandidateRef {
+					fresh = candidate
+				}
+			}
+			if !fresh.NewTab || fresh.State != "ready" || fresh.Kind != "browser.managed" {
+				t.Fatalf("agent has no fresh headless page candidate: %+v", inventory)
+			}
+			if selected, _ := store.GetComputerTarget(ctx, "thread-first"); selected != target.ID {
+				t.Fatal("discovery replaced the selected page")
+			}
+			remaining, err := host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.targets"}, restricted)
+			if err != nil || len(remaining.Candidates) != 0 || remaining.DefaultCandidateRef != "" {
+				t.Fatalf("restricted discovery offered a closed or replacement page: %+v %v", remaining, err)
+			}
+			if _, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.select_target"}, fresh.CandidateRef, restricted); err == nil {
+				t.Fatal("restricted selection created an unapproved replacement page")
+			}
+			if selected, _ := store.GetComputerTarget(ctx, "thread-first"); selected != target.ID {
+				t.Fatal("rejected replacement changed the selected page")
+			}
+			if loss == "crashed_browser" && len(host.managedProfiles) != 0 {
+				t.Fatal("discovery retained or restarted a dead browser")
+			}
+			replacement, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.select_target"}, fresh.CandidateRef, ToolTargetPolicy{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if replacement.ID == target.ID || !replacement.Ready {
+				t.Fatalf("fresh page not prepared: %+v", replacement)
+			}
+			result, err := host.ExecuteTargetTool(ctx, TargetToolCall{ThreadID: "thread-first", TargetID: replacement.ID, ToolName: "computer.observe"})
+			if err != nil || result.Result == nil {
+				t.Fatalf("fresh page could not be observed: %+v %v", result, err)
+			}
+			if selected, _ := store.GetComputerTarget(ctx, "thread-first"); selected != replacement.ID {
+				t.Fatal("selection was not persisted")
+			}
+		})
+	}
+}
+
 func TestManagedBrowserPrivateRecoverySharesProfileOwner(t *testing.T) {
 	if os.Getenv("REDEVEN_BROWSER_INTEGRATION") != "1" {
 		t.Skip("set REDEVEN_BROWSER_INTEGRATION=1 with the pinned browser installed")
@@ -342,7 +441,7 @@ func TestComputerFullAccessManagedBrowserUsesTaskPermission(t *testing.T) {
 	}))
 	defer server.Close()
 	args, _ := json.Marshal(map[string]string{"url": server.URL})
-	result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolCallID: "navigate", TargetID: "browser-main", ToolName: "browser.navigate", Arguments: args, scriptOperation: true})
+	result, err := runtime.ExecuteTargetTool(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolCallID: "navigate", TargetID: "browser-main", ToolName: "browser.navigate", Arguments: args, scriptOperation: true})
 	if err != nil || result.Safety == nil || result.Safety.Level != "routine" {
 		t.Fatalf("full access navigation failed: %+v %v", result, err)
 	}

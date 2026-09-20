@@ -21,20 +21,27 @@ or explicitly replaced. Floret remains the sole conversation lifecycle owner.
 ## Overview and navigation
 
 The overview identifies the actual Runtime hostname and platform, then shows the
-object used by the current conversation and three separate environment entries:
-Flower dedicated browser, Chrome in this environment, and desktop/applications.
-The dedicated browser starts on demand; ordinary task descriptions do not require
-a generic Connect action. Profile management preserves separate website accounts
-without selecting tabs. Chrome management describes live profiles and saved
-pairing, with one setup guide. Desktop details explain missing OS permission or
+page or app used by the current conversation and three environment entries:
+built-in headless browser, Chrome in this environment, and desktop/applications.
+The built-in browser is Chromium packaged with Redeven. It runs headlessly in the
+current Runtime environment, needs no separately installed Chrome, and starts
+after authorized task selection. Its details use three short facts: browser,
+installation, and execution. Saved website data stays separate from system Chrome.
+Optional account groups are collapsed by default; the built-in group is localized
+as shared website data using its stable ID. Creating a group isolates website
+sign-ins without selecting a page or importing system Chrome data.
+
+Chrome management describes live profiles and saved pairing, with one setup guide. Desktop details explain missing OS permission or
 components. A global Flower settings entry opens this same dialog; without a
 conversation it exposes only environment settings. Opening management always
 shows the overview, even when the conversation is waiting for Chrome. Only the
 explicit connection-assistance action opens a guide that may resume that request.
 
-The current conversation object is the overview's primary action area. A missing
-object has a warning treatment and an explicit switch action. Environment entries
-use equal-width cards with textual status badges and visible outlined management
+The conversation section is the overview's primary action area. An unavailable
+previous page is informational: the primary action returns to the conversation,
+where Flower can discover and select a suitable resource for the task. Manual
+selection is secondary. Closing settings neither submits nor resumes work.
+Environment entries use equal-width cards with textual status badges and visible outlined management
 buttons aligned along the bottom; narrow surfaces stack the cards. Help and
 advanced discovery are secondary navigation, and conversation permissions remain
 in the footer. Status color supplements the label and never represents a new
@@ -97,6 +104,8 @@ rather than an upstream platform extension.
 - `redeven:internal/flower_ui/src/FlowerComputerConnections.tsx` - shared dialog and staged operations.
 - `redeven:internal/flower_ui/host/computerUseAdapter.ts` - one carrier-neutral Runtime adapter.
 - `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx` - global entry to the same dialog.
+- `redeven:scripts/stage_computer_resources.mjs` - packaged Chromium delivery.
+- `redeven:internal/envapp/ui_src/scripts/redevenManagedBrowser.mjs` - headless persistent browser process.
 - `redeven:internal/ai/computer_environment.go` - capability observation and authorized advanced discovery.
 - `redeven:internal/ai/computer_environment_test.go` - no startup/binding, independent failure, authority and inventory limits.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerComputerDialog.browser.test.tsx` - actual dialog behavior, cancellation, read-only inspection and keyboard layout.

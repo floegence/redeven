@@ -157,7 +157,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 		r := &run{threadID: thread, targetResolver: host, targetToolExecutor: host}
 		bindTargetTestRun(t, r)
 		runs = append(runs, r)
-		result, err := r.execTargetTool(t.Context(), "start", "browser.navigate", map[string]any{"url": server.URL})
+		result, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "start", "browser.navigate"), "start", "browser.navigate", map[string]any{"url": server.URL})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -173,7 +173,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 	r := runs[0]
 	runID, threadID, turnID := r.floretCanonicalIdentity()
 	args, _ := json.Marshal(map[string]string{"description": "Open task details", "code": `await ui.getByRole('button',{name:'Open details'}).click(); await ui.getByRole('button',{name:'Open details'}).click();`})
-	completed, err := host.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, TargetID: first, ToolCallID: "popup", ToolName: "computer.exec", Arguments: args, revalidate: func(ctx context.Context) error { return ctx.Err() }})
+	completed, err := host.ExecuteTargetTool(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, TargetID: first, ToolCallID: "popup", ToolName: "computer.exec", Arguments: args, revalidate: func(ctx context.Context) error { return ctx.Err() }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 	// Inventory includes the real opener identity, so same-URL tabs do not
 	// establish a relationship by title or URL alone.
 	selection := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: "select", ToolName: "computer.select_target"}
-	inventory, err := host.ComputerTargets(t.Context(), selection, ToolTargetPolicy{})
+	inventory, err := host.ComputerTargets(computerPermissionContext(t, "full_access"), selection, ToolTargetPolicy{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,10 +199,10 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 	if children != 1 || child.OpenerTabID != payload["opener_tab_id"] {
 		t.Fatalf("popup identity mismatch: %+v %+v", child, payload)
 	}
-	if _, err = host.SelectComputerCandidate(t.Context(), selection, child.CandidateRef, ToolTargetPolicy{}); err != nil {
+	if _, err = host.SelectComputerCandidate(computerPermissionContext(t, "full_access"), selection, child.CandidateRef, ToolTargetPolicy{}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := r.execTargetTool(t.Context(), "verify", "computer.observe", nil)
+	result, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "verify", "computer.observe"), "verify", "computer.observe", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 	if !strings.Contains(string(body), "Child result") || !strings.Contains(string(body), "unsaved") {
 		t.Fatalf("selected page lost state: %s", body)
 	}
-	if _, err = r.execTargetTool(t.Context(), "occupied", "computer.observe", map[string]any{"target": second}); err == nil {
+	if _, err = r.execTargetTool(computerAuthorizedTestContext(t, r, "occupied", "computer.observe"), "occupied", "computer.observe", map[string]any{"target": second}); err == nil {
 		t.Fatal("another task page was stolen")
 	}
 	selected, _ := store.GetComputerTarget(t.Context(), "thread-first")
@@ -318,7 +318,7 @@ func TestComputerAutonomousCDPPagesPreserveExistingTab(t *testing.T) {
 		if planned.Kind != "browser.connected" {
 			t.Fatalf("personal CDP browser was not preferred: %+v", planned)
 		}
-		target, err := host.selectComputerTarget(t.Context(), TargetToolCall{ThreadID: thread, TurnID: "turn", RunID: thread, ToolName: "computer.select_target"}, planned)
+		target, err := host.selectComputerTarget(computerPermissionContext(t, "full_access"), TargetToolCall{ThreadID: thread, TurnID: "turn", RunID: thread, ToolName: "computer.select_target"}, planned)
 		if err != nil {
 			t.Fatal(err)
 		}

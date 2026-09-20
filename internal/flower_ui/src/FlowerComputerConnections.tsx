@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
-import { AlertTriangle, ArrowRightLeft, ChevronLeft, ChevronRight, Code, Globe, Info, MonitorPointer, Settings, Shield, Sparkles } from '@floegence/floe-webapp-core/icons';
+import { ArrowRightLeft, ChevronLeft, ChevronRight, Code, Globe, Info, MonitorPointer, Settings, Shield, Sparkles } from '@floegence/floe-webapp-core/icons';
 import type { FlowerComputerAccess, FlowerComputerCandidate, FlowerComputerEnvironment, FlowerComputerInventory, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import { FlowerChromeConnection } from './FlowerChromeConnection';
@@ -42,8 +42,8 @@ export function FlowerComputerConnections(props: {
   const current = () => targets().find(target => target.target_id && target.target_id === inventory()?.current_target_id);
   const selected = () => targets().find(target => target.candidate_ref === draft());
   const targetLabel = (target: FlowerComputerCandidate) => target.new_tab
-    ? `${target.kind === 'browser.managed' ? props.copy.managed : props.copy.system} · ${target.profile_name || target.display_name} · ${props.copy.newTab}`
-    : target.title || target.display_name;
+    ? [target.kind === 'browser.managed' ? props.copy.managed : props.copy.system, target.profile_name, props.copy.newTab].filter(Boolean).join(' · ')
+    : target.title || (target.kind === 'browser.managed' ? props.copy.managed : target.display_name);
   const stateLabel = (state?: string) => ({ ready: props.copy.available, on_demand: props.copy.onDemand,
     in_use: props.copy.inUse, user_control: props.copy.waitingControl, permission_required: props.copy.permissionRequired,
     setup_required: props.copy.setupRequired, stopped: props.copy.stopped, connection_required: props.copy.disconnected }[state ?? ''] ?? props.copy.unknown);
@@ -170,12 +170,13 @@ export function FlowerComputerConnections(props: {
         <div class="flower-computer-environment"><span>{props.copy.environmentTitle}</span><span class="flower-computer-host"><MonitorPointer aria-hidden="true" />{environment()?.hostname || props.adapter.runtime.display_name}</span><Show when={environment()?.platform}><span class="flower-computer-platform">{environment()!.platform === 'darwin' ? 'macOS' : environment()!.platform === 'linux' ? 'Linux' : environment()!.platform}</span></Show></div>
         <Show when={page() === 'overview'}>
           <Show when={props.threadID} fallback={<p class="text-xs text-muted-foreground">{props.copy.noThread}</p>}>
-            <section class="flower-computer-selection" data-tone={missingTarget() ? 'attention' : 'neutral'}>
+            <section class="flower-computer-selection">
               <div class="flower-computer-section-heading"><h3>{props.copy.target}</h3><span class="flower-computer-scope">{props.copy.scope}</span></div>
               <div class="flower-computer-selection-body">
-                <span class="flower-computer-selection-icon" aria-hidden="true"><Show when={missingTarget()} fallback={<MonitorPointer />}><AlertTriangle /></Show></span>
+                <span class="flower-computer-selection-icon" aria-hidden="true"><Show when={missingTarget()} fallback={<MonitorPointer />}><Info /></Show></span>
                 <div role="status" aria-live="polite"><p class="flower-computer-selection-name">{loading() && !inventory() ? props.copy.checking : currentLabel()}</p><p class="flower-computer-description">{currentHint()}</p></div>
-                <div class="flower-computer-selection-actions"><Button disabled={!mutable() || !inventory() || inventoryFailed()} onClick={openPicker}><ArrowRightLeft class="size-3.5" />{props.copy.switchTarget}</Button>
+                <div class="flower-computer-selection-actions"><Button onClick={() => props.onOpenChange(false)}>{props.copy.backToChat}<ChevronRight class="size-3.5" /></Button>
+                  <Button variant="outline" disabled={!mutable() || !inventory() || inventoryFailed()} onClick={openPicker}><ArrowRightLeft class="size-3.5" />{props.copy.switchTarget}</Button>
                   <Show when={inventoryFailed()}><Button variant="outline" disabled={loading()} onClick={() => void load()}>{props.copy.refresh}</Button></Show>
                 </div>
               </div>
@@ -189,13 +190,13 @@ export function FlowerComputerConnections(props: {
                 <h4>{props.copy.managed}</h4>
                 <span class="flower-computer-status" data-tone={capabilityTone(environment()?.managed.state)}>{stateLabel(environment()?.managed.state)}</span>
                 <p class="flower-computer-description">{capabilityHint('managed')}</p>
-                <Show when={environment()?.managed.state === 'on_demand' || environment()?.managed.state === 'ready'} fallback={<Button variant="outline" onClick={() => diagnose('managed')}>{props.copy.details}<ChevronRight class="size-3.5" /></Button>}><Button variant="outline" disabled={!readable() || !management()?.listManagedProfiles} onClick={openProfiles}>{props.copy.manage}<ChevronRight class="size-3.5" /></Button></Show>
+                <Show when={environment()?.managed.state === 'on_demand' || environment()?.managed.state === 'ready'} fallback={<Button variant="outline" onClick={() => diagnose('managed')}>{props.copy.details}<ChevronRight class="size-3.5" /></Button>}><Button variant="outline" disabled={!readable() || !management()?.listManagedProfiles} onClick={openProfiles}>{props.copy.managedDetails}<ChevronRight class="size-3.5" /></Button></Show>
               </section>
               <section class="flower-computer-capability">
                 <span class="flower-computer-capability-icon" aria-hidden="true"><Globe /></span>
                 <h4>{props.copy.chromeTitle}</h4>
                 <span class="flower-computer-status" data-tone={environment()?.chrome.profiles.length ? 'positive' : 'neutral'}>{!environment() ? props.copy.unknown : environment()!.chrome.profiles.length ? props.copy.connected : props.copy.chromeOffline}</span>
-                <p class="flower-computer-description">{environment()?.chrome.profiles.length ? environment()!.chrome.profiles.map(profile => profile.name).join(' · ') : props.copy.chromeOfflineHint}</p>
+                <p class="flower-computer-description">{environment()?.chrome.profiles.length ? props.copy.chromeOnlineHint : props.copy.chromeOfflineHint}</p>
                 <Button variant="outline" disabled={!readable()} onClick={() => go('chrome')}>{props.copy.manage}<ChevronRight class="size-3.5" /></Button>
               </section>
               <section class="flower-computer-capability">
@@ -225,9 +226,16 @@ export function FlowerComputerConnections(props: {
           <Button variant="outline" disabled={!mutable()} onClick={() => { setDraft(''); void load(); }}>{props.copy.refresh}</Button>
         </Show>
         <Show when={page() === 'managed'}>
-          <div class="flower-computer-note"><Sparkles aria-hidden="true" /><div><p class="font-medium">{props.copy.managedHint}</p><p class="mt-2 flower-computer-description">{props.copy.profileHint}</p></div></div>
-          <div class="flower-computer-profile-list"><For each={profiles()}>{profile => <div class="flower-computer-profile"><Globe aria-hidden="true" /><span>{profile.name}</span></div>}</For></div>
-          <details class="flower-computer-detail-card"><summary class="cursor-pointer text-xs font-medium">{props.copy.createProfileHint}</summary><form class="mt-3 flex flex-wrap items-end gap-2" onSubmit={event => { event.preventDefault(); void run(async epoch => {
+          <dl class="flower-computer-browser-facts">
+            <div><dt>{props.copy.managedEngine}</dt><dd>{props.copy.managedEngineValue}</dd></div>
+            <div><dt>{props.copy.managedInstall}</dt><dd>{props.copy.managedInstallValue}</dd></div>
+            <div><dt>{props.copy.managedMode}</dt><dd>{props.copy.managedModeValue}</dd></div>
+          </dl>
+          <div class="flower-computer-note"><Info aria-hidden="true" /><p class="flower-computer-description">{props.copy.profileHint}</p></div>
+          <details class="flower-computer-detail-card"><summary class="cursor-pointer text-xs font-medium">{props.copy.createProfileHint}</summary>
+            <p class="mt-3 flower-computer-description">{props.copy.profileIsolationHint}</p>
+            <div class="mt-3 flower-computer-profile-list"><For each={profiles()}>{profile => <div class="flower-computer-profile"><Globe aria-hidden="true" /><span>{profile.id === 'browser-main' ? props.copy.profileDefault : profile.name}</span></div>}</For></div>
+            <form class="mt-3 flex flex-wrap items-end gap-2" onSubmit={event => { event.preventDefault(); void run(async epoch => {
             const value = await management()!.createManagedProfile!(profileName().trim());
             if (epoch === generation) { setProfiles(value); setProfileName(''); }
           }, props.copy.profileFailed); }}><label class="min-w-0 flex-1 space-y-1 text-xs">{props.copy.profileName}<input class="flower-settings-text-input w-full" value={profileName()} maxlength={120} required onInput={event => setProfileName(event.currentTarget.value)} /></label><Button size="sm" type="submit" disabled={!mutable() || !profileName().trim() || !management()?.createManagedProfile}>{props.copy.createProfile}</Button></form></details>

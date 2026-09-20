@@ -37,6 +37,18 @@ type managedBrowserProfile struct {
 	sequence uint64
 }
 
+func (p *managedBrowserProfile) stopped() bool {
+	if p.retired {
+		return true
+	}
+	select {
+	case <-p.done:
+		return true
+	default:
+		return false
+	}
+}
+
 func (p *managedBrowserProfile) close() {
 	if p.retired {
 		return
@@ -102,6 +114,10 @@ func (p *managedBrowserProfile) call(ctx context.Context, command string) ([]Com
 	}
 	if err := p.receive(ctx, &response); err != nil {
 		return nil, err
+	}
+	if response.ID == id && response.Error == "MANAGED_BROWSER_DISCONNECTED" {
+		p.close()
+		return nil, errors.New("managed browser disconnected")
 	}
 	if response.ID != id || response.Error != "" || len(response.Tabs) > 128 {
 		return nil, errors.New("managed browser command failed")
@@ -182,10 +198,9 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 		return nil, errors.New("select an available managed profile")
 	}
 	if profile := r.managedProfiles[profileID]; profile != nil {
-		select {
-		case <-profile.done:
+		if profile.stopped() {
 			delete(r.managedProfiles, profileID)
-		default:
+		} else {
 			return profile, nil
 		}
 	}
@@ -303,7 +318,7 @@ func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, co
 			profileName = item.Name
 		}
 	}
-	target := TargetDescriptor{ID: targetID, Kind: "browser.managed", DisplayName: "Flower managed browser — " + profileName, Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "ready", PermissionState: "granted", Ready: true}
+	target := TargetDescriptor{ID: targetID, Kind: "browser.managed", DisplayName: computerBrowserDisplayName(computerBrowserProfile{kind: "browser.managed", name: profileName, connection: connection}), Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "ready", PermissionState: "granted", Ready: true}
 	if err := executor.EnsureTargetReady(ctx, target.ID); err != nil {
 		_ = executor.Close()
 		return TargetDescriptor{}, err

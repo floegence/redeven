@@ -76,11 +76,6 @@
   background: color-mix(in srgb, var(--primary) 3%, var(--background));
 }
 
-.flower-computer-selection[data-tone='attention'] {
-  border-color: color-mix(in srgb, var(--warning) 35%, var(--border));
-  background: color-mix(in srgb, var(--warning) 5%, var(--background));
-}
-
 .flower-computer-section-heading {
   display: flex;
   flex-wrap: wrap;
@@ -118,11 +113,6 @@
 .flower-computer-capability-icon > svg {
   width: 1.125rem;
   height: 1.125rem;
-}
-
-.flower-computer-selection[data-tone='attention'] .flower-computer-selection-icon {
-  border-color: color-mix(in srgb, var(--warning) 25%, var(--border));
-  color: var(--warning);
 }
 
 .flower-computer-selection-name {
@@ -370,4 +360,31 @@
   .flower-computer-footer button {
     min-height: 2.75rem;
   }
+}
+
+.flower-computer-browser-facts {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.flower-computer-browser-facts > div {
+  display: grid;
+  grid-template-columns: minmax(5rem, 0.3fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.flower-computer-browser-facts > div + div {
+  border-top: 1px solid var(--border);
+}
+
+.flower-computer-browser-facts dt {
+  color: var(--muted-foreground);
+}
+
+.flower-computer-browser-facts dd {
+  font-weight: 500;
 }
