@@ -88,8 +88,8 @@ filesystem operation.
 
 Runtime validates the requested directory and filesystem scope through the
 existing APIs. A terminal cannot silently start in Home after a rejected path.
-Files retains its existing directed-navigation failure and recovery display,
-including the original requested path and any actual recovery directory. Shell
+Files uses the shared [filesystem navigation failure contract](filesystem-picker-navigation.md),
+retaining the original requested path and offering explicit recovery actions. Shell
 connection recovery and Workbench persistence follow their existing contracts;
 Flower introduces no transport queue, process lifecycle mirror, database schema,
 or retry owner.

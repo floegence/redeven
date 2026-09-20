@@ -1,6 +1,6 @@
 import { classifyFilesystemPathError } from '../../../../../flower_ui/src/filePicker/filesystemPicker';
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
-import { Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
+import { Show, batch, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Settings, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import {
@@ -176,12 +176,9 @@ type PathLoadResult = {
   status: PathLoadStatus;
 };
 
-type DirectedNavigationFailure = {
-  requestId: string;
+type DirectoryNavigationFailure = {
   requestedPath: string;
-  committedPath: string;
   result: PathLoadResult;
-  fallback: boolean;
 };
 
 type DirectoryNavigationIntent = 'browse' | 'verify' | 'refresh' | 'scope-change';
@@ -197,30 +194,23 @@ type PreparedDirectoryState = {
   segments: PreparedDirectorySegment[];
   rootPath: string;
   committedPath: string;
-  invalidatePrefix?: string;
   resetCache?: boolean;
 };
 
 type DirectoryPrepareResult =
   | { status: 'ok'; state: PreparedDirectoryState }
-  | (PathLoadResult & { rootPath?: string });
+  | PathLoadResult;
 
 type DirectoryNavigationResult =
   | { status: 'ready'; state: PreparedDirectoryState }
-  | { status: 'fallback'; state: PreparedDirectoryState; result: PathLoadResult; requestedPath: string }
   | { status: 'canceled' }
   | { status: 'error'; result: PathLoadResult };
 
 type DirectoryNavigationOptions = {
-  fallbackPath?: string;
   persistEnvId?: string;
   persistOnReady?: boolean;
-  persistOnFallback?: boolean;
   refreshPathContext?: boolean;
-  directedRequestId?: string;
   intent?: DirectoryNavigationIntent;
-  showBlockingOverlay?: boolean;
-  allowInvalidTargetFallback?: boolean;
   showHiddenOverride?: boolean;
 };
 
@@ -235,11 +225,11 @@ type DirectoryNavigationRequest = {
 
 type DirectoryViewState = {
   activePath: string;
+  committedPath: string;
   snapshotReady: boolean;
-  freshness: 'fresh' | 'refreshing' | 'stale';
+  failure: DirectoryNavigationFailure | null;
   pending: null | {
     targetPath: string;
-    kind: 'opening' | 'refreshing';
   };
 };
 
@@ -444,36 +434,6 @@ function visibleBrowserPath(path: string, rootPath: string, roots: readonly Norm
   }
 
   return normalizedPath;
-}
-
-function buildFallbackDirectoryCandidates(path: string, rootPath: string, fallbackPath?: string, roots: readonly NormalizedFilesystemRoot[] = []): string[] {
-  const normalizedPath = normalizePath(path);
-  const matchedRoot = matchFilesystemRoot(normalizedPath, roots);
-  const normalizedRoot = normalizePath(matchedRoot?.pathAbs || rootPath);
-  const normalizedFallback = fallbackPath ? normalizePath(fallbackPath) : '';
-  const seen = new Set<string>();
-  const candidates: string[] = [];
-
-  let cursor = normalizedPath;
-  while (cursor !== normalizedRoot) {
-    cursor = getParentDir(cursor);
-    if (cursor !== normalizedRoot && !cursor.startsWith(`${normalizedRoot}/`)) {
-      break;
-    }
-    if (seen.has(cursor)) break;
-    seen.add(cursor);
-    candidates.push(cursor);
-  }
-
-  if (
-    normalizedFallback
-    && (normalizedFallback === normalizedRoot || normalizedFallback.startsWith(`${normalizedRoot}/`))
-    && !seen.has(normalizedFallback)
-  ) {
-    candidates.push(normalizedFallback);
-  }
-
-  return candidates;
 }
 
 const ClipboardIcon = (props: { class?: string }) => (
@@ -715,15 +675,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const decoratedFiles = createMemo(() => applyFileBrowserGitDecorations(files(), filesGitDecorationIndex()));
   const [directoryView, setDirectoryView] = createSignal<DirectoryViewState>({
     activePath: '',
+    committedPath: '',
     snapshotReady: false,
-    freshness: 'fresh',
+    failure: null,
     pending: null,
   });
   const activeDirectoryPath = () => directoryView().activePath;
   const activeDirectorySnapshotReady = () => directoryView().snapshotReady;
   const pendingDirectoryPath = () => directoryView().pending?.targetPath ?? '';
   const directoryBlocking = () => Boolean(directoryView().pending && !directoryView().snapshotReady);
-  const lastStableDirectoryPath = () => activeDirectorySnapshotReady() ? activeDirectoryPath() : '';
 
   let directoryCache = new DirectorySnapshotCache();
 
@@ -747,7 +707,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [fileBrowserResetSeq, setFileBrowserResetSeq] = createSignal(0);
 
   const [homePathDisplayHint, setHomePathDisplayHint] = createSignal('');
-  const [directedNavigationFailure, setDirectedNavigationFailure] = createSignal<DirectedNavigationFailure | null>(null);
+  const directoryNavigationFailure = () => directoryView().failure;
+  const directoryContentUnavailable = () => Boolean(directoryView().failure && !directoryView().snapshotReady);
   const [titleOverridePath, setTitleOverridePath] = createSignal('');
   const [titleOverride, setTitleOverride] = createSignal('');
 
@@ -1073,15 +1034,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const applyPreparedDirectoryState = (state: PreparedDirectoryState, options: { persistEnvId?: string } = {}): boolean => {
-    const previousPath = normalizeAbsolutePath(untrack(() => activeDirectoryPath()));
+    const previousPath = untrack(directoryView).committedPath;
     const committedPath = normalizeAbsolutePath(state.committedPath);
     let nextFiles = state.resetCache ? [] : files();
     if (state.resetCache) {
       directoryCache = new DirectorySnapshotCache();
-    }
-    if (state.invalidatePrefix) {
-      directoryCache.invalidatePrefix(state.invalidatePrefix);
-      nextFiles = removeItemsFromTree(nextFiles, new Set([state.invalidatePrefix]));
     }
     for (const segment of state.segments) {
       const entry = segment.source === 'remote'
@@ -1095,8 +1052,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setDirectoryView((current) => ({
         ...current,
         activePath: state.committedPath,
+        committedPath: state.committedPath,
         snapshotReady: true,
-        freshness: 'fresh',
+        failure: null,
       }));
       if (options.persistEnvId) {
         writePersistedLastPath(options.persistEnvId, state.committedPath);
@@ -1130,8 +1088,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setFiles([]);
     setDirectoryView({
       activePath: '',
+      committedPath: '',
       snapshotReady: false,
-      freshness: 'fresh',
+      failure: null,
       pending: null,
     });
   };
@@ -1244,7 +1203,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const currentPath = normalizeAbsolutePath(activeDirectoryPath()) || defaultRootPath();
       if (currentPath) {
         await requestDirectoryNavigation(currentPath, {
-          fallbackPath: defaultRootPath(),
           persistEnvId: envId(),
           persistOnReady: true,
           intent: 'scope-change',
@@ -3587,7 +3545,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       try {
         rootPath = normalizePath(await resolveFsRootAbs());
       } catch {
-        notifyPathLoadFailure({
+        showPathLoadFailure({
           status: 'transport_error',
         });
         return;
@@ -3607,10 +3565,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       });
 
       await requestDirectoryNavigation(nextPath, {
-        fallbackPath: rootPath,
         persistEnvId: id,
         persistOnReady: true,
-        showBlockingOverlay: true,
         intent: 'scope-change',
       });
     })();
@@ -3680,7 +3636,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setDragMoveLoading(false);
     setPendingEntryReveal(null);
     setArchiveExtractionRequest(null);
-    setDirectedNavigationFailure(null);
     resetFileBrowser();
 
     repoReqSeq += 1;
@@ -3692,9 +3647,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     directoryModeHydrated = true;
   });
 
-  const notifyPathLoadFailure = (result: PathLoadResult) => {
+  const showPathLoadFailure = (result: PathLoadResult) => {
     if (result.status === 'canceled') return;
-    notification.error(i18n.t('files.notifications.failedToLoadDirectoryTitle'), pathLoadFailureMessage(result));
+    const requestedPath = activeDirectoryPath() || initialPathOverride() || readPersistedLastPath(envId()) || defaultRootPath();
+    setDirectoryView((current) => ({ ...current, failure: { requestedPath, result } }));
   };
 
   const directoryPathChain = (path: string, rootPath: string): string[] => {
@@ -3742,7 +3698,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!activeRoot) {
       return {
         status: 'outside_scope',
-        rootPath,
       };
     }
 
@@ -3791,7 +3746,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         if (!isLatestDirectoryRequest(request) || request.controller?.signal.aborted) return { status: 'canceled' };
         return {
           ...classifyPathLoadError(error),
-          rootPath: activeRootPath,
         };
       }
     }
@@ -3805,59 +3759,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         resetCache: intent === 'scope-change',
       },
     };
-  };
-
-  const resolveDirectoryNavigation = async (
-    requestedPath: string,
-    request: DirectoryNavigationRequest,
-    options: Pick<DirectoryNavigationOptions, 'fallbackPath' | 'intent' | 'allowInvalidTargetFallback' | 'showHiddenOverride'> = {},
-  ): Promise<DirectoryNavigationResult> => {
-    const normalizedRequestedPath = normalizePath(requestedPath);
-    const prepared = await prepareDirectoryState(normalizedRequestedPath, request, {
-      intent: options.intent ?? 'browse',
-      showHiddenOverride: options.showHiddenOverride,
-    });
-    if (prepared.status === 'ok') {
-      return { status: 'ready', state: prepared.state };
-    }
-    if (prepared.status === 'canceled') {
-      return { status: 'canceled' };
-    }
-    if (!isDeterministicPathFailure(prepared.status) || options.allowInvalidTargetFallback === false) {
-      return { status: 'error', result: prepared };
-    }
-
-    const rootPath = normalizePath(prepared.rootPath || defaultRootPath() || '/');
-    const normalizedFallbackPath = options.fallbackPath
-      ? normalizePath(options.fallbackPath)
-      : '';
-    const fallbackCandidates = buildFallbackDirectoryCandidates(normalizedRequestedPath, rootPath, normalizedFallbackPath, filesystemRoots());
-
-    for (const candidate of fallbackCandidates) {
-      const fallbackPrepared = await prepareDirectoryState(candidate, request, {
-        intent: 'refresh',
-        showHiddenOverride: options.showHiddenOverride,
-      });
-      if (fallbackPrepared.status === 'ok') {
-        return {
-          status: 'fallback',
-          state: {
-            ...fallbackPrepared.state,
-            invalidatePrefix: normalizedRequestedPath,
-          },
-          result: prepared,
-          requestedPath: normalizedRequestedPath,
-        };
-      }
-      if (fallbackPrepared.status === 'canceled') {
-        return { status: 'canceled' };
-      }
-      if (!isDeterministicPathFailure(fallbackPrepared.status)) {
-        return { status: 'error', result: fallbackPrepared };
-      }
-    }
-
-    return { status: 'error', result: prepared };
   };
 
   const performDirectoryNavigation = async (
@@ -3884,38 +3785,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
       if (!isLatestDirectoryRequest(request)) return { status: 'canceled' };
     }
-    const result = await resolveDirectoryNavigation(request.targetPath, request, {
-      fallbackPath: options.fallbackPath,
-      intent: options.intent,
-      allowInvalidTargetFallback: options.allowInvalidTargetFallback,
-      showHiddenOverride: options.showHiddenOverride,
-    });
-    if (!isLatestDirectoryRequest(request) || result.status === 'canceled') {
+    const prepared = await prepareDirectoryState(request.targetPath, request, options);
+    if (!isLatestDirectoryRequest(request) || prepared.status === 'canceled') {
       return { status: 'canceled' };
     }
-    if (result.status === 'error') return result;
-    if (!applyPreparedDirectoryState(result.state, {
-      persistEnvId: options.persistEnvId && (
-        (result.status === 'ready' && options.persistOnReady === true)
-        || (result.status === 'fallback' && options.persistOnFallback === true)
-      )
-        ? options.persistEnvId
-        : undefined,
+    if (prepared.status !== 'ok') return { status: 'error', result: prepared };
+    if (!applyPreparedDirectoryState(prepared.state, {
+      persistEnvId: options.persistOnReady ? options.persistEnvId : undefined,
     })) {
       return { status: 'canceled' };
     }
-    if (options.directedRequestId) {
-      setDirectedNavigationFailure(result.status === 'fallback'
-        ? {
-            requestId: options.directedRequestId,
-            requestedPath: result.requestedPath,
-            committedPath: result.state.committedPath,
-            result: result.result,
-            fallback: true,
-          }
-        : null);
-    }
-    return result;
+    return { status: 'ready', state: prepared.state };
   };
 
   const drainDirectoryRequestQueue = async (): Promise<void> => {
@@ -3927,18 +3807,22 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         queuedDirectoryRequest = null;
         request.controller = new AbortController();
         activeDirectoryRequest = request;
-    const result = await performDirectoryNavigation(request);
+        const result = await performDirectoryNavigation(request);
         request.resolve(result);
         activeDirectoryRequest = null;
         if (!queuedDirectoryRequest) {
+          const failure = result.status === 'error'
+            ? { requestedPath: request.targetPath, result: result.result }
+            : null;
+          if (failure && isDeterministicPathFailure(failure.result.status)) {
+            directoryCache.invalidatePrefix(request.targetPath);
+            setFiles((current) => removeItemsFromTree(current, new Set([request.targetPath])));
+          }
           setDirectoryView((current) => ({
             ...current,
-            freshness: result.status === 'error'
-              && result.result.status === 'transport_error'
-              && current.activePath === request.targetPath
-              && current.snapshotReady
-              ? 'stale'
-              : current.freshness === 'refreshing' ? 'fresh' : current.freshness,
+            failure: result.status === 'canceled' ? current.failure : failure,
+            snapshotReady: failure && request.targetPath === current.activePath
+              && isDeterministicPathFailure(failure.result.status) ? false : current.snapshotReady,
             pending: null,
           }));
         }
@@ -3954,6 +3838,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     queuedDirectoryRequest = null;
   };
 
+  onCleanup(() => resetDirectoryRequestQueue());
+
   const currentDirectoryResult = (): DirectoryNavigationResult => ({
     status: 'ready',
     state: {
@@ -3963,34 +3849,25 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
   });
 
-  const presentCachedDirectory = (targetPath: string, options: DirectoryNavigationOptions): boolean => {
-    if ((options.intent ?? 'browse') !== 'browse') return false;
+  const presentCachedDirectory = (targetPath: string, intent: DirectoryNavigationIntent): void => {
+    if (intent !== 'browse') return;
     const target = directoryCache.read(targetPath);
     const activeRoot = matchFilesystemRoot(targetPath, filesystemRoots());
-    if (!target || !activeRoot) return false;
+    if (!target || !activeRoot) return;
     const rootPath = normalizePath(activeRoot.pathAbs || defaultRootPath() || '/');
     let nextFiles = files();
     for (const path of directoryPathChain(targetPath, rootPath)) {
       const entry = directoryCache.read(path);
       if (entry) nextFiles = withChildrenAtRoot(nextFiles, path, entry.items, rootPath);
     }
-    const previousPath = normalizeAbsolutePath(activeDirectoryPath());
     batch(() => {
       setFiles(nextFiles);
       setDirectoryView((current) => ({
         ...current,
         activePath: targetPath,
         snapshotReady: true,
-        freshness: 'refreshing',
       }));
-      if (options.persistEnvId && options.persistOnReady) {
-        writePersistedLastPath(options.persistEnvId, targetPath);
-      }
     });
-    if (targetPath !== previousPath) {
-      props.onCommittedPathChange?.(targetPath, activeRoot.id);
-    }
-    return true;
   };
 
   const requestDirectoryNavigation = async (
@@ -4020,7 +3897,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         queuedDirectoryRequest = null;
         setDirectoryView((state) => ({
           ...state,
-          freshness: state.freshness === 'stale' ? 'stale' : 'fresh',
           pending: null,
         }));
       }
@@ -4031,7 +3907,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return desiredRequest.promise;
     }
 
-    const cachePresented = presentCachedDirectory(targetPath, { ...options, intent });
+    presentCachedDirectory(targetPath, intent);
     let resolveRequest!: (result: DirectoryNavigationResult) => void;
     const promise = new Promise<DirectoryNavigationResult>((resolve) => {
       resolveRequest = resolve;
@@ -4042,8 +3918,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       options: {
         ...options,
         intent,
-        allowInvalidTargetFallback: options.allowInvalidTargetFallback ?? true,
-        persistOnReady: cachePresented ? false : options.persistOnReady,
       },
       promise,
       resolve: resolveRequest,
@@ -4055,34 +3929,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     queuedDirectoryRequest = request;
     setDirectoryView((state) => ({
       ...state,
-      freshness: cachePresented || targetPath === state.activePath ? 'refreshing' : state.freshness,
       pending: {
         targetPath,
-        kind: cachePresented || targetPath === state.activePath ? 'refreshing' : 'opening',
       },
     }));
     void drainDirectoryRequestQueue();
 
-    const result = await promise;
-    if (result.status === 'error') {
-      if (options.directedRequestId) {
-        setDirectedNavigationFailure({
-          requestId: options.directedRequestId,
-          requestedPath: targetPath,
-          committedPath: normalizeAbsolutePath(activeDirectoryPath()),
-          result: result.result,
-          fallback: false,
-        });
-      } else if (cachePresented && result.result.status === 'transport_error') {
-        notification.warning(
-          i18n.t('files.navigationFailure.title'),
-          i18n.t('files.navigationFailure.connectionFailed'),
-        );
-      } else {
-        notifyPathLoadFailure(result.result);
-      }
-    }
-    return result;
+    return promise;
   };
 
   const requestManualDirectoryNavigation = async (requestedPath: string): Promise<ManualDirectoryNavigationResult> => {
@@ -4103,11 +3956,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       : rootPath;
     const nextShowHidden = !showHidden() && hasHiddenFilesystemPathSegment(normalizedRequestedPath, rootPath, filesystemRoots());
     const result = await requestDirectoryNavigation(normalizedRequestedPath, {
-      fallbackPath: lastStableDirectoryPath() || rootPath,
       persistEnvId: id || undefined,
       persistOnReady: true,
       intent: 'verify',
-      allowInvalidTargetFallback: false,
       showHiddenOverride: nextShowHidden ? true : undefined,
     });
 
@@ -4136,8 +3987,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const refreshCurrentDirectory = async (options: {
     forceReload?: boolean;
-    directedRequestId?: string;
-    refreshPathContext?: boolean;
   } = {}): Promise<void> => {
     const id = envId();
     const path = normalizeAbsolutePath(activeDirectoryPath());
@@ -4150,14 +3999,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
 
     await requestDirectoryNavigation(path, {
-      fallbackPath: lastStableDirectoryPath() || defaultRootPath(),
       persistEnvId: id,
-      persistOnReady: Boolean(options.directedRequestId),
-      persistOnFallback: !options.directedRequestId,
       intent: options.forceReload ? 'refresh' : 'browse',
-      showBlockingOverlay: !activeDirectorySnapshotReady(),
-      refreshPathContext: options.refreshPathContext,
-      directedRequestId: options.directedRequestId,
     });
   };
 
@@ -4172,46 +4015,45 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner,
   ));
 
-  const retryDirectedNavigation = (failure: DirectedNavigationFailure) => {
-    setDirectedNavigationFailure(null);
-    void requestDirectoryNavigation(failure.requestedPath, {
-      fallbackPath: lastStableDirectoryPath() || defaultRootPath(),
-      showBlockingOverlay: !activeDirectorySnapshotReady(),
+  const retryDirectoryNavigation = async (failure: DirectoryNavigationFailure) => {
+    let requestedPath = failure.requestedPath;
+    if (!requestedPath) {
+      try {
+        requestedPath = await refreshFilesystemPathContext();
+      } catch {
+        showPathLoadFailure({ status: 'transport_error' });
+        return;
+      }
+    }
+    await requestDirectoryNavigation(requestedPath, {
       persistEnvId: envId(),
       persistOnReady: true,
-      persistOnFallback: false,
       intent: 'refresh',
-      refreshPathContext: true,
-      directedRequestId: failure.requestId,
-      allowInvalidTargetFallback: !failure.committedPath,
+      refreshPathContext: Boolean(failure.requestedPath),
     });
   };
 
-  const openHomeAfterDirectedFailure = () => {
-    const homePath = normalizeAbsolutePath(agentHomePathAbs()) || normalizeAbsolutePath(defaultRootPath());
+  const openHomeAfterNavigationFailure = () => {
+    const homePath = normalizeAbsolutePath(agentHomePathAbs());
     if (!homePath) return;
-    setDirectedNavigationFailure(null);
     void requestDirectoryNavigation(homePath, {
       persistEnvId: envId(),
       persistOnReady: true,
       intent: 'verify',
-      allowInvalidTargetFallback: false,
     });
   };
 
-  const openParentAfterDirectedFailure = (failure: DirectedNavigationFailure) => {
+  const openParentAfterNavigationFailure = (failure: DirectoryNavigationFailure) => {
     const parentPath = normalizeAbsolutePath(getParentDir(failure.requestedPath));
     if (!parentPath || parentPath === normalizeAbsolutePath(failure.requestedPath)) return;
-    setDirectedNavigationFailure(null);
     void requestDirectoryNavigation(parentPath, {
       persistEnvId: envId(),
       persistOnReady: true,
       intent: 'verify',
-      allowInvalidTargetFallback: false,
     });
   };
 
-  const copyDirectedNavigationPath = (path: string) => {
+  const copyNavigationPath = (path: string) => {
     void (async () => {
       try {
         await writeTextToClipboard(path);
@@ -4228,15 +4070,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     })();
   };
 
-  const directedNavigationFailurePanel = () => (
-    <Show when={directedNavigationFailure()}>
-      {(failureAccessor) => {
-        const failure = failureAccessor();
+  const directoryNavigationFailurePanel = () => (
+    <Show when={directoryNavigationFailure()} keyed>
+      {(failure) => {
         const accessFailure = failure.result.status === 'outside_scope' || failure.result.status === 'permission_denied';
-        const parentRecovery = failure.result.status === 'host_permission_denied'
+        const parentRecovery = Boolean(failure.requestedPath) && getParentDir(failure.requestedPath) !== failure.requestedPath
+          && (failure.result.status === 'host_permission_denied'
           || failure.result.status === 'not_found'
           || failure.result.status === 'not_directory'
-          || failure.result.status === 'invalid_path';
+          || failure.result.status === 'invalid_path');
         return (
           <section
             class="mx-2 mt-2 shrink-0 rounded-md border border-warning/35 bg-warning/5 px-3 py-2.5"
@@ -4252,30 +4094,32 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                   {pathLoadFailureMessage(failure.result)}
                 </p>
                 <dl class="mt-1.5 grid min-w-0 gap-1 text-[11px] leading-4 text-muted-foreground">
-                  <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2">
-                    <dt>{i18n.t('files.navigationFailure.requestedPath')}</dt>
-                    <dd class="truncate font-mono text-foreground" title={failure.requestedPath}>{failure.requestedPath}</dd>
-                  </div>
-                  <Show when={failure.committedPath}>
+                  <Show when={failure.requestedPath}>
+                    <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2">
+                      <dt>{i18n.t('files.navigationFailure.requestedPath')}</dt>
+                      <dd class="truncate font-mono text-foreground" title={failure.requestedPath}>{failure.requestedPath}</dd>
+                    </div>
+                  </Show>
+                  <Show when={activeDirectorySnapshotReady()}>
                     <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2">
                       <dt>{i18n.t('files.navigationFailure.currentLocation')}</dt>
-                      <dd class="truncate font-mono text-foreground" title={failure.committedPath}>{failure.committedPath}</dd>
+                      <dd class="truncate font-mono text-foreground" title={activeDirectoryPath()}>{activeDirectoryPath()}</dd>
                     </div>
                   </Show>
                 </dl>
                 <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                  <Button size="sm" variant="outline" icon={Refresh} onClick={() => retryDirectedNavigation(failure)}>
+                  <Button size="sm" variant="outline" icon={Refresh} disabled={Boolean(pendingDirectoryPath())} onClick={() => { void retryDirectoryNavigation(failure); }}>
                     {i18n.t('files.navigationFailure.retry')}
                   </Button>
-                  <Button size="sm" variant="outline" icon={Folder} onClick={openHomeAfterDirectedFailure}>
+                  <Button size="sm" variant="outline" icon={Folder} disabled={!agentHomePathAbs()} onClick={openHomeAfterNavigationFailure}>
                     {i18n.t('files.navigationFailure.openHome')}
                   </Button>
                   <Show when={parentRecovery}>
-                    <Button size="sm" variant="outline" icon={Folder} onClick={() => openParentAfterDirectedFailure(failure)}>
+                    <Button size="sm" variant="outline" icon={Folder} onClick={() => openParentAfterNavigationFailure(failure)}>
                       {i18n.t('files.navigationFailure.openParent')}
                     </Button>
                   </Show>
-                  <Button size="sm" variant="ghost" icon={Copy} onClick={() => copyDirectedNavigationPath(failure.requestedPath)}>
+                  <Button size="sm" variant="ghost" icon={Copy} disabled={!failure.requestedPath} onClick={() => copyNavigationPath(failure.requestedPath)}>
                     {i18n.t('files.navigationFailure.copyPath')}
                   </Button>
                   <Show when={accessFailure && canManageFilesystemAccess()}>
@@ -4288,12 +4132,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                   </Show>
                 </div>
               </div>
-              <Show when={Boolean(failure.committedPath)}>
+              <Show when={activeDirectorySnapshotReady()}>
                 <button
                   type="button"
                   class="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
                   aria-label={i18n.t('files.navigationFailure.dismiss')}
-                  onClick={() => setDirectedNavigationFailure(null)}
+                  onClick={() => setDirectoryView((view) => ({ ...view, failure: null }))}
                 >
                   <X class="size-3.5" />
                 </button>
@@ -4626,7 +4470,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
       if (normalizePath(activeDirectoryPath()) !== normalizePath(draft.parentDir)) {
         await requestDirectoryNavigation(draft.parentDir, {
-          fallbackPath: lastStableDirectoryPath() || defaultRootPath(),
           persistEnvId: envId(),
           persistOnReady: true,
           intent: 'browse',
@@ -4645,69 +4488,64 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
-  createEffect(() => {
-    if (!protocol.session?.()) return;
-    const id = envId();
-    const scopeRefreshKey = filesystemScopeRefreshKey();
-    if (!id) return;
-    void (async () => {
-      const persistedPath = normalizeAbsolutePath(untrack(() => readPersistedLastPath(id)));
-      const directedInitialPath = initialPathOverride();
-      if (directedInitialPath) {
-        const directedRequestId = `initial:${browserStateScope()}:${id}:${directedInitialPath}`;
-        if (directedRequestId !== lastHandledInitialPathRequestId) {
-          lastHandledInitialPathRequestId = directedRequestId;
-          setHomePathDisplayHint(homePathOverride());
-          setDirectedNavigationFailure(null);
-          await requestDirectoryNavigation(directedInitialPath, {
-            fallbackPath: persistedPath,
-            showBlockingOverlay: !activeDirectorySnapshotReady(),
-            persistEnvId: id,
-            persistOnReady: true,
-            persistOnFallback: false,
-            intent: 'verify',
-            refreshPathContext: true,
-            directedRequestId,
-            allowInvalidTargetFallback: !untrack(() => activeDirectorySnapshotReady()),
-          });
-        } else if (scopeRefreshKey > 0) {
-          try {
-            await refreshFilesystemPathContext();
-          } catch {
-            notifyPathLoadFailure({ status: 'transport_error' });
+  createEffect(on(
+    [() => protocol.session?.(), envId, filesystemScopeRefreshKey, initialPathOverride],
+    ([client, id, scopeRefreshKey]) => {
+      if (!client) return;
+      if (!id) return;
+      void (async () => {
+        const persistedPath = normalizeAbsolutePath(untrack(() => readPersistedLastPath(id)));
+        const directedInitialPath = initialPathOverride();
+        if (directedInitialPath) {
+          const directedRequestId = `initial:${browserStateScope()}:${id}:${directedInitialPath}`;
+          if (directedRequestId !== lastHandledInitialPathRequestId) {
+            lastHandledInitialPathRequestId = directedRequestId;
+            setHomePathDisplayHint(homePathOverride());
+            await requestDirectoryNavigation(directedInitialPath, {
+              persistEnvId: id,
+              persistOnReady: true,
+              intent: 'verify',
+              refreshPathContext: true,
+            });
+          } else if (scopeRefreshKey > 0) {
+            try {
+              await refreshFilesystemPathContext();
+            } catch {
+              showPathLoadFailure({ status: 'transport_error' });
+            }
           }
+          return;
         }
-        return;
-      }
 
-      let rootPath = '';
-      try {
-        rootPath = normalizePath(scopeRefreshKey > 0 ? await refreshFilesystemPathContext() : await resolveFsRootAbs());
-      } catch {
-        notifyPathLoadFailure({
-          status: 'transport_error',
-        });
-        return;
-      }
+        let rootPath = '';
+        try {
+          rootPath = normalizePath(scopeRefreshKey > 0 ? await refreshFilesystemPathContext() : await resolveFsRootAbs());
+        } catch {
+          showPathLoadFailure({
+            status: 'transport_error',
+          });
+          return;
+        }
 
-      const rememberedPath = untrack(() => normalizeAbsolutePath(activeDirectoryPath()));
-      const showHiddenEnabled = untrack(() => showHidden());
-      const requestedStartPath = rememberedPath || persistedPath || rootPath;
-      const startPath = showHiddenEnabled
-        ? normalizePath(requestedStartPath)
-        : visibleBrowserPath(requestedStartPath, rootPath, filesystemRoots());
-      if (startPath !== requestedStartPath) {
-        writePersistedLastPath(id, startPath);
-      }
-      setDirectoryView((current) => ({
-        ...current,
-        activePath: startPath,
-        snapshotReady: false,
-        freshness: 'fresh',
-        pending: null,
-      }));
-    })();
-  });
+        const rememberedPath = untrack(() => normalizeAbsolutePath(activeDirectoryPath()));
+        const showHiddenEnabled = untrack(() => showHidden());
+        const requestedStartPath = rememberedPath || persistedPath || rootPath;
+        const startPath = showHiddenEnabled
+          ? normalizePath(requestedStartPath)
+          : visibleBrowserPath(requestedStartPath, rootPath, filesystemRoots());
+        if (startPath !== requestedStartPath) {
+          writePersistedLastPath(id, startPath);
+        }
+        setDirectoryView((current) => ({
+          ...current,
+          activePath: startPath,
+          snapshotReady: false,
+          failure: null,
+          pending: null,
+        }));
+      })();
+    },
+  ));
 
   createEffect(() => {
     const seq = ctx.settingsSeq();
@@ -4756,22 +4594,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
     lastHandledOpenPathRequestId = requestId;
     setHomePathDisplayHint(requestedHomePath);
-    setDirectedNavigationFailure(null);
     setTitleOverridePath(requestedPath);
     setTitleOverride(requestedTitle);
 
     void (async () => {
       try {
         await requestDirectoryNavigation(requestedPath, {
-          fallbackPath: lastStableDirectoryPath() || requestedHomePath || defaultRootPath(),
-          showBlockingOverlay: !activeDirectorySnapshotReady(),
           persistEnvId: envId(),
           persistOnReady: true,
-          persistOnFallback: false,
           intent: 'verify',
           refreshPathContext: true,
-          directedRequestId: requestId,
-          allowInvalidTargetFallback: !activeDirectorySnapshotReady(),
         });
       } finally {
         props.onOpenPathRequestHandled?.(requestId);
@@ -4838,7 +4670,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const mode = pageMode();
     const path = normalizeAbsolutePath(activeDirectoryPath());
     if (!directoryModeHydrated || !id || !client || mode !== 'files' || !path) return;
-    if (activeDirectorySnapshotReady()) return;
+    // Failure settles this load. Only explicit navigation, retry, or a new session may load again.
+    if (activeDirectorySnapshotReady() || directoryNavigationFailure()) return;
 
     const normalizedPath = normalizePath(path);
     if (directoryBlocking() || activeDirectoryRequest?.targetPath === normalizedPath || queuedDirectoryRequest?.targetPath === normalizedPath) return;
@@ -5430,7 +5263,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const revealRequest = buildEntryReveal(response.destinationPath, destinationParent);
     setPendingEntryReveal(revealRequest);
     const navigationResult = await requestDirectoryNavigation(destinationParent, {
-      fallbackPath: lastStableDirectoryPath() || defaultRootPath(),
       persistEnvId: envId(),
       persistOnReady: true,
       intent: 'refresh',
@@ -5764,9 +5596,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       >
         {(id) => (
           <div class="flex h-full min-h-0 flex-col">
-            <Show when={pageMode() === 'files'}>
-              {directedNavigationFailurePanel()}
-            </Show>
             <BrowserModeTransitionStack
               class="min-h-0 flex-1"
               activeId={pageMode()}
@@ -5781,6 +5610,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       gitHistoryDisabledReason={gitModeDisabledReason() || undefined}
                       captureTypingFromPage={!hasEmbeddedWidget()}
                       files={decoratedFiles()}
+                      contentNotice={directoryNavigationFailurePanel()}
+                      contentUnavailable={directoryContentUnavailable()}
                       currentPath={activeDirectoryPath()}
                       pendingNavigationPath={pendingDirectoryPath()}
                       initialPath={readPersistedLastPath(id)}
@@ -5809,7 +5640,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onNavigate={(path) => {
                         const targetPath = normalizePath(path);
                         void requestDirectoryNavigation(targetPath, {
-                          fallbackPath: lastStableDirectoryPath() || defaultRootPath(),
                           persistEnvId: id,
                           persistOnReady: true,
                           intent: 'browse',

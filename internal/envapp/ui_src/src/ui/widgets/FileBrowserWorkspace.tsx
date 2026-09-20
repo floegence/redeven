@@ -75,6 +75,8 @@ export interface FileBrowserWorkspaceProps {
   onRevealRequestConsumed?: (requestId: string) => void;
   pathEditRequestKey?: number;
   toolbarEndActions?: JSX.Element;
+  contentNotice?: JSX.Element;
+  contentUnavailable?: boolean;
   /** Client-coordinate limit supplied by shell overlays, when present. */
   contextMenuBottomLimit?: number;
   contextMenuCallbacks?: ContextMenuCallbacks;
@@ -264,7 +266,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   const browser = useFileBrowser();
   const drag = useFileBrowserDrag();
   const i18n = useI18n();
-  const dragEnabled = () => Boolean(drag && props.onDragMove);
+  const dragEnabled = () => Boolean(drag && props.onDragMove && !props.contentUnavailable);
   const resolvedOverrideContextMenuItems = createMemo(() => {
     if (!props.resolveOverrideContextMenuItems) {
       return props.overrideContextMenuItems;
@@ -423,6 +425,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   });
 
   const handleWorkspaceBackgroundContextMenu = (event: MouseEvent) => {
+    if (props.contentUnavailable) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest('button')) return;
 
@@ -532,6 +535,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
               filterInputEl = el;
             }}
           />
+          {props.contentNotice}
           <div
             ref={(el) => {
               contentScrollEl = el;
@@ -542,8 +546,10 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             class={cn('min-h-0 flex-1 overflow-auto', redevenSurfaceRoleClass('main'))}
             onContextMenu={handleWorkspaceBackgroundContextMenu}
           >
-            <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
-              <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full redeven-file-list-compact" />
+            <Show when={!props.contentUnavailable}>
+              <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
+                <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full redeven-file-list-compact" />
+              </Show>
             </Show>
           </div>
           <FileWorkspaceStatusBar />
@@ -606,6 +612,8 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           pathEditRequestKey={props.pathEditRequestKey}
           onDragMove={props.onDragMove}
           toolbarEndActions={props.toolbarEndActions}
+          contentNotice={props.contentNotice}
+          contentUnavailable={props.contentUnavailable}
           contextMenuBottomLimit={props.contextMenuBottomLimit}
           contextMenuCallbacks={props.contextMenuCallbacks}
           overrideContextMenuItems={props.overrideContextMenuItems}

@@ -49,9 +49,9 @@ beforeEach(() => {
 });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); });
 
-async function mountFiles(initialPath: string, placement: 'activity' | 'workbench' = 'activity') {
+async function mountFiles(initialPath: string, placement: 'activity' | 'workbench' = 'activity', options: { storage?: Map<string, string>; restore?: boolean; unavailable?: boolean } = {}) {
   await page.viewport(1440, 900);
-  const storage = new Map<string, string>();
+  const storage = options.storage ?? new Map<string, string>();
   const host = document.createElement('div');
   document.body.append(host);
   dispose = render(() => {
@@ -73,7 +73,7 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
       <EnvContext.Provider value={context}><DownloadContext.Provider value={downloads}>
         <FilePreviewContext.Provider value={{ controller: preview, openPreview: preview.openPreview, closePreview: preview.closePreview }}>
           <div style={{ height: '740px', width: '1200px', transform: placement === 'workbench' ? 'translate(20px, 10px) scale(0.9)' : undefined }}>
-            <RemoteFileBrowser initialPathOverride={initialPath} widgetId={placement === 'workbench' ? 'paths-widget' : undefined}
+            <RemoteFileBrowser initialPathOverride={options.restore ? undefined : initialPath} widgetId={placement === 'workbench' ? 'paths-widget' : undefined}
               onCommittedPathChange={(path, rootId) => { setCommitted(path); setRoot(rootId ?? ''); }} onTitleChange={setTitle} />
           </div>
           <output data-testid="committed-path">{committed()}</output>
@@ -83,7 +83,11 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
       </DownloadContext.Provider></EnvContext.Provider>
     </NotificationProvider></LayoutProvider></FloeConfigProvider>;
   }, host);
-  await expect.poll(() => host.querySelector('[data-testid="committed-path"]')?.textContent).toBe(initialPath);
+  if (options.unavailable) {
+    await expect.poll(() => host.querySelector('[data-testid="file-browser-navigation-failure"]')).not.toBeNull();
+  } else {
+    await expect.poll(() => host.querySelector('[data-testid="committed-path"]')?.textContent).toBe(initialPath);
+  }
   const committedPath = () => host.querySelector('[data-testid="committed-path"]')?.textContent;
   const savedPaths = () => [...storage.entries()].filter(([key]) => key.includes('files:lastPath:')).map(([, value]) => JSON.parse(value));
   const enter = async (value: string) => {
@@ -100,6 +104,76 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
 }
 
 describe('Files path entry through the published components and runtime navigation', () => {
+  it.each(['activity', 'workbench'] as const)('settles a deleted restored directory in %s until the user retries', async (placement) => {
+    const existing = await mountFiles(target, placement);
+    await expect.poll(existing.savedPaths).toContain(target);
+    dispose?.();
+    document.body.replaceChildren();
+    const listExisting = transport.list.getMockImplementation()!;
+    let available = false;
+    let attempts = 0;
+    transport.list.mockImplementation(async (request) => {
+      if (request.path === target) {
+        attempts += 1;
+        if (!available) throw { code: 404, message: 'not found' };
+      }
+      return listExisting(request);
+    });
+    const restored = await mountFiles(target, placement, { storage: existing.storage, restore: true, unavailable: true });
+    expect(attempts).toBe(1);
+    expect(restored.committedPath()).toBe('');
+    expect(restored.savedPaths()).toEqual([target]);
+    expect(restored.host.querySelector('[data-testid="file-browser-content-scroll-region"]')?.textContent).not.toContain('This folder is empty');
+    await page.getByRole('radio', { name: 'List', exact: true }).click();
+    expect(attempts).toBe(1);
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+    await expect.poll(() => restored.host.querySelector('[data-testid="file-browser-navigation-failure"]')).not.toBeNull();
+    expect(attempts).toBe(2);
+    expect(restored.savedPaths()).toEqual([target]);
+    available = true;
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+    await expect.poll(restored.committedPath).toBe(target);
+    expect(attempts).toBe(3);
+    expect(restored.host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+    expect(restored.host.querySelector(`[data-file-browser-item-path="${target}/child"]`)).not.toBeNull();
+  });
+
+  it('updates the recovery panel when the parent is unavailable and recovers through Home', async () => {
+    const f = await mountFiles(target);
+    const listExisting = transport.list.getMockImplementation()!;
+    transport.list.mockImplementation(async (request) => {
+      if (request.path.startsWith('/Volumes')) throw { code: 404, message: 'not found' };
+      return listExisting(request);
+    });
+    await page.getByRole('button', { name: 'Refresh current directory', exact: true }).click();
+    await expect.poll(() => f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).not.toBeNull();
+    await page.getByRole('button', { name: 'Open parent folder', exact: true }).click();
+    await expect.poll(() => f.host.querySelector('[data-testid="file-browser-navigation-failure"] dd')?.textContent).toBe('/Volumes/JianDisk/code/floegence');
+    expect(f.committedPath()).toBe(target);
+    await page.getByRole('button', { name: 'Open Home', exact: true }).click();
+    await expect.poll(f.committedPath).toBe(home);
+    expect(f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+    await expect.poll(f.savedPaths).toContain(home);
+  });
+
+  it('keeps a deleted current directory unavailable until the user opens its parent', async () => {
+    const f = await mountFiles(target);
+    const listExisting = transport.list.getMockImplementation()!;
+    transport.list.mockImplementation(async (request) => {
+      if (request.path === target) throw { code: 404, message: 'not found' };
+      return listExisting(request);
+    });
+    await page.getByRole('button', { name: 'Refresh current directory', exact: true }).click();
+    await expect.poll(() => f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).not.toBeNull();
+    expect(f.committedPath()).toBe(target);
+    expect(transport.list.mock.calls.map(([request]) => request.path)).toEqual([target]);
+    expect(f.host.querySelector('[data-testid="file-browser-content-scroll-region"]')?.textContent).toBe('');
+    await page.getByRole('button', { name: 'Open parent folder', exact: true }).click();
+    await expect.poll(f.committedPath).toBe('/Volumes/JianDisk/code/floegence');
+    await expect.poll(f.savedPaths).toContain('/Volumes/JianDisk/code/floegence');
+    expect(f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+  });
+
   it.each([
     { start: home, placement: 'activity' as const },
     { start: '/', placement: 'workbench' as const },
