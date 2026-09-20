@@ -225,7 +225,14 @@ export function EnvHostApplicationsPage() {
       const style = getComputedStyle(document.documentElement);
       const color = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
       popup.document.open();
-      popup.document.write(hostApplicationPreparationDocument(view, { background: color('--background', '#fafafa'), foreground: color('--foreground', '#18181b'), muted: color('--muted-foreground', '#71717a'), border: color('--border', '#e4e4e7'), primary: color('--primary', '#52525b'), colorScheme: style.colorScheme || 'light dark' }));
+      popup.document.write(hostApplicationPreparationDocument(view, {
+        background: color('--background', 'Canvas'),
+        foreground: color('--foreground', 'CanvasText'),
+        muted: color('--muted-foreground', 'GrayText'),
+        border: color('--border', 'ButtonBorder'),
+        primary: color('--primary', 'AccentColor'),
+        colorScheme: style.colorScheme || 'light dark',
+      }));
       popup.document.close();
       pending = { app, popup, active: true };
     }
@@ -448,7 +455,7 @@ export function EnvHostApplicationsPage() {
       <Show when={error()}><div class="host-apps-notice text-destructive" role="alert">{error()}</div></Show>
       <Show when={!canRead()}><div class="host-apps-empty"><ActivityBarHostApplicationsIcon class="w-9 h-9" /><h2>{i18n.t('hostApplications.permissionTitle')}</h2><p>{i18n.t('hostApplications.readPermission')}</p></div></Show>
       <Show when={canRead()}>
-        <Show when={catalog()} fallback={<div role="status" aria-label={i18n.t('hostApplications.loading')} class="host-apps-skeleton"><div class="host-apps-skeleton-heading" aria-hidden="true" /><div class="host-apps-grid" aria-hidden="true"><For each={[0,1,2,3,4,5]}>{() => <div class="host-app-skeleton-tile"><span /><i /><i /><i /></div>}</For></div></div>}>
+        <Show when={catalog()} fallback={<div role="status" aria-label={i18n.t('hostApplications.loading')} class="host-apps-skeleton"><div class="host-apps-skeleton-heading" aria-hidden="true" /><div class="host-apps-grid" aria-hidden="true"><For each={[0,1,2,3,4,5]}>{() => <div class="host-app-skeleton-tile"><span /><div><i /><i /></div></div>}</For></div></div>}>
           <Show when={!ready() && catalog()!.availability.supported && !isMac()}>{preparationPanel()}</Show>
           <Show when={!ready() && (isMac() || !catalog()!.availability.supported)}>
             <div class="host-apps-notice"><ActivityBarHostApplicationsIcon class="w-5 h-5 shrink-0" /><div><strong>{i18n.t(catalog()!.availability.supported ? 'hostApplications.setupTitle' : 'hostApplications.unsupportedTitle')}</strong><p>{i18n.t(availabilityDescription())}</p>
@@ -489,9 +496,18 @@ export function EnvHostApplicationsPage() {
             <Show when={apps().length} fallback={<Show when={ready()}><div class="host-apps-empty"><Search class="w-8 h-8" /><h2>{i18n.t(query() ? 'hostApplications.noResults' : 'hostApplications.emptyTitle')}</h2><p>{i18n.t(query() ? 'hostApplications.noResultsDescription' : 'hostApplications.emptyDescription')}</p></div></Show>}>
               <div class="host-apps-grid"><For each={apps()}>{app => <div class="host-app-tile-wrap">
                 <button class={`host-app-tile ${redevenSurfaceRoleClass('panelInteractive')}`} aria-busy={starting(app.id)} disabled={!canLaunch() || busy()[app.id]} onClick={() => void open(app)} aria-label={`${i18n.t(runningByApp().has(app.id) ? 'hostApplications.resume' : 'hostApplications.open')} · ${app.name}`}>
-                  <div class="host-app-tile-top"><ApplicationIcon app={app} /><span class="host-app-tile-affordance" aria-hidden="true"><Show when={runningByApp().get(app.id)?.state === 'running'}><span class="host-app-status-dot" /></Show><ExternalLink class="host-app-open-icon w-3.5 h-3.5" /></span></div>
-                  <strong>{app.name}</strong><Show when={app.description}><p title={app.description}>{app.description}</p></Show>
-                  <Show when={starting(app.id)}><span class="host-app-tile-action" role="status"><span class="host-app-launch-indicator" aria-hidden="true" />{i18n.t('hostApplications.starting')}</span></Show>
+                  <ApplicationIcon app={app} />
+                  <div class="host-app-tile-copy">
+                    <strong title={app.name}>{app.name}</strong>
+                    <Show when={app.description}><p title={app.description}>{app.description}</p></Show>
+                  </div>
+                  <span class="host-app-tile-affordance" aria-hidden="true">
+                    <Show when={starting(app.id)} fallback={<>
+                      <Show when={runningByApp().get(app.id)?.state === 'running'}><span class="host-app-status-dot" /></Show>
+                      <ExternalLink class="host-app-open-icon w-3.5 h-3.5" />
+                    </>}><span class="host-app-launch-indicator" /></Show>
+                  </span>
+                  <Show when={starting(app.id)}><span class="sr-only" role="status">{i18n.t('hostApplications.starting')}</span></Show>
                 </button>
                 <Show when={appErrors()[app.id] || catalog()?.sessions.find(s => s.application.id === app.id)?.state === 'failed'}><p class="host-app-error" role="alert">{appErrors()[app.id] || i18n.t('hostApplications.errors.failed')}</p></Show>
               </div>}</For></div>

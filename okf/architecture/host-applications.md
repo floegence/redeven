@@ -138,13 +138,17 @@ child window, or a lost connection never closes the viewer. Applications retain
 their normal save/cancel prompts; cancelling keeps both the session and its viewer.
 Closing the outer viewer still preserves the application session.
 
-The library cards show host-supplied identity and description. The whole card opens
-the application, with an accessible action label and a hover/focus affordance;
-cards do not repeat a visible opening instruction. During launch, the application
-identity remains visible with a small progress indicator and transient status text.
-Its overlapping-window navigation
-icon is distinct from the plugin catalog icon. Application inventory loading uses
-layout-preserving skeleton cards rather than a competing animated app glyph.
+The library uses compact horizontal cards: an unframed host icon, vertically
+centered identity, and a trailing action or session indicator. Descriptions appear
+only when supplied by the host; missing metadata never reserves an empty description
+area. Long names wrap to at most two lines and expose the full name in their title
+and accessible action label. The responsive grid fits narrow widget surfaces.
+The whole card opens the application, with a keyboard focus indicator and a
+hover/focus affordance; cards do not repeat a visible opening instruction. During
+launch, identity and card geometry remain stable while the trailing progress
+indicator and screen-reader status communicate activity. Its overlapping-window
+navigation icon is distinct from the plugin catalog icon. Application inventory
+loading uses matching horizontal skeleton cards and respects reduced motion.
 
 # Evidence
 
