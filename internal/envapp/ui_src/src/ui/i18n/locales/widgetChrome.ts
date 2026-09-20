@@ -67,7 +67,7 @@ export const enUSWidgetChrome = defineDictionary({
     opening: 'Opening...',
     pathNavigationCanceled: 'Path navigation was canceled.',
     navigationFailure: {
-      title: 'Could not open the requested folder',
+      title: 'Folder unavailable',
       outsideScope: 'This folder is outside the filesystem roots authorized for this environment.',
       sessionPermissionDenied: 'Your current session does not have permission to read this folder.',
       hostPermissionDenied: 'The operating system denied access to this folder.',

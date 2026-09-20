@@ -1680,7 +1680,7 @@
     "opening": "Öffnung...",
     "pathNavigationCanceled": "Pfadnavigation wurde abgebrochen.",
     "navigationFailure": {
-      "title": "Der angeforderte Ordner konnte nicht geöffnet werden",
+      "title": "Ordner nicht verfügbar",
       "outsideScope": "Dieser Ordner liegt außerhalb der für diese Umgebung autorisierten Dateisystemwurzeln.",
       "sessionPermissionDenied": "Ihre aktuelle Sitzung darf diesen Ordner nicht lesen.",
       "hostPermissionDenied": "Das Betriebssystem hat den Zugriff auf diesen Ordner verweigert.",

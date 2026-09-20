@@ -47,7 +47,7 @@ beforeEach(() => {
   transport.repo.mockReset().mockResolvedValue({ available: false, gitAvailable: false });
   transport.capabilities.mockReset().mockResolvedValue({});
 });
-afterEach(() => { dispose?.(); document.body.replaceChildren(); });
+afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.restoreAllMocks(); });
 
 async function mountFiles(initialPath: string, placement: 'activity' | 'workbench' = 'activity', options: { storage?: Map<string, string>; restore?: boolean; unavailable?: boolean } = {}) {
   await page.viewport(1440, 900);
@@ -72,7 +72,7 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
     } } }}><LayoutProvider><NotificationProvider>
       <EnvContext.Provider value={context}><DownloadContext.Provider value={downloads}>
         <FilePreviewContext.Provider value={{ controller: preview, openPreview: preview.openPreview, closePreview: preview.closePreview }}>
-          <div style={{ height: '740px', width: '1200px', transform: placement === 'workbench' ? 'translate(20px, 10px) scale(0.9)' : undefined }}>
+          <div data-testid="files-surface" style={{ height: '740px', width: '1200px', transform: placement === 'workbench' ? 'translate(20px, 10px) scale(0.9)' : undefined }}>
             <RemoteFileBrowser initialPathOverride={options.restore ? undefined : initialPath} widgetId={placement === 'workbench' ? 'paths-widget' : undefined}
               onCommittedPathChange={(path, rootId) => { setCommitted(path); setRoot(rootId ?? ''); }} onTitleChange={setTitle} />
           </div>
@@ -104,6 +104,66 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
 }
 
 describe('Files path entry through the published components and runtime navigation', () => {
+  it.each(['activity', 'workbench'] as const)('keeps long recovery paths and actions reachable in a narrow %s surface', async (placement) => {
+    const longPath = `/Volumes/External drive/${'long-folder-'.repeat(16)}/project`;
+    transport.list.mockRejectedValue({ code: 404, message: 'not found' });
+    const f = await mountFiles(longPath, placement, { unavailable: true });
+    const surface = f.host.querySelector<HTMLElement>('[data-testid="files-surface"]')!;
+    surface.style.width = '640px';
+    surface.style.height = '420px';
+    const viewport = f.host.querySelector<HTMLElement>('[data-testid="file-browser-content-scroll-region"]')!;
+    const path = viewport.querySelector<HTMLElement>('dd')!;
+    expect(path.textContent).toBe(longPath);
+    expect(getComputedStyle(path).textOverflow).not.toBe('ellipsis');
+    expect(getComputedStyle(path).userSelect).toBe('text');
+    await expect.poll(() => viewport.scrollWidth).toBe(viewport.clientWidth);
+    expect(path.scrollWidth).toBe(path.clientWidth);
+    await expect.element(page.getByRole('button', { name: 'Open Home', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Open Home', exact: true }).click();
+    await expect.poll(() => viewport.querySelector('dd')?.textContent).toBe(home);
+  });
+
+  it('keeps readable file contents with a dismissible notice after a transient refresh failure', async () => {
+    const f = await mountFiles(target);
+    transport.list.mockRejectedValue({ code: 503, message: 'connection lost' });
+    await page.getByRole('button', { name: 'Refresh current directory', exact: true }).click();
+    await expect.poll(() => f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).not.toBeNull();
+    expect(f.host.querySelector(`[data-file-browser-item-path="${target}/child"]`)).not.toBeNull();
+    expect(f.committedPath()).toBe(target);
+    await page.getByRole('button', { name: 'Dismiss folder navigation error', exact: true }).click();
+    expect(f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+    expect(f.host.querySelector(`[data-file-browser-item-path="${target}/child"]`)).not.toBeNull();
+  });
+
+  it.each(['activity', 'workbench'] as const)('keeps recovery readable and keyboard focus stable during a failed retry in %s', async (placement) => {
+    transport.list.mockRejectedValue({ code: 404, message: 'not found' });
+    const f = await mountFiles(target, placement, { unavailable: true });
+    const panel = f.host.querySelector<HTMLElement>('[data-testid="file-browser-navigation-failure"]')!;
+    const viewport = f.host.querySelector<HTMLElement>('[data-testid="file-browser-content-scroll-region"]')!;
+    expect(viewport.contains(panel)).toBe(true);
+    const retry = page.getByRole('button', { name: 'Retry', exact: true });
+    const retryElement = retry.element();
+    let reject!: (error: unknown) => void;
+    transport.list.mockImplementation(() => new Promise((_, fail) => { reject = fail; }));
+    await retry.click();
+    await expect.poll(() => panel.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(retryElement);
+    expect(f.host.querySelector('.redeven-loading-curtain')).toBeNull();
+    await userEvent.keyboard('{Enter}');
+    expect(transport.list).toHaveBeenCalledTimes(1);
+    reject({ code: 404, message: 'not found' });
+    await expect.poll(() => panel.getAttribute('aria-busy')).toBe('false');
+    expect(retry.element()).toBe(retryElement);
+    expect(document.activeElement).toBe(retryElement);
+    expect(f.committedPath()).toBe('');
+    expect(f.savedPaths()).toEqual([]);
+
+    const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    await page.getByRole('button', { name: 'Copy path', exact: true }).click();
+    expect(write).toHaveBeenCalledWith(target);
+    await expect.element(page.getByRole('button', { name: 'Copied', exact: true })).toBeVisible();
+  });
+
   it.each(['activity', 'workbench'] as const)('settles a deleted restored directory in %s until the user retries', async (placement) => {
     const existing = await mountFiles(target, placement);
     await expect.poll(existing.savedPaths).toContain(target);
@@ -167,7 +227,7 @@ describe('Files path entry through the published components and runtime navigati
     await expect.poll(() => f.host.querySelector('[data-testid="file-browser-navigation-failure"]')).not.toBeNull();
     expect(f.committedPath()).toBe(target);
     expect(transport.list.mock.calls.map(([request]) => request.path)).toEqual([target]);
-    expect(f.host.querySelector('[data-testid="file-browser-content-scroll-region"]')?.textContent).toBe('');
+    expect(f.host.querySelector('[data-testid="file-browser-content-scroll-region"] [data-file-browser-item-path]')).toBeNull();
     await page.getByRole('button', { name: 'Open parent folder', exact: true }).click();
     await expect.poll(f.committedPath).toBe('/Volumes/JianDisk/code/floegence');
     await expect.poll(f.savedPaths).toContain('/Volumes/JianDisk/code/floegence');

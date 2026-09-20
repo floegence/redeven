@@ -1680,7 +1680,7 @@
     "opening": "Ouverture...",
     "pathNavigationCanceled": "La navigation dans le chemin a été annulée.",
     "navigationFailure": {
-      "title": "Impossible d’ouvrir le dossier demandé",
+      "title": "Dossier indisponible",
       "outsideScope": "Ce dossier se trouve hors des racines du système de fichiers autorisées pour cet environnement.",
       "sessionPermissionDenied": "La session actuelle n’est pas autorisée à lire ce dossier.",
       "hostPermissionDenied": "Le système d’exploitation a refusé l’accès à ce dossier.",

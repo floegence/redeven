@@ -535,7 +535,6 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
               filterInputEl = el;
             }}
           />
-          {props.contentNotice}
           <div
             ref={(el) => {
               contentScrollEl = el;
@@ -543,16 +542,17 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             }}
             {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
             data-testid="file-browser-content-scroll-region"
-            class={cn('min-h-0 flex-1 overflow-auto', redevenSurfaceRoleClass('main'))}
+            class={cn('flex min-h-0 flex-1 flex-col overflow-auto', redevenSurfaceRoleClass('main'))}
             onContextMenu={handleWorkspaceBackgroundContextMenu}
           >
+            {props.contentNotice}
             <Show when={!props.contentUnavailable}>
               <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
                 <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full redeven-file-list-compact" />
               </Show>
             </Show>
           </div>
-          <FileWorkspaceStatusBar />
+          <Show when={!props.contentUnavailable}><FileWorkspaceStatusBar /></Show>
           <FileContextMenu
             boundary={menuBoundary()}
             backLabel={i18n.t('files.contextMenuBack')}

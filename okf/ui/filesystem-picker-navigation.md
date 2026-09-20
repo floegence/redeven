@@ -73,11 +73,14 @@ identity. There is no Home-relative display tree or reverse path conversion.
 Files treats a failed directory load as a settled outcome in its existing view
 state. A deleted saved location, unmounted volume, denied directory, or connection
 failure cannot restart hydration merely because no snapshot is available. The
-content area displays one localized recovery panel with the requested path and
-explicit Retry, Home, and applicable parent-directory actions. Unavailable
-contents are not presented as an empty folder; the roots and path controls remain
-available. A previously loaded snapshot may remain visible during a transient
-connection failure, accompanied by the recovery panel.
+content scroll viewport displays a centered, neutral recovery view when no
+snapshot is available, with the full selectable path and inline copy feedback.
+Retry is the primary action; parent-directory and Home navigation remain explicit
+alternatives. Pending recovery stays in place, prevents duplicate retry activation,
+and preserves keyboard focus across failure without a blocking curtain. Unavailable
+contents show neither an empty-folder message nor an item count; roots and path
+controls remain available. A retained snapshot uses a compact, dismissible notice
+above its contents, including during a transient connection failure.
 
 Files never probes ancestors or rewrites a failed target to Home automatically.
 Retry, navigation, or a new runtime session may initiate a new request. The latest
@@ -120,6 +123,7 @@ product operation executes.
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Published path parsing and formatting, absolute identity, and localized input recovery.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserRecoveryView.tsx` - Responsive unavailable-folder presentation and local copy feedback over existing navigation state.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx` - Real Files input through runtime directory requests, root selection, persistence, failure, and cancellation.
 - `redeven:internal/envapp/ui_src/src/ui/services/filesystemPicker.ts` - Runtime and Workbench adapter without independent navigation state.
 - `redeven:internal/flower_ui/src/filePicker/filesystemPicker.ts` - Absolute entries, declared roots, and shared runtime failure classification.

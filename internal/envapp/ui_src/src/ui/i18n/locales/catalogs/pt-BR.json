@@ -1680,7 +1680,7 @@
     "opening": "Abertura...",
     "pathNavigationCanceled": "A navegação por caminho foi cancelada.",
     "navigationFailure": {
-      "title": "Não foi possível abrir a pasta solicitada",
+      "title": "Pasta indisponível",
       "outsideScope": "Esta pasta está fora das raízes do sistema de arquivos autorizadas para este ambiente.",
       "sessionPermissionDenied": "A sessão atual não tem permissão para ler esta pasta.",
       "hostPermissionDenied": "O sistema operacional negou o acesso a esta pasta.",

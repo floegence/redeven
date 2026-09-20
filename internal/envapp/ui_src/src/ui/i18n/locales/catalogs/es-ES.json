@@ -1680,7 +1680,7 @@
     "opening": "Apertura...",
     "pathNavigationCanceled": "La navegación por ruta fue cancelada.",
     "navigationFailure": {
-      "title": "No se pudo abrir la carpeta solicitada",
+      "title": "Carpeta no disponible",
       "outsideScope": "Esta carpeta está fuera de las raíces del sistema de archivos autorizadas para este entorno.",
       "sessionPermissionDenied": "La sesión actual no tiene permiso para leer esta carpeta.",
       "hostPermissionDenied": "El sistema operativo denegó el acceso a esta carpeta.",

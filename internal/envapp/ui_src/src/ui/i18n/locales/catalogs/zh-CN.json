@@ -1680,7 +1680,7 @@
     "opening": "正在打开...",
     "pathNavigationCanceled": "路径导航已取消。",
     "navigationFailure": {
-      "title": "无法打开请求的文件夹",
+      "title": "文件夹暂不可用",
       "outsideScope": "此文件夹不在当前环境已授权的文件系统根目录中。",
       "sessionPermissionDenied": "当前会话没有读取此文件夹的权限。",
       "hostPermissionDenied": "操作系统拒绝访问此文件夹。",

@@ -1680,7 +1680,7 @@
     "opening": "正在開啟...",
     "pathNavigationCanceled": "路徑導航已取消。",
     "navigationFailure": {
-      "title": "無法開啟要求的資料夾",
+      "title": "資料夾暫時無法使用",
       "outsideScope": "此資料夾不在目前環境已授權的檔案系統根目錄中。",
       "sessionPermissionDenied": "目前工作階段沒有讀取此資料夾的權限。",
       "hostPermissionDenied": "作業系統拒絕存取此資料夾。",

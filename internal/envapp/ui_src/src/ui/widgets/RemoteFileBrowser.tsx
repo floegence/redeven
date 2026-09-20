@@ -2,7 +2,7 @@ import { classifyFilesystemPathError } from '../../../../../flower_ui/src/filePi
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import { Show, batch, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
-import { AlertTriangle, Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Settings, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import {
   ArchiveFileIcon,
   classifyArchiveFileName,
@@ -84,6 +84,7 @@ import { useFilePreviewContext } from './FilePreviewContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace, type FileBrowserPathSubmitResult } from './FileBrowserWorkspace';
+import { FileBrowserRecoveryView } from './FileBrowserRecoveryView';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { GitStashWindow } from './GitStashWindow';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
@@ -4053,99 +4054,27 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
   };
 
-  const copyNavigationPath = (path: string) => {
-    void (async () => {
-      try {
-        await writeTextToClipboard(path);
-        notification.success(
-          i18n.t('files.notifications.copiedTitle'),
-          i18n.t('files.notifications.copiedValue', { value: path }),
-        );
-      } catch {
-        notification.error(
-          i18n.t('files.notifications.copyFailedTitle'),
-          i18n.t('git.contextMenu.copyFailedMessage'),
-        );
-      }
-    })();
-  };
-
   const directoryNavigationFailurePanel = () => (
-    <Show when={directoryNavigationFailure()} keyed>
-      {(failure) => {
-        const accessFailure = failure.result.status === 'outside_scope' || failure.result.status === 'permission_denied';
-        const parentRecovery = Boolean(failure.requestedPath) && getParentDir(failure.requestedPath) !== failure.requestedPath
-          && (failure.result.status === 'host_permission_denied'
-          || failure.result.status === 'not_found'
-          || failure.result.status === 'not_directory'
-          || failure.result.status === 'invalid_path');
-        return (
-          <section
-            class="mx-2 mt-2 shrink-0 rounded-md border border-warning/35 bg-warning/5 px-3 py-2.5"
-            role="status"
-            aria-live="polite"
-            data-testid="file-browser-navigation-failure"
-          >
-            <div class="flex items-start gap-2.5">
-              <AlertTriangle class="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-medium text-foreground">{i18n.t('files.navigationFailure.title')}</div>
-                <p class="mt-0.5 text-xs leading-5 text-muted-foreground">
-                  {pathLoadFailureMessage(failure.result)}
-                </p>
-                <dl class="mt-1.5 grid min-w-0 gap-1 text-[11px] leading-4 text-muted-foreground">
-                  <Show when={failure.requestedPath}>
-                    <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2">
-                      <dt>{i18n.t('files.navigationFailure.requestedPath')}</dt>
-                      <dd class="truncate font-mono text-foreground" title={failure.requestedPath}>{failure.requestedPath}</dd>
-                    </div>
-                  </Show>
-                  <Show when={activeDirectorySnapshotReady()}>
-                    <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2">
-                      <dt>{i18n.t('files.navigationFailure.currentLocation')}</dt>
-                      <dd class="truncate font-mono text-foreground" title={activeDirectoryPath()}>{activeDirectoryPath()}</dd>
-                    </div>
-                  </Show>
-                </dl>
-                <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                  <Button size="sm" variant="outline" icon={Refresh} disabled={Boolean(pendingDirectoryPath())} onClick={() => { void retryDirectoryNavigation(failure); }}>
-                    {i18n.t('files.navigationFailure.retry')}
-                  </Button>
-                  <Button size="sm" variant="outline" icon={Folder} disabled={!agentHomePathAbs()} onClick={openHomeAfterNavigationFailure}>
-                    {i18n.t('files.navigationFailure.openHome')}
-                  </Button>
-                  <Show when={parentRecovery}>
-                    <Button size="sm" variant="outline" icon={Folder} onClick={() => openParentAfterNavigationFailure(failure)}>
-                      {i18n.t('files.navigationFailure.openParent')}
-                    </Button>
-                  </Show>
-                  <Button size="sm" variant="ghost" icon={Copy} disabled={!failure.requestedPath} onClick={() => copyNavigationPath(failure.requestedPath)}>
-                    {i18n.t('files.navigationFailure.copyPath')}
-                  </Button>
-                  <Show when={accessFailure && canManageFilesystemAccess()}>
-                    <Button size="sm" variant="ghost" icon={Settings} onClick={() => ctx.openSettings('runtime')}>
-                      {i18n.t('files.navigationFailure.manageAccess')}
-                    </Button>
-                  </Show>
-                  <Show when={accessFailure && !canManageFilesystemAccess()}>
-                    <span class="text-[11px] text-muted-foreground">{i18n.t('files.navigationFailure.askAdministrator')}</span>
-                  </Show>
-                </div>
-              </div>
-              <Show when={activeDirectorySnapshotReady()}>
-                <button
-                  type="button"
-                  class="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                  aria-label={i18n.t('files.navigationFailure.dismiss')}
-                  onClick={() => setDirectoryView((view) => ({ ...view, failure: null }))}
-                >
-                  <X class="size-3.5" />
-                </button>
-              </Show>
-            </div>
-          </section>
-        );
-      }}
+    <Show when={directoryNavigationFailure()}>
+      {(failure) => (
+        <FileBrowserRecoveryView
+          requestedPath={failure().requestedPath}
+          currentPath={activeDirectorySnapshotReady() ? activeDirectoryPath() : undefined}
+          message={pathLoadFailureMessage(failure().result)}
+          unavailable={directoryContentUnavailable()}
+          pending={Boolean(pendingDirectoryPath())}
+          homeAvailable={Boolean(agentHomePathAbs())}
+          parentAvailable={Boolean(failure().requestedPath) && getParentDir(failure().requestedPath) !== failure().requestedPath
+            && ['host_permission_denied', 'not_found', 'not_directory', 'invalid_path'].includes(failure().result.status)}
+          accessFailure={failure().result.status === 'outside_scope' || failure().result.status === 'permission_denied'}
+          canManageAccess={canManageFilesystemAccess()}
+          onRetry={() => { void retryDirectoryNavigation(failure()); }}
+          onOpenHome={openHomeAfterNavigationFailure}
+          onOpenParent={() => openParentAfterNavigationFailure(failure())}
+          onManageAccess={() => ctx.openSettings('runtime')}
+          onDismiss={() => setDirectoryView((view) => ({ ...view, failure: null }))}
+        />
+      )}
     </Show>
   );
 
@@ -5798,7 +5727,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         )}
       </Show>
 
-      <RedevenLoadingCurtain visible={pageMode() === 'files' && directoryBlocking()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.loadingFiles')} />
+      <RedevenLoadingCurtain visible={pageMode() === 'files' && directoryBlocking() && !directoryNavigationFailure()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.loadingFiles')} />
       <RedevenLoadingCurtain visible={dragMoveLoading()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.moving')} />
 
       <ArchiveExtractionDialog
