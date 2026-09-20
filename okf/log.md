@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-20: Bound Desktop development bundle storage
+
+- Prune verified old development packages after each complete bundle publication.
+- Keep the selected package, the three newest packages, and packages referenced by live process arguments or inherited environments.
+- Cover immutable permissions, isolated state roots, symlinks, dry runs, and unavailable process inventory with focused acceptance tests.
+
 ## 2026-09-20: Apply permission changes to the next tool invocation
 
 - Adopt published Floret v7.18.0 after its full Go, API compatibility and clean-module adoption checks.
