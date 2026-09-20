@@ -39,7 +39,11 @@ try {
         const { targetInfo } = await session.send('Target.getTargetInfo', { targetId });
         emit({ id: message.id, tab: { id: targetId, profile_id: targetInfo.browserContextId || 'default', title: '', url: 'about:blank' } });
       } else throw new Error('invalid command');
-    } catch { emit({ id: message.id, error: 'MANAGED_BROWSER_COMMAND_FAILED' }); }
+    } catch {
+      const disconnected = !context.browser().isConnected();
+      emit({ id: message.id, error: disconnected ? 'MANAGED_BROWSER_DISCONNECTED' : 'MANAGED_BROWSER_COMMAND_FAILED' });
+      if (disconnected) break;
+    }
   }
 } catch (error) { emit({ type: 'ready', protocol_version: 2, error: 'TARGET_SETUP_REQUIRED', reason: error?.code === 'ERR_MODULE_NOT_FOUND' ? 'browser_dependency_missing' : 'browser_launch_failed' }); process.exitCode = 1; }
 finally { await context?.close(); }

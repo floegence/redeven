@@ -28,6 +28,16 @@ page titles, URLs, profile names, actual opener identities and availability.
 References are thread-scoped, expire after ten minutes and exist only in bounded
 Runtime memory. A native Chrome window is a desktop window, not a browser page.
 
+Live browser inventory owns page availability. Registered adapters preserve
+identity, but their cached descriptors cannot keep a closed page available.
+Restricted discovery also reads live inventory, then exposes only allowed
+registered identities, without offering new pages. A disconnected managed
+Chromium process is retired during discovery; this read neither starts a
+replacement nor changes the saved selection. An eligible new-page candidate stays
+available, and authorized selection starts Chromium through the existing profile
+owner. The built-in profile is described as headless Chromium, without exposing
+its internal Default name as a separate setup choice.
+
 `computer.select_target` consumes one candidate. Resource resolution is read-only;
 connection and new-page creation occur after Floret authorization. Selection
 rechecks inventory identity, current permissions and resource occupancy, prepares
@@ -79,8 +89,15 @@ intact. Floret storage is opaque and its published v7.16.1 authorization, result
 Activity and interaction contracts require no upstream API expansion.
 
 Restart restores selection identity, not helper liveness or control. A lost task
-page fails until a fresh candidate is selected. New and forked threads start
-unbound, have independent task pages and inherit no parent resource authority.
+page fails until a fresh candidate is selected. Flower recovers through discovery,
+selection and a fresh observation, without directing a remote user to restore the
+desktop or configure a target. It reuses a matching live page or, for ordinary web
+work, opens an eligible page and navigates to the task URL. Explicit browser and
+account requirements, Stop, private control and completed effects remain binding.
+Missing account access or unsaved page content is explained in the conversation;
+recovery never claims to restore unsaved forms or replays an unknown effect.
+New and forked threads start unbound, have independent task pages and inherit no
+parent resource authority.
 Forks start with empty computer grants. Deleting product settings removes the
 selection and grants; a later bind never recreates a deleted thread.
 
@@ -107,7 +124,9 @@ prove readiness, foreground safety or platform qualification.
 - `redeven:internal/ai/threadstore/computer_access_test.go` - contiguous access migration and fork isolation.
 - `redeven:internal/ai/computer_access.go` - current authorization and active-script revocation.
 
-- `redeven:internal/ai/computer_candidates.go` - bounded candidate identities and shared selection.
+- `redeven:internal/ai/computer_candidates.go` - live browser inventory, bounded candidate identities and shared selection.
+- `redeven:internal/ai/computer_managed_browser_test.go` - real closed-page and browser-crash recovery without discovery side effects.
+- `redeven:internal/ai/prompt_builder.go` - task-led recovery and browser/account boundaries.
 - `redeven:internal/ai/computer_autonomous_integration_test.go` - real Chromium through the production Floret tool loop.
 - `redeven:internal/flower_ui/src/FlowerComputerConnections.tsx` - staged grouped target picker.
 

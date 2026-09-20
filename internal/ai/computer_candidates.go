@@ -188,7 +188,18 @@ func (r *ComputerUseRuntime) candidateBrowserTabs(ctx context.Context, connectio
 		if profile == nil {
 			return nil, nil
 		}
-		return profile.call(ctx, "inventory")
+		if profile.stopped() {
+			delete(r.managedProfiles, connection.ManagedProfileID)
+			return nil, nil
+		}
+		tabs, err := profile.call(ctx, "inventory")
+		if ctx.Err() == nil && profile.stopped() {
+			// A dead managed process needs no manual pairing. Discovery offers
+			// a new page; only an authorized selection may restart the profile.
+			delete(r.managedProfiles, connection.ManagedProfileID)
+			return nil, nil
+		}
+		return tabs, err
 	}
 	tabs, err := r.BrowserTabs(ctx, connection.CDPURL)
 	result := []ComputerBrowserTab{}
@@ -240,68 +251,76 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 	}
 
 	for _, target := range targets {
-		if !targetAllowedByPolicy(policy, target.ID) || target.ID == "browser-main" || (source == "system" && target.Kind != "browser.connected") || (source == "managed" && target.Kind != "browser.managed") {
+		if !targetAllowedByPolicy(policy, target.ID) || target.ID == "browser-main" || r.browserTargetHasInventory(target.ID) || (source == "system" && target.Kind != "browser.connected") || (source == "managed" && target.Kind != "browser.managed") {
 			continue
 		}
 		if err := r.appendComputerCandidate(&inventory, call.ThreadID, ComputerCandidate{TargetID: target.ID, Kind: target.Kind, DisplayName: target.DisplayName, URL: target.CurrentURL, AppBundleID: target.AppBundleID, State: r.computerTargetState(target, call.ThreadID)}, nil); err != nil {
 			return inventory, err
 		}
 	}
-	if len(normalizeToolTargetPolicy(policy).AllowedTargetIDs) == 0 {
-		profiles := []computerBrowserProfile{}
-		if source != "managed" {
-			profiles = r.personalBrowserProfiles()
-		}
-		if source != "system" {
-			r.connectMu.Lock()
-			managed, managedErr := r.managedProfilesLocked()
-			r.connectMu.Unlock()
-			if managedErr != nil {
-				if err := r.appendComputerCandidate(&inventory, call.ThreadID, ComputerCandidate{Kind: "browser.managed", DisplayName: "Flower managed browser", State: "setup_required"}, nil); err != nil {
-					return inventory, err
-				}
-			}
-			for _, profile := range managed {
-				profiles = append(profiles, computerBrowserProfile{name: profile.Name, kind: "browser.managed", connection: ComputerBrowserConnection{ManagedProfileID: profile.ID, NewTab: true}})
+	allowNewPages := len(normalizeToolTargetPolicy(policy).AllowedTargetIDs) == 0
+	profiles := []computerBrowserProfile{}
+	if source != "managed" {
+		profiles = r.personalBrowserProfiles()
+	}
+	if source != "system" {
+		r.connectMu.Lock()
+		managed, managedErr := r.managedProfilesLocked()
+		r.connectMu.Unlock()
+		if managedErr != nil && allowNewPages {
+			if err := r.appendComputerCandidate(&inventory, call.ThreadID, ComputerCandidate{Kind: "browser.managed", DisplayName: "Headless Chromium", State: "setup_required"}, nil); err != nil {
+				return inventory, err
 			}
 		}
-		defaultProfile, _ := defaultComputerBrowserProfile(profiles)
+		for _, profile := range managed {
+			profiles = append(profiles, computerBrowserProfile{name: profile.Name, kind: "browser.managed", connection: ComputerBrowserConnection{ManagedProfileID: profile.ID, NewTab: true}})
+		}
+	}
+	defaultProfile, _ := defaultComputerBrowserProfile(profiles)
 
-		for _, profile := range profiles {
-			connection := profile.connection
-			tabs, tabsErr := r.candidateBrowserTabs(ctx, connection)
-			state := "ready"
-			if tabsErr != nil {
-				state = "connection_required"
-			}
-			if err := r.appendComputerCandidate(&inventory, call.ThreadID, ComputerCandidate{Kind: profile.kind, DisplayName: computerBrowserDisplayName(profile), ProfileName: profile.name, NewTab: true, State: state}, &connection); err != nil {
+	for _, profile := range profiles {
+		connection := profile.connection
+		profileName := profile.name
+		if connection.ManagedProfileID == "browser-main" {
+			profileName = ""
+		}
+		tabs, tabsErr := r.candidateBrowserTabs(ctx, connection)
+		state := "ready"
+		if tabsErr != nil {
+			state = "connection_required"
+		}
+		if allowNewPages {
+			if err := r.appendComputerCandidate(&inventory, call.ThreadID, ComputerCandidate{Kind: profile.kind, DisplayName: computerBrowserDisplayName(profile), ProfileName: profileName, NewTab: true, State: state}, &connection); err != nil {
 				return inventory, err
 			}
 			if state == "ready" && computerProfileIdentity(connection) == computerProfileIdentity(defaultProfile.connection) {
 				inventory.DefaultCandidateRef = inventory.Candidates[len(inventory.Candidates)-1].CandidateRef
 			}
-			for _, tab := range tabs {
-				var targetID string
-				if connection.ExtensionProfileID != "" {
-					targetID = r.extensionTabTargetID(connection.ExtensionProfileID, tab.ID)
-				} else {
-					endpoint := connection.CDPURL
-					if connection.ManagedProfileID != "" {
-						r.connectMu.Lock()
-						if running := r.managedProfiles[connection.ManagedProfileID]; running != nil {
-							endpoint = running.endpoint
-						}
-						r.connectMu.Unlock()
+		}
+		for _, tab := range tabs {
+			var targetID string
+			if connection.ExtensionProfileID != "" {
+				targetID = r.extensionTabTargetID(connection.ExtensionProfileID, tab.ID)
+			} else {
+				endpoint := connection.CDPURL
+				if connection.ManagedProfileID != "" {
+					r.connectMu.Lock()
+					if running := r.managedProfiles[connection.ManagedProfileID]; running != nil {
+						endpoint = running.endpoint
 					}
-					targetID = r.managedTabTargetID(endpoint, tab.ID)
+					r.connectMu.Unlock()
 				}
-				target := TargetDescriptor{ID: targetID, Ready: true}
-				view := ComputerCandidate{TargetID: targetID, Kind: profile.kind, DisplayName: computerBrowserDisplayName(profile), ProfileName: profile.name, Title: tab.Title, URL: tab.URL, OpenerTabID: tab.OpenerTabID, State: r.computerTargetState(target, call.ThreadID)}
-				tabConnection := connection
-				tabConnection.NewTab, tabConnection.TabID, tabConnection.TabTitle, tabConnection.TabURL = false, tab.ID, tab.Title, tab.URL
-				if err := r.appendComputerCandidate(&inventory, call.ThreadID, view, &tabConnection); err != nil {
-					return inventory, err
-				}
+				targetID = r.managedTabTargetID(endpoint, tab.ID)
+			}
+			if !allowNewPages && (targetID == "" || !targetAllowedByPolicy(policy, targetID)) {
+				continue
+			}
+			target := TargetDescriptor{ID: targetID, Ready: true}
+			view := ComputerCandidate{TargetID: targetID, Kind: profile.kind, DisplayName: computerBrowserDisplayName(profile), ProfileName: profileName, Title: tab.Title, URL: tab.URL, OpenerTabID: tab.OpenerTabID, State: r.computerTargetState(target, call.ThreadID)}
+			tabConnection := connection
+			tabConnection.NewTab, tabConnection.TabID, tabConnection.TabTitle, tabConnection.TabURL = false, tab.ID, tab.Title, tab.URL
+			if err := r.appendComputerCandidate(&inventory, call.ThreadID, view, &tabConnection); err != nil {
+				return inventory, err
 			}
 		}
 	}
@@ -324,6 +343,21 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 		}
 	}
 	return inventory, ctx.Err()
+}
+
+// Registered browser adapters retain identity, not proof that their page is
+// still open. Their candidates come exclusively from fresh browser inventory.
+func (r *ComputerUseRuntime) browserTargetHasInventory(targetID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	switch executor := r.executors[targetID].(type) {
+	case *PlaywrightTargetExecutor:
+		return executor.CDPURL != ""
+	case *extensionTargetExecutor:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *ComputerUseRuntime) extensionTabTargetID(profileID, tabID string) string {
@@ -358,7 +392,8 @@ func (r *ComputerUseRuntime) SelectComputerCandidate(ctx context.Context, call T
 	if err = r.requireComputerSelectionOpen(call); err != nil {
 		return TargetDescriptor{}, err
 	}
-	if candidate.connection != nil && len(normalizeToolTargetPolicy(policy).AllowedTargetIDs) > 0 {
+	if candidate.connection != nil && len(normalizeToolTargetPolicy(policy).AllowedTargetIDs) > 0 &&
+		(candidate.connection.NewTab || candidate.view.TargetID == "" || !targetAllowedByPolicy(policy, candidate.view.TargetID)) {
 		return TargetDescriptor{}, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
 	}
 	var target TargetDescriptor
@@ -556,7 +591,10 @@ func (r *ComputerUseRuntime) requireComputerSelectionOpen(call TargetToolCall) e
 
 func computerBrowserDisplayName(profile computerBrowserProfile) string {
 	if profile.kind == "browser.managed" {
-		return "Flower managed browser — " + profile.name
+		if profile.connection.ManagedProfileID == "browser-main" {
+			return "Headless Chromium"
+		}
+		return "Headless Chromium — " + profile.name
 	}
 	return "Connected browser — " + profile.name
 }

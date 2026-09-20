@@ -44,6 +44,16 @@ func TestComputerAutonomousProductionToolLoop(t *testing.T) {
 	if os.Getenv("REDEVEN_BROWSER_INTEGRATION") != "1" {
 		t.Skip("requires pinned Chromium")
 	}
+	for _, stale := range []bool{false, true} {
+		name := "new_task"
+		if stale {
+			name = "lost_page"
+		}
+		t.Run(name, func(t *testing.T) { testComputerAutonomousProductionToolLoop(t, stale) })
+	}
+}
+
+func testComputerAutonomousProductionToolLoop(t *testing.T, stale bool) {
 	var opened atomic.Int32
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -87,7 +97,13 @@ func TestComputerAutonomousProductionToolLoop(t *testing.T) {
 		})
 		step := steps.Add(1)
 		name, args := "", map[string]any{}
-		switch step {
+		sequence := step
+		if stale {
+			sequence--
+		}
+		switch sequence {
+		case 0:
+			name = "computer_observe"
 		case 1:
 			name = "computer_targets"
 		case 2:
@@ -153,6 +169,11 @@ func TestComputerAutonomousProductionToolLoop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if stale {
+		if err := svc.snapshotThreadStore().SetComputerTarget(t.Context(), thread.ThreadID, "retired-page"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "browser-task", Model: "openai/gpt-5-mini", Input: RunInput{Text: "Open the website and verify its details page."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +197,11 @@ func TestComputerAutonomousProductionToolLoop(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if steps.Load() != 8 || opened.Load() != 1 {
+	wantSteps := int32(8)
+	if stale {
+		wantSteps++
+	}
+	if steps.Load() != wantSteps || opened.Load() != 1 {
 		t.Fatalf("steps=%d popup navigations=%d", steps.Load(), opened.Load())
 	}
 }

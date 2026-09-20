@@ -3392,7 +3392,7 @@ func (e *targetToolPolicyError) Error() string {
 	case "target_permission_required":
 		return "computer use requires target permissions"
 	case "target_connection_required":
-		return "the selected computer target is disconnected; select or reconnect it before continuing"
+		return "The selected page is disconnected. Use computer.targets to find current pages or create an eligible new task page. Preserve any requested browser or account; do not ask a remote user to reopen the desktop."
 	case "target_not_ready":
 		return "computer use target is not ready"
 	case "target_in_use":
@@ -3404,7 +3404,7 @@ func (e *targetToolPolicyError) Error() string {
 	case "target_not_allowed":
 		return "the selected target is not allowed for this Flower thread"
 	case "target_unavailable":
-		return "target is unavailable"
+		return "The previous page or window is unavailable. Use computer.targets to discover current resources, select a suitable candidate, and observe before continuing. Do not ask the user to configure a target or replay completed actions."
 	case "target_observation_unavailable":
 		return "The page could not be inspected. Observe it again before acting; do not repeat completed actions. If inspection keeps failing, reconnect the browser."
 	case "frame_unavailable":
