@@ -45,7 +45,7 @@ async function viewer(deferredInitialization = false, native = false) {
   const client = {
     _get_desktop_size:() => [1000, 680], id_to_window:windows, connected:true, reconnect:true, reconnect_count:5,
     _new_window:vi.fn(), do_send_damage_sequence:vi.fn(), send_configure_window:vi.fn(),
-    send_control_refresh:vi.fn(), close:vi.fn(), callback_close:() => {},
+    send_control_refresh:vi.fn(), close:vi.fn(), callback_close:() => {}, on_last_window:vi.fn(),
   };
   if (!deferredInitialization) Object.assign(frame.contentWindow!, {client});
   frame.dispatchEvent(new dom.window.Event('load'));
@@ -120,6 +120,17 @@ describe('host application viewer', () => {
     v.doc.dispatchEvent(new dom.window.Event('connection-lost'));
     await drain();
     expect(v.nativeWindow.request).toHaveBeenCalledWith('close');
+  });
+
+  it('closes after the last Xpra window is destroyed without racing server shutdown', async () => {
+    const v = await viewer(false, true);
+    v.appWindow(1); v.appWindow(2); v.client._new_window(1); v.client._new_window(2);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    delete v.client.id_to_window[1]; v.client.on_last_window(); await drain();
+    expect(v.nativeWindow.request).not.toHaveBeenCalledWith('close');
+    delete v.client.id_to_window[2]; v.client.on_last_window(); await drain();
+    expect(v.nativeWindow.request).toHaveBeenCalledWith('close');
+    expect(v.state()).toBe('ended');
   });
 
   it('closes a browser popup after its active application ends', async () => {

@@ -65,6 +65,38 @@ func TestStopRejectsAnotherOwnerAndCleansPrivateRoute(t *testing.T) {
 	}
 }
 
+func TestFinishedSessionDistinguishesStartupFailureFromAnEndedApplication(t *testing.T) {
+	for _, initial := range []string{"starting", "running"} {
+		t.Run(initial, func(t *testing.T) {
+			state := t.TempDir()
+			reg, err := registry.Open(filepath.Join(state, "forwards.sqlite"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			forwards, err := portforward.New(reg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer forwards.Close()
+			m := New(state, state, forwards)
+			f, err := forwards.OpenOwnedForwardSession(context.Background(), "http://127.0.0.1:45312/_redeven_host_app/")
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := &ownedSession{view: Session{ID: "finished", State: initial, Forward: f}, password: "secret", done: make(chan struct{})}
+			m.sessions[s.view.ID] = s
+			m.finish(s, "application_exited")
+			want := "failed"
+			if initial == "running" {
+				want = "ended"
+			}
+			if s.view.State != want || s.view.ErrorCode != "application_exited" || m.Password(s.view.ID) != "" {
+				t.Fatalf("incorrect final state or lost exit diagnostic: %+v", s.view)
+			}
+		})
+	}
+}
+
 func TestQuotedLaunchArgumentsNeverEvaluateShellExpressions(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "executed")
 	input := []string{"a'b", "two words", "$(touch " + marker + ")", ""}

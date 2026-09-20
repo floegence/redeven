@@ -97,6 +97,15 @@
     xpra.reconnect_count = 0;
     xpra.callback_close = () => connectionLost(attempt);
     doc.addEventListener('connection-lost', () => connectionLost(attempt));
+    const lastWindow = xpra.on_last_window;
+    xpra.on_last_window = function() {
+      lastWindow.call(this);
+      // This hook is emitted for a server-confirmed window destruction, never
+      // for the client's bulk cleanup on network loss. Finish after packet handling.
+      queueMicrotask(() => {
+        if (attempt === generation && wasActive && Object.keys(xpra.id_to_window).length === 0) finish('ended');
+      });
+    };
     // Keep upstream input controls intact; application windows own all visible space.
     const style = doc.createElement('style');
     style.textContent = 'html,body,#screen{background:transparent!important;background-image:none!important}#float_menu,#toolbar,#progress,#notifications,.spinneroverlay{display:none!important}.redeven-primary{border:0!important;border-radius:0!important;box-shadow:none!important}.redeven-primary>.windowhead,.redeven-primary>.ui-resizable-handle{display:none!important}';
