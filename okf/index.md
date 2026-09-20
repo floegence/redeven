@@ -147,6 +147,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Optional built-in browser installation](ai/computer-use-browser-installation.md) - Confirm browser download or Desktop upload, persist the capability switch, and validate task continuation.
 - [Browser and desktop settings](ai/computer-use-environment-settings.md) - Inspect environment capabilities and manage pairing without changing conversation targets or permissions.
 - [Guided Chrome connection](ai/computer-use-browser-connection.md) - Install and confirm a browser connection, then resume the original task automatically.
+- [Chrome connection diagnostics and recovery](ai/computer-use-chrome-diagnostics.md) - Diagnose missing components and graphical sessions, then recover on the correct environment host.
 - [Managed browsers and authorized Chrome tabs](ai/computer-use-browser.md) - Select profiles and exact tabs, preserve user settings, and qualify background control.
 - [Semantic desktop operations](ai/computer-use-desktop.md) - Use window AX and isolated AT-SPI with explicit foreground authority and user input priority.
 - [Computer target selection across threads](ai/computer-use-target-selection.md) - Preserve authorized target choices across turns and restart without inheriting control on fork.

@@ -155,12 +155,15 @@ func TestExtensionSetupRepairsRegistrationAndAssetsAfterRestart(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(resources, "extension", "manifest.json"), []byte("current-package"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(resources, "helper.mjs"), []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	create := func() *ComputerUseRuntime {
 		registry := NewTargetRegistry()
 		if err := registry.Register(TargetDescriptor{ID: "browser-main", Kind: "browser.managed"}); err != nil {
 			t.Fatal(err)
 		}
-		host := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": NewPlaywrightTargetExecutor("/fixture/node", filepath.Join(resources, "helper.mjs"), filepath.Join(root, "profiles"))}, filepath.Join(root, "media"))
+		host := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": NewPlaywrightTargetExecutor("/bin/sh", filepath.Join(resources, "helper.mjs"), filepath.Join(root, "profiles"))}, filepath.Join(root, "media"))
 		t.Cleanup(func() { _ = host.Close() })
 		return host
 	}
@@ -185,7 +188,7 @@ func TestExtensionSetupRepairsRegistrationAndAssetsAfterRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	host.extension.mu.Lock()
-	host.extension.connectionError = "extension_update_required"
+	host.extension.diagnostic = &ComputerExtensionDiagnostic{Stage: "check", Reason: "extension_update_required"}
 	host.extension.mu.Unlock()
 	repaired, err := host.setupComputerExtension(context.Background())
 	if err != nil || !reflect.DeepEqual(repaired, setup) {

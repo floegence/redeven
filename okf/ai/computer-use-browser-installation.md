@@ -75,6 +75,18 @@ symlinks. macOS framework links stay inside the new directory. A complete verifi
 package is published under `state/computer/browser/packages/<digest>`; no system
 Chrome installation is required. Normal host OS dependencies still apply.
 
+Desktop source-built Runtime upload suites also include `computer.zip`, with
+resources staged from that source snapshot for the target platform. Linux
+staging may use a different builder platform: its JavaScript/Wasm dependencies
+are portable and the target Node archive is checked against official checksums.
+Only native target Node binaries are executed on the builder. Darwin staging
+retains its matching native Swift builder requirement. The source-build cache
+requires the helper archive in its closed inventory, so older incomplete caches
+are rebuilt. Runtime helper verification requires extension entrypoints as well
+as Node and Playwright. Historical released packages without helpers remain
+installable and report their unavailable browser capability through
+[Chrome diagnostics](computer-use-chrome-diagnostics.md).
+
 `state/computer/browser/settings.json` owns the versioned enabled preference.
 Writes are atomic. Malformed or unknown settings fail closed without rewriting
 user state. The installer owns one operation at a time; uploads have opaque IDs,
@@ -86,6 +98,8 @@ No installation automatically restarts following a Runtime restart.
 
 # Evidence
 
+- `redeven:desktop/src/main/runtimePackageCache.ts` - complete source suites and cache admission.
+- `redeven:scripts/stage_computer_resources.mjs` - verified native and cross-platform helper staging.
 - `redeven:internal/browserinstall/manager.go` - preference, explicit acquisition and atomic package publication.
 - `redeven:internal/browserinstall/catalog.json` - official pinned package identities.
 - `redeven:internal/browserinstall/helpers.go` - release-suite helper preparation.

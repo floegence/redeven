@@ -77,7 +77,7 @@ func validateHelpers(root string) error {
 	if json.Unmarshal(data, &manifest) != nil || manifest.Version != 1 || manifest.Platform != runtime.GOOS || manifest.Architecture != arch {
 		return errors.New("computer helper platform mismatch")
 	}
-	required := map[string]bool{"node": false, "redevenComputerHost.mjs": false, "redevenManagedBrowser.mjs": false, "node_modules/playwright/package.json": false}
+	required := map[string]bool{"node": false, "redevenComputerHost.mjs": false, "redevenManagedBrowser.mjs": false, "node_modules/playwright/package.json": false, "extension/manifest.json": false, "extension/background.mjs": false, "extension/popup.html": false, "extension/popup.mjs": false}
 	seen := map[string]bool{}
 	for _, item := range manifest.Files {
 		if !filepath.IsLocal(item.Path) || filepath.Clean(item.Path) != item.Path || seen[item.Path] {

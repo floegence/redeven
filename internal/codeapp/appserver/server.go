@@ -3453,7 +3453,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		setup, err := aiSvc.SetupComputerExtension(r.Context(), meta)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_extension_setup_failed"})
+			g.writeComputerExtensionFailure(w, err, "prepare")
 			return
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: setup})
@@ -3473,7 +3473,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := aiSvc.OpenComputerExtension(r.Context(), meta, input.Action); err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_extension_open_failed"})
+			g.writeComputerExtensionFailure(w, err, "open")
 			return
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true})
@@ -3485,7 +3485,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		profiles, err := aiSvc.ComputerExtensionConnectionStatus(r.Context(), meta)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_extension_unavailable"})
+			g.writeComputerExtensionFailure(w, err, "check")
 			return
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: profiles})

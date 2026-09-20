@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/floegence/redeven/internal/session"
 )
@@ -29,23 +31,56 @@ func (s *Service) OpenComputerExtension(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return err
 	}
-	if runtime.GOOS == "linux" && action != "folder" {
-		name, err = exec.LookPath(name)
-		if err != nil {
-			return errors.New("cannot open Google Chrome: browser is not installed")
-		}
-	}
-	// Linux Chrome may remain attached when it starts a new process. Reap it
-	// asynchronously; actual connection readiness comes only from Native Messaging.
-	cmd := exec.Command(name, args...)
-	if runtime.GOOS == "darwin" {
-		return cmd.Run()
-	}
-	if err := cmd.Start(); err != nil {
+	if err := checkComputerExtensionOpen(runtime.GOOS, action, os.Getenv, exec.LookPath); err != nil {
 		return err
 	}
-	go func() { _ = cmd.Wait() }()
-	return nil
+	host := s.targetToolExecutor.(*ComputerUseRuntime)
+	host.mu.RLock()
+	hub := host.extension
+	host.mu.RUnlock()
+	hub.mu.Lock()
+	hub.launchGeneration++
+	generation := hub.launchGeneration
+	hub.mu.Unlock()
+	reason := "chrome_start_failed"
+	if action == "folder" {
+		reason = "folder_open_failed"
+	}
+	return startComputerExtensionCommand(exec.Command(name, args...), reason, func(err error) {
+		diagnostic := ComputerExtensionDiagnosticForError(err, "open")
+		hub.mu.Lock()
+		defer hub.mu.Unlock()
+		if !hub.closed && hub.launchGeneration == generation && len(hub.profiles) == 0 {
+			hub.diagnostic = &diagnostic
+		}
+	})
+}
+
+// Starting an application is not proof that it opened. Observe early exits and
+// retain later failures in the existing hub; the handshake alone means connected.
+func startComputerExtensionCommand(cmd *exec.Cmd, reason string, failed func(error)) error {
+	if err := cmd.Start(); err != nil {
+		return extensionFailure("open", reason, err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		err := cmd.Wait()
+		if err != nil {
+			err = extensionFailure("open", reason, err)
+			diagnostic := ComputerExtensionDiagnosticForError(err, "open")
+			slog.Warn("browser application launch failed", "reason", diagnostic.Reason, "diagnostic_id", diagnostic.DiagnosticID, "exit", cmd.ProcessState.ExitCode())
+			failed(err)
+		}
+		done <- err
+	}()
+	timer := time.NewTimer(300 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		return err
+	case <-timer.C:
+		return nil
+	}
 }
 
 func computerExtensionOpenCommand(platform, action string, setup ComputerExtensionSetup) (string, []string, error) {

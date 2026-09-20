@@ -134,7 +134,7 @@ it('stops after a failed automatic continuation and exposes explicit retry witho
   expect(host.textContent).not.toContain('private adapter details');
   expect(management.loadExtensionStatus).toHaveBeenCalledTimes(1);
   continued.mockResolvedValue(undefined);
-  Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === computerUseEnUS.retryConnection)!.click();
+  Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === computerUseEnUS.continueTask)!.click();
   await waitFor(() => continued.mock.calls.length === 2);
 });
 
@@ -255,4 +255,100 @@ it('routes an incompatible installed extension back to update without continuing
   expect(continued).not.toHaveBeenCalled();
   loadExtensionStatus.mockResolvedValue({ profiles: [{ id: 'updated', name: 'Chrome' }] });
   await waitFor(() => continued.mock.calls.length === 1);
+});
+
+it('explains missing Chrome resources before preparation and copies only safe diagnosis fields', async () => {
+  const { page } = await import('vitest/browser');
+  const host = document.createElement('div'); document.body.append(host);
+  const management = { listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+    setupExtension: vi.fn(), openExtension: vi.fn(), loadExtensionStatus: vi.fn().mockResolvedValue({ profiles: [], hostname: 'udesk26', platform: 'linux', browser_installed: true,
+      diagnostic: { stage: 'prepare', reason: 'browser_resources_missing', detail: '/private/secret' } }) };
+  const continued = vi.fn();
+  const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open connectionOnly threadID="thread" onOpenChange={() => undefined}
+    adapter={{ ...adapter(true), computerManagement: management }} copy={zhCN.flowerSurface.computer} onContinue={continued} /></LayoutProvider></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  await waitFor(() => !!document.querySelector('[data-chrome-diagnostic]'));
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  expect(dialog.innerText).toContain('udesk26');
+  expect(dialog.innerText).toContain(zhCN.flowerSurface.computer.chromeResourcesTitle);
+  expect(dialog.innerText).toContain(zhCN.flowerSurface.computer.chromeBrowserDetected);
+  expect(dialog.innerText).not.toContain(zhCN.flowerSurface.computer.setupFailed);
+  expect(management.setupExtension).not.toHaveBeenCalled();
+  expect(continued).not.toHaveBeenCalled();
+  const details = [...dialog.querySelectorAll('summary')].find(item => item.textContent === zhCN.flowerSurface.computer.chromeDiagnostics)!;
+  details.click();
+  const diagnostic = dialog.querySelector('textarea')!;
+  expect(diagnostic.value).toContain('browser_resources_missing');
+  expect(diagnostic.value).not.toContain('/private/secret');
+  await page.viewport(390, 720);
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+  if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog, path: '__screenshots__/chrome-diagnostics-missing-resources.png' });
+  await page.viewport(1280, 720);
+});
+
+it('keeps installation guidance during a failed status check and resumes only a real connection', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const continued = vi.fn().mockResolvedValue(undefined);
+  const status = vi.fn().mockResolvedValue({ profiles: [], hostname: 'udesk26', platform: 'linux', browser_installed: true,
+    diagnostic: { stage: 'open', reason: 'desktop_session_unavailable' } });
+  const management = { listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+    loadExtensionStatus: status, openExtension: vi.fn(), setupExtension: vi.fn().mockResolvedValue({ extension_path: '/home/tang/Redeven/Flower Browser fixture', extension_home_path: ['Redeven', 'Flower Browser fixture'], platform: 'linux', extension_id: 'mgfbpkkmocckooenpdfpefknffjanjce', native_host: 'dev.floegence.redeven.r123456789abcdef0' }) };
+  const stop = render(() => <FloeConfigProvider><FlowerChromeConnection reuseConnected management={management} copy={computerUseEnUS} onConnected={continued} /></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  await waitFor(() => !!host.querySelector('input[readonly]'));
+  expect(host.textContent).toContain(computerUseEnUS.chromeDesktopTitle);
+  expect(management.setupExtension).toHaveBeenCalledOnce();
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === computerUseEnUS.setupInstalled)!.click();
+  expect([...host.querySelectorAll('button')].some(button => button.textContent === computerUseEnUS.chromeCopyConnectionLink)).toBe(true);
+  expect([...host.querySelectorAll('input')].some(input => input.value === 'chrome-extension://mgfbpkkmocckooenpdfpefknffjanjce/popup.html#dev.floegence.redeven.r123456789abcdef0')).toBe(true);
+  expect(management.openExtension).not.toHaveBeenCalled();
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === computerUseEnUS.setupBack)!.click();
+  status.mockRejectedValue(new Error('private transport detail'));
+  await waitFor(() => host.textContent?.includes(computerUseEnUS.chromeCheckFailed) === true);
+  expect([...host.querySelectorAll('button')].some(button => button.textContent === computerUseEnUS.openExtensions)).toBe(true);
+  expect(host.querySelector('input[readonly]')).not.toBeNull();
+  expect(host.textContent).not.toContain('private transport detail');
+  status.mockResolvedValue({ profiles: [{ id: 'connected', name: 'Chrome' }] });
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === computerUseEnUS.retryConnection)!.click();
+  await waitFor(() => continued.mock.calls.length === 1);
+});
+
+it('keeps an application launch failure visible with its diagnostic ID', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const management = { listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+    loadExtensionStatus: vi.fn().mockResolvedValue({ profiles: [] }),
+    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture/Redeven/Flower Browser fixture', extension_home_path: ['Redeven', 'Flower Browser fixture'], platform: 'linux' }),
+    openExtension: vi.fn().mockRejectedValue({ code: 'chrome_start_failed', data: { stage: 'open', reason: 'chrome_start_failed', diagnostic_id: 'launch-fixture-123', stderr: 'secret launch details' } }) };
+  const stop = render(() => <FloeConfigProvider><FlowerChromeConnection management={management} copy={computerUseEnUS} onConnected={vi.fn()} /></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  await waitFor(() => !!host.querySelector('button'));
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === computerUseEnUS.openExtensions)!.click();
+  await waitFor(() => host.textContent?.includes(computerUseEnUS.chromeLaunchTitle) === true);
+  expect(host.querySelector('textarea')?.value).toContain('launch-fixture-123');
+  expect(host.querySelector('textarea')?.value).not.toContain('secret launch details');
+  expect(host.textContent).not.toContain(computerUseEnUS.setupTimeout);
+});
+
+it('restarts connection observation when a manual connection link is copied after a status failure', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const continued = vi.fn().mockResolvedValue(undefined);
+  const clipboard = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+  const status = vi.fn().mockResolvedValue({ profiles: [], diagnostic: { stage: 'open', reason: 'desktop_session_unavailable' } });
+  const management = { listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
+    loadExtensionStatus: status, openExtension: vi.fn(), setupExtension: vi.fn().mockResolvedValue({
+      extension_path: '/fixture/Flower Browser', extension_home_path: ['Flower Browser'], platform: 'linux',
+      extension_id: 'mgfbpkkmocckooenpdfpefknffjanjce', native_host: 'dev.floegence.redeven.r123456789abcdef0',
+    }) };
+  const stop = render(() => <FloeConfigProvider><FlowerChromeConnection reuseConnected management={management} copy={computerUseEnUS} onConnected={continued} /></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); clipboard.mockRestore(); };
+  await waitFor(() => host.textContent?.includes(computerUseEnUS.setupInstalled) === true);
+  status.mockRejectedValue(new Error('connection temporarily unavailable'));
+  await waitFor(() => host.textContent?.includes(computerUseEnUS.chromeCheckFailed) === true);
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === computerUseEnUS.setupInstalled)!.click();
+  status.mockResolvedValue({ profiles: [{ id: 'confirmed', name: 'Chrome' }] });
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === computerUseEnUS.chromeCopyConnectionLink)!.click();
+  await waitFor(() => continued.mock.calls.length === 1);
+  expect(clipboard).toHaveBeenCalledWith('chrome-extension://mgfbpkkmocckooenpdfpefknffjanjce/popup.html#dev.floegence.redeven.r123456789abcdef0');
+  expect(management.setupExtension).toHaveBeenCalledOnce();
+  expect(management.openExtension).not.toHaveBeenCalled();
 });

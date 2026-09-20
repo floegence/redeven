@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { gunzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -218,6 +218,11 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
     'done',
   ].join('\n'), { mode: 0o755 });
 
+  await fs.writeFile(path.join(root, 'scripts', 'stage_computer_archive.mjs'), [
+    "import { writeFileSync } from 'node:fs';",
+    "writeFileSync(process.argv[2], 'verified-target-computer-resources:' + process.argv.slice(3).join(' '));",
+  ].join('\n'));
+
   const manifest = {
     platform_version: '3.0.31',
     plugin_api: 1,
@@ -398,6 +403,7 @@ describe('runtimePackageCache', () => {
       expect(first.source).toBe('source_build');
       expect(cached.source).toBe('source_build_cache');
       expect(cached.archiveData).toEqual(first.archiveData);
+      expect(tarGzipEntryNames(first.archiveData)).toContain('computer.zip');
       const sourceCacheEntries = await fs.readdir(path.join(fixture.cacheRoot, 'source-build-cache'), { withFileTypes: true });
       expect(sourceCacheEntries.filter((entry) => entry.isDirectory())).toHaveLength(1);
       const metadata = JSON.parse(await fs.readFile(
@@ -420,6 +426,36 @@ describe('runtimePackageCache', () => {
     } finally {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }
+  }, 15_000);
+
+  it('rebuilds an old source cache that omitted browser connection resources', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    try {
+      const first = await preparePackage({ cacheRoot: fixture.cacheRoot, platform, sourceRuntimeRoot: fixture.root });
+      const entries = await fs.readdir(path.join(fixture.cacheRoot, 'source-build-cache'));
+      const directory = path.join(fixture.cacheRoot, 'source-build-cache', entries[0]);
+      const tar = gunzipSync(first.archiveData);
+      const retained: Buffer[] = [];
+      for (let offset = 0; offset + 512 <= tar.length;) {
+        const header = tar.subarray(offset, offset + 512);
+        const name = header.subarray(0, 100).toString().replace(/\0.*$/u, '');
+        if (!name) break;
+        const size = Number.parseInt(header.subarray(124, 136).toString().replace(/\0.*$/u, '').trim(), 8);
+        const end = offset + 512 + Math.ceil(size / 512) * 512;
+        if (name !== 'computer.zip') retained.push(tar.subarray(offset, end));
+        offset = end;
+      }
+      const incomplete = gzipSync(Buffer.concat([...retained, Buffer.alloc(1024)]));
+      const metadataPath = path.join(directory, 'metadata.json');
+      const metadata = JSON.parse(await fs.readFile(metadataPath, 'utf8'));
+      metadata.archive_sha256 = sha256(incomplete);
+      await fs.writeFile(path.join(directory, 'runtime-package.tar.gz'), incomplete);
+      await fs.writeFile(metadataPath, JSON.stringify(metadata));
+      const repaired = await preparePackage({ cacheRoot: fixture.cacheRoot, platform, sourceRuntimeRoot: fixture.root });
+      expect(repaired.source).toBe('source_build');
+      expect(tarGzipEntryNames(repaired.archiveData)).toContain('computer.zip');
+    } finally { await fs.rm(path.dirname(fixture.root), { recursive: true, force: true }); }
   }, 15_000);
 
   it('classifies a forbidden ReDevPlugin manifest before any source build', async () => {
@@ -619,6 +655,7 @@ describe('runtimePackageCache', () => {
         'redevplugin-runtime.provenance.json',
         'redevplugin-runtime.sig',
         'redevplugin-runtime.pem',
+        'computer.zip',
       ]);
       expect(tarGzipEntryNames(gatewayAsset.archiveData)).toEqual(['redeven-gateway']);
       const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');

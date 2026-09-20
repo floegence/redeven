@@ -15,8 +15,14 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export function stageComputerResources(destination, platform = process.platform, arch = process.arch) {
   if (!path.isAbsolute(destination)) throw new Error('Computer resource destination must be absolute.');
   const expectedNode = readFileSync(path.join(repo, '.node-version'), 'utf8').trim();
-  if (platform !== process.platform || arch !== process.arch || process.versions.node !== expectedNode) {
-    throw new Error(`Computer resources require a native ${platform}/${arch} builder with Node ${expectedNode}.`);
+  if (process.versions.node !== expectedNode || !['darwin', 'linux'].includes(platform) || !['x64', 'arm64'].includes(arch)) {
+    throw new Error(`Computer resources require Node ${expectedNode} and a supported Runtime target.`);
+  }
+  // Linux helpers are JavaScript/Wasm plus a checksum-verified official Node
+  // binary. Darwin also includes a native Swift helper and needs a native build.
+  const nativeTarget = platform === process.platform && arch === process.arch;
+  if (platform === 'darwin' && !nativeTarget) {
+    throw new Error('Darwin computer resources require a matching native builder.');
   }
   if (existsSync(destination)) throw new Error('Computer resource destination must be new.');
   const requireUI = createRequire(path.join(repo, 'internal/envapp/ui_src/package.json'));
@@ -44,7 +50,7 @@ export function stageComputerResources(destination, platform = process.platform,
     execFileSync('tar', ['-xzf', archive, '-C', downloadRoot, `${prefix}/bin/node`, `${prefix}/LICENSE`]);
     copy(path.join(downloadRoot, prefix, 'bin/node'), 'node');
     copy(path.join(downloadRoot, prefix, 'LICENSE'), 'NODE_LICENSE');
-    if (execFileSync(path.join(destination, 'node'), ['--version'], { encoding: 'utf8' }).trim() !== `v${expectedNode}`) throw new Error('Bundled Node version mismatch.');
+    if (nativeTarget && execFileSync(path.join(destination, 'node'), ['--version'], { encoding: 'utf8' }).trim() !== `v${expectedNode}`) throw new Error('Bundled Node version mismatch.');
   } finally { rmSync(downloadRoot, { recursive: true, force: true }); }
   for (const file of ['redevenComputerHost.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'redevenComputerScript.mjs']) {
     copy(path.join(repo, 'internal/envapp/ui_src/scripts', file), file);
