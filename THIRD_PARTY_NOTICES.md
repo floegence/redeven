@@ -1394,7 +1394,7 @@ SOFTWARE.
 | github.com/dunglas/httpsfv | v1.1.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.1 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
-| github.com/floegence/floe-native-apps | v0.1.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.1.2 | Detected from LICENSE. |
+| github.com/floegence/floe-native-apps | v0.1.3 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.1.3 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.18.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.18.0 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.2.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.2.2 | Floegence first-party dependency. |
@@ -1446,10 +1446,10 @@ SOFTWARE.
 | go4.org | v0.0.0-20230225012048-214862532bf5 | Apache-2.0 | Runtime | https://pkg.go.dev/go4.org@v0.0.0-20230225012048-214862532bf5 | Detected from LICENSE. |
 | golang.org/x/crypto | v0.55.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.55.0 | Detected from LICENSE. |
 | golang.org/x/image | v0.45.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.45.0 | Detected from LICENSE. |
-| golang.org/x/mod | v0.40.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.40.0 | Detected from LICENSE. |
+| golang.org/x/mod | v0.41.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.41.0 | Detected from LICENSE. |
 | golang.org/x/net | v0.58.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.58.0 | Detected from LICENSE. |
-| golang.org/x/sync | v0.22.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.22.0 | Detected from LICENSE. |
-| golang.org/x/sys | v0.47.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.47.0 | Detected from LICENSE. |
+| golang.org/x/sync | v0.23.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.23.0 | Detected from LICENSE. |
+| golang.org/x/sys | v0.48.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.48.0 | Detected from LICENSE. |
 | golang.org/x/term | v0.45.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/term@v0.45.0 | Detected from LICENSE. |
 | golang.org/x/text | v0.41.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/text@v0.41.0 | Detected from LICENSE. |
 | gopkg.in/yaml.v3 | v3.0.1 | MIT | Runtime | https://pkg.go.dev/gopkg.in/yaml.v3@v3.0.1 | Detected from LICENSE. |

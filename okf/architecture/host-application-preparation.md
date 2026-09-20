@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed host application preparation
 description: One-action acquisition, verification, cancellation, offline recovery and same-window launch continuation for native host applications.
 tags: [runtime, desktop, applications, linux, security]
-timestamp: 2026-09-20T15:00:00Z
+timestamp: 2026-09-20T17:00:00Z
 ---
 # Summary
 
@@ -18,9 +18,9 @@ closing a pending viewer prevents its automatic application opening.
 
 # Component ownership and admission
 
-Redeven consumes `github.com/floegence/floe-native-apps` v0.1.2 as a published Go
-module. Its embedded catalog pins original publisher URLs, archive sizes, SHA-256,
-licenses and source references. The Runtime accepts no client-provided URL, hash,
+Redeven consumes `github.com/floegence/floe-native-apps` v0.1.3 as a published Go
+module, built with the same Go 1.27.1 toolchain. Its embedded catalog pins original
+publisher URLs, archive sizes, SHA-256, licenses and source references. The Runtime accepts no client-provided URL, hash,
 catalog, executable, or install destination. The upstream acquires original Alpine
 APK archives and Xpra HTML5 source, retaining archives in a private cache. Native
 binaries are not added to Redeven's source or supplied by a local sibling checkout.
@@ -104,4 +104,4 @@ cannot silently grant them. A graphical login remains required, as defined by th
 - `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx`: pending-window continuation and cancellation races.
 - `desktop/src/main/hostApplicationPreparationWindows.test.ts`: exact document ownership and inert presentation.
 - `desktop/src/main/hostApplicationComponents.test.ts` and `cmd/redeven/host_application_package.go`: Desktop relay and released acquisition delegation.
-- [Upstream v0.1.2](https://github.com/floegence/floe-native-apps/releases/tag/v0.1.2): pinned component catalog, integrity/extraction and native qualification implementation.
+- [Upstream v0.1.3](https://github.com/floegence/floe-native-apps/releases/tag/v0.1.3): pinned component catalog, integrity/extraction and native qualification implementation.
