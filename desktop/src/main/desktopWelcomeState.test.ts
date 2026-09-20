@@ -33,6 +33,19 @@ import {
 } from './desktopTarget';
 import type { DesktopSavedRuntimeTarget } from './desktopPreferences';
 
+it('preserves an explicit Welcome navigation request independently of Flower settings focus', () => {
+  const preferences = testDesktopPreferences();
+  const args = { preferences, surface: 'flower' as const, navigationRevision: 4, flowerSettingsFocusRevision: 2 };
+  const opened = buildDesktopWelcomeSnapshot(args);
+  expect(opened.navigation_revision).toBe(4);
+  expect(opened.flower_settings_focus_revision).toBe(2);
+  const refreshed = buildDesktopWelcomeSnapshot({ ...args, entryReason: 'switch_environment' });
+  expect(refreshed.navigation_revision).toBe(opened.navigation_revision);
+  const reopened = buildDesktopWelcomeSnapshot({ ...args, navigationRevision: 5 });
+  expect(reopened.surface).toBe(opened.surface);
+  expect(reopened.navigation_revision).toBe(5);
+});
+
 function sshRuntimeTarget(input: Readonly<{
   id: string;
   label: string;

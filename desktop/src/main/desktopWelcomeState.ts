@@ -119,6 +119,7 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   entryReason?: DesktopWelcomeEntryReason;
   issue?: DesktopWelcomeIssue | null;
   selectedEnvironmentID?: string;
+  navigationRevision?: number;
   flowerSettingsFocusRevision?: number;
   platformCapabilities?: DesktopPlatformCapabilities;
   wslDiscovery?: DesktopWSLDiscoverySnapshot | null;
@@ -1964,6 +1965,7 @@ export function buildDesktopWelcomeSnapshot(
     platform_capabilities: platformCapabilities,
     wsl_discovery: args.wslDiscovery ?? null,
     default_flower_runtime_target_id: preferences.default_flower_runtime_target_id,
+    navigation_revision: args.navigationRevision ?? 0,
     flower_settings_focus_revision: Math.max(0, Math.floor(Number(args.flowerSettingsFocusRevision ?? 0))),
     entry_reason: args.entryReason ?? 'app_launch',
     close_action: openSessions.length > 0 ? 'close_launcher' : 'quit',

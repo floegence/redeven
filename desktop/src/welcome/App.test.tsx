@@ -278,7 +278,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('selectedFlowerWarmupProgress(flowerRuntimeLifecycleProgress())');
     expect(appSrc).toContain('warmup={flowerWarmupState()}');
     expect(appSrc).toContain("aria-label={i18n().t('flowerSurface.chat.entryLabel')}");
-    expect(appSrc).toContain("when={snapshot().surface !== 'flower'}");
+    expect(appSrc).toContain("when={!flowerVisible()}");
     expect(appSrc).toContain('class="redeven-flower-topbar-button"');
     expect(appSrc).not.toContain("class={cn('rounded-full'");
     expect(appSrc).toContain('<FlowerIcon class="h-5 w-5" />');
@@ -304,9 +304,9 @@ describe('DesktopWelcomeShell', () => {
   it('routes the Redeven mark back to Environments while Flower owns the main surface', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('async function openEnvironmentCenterSurface(): Promise<void>');
-    expect(appSrc).toContain("kind: 'open_environment_center'");
-    expect(appSrc).toContain("snapshot().surface === 'flower'");
+    expect(appSrc).toContain('function openEnvironmentCenterSurface(): void');
+    expect(appSrc).toContain("navigateWelcomeSurface('connect_environment')");
+    expect(appSrc).toContain("activeSurface() === 'flower'");
     expect(appSrc).toContain("i18n().t('shell.backToEnvironments')");
     expect(appSrc).toContain('class="redeven-flower-back-button"');
     expect(appSrc).toContain('<ArrowLeft class="h-3.5 w-3.5" />');
@@ -1336,7 +1336,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toMatch(/props\.i18n\.t\('environmentCenter\.askFlowerForLabel',\s*\{\s*label: ownerLabel\(\),?\s*\}\)/u);
     expect(appSrc).toContain('<FlowerTurnLauncherWindow');
     expect(appSrc).toContain('intent={flowerTurnLauncherIntent()}');
-    expect(appSrc).toContain('focusThreadRequest={flowerFocusThreadRequest()}');
+    expect(appSrc).toContain('focusThreadRequest={flowerVisible() ? flowerFocusThreadRequest() : null}');
     expect(appSrc).toContain('source_surface:');
     expect(appSrc).toContain("'desktop_welcome_environment_card'");
     expect(appSrc).toContain('launchLocalEnvironmentFlowerTurn(props.runtime.settings');
@@ -1348,14 +1348,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`');
     expect(appSrc).toContain('onFocusThreadRequestConsumed={(requestID) => {');
     expect(appSrc).toContain('current?.request_id === requestID ? null : current');
-    expect(appSrc).toMatch(/closeFlowerTurnLauncher\(\);\s*await openFlowerSurface\(\);/u);
+    expect(appSrc).toMatch(/closeFlowerTurnLauncher\(\);\s*openFlowerSurface\(\);/u);
     expect(appSrc).not.toContain("showActionToast(i18n().t('toast.flowerPromptQueued')");
     expect(appSrc).toContain(
       'context_action: buildEnvironmentFlowerContextAction(environment, contextSummary, cleanLabel)',
     );
     expect(appSrc).not.toContain('context_action: buildEnvironmentFlowerContextEnvelope(environment).raw');
-    expect(appSrc).toContain('async function openFlowerSurface(): Promise<void>');
-    expect(appSrc).toContain("kind: 'open_flower'");
+    expect(appSrc).toContain('function openFlowerSurface(): void');
+    expect(appSrc).toContain("navigateWelcomeSurface('flower')");
     expect(appSrc).toContain('class="redeven-environment-card__flower-button"');
     expect(appSrc).toContain('FlowerSoftAuraIcon');
     expect(appSrc).not.toContain('flowerDraftIntent');
