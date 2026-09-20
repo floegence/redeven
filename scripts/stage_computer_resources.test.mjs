@@ -6,9 +6,10 @@ import { mkdtempSync, readFileSync, rmSync, renameSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { createRequire } from 'node:module';
 import { stageComputerResources } from './stage_computer_resources.mjs';
 
-test('immutable computer bundle starts without source, PATH, NODE_PATH or browser cache', { skip: process.env.REDEVEN_COMPUTER_BUNDLE_QUALIFICATION !== '1', timeout: 120000 }, async () => {
+test('immutable helpers exclude Chromium and use an explicitly installed browser without source or PATH', { skip: process.env.REDEVEN_COMPUTER_BUNDLE_QUALIFICATION !== '1', timeout: 120000 }, async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'redeven-computer-bundle-'));
   let child;
   let exited;
@@ -18,7 +19,10 @@ test('immutable computer bundle starts without source, PATH, NODE_PATH or browse
     const resources = path.join(root, 'relocated');
     const manifest = JSON.parse(readFileSync(path.join(resources, 'manifest.json')));
     assert.ok(manifest.files.some(file => file.path === 'node_modules/playwright/package.json'));
-    child = spawn(path.join(resources, 'node'), [path.join(resources, 'redevenComputerHost.mjs'), '--profile', path.join(root, 'profile')], {
+    assert.ok(!manifest.files.some(file => file.path.startsWith('chromium/') || file.path === 'browser.json'));
+    const requireUI = createRequire(path.resolve('internal/envapp/ui_src/package.json'));
+    const browser = requireUI('playwright').chromium.executablePath();
+    child = spawn(path.join(resources, 'node'), [path.join(resources, 'redevenComputerHost.mjs'), '--profile', path.join(root, 'profile'), '--browser-executable', browser], {
       cwd: os.tmpdir(), env: { HOME: root, PATH: '/usr/bin:/bin', PLAYWRIGHT_BROWSERS_PATH: path.join(root, 'absent-cache') }, stdio: ['pipe', 'pipe', 'pipe'], timeout: 30000,
     });
     exited = new Promise(resolve => child.once('exit', resolve));
@@ -65,5 +69,24 @@ test('immutable computer bundle starts without source, PATH, NODE_PATH or browse
     if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     if (exited) await exited;
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('optional browser catalog matches the published Playwright browser revision on every Runtime platform', () => {
+  const requireUI = createRequire(path.resolve('internal/envapp/ui_src/package.json'));
+  const playwright = requireUI('playwright/package.json');
+  const core = createRequire(requireUI.resolve('playwright/package.json'));
+  const browserMetadata = JSON.parse(readFileSync(path.join(path.dirname(core.resolve('playwright-core/package.json')), 'browsers.json')));
+  const chromium = browserMetadata.browsers.find(browser => browser.name === 'chromium');
+  const catalog = JSON.parse(readFileSync('internal/browserinstall/catalog.json'));
+  assert.equal(catalog.playwright_version, playwright.version);
+  assert.deepEqual(catalog.packages.map(pkg => `${pkg.platform}/${pkg.architecture}`).sort(), ['darwin/amd64', 'darwin/arm64', 'linux/amd64', 'linux/arm64']);
+  for (const pkg of catalog.packages) {
+    assert.equal(pkg.version, chromium.browserVersion);
+    assert.ok(pkg.id.includes(`-${chromium.revision}-`));
+    assert.equal(new URL(pkg.url).origin, 'https://cdn.playwright.dev');
+    assert.match(pkg.sha256, /^[0-9a-f]{64}$/u);
+    assert.ok(pkg.size_bytes > 0 && pkg.installed_bytes > pkg.size_bytes);
+    assert.equal(pkg.name, pkg.url.includes('/cft/') ? 'Chrome for Testing' : 'Chromium');
   }
 });

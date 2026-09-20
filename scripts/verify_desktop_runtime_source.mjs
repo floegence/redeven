@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, lstatSync } from 'node:fs';
 import path from 'node:path';
@@ -31,6 +32,16 @@ export function verifyDesktopRuntimeSource(manifestPath, runtimeRoot, version, c
       || createHash('sha256').update(readFileSync(filename)).digest('hex') !== file.sha256) {
       throw new Error(`Linux Runtime archive differs from its source manifest: ${file.path}`);
     }
+  }
+  const helpers = execFileSync('python3', ['-c', `
+import sys,zipfile
+with zipfile.ZipFile(sys.argv[1]) as archive:
+ info=archive.getinfo('manifest.json')
+ if info.file_size > 2 * 1024 * 1024: raise ValueError('helper manifest too large')
+ sys.stdout.buffer.write(archive.read(info))
+`, path.join(runtimeRoot, 'computer.zip')], { maxBuffer: 2 * 1024 * 1024 });
+  if (createHash('sha256').update(helpers).digest('hex') !== manifest.computer_manifest_sha256) {
+    throw new Error('Linux Runtime helper archive differs from its source manifest.');
   }
   const identity = { schema_version: 1, files: manifest.runtime_files.map((file) => ({
     name: file.path, sha256: `sha256:${file.sha256}`, size_bytes: file.size_bytes, executable: file.executable,

@@ -37,6 +37,7 @@ function writeRuntimeSuite(directory, label, omit = '') {
     ['redeven', `#!/bin/sh\n[ "$1" = version ]\n# ${label}\n`],
     ['redevplugin-runtime', `#!/bin/sh\nexit 0\n# ${label}\n`],
     ['REDEVPLUGIN_THIRD_PARTY_NOTICES.md', `plugin notices ${label}\n`],
+    ['computer.zip', Buffer.from('thin helper archive')],
     ['REDEVPLUGIN_RUNTIME.spdx.json', `{"label":"${label}","kind":"sbom"}\n`],
     ['redevplugin-runtime.provenance.json', `{"label":"${label}","kind":"provenance"}\n`],
     ['redevplugin-runtime.sig', `signature ${label}\n`],
@@ -116,6 +117,7 @@ test('atomically activates and verifies the complete versioned ReDevPlugin runti
     assert.equal(readlinkSync(path.join(install, 'redeven')), `.redeven-runtime-suites/${'a'.repeat(64)}/redeven`);
     const suite = path.join(install, '.redeven-runtime-suites', 'a'.repeat(64));
     for (const name of [
+      'computer.zip',
       'redeven',
       'redevplugin-runtime',
       'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
@@ -198,6 +200,7 @@ test('atomically activates a Darwin suite with the complete ReDevPlugin runtime 
       'REDEVEN_THIRD_PARTY_NOTICES.md',
       'REDEVPLUGIN_RUNTIME.spdx.json',
       'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
+      'computer.zip',
       'redeven',
       'redevplugin-runtime',
       'redevplugin-runtime.pem',

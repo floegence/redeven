@@ -48,6 +48,7 @@ function createRuntimeArchive(root: string): string {
     'redevplugin-runtime.sig',
     'redevplugin-runtime.pem',
     'redevplugin-runtime',
+    'computer.zip',
   ]) {
     fs.writeFileSync(path.join(source, companion), companion === 'redevplugin-runtime' ? '#!/bin/sh\n' : '{}');
   }
@@ -368,6 +369,7 @@ describe('sshRuntime', () => {
       const activateScriptPath = path.join(root, 'activate.sh');
       fs.writeFileSync(activateScriptPath, buildManagedSSHActivatePreparedRuntimeScript());
       execFileSync('sh', [activateScriptPath, targetRoot, 'v1', stagingRoot]);
+      expect(fs.readFileSync(path.join(targetRoot, 'runtime', 'managed', 'bin', 'computer.zip'), 'utf8')).toBe('{}');
       expect(fileMode(path.join(targetRoot, 'runtime'))).toBe(0o700);
       expect(fileMode(path.join(targetRoot, 'runtime', 'managed'))).toBe(0o700);
       expect(fileMode(path.join(targetRoot, 'runtime', 'managed', 'bin'))).toBe(0o700);

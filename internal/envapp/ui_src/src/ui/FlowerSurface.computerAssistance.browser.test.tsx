@@ -5,7 +5,7 @@ import { page } from 'vitest/browser';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' = 'site', permission: 'approval_required' | 'full_access' = 'approval_required') {
+async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'installation' = 'site', permission: 'approval_required' | 'full_access' = 'approval_required') {
   const threadID = 'assistance-fixture';
   const item = activityItem({ item_id: 'step', tool_id: 'navigate', tool_name: kind === 'connection' ? 'computer.targets' : 'browser.navigate', renderer: 'structured', status: 'success',
     target_refs: [{ kind: kind === 'connection' ? 'computer_browser_source' : 'computer_control', label: 'Task browser', resource_ref: kind === 'connection' ? 'system' : 'browser-main' },
@@ -23,7 +23,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' = 'site
     const { label, description, renderer, payload, chips, target_refs, ...facts } = entry.activity;
     return { ...entry, activity: { ...facts, presentation: { label, description, renderer, payload, chips, target_refs } } };
   }), interactions: [{ id: 'tool-input:step', kind: 'input' as const, turn_id: 'turn-control', run_id: 'run-control', tool_call_id: 'navigate',
-    input: { summary: 'Specific external step', questions: [{ id: kind === 'connection' ? 'browser_connection' : 'computer_control', prompt: 'Inspect the selected page.', kind: 'select', options: [kind === 'connection' ? 'Continue with connected browser' : 'Return control to Flower'] }] },
+    input: { summary: 'Specific external step', questions: [{ id: kind === 'installation' ? 'browser_install' : kind === 'connection' ? 'browser_connection' : 'computer_control', prompt: 'Inspect the selected page.', kind: 'select', options: kind === 'installation' ? ['Continue with installed browser', 'Continue without built-in browser'] : [kind === 'connection' ? 'Continue with connected browser' : 'Return control to Flower'] }] },
   }] };
   const gate = deferred<void>();
   const other = thread({ thread_id: 'other-conversation' });
@@ -31,8 +31,12 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' = 'site
   const loadExtensionStatus = vi.fn(async () => ({ profiles: [{ id: 'personal', name: 'Personal' }] }));
   const loadAccess = vi.fn(async () => ({ origins: ['https://existing.test'], apps: ['dev.Notes'], allow_foreground: false }));
   const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:step', current: { ...current, view_version: 2, activity: 'idle' as const, last_outcome: 'completed' as const, interactions: [] } }));
+  const browser = { enabled: true, state: 'not_installed' as const, directory: '/state/browser', received_bytes: 0,
+    package: { name: 'Chrome for Testing', id: 'fixture', version: '148', platform: 'linux', architecture: 'amd64', url: 'https://cdn.playwright.dev/fixture.zip', size_bytes: 180000000, installed_bytes: 390000000 } };
+  const loadBrowserInstallation = vi.fn().mockResolvedValue(browser);
+  const installBrowser = vi.fn().mockResolvedValue({ ...browser, state: 'downloading', operation_id: 'confirmed' });
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput,
-    computerManagement: { openExtension: vi.fn(), loadExtensionStatus, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess,     },
+    computerManagement: { loadBrowserInstallation, installBrowser, saveBrowserEnabled: vi.fn(), openExtension: vi.fn(), loadExtensionStatus, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess,     },
     listThreads: vi.fn(async () => [snapshot, other]), loadThread: vi.fn(async id => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(other)),
     connectLiveStream: async function* ({ signal }) {
       yield { schema_version: 1 as const, kind: 'ready' as const, observer_id: 'assistance-observer', summaries: [snapshot, other] };
@@ -40,7 +44,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' = 'site
     },
   }, { focusThreadRequest: { request_id: 'select-assistance', thread_id: threadID }, layout: true });
   await waitFor(() => !!surface.querySelector('.flower-computer-control-heading'));
-  return { surface, gate, saveAccess, loadAccess, submitInput, loadExtensionStatus };
+  return { surface, gate, saveAccess, loadAccess, submitInput, loadExtensionStatus, loadBrowserInstallation, installBrowser, browser };
 }
 
 it('explains the exact site grant and grants it once before continuing without manual browser control', async () => {
@@ -210,5 +214,35 @@ it('opens management without resuming a conversation that is waiting for Chrome'
   await new Promise(resolve => requestAnimationFrame(resolve));
   expect(document.querySelector('[data-flower-computer-panel="overview"]')).not.toBeNull();
   expect(s.loadExtensionStatus).not.toHaveBeenCalled();
+  expect(s.submitInput).not.toHaveBeenCalled();
+});
+
+it('shows one installation action and continues only after the confirmed browser is installed', async () => {
+  const s = await setup('installation', 'full_access');
+  expect(s.surface.querySelector('[data-computer-control-action]')).toBeNull();
+  const setupButton = [...s.surface.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Set up the built-in browser')!;
+  setupButton.click();
+  await waitFor(() => !!document.querySelector('[role="switch"]'));
+  expect(s.installBrowser).not.toHaveBeenCalled();
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Download and install')!;
+  confirm.click(); await waitFor(() => s.installBrowser.mock.calls.length === 1);
+  expect(s.submitInput).not.toHaveBeenCalled();
+  s.loadBrowserInstallation.mockResolvedValue({ ...s.browser, state: 'installed' });
+  await vi.waitFor(() => expect(s.submitInput).toHaveBeenCalledTimes(1), { timeout: 4000 });
+  expect(JSON.stringify(s.submitInput.mock.calls)).toContain('Continue with installed browser');
+});
+it('never continues another conversation after an installation completes', async () => {
+  const s = await setup('installation', 'full_access');
+  [...s.surface.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Set up the built-in browser')!.click();
+  await waitFor(() => !!document.querySelector('[role="switch"]'));
+  [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Download and install')!.click();
+  await waitFor(() => s.installBrowser.mock.calls.length === 1);
+  const loaded = deferred<Omit<typeof s.browser, 'state'> & { state: string }>();
+  s.loadBrowserInstallation.mockImplementation(() => loaded.promise);
+  await vi.waitFor(() => expect(s.loadBrowserInstallation).toHaveBeenCalledTimes(2), { timeout: 4000 });
+  s.surface.querySelector<HTMLButtonElement>('[data-thread-id="other-conversation"] .flower-thread-card-select-button')!.click();
+  await waitFor(() => s.surface.querySelector('[data-thread-id="other-conversation"]')?.getAttribute('data-flower-thread-active') === 'true');
+  loaded.resolve({ ...s.browser, state: 'installed' });
+  await new Promise(resolve => setTimeout(resolve, 30));
   expect(s.submitInput).not.toHaveBeenCalled();
 });

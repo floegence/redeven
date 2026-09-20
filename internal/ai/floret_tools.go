@@ -1274,7 +1274,10 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 			if len(result.inputRequired.Questions) > 0 {
 				activity.Description = result.inputRequired.Questions[0].Prompt
 			}
-			if rawPayload["connection_required"] == true && rawPayload["browser_source"] == "system" {
+			if rawPayload["browser_installation_required"] == true {
+				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_browser_install", ResourceRef: "managed", Label: "Built-in browser"})
+				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: "installation", Tone: "info"})
+			} else if rawPayload["connection_required"] == true && rawPayload["browser_source"] == "system" {
 				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_browser_source", ResourceRef: "system", Label: "System browser"})
 				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: "connection", Tone: "warning"})
 			} else {

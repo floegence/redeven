@@ -110,3 +110,17 @@ func TestComputerBrowserDiscoveryRejectsForgedOrUnboundedBodies(t *testing.T) {
 		t.Fatal("environment route is not exposed")
 	}
 }
+
+func TestComputerBrowserInstallationRejectsMalformedAndUnboundedRequests(t *testing.T) {
+	srv, origin, _ := newUploadRouteServer(t)
+	for _, test := range []struct{ method, body string }{
+		{http.MethodPut, `{}`}, {http.MethodPut, `{"enabled":true,"url":"https://untrusted.test"}`},
+		{http.MethodPut, `{"enabled":true}{}`}, {http.MethodPost, `{"action":"start","url":"https://untrusted.test"}`},
+		{http.MethodPost, `{"action":"chunk","data":"` + strings.Repeat("x", 360*1024) + `"}`},
+	} {
+		response := performServerRequest(srv, test.method, "/_redeven_proxy/api/ai/computer/managed/browser", origin, test.body)
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid json") {
+			t.Fatalf("invalid request: %d %s", response.Code, response.Body.String())
+		}
+	}
+}

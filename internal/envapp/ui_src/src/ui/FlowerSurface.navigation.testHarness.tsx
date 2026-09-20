@@ -123,6 +123,8 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
     ChevronRight: Icon,
     Clock: Icon,
     Code: Icon,
+    Download: actual.Download,
+    Upload: actual.Upload,
     Copy: Icon,
     ExternalLink: Icon,
     FileText: Icon,
@@ -159,6 +161,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   return {
   createFloatingPresence: actual.createFloatingPresence,
   resolveFloatingWindowViewport: actual.resolveFloatingWindowViewport,
+  Switch: actual.Switch,
   RadioGroup: actual.RadioGroup,
   RadioOption: actual.RadioOption,
   Button: (props: any) => {

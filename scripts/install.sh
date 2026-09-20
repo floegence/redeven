@@ -600,6 +600,10 @@ publish_runtime_suite() {
     runtime_install_command cp "$extracted_dir/redeven" "$suite_staging/redeven"
     runtime_install_command cp "$extracted_dir/LICENSE" "$suite_staging/REDEVEN_LICENSE"
     runtime_install_command cp "$extracted_dir/THIRD_PARTY_NOTICES.md" "$suite_staging/REDEVEN_THIRD_PARTY_NOTICES.md"
+    if [ -f "$extracted_dir/computer.zip" ] && [ ! -L "$extracted_dir/computer.zip" ]; then
+        runtime_install_command cp "$extracted_dir/computer.zip" "$suite_staging/computer.zip"
+        runtime_install_command chmod 644 "$suite_staging/computer.zip"
+    fi
     runtime_install_command chmod 755 "$suite_staging/redeven"
     runtime_install_command chmod 644 "$suite_staging/REDEVEN_LICENSE" "$suite_staging/REDEVEN_THIRD_PARTY_NOTICES.md"
     runtime_install_command cp "$extracted_dir/redevplugin-runtime" "$suite_staging/redevplugin-runtime"
@@ -695,7 +699,11 @@ install_redeven() {
     ARCHIVE_SHA256=$(sha256_file "$ARCHIVE_PATH" | tr -d '\r\n')
     ARCHIVE_SIZE=$(wc -c < "$ARCHIVE_PATH" | tr -d '[:space:]')
     log_info "Extracting the closed runtime suite..."
-    python3 "$SAFE_EXTRACTOR_PATH" \
+    set --
+    if tar -tzf "$ARCHIVE_PATH" | grep -qx computer.zip; then
+        set -- --allow-file computer.zip
+    fi
+    python3 "$SAFE_EXTRACTOR_PATH" "$@" \
         --archive "$ARCHIVE_PATH" \
         --dest "$EXTRACT_DIR" \
         --expected-sha256 "$ARCHIVE_SHA256" \

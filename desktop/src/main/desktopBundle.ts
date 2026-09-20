@@ -19,6 +19,7 @@ const NATIVE_RUNTIME_FILES = Object.freeze([
   'redevplugin-runtime.sig',
 ].sort((left, right) => left.localeCompare(right)));
 const MANAGED_WSL_ARCHIVE_FILES = Object.freeze([
+  'computer.zip',
   '.redevplugin-release-artifacts-verified.json',
   'LICENSE',
   'REDEVPLUGIN_RUNTIME.spdx.json',

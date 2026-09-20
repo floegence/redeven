@@ -896,6 +896,10 @@ ${renderTerminalFontLicenses()}
 
 Redeven Desktop packages Electron and Chromium runtime components. Desktop release artifacts include Electron's \`LICENSE\` and \`LICENSES.chromium.html\` files under \`licenses/electron/\` in addition to this notice file.
 
+## Optional Browser Distribution
+
+Flower's headless Chromium browser is installed separately, only after user confirmation. It is not included in the standard Redeven Runtime or Desktop computer-helper bundle. Redeven downloads an official Playwright Chromium or Chrome for Testing archive (or accepts the identical local archive) at the platform-specific version, URL, size and SHA-256 in \`internal/browserinstall/catalog.json\`. The original distribution and its license resources remain intact in the user's Runtime state directory. Chromium is available under the BSD-style license and the licenses of its included third-party components; see https://chromium.googlesource.com/chromium/src/+/main/LICENSE and the distribution's own notices.
+
 ## License Policy Guard
 
 The generator fails on missing licenses and on licenses that are not acceptable for Redeven's public binary and desktop distribution without explicit review, including AGPL, GPL-only, LGPL, SSPL, BUSL, Commons Clause, Elastic License, and PolyForm-style licenses.

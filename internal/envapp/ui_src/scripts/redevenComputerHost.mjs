@@ -1,6 +1,6 @@
 import readline from 'node:readline';
 import process from 'node:process';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { lstat, mkdir } from 'node:fs/promises';
@@ -23,13 +23,9 @@ let page;
 try {
   const { chromium } = await import('playwright');
   const resources = path.dirname(fileURLToPath(import.meta.url));
-  const browserConfig = path.join(resources, 'browser.json');
-  let executablePath;
-  if (existsSync(browserConfig)) {
-    const configuration = JSON.parse(readFileSync(browserConfig, 'utf8'));
-    executablePath = path.resolve(resources, configuration.executable);
-    if (!executablePath.startsWith(resources + path.sep) || !existsSync(executablePath)) throw new Error('BROWSER_BINARY_MISSING');
-  }
+  const executableIndex = process.argv.indexOf('--browser-executable');
+  const executablePath = executableIndex >= 0 ? process.argv[executableIndex + 1] : undefined;
+  if (!cdpURL && !executablePath && existsSync(path.join(resources, 'manifest.json'))) throw new Error('BROWSER_INSTALLATION_REQUIRED');
   browser = cdpURL ? await chromium.connectOverCDP(cdpURL, { timeout: 20000, noDefaults: true }) : undefined;
   if (browser) {
     if (!tabID || !browserContextID) throw new Error('TAB_SELECTION_REQUIRED');

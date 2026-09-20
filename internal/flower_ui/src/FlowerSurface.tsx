@@ -5623,7 +5623,7 @@ webSearch: model.web_search,
   });
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
-  const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | null>(null);
+  const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | 'installation' | null>(null);
   createEffect(on([selectedThreadID, () => selectedInputRequest()?.prompt_id], () => setComputerDialog(null), { defer: true }));
   const [computerStageOpen, setComputerStageOpen] = createSignal(false);
   const [computerFrameSelection, setComputerFrameSelection] = createSignal<{ frame: string; threadID: string; runID?: string }>();
@@ -5676,7 +5676,9 @@ webSearch: model.web_search,
     && request.questions.some((question) => question.id === 'computer_control'));
   const isBrowserConnectionInput = (request: FlowerInputRequest | null | undefined) => Boolean(request
     && request.tool_name === 'computer.targets' && request.questions.length === 1 && request.questions[0].id === 'browser_connection');
-  const isComputerAssistanceInput = (request: FlowerInputRequest | null | undefined) => isComputerInput(request) || isBrowserConnectionInput(request);
+  const isBrowserInstallInput = (request: FlowerInputRequest | null | undefined) => Boolean(request
+    && (request.tool_name.startsWith('computer.') || request.tool_name.startsWith('browser.')) && request.questions.length === 1 && request.questions[0].id === 'browser_install');
+  const isComputerAssistanceInput = (request: FlowerInputRequest | null | undefined) => isComputerInput(request) || isBrowserConnectionInput(request) || isBrowserInstallInput(request);
   let computerInputQueue = Promise.resolve();
   let computerInputCount = 0;
   let computerInputGeneration = 0;
@@ -5783,6 +5785,7 @@ webSearch: model.web_search,
   });
   const selectedComputerAssistance = createMemo(() => {
     const recheck = computerRecheck();
+    if (isBrowserInstallInput(selectedInputRequest())) return computerAssistance(undefined, copy().computer, { kind: 'installation' });
     if (isBrowserConnectionInput(selectedInputRequest())) return computerAssistance(undefined, copy().computer, { kind: 'connection' });
     return computerAssistance(selectedComputerStage()?.item, copy().computer,
       recheck?.threadID === selectedThreadID() && recheck.promptID === selectedInputRequest()?.prompt_id ? recheck.observation : undefined, selectedThread()?.permission_type === 'full_access');
@@ -7862,11 +7865,12 @@ webSearch: model.web_search,
               <Show when={selectedThreadReadOnly()}><span class="flower-decision-readonly-status" role="status">{selectedThreadReadOnlyDisplay()}</span></Show>
               <div class="flower-computer-control-actions">
               <Show when={props.adapter.computerManagement && (selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'target')}><Button variant="secondary" disabled={inputRequestIsSubmitting()} onClick={() => setComputerDialog('settings')}>{copy().computer.title}</Button></Show>
-              <Show when={selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'authorized' && selectedComputerAssistance().kind !== 'target'}>
+              <Show when={selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'installation' && selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'authorized' && selectedComputerAssistance().kind !== 'target'}>
               <Button variant="secondary" data-computer-control-action="take" disabled={computerReturning() || !computerObserverID() || !computerCurrentVerified() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{computerControlDisconnected() ? copy().chat.computerResumeControl : privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
               </Show>
+              <Show when={selectedComputerAssistance().kind === 'installation'}><Button variant="primary" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} onClick={() => setComputerDialog('installation')}>{copy().computer.browserInstallTitle}</Button></Show>
               <Show when={selectedComputerAssistance().kind === 'connection'}><Button variant="primary" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} onClick={() => setComputerDialog('connection')}>{copy().computer.connectionTitle}</Button></Show>
-              <Show when={selectedComputerAssistance().kind !== 'connection'}><Button variant="primary" data-computer-control-action={selectedComputerAssistance().kind === 'access' ? 'grant' : 'return'} disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting() || (selectedComputerAssistance().kind === 'access' && !props.adapter.computerManagement)} loading={inputRequestIsSubmitting()} onClick={() => {
+              <Show when={selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'installation'}><Button variant="primary" data-computer-control-action={selectedComputerAssistance().kind === 'access' ? 'grant' : 'return'} disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting() || (selectedComputerAssistance().kind === 'access' && !props.adapter.computerManagement)} loading={inputRequestIsSubmitting()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];
                 if (!question || !choice) return;
@@ -11124,12 +11128,14 @@ webSearch: model.web_search,
                 aria-haspopup="dialog" aria-expanded={computerDialog() !== null} onClick={() => setComputerDialog('settings')}><Link class="h-4 w-4" aria-hidden="true" /></button>
             </Show>
             <Show when={computerStageAvailable() && selectedComputerStage()}>
-              <button type="button" class="flower-computer-entry" aria-expanded={computerStageOpen()}
+              <button type="button" class="flower-computer-entry" aria-expanded={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? computerDialog() !== null : computerStageOpen()}
                 data-session-state={computerStageSessionState()}
                 data-floe-progress-shimmer={computerStageSessionState() === 'running' ? 'surface' : undefined}
-                title={`${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore} — ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
-                aria-label={`${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
+                title={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? selectedComputerAssistance().title : `${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore} — ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
+                aria-label={isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest()) ? selectedComputerAssistance().title : `${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
                 onClick={(event) => {
+                  if (isBrowserInstallInput(selectedInputRequest())) { setComputerDialog('installation'); return; }
+                  if (isBrowserConnectionInput(selectedInputRequest())) { setComputerDialog('connection'); return; }
                   if (selectedThread()?.status === 'running') setComputerFrameSelection(undefined);
                   restoreComputerStage(event.currentTarget);
                 }}>
@@ -11189,10 +11195,10 @@ webSearch: model.web_search,
       </div>
       <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
       <FlowerComputerConnections open={computerDialog() !== null} onOpenChange={open => { if (!open) setComputerDialog(null); }}
-        connectionOnly={computerDialog() === 'connection'} onContinue={async () => {
+        connectionOnly={computerDialog() === 'connection'} installationOnly={computerDialog() === 'installation'} onContinue={async (enabled) => {
           const request = selectedInputRequest();
-          if (!isBrowserConnectionInput(request) || !request) return;
-          const question = request.questions[0], choice = question.choices?.[0];
+          if ((!isBrowserConnectionInput(request) && !isBrowserInstallInput(request)) || !request) return;
+          const question = request.questions[0], choice = question.choices?.[isBrowserInstallInput(request) && enabled === false ? 1 : 0];
           if (!choice) return;
           selectInputChoice(question, choice);
           setComputerDialog(null);

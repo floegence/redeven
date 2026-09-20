@@ -34,8 +34,11 @@ Restricted discovery also reads live inventory, then exposes only allowed
 registered identities, without offering new pages. A disconnected managed
 Chromium process is retired during discovery; this read neither starts a
 replacement nor changes the saved selection. An eligible new-page candidate stays
-available, and authorized selection starts Chromium through the existing profile
-owner. The built-in profile is described as headless Chromium, without exposing
+available while the capability is enabled. Authorized selection starts an installed
+Chromium through the existing profile owner, or produces the canonical
+[installation consent request](computer-use-browser-installation.md) when absent.
+Disabled managed browsers are excluded from candidates and default planning;
+existing references cannot dispatch browser tools. The built-in profile is described as headless Chromium, without exposing
 its internal Default name as a separate setup choice.
 
 `computer.select_target` consumes one candidate. Resource resolution is read-only;

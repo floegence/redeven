@@ -23,10 +23,11 @@ or explicitly replaced. Floret remains the sole conversation lifecycle owner.
 The overview identifies the actual Runtime hostname and platform, then shows the
 page or app used by the current conversation and three environment entries:
 built-in headless browser, Chrome in this environment, and desktop/applications.
-The built-in browser is Chromium packaged with Redeven. It runs headlessly in the
-current Runtime environment, needs no separately installed Chrome, and starts
-after authorized task selection. Its details use three short facts: browser,
-installation, and execution. Saved website data stays separate from system Chrome.
+The built-in browser is headless Chromium installed on demand in the current
+Runtime environment, without needing system Chrome. Browser settings presents
+one default-on capability switch and explicit source/size confirmation under the
+[optional browser installation contract](computer-use-browser-installation.md).
+Opening or enabling never downloads. Saved website data stays separate from system Chrome.
 Optional account groups are collapsed by default; the built-in group is localized
 as shared website data using its stable ID. Creating a group isolates website
 sign-ins without selecting a page or importing system Chrome data.
@@ -73,7 +74,7 @@ Xvfb, its window manager, or application processes. Capability is an observation
 not an authorization or a guarantee that subsequent startup cannot fail.
 
 Capability states are `ready`, `on_demand`, `setup_required`, and
-`permission_required`; closed reason codes are available in collapsed diagnostics.
+`permission_required`, `installation_required`, and `disabled`; closed reason codes are available in collapsed diagnostics.
 An independent missing desktop permission does not hide a usable browser. A failed
 status request shows unknown and offers refresh; refresh never repairs a missing
 installation or clears a reported failure without new evidence.
@@ -92,7 +93,7 @@ deduplicates existing targets, and obeys the shared inventory limit. The UI neve
 constructs connections from tab metadata. Only explicit selection prepares or
 binds a page; discovery failure leaves the old selection intact.
 
-Runtime compatibility epoch 28 is required by the bundled Desktop surface for
+Runtime compatibility epoch 29 is required by the bundled Desktop surface for
 these environment and candidate interfaces. Existing Runtime compatibility and
 upgrade boundaries apply; no local fallback connection form, durable candidate
 store, schema migration, or new Floret API is introduced. Published Floe components
@@ -104,7 +105,7 @@ rather than an upstream platform extension.
 - `redeven:internal/flower_ui/src/FlowerComputerConnections.tsx` - shared dialog and staged operations.
 - `redeven:internal/flower_ui/host/computerUseAdapter.ts` - one carrier-neutral Runtime adapter.
 - `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx` - global entry to the same dialog.
-- `redeven:scripts/stage_computer_resources.mjs` - packaged Chromium delivery.
+- `redeven:scripts/stage_computer_resources.mjs` - thin helper delivery without Chromium.
 - `redeven:internal/envapp/ui_src/scripts/redevenManagedBrowser.mjs` - headless persistent browser process.
 - `redeven:internal/ai/computer_environment.go` - capability observation and authorized advanced discovery.
 - `redeven:internal/ai/computer_environment_test.go` - no startup/binding, independent failure, authority and inventory limits.

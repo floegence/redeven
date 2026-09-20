@@ -8,26 +8,30 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/floegence/redeven/internal/browserinstall"
 )
 
 // ComputerUseRuntime owns the adapters and the only target readiness path.
 // Resolving identity is read-only. Preparation happens after target policy has
 // authorized the action, and only a successful adapter handshake grants ready.
 type ComputerUseRuntime struct {
-	candidates      map[string]computerCandidate
-	managedProfiles map[string]*managedBrowserProfile
-	extension       *computerExtensionHub
-	connectMu       sync.Mutex
-	closed          bool
-	mu              sync.RWMutex
-	registry        *TargetRegistry
-	bindings        ComputerTargetBindingStore
-	media           computerMediaStore
-	executors       map[string]TargetToolExecutor
-	liveFrames      map[string]*computerLiveSampler
-	liveWG          sync.WaitGroup
-	controls        map[string]*computerTargetControl
-	scripts         map[computerScriptKey]*computerScriptProcess
+	browserInstallation    *browserinstall.Manager
+	browserInstallationErr error
+	candidates             map[string]computerCandidate
+	managedProfiles        map[string]*managedBrowserProfile
+	extension              *computerExtensionHub
+	connectMu              sync.Mutex
+	closed                 bool
+	mu                     sync.RWMutex
+	registry               *TargetRegistry
+	bindings               ComputerTargetBindingStore
+	media                  computerMediaStore
+	executors              map[string]TargetToolExecutor
+	liveFrames             map[string]*computerLiveSampler
+	liveWG                 sync.WaitGroup
+	controls               map[string]*computerTargetControl
+	scripts                map[computerScriptKey]*computerScriptProcess
 }
 
 // ConnectBrowser registers an explicitly authorized Chrome CDP session. A
@@ -195,6 +199,11 @@ func (r *ComputerUseRuntime) prepareInitialManagedTarget(ctx context.Context, ta
 }
 
 func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDescriptor) (TargetDescriptor, error) {
+	if target.Kind == "browser.managed" && target.PermissionState != "helper_missing" {
+		if _, err := r.requireManagedBrowser(); err != nil {
+			return target, err
+		}
+	}
 	var readinessErr error
 	if err := ctx.Err(); err != nil {
 		return target, err
@@ -254,6 +263,9 @@ func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDes
 	return target, nil
 }
 func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
+	if err := r.checkManagedTarget(call.TargetID); err != nil {
+		return TargetToolResult{}, err
+	}
 	if call.bindSelection {
 		if err := r.requireComputerSelectionOpen(call); err != nil {
 			return TargetToolResult{}, err
@@ -291,6 +303,9 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 }
 
 func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call TargetToolCall, control *computerTargetControl) (TargetToolResult, error) {
+	if err := r.checkManagedTarget(call.TargetID); err != nil {
+		return TargetToolResult{}, err
+	}
 	// Re-read grants after gate admission, including live capture and handback.
 	// A queued operation must not retain permissions revoked while it waited.
 	if err := r.authorizeComputerCall(ctx, &call); err != nil {
@@ -397,6 +412,9 @@ func (r *ComputerUseRuntime) ResolveTargetToolAttachment(ctx context.Context, re
 	return r.media.read(ctx, ref)
 }
 func (r *ComputerUseRuntime) Close() error {
+	if r.browserInstallation != nil {
+		r.browserInstallation.Close()
+	}
 	r.connectMu.Lock()
 	defer r.connectMu.Unlock()
 	r.mu.Lock()

@@ -124,6 +124,9 @@ func (s *Service) InputComputerControl(ctx context.Context, meta *session.Meta, 
 }
 
 func (r *ComputerUseRuntime) executeComputerUserInputLocked(ctx context.Context, call TargetToolCall) ([]byte, error) {
+	if err := r.checkManagedTarget(call.TargetID); err != nil {
+		return nil, err
+	}
 	if err := r.authorizeComputerCall(ctx, &call); err != nil {
 		return nil, err
 	}

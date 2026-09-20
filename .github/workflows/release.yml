@@ -127,6 +127,9 @@ jobs:
             -o dist/redeven-gateway \
             ./cmd/redeven-gateway
 
+      - name: Stage browser helpers without browser binaries
+        run: node scripts/stage_computer_archive.mjs dist/computer.zip
+
       - name: Build signed ReDevPlugin runtime and package archives
         env:
           GH_TOKEN: ${{ github.token }}
@@ -138,6 +141,7 @@ jobs:
 
           redeven_entries=(
             redeven
+            computer.zip
             LICENSE
             THIRD_PARTY_NOTICES.md
           )

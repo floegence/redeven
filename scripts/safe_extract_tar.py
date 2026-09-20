@@ -65,6 +65,7 @@ def extract_validated_members(
     *,
     expected_root: str | None,
     allowed_files: frozenset[str],
+    optional_files: frozenset[str] = frozenset(),
     max_files: int,
     max_total_bytes: int,
 ) -> None:
@@ -141,16 +142,16 @@ def extract_validated_members(
             raise ArchiveValidationError(
                 f"archive root must be exactly {expected_root!r}"
             )
-    if allowed_files and regular_files != allowed_files:
+    if (allowed_files or optional_files) and (not allowed_files <= regular_files or not regular_files <= allowed_files | optional_files):
         missing = sorted(allowed_files - regular_files)
-        unexpected = sorted(regular_files - allowed_files)
+        unexpected = sorted(regular_files - allowed_files - optional_files)
         raise ArchiveValidationError(
             f"archive file inventory mismatch; missing={missing!r} unexpected={unexpected!r}"
         )
-    if allowed_files:
+    if allowed_files or optional_files:
         allowed_directories = {
             "/".join(parts[:index])
-            for allowed in allowed_files
+            for allowed in allowed_files | optional_files
             for parts in [PurePosixPath(allowed).parts]
             for index in range(1, len(parts))
         }
@@ -360,6 +361,7 @@ def safe_extract(
     *,
     expected_root: str | None,
     allowed_files: frozenset[str],
+    optional_files: frozenset[str] = frozenset(),
     max_files: int,
     max_total_bytes: int,
     expected_sha256: str | None,
@@ -371,7 +373,7 @@ def safe_extract(
         if "/" in normalized_root:
             raise ArchiveValidationError("expected root must be a single path segment")
         expected_root = normalized_root
-    for allowed in allowed_files:
+    for allowed in allowed_files | optional_files:
         normalized = normalized_member_path(allowed).as_posix()
         if normalized != allowed:
             raise ArchiveValidationError(f"allowed path is not canonical: {allowed!r}")
@@ -427,6 +429,7 @@ def safe_extract(
                         staging,
                         expected_root=expected_root,
                         allowed_files=allowed_files,
+                        optional_files=optional_files,
                         max_files=max_files,
                         max_total_bytes=max_total_bytes,
                     )
@@ -469,6 +472,29 @@ def run_self_test() -> None:
         )
         if (root / "valid-output/bundle/bin/runtime").read_bytes() != b"runtime":
             raise AssertionError("valid archive extraction mismatch")
+
+        for label, entries, succeeds in [
+            ("optional-present", [("redeven", b"runtime"), ("computer.zip", b"helpers")], True),
+            ("optional-absent", [("redeven", b"runtime")], True),
+            ("optional-unknown", [("redeven", b"runtime"), ("unknown.zip", b"bad")], False),
+            ("optional-duplicate", [("redeven", b"runtime"), ("computer.zip", b"a"), ("computer.zip", b"b")], False),
+            ("optional-missing-required", [("computer.zip", b"helpers")], False),
+        ]:
+            source = root / f"{label}.tar.gz"
+            destination = root / label
+            create_fixture(source, entries)
+            try:
+                safe_extract(source, destination, expected_root=None,
+                    allowed_files=frozenset({"redeven"}), optional_files=frozenset({"computer.zip"}),
+                    max_files=8, max_total_bytes=2048, expected_sha256=None, expected_size=None)
+            except ArchiveValidationError:
+                if succeeds:
+                    raise
+                if destination.exists():
+                    raise AssertionError("rejected optional archive was published")
+            else:
+                if not succeeds:
+                    raise AssertionError("invalid optional archive accepted")
 
         publish_source = root / "publish-source"
         publish_destination = root / "publish-destination"
@@ -544,6 +570,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dest", type=Path)
     parser.add_argument("--expected-root")
     parser.add_argument("--allow-file", action="append", default=[])
+    parser.add_argument("--optional-file", action="append", default=[])
     parser.add_argument("--max-files", type=int, default=DEFAULT_MAX_FILES)
     parser.add_argument("--max-total-bytes", type=int, default=DEFAULT_MAX_TOTAL_BYTES)
     parser.add_argument("--expected-sha256")
@@ -555,14 +582,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     if args.self_test:
-        if args.archive is not None or args.dest is not None or args.expected_root or args.allow_file or args.publish_dir or args.replace_dir or args.replace_file or args.snapshot_file:
+        if args.archive is not None or args.dest is not None or args.expected_root or args.allow_file or args.optional_file or args.publish_dir or args.replace_dir or args.replace_file or args.snapshot_file:
             parser.error("--self-test cannot be combined with extraction arguments")
         return args
     publication_modes = [args.publish_dir, args.replace_dir, args.replace_file, args.snapshot_file]
     if any(value is not None for value in publication_modes):
         if sum(value is not None for value in publication_modes) != 1:
             parser.error("publication modes are mutually exclusive")
-        if args.dest is None or args.archive is not None or args.expected_root or args.allow_file or args.expected_sha256 or args.expected_size is not None:
+        if args.dest is None or args.archive is not None or args.expected_root or args.allow_file or args.optional_file or args.expected_sha256 or args.expected_size is not None:
             parser.error("directory publication requires only --dest")
         return args
     if args.archive is None or args.dest is None:
@@ -604,6 +631,7 @@ def main() -> None:
             args.dest,
             expected_root=args.expected_root,
             allowed_files=frozenset(args.allow_file),
+            optional_files=frozenset(args.optional_file),
             max_files=args.max_files,
             max_total_bytes=args.max_total_bytes,
             expected_sha256=args.expected_sha256,

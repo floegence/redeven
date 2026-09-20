@@ -78,6 +78,17 @@ func (r *ComputerUseRuntime) ComputerEnvironment(ctx context.Context) (ComputerE
 		result.Managed = computerCapabilityFailure(managedErr)
 	}
 	r.connectMu.Unlock()
+	if r.browserInstallation != nil {
+		state := r.browserInstallation.Snapshot()
+		if !state.Enabled {
+			result.Managed = ComputerCapability{State: "disabled"}
+		} else if state.State != "installed" && result.Managed.State == "on_demand" {
+			result.Managed = ComputerCapability{State: "installation_required"}
+		}
+	}
+	if r.browserInstallationErr != nil {
+		result.Managed = ComputerCapability{State: "setup_required", Reason: "browser_settings_unavailable"}
+	}
 	r.mu.RLock()
 	native := r.executors["desktop-main"]
 	private := r.executors["xvfb-main"]

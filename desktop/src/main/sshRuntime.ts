@@ -809,6 +809,7 @@ export function buildManagedSSHUploadedInstallScript(): string {
     '    cp "${extract_dir}/$companion" "${staging_root}/bin/$companion"',
     '  fi',
     'done',
+    'if [ -f "${extract_dir}/computer.zip" ] && [ ! -L "${extract_dir}/computer.zip" ]; then cp "${extract_dir}/computer.zip" "${staging_root}/bin/computer.zip"; fi',
     'if ! staged_version_output="$("${staging_root}/bin/redeven" version 2>/dev/null)"; then',
     '  echo "uploaded Redeven binary failed to report its version" >&2',
     '  exit 1',
