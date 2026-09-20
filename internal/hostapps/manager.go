@@ -400,11 +400,14 @@ func infoHasWindows(info string) bool {
 
 func (m *Manager) finish(s *ownedSession, code string) {
 	m.mu.Lock()
+	wasRunning := s.view.State == "running"
 	if s.view.ErrorCode == "" {
 		s.view.ErrorCode = code
 	}
 	s.view.State = "ended"
-	if s.view.ErrorCode != "" {
+	// A server cleanup error does not mean an already running application failed
+	// to open. Preserve the exit diagnostic while reporting its ended lifecycle.
+	if s.view.ErrorCode != "" && !wasRunning {
 		s.view.State = "failed"
 	}
 	s.password = ""

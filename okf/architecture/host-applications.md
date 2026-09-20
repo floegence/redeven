@@ -68,8 +68,10 @@ listener, and process group. A GIO launch receipt, responding HTML5 endpoint, an
 inventory must all be ready before the session becomes running. Startup has a bounded
 deadline; failure stops the owned process group and removes its route and secret.
 The Runtime limits concurrent sessions to twelve and retains at most forty-eight
-session records per Runtime lifetime. Completed session records expose failure
-status so a failed launch cannot disappear silently from the library.
+session records per Runtime lifetime. Startup failures retain failed status so a
+failed launch cannot disappear silently from the library. A previously running
+session becomes ended when its server exits, retaining any exit diagnostic without
+mislabeling an application's closure as a failure to open.
 
 The [Web Service session owner](web-service-browser-sessions.md) provides an
 owned ephemeral route that is pinned until application termination, is absent
@@ -122,7 +124,8 @@ stretching or cropping substitutes for application resize. Fixed-size or minimum
 applications can still constrain their own layout. Xpra owns keyboard and clipboard
 transport. This path does not create a native OS window per X11 child window.
 
-After an established application session is confirmed ended, the viewer closes its
+After Xpra confirms destruction of the final application window, or an established
+application session is confirmed ended, the viewer closes its
 native window or script-opened browser popup. A close request alone, removal of one
 child window, or a lost connection never closes the viewer. Applications retain
 their normal save/cancel prompts; cancelling keeps both the session and its viewer.
