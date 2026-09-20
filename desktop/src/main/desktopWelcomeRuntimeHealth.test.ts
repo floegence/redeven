@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
+import { normalizeRuntimeServiceSnapshot } from '../shared/runtimeService';
 import {
   DesktopWelcomeRuntimeHealthStore,
   desktopWelcomeRuntimeHealthIsFresh,
@@ -109,6 +110,21 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
     expect(desktopWelcomeRuntimeHealthIsFresh(freshHealth, checkedAtUnixMS + 30_000)).toBe(false);
     expect(desktopWelcomeRuntimeHealthIsFresh({ ...freshHealth, freshness: 'failed' }, checkedAtUnixMS + 1)).toBe(false);
   });
+
+  it.each(['starting', 'inspecting', 'backing_up', 'optimizing', 'migrating', 'verifying', 'recovering', 'restoring'])(
+    'observes AI %s on the next existing health tick instead of caching startup for 30 seconds', async state => {
+      let probes = 0;
+      const service = (state: string) => normalizeRuntimeServiceSnapshot({ ai_readiness: { state } });
+      const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
+      const runtimeTarget = target(async () => ({ health: health({ status: 'online', runtime_service: service(++probes === 1 ? state : 'ready') }) }));
+      await store.refresh([runtimeTarget]);
+      await store.refresh([runtimeTarget]);
+      expect(probes).toBe(2);
+      expect(store.snapshot().savedExternalRuntimeHealth.demo.runtime_service?.ai_readiness?.state).toBe('ready');
+      await store.refresh([runtimeTarget]);
+      expect(probes).toBe(2);
+    },
+  );
 
   it('primes missing targets without starting probes or fabricating health', () => {
     let probeCount = 0;

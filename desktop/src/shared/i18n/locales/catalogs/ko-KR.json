@@ -2831,6 +2831,9 @@
     "loopbackHelp": "이 루프백 주소는 {host} 자체를 가리킵니다. 서로 다른 호스트는 같은 포트를 사용할 수 있습니다. 이 기기의 브라우저에서 해당 환경에 접속하는 주소가 아닙니다."
   },
   "flowerRuntime": {
+    "preparingDetail": "Flower의 AI 서비스를 준비하고 있습니다. 준비가 완료되면 대화가 자동으로 표시됩니다. 언제든지 환경 목록으로 돌아갈 수 있습니다.",
+    "unavailableTitle": "Flower를 사용할 수 없습니다",
+    "unavailableDetail": "Flower의 AI 서비스가 현재 요청을 처리할 수 없습니다. 환경 목록으로 돌아가 런타임 상태를 확인하세요. 대화와 보내지 않은 초안은 유지됩니다.",
     "runtimeTitle": "Flower를 사용하려면 런타임을 업데이트하세요",
     "desktopTitle": "Flower를 사용하려면 Desktop을 업데이트하세요",
     "runtimeDetail": "이 런타임은 Desktop Flower와 호환되지 않습니다. 런타임을 업데이트한 후 계속하세요. 초안은 보존되며 환경에 포함된 앱은 계속 사용할 수 있습니다.",

@@ -991,11 +991,13 @@ function runtimeHealthWithEffectiveMaintenance(health: DesktopRuntimeHealth): De
 }
 
 function preferredRuntimeService(
-  primary: RuntimeServiceSnapshot | undefined,
+  startup: RuntimeServiceSnapshot | undefined,
   health: DesktopRuntimeHealth | null | undefined,
   presence?: DesktopRuntimePresence | undefined,
 ): RuntimeServiceSnapshot | undefined {
-  const snapshot = runtimeServiceFromPresence(presence) ?? primary ?? runtimeServiceFromHealth(health ?? undefined);
+  // A startup report can precede AI publication. Keep the latest observed
+  // service, including during a health refresh, ahead of that historical report.
+  const snapshot = runtimeServiceFromPresence(presence) ?? runtimeServiceFromHealth(health ?? undefined) ?? startup;
   return snapshot ? normalizeRuntimeServiceSnapshot(snapshot) : undefined;
 }
 

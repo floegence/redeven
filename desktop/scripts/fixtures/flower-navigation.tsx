@@ -11,6 +11,7 @@ declare global {
       requests: string[];
       streams: number;
       cancellations: number;
+      prematureRequests: number;
       releaseRuntime: () => void;
       publish: (patch: Partial<DesktopWelcomeSnapshot>) => void;
       dispose: () => void;
@@ -21,10 +22,17 @@ declare global {
 let snapshot = window.navigationSnapshot;
 let receive: ((value: DesktopWelcomeSnapshot) => void) | undefined;
 let receiveStream: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
-let releaseRuntime = () => {};
-const runtimeReady = new Promise<void>(resolve => { releaseRuntime = resolve; });
+let aiReady = false;
+const unavailable = () => ({ ok: false as const, error: { code: 'AI_SERVICE_UNAVAILABLE', status: 503,
+  message: 'AI service is unavailable', data: { readiness: { state: 'inspecting', retryable: false, safe_to_retry: false } } } });
 const fixture = window.navigationFixture = {
-  requests: [] as string[], streams: 0, cancellations: 0, releaseRuntime, dispose: () => {},
+  requests: [] as string[], streams: 0, cancellations: 0, prematureRequests: 0, dispose: () => {},
+  releaseRuntime() {
+    aiReady = true;
+    fixture.publish({ environments: snapshot.environments.map(entry => ({ ...entry,
+      ...(entry.runtime_service ? { runtime_service: { ...entry.runtime_service, ai_readiness: { state: 'ready' as const } } } : {}),
+    })) });
+  },
   publish(patch: Partial<DesktopWelcomeSnapshot>) {
     snapshot = { ...snapshot, ...patch, snapshot_revision: (snapshot.snapshot_revision ?? 0) + 1 };
     receive?.(snapshot);
@@ -45,13 +53,13 @@ const settings: DesktopWelcomeRuntime['settings'] = {
     const url = new URL(request.path, 'http://fixture.invalid');
     const route = url.pathname.replace('/_redeven_proxy/api/', '');
     fixture.requests.push(`${request.method} ${route}`);
-    await runtimeReady;
     if (route === 'settings') return { ok: true, data: {
       ai: { current_model_id: 'fixture/model', permission_type: 'approval_required', computer_use_enabled: false,
         providers: [{ id: 'fixture', name: 'Fixture', type: 'openai_compatible', base_url: 'https://fixture.invalid',
           models: [{ model_name: 'model', context_window: 128000, max_output_tokens: 4096, input_modalities: ['text'] }] }] },
       ai_secrets: { provider_api_key_set: { fixture: true } },
     } };
+    if (route.startsWith('ai/') && !aiReady) { fixture.prematureRequests++; return unavailable(); }
     if (route === 'ai/models') return { ok: true, data: { current_model: 'fixture/model', models: [{ id: 'fixture/model' }] } };
     if (route === 'ai/threads') return { ok: true, data: { threads: [thread] } };
     if (route === `ai/threads/${thread.thread_id}`) return { ok: true, data: { thread, current } };
@@ -62,6 +70,7 @@ const settings: DesktopWelcomeRuntime['settings'] = {
   },
   async startRuntimeFlowerStream(request) {
     fixture.streams++;
+    if (!aiReady) { fixture.prematureRequests++; return unavailable(); }
     queueMicrotask(() => receiveStream?.({ stream_id: request.stream_id, kind: 'chunk',
       chunk: new TextEncoder().encode(`data: ${JSON.stringify({ schema_version: 1, kind: 'ready', summaries: [thread] })}\n\n`) }));
     return { ok: true, status: 200, content_type: 'text/event-stream' };

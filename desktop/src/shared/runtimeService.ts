@@ -22,6 +22,22 @@ export type RuntimeServiceAIReadiness = Readonly<{
   issue_count?: number;
 }>;
 
+export function runtimeServiceAIIsPreparing(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
+  switch (snapshot?.ai_readiness?.state) {
+    case 'starting':
+    case 'inspecting':
+    case 'backing_up':
+    case 'optimizing':
+    case 'migrating':
+    case 'verifying':
+    case 'recovering':
+    case 'restoring':
+      return true;
+    default:
+      return false;
+  }
+}
+
 export type RuntimeServiceWorkload = Readonly<{
   terminal_count: number;
   session_count: number;

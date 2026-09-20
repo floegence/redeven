@@ -2831,6 +2831,9 @@
     "loopbackHelp": "此回环地址属于 {host} 自身。不同主机可以使用相同端口；它不是此设备访问该环境的浏览器入口。"
   },
   "flowerRuntime": {
+    "preparingDetail": "Flower 正在准备 AI 服务，就绪后会自动显示会话。你可以随时返回环境列表。",
+    "unavailableTitle": "Flower 暂不可用",
+    "unavailableDetail": "Flower 的 AI 服务目前无法处理请求。请返回环境列表检查运行时状态。你的会话和未发送的草稿会保留。",
     "runtimeTitle": "更新运行时后使用 Flower",
     "desktopTitle": "更新 Desktop 后使用 Flower",
     "runtimeDetail": "此运行时与 Desktop Flower 不兼容。请更新运行时后继续。草稿已保留，仍可使用环境自带的应用。",

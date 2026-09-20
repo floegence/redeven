@@ -19,7 +19,7 @@ try {
   const snapshot = mixedEnvironmentFixture().snapshot;
   snapshot.environments = snapshot.environments.map(entry => {
     const service = entry.runtime_service ?? entry.local_environment_runtime_service;
-    return { ...entry, runtime_service: service ? { ...service, compatibility_epoch: epoch, protocol_version: protocol, compatibility: 'compatible', compatibility_message: undefined, open_readiness: { state: 'openable' } } : undefined };
+    return { ...entry, runtime_service: service ? { ...service, compatibility_epoch: epoch, protocol_version: protocol, compatibility: 'compatible', compatibility_message: undefined, open_readiness: { state: 'openable' }, ai_readiness: { state: 'inspecting' } } : undefined };
   });
   for (const locale of ['en-US', 'zh-CN']) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
@@ -49,14 +49,21 @@ try {
       return elapsed;
     }
     const timings = [await navigate('.redeven-flower-topbar-button', 'flower')];
+    await page.locator('[data-flower-runtime-availability="preparing"]').waitFor();
+    assert.equal(await page.locator('[data-flower-engaged]').count(), 0, 'AI startup does not mount Flower requests');
+    assert.equal(await page.evaluate(() => window.navigationFixture.requests.length), 0);
+    await page.screenshot({ path: `${output}/${locale}-preparing.png`, animations: 'disabled' });
     timings.push(await navigate('.redeven-flower-back-button', 'environments'));
     await page.locator('.redeven-flower-topbar-button').focus();
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('.redeven-flower-back-button').evaluate(el => document.activeElement === el), true, 'keyboard entry preserves a visible navigation focus');
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('.redeven-flower-topbar-button').evaluate(el => document.activeElement === el), true, 'keyboard return restores the Flower entry');
-    await page.evaluate(() => window.navigationFixture.releaseRuntime());
     timings.push(await navigate('.redeven-flower-topbar-button', 'flower'));
+    await page.evaluate(() => window.navigationFixture.releaseRuntime());
+    await page.locator('[data-flower-engaged]').waitFor();
+    assert.equal(await page.locator('[data-flower-runtime-availability]').count(), 0, 'AI readiness replaces preparation automatically');
+    assert.equal(await page.getByText('AI service is unavailable', { exact: false }).count(), 0);
     try {
       await page.locator('[data-thread-id="navigation-thread"] button').first().click({ timeout: 5000 });
     } catch (error) {
@@ -96,7 +103,9 @@ try {
     await page.locator('.redeven-flower-topbar-button').waitFor();
     await page.screenshot({ path: `${output}/${locale}-environments.png`, animations: 'disabled' });
     const counters = await page.evaluate(() => ({ requests: window.navigationFixture.requests,
-      streams: window.navigationFixture.streams, cancellations: window.navigationFixture.cancellations }));
+      streams: window.navigationFixture.streams, cancellations: window.navigationFixture.cancellations,
+      prematureRequests: window.navigationFixture.prematureRequests }));
+    assert.equal(counters.prematureRequests, 0, 'no settings/model/stream bootstrap races AI publication');
     assert.equal(counters.requests.filter(value => value === 'GET settings').length, 1, 'settings load once across visits');
     assert.equal(counters.requests.filter(value => value === 'GET ai/threads').length, 1, 'thread list loads once across visits');
     assert.equal(counters.streams, 1, 'one workspace stream survives navigation');

@@ -4,6 +4,7 @@ import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from './App';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { testDesktopPreferences } from '../testSupport/desktopTestHelpers';
 import type { DesktopWelcomeSnapshot } from '../shared/desktopLauncherIPC';
+import { normalizeRuntimeServiceSnapshot, RUNTIME_SERVICE_COMPATIBILITY_EPOCH, RUNTIME_SERVICE_PROTOCOL_VERSION, type RuntimeServiceAIReadinessState } from '../shared/runtimeService';
 
 const disposers: Array<() => void> = [];
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -14,7 +15,7 @@ const click = (selector: string) => {
   button!.click();
 };
 
-async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_environment') {
+async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_environment', aiState: RuntimeServiceAIReadinessState = 'ready') {
   HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })));
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -23,6 +24,9 @@ async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_envir
   const storage = new Map<string, string>();
   vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) });
   let snapshot = { ...buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences(), surface }), navigation_revision: 1 };
+  const runtimeService = normalizeRuntimeServiceSnapshot({ compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH, protocol_version: RUNTIME_SERVICE_PROTOCOL_VERSION,
+    compatibility: 'compatible', open_readiness: { state: 'openable' }, ai_readiness: { state: aiState } });
+  snapshot = { ...snapshot, environments: snapshot.environments.map(entry => ({ ...entry, runtime_service: runtimeService })) };
   let receive: ((value: DesktopWelcomeSnapshot) => void) | undefined;
   // Both IPC and runtime preparation stay pending throughout navigation.
   const performAction = vi.fn(() => new Promise<never>(() => {}));
@@ -49,13 +53,33 @@ afterEach(() => {
 });
 
 it('opens Flower on the click while IPC and runtime preparation are pending', async () => {
-  const h = await mount();
+  const h = await mount('connect_environment', 'inspecting');
   expect(h.requestRuntimeFlower).not.toHaveBeenCalled();
   click('.redeven-flower-topbar-button');
-  expect(flower()).not.toBeNull();
+  expect(document.querySelector('[data-flower-runtime-availability="preparing"]')).not.toBeNull();
+  expect(flower()).toBeNull();
+  expect(h.requestRuntimeFlower).not.toHaveBeenCalled();
   expect(document.querySelector('.redeven-flower-back-button')).not.toBeNull();
   expect(h.performAction).not.toHaveBeenCalled();
   expect(h.getSnapshot).not.toHaveBeenCalled();
+});
+
+it('returns during AI startup and initializes the retained page only when the runtime publishes ready', async () => {
+  const h = await mount('flower', 'inspecting');
+  expect(h.requestRuntimeFlower).not.toHaveBeenCalled();
+  click('.redeven-flower-back-button');
+  expect(document.querySelector('.redeven-flower-topbar-button')).not.toBeNull();
+  h.publish({ environments: h.snapshot.environments.map(entry => ({ ...entry, runtime_service: { ...entry.runtime_service!, ai_readiness: { state: 'ready' } } })) });
+  await settle();
+  const mounted = flower();
+  expect(mounted).not.toBeNull();
+  expect(mounted?.dataset.flowerEngaged).toBe('false');
+  const requests = h.requestRuntimeFlower.mock.calls.length;
+  expect(requests).toBeGreaterThan(0);
+  click('.redeven-flower-topbar-button');
+  expect(flower()).toBe(mounted);
+  expect(h.requestRuntimeFlower).toHaveBeenCalledTimes(requests);
+  expect(h.performAction).not.toHaveBeenCalled();
 });
 
 it.each(['.redeven-flower-back-button', '.flower-sidebar-leading-action'])('returns immediately through %s and retains the pending Flower instance', async selector => {

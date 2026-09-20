@@ -45,6 +45,9 @@ existing visibility contract. It retains one Desktop workspace stream while
 foreground reads, focus, and transcript presentation follow engagement. Returning
 does not reload settings, recreate the thread list, or reconnect the workspace
 stream; the selected current view may refresh through normal engagement behavior.
+Before AI is operational, the retained page shows preparation without mounting
+Flower. The [Desktop readiness boundary](desktop-runtime-readiness.md) admits the
+surface automatically when AI becomes ready and preserves drafts during recovery.
 Disposing Welcome releases Flower and its stream. Changing the selected runtime
 identity remounts the Flower boundary so the previous runtime's cached conversation
 does not become the new runtime's view.
@@ -64,4 +67,4 @@ page; contextual window placement remains in
 - `redeven:desktop/src/main/main.ts` - Explicit host request revision and snapshot capture.
 - `redeven:desktop/src/main/desktopWelcomeState.ts` - Welcome snapshot projection.
 - `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Pending IPC, immediate return, retained instances, and explicit host requests.
-- `redeven:desktop/scripts/check-flower-navigation.mjs` - Browser paint timing, draft and selection retention, inert pages, and workspace stream lifetime.
+- `redeven:desktop/scripts/check-flower-navigation.mjs` - Browser paint timing, delayed AI admission, draft and selection retention, inert pages, and workspace stream lifetime using a fixture that rejects premature AI requests.
