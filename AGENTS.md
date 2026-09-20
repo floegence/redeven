@@ -1201,9 +1201,12 @@ must select Node 26 without older-major fallbacks.
 - During implementation, run focused checks for changed behavior and affected
   contracts.
 - `.githooks/pre-commit` is intentionally fast. It runs staged diff validation,
-  the README localization contract, and staged open-source hygiene only. Do not
-  add asset builds, full product suites, Docker E2E, or repository-wide tests to
-  pre-commit.
+  the README localization contract, staged open-source hygiene, and offline
+  third-party notice verification when dependency or attribution inputs change.
+  Notice verification uses the staged tree and existing installed dependencies
+  and Go cache; it must not download, install, regenerate, or stage files.
+  Do not add asset builds, full product suites, Docker E2E, or repository-wide
+  tests to pre-commit.
 - `.githooks/pre-push` owns the complete local integration gate for updates to
   remote `main`. It requires the checked-out local `main` tip to match the push,
   requires the remote tip to be its ancestor, rejects merge commits in the
