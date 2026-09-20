@@ -73,10 +73,12 @@ identity. There is no Home-relative display tree or reverse path conversion.
 Files treats a failed directory load as a settled outcome in its existing view
 state. A deleted saved location, unmounted volume, denied directory, or connection
 failure cannot restart hydration merely because no snapshot is available. The
-content scroll viewport displays a centered, neutral recovery view when no
-snapshot is available, with the full selectable path and inline copy feedback.
-Retry is the primary action; parent-directory and Home navigation remain explicit
-alternatives. Pending recovery stays in place, prevents duplicate retry activation,
+content scroll viewport displays a compact recovery composition when no snapshot
+is available. The folder name identifies the target above the explanation and full
+selectable path, with inline copy feedback. Parent navigation is emphasized when
+available; scope administrators can open access management, and other failures
+emphasize Retry. Retry and Home remain explicit alternatives. Pending recovery
+stays in place, prevents duplicate retry activation,
 and preserves keyboard focus across failure without a blocking curtain. Unavailable
 contents show neither an empty-folder message nor an item count; roots and path
 controls remain available. A retained snapshot uses a compact, dismissible notice

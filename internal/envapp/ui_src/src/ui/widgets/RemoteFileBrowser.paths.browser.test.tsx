@@ -114,6 +114,7 @@ describe('Files path entry through the published components and runtime navigati
     const viewport = f.host.querySelector<HTMLElement>('[data-testid="file-browser-content-scroll-region"]')!;
     const path = viewport.querySelector<HTMLElement>('dd')!;
     expect(path.textContent).toBe(longPath);
+    await expect.element(page.getByRole('heading', { name: 'project', exact: true })).toBeVisible();
     expect(getComputedStyle(path).textOverflow).not.toBe('ellipsis');
     expect(getComputedStyle(path).userSelect).toBe('text');
     await expect.poll(() => viewport.scrollWidth).toBe(viewport.clientWidth);
@@ -121,6 +122,7 @@ describe('Files path entry through the published components and runtime navigati
     await expect.element(page.getByRole('button', { name: 'Open Home', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Open Home', exact: true }).click();
     await expect.poll(() => viewport.querySelector('dd')?.textContent).toBe(home);
+    await expect.element(page.getByRole('heading', { name: 'tangjianyin', exact: true })).toBeVisible();
   });
 
   it('keeps readable file contents with a dismissible notice after a transient refresh failure', async () => {

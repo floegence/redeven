@@ -1,10 +1,10 @@
 import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { ArrowUp, Check, Copy, Folder, Home, Lock, Refresh, Settings, X } from '@floegence/floe-webapp-core/icons';
+import { ArrowUp, Check, Copy, Refresh, Settings, X } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useI18n } from '../i18n';
 import { writeTextToClipboard } from '../utils/clipboard';
-import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { basenameFromAbsolutePath } from '../utils/askFlowerPath';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 
@@ -54,45 +54,44 @@ export function FileBrowserRecoveryView(props: FileBrowserRecoveryViewProps) {
     copyTimer = setTimeout(() => setCopyState('idle'), 2500);
   };
 
+  const folderName = () => props.requestedPath === '/' ? i18n.t('files.rootLabel') : basenameFromAbsolutePath(props.requestedPath);
+  const hasRecoveryDestination = () => props.parentAvailable || (props.accessFailure && props.canManageAccess);
+
   return (
     <section
       class={cn('relative min-w-0 shrink-0', props.unavailable
-        ? 'flex min-h-full flex-col items-center justify-center px-6 py-10'
-        : 'm-3 rounded-lg border border-border/60 px-4 py-3')}
+        ? 'flex min-h-full flex-col px-8 py-12'
+        : 'border-b border-border/60 px-5 py-4')}
       aria-busy={props.pending}
       data-testid="file-browser-navigation-failure"
     >
-      <div class={cn('min-w-0 w-full', props.unavailable && 'max-w-[420px] text-center')}>
+      <div class={cn('min-w-0 w-full', props.unavailable && 'mx-auto my-auto max-w-[400px] py-6')}>
         <div {...REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS} class="select-text" role="status" aria-live="polite">
-          <div class={cn('flex', props.unavailable ? 'flex-col items-center' : 'items-start gap-3 pr-7')}>
-            <div class={cn('flex shrink-0 items-center justify-center text-muted-foreground', props.unavailable
-              ? cn('mb-5 size-14 rounded-2xl border border-border/50', redevenSurfaceRoleClass('inset'))
-              : 'mt-0.5 size-5')} aria-hidden="true">
-              <Show when={props.accessFailure} fallback={<Folder class={props.unavailable ? 'size-6' : 'size-4'} />}>
-                <Lock class={props.unavailable ? 'size-6' : 'size-4'} />
-              </Show>
-            </div>
-            <div class="min-w-0">
-              <h2 class={cn('font-medium tracking-tight text-foreground', props.unavailable ? 'text-lg' : 'text-sm')}>
-                {i18n.t('files.navigationFailure.title')}
-              </h2>
-              <p class={cn('text-muted-foreground', props.unavailable ? 'mt-2 text-[13px] leading-6' : 'mt-1 text-xs leading-5')}>
-                {props.message}
-              </p>
-            </div>
-          </div>
+          <p class="text-[11px] font-medium tracking-wide text-muted-foreground">
+            {i18n.t('files.navigationFailure.title')}
+          </p>
+          <Show when={props.requestedPath}>
+            <h2 class={cn('text-balance font-medium tracking-tight text-foreground [overflow-wrap:anywhere]', props.unavailable
+              ? 'mt-3 text-[23px] leading-[1.35]'
+              : 'mt-2 pr-7 text-sm leading-5')}>
+              {folderName()}
+            </h2>
+          </Show>
+          <p class={cn('text-muted-foreground', props.unavailable ? 'mt-3 text-[13px] leading-6' : 'mt-1 text-xs leading-5')}>
+            {props.message}
+          </p>
         </div>
         <Show when={props.requestedPath}>
-          <div class={cn('flex min-w-0 items-start gap-2 rounded-lg px-3 py-2.5 text-left', redevenSurfaceRoleClass('inset'), props.unavailable ? 'mt-5' : 'mt-3')}>
+          <div class={cn('flex min-w-0 items-start gap-3', props.unavailable ? 'mt-6' : 'mt-3')}>
             <dl {...REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS} class="min-w-0 flex-1 select-text self-center">
               <dt class="sr-only">{i18n.t('files.navigationFailure.requestedPath')}</dt>
-              <dd class="whitespace-pre-wrap font-mono text-[11px] leading-5 text-foreground/80 [overflow-wrap:anywhere]">{props.requestedPath}</dd>
+              <dd class="whitespace-pre-wrap font-mono text-[11px] leading-[1.8] text-muted-foreground [overflow-wrap:anywhere]">{props.requestedPath}</dd>
             </dl>
             <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="icon" variant="ghost"
-              class="-my-0.5 -mr-1 size-7 shrink-0 text-muted-foreground"
+              class="-my-0.5 size-6 shrink-0 text-muted-foreground/70 hover:text-foreground"
               title={copyLabel()} aria-label={copyLabel()} onClick={() => { void copyPath(); }}>
-              <Show when={copyState() === 'copied'} fallback={<Copy class="size-3.5" aria-hidden="true" />}>
-                <Check class="size-3.5 text-success" aria-hidden="true" />
+              <Show when={copyState() === 'copied'} fallback={<Copy class="size-3" aria-hidden="true" />}>
+                <Check class="size-3 text-success" aria-hidden="true" />
               </Show>
             </Button>
             <span class="sr-only" role="status">{copyState() !== 'idle' ? copyLabel() : ''}</span>
@@ -106,30 +105,30 @@ export function FileBrowserRecoveryView(props: FileBrowserRecoveryViewProps) {
             {i18n.t('files.navigationFailure.currentLocation')}: <span class="font-mono">{props.currentPath}</span>
           </p>
         </Show>
-        <div class={cn('flex flex-wrap items-center gap-2', props.unavailable ? 'mt-6 justify-center' : 'mt-3')}>
-          <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="md" variant="primary"
-            class="min-w-24 aria-disabled:cursor-wait aria-disabled:opacity-70"
-            aria-disabled={props.pending} onClick={() => { if (!props.pending) props.onRetry(); }}>
-            <Refresh class={cn('size-3.5', props.pending && 'motion-safe:animate-spin')} aria-hidden="true" />
-            {i18n.t('files.navigationFailure.retry')}
-          </Button>
+        <div class={cn('flex flex-wrap items-center gap-x-2 gap-y-2', props.unavailable ? 'mt-6 border-t border-border/60 pt-5' : 'mt-3')}>
           <Show when={props.parentAvailable}>
-            <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="md" variant="outline" icon={ArrowUp} onClick={props.onOpenParent}>
+            <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="md" variant="primary" icon={ArrowUp}
+              class="h-8 rounded-md px-3 text-xs shadow-none" onClick={props.onOpenParent}>
               {i18n.t('files.navigationFailure.openParent')}
             </Button>
           </Show>
           <Show when={props.accessFailure && props.canManageAccess}>
-            <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="md" variant="outline" icon={Settings} onClick={props.onManageAccess}>
+            <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="md" variant="primary" icon={Settings}
+              class="h-8 rounded-md px-3 text-xs shadow-none" onClick={props.onManageAccess}>
               {i18n.t('files.navigationFailure.manageAccess')}
             </Button>
           </Show>
+          <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="md" variant={hasRecoveryDestination() ? 'ghost' : 'primary'}
+            class={cn('h-8 rounded-md px-3 text-xs shadow-none aria-disabled:cursor-wait aria-disabled:opacity-60', hasRecoveryDestination() && 'text-muted-foreground')}
+            aria-disabled={props.pending} onClick={() => { if (!props.pending) props.onRetry(); }}>
+            <Refresh class={cn('size-3', props.pending && 'motion-safe:animate-spin')} aria-hidden="true" />
+            {i18n.t('files.navigationFailure.retry')}
+          </Button>
           <Show when={props.homeAvailable}>
-            <div class={props.unavailable ? 'w-full pt-1' : ''}>
-              <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="sm" variant="ghost" icon={Home}
-                class="text-muted-foreground" onClick={props.onOpenHome}>
-                {i18n.t('files.navigationFailure.openHome')}
-              </Button>
-            </div>
+            <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="sm" variant="ghost"
+              class="ml-auto h-8 px-1 text-[11px] font-normal text-muted-foreground" onClick={props.onOpenHome}>
+              {i18n.t('files.navigationFailure.openHome')}
+            </Button>
           </Show>
         </div>
         <Show when={props.accessFailure && !props.canManageAccess}>
