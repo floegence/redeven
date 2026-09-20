@@ -102,6 +102,14 @@ jobs:
           cp LICENSE dist/LICENSE
           cp THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
 
+      - name: Prepare Linux static libraries and source indexes
+        if: matrix.goos == 'linux'
+        run: |
+          set -euo pipefail
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ libc6-dev
+
       - name: Build binaries
         env:
           GOOS: ${{ matrix.goos }}
@@ -114,18 +122,42 @@ jobs:
           BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           mkdir -p dist
-          go build \
-            -tags floeterm_native \
-            -trimpath \
-            -ldflags "-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildTime=${BUILD_TIME}" \
-            -o dist/redeven \
-            ./cmd/redeven
-          go build \
-            -tags floeterm_native \
-            -trimpath \
-            -ldflags "-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildTime=${BUILD_TIME}" \
-            -o dist/redeven-gateway \
-            ./cmd/redeven-gateway
+          for binary in redeven redeven-gateway; do
+            relink_args=()
+            if [[ "$GOOS" == linux ]]; then
+              relink_args=(--relink-dir "$PWD/dist/runtime-relink/$binary")
+            fi
+            ./scripts/build_runtime_binary.sh \
+              --goos "$GOOS" --goarch "$GOARCH" \
+              --output "dist/$binary" --command "./cmd/$binary" \
+              --version "$VERSION" --commit "$COMMIT" --build-time "$BUILD_TIME" \
+              "${relink_args[@]}"
+          done
+
+      - name: Verify Linux runtime portability
+        if: matrix.goos == 'linux'
+        run: |
+          set -euo pipefail
+          for binary in dist/redeven dist/redeven-gateway; do
+            program_headers=$(readelf -l "$binary")
+            dynamic_section=$(readelf -d "$binary")
+            if [[ "$program_headers" == *INTERP* || "$dynamic_section" == *NEEDED* ]]; then
+              echo "Linux runtime must not require a host dynamic loader or shared library: $binary" >&2
+              exit 1
+            fi
+          done
+
+      - name: Package Linux library source and relink objects
+        if: matrix.goos == 'linux'
+        env:
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          ./scripts/package_linux_relink.sh dist/runtime-relink "$PWD/dist/redeven_relink_linux_${GOARCH}.tar.gz"
+          for binary in redeven redeven-gateway; do
+            python3 "dist/runtime-relink/$binary/relink.py"
+            diff <("dist/$binary" version) <("dist/runtime-relink/$binary/$binary" version)
+          done
 
       - name: Stage browser helpers without browser binaries
         run: node scripts/stage_computer_archive.mjs dist/computer.zip
@@ -184,6 +216,9 @@ jobs:
           cp dist/okf_bundle.sha256 "$upload_dir/"
           cp dist/LICENSE "$upload_dir/"
           cp dist/THIRD_PARTY_NOTICES.md "$upload_dir/"
+          if [[ "$GOOS" == linux ]]; then
+            cp "dist/redeven_relink_linux_${GOARCH}.tar.gz" "$upload_dir/"
+          fi
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v6

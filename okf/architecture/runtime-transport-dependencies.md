@@ -28,18 +28,9 @@ Stop remains one RPC lifecycle command without a fallback transport.
 
 The released runtime dependency set includes Floeterm terminal-go v0.19.2 and Flowersec Go v5.2.2. Flowersec v5.2.2 places standalone WebSocket sessions behind a close-before-wait shutdown barrier: shutdown stops admission, closes active sessions, and waits for lease release before the Runtime process may exit. Redeven relies on that published lifecycle instead of duplicating it.
 
-Every shipped Redeven Runtime enables terminal-go's `floeterm_native` build tag
-with cgo. The published module carries the target-specific Ghostty static
-archive, generated adapter, public headers, and provenance for Darwin and Linux
-on amd64 and arm64. Release builds run on a matching native runner for each
-target. One shared Runtime binary builder owns the Desktop bundle and SSH source
-build commands. It uses the native C toolchain only when host and target match;
-a cross-platform Linux source build selects Zig's explicit GNU target for the
-requested architecture, disables Go workspaces, and fails before source copying
-or asset generation when Zig is unavailable. It never lets cgo fall back to the
-host compiler or SDK. Desktop source builds and the exact-main semantic carrier
-use the same native build contract. Terminal-go's no-tag engine is retained only
-as a fail-closed boundary test and is never a shippable Runtime fallback.
+The [Runtime binary build contract](runtime-binary-portability.md) owns native
+Floeterm linkage, portable Linux artifacts, compiler preflight and source/relink
+distribution. Every shipped Runtime retains the published native terminal engine.
 
 Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The Runtime consumes Flowersec Go v5.2.2; Env App and Desktop consume Flowersec TypeScript v5.2.3 through published packages only. The agent delegates retry and connection lifecycle to Flowersec's controllers, structured diagnostics, wait, and connect APIs. It does not run a parallel retry loop or reuse a spent artifact. Public Local UI composes pages and `/flowersec/v3/direct` on one configured port. Explicit HTTP uses the published `flowersec-http-direct/1` profile; HTTPS retains normal `flowersec/3`, exact-SAN certificates, and client trust. Desktop-private Local UI uses the separate `flowersec-private-loopback/1` profile restricted to same-origin numeric-loopback `ws:` after bridge-token admission. Neither explicit profile changes normal Transport v3 TLS defaults. [Local UI network exposure](../security/local-ui-network-exposure.md) owns the product protocol-selection contract.
 

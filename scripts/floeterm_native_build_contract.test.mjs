@@ -17,17 +17,22 @@ test("every shipped Redeven runtime enables the published native Floeterm engine
   assert.match(release, /- goos: darwin\n\s+goarch: amd64\n\s+runner: macos-15-intel/u);
   assert.match(release, /- goos: darwin\n\s+goarch: arm64\n\s+runner: macos-15/u);
   assert.match(release, /CGO_ENABLED: 1/u);
-  assert.equal((release.match(/-tags floeterm_native/gu) ?? []).length, 2);
+  assert.match(release, /build_runtime_binary\.sh/u);
+  assert.match(release, /for binary in redeven redeven-gateway/u);
+  assert.match(release, /readelf -l/u);
+  assert.match(release, /readelf -d/u);
 
   assert.match(desktopBundle, /build_runtime_binary\.sh/u);
   assert.doesNotMatch(desktopBundle, /CGO_ENABLED="\$\{CGO_ENABLED:-0\}"/u);
 
   assert.match(sshSourceBuild, /build_runtime_binary\.sh/u);
   assert.match(runtimeBuilder, /"CGO_ENABLED=1"/u);
-  assert.match(runtimeBuilder, /-tags floeterm_native/u);
-  assert.match(runtimeBuilder, /linux\/amd64\) zig_target="x86_64-linux-gnu"/u);
-  assert.match(runtimeBuilder, /linux\/arm64\) zig_target="aarch64-linux-gnu"/u);
-  assert.match(runtimeBuilder, /Zig is required to cross-compile/u);
+  assert.match(runtimeBuilder, /build_tags="floeterm_native"/u);
+  assert.match(runtimeBuilder, /build_tags\+=",netgo,osusergo"/u);
+  assert.match(runtimeBuilder, /-linkmode external -extldflags '-static -lrt -lpthread'/u);
+  assert.match(runtimeBuilder, /linux\/amd64\) target_cpu="x86_64"/u);
+  assert.match(runtimeBuilder, /linux\/arm64\) target_cpu="aarch64"/u);
+  assert.match(runtimeBuilder, /GNU C and C\+\+ compilers are required/u);
 
   assert.match(finalGate, /go test -tags floeterm_native -p 1 -count=1 \.\/\.\.\./u);
   assert.match(finalGate, /golangci-lint run --build-tags floeterm_native \.\/\.\.\./u);

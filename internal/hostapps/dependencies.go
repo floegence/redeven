@@ -2,12 +2,16 @@ package hostapps
 
 import (
 	"context"
+	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"golang.org/x/net/html"
 )
 
 // Resolve installed capabilities, never a distribution name or package manager.
@@ -141,12 +145,64 @@ func installedHTML(paths string) string {
 					break
 				}
 			}
-			if valid {
+			if valid && htmlResourcesReadable(dir) {
 				return dir
 			}
 		}
 	}
 	return ""
+}
+
+func htmlResourcesReadable(dir string) bool {
+	index, err := os.Open(filepath.Join(dir, "index.html"))
+	if err != nil {
+		return false
+	}
+	defer index.Close()
+	tokens := html.NewTokenizer(index)
+	for {
+		kind := tokens.Next()
+		if kind == html.ErrorToken {
+			return tokens.Err() == io.EOF
+		}
+		if kind != html.StartTagToken && kind != html.SelfClosingTagToken {
+			continue
+		}
+		tag := tokens.Token()
+		attributes := map[string]string{}
+		for _, attr := range tag.Attr {
+			attributes[attr.Key] = attr.Val
+		}
+		reference := ""
+		if tag.Data == "script" {
+			reference = attributes["src"]
+		} else if tag.Data == "link" && attributes["rel"] == "stylesheet" {
+			reference = attributes["href"]
+		}
+		if reference == "" {
+			continue
+		}
+		resource, err := url.Parse(reference)
+		if err != nil || resource.IsAbs() || resource.Host != "" || resource.Path == "" || strings.HasPrefix(resource.Path, "/") {
+			return false
+		}
+		path := filepath.Join(dir, filepath.FromSlash(resource.Path))
+		relative, err := filepath.Rel(dir, path)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return false
+		}
+		// Distribution packages may use absolute symlinks into shared JavaScript
+		// directories. Follow them, but never advertise a broken installation.
+		file, err := os.Open(path)
+		if err != nil {
+			return false
+		}
+		info, err := file.Stat()
+		_ = file.Close()
+		if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+			return false
+		}
+	}
 }
 
 // An owned session must not inherit distribution/user Xpra settings that start

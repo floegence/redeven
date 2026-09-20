@@ -66,6 +66,7 @@ function createFixture(root, version = '1.2.3') {
     for (const updateFile of target.updateFiles) write(desktopDirectory, updateFile, Buffer.from(`version: ${version}\npath: ${target.desktopArch}\n`));
     write(packageDirectory, `redeven_${target.goos}_${target.goarch}.tar.gz`, Buffer.from(`runtime ${target.goos}/${target.goarch}\n`));
     write(packageDirectory, `redeven-gateway_${target.goos}_${target.goarch}.tar.gz`, Buffer.from(`gateway ${target.goos}/${target.goarch}\n`));
+    if (target.goos === 'linux') write(packageDirectory, `redeven_relink_linux_${target.goarch}.tar.gz`, Buffer.from(`library source and link objects ${target.goarch}\n`));
 
     for (const extension of target.extensions) {
       const installerName = `Redeven-Desktop-${version}-${target.desktopOS}-${target.desktopArch}.${extension}`;
@@ -103,11 +104,12 @@ test('collects only the closed four-target release inventory', () => {
     const destination = path.join(root, 'release');
     collect(downloads, destination, 'v1.2.3');
     const outputs = readdirSync(destination).sort();
-    assert.equal(outputs.filter((name) => name.startsWith('redeven_')).length, 4);
+    assert.equal(outputs.filter((name) => /^redeven_(linux|darwin)_/.test(name)).length, 4);
+    assert.equal(outputs.filter((name) => name.startsWith('redeven_relink_')).length, 2);
     assert.equal(outputs.filter((name) => name.startsWith('redeven-gateway_')).length, 4);
     assert.equal(outputs.filter((name) => /\.(?:deb|rpm|dmg)$/u.test(name)).length, 6);
     assert.equal(outputs.filter((name) => name.endsWith('.redevplugin-verification.json')).length, 6);
-    assert.equal(outputs.length, 30);
+    assert.equal(outputs.length, 32);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -123,7 +125,18 @@ test('excludes Sparkle stable-feed assets from prereleases', () => {
     const outputs = readdirSync(destination).sort();
     assert.equal(outputs.some((name) => name.startsWith('appcast-mac-')), false);
     assert.equal(outputs.some((name) => name.startsWith('Redeven-Desktop-') && name.endsWith('.md')), false);
-    assert.equal(outputs.length, 26);
+    assert.equal(outputs.length, 28);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects a Linux release without its corresponding source and relink kit', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-release-collector-'));
+  try {
+    const downloads = createFixture(root);
+    unlinkSync(path.join(downloads, 'package-linux-amd64', 'redeven_relink_linux_amd64.tar.gz'));
+    assert.throws(() => collect(downloads, path.join(root, 'output'), 'v1.2.3'), /package-linux-amd64 inventory mismatch/u);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

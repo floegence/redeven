@@ -356,7 +356,10 @@ func sessionHasWindows(xpra, socketDir string) bool {
 		if entry.Type()&os.ModeSocket == 0 {
 			continue
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		// Xpra 6.2 can spend five seconds collecting optional codec information
+		// even on an otherwise ready server. Keep the probe bounded while allowing
+		// the supported 6.x versions to return their actual window inventory.
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		out, err := commandOutput(ctx, xpraEnvironment(os.Environ()), xpra, "info", "socket://"+filepath.Join(socketDir, entry.Name()))
 		cancel()
 		if err == nil && infoHasWindows(string(out)) {

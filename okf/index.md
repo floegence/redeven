@@ -17,6 +17,9 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first opens, persisted proxy choice, and isolated Desktop loopback compatibility.
 - [Host Applications](architecture/host-applications.md) - Browse native Linux applications and open owned Xpra sessions in authorized windows.
 - [Host Application Platforms](architecture/host-application-platforms.md) - Prepare a headless host, diagnose missing capabilities, and distinguish validated distributions from macOS host limitations.
+- [Host Application Setup](operations/host-application-setup.md) - Install compatible Arch, Enterprise Linux and Alpine packages and verify native application startup.
+- [Host Application Validation](operations/host-application-validation.md) - Check distribution and architecture evidence and repeat the native session acceptance tests.
+- [Runtime Binary Portability](architecture/runtime-binary-portability.md) - Build native Linux/macOS runtimes and preserve static library source and relink access.
 - [Desktop loopback Web Service access](architecture/web-service-desktop-loopback.md) - Give one HTTP service a protected numeric-loopback Origin in its isolated Desktop window.
 - [Web Service system-browser authorization](architecture/web-service-browser-authorization.md) - Exchange a Desktop-private route for one exact, bounded browser session without a public fallback.
 - [Managed Web Service Templates](architecture/managed-web-service-templates.md) - Verify and map one released external catalog without retaining service-specific content in Redeven.

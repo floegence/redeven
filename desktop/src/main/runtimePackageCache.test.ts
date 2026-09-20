@@ -642,7 +642,7 @@ describe('runtimePackageCache', () => {
     const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
     await fs.writeFile(path.join(fixture.root, 'scripts', 'build_runtime_binary.sh'), [
       '#!/usr/bin/env sh',
-      'echo "Zig is required to cross-compile the linux/amd64 cgo runtime" >&2',
+      'echo "GNU C and C++ compilers are required for linux/amd64" >&2',
       'exit 1',
     ].join('\n'), { mode: 0o755 });
     try {
@@ -654,7 +654,7 @@ describe('runtimePackageCache', () => {
 
       expect(error).toBeInstanceOf(DesktopOperationFailureError);
       expect((error as DesktopOperationFailureError).presentation.diagnostics?.[0]?.text).toContain(
-        'Zig is required to cross-compile the linux/amd64 cgo runtime',
+        'GNU C and C++ compilers are required for linux/amd64',
       );
       await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({
         code: 'ENOENT',
