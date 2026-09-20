@@ -89,7 +89,11 @@ a phantom untracked diff. Unavailable repositories/files/diffs keep their
 component and present a recoverable error; successful responses without a file
 settle as empty and never retain a loading overlay or obsolete patch. Refresh
 invalidates both patch and full-context requests, and late results cannot replace
-the refreshed selection.
+the refreshed selection. Browser restoration may load the saved layout before
+RPC connects; the shared diff panel waits for its transport and follows the
+connection and error ownership rules in Git diff inspection above. Restoring a
+target must not turn this ordering into a missing-file error or require manual
+refresh after connection succeeds.
 
 The window, canvas widget, or modal supplies a definite height and a shrinkable content body.
 The patch owns vertical scrolling, while the title, mode controls, and patch

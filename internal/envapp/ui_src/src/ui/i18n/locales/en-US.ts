@@ -200,7 +200,10 @@ export const enUS = defineDictionary({
   gitDiff: {
     refresh: "Refresh diff",
     empty: "No changes are available for this file in the selected diff.",
-    unavailableDetail: "The file, repository, or diff may no longer be available. Refresh to try again.",
+    waitingForConnection: "Waiting for connection...",
+    sourceUnavailable: "The selected diff or its source is no longer available. Refresh the diff to check again.",
+    permissionDenied: "You do not have permission to read this diff.",
+    requestFailedDetail: "Refresh the diff to try again.",
 
     title: 'Diff',
     directoryUnavailable: 'Diff preview is unavailable for directory entries.',

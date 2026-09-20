@@ -332,7 +332,10 @@
   "gitDiff": {
     "refresh": "差分を更新",
     "empty": "選択した差分には、このファイルの変更はありません。",
-    "unavailableDetail": "ファイル、リポジトリ、または差分が利用できなくなった可能性があります。更新して再試行してください。",
+    "waitingForConnection": "接続を待機しています…",
+    "sourceUnavailable": "選択した差分またはその取得元は利用できなくなりました。差分を更新して再確認してください。",
+    "permissionDenied": "この差分を読み取る権限がありません。",
+    "requestFailedDetail": "差分を更新して再試行してください。",
     "title": "差分",
     "directoryUnavailable": "フォルダーでは差分プレビューを利用できません。",
     "patchUnavailable": "このファイルではパッチプレビューを利用できません。",

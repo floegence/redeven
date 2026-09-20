@@ -9,9 +9,10 @@ import { GitHistoryBrowser } from './GitHistoryBrowser';
 import { GitBranchesPanel } from './GitBranchesPanel';
 
 const rpc = vi.hoisted(() => ({ getCommitDetail: vi.fn() }));
+const rpcTransport = vi.hoisted(() => ({}));
 vi.mock('@floegence/floe-webapp-protocol', async () => ({
   ...await vi.importActual<typeof import('@floegence/floe-webapp-protocol')>('@floegence/floe-webapp-protocol'),
-  useProtocol: () => ({ session: () => ({ connected: true }) }),
+  useProtocol: () => ({ rpcTransport: () => rpcTransport, session: () => ({ connected: true }) }),
 }));
 vi.mock('../protocol/redeven_v1', async () => ({
   ...await vi.importActual<typeof import('../protocol/redeven_v1')>('../protocol/redeven_v1'),

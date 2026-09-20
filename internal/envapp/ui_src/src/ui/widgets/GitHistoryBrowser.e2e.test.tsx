@@ -20,13 +20,14 @@ const resizeObserverState = {
   }>,
 };
 
+const rpcTransport = vi.hoisted(() => ({}));
 vi.mock("@floegence/floe-webapp-protocol", async () => {
   const actual = await vi.importActual<
     typeof import("@floegence/floe-webapp-protocol")
   >("@floegence/floe-webapp-protocol");
   return {
     ...actual,
-    useProtocol: () => ({
+    useProtocol: () => ({ rpcTransport: () => rpcTransport,
       session: () => ({ connected: true }),
     }),
   };

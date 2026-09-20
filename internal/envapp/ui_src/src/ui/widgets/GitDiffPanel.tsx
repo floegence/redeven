@@ -10,6 +10,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
+import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import { FileText, Refresh } from '@floegence/floe-webapp-core/icons';
 import {
   useRedevenRpc,
@@ -74,6 +75,7 @@ type GitDiffDialogLoadPhase = "idle" | "loading" | "ready" | "error";
 type GitDiffDialogLoadSlot = {
   selectionKey: string;
   requestKey: string;
+  transport: ReturnType<ReturnType<typeof useProtocol>['rpcTransport']>;
   phase: GitDiffDialogLoadPhase;
   item: GitDiffFileContent | null;
   error: GitDiffDialogErrorState | null;
@@ -97,7 +99,7 @@ type GitDiffDialogBodyState =
       kind: "empty";
     }
   | {
-      kind: "loading";
+      kind: "loading" | "waiting";
       mode: GitDiffContentMode;
     }
   | {
@@ -146,19 +148,16 @@ export interface GitDiffPanelProps {
 }
 
 
-function defaultDiffErrorState(
-  _error: unknown,
-  fallbackMessage: string,
-): GitDiffDialogErrorState {
-  return { message: fallbackMessage };
-}
-
 function resolveDiffErrorState(
   error: unknown,
   fallbackMessage: string,
   context: GitDiffDialogErrorFormatterContext,
+  i18n: ReturnType<typeof useI18n>,
   formatter?: GitDiffDialogErrorFormatter,
 ): GitDiffDialogErrorState {
+  if (error instanceof RpcError && error.code === 403) {
+    return { message: fallbackMessage, detail: i18n.t('gitDiff.permissionDenied') };
+  }
   const formatted = formatter?.(error, context);
   if (typeof formatted === "string") {
     const message = formatted.trim();
@@ -174,7 +173,12 @@ function resolveDiffErrorState(
       };
     }
   }
-  return defaultDiffErrorState(error, fallbackMessage);
+  return {
+    message: fallbackMessage,
+    detail: i18n.t(error instanceof RpcError && error.code === 404
+      ? 'gitDiff.sourceUnavailable'
+      : 'gitDiff.requestFailedDetail'),
+  };
 }
 
 function normalizeDiffPathCandidate(value: unknown): string {
@@ -316,89 +320,23 @@ function buildGitDiffDialogSelectionKey(
   });
 }
 
-function createGitDiffDialogLoadSlot(
-  selectionKey = "",
-  requestKey = "",
-  phase: GitDiffDialogLoadPhase = "idle",
-  item: GitDiffFileContent | null = null,
-  error: GitDiffDialogErrorState | null = null,
-  presentation: GitCommitDiffPresentation | null = null,
-): GitDiffDialogLoadSlot {
+function createGitDiffDialogLoadSlot(values: Partial<GitDiffDialogLoadSlot> = {}): GitDiffDialogLoadSlot {
   return {
-    selectionKey,
-    requestKey,
-    phase,
-    item,
-    error,
-    presentation,
+    selectionKey: '',
+    requestKey: '',
+    transport: null,
+    phase: 'idle',
+    item: null,
+    error: null,
+    presentation: null,
+    ...values,
   };
-}
-
-function createLoadingGitDiffDialogLoadSlot(
-  selectionKey: string,
-  requestKey: string,
-  presentation?: GitCommitDiffPresentation | null,
-): GitDiffDialogLoadSlot {
-  return createGitDiffDialogLoadSlot(
-    selectionKey,
-    requestKey,
-    "loading",
-    null,
-    null,
-    presentation ?? null,
-  );
-}
-
-function createIdleGitDiffDialogLoadSlot(
-  selectionKey: string,
-  requestKey: string,
-  presentation?: GitCommitDiffPresentation | null,
-): GitDiffDialogLoadSlot {
-  return createGitDiffDialogLoadSlot(
-    selectionKey,
-    requestKey,
-    "idle",
-    null,
-    null,
-    presentation ?? null,
-  );
-}
-
-function createReadyGitDiffDialogLoadSlot(
-  selectionKey: string,
-  requestKey: string,
-  item: GitDiffFileContent | null,
-  presentation?: GitCommitDiffPresentation | null,
-): GitDiffDialogLoadSlot {
-  return createGitDiffDialogLoadSlot(
-    selectionKey,
-    requestKey,
-    "ready",
-    item,
-    null,
-    presentation ?? null,
-  );
-}
-
-function createErrorGitDiffDialogLoadSlot(
-  selectionKey: string,
-  requestKey: string,
-  error: GitDiffDialogErrorState,
-  presentation?: GitCommitDiffPresentation | null,
-): GitDiffDialogLoadSlot {
-  return createGitDiffDialogLoadSlot(
-    selectionKey,
-    requestKey,
-    "error",
-    null,
-    error,
-    presentation ?? null,
-  );
 }
 
 export function GitDiffPanel(props: GitDiffPanelProps) {
   const i18n = useI18n();
   const rpc = useRedevenRpc();
+  const protocol = useProtocol();
   const [refreshRevision, setRefreshRevision] = createSignal(0);
   // The mode is a browsing preference for this inspection surface. Keep it
   // while the selected file changes so a reviewer can scan every file in the
@@ -411,9 +349,8 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
     createGitDiffDialogLoadSlot(),
   );
 
-  let previewReqSeq = 0;
-  let fullReqSeq = 0;
-  onCleanup(() => { previewReqSeq += 1; fullReqSeq += 1; });
+  let disposed = false;
+  onCleanup(() => { disposed = true; });
 
   // A new file summary is a fresh workspace snapshot, even at the same path.
   const selectionRevision = createMemo((revision: number) => {
@@ -459,10 +396,12 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
     return props.open ? selectedMode() : "patch";
   });
   const previewSlotMatchesSelection = createMemo(
-    () => previewSlot().selectionKey === selectionSession().selectionKey,
+    () => previewSlot().selectionKey === selectionSession().selectionKey
+      && previewSlot().transport === protocol.rpcTransport(),
   );
   const fullSlotMatchesSelection = createMemo(
-    () => fullSlot().selectionKey === selectionSession().selectionKey,
+    () => fullSlot().selectionKey === selectionSession().selectionKey
+      && fullSlot().transport === protocol.rpcTransport(),
   );
   const activeCommitPresentation = createMemo(() => {
     const session = selectionSession();
@@ -510,7 +449,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
     }
     if (session.previewRequestKey) {
       return {
-        kind: "loading",
+        kind: protocol.rpcTransport() ? "loading" : "waiting",
         mode: "preview",
       };
     }
@@ -565,7 +504,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
     }
     if (session.fullRequestKey) {
       return {
-        kind: "loading",
+        kind: protocol.rpcTransport() ? "loading" : "waiting",
         mode: "full",
       };
     }
@@ -608,7 +547,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
     );
   });
   const activeBodyLoadingMessage = createMemo(() =>
-    activeMode() === "full-context"
+    !protocol.rpcTransport() ? i18n.t('gitDiff.waitingForConnection') : activeMode() === "full-context"
       ? i18n.t('gitDiff.loadingFullContext')
       : i18n.t('gitDiff.loadingPatch'),
   );
@@ -641,213 +580,62 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
     setSelectedMode(nextMode);
   };
 
-  createEffect(
-    on(
-      () => {
-        const session = selectionSession();
-        return [props.open, session.selectionKey, session.previewRequestKey] as const;
-      },
-      ([open, selectionKey, previewRequestKey]) => {
-        const session = selectionSession();
-        previewReqSeq += 1;
-
+  // Both modes share request ownership. Only a ready transport can start work;
+  // transport replacement invalidates results without creating a reconnect owner.
+  createEffect(on(
+    () => [props.open, selectionSession(), activeMode(), protocol.rpcTransport()] as const,
+    ([open, session, mode, transport]) => {
+      for (const contentMode of ['preview', 'full'] as const) {
+        const readSlot = contentMode === 'preview' ? previewSlot : fullSlot;
+        const writeSlot = contentMode === 'preview' ? setPreviewSlot : setFullSlot;
+        const request = contentMode === 'preview' ? session.previewRequest : session.fullRequest;
+        const requestKey = contentMode === 'preview' ? session.previewRequestKey : session.fullRequestKey;
+        const selectionKey = session.selectionKey;
         if (!open || !selectionKey) {
-          setPreviewSlot(createGitDiffDialogLoadSlot());
-          return;
-        }
-        if (session.seededPreviewItem) {
-          setPreviewSlot(
-            createReadyGitDiffDialogLoadSlot(
-              selectionKey,
-              previewRequestKey,
-              session.seededPreviewItem,
-              session.commitPresentation,
-            ),
-          );
-          return;
-        }
-        if (!session.previewRequest || !previewRequestKey) {
-          setPreviewSlot(
-            createIdleGitDiffDialogLoadSlot(
-              selectionKey,
-              previewRequestKey,
-              session.commitPresentation,
-            ),
-          );
-          return;
+          writeSlot(createGitDiffDialogLoadSlot());
+          continue;
         }
 
-        const seq = previewReqSeq;
-        setPreviewSlot(
-          createLoadingGitDiffDialogLoadSlot(
-            selectionKey,
-            previewRequestKey,
-            session.commitPresentation,
-          ),
-        );
+        let slot = readSlot();
+        if (slot.selectionKey !== selectionKey || slot.requestKey !== requestKey || slot.transport !== transport) {
+          slot = createGitDiffDialogLoadSlot({ selectionKey, requestKey, transport, presentation: session.commitPresentation });
+          writeSlot(slot);
+        }
+        if (slot.phase !== 'idle') continue;
+        if (contentMode === 'preview' && session.seededPreviewItem) {
+          writeSlot({ ...slot, phase: 'ready', item: session.seededPreviewItem });
+          continue;
+        }
+        if (!request || !transport || (contentMode === 'full' && mode !== 'full-context')) continue;
 
-        void rpc.git
-          .getDiffContent(session.previewRequest)
-          .then((resp) => {
-            const currentSession = selectionSession();
-            if (
-              seq !== previewReqSeq ||
-              !props.open ||
-              currentSession.selectionKey !== selectionKey ||
-              currentSession.previewRequestKey !== previewRequestKey
-            )
-              return;
-            setPreviewSlot(
-              createReadyGitDiffDialogLoadSlot(
-                selectionKey,
-                previewRequestKey,
-                resp.file ?? null,
-                resp?.presentation ?? currentSession.commitPresentation,
-              ),
-            );
-          })
-          .catch((err) => {
-            const currentSession = selectionSession();
-            if (
-              seq !== previewReqSeq ||
-              !props.open ||
-              currentSession.selectionKey !== selectionKey ||
-              currentSession.previewRequestKey !== previewRequestKey
-            )
-              return;
-            setPreviewSlot(
-              createErrorGitDiffDialogLoadSlot(
-                selectionKey,
-                previewRequestKey,
-                resolveDiffErrorState(
-                  err,
-                  i18n.t('gitDiff.failedPatch'),
-                  {
-                    mode: "preview",
-                    source: props.source,
-                    item: props.item,
-                  },
-                  props.errorFormatter,
-                ),
-                currentSession.commitPresentation,
-              ),
-            );
+        const pending: GitDiffDialogLoadSlot = { ...slot, phase: 'loading' };
+        writeSlot(pending);
+        const stillOwnsRequest = () => !disposed && props.open
+          && protocol.rpcTransport() === transport
+          && selectionSession().selectionKey === selectionKey
+          && readSlot() === pending;
+        const context: GitDiffDialogErrorFormatterContext = { mode: contentMode, source: props.source, item: props.item };
+        void rpc.git.getDiffContent(request).then((response) => {
+          if (!stillOwnsRequest()) return;
+          writeSlot({
+            ...pending,
+            phase: 'ready',
+            item: response.file ?? null,
+            presentation: response.presentation ?? session.commitPresentation,
           });
-      },
-    ),
-  );
-
-  createEffect(
-    on(
-      () => {
-        const session = selectionSession();
-        return [
-          props.open,
-          activeMode(),
-          session.selectionKey,
-          session.fullRequestKey,
-        ] as const;
-      },
-      ([open, nextMode, selectionKey, fullRequestKey]) => {
-        const session = selectionSession();
-        const slot = fullSlot();
-        const slotMatchesRequest =
-          slot.selectionKey === selectionKey &&
-          slot.requestKey === fullRequestKey;
-
-        if (!open || !selectionKey) {
-          fullReqSeq += 1;
-          setFullSlot(createGitDiffDialogLoadSlot());
-          return;
-        }
-        if (!session.fullRequest || !fullRequestKey) {
-          fullReqSeq += 1;
-          setFullSlot(
-            createIdleGitDiffDialogLoadSlot(
-              selectionKey,
-              fullRequestKey,
-              session.commitPresentation,
-            ),
-          );
-          return;
-        }
-        if (nextMode !== "full-context") {
-          if (!slotMatchesRequest) {
-            fullReqSeq += 1;
-            setFullSlot(
-              createIdleGitDiffDialogLoadSlot(
-                selectionKey,
-                fullRequestKey,
-                session.commitPresentation,
-              ),
-            );
-          }
-          return;
-        }
-        if (slotMatchesRequest && (slot.phase === "ready" || slot.phase === "loading")) {
-          return;
-        }
-
-        fullReqSeq += 1;
-        const seq = fullReqSeq;
-        setFullSlot(
-          createLoadingGitDiffDialogLoadSlot(
-            selectionKey,
-            fullRequestKey,
-            session.commitPresentation,
-          ),
-        );
-
-        void rpc.git
-          .getDiffContent(session.fullRequest)
-          .then((resp) => {
-            const currentSession = selectionSession();
-            if (
-              seq !== fullReqSeq ||
-              !props.open ||
-              currentSession.selectionKey !== selectionKey ||
-              currentSession.fullRequestKey !== fullRequestKey
-            )
-              return;
-            setFullSlot(
-              createReadyGitDiffDialogLoadSlot(
-                selectionKey,
-                fullRequestKey,
-                resp.file ?? null,
-                resp?.presentation ?? currentSession.commitPresentation,
-              ),
-            );
-          })
-          .catch((err) => {
-            const currentSession = selectionSession();
-            if (
-              seq !== fullReqSeq ||
-              !props.open ||
-              currentSession.selectionKey !== selectionKey ||
-              currentSession.fullRequestKey !== fullRequestKey
-            )
-              return;
-            setFullSlot(
-              createErrorGitDiffDialogLoadSlot(
-                selectionKey,
-                fullRequestKey,
-                resolveDiffErrorState(
-                  err,
-                  i18n.t('gitDiff.failedFullContext'),
-                  {
-                    mode: "full",
-                    source: props.source,
-                    item: props.item,
-                  },
-                  props.errorFormatter,
-                ),
-                currentSession.commitPresentation,
-              ),
-            );
+        }).catch((error) => {
+          if (!stillOwnsRequest()) return;
+          writeSlot({
+            ...pending,
+            phase: 'error',
+            error: resolveDiffErrorState(error,
+              i18n.t(contentMode === 'preview' ? 'gitDiff.failedPatch' : 'gitDiff.failedFullContext'),
+              context, i18n, props.errorFormatter),
           });
-      },
-    ),
-  );
+        });
+      }
+    },
+  ));
 
   const dialogContent = () => (
     <div data-git-diff-panel class={cn("git-diff-panel flex h-full min-h-0 min-w-0 flex-col", props.class)}>
@@ -900,7 +688,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
         <Show when={props.source && props.item}>
           <button type="button" class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             title={i18n.t('gitDiff.refresh')} aria-label={i18n.t('gitDiff.refresh')}
-            disabled={props.loading || activeBodyState().kind === 'loading' || fullContextLoading()}
+            disabled={!protocol.rpcTransport() || props.loading || activeBodyState().kind === 'loading' || fullContextLoading()}
             onClick={() => setRefreshRevision((revision) => revision + 1)}>
             <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -915,14 +703,14 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
 
       <div class="relative min-h-0 flex-1">
         <Switch>
-          <Match when={props.loading || activeBodyState().kind === "loading"}>
+          <Match when={props.loading || activeBodyState().kind === "loading" || activeBodyState().kind === "waiting"}>
             <GitStatePane loading loadingVariant="patch" loadingRows={10} message={activeBodyLoadingMessage()} class="git-diff-panel__loading" />
           </Match>
           <Match when={activeErrorState()}>
             <GitStatePane
               tone="error"
               message={activeErrorState()?.message}
-              detail={activeErrorState()?.detail ?? i18n.t('gitDiff.unavailableDetail')}
+              detail={activeErrorState()?.detail}
               surface
               class="min-h-0 flex-1"
             />

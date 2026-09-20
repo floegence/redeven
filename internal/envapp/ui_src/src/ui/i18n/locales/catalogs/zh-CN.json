@@ -332,7 +332,10 @@
   "gitDiff": {
     "refresh": "刷新差异",
     "empty": "所选差异中没有此文件的变更。",
-    "unavailableDetail": "文件、仓库或差异可能已不存在。请刷新重试。",
+    "waitingForConnection": "正在等待连接…",
+    "sourceUnavailable": "所选差异或其来源已不可用。请刷新差异后重新检查。",
+    "permissionDenied": "你没有读取此差异的权限。",
+    "requestFailedDetail": "请刷新差异后重试。",
     "title": "差异",
     "directoryUnavailable": "文件夹不支持差异预览。",
     "patchUnavailable": "此文件不支持补丁预览。",
