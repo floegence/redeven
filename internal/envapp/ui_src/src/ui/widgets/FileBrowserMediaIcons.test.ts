@@ -34,7 +34,7 @@ describe('FileBrowser media icons', () => {
     const dispose = render(() => VideoFileIcon({}), host);
     const html = host.innerHTML;
 
-    expect(html).toContain('#8b5cf6');
+    expect(html).toContain('var(--floe-icon-purple)');
     expect(html).toContain('data-file-icon-kind="video"');
     expect(html).not.toContain('var(--primary)');
 

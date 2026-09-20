@@ -248,7 +248,7 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
       >
         <div class="space-y-4" data-testid="archive-extraction-dialog">
           <div class="flex min-w-0 items-center gap-3 border-b border-border pb-3">
-            <ArchiveFileIcon class="h-9 w-9 shrink-0" />
+            <ArchiveFileIcon size={36} class="h-9 w-9 shrink-0" />
             <div class="min-w-0">
               <div class="truncate text-sm font-medium text-foreground" title={props.request?.item.name}>
                 {props.request?.item.name}

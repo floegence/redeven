@@ -5664,7 +5664,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     id: 'extract-archive',
     label: i18n.t('files.archiveExtraction.menuExtract'),
     type: 'custom',
-    icon: (props) => <ArchiveFileIcon class={props.class} />,
+    icon: (props) => <ArchiveFileIcon size={16} class={props.class} />,
     onAction: () => openArchiveExtraction(item, classification),
   });
 

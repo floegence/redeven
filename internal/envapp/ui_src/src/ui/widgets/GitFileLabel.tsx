@@ -9,7 +9,7 @@ export function GitFileLabel(props: { path: string; secondaryPath?: string; dire
   const description = () => props.secondaryPath || props.path;
   return (
     <span class="git-file-label" title={description()}>
-      <FileItemIcon item={{ name: name(), type: props.directory ? 'folder' : 'file', extension: extNoDot(name()) }} class="size-3.5 shrink-0" />
+      <FileItemIcon size={14} item={{ name: name(), type: props.directory ? 'folder' : 'file', extension: extNoDot(name()) }} class="size-3.5 shrink-0" />
       <span class="git-file-label__name">{name()}</span>
       <Show when={parent()}><span aria-hidden="true" class="git-file-label__directory">{parent()}</span></Show>
       <Show when={description() !== name()}><span class="sr-only">{description()}</span></Show>
