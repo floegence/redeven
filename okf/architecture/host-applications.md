@@ -93,8 +93,9 @@ Opening uses an application presentation of the existing
 [Desktop isolated forward window](../desktop/web-service-browser-window.md), or a
 synchronously reserved popup in browser mode. Desktop uses a native title bar,
 application title, and full content bounds without browser navigation or an
-address field. Both window documents and the application view have no Desktop
-preload or bridge. Browser popups retain browser-owned chrome.
+address field. The Xpra document has no Desktop preload or bridge. Only the
+Redeven bootstrap receives a narrow, current-window presentation capability as
+defined by the Desktop window contract. Browser popups retain browser-owned chrome.
 
 The localized bootstrap owns connection presentation. It uses the host application's
 unframed icon, quiet progress motion, and distinct starting, connecting, disconnected,
@@ -103,19 +104,29 @@ successful Xpra paint acknowledgement. Reduced-motion preferences disable motion
 A broken connection provides explicit reconnection, reseeding credentials from the
 authorized state endpoint without starting another application process. Stale
 callbacks cannot restore a disconnected or superseded view. Terminated sessions
-show their ended state instead of an unusable retry. A failed initial Desktop
+cannot offer an unusable retry. A failed initial Desktop
 navigation also has a localized, bridge-free reconnect page.
 
 The adapter integrates the separately installed HTML5 v20 client. Primary normal
 windows fill the viewer and track its size through Xpra's window geometry API;
 Xpra decorations, wallpaper, toolbar, and loading UI are hidden. Native viewer
-chrome owns primary-window movement and minimization. The application still owns
+chrome owns primary-window movement and the authoritative maximize/minimize state.
+Application controls request that state through Xpra metadata; native state changes
+are reflected back to Xpra without confusing viewport filling with OS maximization.
+Native restore also clears the remote iconified state. Dialog controls remain local
+to their dialog. The application still owns
 its own client-side header and controls. Transient dialogs retain their stacking, close controls, and input behavior;
 oversized dialogs negotiate a bounded size so their actions remain reachable.
 Menus and popups keep their ordinary window geometry. No pixel
 stretching or cropping substitutes for application resize. Fixed-size or minimum-size
 applications can still constrain their own layout. Xpra owns keyboard and clipboard
 transport. This path does not create a native OS window per X11 child window.
+
+After an established application session is confirmed ended, the viewer closes its
+native window or script-opened browser popup. A close request alone, removal of one
+child window, or a lost connection never closes the viewer. Applications retain
+their normal save/cancel prompts; cancelling keeps both the session and its viewer.
+Closing the outer viewer still preserves the application session.
 
 The library cards show host-supplied identity and description. The whole card opens
 the application, with an accessible action label and a hover/focus affordance;

@@ -34,6 +34,10 @@ function resolveDesktopPreloadEntries(options: DesktopPreloadBuildOptions = {}):
       entryPoint: path.join(desktopRoot, 'src', 'preload', 'webServiceBrowser.ts'),
       outfile: path.join(outDir, 'web-service-browser.js'),
     },
+    {
+      entryPoint: path.join(desktopRoot, 'src', 'preload', 'hostApplicationWindow.ts'),
+      outfile: path.join(outDir, 'host-application-window.js'),
+    },
   ];
 }
 

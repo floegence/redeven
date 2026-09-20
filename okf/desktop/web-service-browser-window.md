@@ -37,6 +37,15 @@ localized reconnect action without service addresses or browser instructions.
 The [host application contract](../architecture/host-applications.md) owns Xpra
 geometry, application progress, disconnection, and session lifecycle.
 
+Only the Redeven host-application bootstrap receives a dedicated presentation
+preload. It can request close, minimize, maximize, or unmaximize for its own native
+window and observe that window's state. Electron main binds every request to the
+attached live WebContents, its current main frame, and the exact entry origin and
+bootstrap path. Subframes, other forwards, navigated documents, and unknown actions
+are rejected. The Xpra iframe, native host document, and unavailable document receive
+no page bridge. No environment identity, credentials, filesystem, shell, or general
+Desktop APIs are exposed. Native event subscriptions are removed with the view.
+
 # Boundaries
 
 Desktop isolation is a B-level browsing surface over Redeven's existing authorized route; it is not Remote Browser Isolation and does not claim a general-purpose browser security boundary. The browser-only Env App path remains an explicit popup route. Redeven must not label a same-page iframe as complete isolated browsing, copy a reusable RBI implementation into this repository, or bypass the published-dependency policy to obtain one.
@@ -50,3 +59,5 @@ System-browser authorization and the persisted access-mode decision remain owned
 - `redeven:desktop/src/main/webServiceLoopbackGateway.ts` - The isolated gateway maps redirects for the current protected Forward back to application-root paths without accepting other route identities.
 - `redeven:desktop/src/main/main.ts:7916` - Desktop prepares the isolated network partition, owns the trusted browser toolbar and target view, handles marked connection failures and target DevTools, enforces popup/navigation policy, and clears partition storage and cache.
 - `redeven:desktop/src/main/webServiceUnavailableDocument.ts:1` - The localized scriptless state page presents the target, recovery checks, and local retry intent without a renderer bridge.
+- `redeven:desktop/src/main/hostApplicationWindow.ts` and `hostApplicationWindow.test.ts` - Current-window action admission, native state, and teardown.
+- `redeven:desktop/src/preload/hostApplicationWindow.ts` and `hostApplicationWindow.test.ts` - Minimal presentation API restricted to the main bootstrap document.

@@ -13,6 +13,13 @@
   let client;
   let attached = false;
   let wasActive = false;
+  const nativeWindow = window.redevenHostApplicationWindow;
+  let nativeState;
+  let applyNativeState = () => {};
+  const unsubscribeWindow = nativeWindow?.subscribe(state => {
+    nativeState = state;
+    applyNativeState();
+  });
 
   if (/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(config.icon)) {
     const icon = document.getElementById('icon');
@@ -39,6 +46,7 @@
     const previous = client;
     client = null;
     attached = false;
+    applyNativeState = () => {};
     if (previous) {
       previous.callback_close = () => {};
       previous.close();
@@ -53,6 +61,12 @@
     request?.abort();
     stopClient();
     present(state);
+    // Only a confirmed ended session closes an established viewer. Application
+    // save dialogs and transport loss must keep the physical window available.
+    if (state === 'ended' && wasActive) {
+      if (nativeWindow) nativeWindow.request('close');
+      else window.close();
+    }
     if (!retry.hidden) retry.focus({preventScroll:true});
   }
 
@@ -90,6 +104,17 @@
     doc.documentElement.style.backgroundColor = getComputedStyle(document.body).backgroundColor;
 
     const primaryWindows = new Set();
+    function syncWindowState(win) {
+      const state = nativeState || {maximized:true, minimized:false};
+      xpra.send_configure_window(win, {maximized:state.maximized, iconified:state.minimized}, false);
+    }
+    applyNativeState = () => {
+      if (attempt !== generation) return;
+      for (const wid of primaryWindows) {
+        const win = xpra.id_to_window[wid];
+        if (win) syncWindowState(win);
+      }
+    };
     function fit(win) {
       if (!win || win.override_redirect || win.tray) return;
       if (win.metadata['transient-for'] || win.metadata.modal || win.has_windowtype(['DIALOG'])) {
@@ -114,14 +139,26 @@
       if (!primaryWindows.has(win.wid)) {
         primaryWindows.add(win.wid);
         win.div.classList.add('redeven-primary');
-        // Native viewer chrome owns movement, minimization and size. Dialogs retain
-        // the external client's ordinary window behavior and close controls.
+        // Filling the viewport is a rendering detail. The native window owns the
+        // actual maximize/minimize state reported back to the host application.
         const maximize = win.set_maximized;
-        win.set_maximized = () => maximize.call(win, true);
-        win.set_minimized = () => {};
+        win.set_maximized = value => {
+          if (attempt !== generation) return;
+          if (nativeState && Boolean(value) !== nativeState.maximized) nativeWindow.request(value ? 'maximize' : 'unmaximize');
+          maximize.call(win, true);
+        };
+        win.set_minimized = value => {
+          if (attempt === generation && nativeState && value && !nativeState.minimized) nativeWindow.request('minimize');
+        };
         win.initiate_moveresize = () => {};
-        win.update_metadata({'decorations':false, 'maximized':true});
-        xpra.send_configure_window(win, {maximized:true}, false);
+        const moveResize = win.move_resize;
+        win.move_resize = function(...args) {
+          moveResize.apply(this, args);
+          this.screen_resized();
+        };
+        win.update_metadata({'decorations':false});
+        maximize.call(win, true);
+        syncWindowState(win);
       }
       win.screen_resized();
     }
@@ -205,6 +242,6 @@
   }
   retry.addEventListener('click', connect);
   window.addEventListener('offline', () => finish('disconnected'));
-  window.addEventListener('pagehide', () => { generation++; clearTimeout(timer); clearTimeout(deadline); request?.abort(); stopClient(); });
+  window.addEventListener('pagehide', () => { generation++; clearTimeout(timer); clearTimeout(deadline); request?.abort(); stopClient(); unsubscribeWindow?.(); });
   connect();
 })();
