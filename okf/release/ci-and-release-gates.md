@@ -22,9 +22,19 @@ fails closed if any Windows asset appears.
 ## Validation levels
 
 Feature work runs focused checks for affected code and contracts. Pre-commit
-checks only the staged diff, README localization contract, and staged
-open-source hygiene. It does not run full asset, Desktop, Docker, or repository
-suites.
+checks the staged diff, README localization contract, staged open-source
+hygiene, and third-party notices when dependency or attribution inputs change.
+It does not run full asset, Desktop, Docker, or repository suites.
+
+The notice check exports the Git index to a temporary tree and calls that
+tree's existing generator with `--check`. It checks the content being committed,
+including partial staging; an unstaged notice update cannot satisfy it. The
+snapshot reads installed package metadata from the current checkout and uses
+only the local Go toolchain and module cache, with proxy, checksum-server, and
+VCS downloads disabled. Unrelated commits skip this check. Missing prerequisites
+or stale output stop the commit with instructions to prepare dependencies,
+regenerate notices, and stage matching inputs. Success and failure remove the
+temporary tree without rewriting working files or the index.
 
 Ordinary push and pull-request Actions run one bounded source-only job. CodeQL
 is a separate asynchronous discovery lane: it runs on a daily schedule or
@@ -392,6 +402,8 @@ not become a fallback, shim, or local artifact path.
 - `redeven:desktop/package.json` - Pins the Desktop package manager and explicit dependency lifecycle-script policy.
 - `redeven:desktop/electron-builder.config.mjs` - Selects NSIS for the internal Windows target.
 - `redeven:scripts/generate_third_party_notices.mjs` - Generates and checks attribution against locked dependencies.
+- `redeven:scripts/check_staged_third_party_notices.mjs` - Runs the same checker offline against staged content only when its inputs change.
+- `redeven:scripts/check_staged_third_party_notices.test.mjs` - Exercises stale and partially staged notices, missing dependencies, cleanup, and actual commit rejection.
 - `redeven:scripts/check_desktop_electron_test_runtime.sh:1` - Fails closed when the exact npm Electron runtime cannot execute without modifying host trust.
 - `redeven:desktop/src/build/desktopPreloadRuntime.test.ts:1` - Runs real Electron preload bridges in isolated working and user-data directories.
 - `redeven:scripts/check_plugin_integration.sh:1` - Defines focused ReDevPlugin integration coverage.

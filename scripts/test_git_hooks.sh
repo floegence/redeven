@@ -19,6 +19,8 @@ if grep -Eq 'build_assets|check_plugin_integration|check_gateway_protocol_contra
   fail "pre-commit must contain only fast commit-time checks"
 fi
 
+node --test "$ROOT_DIR/scripts/check_staged_third_party_notices.test.mjs"
+
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 repo="$tmpdir/repo"
