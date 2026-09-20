@@ -54,11 +54,15 @@ sentence instead of repeating installation instructions.
 A Runtime-generated extension-page fragment supplies the native-host name. It
 is configuration, not consent: only the extension's own exact popup path accepts
 messages, and the user confirms Connect there. Profile naming is optional. No
-raw native-host field, manual copy or manual inventory refresh remains. A
+raw native-host field or manual inventory refresh is required for the normal
+flow. When this Runtime lacks a graphical launch session, the guide exposes a
+copyable connection-page link for Chrome on the environment desktop; the
+[diagnostics contract](computer-use-chrome-diagnostics.md) owns that recovery. A
 bounded two-minute inventory observation exists only while the guide is open;
 only the completed Native Messaging handshake can resume the original Floret
 interaction. Closing or switching conversations discards delayed results. A
-failed check exposes retry, without binding a tab or creating another lifecycle.
+failed check retains installation guidance and exposes a stage-specific recovery
+action, without binding a tab or creating another lifecycle.
 Connected profiles are reused. Conversation assistance starts at the connection
 step when the Runtime has a prepared registration; installation remains available
 through Back. First setup and adding another profile start with installation.
@@ -90,8 +94,8 @@ assistance may reuse already connected profiles and resume immediately. Genuine
 profile ambiguity remains the Agent's responsibility through existing discovery.
 The extension's optional profile label is user content, not routing authority.
 
-Runtime Service epoch 28 pairs the connection status snapshot with both product
-carriers. `extension/status` contains live profiles, an optional failure reason
+Runtime Service epoch 30 pairs the connection status snapshot and structured
+diagnostics with both product carriers. `extension/status` contains live profiles, an optional failure reason
 and optional `prepared` presentation hint. Older carriers safely ignore the hint;
 new carriers retain installation guidance when it is absent. Native Messaging
 uses protocol 6. The first connection remains consent-gated even when the URL

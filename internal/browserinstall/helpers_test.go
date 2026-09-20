@@ -17,7 +17,7 @@ func TestComputerHelperArchiveVerifiesContentsAndRepairsCorruption(t *testing.T)
 	if arch == "amd64" {
 		arch = "x64"
 	}
-	files := map[string][]byte{"node": []byte("#!/bin/sh\n"), "redevenComputerHost.mjs": []byte("host"), "redevenManagedBrowser.mjs": []byte("browser"), "node_modules/playwright/package.json": []byte(`{"version":"1.60.0"}`)}
+	files := map[string][]byte{"node": []byte("#!/bin/sh\n"), "redevenComputerHost.mjs": []byte("host"), "redevenManagedBrowser.mjs": []byte("browser"), "node_modules/playwright/package.json": []byte(`{"version":"1.60.0"}`), "extension/manifest.json": []byte(`{}`), "extension/background.mjs": []byte("background"), "extension/popup.html": []byte("popup"), "extension/popup.mjs": []byte("popup script")}
 	entries := []map[string]any{}
 	archive := filepath.Join(t.TempDir(), "computer.zip")
 	f, err := os.Create(archive)
@@ -44,6 +44,27 @@ func TestComputerHelperArchiveVerifiesContentsAndRepairsCorruption(t *testing.T)
 	state := t.TempDir()
 	helper, err := PrepareComputerHelpers(archive, state)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(filepath.Dir(helper), "extension", "popup.mjs")); err != nil {
+		t.Fatal(err)
+	}
+	// An internally consistent manifest must still include every required
+	// browser connection entrypoint.
+	retained := make([]map[string]any, 0, len(entries)-1)
+	for _, entry := range entries {
+		if entry["path"] != "extension/popup.mjs" {
+			retained = append(retained, entry)
+		}
+	}
+	incompleteManifest, _ := json.Marshal(map[string]any{"schema_version": 1, "platform": runtime.GOOS, "architecture": arch, "files": retained})
+	if err := os.WriteFile(filepath.Join(filepath.Dir(helper), "manifest.json"), incompleteManifest, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateHelpers(filepath.Dir(helper)); err == nil {
+		t.Fatal("missing extension entrypoint was admitted")
+	}
+	if _, err := PrepareComputerHelpers(archive, state); err != nil {
 		t.Fatal(err)
 	}
 	first, _ := os.Stat(helper)

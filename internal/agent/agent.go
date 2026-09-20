@@ -75,6 +75,9 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 			slog.Warn("computer helper resources unavailable", "error", err)
 		}
 	}
+	if helper == "" {
+		slog.Warn("browser connection components unavailable", "reason", "browser_resources_missing")
+	}
 	registry := ai.NewTargetRegistry()
 	target := ai.TargetDescriptor{
 		ID: "browser-main", Kind: "browser.managed", DisplayName: "Redeven Managed Browser",

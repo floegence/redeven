@@ -1,9 +1,9 @@
 {
   "schema_version": 3,
   "okf_version": "0.2",
-  "concept_count": 147,
-  "section_count": 312,
-  "evidence_count": 1354,
-  "bundle_sha256": "ba7818ad0d635c7b0731c34dc3c83d25a4a3eac5cc28699dee9dca97affc534f",
-  "source_sha256": "0d7cff57567052345e72e0ba42453ea40d93621847fddf3e9ff679837f16d504"
+  "concept_count": 148,
+  "section_count": 314,
+  "evidence_count": 1363,
+  "bundle_sha256": "82a984a94769a590ace3ad9ad32a94c1c7ae0bc05981f4bb60834ebd34b187a7",
+  "source_sha256": "e6011e1f7b6386225f0f96fd0c7ea03bd547bf46b5c47435645913db558b3bff"
 }

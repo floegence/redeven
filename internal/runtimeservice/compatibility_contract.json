@@ -4,9 +4,10 @@
     "release_version": "v0.13.0",
     "previous_release": "v0.12.0",
     "reviewed_at": "2026-09-20",
-    "review_id": "flower-browser-install-consent-v1",
-    "summary": "Epoch 29 adds explicit user-confirmed Chromium installation and a persistent default-on browser switch. Runtime owns one installer; Desktop and Env App share its status and confirmation UI. Standard packages contain thin helpers without Chromium. Download and Desktop ZIP upload use one pinned digest and platform contract. Existing Floret InputRequest/Respond owns the installation wait and continuation; no upstream API or database schema changes.",
+    "review_id": "chrome-connection-diagnostics-v1",
+    "summary": "Epoch 30 exposes Chrome prerequisites and bounded action diagnostics through the existing status and error envelopes. Shared Desktop and Env App guides distinguish preparation, application launch, connection checks and continuation. Source-built Runtime suites now include verified target-specific computer.zip resources; old incomplete build caches are rejected. Browser consent, Floret continuation, Native Messaging protocol and storage ownership remain unchanged.",
     "checked_surfaces": [
+      "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 30; epoch 29 is upgrade-only. Chrome status reports host, platform, Linux Chrome detection and one prerequisite or launch diagnostic. Action failures preserve stage, reason and diagnostic ID in the existing error_code/data envelope. Linux launch checks the current graphical session and observes process exits without claiming handshake readiness. Source package generation and cache validation require computer.zip; historical published packages remain installable and report missing capability explicitly.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 29; epoch 28 is upgrade-only. Authenticated computer/managed/browser GET/PUT/POST manages installation and preference. Source selection and enabling never download. Installed binaries and website data survive disable/restart. Runtime release archives and SSH installation retain computer.zip; native Desktop stages thin helpers, while managed WSL retains the matching Linux archive. Browser ZIPs are optional pinned official distributions.",
       "Flower displays images, video, audio, and isolated HTML through published Floe Webapp v0.58.0. Local image clicks reuse the existing file preview and expose distinct containing-folder navigation; non-file images use shared floating previews. The existing authenticated file endpoint adds bounded preview=1 reads, serving HTML as inert text only. Desktop admits the exact file-preview GET and transfers bounded binary bytes. Conversation, Runtime Service, Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH bootstrap, and storage contracts are unchanged; compatibility epoch 28 remains sufficient.",
       "Chrome extension 1.0.3 restores only a successfully confirmed native host after worker or Runtime restart; explicit Disconnect disables recovery. Runtime restores previously staged setup without granting tabs. The optional extension/status prepared field is a presentation hint: older carriers ignore it and newer carriers accept its absence; live profiles alone establish readiness. Popup notifications remain extension-internal. Native Messaging protocol 6, Runtime Service epoch 28, Floret contracts, storage schema and target authorization remain unchanged.",
@@ -63,7 +64,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 29,
+  "compatibility_epoch": 30,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -84,7 +85,8 @@
     25,
     26,
     27,
-    28
+    28,
+    29
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

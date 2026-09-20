@@ -573,7 +573,7 @@ function runtimePackageEntryNames(args: Readonly<{
     return ['redeven-gateway'];
   }
   if (args.platform.goos === 'linux' || args.platform.goos === 'darwin') {
-    return ['redeven', ...NATIVE_RUNTIME_COMPANION_FILES];
+    return ['redeven', ...NATIVE_RUNTIME_COMPANION_FILES, 'computer.zip'];
   }
   return ['redeven'];
 }
@@ -847,12 +847,18 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
         manifestPath: args.manifestPath ?? (() => { throw new Error('ReDevPlugin release manifest is required for a Linux Runtime build.'); })(),
         signal: args.signal,
       });
+      await runLocalCommand('node', [
+        path.join(buildSourceRoot, 'scripts', 'stage_computer_archive.mjs'),
+        path.join(suiteRoot, 'computer.zip'),
+        '--platform', args.platform.goos,
+        '--arch', args.platform.goarch === 'amd64' ? 'x64' : args.platform.goarch,
+      ], { cwd: buildSourceRoot, signal: args.signal, timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS });
       const entries: RuntimeArchiveEntry[] = [{
         name: commandName,
         data: await fs.readFile(binaryPath),
         mode: 0o755,
       }];
-      for (const name of NATIVE_RUNTIME_COMPANION_FILES) {
+      for (const name of [...NATIVE_RUNTIME_COMPANION_FILES, 'computer.zip']) {
         entries.push({
           name,
           data: await fs.readFile(path.join(suiteRoot, name)),

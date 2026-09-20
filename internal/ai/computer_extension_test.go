@@ -455,7 +455,7 @@ func TestExtensionRejectsOldObservationProtocol(t *testing.T) {
 			}
 			hub.mu.Lock()
 			defer hub.mu.Unlock()
-			if old == "hello" && hub.connectionError != "extension_update_required" {
+			if old == "hello" && (hub.diagnostic == nil || hub.diagnostic.Reason != "extension_update_required") {
 				t.Fatal("guide lost the handshake failure")
 			}
 			if len(hub.profiles) != 1 {

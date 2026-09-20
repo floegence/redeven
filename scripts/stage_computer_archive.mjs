@@ -7,8 +7,10 @@ import path from 'node:path';
 const destination = path.resolve(process.argv[2]);
 const root = mkdtempSync(path.join(os.tmpdir(), 'redeven-computer-archive-'));
 try {
-  const resources = process.argv[3] ? path.resolve(process.argv[3]) : path.join(root, 'resources');
-  if (!process.argv[3]) stageComputerResources(resources);
+  const suppliedResources = process.argv[3] && !process.argv[3].startsWith('--') ? process.argv[3] : undefined;
+  const argument = name => { const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1]; };
+  const resources = suppliedResources ? path.resolve(suppliedResources) : path.join(root, 'resources');
+  if (!suppliedResources) stageComputerResources(resources, argument('--platform'), argument('--arch'));
   execFileSync('python3', ['-c', `
 import pathlib,sys,zipfile
 source=pathlib.Path(sys.argv[1])

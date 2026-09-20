@@ -1213,6 +1213,8 @@ export type FlowerComputerAccess = Readonly<{
   apps: readonly string[];
   allow_foreground: boolean;
 }>;
+export type FlowerChromeDiagnostic = Readonly<{ stage: 'prepare' | 'open' | 'check' | 'continue'; reason: string; diagnostic_id?: string }>;
+export type FlowerChromeStatus = Readonly<{ profiles: readonly Readonly<{ id: string; name: string }>[]; prepared?: boolean; error?: 'extension_update_required'; hostname?: string; runtime_version?: string; platform?: string; browser_installed?: boolean; diagnostic?: FlowerChromeDiagnostic }>;
 export type FlowerComputerExtensionSetup = Readonly<{ native_host: string; extension_id: string; extension_path: string; extension_home_path: readonly string[]; platform: 'darwin' | 'linux' }>;
 export type FlowerBrowserInstallation = Readonly<{
   enabled: boolean; state: 'not_installed' | 'installed' | 'downloading' | 'uploading' | 'verifying' | 'installing' | 'failed' | 'cancelled';
@@ -1235,7 +1237,7 @@ export type FlowerComputerManagement = Readonly<{
   createManagedProfile?: (name: string) => Promise<readonly Readonly<{ id: string; name: string }>[]>;
   openExtension?: (action: 'extensions' | 'folder' | 'connect') => Promise<void>;
   setupExtension?: () => Promise<FlowerComputerExtensionSetup>;
-  loadExtensionStatus?: () => Promise<Readonly<{ profiles: readonly Readonly<{ id: string; name: string }>[]; prepared?: boolean; error?: 'extension_update_required' }>>;
+  loadExtensionStatus?: () => Promise<FlowerChromeStatus>;
   loadAccess: (threadID: string) => Promise<FlowerComputerAccess>;
   saveAccess: (threadID: string, access: FlowerComputerAccess) => Promise<void>;
 }>;

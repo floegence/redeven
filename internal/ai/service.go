@@ -99,6 +99,7 @@ type Options struct {
 }
 
 type Service struct {
+	buildVersion           string
 	serviceClosing         bool // guarded by mu; fences background worker admission
 	storageGeneration      string
 	log                    *slog.Logger
@@ -394,6 +395,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	svc := &Service{
+		buildVersion:                    strings.TrimSpace(opts.BuildVersion),
 		activateFloret:                  floretBootstrap.activate,
 		prepareFloretRestore:            floretBootstrap.prepareRestore,
 		readState:                       reads,

@@ -1,30 +1,42 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FlowerComputerCopy } from './computerUseCopy';
-import type { FlowerComputerExtensionSetup, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
+import type { FlowerChromeDiagnostic, FlowerChromeStatus, FlowerComputerExtensionSetup, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
+
+import { chromeConnectionDiagnostic, chromeConnectionError, chromeDiagnosticPresentation } from './chromeConnectionDiagnostic';
 
 // This guide observes Runtime connection inventory. It never binds a tab or
 // creates a conversation lifecycle; the caller resumes the original interaction.
 export function FlowerChromeConnection(props: {
-  reuseConnected?: boolean; management: FlowerComputerManagement; copy: FlowerComputerCopy; onConnected: () => Promise<void>;
+  environmentName?: string; reuseConnected?: boolean; management: FlowerComputerManagement; copy: FlowerComputerCopy; onConnected: () => Promise<void>;
 }) {
   const [setup, setSetup] = createSignal<FlowerComputerExtensionSetup>();
   const [phase, setPhase] = createSignal<'preparing' | 'waiting' | 'confirming' | 'connected' | 'failed' | 'timeout'>('preparing');
   const [step, setStep] = createSignal<'install' | 'connect'>('install');
   const [extensionsOpened, setExtensionsOpened] = createSignal(false);
   const [opening, setOpening] = createSignal(false);
-  const [openFailed, setOpenFailed] = createSignal(false);
+  const [diagnostic, setDiagnostic] = createSignal<FlowerChromeDiagnostic>();
+  const [connectionStatus, setConnectionStatus] = createSignal<FlowerChromeStatus>();
+  const [diagnosticCopied, setDiagnosticCopied] = createSignal(false);
+  const [copyFailed, setCopyFailed] = createSignal(false);
+  let diagnosticInput: HTMLTextAreaElement | undefined;
   const [updateRequired, setUpdateRequired] = createSignal(false);
+  const [linkCopied, setLinkCopied] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
+  let connectionInput: HTMLInputElement | undefined;
+  let generation = 0;
   let pathInput: HTMLInputElement | undefined;
   let initialProfiles: Set<string> | undefined;
   let disposed = false, completing = false, deadline = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => { disposed = true; clearTimeout(timer); });
-  const check = async (): Promise<boolean> => {
+  onCleanup(() => { disposed = true; generation++; clearTimeout(timer); });
+  const check = async (epoch: number): Promise<boolean> => {
     const connection = await props.management.loadExtensionStatus!();
+    if (disposed || completing || epoch !== generation) return true;
     const profiles = connection.profiles;
-    if (disposed || completing) return true;
+    setConnectionStatus(connection);
+    setDiagnostic(connection.diagnostic ? chromeConnectionDiagnostic(connection.diagnostic, connection.diagnostic.stage) : undefined);
+    if (connection.diagnostic?.reason === 'desktop_session_unavailable') setExtensionsOpened(true);
     if (!initialProfiles) {
       initialProfiles = new Set(profiles.map(profile => profile.id));
       if (props.reuseConnected && connection.prepared) setStep('connect');
@@ -38,52 +50,87 @@ export function FlowerChromeConnection(props: {
     if (!profiles.some(profile => props.reuseConnected || !initialProfiles!.has(profile.id))) {
       return false;
     }
-    completing = true; setPhase('connected');
-    await props.onConnected();
+    completing = true;
+    try { await props.onConnected(); if (!disposed && epoch === generation) setPhase('connected'); }
+    catch (error) { if (!disposed && epoch === generation) { setDiagnostic(chromeConnectionError(error, 'continue')); setPhase('failed'); } }
     return true;
   };
-  const poll = async () => {
+  const poll = async (epoch = generation) => {
     try {
-      if (await check() || disposed) return;
+      if (await check(epoch) || disposed) return;
       if (Date.now() >= deadline) { setPhase('timeout'); return; }
-      timer = setTimeout(() => void poll(), 500);
-    } catch { if (!disposed) setPhase('failed'); }
+      timer = setTimeout(() => void poll(epoch), 500);
+    } catch (error) { if (!disposed && epoch === generation) { setDiagnostic(chromeConnectionError(error, 'check')); setPhase('failed'); } }
   };
   const prepare = async () => {
-    clearTimeout(timer); completing = false; setPhase('preparing'); setOpenFailed(false);
+    if (opening() || disposed) return;
+    const epoch = ++generation;
+    clearTimeout(timer); completing = false; setPhase('preparing'); setDiagnostic(undefined); setDiagnosticCopied(false);
+    try { if (await check(epoch) || disposed) return; }
+    catch (error) { if (!disposed && epoch === generation) { setDiagnostic(chromeConnectionError(error, 'check')); setPhase('failed'); } return; }
+    if (diagnostic()?.stage === 'prepare') { setPhase('failed'); return; }
     try {
-      if (await check() || disposed) return;
       const result = await props.management.setupExtension!();
-      if (disposed) return;
+      if (disposed || epoch !== generation) return;
       setSetup(result); setPhase('waiting'); deadline = Date.now() + 120_000;
       void poll();
-    } catch { if (!disposed) setPhase('failed'); }
+    } catch (error) { if (!disposed && epoch === generation) { setDiagnostic(chromeConnectionError(error, 'prepare')); setPhase('failed'); } }
+  };
+  const observeConfirmation = () => {
+    if (disposed || completing) return;
+    clearTimeout(timer); setUpdateRequired(false); setPhase('confirming'); deadline = Date.now() + 120_000;
+    void poll(++generation);
   };
   const open = async (action: 'extensions' | 'folder' | 'connect') => {
     if (opening() || disposed) return;
-    setOpening(true); setOpenFailed(false);
+    const epoch = generation;
+    setOpening(true); setDiagnostic(undefined);
     try {
       await props.management.openExtension!(action);
-      if (!disposed && !completing) {
+      if (!disposed && !completing && epoch === generation) {
         if (action === 'extensions') setExtensionsOpened(true);
-        if (action === 'connect') {
-          setUpdateRequired(false); setPhase('confirming');
-          clearTimeout(timer); void poll();
-        }
+        if (action === 'connect') observeConfirmation();
       }
-    } catch { if (!disposed) setOpenFailed(true); }
+    } catch (error) { if (!disposed && epoch === generation) { clearTimeout(timer); setDiagnostic(chromeConnectionError(error, 'open')); } }
     finally { if (!disposed) setOpening(false); }
   };
   onMount(() => void prepare());
   const status = () => ({ preparing: props.copy.setupPreparing, waiting: '',
     confirming: props.copy.setupConfirming, connected: props.reuseConnected ? props.copy.setupConnected : props.copy.pairingSaved,
-    failed: props.copy.setupFailed, timeout: props.copy.setupTimeout }[phase()]);
+    failed: '', timeout: props.copy.setupTimeout }[phase()]);
   const changeStep = (next: 'install' | 'connect') => {
-    setStep(next); setOpenFailed(false);
+    setStep(next); setDiagnostic(undefined);
     if (phase() === 'confirming') setPhase('waiting');
   };
+  const manualDesktop = () => connectionStatus()?.diagnostic?.reason === 'desktop_session_unavailable';
+  const connectionURL = () => setup() ? `chrome-extension://${setup()!.extension_id}/popup.html#${setup()!.native_host}` : '';
+  const copyConnection = () => {
+    observeConfirmation();
+    void navigator.clipboard.writeText(connectionURL()).then(() => { if (!disposed) setLinkCopied(true); }, () => { if (!disposed) { connectionInput?.closest('details')?.setAttribute('open', ''); connectionInput?.focus(); connectionInput?.select(); } });
+  };
+  const presentation = () => diagnostic() ? chromeDiagnosticPresentation(diagnostic()!, props.copy) : undefined;
+  const diagnosticText = () => JSON.stringify({ environment: connectionStatus()?.hostname || props.environmentName,
+    runtime_version: connectionStatus()?.runtime_version, platform: connectionStatus()?.platform, browser_installed: connectionStatus()?.browser_installed,
+    ...diagnostic() }, null, 2);
+  const retryLabel = () => diagnostic()?.stage === 'continue' ? props.copy.continueTask
+    : ['browser_resources_missing', 'browser_extension_missing', 'chrome_not_installed', 'desktop_session_unavailable'].includes(diagnostic()?.reason ?? '') ? props.copy.chromeCheckAfterRepair
+    : diagnostic()?.stage === 'prepare' ? props.copy.chromeRetryPrepare : props.copy.retryConnection;
   return <section class="space-y-5" data-flower-chrome-connection>
-    <ol class="grid grid-cols-2 gap-4 text-sm">
+    <Show when={connectionStatus()?.hostname || props.environmentName}><div class="space-y-1 text-xs text-muted-foreground">
+      <p>{props.copy.environmentTitle} · <span class="font-medium text-foreground">{connectionStatus()?.hostname || props.environmentName}</span></p>
+      <Show when={connectionStatus()?.browser_installed !== undefined}><p>{connectionStatus()?.browser_installed ? props.copy.chromeBrowserDetected : props.copy.chromeBrowserMissing}</p></Show>
+    </div></Show>
+    <Show when={diagnostic()}>{value => <div class="space-y-3 rounded-lg border border-border bg-muted/30 p-4" data-chrome-diagnostic>
+      <div role="alert" class="space-y-1 text-sm"><Show when={presentation()?.title}><p class="font-medium">{presentation()!.title}</p></Show><p class="leading-relaxed text-muted-foreground">{presentation()!.hint}</p></div>
+      <Show when={presentation()?.help}><details class="text-sm"><summary class="w-fit cursor-pointer font-medium">{presentation()!.help}</summary><p class="mt-2 leading-relaxed text-muted-foreground">{presentation()!.steps}</p></details></Show>
+      <details class="text-xs text-muted-foreground"><summary class="w-fit cursor-pointer">{props.copy.chromeDiagnostics}</summary>
+        <textarea ref={diagnosticInput} readOnly aria-label={props.copy.chromeDiagnostics} class="flower-settings-text-input mt-2 min-h-32 w-full resize-y font-mono text-xs" value={diagnosticText()} onFocus={event => event.currentTarget.select()} />
+        <Button class="mt-2" size="sm" variant="ghost" onClick={() => { void navigator.clipboard.writeText(diagnosticText()).then(() => { if (!disposed) { setDiagnosticCopied(true); setCopyFailed(false); } }, () => { if (!disposed) { setCopyFailed(true); diagnosticInput?.focus(); diagnosticInput?.select(); } }); }}>{diagnosticCopied() ? props.copy.chromeDiagnosticCopied : props.copy.chromeCopyDiagnostics}</Button>
+        <Show when={copyFailed()}><p role="status">{props.copy.chromeDiagnosticCopyFailed}</p></Show>
+      </details>
+      <Button size="sm" variant={setup() && value().stage !== 'continue' ? 'outline' : 'primary'} disabled={opening()} onClick={() => void prepare()}>{retryLabel()}</Button>
+    </div>}</Show>
+    <Show when={diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}><ol class="grid grid-cols-2 gap-4 text-sm">
       <li aria-current={step() === 'install' ? 'step' : undefined}
         class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'install', 'border-border text-muted-foreground': step() !== 'install' }}>
         <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs">1</span>{updateRequired() ? props.copy.setupUpdateTitle : props.copy.setupInstallTitle}
@@ -92,14 +139,14 @@ export function FlowerChromeConnection(props: {
         class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'connect', 'border-border text-muted-foreground': step() !== 'connect' }}>
         <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs">2</span>{props.copy.setupConfirmTitle}
       </li>
-    </ol>
+    </ol></Show>
     <Show when={status()}><p class="text-sm" role={phase() === 'failed' ? 'alert' : 'status'} aria-live="polite">{status()}</p></Show>
-    <Show when={setup() && (phase() === 'waiting' || phase() === 'confirming')}>
+    <Show when={setup() && phase() !== 'connected' && phase() !== 'preparing' && diagnostic()?.stage !== 'continue' && diagnostic()?.stage !== 'prepare'}>
       <Show when={step() === 'install'} fallback={<>
         <p class="text-sm leading-relaxed text-muted-foreground">{props.reuseConnected ? props.copy.setupConfirmHint : props.copy.pairingConfirmHint}</p>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('install')}>{props.copy.setupBack}</Button>
-          <Button disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>
+          <Show when={manualDesktop()} fallback={<Button disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>}><Button onClick={copyConnection}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</Button></Show>
         </div>
       </>}>
         <Show when={extensionsOpened()} fallback={<p class="text-sm leading-relaxed text-muted-foreground">{updateRequired() ? props.copy.setupUpdateHint : props.copy.extensionHint}</p>}><div class="space-y-4">
@@ -115,7 +162,7 @@ export function FlowerChromeConnection(props: {
                   </li>}</For>
                 </ol>
                 <p class="mt-2 text-xs leading-relaxed text-muted-foreground">{props.copy.setupFolderHint}</p>
-                <Button class="mt-2" size="sm" variant="outline" disabled={opening()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button>
+                <Button class="mt-2" size="sm" variant="outline" disabled={opening() || manualDesktop()} onClick={() => void open('folder')}>{props.copy.openExtensionFolder}</Button>
               </div>
             </li>
           </ol>
@@ -141,14 +188,14 @@ export function FlowerChromeConnection(props: {
         </div>
       </Show>
     </Show>
-    <Show when={openFailed()}><p class="text-xs text-destructive" role="alert">{props.copy.setupOpenFailed}</p></Show>
-    <Show when={phase() === 'failed' || phase() === 'timeout'}><Button onClick={() => void prepare()}>{props.copy.retryConnection}</Button></Show>
+    <Show when={phase() === 'timeout' && !diagnostic()}><Button onClick={() => void prepare()}>{props.copy.retryConnection}</Button></Show>
     <Show when={setup() && phase() !== 'connected'}>
       <details class="border-t border-border pt-3 text-xs text-muted-foreground">
         <summary class="w-fit cursor-pointer">{props.copy.setupHelp}</summary>
         <div class="mt-3 space-y-3 leading-relaxed">
           <p>{props.copy.setupHostHint}</p>
           <p>{props.copy.setupLabelsHint}</p>
+          <Show when={manualDesktop()}><label class="block space-y-1">{props.copy.chromeConnectionPage}<input ref={connectionInput} class="flower-settings-text-input w-full" readOnly value={connectionURL()} onFocus={event => event.currentTarget.select()} /></label><Button size="sm" variant="ghost" onClick={copyConnection}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</Button></Show>
           <label class="block space-y-1">{props.copy.extensionPath}<input ref={pathInput} class="flower-settings-text-input w-full" readOnly value={setup()!.extension_path} onFocus={event => event.currentTarget.select()} /></label>
           <Button size="sm" variant="ghost" onClick={() => {
             void navigator.clipboard.writeText(setup()!.extension_path).then(() => { if (!disposed) setCopied(true); }, () => {

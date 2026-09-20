@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -36,22 +37,28 @@ type ComputerExtensionProfile struct {
 	Name string `json:"name"`
 }
 type ComputerExtensionStatus struct {
-	Profiles []ComputerExtensionProfile `json:"profiles"`
-	Prepared bool                       `json:"prepared,omitempty"`
-	Error    string                     `json:"error,omitempty"`
+	RuntimeVersion   string                       `json:"runtime_version,omitempty"`
+	Hostname         string                       `json:"hostname,omitempty"`
+	Platform         string                       `json:"platform,omitempty"`
+	BrowserInstalled *bool                        `json:"browser_installed,omitempty"`
+	Diagnostic       *ComputerExtensionDiagnostic `json:"diagnostic,omitempty"`
+	Profiles         []ComputerExtensionProfile   `json:"profiles"`
+	Prepared         bool                         `json:"prepared,omitempty"`
+	Error            string                       `json:"error,omitempty"`
 }
 
 type computerExtensionHub struct {
-	connectionError string
-	owner           *ComputerUseRuntime
-	mu              sync.Mutex
-	listener        net.Listener
-	directory       string
-	profiles        map[string]*computerExtensionClient
-	closed          bool
-	manifestPath    string
-	manifestBytes   []byte
-	wait            sync.WaitGroup
+	diagnostic       *ComputerExtensionDiagnostic
+	launchGeneration uint64
+	owner            *ComputerUseRuntime
+	mu               sync.Mutex
+	listener         net.Listener
+	directory        string
+	profiles         map[string]*computerExtensionClient
+	closed           bool
+	manifestPath     string
+	manifestBytes    []byte
+	wait             sync.WaitGroup
 }
 type computerExtensionClient struct {
 	hub      *computerExtensionHub
@@ -76,7 +83,12 @@ func (s *Service) SetupComputerExtension(ctx context.Context, meta *session.Meta
 	}
 	return host.setupComputerExtension(ctx)
 }
-func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (ComputerExtensionSetup, error) {
+func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (result ComputerExtensionSetup, failure error) {
+	defer func() {
+		if failure != nil {
+			failure = extensionFailure("prepare", "extension_setup_failed", failure)
+		}
+	}()
 	r.connectMu.Lock()
 	defer r.connectMu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -92,20 +104,11 @@ func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (Comput
 	if closed {
 		return ComputerExtensionSetup{}, errors.New("computer runtime closed")
 	}
-	base, err := r.registry.ResolveTarget(ctx, "current")
+	managed, err := r.extensionResources()
 	if err != nil {
 		return ComputerExtensionSetup{}, err
 	}
-	r.mu.RLock()
-	managed, ok := r.executors[base.ID].(*PlaywrightTargetExecutor)
-	r.mu.RUnlock()
-	if !ok {
-		return ComputerExtensionSetup{}, errors.New("browser resources unavailable")
-	}
 	resources := filepath.Join(filepath.Dir(managed.HelperPath), "extension")
-	if info, err := os.Stat(filepath.Join(resources, "manifest.json")); err != nil || !info.Mode().IsRegular() {
-		return ComputerExtensionSetup{}, errors.New("packaged browser extension unavailable")
-	}
 	userHome, err := os.UserHomeDir()
 	if err != nil {
 		return ComputerExtensionSetup{}, err
@@ -157,7 +160,8 @@ func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (Comput
 	}
 	hub.mu.Lock()
 	hub.manifestPath, hub.manifestBytes = manifestPath, manifest
-	hub.connectionError = ""
+	hub.diagnostic = nil
+	hub.launchGeneration++
 	hub.mu.Unlock()
 	return setup, nil
 }
@@ -246,7 +250,7 @@ func (h *computerExtensionHub) admit(conn net.Conn) {
 	}
 	if hello.Protocol != browserbridge.ProtocolVersion {
 		h.mu.Lock()
-		h.connectionError = "extension_update_required"
+		h.diagnostic = &ComputerExtensionDiagnostic{Stage: "check", Reason: "extension_update_required"}
 		h.mu.Unlock()
 		slog.Info("browser extension connection rejected", "reason", "extension_update_required", "protocol", hello.Protocol, "required_protocol", browserbridge.ProtocolVersion)
 		_ = browserbridge.WriteMessage(conn, map[string]any{"type": "connection_error", "code": "extension_update_required"}, 1<<20)
@@ -267,7 +271,7 @@ func (h *computerExtensionHub) admit(conn net.Conn) {
 	}
 	_ = conn.SetDeadline(time.Time{})
 	h.profiles[client.profile.ID] = client
-	h.connectionError = ""
+	h.diagnostic = nil
 	admitted = true
 	h.wait.Add(1)
 	go client.read()
@@ -438,7 +442,9 @@ func (s *Service) ComputerExtensionConnectionStatus(ctx context.Context, meta *s
 	if !ok {
 		return ComputerExtensionStatus{}, errors.New("computer runtime unavailable")
 	}
-	return host.extensionStatus(), nil
+	status := host.extensionStatus()
+	status.RuntimeVersion = s.buildVersion
+	return status, nil
 }
 
 // One bounded Runtime snapshot owns connection inventory and handshake failure.
@@ -447,15 +453,35 @@ func (r *ComputerUseRuntime) extensionStatus() ComputerExtensionStatus {
 	r.mu.RLock()
 	hub := r.extension
 	r.mu.RUnlock()
-	status := ComputerExtensionStatus{Profiles: []ComputerExtensionProfile{}}
+	status := ComputerExtensionStatus{Profiles: []ComputerExtensionProfile{}, Platform: runtime.GOOS}
+	status.Hostname, _ = os.Hostname()
+	if runtime.GOOS == "linux" {
+		installed := chromeExecutableAvailable()
+		status.BrowserInstalled = &installed
+	}
 	if hub != nil {
 		hub.mu.Lock()
 		status.Prepared = !hub.closed && hub.manifestPath != ""
-		status.Error = hub.connectionError
+		status.Diagnostic = hub.diagnostic
+		if hub.diagnostic != nil && hub.diagnostic.Reason == "extension_update_required" {
+			status.Error = hub.diagnostic.Reason
+			status.Diagnostic = nil
+		}
 		for _, client := range hub.profiles {
 			status.Profiles = append(status.Profiles, client.profile)
 		}
 		hub.mu.Unlock()
+	}
+	if len(status.Profiles) == 0 && status.Diagnostic == nil && status.Error == "" {
+		if _, err := r.extensionResources(); err != nil {
+			diagnostic := ComputerExtensionDiagnosticForError(err, "prepare")
+			diagnostic.DiagnosticID = ""
+			status.Diagnostic = &diagnostic
+		} else if err := checkComputerExtensionOpen(runtime.GOOS, "extensions", os.Getenv, exec.LookPath); err != nil {
+			diagnostic := ComputerExtensionDiagnosticForError(err, "open")
+			diagnostic.DiagnosticID = ""
+			status.Diagnostic = &diagnostic
+		}
 	}
 	sort.Slice(status.Profiles, func(i, j int) bool { return status.Profiles[i].ID < status.Profiles[j].ID })
 	return status
