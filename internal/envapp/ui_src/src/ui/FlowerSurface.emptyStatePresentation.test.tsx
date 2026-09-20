@@ -147,7 +147,7 @@ describe('Flower empty-state presentation', () => {
     expect(emptyState.querySelector('.flower-empty-suggestions')).toBeNull();
   });
 
-  it('keeps actionable starter suggestions on the dedicated page', async () => {
+  it('fills each complete starter task as an editable draft without launching a turn', async () => {
     const { surfaceAdapter } = emptyThreadAdapter();
     const runtime = renderSurfaceWithAdapterProps(surfaceAdapter, {
       presentation: 'full',
@@ -159,11 +159,24 @@ describe('Flower empty-state presentation', () => {
     const suggestionButtons = emptyState.querySelectorAll<HTMLButtonElement>('.flower-empty-suggestions button');
     expect(emptyState.dataset.flowerEmptySuggestions).toBe('visible');
     expect(suggestionButtons).toHaveLength(4);
+    expect(Array.from(suggestionButtons, (button) => button.querySelector('.font-medium')?.textContent)).toEqual([
+      'Map this project', 'Review local changes', 'Fix a failing test', 'Analyze disk usage',
+    ]);
 
-    suggestionButtons[0]?.click();
+    const composer = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    for (const [index, button] of Array.from(suggestionButtons).entries()) {
+      button.focus();
+      button.click();
 
-    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value)
-      .toBe('Review the selected workspace and tell me the highest-value next step.');
+      expect(composer.value).toBe(DEFAULT_FLOWER_SURFACE_COPY.emptyState.suggestions[index]?.prompt);
+      await waitFor(() => document.activeElement === composer);
+      expect(composer.selectionStart).toBe(composer.value.length);
+      expect(composer.selectionEnd).toBe(composer.value.length);
+      composer.value += '\nFocus on the current package.';
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      expect(composer.value).toContain('Focus on the current package.');
+      expect(surfaceAdapter.launchTurn).not.toHaveBeenCalled();
+    }
   });
 
   it('does not reuse New Chat onboarding for a selected canonical thread', async () => {

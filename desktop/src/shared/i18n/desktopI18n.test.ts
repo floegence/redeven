@@ -510,8 +510,8 @@ describe('Desktop shared i18n dictionaries', () => {
       retrying: 'Tentando novamente a solicitação ao modelo...',
       finalizing: 'Finalizando resposta...',
     });
-    expect(DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.emptyState.explainTitle).toBe('解释代码');
-    expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.emptyState.explainTitle).toBe('解釋程式碼');
+    expect(DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.emptyState.projectTitle).toBe('读懂这个项目');
+    expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.emptyState.projectTitle).toBe('讀懂這個專案');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.threadList.refreshLabel).toBe('重新整理對話');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.settings.backToChat).toBe('返回聊天');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].environmentCenter.askFlowerCardTitle).toBe('詢問 Flower');

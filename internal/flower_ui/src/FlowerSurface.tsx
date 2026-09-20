@@ -10386,7 +10386,10 @@ webSearch: model.web_search,
                 </div>
               </Show>
             )}
-            onSuggestionClick={(prompt) => updateComposerSessionText(currentComposerSessionKey(), prompt)}
+            onSuggestionClick={(prompt) => {
+              updateComposerSessionText(currentComposerSessionKey(), prompt);
+              focusComposerAt(prompt.length);
+            }}
           />
         );
   };

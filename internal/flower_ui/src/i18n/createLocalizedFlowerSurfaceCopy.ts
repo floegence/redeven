@@ -531,24 +531,24 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       description: t(i18n, k('emptyState.description')),
       suggestions: [
         {
+          title: t(i18n, k('emptyState.projectTitle')),
+          description: t(i18n, k('emptyState.projectDescription')),
+          prompt: t(i18n, k('emptyState.projectPrompt')),
+        },
+        {
           title: t(i18n, k('emptyState.reviewTitle')),
           description: t(i18n, k('emptyState.reviewDescription')),
           prompt: t(i18n, k('emptyState.reviewPrompt')),
         },
         {
-          title: t(i18n, k('emptyState.transferTitle')),
-          description: t(i18n, k('emptyState.transferDescription')),
-          prompt: t(i18n, k('emptyState.transferPrompt')),
+          title: t(i18n, k('emptyState.testTitle')),
+          description: t(i18n, k('emptyState.testDescription')),
+          prompt: t(i18n, k('emptyState.testPrompt')),
         },
         {
-          title: t(i18n, k('emptyState.explainTitle')),
-          description: t(i18n, k('emptyState.explainDescription')),
-          prompt: t(i18n, k('emptyState.explainPrompt')),
-        },
-        {
-          title: t(i18n, k('emptyState.workflowTitle')),
-          description: t(i18n, k('emptyState.workflowDescription')),
-          prompt: t(i18n, k('emptyState.workflowPrompt')),
+          title: t(i18n, k('emptyState.storageTitle')),
+          description: t(i18n, k('emptyState.storageDescription')),
+          prompt: t(i18n, k('emptyState.storagePrompt')),
         },
       ],
       sendKeyLabel: t(i18n, k('emptyState.sendKeyLabel')),

@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { createDesktopI18n } from '../../shared/i18n';
 import { createDesktopFlowerSurfaceCopy } from './desktopFlowerSurfaceCopy';
+import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../internal/flower_ui/src/copy';
 
 describe('createDesktopFlowerSurfaceCopy', () => {
+  it('keeps the localized English starter tasks aligned with the shared surface defaults', () => {
+    expect(createDesktopFlowerSurfaceCopy(createDesktopI18n('en-US')).emptyState)
+      .toEqual(DEFAULT_FLOWER_SURFACE_COPY.emptyState);
+  });
+
   it('formats Subagent operation titles from the active locale', () => {
     const en = createDesktopFlowerSurfaceCopy(createDesktopI18n('en-US')).subagents!.activity.titles;
     const zhCN = createDesktopFlowerSurfaceCopy(createDesktopI18n('zh-CN')).subagents!.activity.titles;

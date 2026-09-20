@@ -1,7 +1,7 @@
 import type { Component, JSX } from 'solid-js';
 import { For, Show } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Code, FolderOpen, GitBranch, Sparkles } from '@floegence/floe-webapp-core/icons';
+import { Code, FolderOpen, GitBranch, Sparkles, Terminal } from '@floegence/floe-webapp-core/icons';
 
 import type { FlowerEmptyStateCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
@@ -13,7 +13,7 @@ type FlowerEmptySuggestion = Readonly<{
   icon: Component<{ class?: string }>;
 }>;
 
-const SUGGESTION_ICONS: readonly Component<{ class?: string }>[] = [FolderOpen, GitBranch, Code, Sparkles];
+const SUGGESTION_ICONS: readonly Component<{ class?: string }>[] = [Code, GitBranch, Terminal, FolderOpen];
 
 function suggestionRows(copy: FlowerEmptyStateCopy): readonly FlowerEmptySuggestion[] {
   return copy.suggestions.map((item, index) => ({
