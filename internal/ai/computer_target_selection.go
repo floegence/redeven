@@ -35,12 +35,15 @@ func (r *ComputerUseRuntime) ListComputerTargets(ctx context.Context) ([]TargetD
 			}
 			r.mu.Unlock()
 			result := r.registry.Snapshot()
-			state := "setup_required"
+			state, reason := "setup_required", "native_inventory_unavailable"
 			var startup *TargetStartupError
-			if errors.As(err, &startup) && startup.Code == "TARGET_PERMISSION_REQUIRED" {
-				state = "permission_required"
+			if errors.As(err, &startup) {
+				reason = startup.Reason
+				if startup.Code == "TARGET_PERMISSION_REQUIRED" {
+					state = "permission_required"
+				}
 			}
-			return append(result, TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop", Locality: "local", State: state, Ready: false}), nil
+			return append(result, TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop", Locality: "local", State: state, Reason: reason, Ready: false}), nil
 		}
 		live := make(map[string]bool, len(windows))
 		r.mu.Lock()

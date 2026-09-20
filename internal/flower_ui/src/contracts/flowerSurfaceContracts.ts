@@ -1200,32 +1200,32 @@ export type FlowerComputerInventory = Readonly<{
   current_target_id: string; default_candidate_ref?: string; candidates: readonly FlowerComputerCandidate[];
 }>;
 
+export type FlowerComputerCapability = Readonly<{ state: 'ready' | 'on_demand' | 'setup_required' | 'permission_required'; reason?: string }>;
+export type FlowerComputerEnvironment = Readonly<{
+  hostname: string; platform: string;
+  managed: FlowerComputerCapability; desktop: FlowerComputerCapability;
+  chrome: Readonly<{ profiles: readonly Readonly<{ id: string; name: string }>[]; prepared?: boolean; error?: string }>;
+}>;
+
 export type FlowerComputerAccess = Readonly<{
   origins: readonly string[];
   apps: readonly string[];
   allow_foreground: boolean;
 }>;
-export type FlowerBrowserConnection = Readonly<{ managed_profile_id?: string; cdp_url?: string; tab_id?: string; tab_title?: string; tab_url?: string; profile_id?: string; extension_profile_id?: string; new_tab?: boolean }>;
-export type FlowerBrowserTab = Readonly<{ id: string; profile_id: string; title: string; url: string }>;
 export type FlowerComputerExtensionSetup = Readonly<{ native_host: string; extension_id: string; extension_path: string; extension_home_path: readonly string[]; platform: 'darwin' | 'linux' }>;
 export type FlowerComputerManagement = Readonly<{
+  loadEnvironment?: () => Promise<FlowerComputerEnvironment>;
+  discoverBrowser?: (threadID: string, endpoint: string) => Promise<FlowerComputerInventory>;
   revealTarget?: (threadID: string, targetID: string) => Promise<void>;
   listCandidates: (threadID: string) => Promise<FlowerComputerInventory>;
   selectCandidate: (threadID: string, candidateRef: string) => Promise<FlowerTargetDescriptor>;
   listManagedProfiles?: () => Promise<readonly Readonly<{ id: string; name: string }>[]>;
   createManagedProfile?: (name: string) => Promise<readonly Readonly<{ id: string; name: string }>[]>;
-  listManagedTabs?: (profileID: string) => Promise<readonly FlowerBrowserTab[]>;
-  disconnectBrowser?: (targetID: string) => Promise<void>;
   openExtension?: (action: 'extensions' | 'folder' | 'connect') => Promise<void>;
   setupExtension?: () => Promise<FlowerComputerExtensionSetup>;
   loadExtensionStatus?: () => Promise<Readonly<{ profiles: readonly Readonly<{ id: string; name: string }>[]; prepared?: boolean; error?: 'extension_update_required' }>>;
-  listExtensionTabs?: (profileID: string) => Promise<readonly FlowerBrowserTab[]>;
-  listTargets: () => Promise<readonly FlowerTargetDescriptor[]>;
-  listBrowserTabs: (cdpURL: string) => Promise<readonly FlowerBrowserTab[]>;
   loadAccess: (threadID: string) => Promise<FlowerComputerAccess>;
   saveAccess: (threadID: string, access: FlowerComputerAccess) => Promise<void>;
-  loadTarget: (threadID: string) => Promise<Readonly<{ target_id: string }>>;
-  selectTarget: (threadID: string, targetID: string) => Promise<void>;
 }>;
 
 export type FlowerComputerUserInput = Readonly<{
@@ -1283,7 +1283,6 @@ export type FlowerSurfaceAdapter = Readonly<{
     interaction_id?: string; fps?: number;
   }>) => Promise<void>;
   computerManagement?: FlowerComputerManagement;
-  connectComputerBrowser?: (connection: FlowerBrowserConnection) => Promise<FlowerTargetDescriptor>;
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   retryThread: (threadID: string) => Promise<FlowerThreadView>;

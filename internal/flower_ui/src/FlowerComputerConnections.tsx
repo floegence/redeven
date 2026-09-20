@@ -1,184 +1,246 @@
-import { FlowerProfileConnection } from './FlowerProfileConnection';
-import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
-import type { FlowerComputerAccess, FlowerSurfaceAdapter, FlowerComputerCandidate } from './contracts/flowerSurfaceContracts';
+import { ChevronLeft, Globe, MonitorPointer, Settings } from '@floegence/floe-webapp-core/icons';
+import type { FlowerComputerAccess, FlowerComputerCandidate, FlowerComputerEnvironment, FlowerComputerInventory, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 import type { FlowerComputerCopy } from './computerUseCopy';
-import { FlowerBrowserConnection } from './FlowerBrowserConnection';
+import { FlowerChromeConnection } from './FlowerChromeConnection';
 
 export type FlowerRequestedComputerAccess = Readonly<{ origin?: string; app?: string; foreground?: boolean }>;
+type Page = 'overview' | 'targets' | 'managed' | 'chrome' | 'setup' | 'access' | 'advanced' | 'help' | 'diagnostics';
+
 export function FlowerComputerConnections(props: {
   open: boolean; onOpenChange: (open: boolean) => void;
-  threadID: string; adapter: FlowerSurfaceAdapter; copy: FlowerComputerCopy;
-  requested?: FlowerRequestedComputerAccess;
-  fullAccess?: boolean;
-  connectionOnly?: boolean;
+  threadID: string; adapter: Pick<FlowerSurfaceAdapter, 'runtime' | 'canMutate' | 'computerManagement'>; copy: FlowerComputerCopy;
+  requested?: FlowerRequestedComputerAccess; fullAccess?: boolean; connectionOnly?: boolean;
+  permissionLabel?: string; onEditPermissionMode?: () => void;
   onContinue?: () => Promise<void>;
 }) {
-  const [targets, setTargets] = createSignal<readonly FlowerComputerCandidate[]>([]);
-  const [targetID, setTargetID] = createSignal('');
-  const [switching, setSwitching] = createSignal(false);
-  const [managing, setManaging] = createSignal(false);
-  const [query, setQuery] = createSignal('');
-  const currentTarget = () => targets().find(target => target.target_id === targetID() && Boolean(targetID()));
-  const candidateLabel = (target: FlowerComputerCandidate) => target.new_tab ? `${target.kind === "browser.managed" ? props.copy.managed : props.copy.system} · ${target.profile_name || target.display_name} · ${props.copy.newTab}` : target.title || target.display_name;
-  const candidateState = (target: FlowerComputerCandidate) => ({ in_use: props.copy.inUse, user_control: props.copy.waitingControl,
-    permission_required: props.copy.permissionRequired, setup_required: props.copy.setupRequired, connection_required: props.copy.disconnected,
-    stopped: props.copy.disconnected, ready: props.copy.connected }[target.state] || props.copy.disconnected);
-  const candidates = (browser: boolean) => targets().filter(target => target.kind.startsWith('browser.') === browser
-    && `${target.display_name} ${target.title || ''} ${target.url || ''} ${target.profile_name || ''}`.toLocaleLowerCase().includes(query().trim().toLocaleLowerCase()));
+  const [page, setPage] = createSignal<Page>('overview');
+  const [inventory, setInventory] = createSignal<FlowerComputerInventory>();
+  const [environment, setEnvironment] = createSignal<FlowerComputerEnvironment>();
   const [access, setAccess] = createSignal<FlowerComputerAccess>();
+  const [profiles, setProfiles] = createSignal<readonly Readonly<{ id: string; name: string }>[]>([]);
+  const [query, setQuery] = createSignal('');
+  const [draft, setDraft] = createSignal('');
   const [origin, setOrigin] = createSignal('');
+  const [profileName, setProfileName] = createSignal('');
+  const [endpoint, setEndpoint] = createSignal('');
+  const [diagnostic, setDiagnostic] = createSignal<'managed' | 'desktop'>('managed');
   const [loading, setLoading] = createSignal(false);
-  const [saving, setSaving] = createSignal(false);
-  const [failed, setFailed] = createSignal(false);
-  const [selectionFailure, setSelectionFailure] = createSignal('');
+  const [busy, setBusy] = createSignal(false);
+  const [inventoryFailed, setInventoryFailed] = createSignal(false);
+  const [environmentFailed, setEnvironmentFailed] = createSignal(false);
+  const [error, setError] = createSignal('');
   const [saved, setSaved] = createSignal(false);
   let generation = 0;
   onCleanup(() => { generation++; });
-  const available = () => !loading() && !saving() && Boolean(access()) && props.adapter.canMutate !== false;
-  const load = async () => {
-    const management = props.adapter.computerManagement, thread = props.threadID, current = ++generation;
-    setFailed(false); setSelectionFailure(''); setSaved(false); setSaving(false); setAccess(undefined); setTargets([]); setTargetID(''); setLoading(true);
-    if (props.connectionOnly || !management || !thread) { setLoading(false); return; }
-    const results = await Promise.allSettled([management.listCandidates(thread), management.loadAccess(thread)]);
-    if (current !== generation) return;
-    const [inventory, grants] = results;
-    if (inventory.status === 'fulfilled') { setTargets(inventory.value.candidates); setTargetID(inventory.value.current_target_id); }
-    if (grants.status === 'fulfilled') setAccess({ ...grants.value, origins: grants.value.origins ?? [], apps: grants.value.apps ?? [] });
-    setFailed(results.some(result => result.status === 'rejected')); setLoading(false);
+  const management = () => props.adapter.computerManagement;
+  const readable = () => !loading() && !busy();
+  const mutable = () => props.adapter.canMutate !== false && readable();
+  const guideKey = createMemo(() => props.open ? `${props.threadID}:${props.connectionOnly ? 'assistance' : page()}` : '');
+  const targets = () => inventory()?.candidates ?? [];
+  const current = () => targets().find(target => target.target_id && target.target_id === inventory()?.current_target_id);
+  const selected = () => targets().find(target => target.candidate_ref === draft());
+  const targetLabel = (target: FlowerComputerCandidate) => target.new_tab
+    ? `${target.kind === 'browser.managed' ? props.copy.managed : props.copy.system} · ${target.profile_name || target.display_name} · ${props.copy.newTab}`
+    : target.title || target.display_name;
+  const stateLabel = (state?: string) => ({ ready: props.copy.available, on_demand: props.copy.onDemand,
+    in_use: props.copy.inUse, user_control: props.copy.waitingControl, permission_required: props.copy.permissionRequired,
+    setup_required: props.copy.setupRequired, stopped: props.copy.stopped, connection_required: props.copy.disconnected }[state ?? ''] ?? props.copy.unknown);
+  const candidateState = (target: FlowerComputerCandidate) => target.kind === 'browser.managed'
+    && environment()?.managed.state !== 'on_demand' && environment()?.managed.state !== 'ready'
+    ? environment()?.managed.state ?? 'unknown' : target.state;
+  const canSelect = (target: FlowerComputerCandidate) => !inventoryFailed() && (candidateState(target) === 'ready'
+    || (target.kind === 'xvfb.desktop' && target.state === 'stopped' && environment()?.desktop.state === 'on_demand'));
+  const filteredTargets = (browser: boolean) => targets().filter(target => target.kind.startsWith('browser.') === browser
+    && `${target.display_name} ${target.title ?? ''} ${target.url ?? ''} ${target.profile_name ?? ''}`.toLocaleLowerCase().includes(query().trim().toLocaleLowerCase()));
+  const currentLabel = () => inventoryFailed() || !inventory() ? props.copy.unknown : current() ? targetLabel(current()!) : inventory()!.current_target_id ? props.copy.currentMissing : props.copy.automatic;
+  const currentHint = () => inventoryFailed() || !inventory() ? props.copy.loadFailed : current()
+    ? [current()!.profile_name, current()!.url, stateLabel(current()!.state)].filter(Boolean).join(' · ')
+    : inventory()!.current_target_id ? props.copy.currentMissingHint : props.copy.automaticHint;
+  const go = (next: Page) => { setPage(next); setError(''); setSaved(false); setDraft(''); setQuery(''); };
+  const run = async (action: (epoch: number) => Promise<void>, failure: string, readOnly = false) => {
+    if (!(readOnly ? readable() : mutable())) return;
+    const epoch = generation; setBusy(true); setError(''); setSaved(false);
+    try { await action(epoch); } catch { if (epoch === generation) setError(failure); }
+    finally { if (epoch === generation) setBusy(false); }
   };
-  createEffect(() => { if (props.open && props.threadID) { setSwitching(false); setManaging(false); setQuery(''); void load(); } else generation++; });
-  const change = (value: FlowerComputerAccess) => { setAccess(value); setSaved(false); };
-  const save = async () => {
-    const value = access(), management = props.adapter.computerManagement, current = generation;
-    if (!value || !management || !available() || props.fullAccess) return;
-    setSaving(true); setFailed(false); setSaved(false);
-    try { await management.saveAccess(props.threadID, value); if (current === generation) setSaved(true); }
-    catch { if (current === generation) setFailed(true); }
-    finally { if (current === generation) setSaving(false); }
-  };
-  const select = async (ref: string) => {
-    if (!available() || !props.adapter.computerManagement) return;
-    const current = generation;
-    setSaving(true); setFailed(false); setSelectionFailure('');
+  const refreshEnvironment = async (epoch = generation) => {
     try {
-      const target = await props.adapter.computerManagement.selectCandidate(props.threadID, ref);
-      if (current === generation) { setTargetID(target.id); setSwitching(false); await load(); }
-    }
-    catch (error) {
-      if (current === generation) {
-        const code = (error as { code?: string })?.code;
+      const result = await management()?.loadEnvironment?.();
+      if (epoch === generation) { setEnvironment(result); setEnvironmentFailed(!result); }
+    } catch { if (epoch === generation) { setEnvironment(undefined); setEnvironmentFailed(true); } }
+  };
+  const refreshInventory = async (epoch = generation) => {
+    if (!props.threadID || !management()) return;
+    try {
+      const result = await management()!.listCandidates(props.threadID);
+      if (epoch === generation) { setInventory(result); setInventoryFailed(false); }
+    } catch { if (epoch === generation) setInventoryFailed(true); }
+  };
+  const load = async () => {
+    const epoch = generation; setLoading(true);
+    await Promise.all([refreshEnvironment(epoch), refreshInventory(epoch)]);
+    if (epoch === generation) setLoading(false);
+  };
+  createEffect(on(() => [props.open, props.threadID, props.connectionOnly] as const, ([open]) => {
+    generation++; setPage('overview'); setInventory(undefined); setEnvironment(undefined); setAccess(undefined);
+    setProfiles([]); setError(''); setSaved(false); setDraft(''); setQuery(''); setOrigin(''); setProfileName(''); setEndpoint(''); setBusy(false);
+    setInventoryFailed(false); setEnvironmentFailed(false);
+    if (open && !props.connectionOnly) void load(); else setLoading(false);
+  }));
+  const openAccess = () => {
+    go('access'); setAccess(undefined);
+    void run(async epoch => {
+      const value = await management()!.loadAccess(props.threadID);
+      if (epoch === generation) setAccess({ origins: value.origins ?? [], apps: value.apps ?? [], allow_foreground: value.allow_foreground });
+    }, props.copy.accessSettingsFailed, true);
+  };
+  const openProfiles = () => {
+    go('managed'); setProfiles([]);
+    void run(async epoch => {
+      const value = await management()!.listManagedProfiles!();
+      if (epoch === generation) setProfiles(value);
+    }, props.copy.profileFailed, true);
+  };
+  const saveAccess = (value: FlowerComputerAccess) => run(async epoch => {
+    await management()!.saveAccess(props.threadID, value);
+    if (epoch === generation) { setAccess(value); setSaved(true); }
+  }, props.copy.accessSettingsFailed);
+  const select = async () => {
+    const candidate = selected();
+    if (!candidate || !canSelect(candidate)) return;
+    await run(async epoch => {
+      try {
+        const target = await management()!.selectCandidate(props.threadID, candidate.candidate_ref);
+        if (epoch !== generation) return;
+        setInventory(value => ({ ...value!, current_target_id: target.id, candidates: [...(value?.candidates ?? []).filter(item => item.candidate_ref !== candidate.candidate_ref), { ...candidate, target_id: target.id, new_tab: false, state: target.state ?? 'ready' }] }));
+        go('overview'); await refreshInventory(epoch);
+      } catch (failure) {
+        if (epoch !== generation) return;
+        const code = (failure as { code?: string })?.code;
         const messages: Record<string, string> = { target_in_use: props.copy.inUse, target_selection_stale: props.copy.selectionStale,
           target_not_allowed: props.copy.permissionRequired, target_permission_required: props.copy.permissionRequired,
           target_setup_required: props.copy.setupRequired, target_connection_required: props.copy.disconnected,
           interaction_takeover_required: props.copy.waitingControl };
-        setSelectionFailure(code ? messages[code] || '' : ''); setFailed(true);
+        setError(code ? messages[code] ?? props.copy.selectionFailed : props.copy.selectionFailed);
       }
-    }
-    finally { if (current === generation) setSaving(false); }
-  };
-  const connectBrowser: NonNullable<FlowerSurfaceAdapter['connectComputerBrowser']> = async connection => {
-    const current = generation, thread = props.threadID;
-    const management = props.adapter.computerManagement, connect = props.adapter.connectComputerBrowser;
-    if (!management || !connect || !available()) throw new Error('computer connections unavailable');
-    const target = await connect(connection);
-    if (!target.ready || current !== generation) throw new Error('computer connection changed');
-    // Connecting an explicitly chosen tab also selects it for this conversation.
-    await management.selectTarget(thread, target.id);
-    return target;
-  };
-  const disconnect = async (id: string) => {
-    if (!available() || !props.adapter.computerManagement?.disconnectBrowser) return;
-    const current = generation; setSaving(true); setFailed(false);
-    try { await props.adapter.computerManagement.disconnectBrowser(id); if (current === generation) await load(); }
-    catch { if (current === generation) setFailed(true); }
-    finally { if (current === generation) setSaving(false); }
+    }, props.copy.selectionFailed);
   };
   const addOrigin = () => {
-    const value = access(); if (!value) return;
     try {
       const url = new URL(origin().trim());
-      if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('invalid');
-      change({ ...value, origins: [...new Set([...value.origins, url.origin])] }); setOrigin(''); setFailed(false);
-    } catch { setFailed(true); }
+      if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('invalid origin');
+      setAccess(value => ({ ...value!, origins: [...new Set([...value!.origins, url.origin])] })); setOrigin(''); setError(''); setSaved(false);
+    } catch { setError(props.copy.invalidOrigin); }
   };
-  const requested = () => Boolean(props.requested?.origin || props.requested?.app || props.requested?.foreground);
-  return <Dialog open={props.open} onOpenChange={props.onOpenChange} title={props.connectionOnly ? props.copy.connectionTitle : props.copy.title} class={props.connectionOnly ? "w-[min(30rem,94vw)]" : "w-[min(42rem,94vw)]"}
-    footer={props.connectionOnly ? undefined : <div class="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => props.onOpenChange(false)}>{props.copy.close}</Button>
-      <Show when={!props.connectionOnly && !props.fullAccess}><Button size="sm" disabled={!available()} onClick={() => void save()}>{saving() ? props.copy.saving : props.copy.save}</Button></Show></div>}>
-    <div class="space-y-5 text-sm" aria-busy={loading() || saving()}>
-      <Show when={props.connectionOnly} fallback={<>
-      <p class="text-muted-foreground">{props.copy.description}</p>
-      <section class="space-y-3 rounded-lg border border-border p-4">
-        <div class="flex items-center justify-between gap-3"><span class="text-xs text-muted-foreground">{props.copy.target}</span><span class="text-xs text-muted-foreground">{props.adapter.runtime.display_name}</span></div>
-        <div role="status" class="min-w-0 space-y-1">
-          <p class="truncate font-medium">{currentTarget() ? candidateLabel(currentTarget()!) : targetID() ? props.copy.disconnected : props.copy.automatic}</p>
-          <p class="truncate text-xs text-muted-foreground">{currentTarget() ? [currentTarget()!.profile_name, currentTarget()!.url, candidateState(currentTarget()!)].filter(Boolean).join(' · ') : props.copy.automaticHint}</p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" aria-expanded={switching()} disabled={!available()} onClick={() => setSwitching(!switching())}>{props.copy.switchTarget}</Button>
-          <Button size="sm" variant="ghost" aria-expanded={managing()} onClick={() => setManaging(!managing())}>{props.copy.manageConnections}</Button>
-          <Button variant="ghost" size="sm" disabled={loading() || saving()} onClick={() => void load()}>{props.copy.refresh}</Button>
-          <Show when={currentTarget()?.kind.startsWith('browser.') && props.adapter.computerManagement?.disconnectBrowser}>
-            <Button size="sm" variant="ghost" disabled={!available()} onClick={() => void disconnect(targetID())}>{props.copy.disconnect}</Button>
+  const diagnose = (kind: 'managed' | 'desktop') => { setDiagnostic(kind); go('diagnostics'); };
+  const capability = () => environment()?.[diagnostic()];
+  const capabilityHint = (kind: 'managed' | 'desktop') => {
+    const state = environment()?.[kind].state;
+    if (!state) return props.copy.loadFailed;
+    if (state === 'permission_required') return props.copy.desktopPermissionHint;
+    if (state === 'setup_required') return kind === 'managed' ? props.copy.managedMissingHint : props.copy.desktopMissingHint;
+    return kind === 'managed' ? props.copy.managedHint : props.copy.desktopHint;
+  };
+  const title = createMemo(() => props.connectionOnly ? props.copy.connectionTitle : ({ overview: props.copy.title, targets: props.copy.switchTarget,
+    managed: props.copy.managed, chrome: props.copy.chromeTitle, setup: props.copy.connectionTitle, access: props.copy.permissions,
+    advanced: props.copy.advanced, help: props.copy.help, diagnostics: props.copy.diagnostics }[page()]));
+  const openPicker = () => { go('targets'); void load(); };
+  return <Dialog open={props.open} onOpenChange={props.onOpenChange} title={title()} closeLabel={props.copy.close} class={props.connectionOnly ? 'w-[min(30rem,94vw)] max-w-[30rem]' : 'w-[min(42rem,94vw)] max-w-[42rem]'}
+    footer={props.connectionOnly ? undefined : <div class="flex flex-wrap items-center justify-between gap-3">
+      <Show when={page() === 'overview'} fallback={<Button variant="ghost" size="sm" disabled={busy()} onClick={() => go('overview')}><ChevronLeft class="size-3.5" />{props.copy.back}</Button>}>
+        <Show when={props.threadID}><Button variant="ghost" size="sm" disabled={!readable()} onClick={openAccess}>{props.permissionLabel || (props.fullAccess ? props.copy.fullAccessTitle : props.copy.permissions)}</Button></Show>
+      </Show>
+      <div class="flex flex-wrap gap-2">
+        <Show when={page() === 'targets'}><Button size="sm" variant="outline" disabled={busy()} onClick={() => go('overview')}>{props.copy.cancel}</Button><Button size="sm" disabled={!mutable() || !selected() || !canSelect(selected()!)} onClick={() => void select()}>{props.copy.confirmTarget}</Button></Show>
+        <Show when={page() === 'access' && !props.fullAccess}><Button size="sm" disabled={!mutable() || !access()} onClick={() => { const value = access(); if (value) void saveAccess(value); }}>{props.copy.save}</Button></Show>
+        <Show when={page() !== 'targets'}><Button size="sm" variant={page() === 'overview' ? 'default' : 'outline'} onClick={() => props.onOpenChange(false)}>{props.copy.close}</Button></Show>
+      </div>
+    </div>}>
+    <Show when={!props.connectionOnly} fallback={<Show when={management()?.loadExtensionStatus && management()?.setupExtension && management()?.openExtension && props.adapter.canMutate !== false} fallback={<p role="alert">{props.copy.setupRequired}</p>}>
+      <Show when={guideKey()} keyed>{_key => <FlowerChromeConnection reuseConnected management={management()!} copy={props.copy} onConnected={async () => { await props.onContinue?.(); }} />}</Show>
+    </Show>}>
+      <div class="space-y-5 text-sm" data-flower-computer-panel={page()} aria-busy={loading() || busy()}>
+        <p class="break-words text-xs text-muted-foreground">{props.copy.environmentTitle} · {environment()?.hostname || props.adapter.runtime.display_name}<Show when={environment()?.platform}> · {environment()!.platform === 'darwin' ? 'macOS' : environment()!.platform === 'linux' ? 'Linux' : environment()!.platform}</Show></p>
+        <Show when={page() === 'overview'}>
+          <Show when={props.threadID} fallback={<p class="text-xs text-muted-foreground">{props.copy.noThread}</p>}>
+            <section class="space-y-3 rounded-lg bg-muted/40 p-4">
+              <div class="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground"><span>{props.copy.target}</span><span>{props.copy.scope}</span></div>
+              <div role="status" class="space-y-1" aria-live="polite"><p class="break-words font-medium">{loading() && !inventory() ? props.copy.checking : currentLabel()}</p><p class="break-words text-xs leading-relaxed text-muted-foreground">{currentHint()}</p></div>
+              <Button size="sm" variant="outline" disabled={!mutable() || !inventory() || inventoryFailed()} onClick={openPicker}>{props.copy.switchTarget}</Button>
+              <Show when={inventoryFailed()}><Button variant="ghost" size="sm" disabled={loading()} onClick={() => void load()}>{props.copy.refresh}</Button></Show>
+            </section>
           </Show>
-        </div>
-      </section>
-      <Show when={switching()}><section class="space-y-3" aria-label={props.copy.switchTarget}>
-        <input type="search" class="flower-settings-text-input w-full" aria-label={props.copy.searchTargets} placeholder={props.copy.searchTargets}
-          value={query()} onInput={event => setQuery(event.currentTarget.value)} />
-        <div class="max-h-72 space-y-4 overflow-y-auto overscroll-contain">
-          <For each={[true, false]}>{browser => <Show when={candidates(browser).length}><section class="space-y-1">
-            <h3 class="px-1 text-xs font-medium text-muted-foreground">{browser ? props.copy.browserPages : props.copy.applicationWindows}</h3>
-            <For each={candidates(browser)}>{target => <button type="button" class="flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-              data-computer-candidate-target={target.target_id}
-              disabled={!available() || target.state !== 'ready'} aria-pressed={Boolean(target.target_id) && targetID() === target.target_id}
-              onClick={() => void select(target.candidate_ref)}>
-              <span class="min-w-0 flex-1"><span class="block truncate text-sm">{candidateLabel(target)}</span>
-                <span class="block truncate text-xs text-muted-foreground">{[target.profile_name, target.url, !browser ? target.display_name : ''].filter(Boolean).join(' · ')}</span></span>
-              <span class="shrink-0 text-xs text-muted-foreground">{candidateState(target)}</span>
-            </button>}</For>
-          </section></Show>}</For>
-          <Show when={!candidates(true).length && !candidates(false).length}><p class="text-xs text-muted-foreground">{props.copy.noTargets}</p></Show>
-        </div>
-      </section></Show>
-      <Show when={props.fullAccess}><section class="space-y-1 rounded-md border border-border p-3" role="status"><p class="font-medium">{props.copy.fullAccessTitle}</p><p class="text-xs text-muted-foreground">{props.copy.fullAccessHint}</p></section></Show>
-      <Show when={!props.fullAccess && access()}>{value => <>
-        <Show when={requested()}><div class="space-y-2 rounded-md border border-border p-3">
-          <p class="font-medium">{props.copy.requestedAccess}</p>
-          <p class="break-all text-xs">{[props.requested?.origin, props.requested?.app, props.requested?.foreground ? props.copy.foreground : ''].filter(Boolean).join(' · ')}</p>
-          <Button size="sm" variant="secondary" disabled={!available()} onClick={() => change({
-            ...value(), origins: [...new Set([...value().origins, ...(props.requested?.origin ? [props.requested.origin] : [])])],
-            apps: [...new Set([...value().apps, ...(props.requested?.app ? [props.requested.app] : [])])],
-            allow_foreground: value().allow_foreground || props.requested?.foreground === true,
-          })}>{props.copy.grantRequested}</Button>
-        </div></Show>
-        <section class="space-y-2"><p class="font-medium">{props.copy.sites}</p>
-          <For each={value().origins}>{site => <div class="flex items-center justify-between gap-2"><span class="truncate text-xs">{site}</span><Button variant="ghost" size="sm" disabled={!available()} aria-label={`${props.copy.remove}: ${site}`} onClick={() => change({ ...value(), origins: value().origins.filter(item => item !== site) })}>{props.copy.remove}</Button></div>}</For>
-          <form class="flex gap-2" onSubmit={event => { event.preventDefault(); addOrigin(); }}><input type="url" class="flower-settings-text-input min-w-0 flex-1" aria-label={props.copy.sites} placeholder={props.copy.sitePlaceholder} disabled={!available()} value={origin()} onInput={event => setOrigin(event.currentTarget.value)} /><Button type="submit" size="sm" disabled={!available() || !origin().trim()}>{props.copy.add}</Button></form>
-        </section>
-        <section class="space-y-2"><p class="font-medium">{props.copy.apps}</p>
-          <For each={[...new Set([...value().apps, ...targets().flatMap(target => target.app_bundle_id ? [target.app_bundle_id] : [])])]}>{app => <label class="flex cursor-pointer items-center gap-2 has-[:disabled]:cursor-not-allowed"><input type="checkbox" class="cursor-pointer disabled:cursor-not-allowed" disabled={!available()} checked={value().apps.includes(app)} onChange={event => change({ ...value(), apps: event.currentTarget.checked ? [...value().apps, app] : value().apps.filter(item => item !== app) })} /><span class="truncate text-xs">{app}</span></label>}</For>
-        </section>
-        <label class="flex cursor-pointer items-start gap-3 has-[:disabled]:cursor-not-allowed"><input type="checkbox" class="mt-1 cursor-pointer disabled:cursor-not-allowed" disabled={!available()} checked={value().allow_foreground} onChange={event => change({ ...value(), allow_foreground: event.currentTarget.checked })} /><span>{props.copy.foreground}<span class="mt-1 block text-xs text-muted-foreground">{props.copy.foregroundHint}</span></span></label>
-        <Button size="sm" variant="ghost" disabled={!available()} onClick={() => { change({ origins: [], apps: [], allow_foreground: false }); void save(); }}>{props.copy.revokeAll}</Button>
-      </>}</Show>
-      <Show when={managing()}>
-      <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement?.listManagedProfiles && props.adapter.computerManagement.createManagedProfile && props.adapter.computerManagement.listManagedTabs}>
-        <FlowerProfileConnection managed management={props.adapter.computerManagement!} connect={connectBrowser} copy={props.copy} onConnected={() => void load()} />
-      </Show>
-      <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement?.openExtension && props.adapter.computerManagement.setupExtension && props.adapter.computerManagement.loadExtensionStatus && props.adapter.computerManagement.listExtensionTabs}>
-        <FlowerProfileConnection management={props.adapter.computerManagement!} connect={connectBrowser} copy={props.copy} onConnected={() => void load()} />
-      </Show>
-      <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement}><details class="rounded-md border border-border p-3"><summary class="cursor-pointer text-xs font-medium">{props.copy.advanced}</summary><div class="pt-3"><FlowerBrowserConnection copy={props.copy} listTabs={props.adapter.computerManagement!.listBrowserTabs} connect={connectBrowser} onConnected={() => void load()} /></div></details></Show>
-      </Show>
-      </>}>
-        <Show when={props.adapter.canMutate !== false && props.adapter.computerManagement?.loadExtensionStatus && props.adapter.computerManagement.setupExtension && props.adapter.computerManagement.openExtension} fallback={<p role="alert">{props.copy.setupRequired}</p>}>
-          <FlowerProfileConnection connectionOnly management={props.adapter.computerManagement!} connect={connectBrowser} copy={props.copy} onConnected={() => undefined} onContinue={props.onContinue} />
+          <section class="divide-y divide-border" aria-label={props.copy.environmentCapabilities}>
+            <h3 class="pb-2 text-xs font-normal text-muted-foreground">{props.copy.environmentCapabilities}</h3>
+            <div class="flex items-start gap-3 py-4"><Globe class="mt-1 size-5 shrink-0 text-muted-foreground" /><div class="min-w-0 flex-1 space-y-1"><p class="flex flex-wrap items-center gap-2"><span class="font-medium">{props.copy.managed}</span><span class="text-xs text-muted-foreground">{stateLabel(environment()?.managed.state)}</span></p><p class="text-xs leading-relaxed text-muted-foreground">{capabilityHint('managed')}</p><div class="pt-1"><Show when={environment()?.managed.state === 'on_demand' || environment()?.managed.state === 'ready'} fallback={<Button size="sm" variant="ghost" onClick={() => diagnose('managed')}>{props.copy.details}</Button>}><Button size="sm" variant="ghost" disabled={!readable() || !management()?.listManagedProfiles} onClick={openProfiles}>{props.copy.manage}</Button></Show></div></div></div>
+            <div class="flex items-start gap-3 py-4"><Globe class="mt-1 size-5 shrink-0 text-muted-foreground" /><div class="min-w-0 flex-1 space-y-1"><p class="flex flex-wrap items-center gap-2"><span class="font-medium">{props.copy.chromeTitle}</span><span class="text-xs text-muted-foreground">{!environment() ? props.copy.unknown : environment()!.chrome.profiles.length ? props.copy.connected : props.copy.chromeOffline}</span></p><p class="text-xs leading-relaxed text-muted-foreground">{environment()?.chrome.profiles.length ? environment()!.chrome.profiles.map(profile => profile.name).join(' · ') : props.copy.chromeOfflineHint}</p><Button size="sm" variant="ghost" disabled={!readable()} onClick={() => go('chrome')}>{props.copy.manage}</Button></div></div>
+            <div class="flex items-start gap-3 py-4"><MonitorPointer class="mt-1 size-5 shrink-0 text-muted-foreground" /><div class="min-w-0 flex-1 space-y-1"><p class="flex flex-wrap items-center gap-2"><span class="font-medium">{props.copy.desktopTitle}</span><span class="text-xs text-muted-foreground">{stateLabel(environment()?.desktop.state)}</span></p><p class="text-xs leading-relaxed text-muted-foreground">{capabilityHint('desktop')}</p><Button size="sm" variant="ghost" onClick={() => diagnose('desktop')}>{props.copy.details}</Button></div></div>
+          </section>
+          <div class="flex flex-wrap gap-2"><Button size="sm" variant="ghost" onClick={() => go('help')}>{props.copy.help}</Button><Button size="sm" variant="ghost" disabled={!mutable() || !props.threadID || !management()?.discoverBrowser} onClick={() => go('advanced')}>{props.copy.advanced}</Button></div>
         </Show>
-      </Show>
-      <Show when={failed()}><p role="alert" class="text-xs text-destructive">{selectionFailure() || props.copy.failed}</p></Show>
-      <Show when={saved()}><p role="status" class="text-xs">{props.copy.saved}</p></Show>
-    </div>
+        <Show when={page() === 'targets'}>
+          <p class="text-xs text-muted-foreground">{props.copy.selectionScope}</p>
+          <input type="search" class="flower-settings-text-input w-full" aria-label={props.copy.searchTargets} placeholder={props.copy.searchTargets} value={query()} onInput={event => setQuery(event.currentTarget.value)} />
+          <div class="space-y-4" role="radiogroup" aria-label={props.copy.switchTarget}>
+            <For each={[true, false]}>{browser => <Show when={filteredTargets(browser).length}><section class="space-y-2"><h3 class="text-xs font-medium text-muted-foreground">{browser ? props.copy.browserPages : props.copy.applicationWindows}</h3>
+              <For each={filteredTargets(browser)}>{target => <label class="flex cursor-pointer items-start gap-3 rounded-md border border-border p-3 has-[:disabled]:cursor-not-allowed has-[:checked]:bg-muted/50">
+                <input type="radio" name="flower-computer-target" class="mt-1 cursor-pointer disabled:cursor-not-allowed" value={target.candidate_ref} checked={draft() === target.candidate_ref} disabled={!mutable() || !canSelect(target)} onChange={() => setDraft(target.candidate_ref)} />
+                <span class="min-w-0 flex-1"><span class="block break-words text-sm">{targetLabel(target)}</span><span class="mt-1 block break-all text-xs text-muted-foreground">{[target.profile_name, target.url, stateLabel(candidateState(target))].filter(Boolean).join(' · ')}</span></span>
+              </label>}</For>
+            </section></Show>}</For>
+          </div>
+          <Show when={inventoryFailed()}><p role="alert" class="text-xs text-destructive">{props.copy.loadFailed}</p></Show>
+          <Show when={!filteredTargets(true).length && !filteredTargets(false).length}><p class="text-xs text-muted-foreground">{props.copy.noTargets}</p></Show>
+          <Button size="sm" variant="ghost" disabled={!mutable()} onClick={() => { setDraft(''); void load(); }}>{props.copy.refresh}</Button>
+        </Show>
+        <Show when={page() === 'managed'}>
+          <p class="text-muted-foreground">{props.copy.managedHint}</p><p class="text-xs leading-relaxed text-muted-foreground">{props.copy.profileHint}</p>
+          <div class="divide-y divide-border"><For each={profiles()}>{profile => <p class="break-words py-3">{profile.name}</p>}</For></div>
+          <details class="border-t border-border pt-3"><summary class="cursor-pointer text-xs">{props.copy.createProfileHint}</summary><form class="mt-3 flex flex-wrap items-end gap-2" onSubmit={event => { event.preventDefault(); void run(async epoch => {
+            const value = await management()!.createManagedProfile!(profileName().trim());
+            if (epoch === generation) { setProfiles(value); setProfileName(''); }
+          }, props.copy.profileFailed); }}><label class="min-w-0 flex-1 space-y-1 text-xs">{props.copy.profileName}<input class="flower-settings-text-input w-full" value={profileName()} maxlength={120} required onInput={event => setProfileName(event.currentTarget.value)} /></label><Button size="sm" type="submit" disabled={!mutable() || !profileName().trim() || !management()?.createManagedProfile}>{props.copy.createProfile}</Button></form></details>
+        </Show>
+        <Show when={page() === 'chrome'}>
+          <p class="text-muted-foreground">{props.copy.chromeOnlineHint}</p>
+          <div class="space-y-2 rounded-lg bg-muted/40 p-4"><p class="font-medium">{!environment() ? props.copy.unknown : environment()!.chrome.profiles.length ? props.copy.connected : props.copy.chromeOffline}</p><For each={environment()?.chrome.profiles ?? []}>{profile => <p class="break-words text-xs">{profile.name}</p>}</For><Show when={!environment()?.chrome.profiles.length}><p class="text-xs leading-relaxed text-muted-foreground">{environment() ? props.copy.chromeOfflineHint : props.copy.loadFailed}</p></Show></div>
+          <p class="text-xs leading-relaxed text-muted-foreground">{props.copy.pairingPersistence}</p><p class="text-xs leading-relaxed text-muted-foreground">{props.copy.setupHostHint}</p>
+          <Button size="sm" disabled={!mutable() || !management()?.setupExtension || !management()?.openExtension || !management()?.loadExtensionStatus} onClick={() => go('setup')}>{props.copy.setupChrome}</Button>
+          <Button size="sm" variant="ghost" disabled={!readable()} onClick={() => void load()}>{props.copy.refresh}</Button>
+        </Show>
+        <Show when={page() === 'setup' && guideKey()} keyed>{_key => <FlowerChromeConnection management={management()!} copy={props.copy} onConnected={async () => { const epoch = generation; await refreshEnvironment(epoch); if (epoch === generation) go('chrome'); }} />}</Show>
+        <Show when={page() === 'diagnostics'}>
+          <h3 class="font-medium">{diagnostic() === 'managed' ? props.copy.managed : props.copy.desktopTitle} · {stateLabel(capability()?.state)}</h3><p class="leading-relaxed text-muted-foreground">{capabilityHint(diagnostic())}</p>
+          <Show when={!capability() || capability()?.state === 'setup_required'}><p class="text-xs leading-relaxed text-muted-foreground">{environmentFailed() ? props.copy.loadFailed : props.copy.repairHint}</p></Show>
+          <p class="rounded-md bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">{props.copy.permissionBoundary}</p>
+          <Show when={capability()?.reason}><details><summary class="cursor-pointer text-xs">{props.copy.diagnostics}</summary><code class="mt-2 block break-all text-xs">{capability()!.reason}</code></details></Show>
+          <Button size="sm" disabled={!readable()} onClick={() => void load()}>{props.copy.refresh}</Button>
+        </Show>
+        <Show when={page() === 'help'}><div class="space-y-5 text-xs leading-relaxed text-muted-foreground"><section><h3 class="mb-1 font-medium text-foreground">{props.copy.chromeTitle}</h3><p>{props.copy.pairingPersistence}</p></section><section><h3 class="mb-1 font-medium text-foreground">{props.copy.managed}</h3><p>{props.copy.profileHint}</p></section><section><h3 class="mb-1 font-medium text-foreground">{props.copy.target}</h3><p>{props.copy.selectionPersistence}</p></section><section><h3 class="mb-1 font-medium text-foreground">{props.copy.permissions}</h3><p>{props.copy.permissionBoundary}</p></section></div></Show>
+        <Show when={page() === 'advanced'}>
+          <p class="text-xs leading-relaxed text-muted-foreground">{props.copy.advancedHint}</p>
+          <form class="space-y-3" onSubmit={event => { event.preventDefault(); void run(async epoch => {
+            const result = await management()!.discoverBrowser!(props.threadID, endpoint().trim());
+            if (epoch === generation) { setInventory(result); setInventoryFailed(false); go('targets'); }
+          }, props.copy.endpointFailed); }}><label class="block space-y-1 text-xs">{props.copy.endpoint}<input type="url" required class="flower-settings-text-input w-full" value={endpoint()} onInput={event => setEndpoint(event.currentTarget.value)} placeholder="http://127.0.0.1:9222" /></label><Button size="sm" type="submit" disabled={!mutable() || !endpoint().trim()}>{props.copy.listTabs}</Button></form>
+        </Show>
+        <Show when={page() === 'access'}>
+          <p class="text-xs leading-relaxed text-muted-foreground">{props.copy.permissionBoundary}</p>
+          <Show when={props.onEditPermissionMode}><Button size="sm" variant="outline" disabled={!mutable()} onClick={() => { props.onOpenChange(false); props.onEditPermissionMode?.(); }}><Settings class="size-3.5" />{props.copy.editPermissions}</Button></Show>
+          <Show when={props.fullAccess} fallback={<Show when={access()}>{value => <>
+            <Show when={props.requested?.origin || props.requested?.app || props.requested?.foreground}><div class="space-y-2 rounded-md bg-muted/40 p-3"><p class="font-medium">{props.copy.requestedAccess}</p><p class="break-all text-xs">{[props.requested?.origin, props.requested?.app, props.requested?.foreground ? props.copy.foreground : ''].filter(Boolean).join(' · ')}</p><Button size="sm" variant="outline" disabled={!mutable()} onClick={() => { setAccess({ origins: [...new Set([...value().origins, ...(props.requested?.origin ? [props.requested.origin] : [])])], apps: [...new Set([...value().apps, ...(props.requested?.app ? [props.requested.app] : [])])], allow_foreground: value().allow_foreground || props.requested?.foreground === true }); setSaved(false); }}>{props.copy.grantRequested}</Button></div></Show>
+            <section class="space-y-2"><h3 class="font-medium">{props.copy.sites}</h3><For each={value().origins}>{site => <div class="flex items-center justify-between gap-2"><span class="min-w-0 break-all text-xs">{site}</span><Button size="sm" variant="ghost" disabled={!mutable()} aria-label={`${props.copy.remove}: ${site}`} onClick={() => { setAccess({ ...value(), origins: value().origins.filter(item => item !== site) }); setSaved(false); }}>{props.copy.remove}</Button></div>}</For>
+              <form class="flex flex-wrap gap-2" onSubmit={event => { event.preventDefault(); addOrigin(); }}><input type="url" class="flower-settings-text-input min-w-0 flex-1" aria-label={props.copy.sites} placeholder={props.copy.sitePlaceholder} value={origin()} disabled={!mutable()} onInput={event => setOrigin(event.currentTarget.value)} /><Button type="submit" size="sm" disabled={!mutable() || !origin().trim()}>{props.copy.add}</Button></form>
+            </section><section class="space-y-2"><h3 class="font-medium">{props.copy.apps}</h3><For each={[...new Set([...value().apps, ...targets().flatMap(target => target.app_bundle_id ? [target.app_bundle_id] : [])])]}>{app => <label class="flex cursor-pointer items-center gap-2 has-[:disabled]:cursor-not-allowed"><input type="checkbox" class="cursor-pointer disabled:cursor-not-allowed" disabled={!mutable()} checked={value().apps.includes(app)} onChange={event => { setAccess({ ...value(), apps: event.currentTarget.checked ? [...value().apps, app] : value().apps.filter(item => item !== app) }); setSaved(false); }} /><span class="break-all text-xs">{app}</span></label>}</For></section>
+            <label class="flex cursor-pointer items-start gap-3 has-[:disabled]:cursor-not-allowed"><input type="checkbox" class="mt-1 cursor-pointer disabled:cursor-not-allowed" disabled={!mutable()} checked={value().allow_foreground} onChange={event => { setAccess({ ...value(), allow_foreground: event.currentTarget.checked }); setSaved(false); }} /><span>{props.copy.foreground}<span class="mt-1 block text-xs text-muted-foreground">{props.copy.foregroundHint}</span></span></label>
+            <Button size="sm" variant="ghost" disabled={!mutable()} onClick={() => void saveAccess({ origins: [], apps: [], allow_foreground: false })}>{props.copy.revokeAll}</Button>
+          </>}</Show>}><p class="rounded-md bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">{props.copy.fullAccessHint}</p></Show>
+        </Show>
+        <Show when={environmentFailed() && page() === 'overview'}><p role="alert" class="text-xs text-destructive">{props.copy.loadFailed}</p><Button size="sm" variant="ghost" disabled={loading()} onClick={() => void load()}>{props.copy.refresh}</Button></Show>
+        <Show when={error()}><p role="alert" class="text-xs text-destructive">{error()}</p></Show><Show when={saved()}><p role="status" class="text-xs">{props.copy.saved}</p></Show>
+      </div>
+    </Show>
   </Dialog>;
 }

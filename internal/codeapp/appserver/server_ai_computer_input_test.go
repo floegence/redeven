@@ -89,3 +89,24 @@ func TestChromeOnboardingRejectsArbitraryNativeDestinations(t *testing.T) {
 		}
 	}
 }
+
+func TestComputerBrowserDiscoveryRejectsForgedOrUnboundedBodies(t *testing.T) {
+	srv, origin, _ := newUploadRouteServer(t)
+	const marker = "private-endpoint-marker"
+	for _, body := range []string{
+		`{"thread_id":"missing","cdp_url":"` + marker + `","new_tab":true}`,
+		`{"thread_id":"missing","cdp_url":"` + marker + `"}{}`,
+		`{"thread_id":"missing","cdp_url":7}`,
+		`{"thread_id":"missing","cdp_url":"` + marker + strings.Repeat("x", 16384) + `"}`,
+		`{"thread_id":"missing","cdp_url":"` + marker + `"}`,
+	} {
+		response := performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/computer/candidates", origin, body)
+		if response.Code != http.StatusBadRequest || strings.Contains(response.Body.String(), marker) {
+			t.Fatalf("invalid discovery response: %d %s", response.Code, response.Body.String())
+		}
+	}
+	response := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/computer/environment", origin, "")
+	if response.Code == http.StatusNotFound {
+		t.Fatal("environment route is not exposed")
+	}
+}

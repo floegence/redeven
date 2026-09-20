@@ -39,9 +39,23 @@ func NewNativeDesktopTargetExecutor(helperPath string) *NativeDesktopTargetExecu
 	return &NativeDesktopTargetExecutor{HelperPath: strings.TrimSpace(helperPath), Timeout: 30 * time.Second, media: map[string][]byte{}}
 }
 
+// CheckComputerSetup probes OS permissions without starting a control session.
+func (e *NativeDesktopTargetExecutor) CheckComputerSetup(ctx context.Context) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.checkSetupLocked(ctx)
+}
+
 func (e *NativeDesktopTargetExecutor) EnsureTargetReady(ctx context.Context, _ string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if err := e.checkSetupLocked(ctx); err != nil {
+		return err
+	}
+	return e.startLocked()
+}
+
+func (e *NativeDesktopTargetExecutor) checkSetupLocked(ctx context.Context) error {
 	if e.closed {
 		return errors.New("desktop target executor is closed")
 	}
@@ -66,7 +80,7 @@ func (e *NativeDesktopTargetExecutor) EnsureTargetReady(ctx context.Context, _ s
 	if !capabilities.ScreenRecording || !capabilities.Accessibility {
 		return &TargetStartupError{Code: "TARGET_PERMISSION_REQUIRED", Reason: "screen_recording_or_accessibility_missing"}
 	}
-	return e.startLocked()
+	return nil
 }
 
 func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {

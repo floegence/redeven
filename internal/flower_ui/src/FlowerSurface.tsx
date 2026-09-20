@@ -5623,8 +5623,8 @@ webSearch: model.web_search,
   });
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
-  const [computerConnectionsOpen, setComputerConnectionsOpen] = createSignal(false);
-  createEffect(on([selectedThreadID, () => selectedInputRequest()?.prompt_id], () => setComputerConnectionsOpen(false), { defer: true }));
+  const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | null>(null);
+  createEffect(on([selectedThreadID, () => selectedInputRequest()?.prompt_id], () => setComputerDialog(null), { defer: true }));
   const [computerStageOpen, setComputerStageOpen] = createSignal(false);
   const [computerFrameSelection, setComputerFrameSelection] = createSignal<{ frame: string; threadID: string; runID?: string }>();
   const selectedComputerFrame = createMemo(() => {
@@ -7861,11 +7861,11 @@ webSearch: model.web_search,
               </Show>
               <Show when={selectedThreadReadOnly()}><span class="flower-decision-readonly-status" role="status">{selectedThreadReadOnlyDisplay()}</span></Show>
               <div class="flower-computer-control-actions">
-              <Show when={props.adapter.computerManagement && (selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'target')}><Button variant="secondary" disabled={inputRequestIsSubmitting()} onClick={() => setComputerConnectionsOpen(true)}>{copy().computer.title}</Button></Show>
+              <Show when={props.adapter.computerManagement && (selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'target')}><Button variant="secondary" disabled={inputRequestIsSubmitting()} onClick={() => setComputerDialog('settings')}>{copy().computer.title}</Button></Show>
               <Show when={selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'authorized' && selectedComputerAssistance().kind !== 'target'}>
               <Button variant="secondary" data-computer-control-action="take" disabled={computerReturning() || !computerObserverID() || !computerCurrentVerified() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{computerControlDisconnected() ? copy().chat.computerResumeControl : privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
               </Show>
-              <Show when={selectedComputerAssistance().kind === 'connection'}><Button variant="primary" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} onClick={() => setComputerConnectionsOpen(true)}>{copy().computer.connectionTitle}</Button></Show>
+              <Show when={selectedComputerAssistance().kind === 'connection'}><Button variant="primary" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} onClick={() => setComputerDialog('connection')}>{copy().computer.connectionTitle}</Button></Show>
               <Show when={selectedComputerAssistance().kind !== 'connection'}><Button variant="primary" data-computer-control-action={selectedComputerAssistance().kind === 'access' ? 'grant' : 'return'} disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting() || (selectedComputerAssistance().kind === 'access' && !props.adapter.computerManagement)} loading={inputRequestIsSubmitting()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];
@@ -11121,7 +11121,7 @@ webSearch: model.web_search,
           <div class="flower-chat-header-actions">
             <Show when={selectedThreadID() && props.adapter.computerManagement}>
               <button type="button" class="flower-header-icon-button" aria-label={copy().computer.title} title={copy().computer.title}
-                aria-haspopup="dialog" aria-expanded={computerConnectionsOpen()} onClick={() => setComputerConnectionsOpen(true)}><Link class="h-4 w-4" aria-hidden="true" /></button>
+                aria-haspopup="dialog" aria-expanded={computerDialog() !== null} onClick={() => setComputerDialog('settings')}><Link class="h-4 w-4" aria-hidden="true" /></button>
             </Show>
             <Show when={computerStageAvailable() && selectedComputerStage()}>
               <button type="button" class="flower-computer-entry" aria-expanded={computerStageOpen()}
@@ -11188,16 +11188,17 @@ webSearch: model.web_search,
         </div>
       </div>
       <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
-      <FlowerComputerConnections open={computerConnectionsOpen()} onOpenChange={setComputerConnectionsOpen}
-        connectionOnly={isBrowserConnectionInput(selectedInputRequest())} onContinue={async () => {
+      <FlowerComputerConnections open={computerDialog() !== null} onOpenChange={open => { if (!open) setComputerDialog(null); }}
+        connectionOnly={computerDialog() === 'connection'} onContinue={async () => {
           const request = selectedInputRequest();
           if (!isBrowserConnectionInput(request) || !request) return;
           const question = request.questions[0], choice = question.choices?.[0];
           if (!choice) return;
           selectInputChoice(question, choice);
-          setComputerConnectionsOpen(false);
+          setComputerDialog(null);
           await submitInputRequest();
         }}
+        permissionLabel={composerPermissionCopy()?.label} onEditPermissionMode={() => { queueMicrotask(() => openPermissionMenu()); }}
         threadID={selectedThreadID()} fullAccess={selectedThread()?.permission_type === 'full_access'} adapter={props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
       <FlowerChatContextPreview
         preview={contextSnapshotPreview()}
@@ -12106,8 +12107,7 @@ webSearch: model.web_search,
                 onSaveDefaultPermission={saveDefaultPermission}
                 onSaveComputerUseEnabled={props.adapter.saveComputerUseEnabled ? saveComputerUseEnabled : undefined}
                 computerCopy={copy().computer}
-                onListComputerBrowserTabs={props.adapter.computerManagement?.listBrowserTabs}
-                onConnectComputerBrowser={props.adapter.canMutate !== false ? props.adapter.connectComputerBrowser : undefined}
+                onOpenComputerSettings={props.adapter.computerManagement ? () => { returnToChat(); setComputerDialog('settings'); } : undefined}
                 onSaveModelProfile={saveModelProfile}
                 saveError={saveError()}
                 savedAt={savedAt()}

@@ -136,6 +136,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.
 - [Computer and browser use runtime](ai/computer-use-runtime.md) - Keep authorization, execution, observation and packaged helper compatibility under one Runtime owner.
 - [Computer script execution](ai/computer-use-scripts.md) - Compose bounded semantic operations and preserve partial results without replaying effects.
+- [Browser and desktop settings](ai/computer-use-environment-settings.md) - Inspect environment capabilities and manage pairing without changing conversation targets or permissions.
 - [Guided Chrome connection](ai/computer-use-browser-connection.md) - Install and confirm a browser connection, then resume the original task automatically.
 - [Managed browsers and authorized Chrome tabs](ai/computer-use-browser.md) - Select profiles and exact tabs, preserve user settings, and qualify background control.
 - [Semantic desktop operations](ai/computer-use-desktop.md) - Use window AX and isolated AT-SPI with explicit foreground authority and user input priority.

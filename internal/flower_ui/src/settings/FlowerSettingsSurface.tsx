@@ -1,6 +1,4 @@
-import { FlowerBrowserConnection } from '../FlowerBrowserConnection';
 import { computerUseEnUS, type FlowerComputerCopy } from '../computerUseCopy';
-import type { FlowerSurfaceAdapter } from '../contracts/flowerSurfaceContracts';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { flowerProviderSearchSummary } from '../webSearchCapability';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -167,8 +165,7 @@ export type FlowerSettingsSurfaceProps = Readonly<{
   snapshot: FlowerSettingsSnapshot | null;
   onSaveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   onSaveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
-  onConnectComputerBrowser?: FlowerSurfaceAdapter['connectComputerBrowser'];
-  onListComputerBrowserTabs?: NonNullable<FlowerSurfaceAdapter['computerManagement']>['listBrowserTabs'];
+  onOpenComputerSettings?: () => void;
   computerCopy?: FlowerComputerCopy;
   onSaveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   saveError?: string;
@@ -708,7 +705,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
             </div>
           </section>
 
-          <Show when={props.onSaveComputerUseEnabled || (props.onConnectComputerBrowser && props.onListComputerBrowserTabs)}>
+          <Show when={props.onSaveComputerUseEnabled || props.onOpenComputerSettings}>
             <section class="flower-settings-section flower-settings-computer-use-section" aria-label={copy().computerUseTitle}>
               <FlowerSubSectionHeader
                 title={copy().computerUseTitle}
@@ -725,11 +722,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   </button>
                   <Show when={computerUseError()}><p role="alert" class="mt-3 text-xs text-destructive">{computerUseError()}</p></Show>
                 </Show>
-                <Show when={props.onConnectComputerBrowser && props.onListComputerBrowserTabs}>
-                  <details class="flower-settings-computer-connect-section">
-                    <summary><ChevronDown class="h-3.5 w-3.5" aria-hidden="true" /><span>{(props.computerCopy ?? computerUseEnUS).advanced}</span></summary>
-                    <FlowerBrowserConnection copy={props.computerCopy ?? computerUseEnUS} listTabs={props.onListComputerBrowserTabs!} connect={props.onConnectComputerBrowser!} />
-                  </details>
+                <Show when={props.onOpenComputerSettings}>
+                  <Button size="sm" variant="outline" onClick={() => props.onOpenComputerSettings?.()}>{(props.computerCopy ?? computerUseEnUS).title}</Button>
                 </Show>
               </div>
             </section>

@@ -3496,6 +3496,40 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: tabs})
 		return
 
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/environment":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		environment, err := aiSvc.ComputerEnvironment(r.Context(), meta)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "computer_environment_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: environment})
+		return
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/candidates":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var body struct {
+			ThreadID string `json:"thread_id"`
+			CDPURL   string `json:"cdp_url"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		inventory, err := aiSvc.ComputerBrowserCandidates(r.Context(), meta, body.ThreadID, body.CDPURL)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_tabs_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: inventory})
+		return
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/candidates":
 		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
 		if !ok || !g.requireAIService(w, aiSvc) {

@@ -42,7 +42,6 @@ import type {
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
-  FlowerTargetDescriptor,
   FlowerAttachmentUploadInput,
   FlowerAttachmentCapability,
   FlowerAttachmentStagingScope,
@@ -859,7 +858,6 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     setComputerViewer: async (input) => { await runtimeJSON(bridge, 'PUT', '/_redeven_proxy/api/ai/computer/view', input); },
     computerManagement: computerManagementAdapter((method, path, body) => runtimeJSON(bridge, method, path, body)),
-    connectComputerBrowser: async (connection): Promise<FlowerTargetDescriptor> => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/computer/connect', connection),
     saveModelProfile: async (draft) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
       return loadSettingsSnapshot(bridge);

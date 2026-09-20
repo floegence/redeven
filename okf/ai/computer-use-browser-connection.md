@@ -3,7 +3,7 @@ type: Product Interaction Contract
 title: Guided Chrome connection
 description: Prepare, install and confirm a same-host browser connection without exposing native-host configuration.
 tags: [ai, browser-use, chrome, onboarding]
-timestamp: 2026-09-19T00:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 # Summary
 
@@ -80,15 +80,17 @@ cannot open Chrome on the client machine. Safari and other browsers are not
 supported by this extension connection. Native open actions accept only a fixed
 enum, never caller-supplied URLs, paths, arguments or sandbox overrides. Managed
 Chromium also launches with its sandbox enabled. Managed profiles are identified
-as **Flower managed browser**; Default is not the OS default browser.
+as **Flower dedicated browser**; Default is not the OS default browser.
 
-Connection management can add another profile while existing profiles remain
-connected. Only new verified profile identities complete that guide. Conversation
+The shared [environment settings dialog](computer-use-environment-settings.md)
+can add another profile while existing profiles remain
+connected. Only new verified profile identities complete that guide, returning
+to Chrome management without selecting a page or changing conversation grants. Conversation
 assistance may reuse already connected profiles and resume immediately. Genuine
 profile ambiguity remains the Agent's responsibility through existing discovery.
 The extension's optional profile label is user content, not routing authority.
 
-Runtime Service epoch 27 pairs the connection status snapshot with both product
+Runtime Service epoch 28 pairs the connection status snapshot with both product
 carriers. `extension/status` contains live profiles, an optional failure reason
 and optional `prepared` presentation hint. Older carriers safely ignore the hint;
 new carriers retain installation guidance when it is absent. Native Messaging

@@ -28,6 +28,7 @@ type TargetDescriptor struct {
 	DisplayName     string   `json:"display_name"`
 	Locality        string   `json:"locality"`
 	State           string   `json:"state,omitempty"`
+	Reason          string   `json:"reason,omitempty"`
 	Capabilities    []string `json:"capabilities,omitempty"`
 	Ready           bool     `json:"ready"`
 	PermissionState string   `json:"permission_state,omitempty"`
