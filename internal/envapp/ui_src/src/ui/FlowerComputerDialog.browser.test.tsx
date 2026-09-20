@@ -8,6 +8,7 @@ import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core'
 import { FlowerComputerConnections } from '../../../../flower_ui/src/FlowerComputerConnections';
 import zhCN from './i18n/locales/catalogs/zh-CN.json';
 import deDE from './i18n/locales/catalogs/de-DE.json';
+import ruRU from './i18n/locales/catalogs/ru-RU.json';
 import zhTW from './i18n/locales/catalogs/zh-TW.json';
 import { computerUseEnUS as copy, type FlowerComputerCopy } from '../../../../flower_ui/src/computerUseCopy';
 import type { FlowerComputerAccess, FlowerComputerEnvironment } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -20,6 +21,11 @@ const waitFor = async (predicate: () => boolean) => {
 const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === text)!;
 const radios = () => [...document.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
 const environment: FlowerComputerEnvironment = { hostname: 'Work Mac', platform: 'darwin', managed: { state: 'on_demand' }, desktop: { state: 'permission_required', reason: 'screen_recording_required' }, chrome: { profiles: [] } };
+const manyTargets = () => [
+  { candidate_ref: 'new', target_id: '', kind: 'browser.connected', display_name: 'Chrome', profile_name: 'Chrome', new_tab: true, state: 'ready' },
+  ...Array.from({ length: 40 }, (_, index) => ({ candidate_ref: `page-${index}`, target_id: `page-${index}`, kind: 'browser.connected', display_name: 'Chrome', profile_name: 'Chrome', title: ['DeepSeek', 'floegence/floebrowser', 'API console', 'Project dashboard'][index % 4], url: `https://example.test/workspace/project-${index}/overview`, state: index === 2 ? 'in_use' : 'ready' })),
+  { candidate_ref: 'notes', target_id: 'notes', kind: 'desktop.window', display_name: 'Notes — Project plan', app_bundle_id: 'com.apple.Notes', state: 'ready' },
+];
 function mount(options: { current?: string; fullAccess?: boolean; readonly?: boolean; connectionOnly?: boolean; copy?: FlowerComputerCopy; environment?: FlowerComputerEnvironment } = {}) {
   const management = {
     loadEnvironment: vi.fn().mockResolvedValue(options.environment ?? environment),
@@ -50,6 +56,92 @@ function mount(options: { current?: string; fullAccess?: boolean; readonly?: boo
 }
 async function ready() { await waitFor(() => !!button(copy.switchTarget) && !button(copy.switchTarget).disabled); }
 async function picker() { button(copy.switchTarget).click(); await waitFor(() => radios().length > 0 && !radios()[0].disabled); }
+
+it('keeps a long picker compact with search and confirmation outside the list scroll', async () => {
+  await page.viewport(1280, 900);
+  const { management } = mount({ current: 'page-0' });
+  management.listCandidates.mockResolvedValue({ current_target_id: 'page-0', candidates: manyTargets() });
+  await ready(); await picker();
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  await waitFor(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
+  expect(radios()).toHaveLength(42);
+  expect(dialog.getBoundingClientRect().height).toBeLessThanOrEqual(620);
+  const list = dialog.querySelector<HTMLElement>('[role="radiogroup"]')!;
+  expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+  const search = dialog.querySelector<HTMLInputElement>('input[type="search"]')!;
+  const searchTop = search.getBoundingClientRect().top;
+  const confirmTop = button(copy.confirmTarget).getBoundingClientRect().top;
+  list.scrollTop = list.scrollHeight;
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(search.getBoundingClientRect().top).toBe(searchTop);
+  expect(button(copy.confirmTarget).getBoundingClientRect().top).toBe(confirmTop);
+  expect(dialog.querySelector<HTMLElement>('.flower-computer-content')!.scrollTop).toBe(0);
+  radios().at(-1)!.click();
+  expect(management.selectCandidate).not.toHaveBeenCalled();
+  expect(button(copy.confirmTarget).disabled).toBe(false);
+});
+
+it('filters directly to applications, combines search, and preserves an explicit staged choice', async () => {
+  const { management } = mount({ current: 'page-0' });
+  management.listCandidates.mockResolvedValue({ current_target_id: 'page-0', candidates: manyTargets() });
+  await ready(); await picker();
+  const filters = [...document.querySelectorAll<HTMLButtonElement>('.flower-computer-picker-filters button')];
+  expect(filters.map(item => item.textContent)).toEqual([`${copy.allTargets}42`, `${copy.targetPages}41`, `${copy.targetApps}1`]);
+  filters[2].click();
+  expect(radios()).toHaveLength(1);
+  expect(radios()[0].value).toBe('notes');
+  radios()[0].focus(); await userEvent.keyboard(' ');
+  expect(document.querySelector('.flower-computer-picker-selection')?.textContent).toBe('Notes — Project plan');
+  filters[1].click();
+  expect(radios()).toHaveLength(41);
+  expect(radios().find(item => item.value === 'page-2')!.disabled).toBe(true);
+  expect(document.querySelector('.flower-computer-target-current')?.textContent).toBe(copy.currentTarget);
+  const search = document.querySelector<HTMLInputElement>('input[type="search"]')!;
+  search.value = 'project-39'; search.dispatchEvent(new Event('input', { bubbles: true }));
+  expect(radios()).toHaveLength(1);
+  expect(radios()[0].value).toBe('page-39');
+  filters[2].click();
+  expect(radios()).toHaveLength(0);
+  expect(document.body.textContent).toContain(copy.noMatchingTargets);
+  expect(management.selectCandidate).not.toHaveBeenCalled();
+  button(copy.confirmTarget).click();
+  await waitFor(() => management.selectCandidate.mock.calls.length === 1);
+  expect(management.selectCandidate).toHaveBeenCalledWith('thread', 'notes');
+});
+
+for (const [locale, labels, width, dark] of [['zh-CN', zhCN.flowerSurface.computer, 1280, false], ['zh-CN-dark', zhCN.flowerSurface.computer, 1280, true], ['de-DE-mobile', deDE.flowerSurface.computer, 390, false], ['ru-RU-mobile', ruRU.flowerSurface.computer, 390, false]] as const) {
+  it(`keeps dense target rows and fixed actions readable in ${locale}`, async () => {
+    await page.viewport(width, 800); document.documentElement.classList.toggle('dark', dark);
+    const { management } = mount({ copy: labels, current: 'page-0' });
+    management.listCandidates.mockResolvedValue({ current_target_id: 'page-0', candidates: manyTargets() });
+    await waitFor(() => !!button(labels.switchTarget) && !button(labels.switchTarget).disabled);
+    button(labels.switchTarget).click();
+    await waitFor(() => radios().length === 42 && !radios()[0].disabled);
+    radios()[2].click();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    await waitFor(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
+    expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+    const content = dialog.querySelector<HTMLElement>('.flower-computer-content')!;
+    expect(content.scrollHeight).toBeLessThanOrEqual(content.clientHeight + 1);
+    const filters = dialog.querySelector<HTMLElement>('.flower-computer-picker-filters')!;
+    expect(filters.scrollWidth).toBeLessThanOrEqual(filters.clientWidth + 1);
+    for (const filter of filters.querySelectorAll('button')) {
+      const [label, count] = filter.querySelectorAll('span');
+      expect(label.getBoundingClientRect().height).toBeLessThanOrEqual(20);
+      expect(count.getBoundingClientRect().left).toBeGreaterThan(label.getBoundingClientRect().right);
+      expect(Math.abs(count.getBoundingClientRect().top - label.getBoundingClientRect().top)).toBeLessThanOrEqual(3);
+    }
+    for (const row of dialog.querySelectorAll<HTMLElement>('.flower-computer-target')) {
+      expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+      expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(width === 390 ? 64 : 48);
+    }
+    const first = dialog.querySelector<HTMLElement>('.flower-computer-target')!;
+    expect(getComputedStyle(first).cursor).toBe('pointer');
+    expect(button(labels.confirmTarget).getBoundingClientRect().bottom).toBeLessThanOrEqual(800);
+    expect(button(labels.confirmTarget).disabled).toBe(false);
+    if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/compact-picker-${locale}.png` });
+  });
+}
 
 it('gives capability actions visible button boundaries before hover', async () => {
   mount(); await ready();

@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
-import { ArrowRightLeft, ChevronLeft, ChevronRight, Code, Globe, Info, MonitorPointer, Settings, Shield, Sparkles } from '@floegence/floe-webapp-core/icons';
+import { ArrowRightLeft, ChevronLeft, ChevronRight, Code, Globe, Info, MonitorPointer, Plus, Refresh, Search, Settings, Shield, Sparkles } from '@floegence/floe-webapp-core/icons';
 import type { FlowerComputerAccess, FlowerComputerCandidate, FlowerComputerEnvironment, FlowerComputerInventory, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import { FlowerManagedBrowser } from './FlowerManagedBrowser';
@@ -22,6 +22,7 @@ export function FlowerComputerConnections(props: {
   const [access, setAccess] = createSignal<FlowerComputerAccess>();
   const [profiles, setProfiles] = createSignal<readonly Readonly<{ id: string; name: string }>[]>([]);
   const [query, setQuery] = createSignal('');
+  const [targetFilter, setTargetFilter] = createSignal<'all' | 'browser' | 'app'>('all');
   const [draft, setDraft] = createSignal('');
   const [origin, setOrigin] = createSignal('');
   const [profileName, setProfileName] = createSignal('');
@@ -34,6 +35,7 @@ export function FlowerComputerConnections(props: {
   const [error, setError] = createSignal('');
   const [saved, setSaved] = createSignal(false);
   let generation = 0;
+  let targetList: HTMLDivElement | undefined;
   onCleanup(() => { generation++; });
   const management = () => props.adapter.computerManagement;
   const readable = () => !loading() && !busy();
@@ -53,13 +55,22 @@ export function FlowerComputerConnections(props: {
     ? environment()?.managed.state ?? 'unknown' : target.state;
   const canSelect = (target: FlowerComputerCandidate) => !inventoryFailed() && (candidateState(target) === 'ready'
     || (target.kind === 'xvfb.desktop' && target.state === 'stopped' && environment()?.desktop.state === 'on_demand'));
-  const filteredTargets = (browser: boolean) => targets().filter(target => target.kind.startsWith('browser.') === browser
-    && `${target.display_name} ${target.title ?? ''} ${target.url ?? ''} ${target.profile_name ?? ''}`.toLocaleLowerCase().includes(query().trim().toLocaleLowerCase()));
+  const matchingTargets = createMemo(() => targets().filter(target =>
+    `${target.display_name} ${target.title ?? ''} ${target.url ?? ''} ${target.profile_name ?? ''}`.toLocaleLowerCase().includes(query().trim().toLocaleLowerCase())));
+  const targetCount = (filter: 'all' | 'browser' | 'app') => matchingTargets().filter(target => filter === 'all' || target.kind.startsWith('browser.') === (filter === 'browser')).length;
+  const filteredTargets = (browser: boolean) => matchingTargets().filter(target => target.kind.startsWith('browser.') === browser
+    && (targetFilter() === 'all' || (targetFilter() === 'browser') === browser));
+  const pickerLabel = (target: FlowerComputerCandidate) => target.new_tab ? props.copy.newTab : targetLabel(target);
+  const pickerDetail = (target: FlowerComputerCandidate) => {
+    if (target.url) return [target.profile_name, target.url.replace(/^https?:\/\//, '').replace(/\/$/, '')].filter(Boolean).join(' · ');
+    return target.profile_name || (target.kind === 'browser.managed' ? props.copy.managed : target.display_name);
+  };
+  createEffect(on([query, targetFilter], () => { if (targetList) targetList.scrollTop = 0; }, { defer: true }));
   const currentLabel = () => inventoryFailed() || !inventory() ? props.copy.unknown : current() ? targetLabel(current()!) : inventory()!.current_target_id ? props.copy.currentMissing : props.copy.automatic;
   const currentHint = () => inventoryFailed() || !inventory() ? props.copy.loadFailed : current()
     ? [current()!.profile_name, current()!.url, stateLabel(current()!.state)].filter(Boolean).join(' · ')
     : inventory()!.current_target_id ? props.copy.currentMissingHint : props.copy.automaticHint;
-  const go = (next: Page) => { setPage(next); setError(''); setSaved(false); setDraft(''); setQuery(''); };
+  const go = (next: Page) => { setPage(next); setError(''); setSaved(false); setDraft(''); setQuery(''); setTargetFilter('all'); };
   const run = async (action: (epoch: number) => Promise<void>, failure: string, readOnly = false) => {
     if (!(readOnly ? readable() : mutable())) return;
     const epoch = generation; setBusy(true); setError(''); setSaved(false);
@@ -86,7 +97,7 @@ export function FlowerComputerConnections(props: {
   };
   createEffect(on(() => [props.open, props.threadID, props.connectionOnly, props.installationOnly] as const, ([open]) => {
     generation++; setPage(props.installationOnly ? 'managed' : 'overview'); setInventory(undefined); setEnvironment(undefined); setAccess(undefined);
-    setProfiles([]); setError(''); setSaved(false); setDraft(''); setQuery(''); setOrigin(''); setProfileName(''); setEndpoint(''); setBusy(false);
+    setProfiles([]); setError(''); setSaved(false); setDraft(''); setQuery(''); setTargetFilter('all'); setOrigin(''); setProfileName(''); setEndpoint(''); setBusy(false);
     setInventoryFailed(false); setEnvironmentFailed(false);
     if (open && !props.connectionOnly) void load(); else setLoading(false);
   }));
@@ -153,22 +164,25 @@ export function FlowerComputerConnections(props: {
   const missingTarget = () => !loading() && !inventoryFailed() && !!inventory()?.current_target_id && !current();
   return <Dialog open={props.open} onOpenChange={props.onOpenChange}
     title={<span class="flower-computer-title"><MonitorPointer aria-hidden="true" />{title()}</span>}
-    closeLabel={props.copy.close} class={props.connectionOnly ? 'flower-computer-dialog w-[min(30rem,94vw)] max-w-[30rem]' : 'flower-computer-dialog w-[min(48rem,94vw)] max-w-[48rem]'}
-    contentClass="flower-computer-content"
-    footer={props.connectionOnly ? undefined : <div class="flower-computer-footer">
+    closeLabel={props.copy.close} class={props.connectionOnly ? 'flower-computer-dialog w-[min(30rem,94vw)] max-w-[30rem]' : `flower-computer-dialog w-[min(48rem,94vw)] max-w-[48rem]${page() === 'targets' ? ' flower-computer-picker-dialog' : ''}`}
+    contentClass={`flower-computer-content${page() === 'targets' ? ' flower-computer-picker-content' : ''}`}
+    footer={props.connectionOnly ? undefined : <Show when={page() === 'targets'} fallback={<div class="flower-computer-footer">
       <Show when={page() === 'overview'} fallback={<Button variant="outline" disabled={busy()} onClick={() => go('overview')}><ChevronLeft class="size-3.5" />{props.copy.back}</Button>}>
         <Show when={props.threadID}><Button variant="outline" disabled={!readable()} onClick={openAccess}><Shield class="size-3.5" />{props.permissionLabel || (props.fullAccess ? props.copy.fullAccessTitle : props.copy.permissions)}<ChevronRight class="size-3.5" /></Button></Show>
       </Show>
       <div class="flex flex-wrap gap-2">
-        <Show when={page() === 'targets'}><Button size="sm" variant="outline" disabled={busy()} onClick={() => go('overview')}>{props.copy.cancel}</Button><Button size="sm" disabled={!mutable() || !selected() || !canSelect(selected()!)} onClick={() => void select()}>{props.copy.confirmTarget}</Button></Show>
         <Show when={page() === 'access' && !props.fullAccess}><Button size="sm" disabled={!mutable() || !access()} onClick={() => { const value = access(); if (value) void saveAccess(value); }}>{props.copy.save}</Button></Show>
-        <Show when={page() !== 'targets'}><Button variant="outline" onClick={() => props.onOpenChange(false)}>{props.copy.close}</Button></Show>
+        <Button variant="outline" onClick={() => props.onOpenChange(false)}>{props.copy.close}</Button>
       </div>
-    </div>}>
+    </div>}><div class="flower-computer-footer flower-computer-picker-footer">
+      <Button variant="outline" disabled={busy()} onClick={() => go('overview')}>{props.copy.cancel}</Button>
+      <span class="flower-computer-picker-selection" title={selected() ? targetLabel(selected()!) : undefined}>{selected() ? pickerLabel(selected()!) : props.copy.scope}</span>
+      <Button variant="primary" disabled={!mutable() || !selected() || !canSelect(selected()!)} onClick={() => void select()}>{props.copy.confirmTarget}</Button>
+    </div></Show>}>
     <Show when={!props.connectionOnly} fallback={<Show when={management()?.loadExtensionStatus && management()?.setupExtension && management()?.openExtension && props.adapter.canMutate !== false} fallback={<p role="alert">{props.copy.setupRequired}</p>}>
       <Show when={guideKey()} keyed>{_key => <FlowerChromeConnection reuseConnected management={management()!} copy={props.copy} onConnected={async () => { await props.onContinue?.(); }} />}</Show>
     </Show>}>
-      <div class="flower-computer-panel space-y-5 text-sm" data-flower-computer-panel={page()} aria-busy={loading() || busy()}>
+      <div class={`flower-computer-panel text-sm${page() === 'targets' ? ' flower-computer-picker' : ' space-y-5'}`} data-flower-computer-panel={page()} aria-busy={loading() || busy()}>
         <div class="flower-computer-environment"><span>{props.copy.environmentTitle}</span><span class="flower-computer-host"><MonitorPointer aria-hidden="true" />{environment()?.hostname || props.adapter.runtime.display_name}</span><Show when={environment()?.platform}><span class="flower-computer-platform">{environment()!.platform === 'darwin' ? 'macOS' : environment()!.platform === 'linux' ? 'Linux' : environment()!.platform}</span></Show></div>
         <Show when={page() === 'overview'}>
           <Show when={props.threadID} fallback={<p class="text-xs text-muted-foreground">{props.copy.noThread}</p>}>
@@ -213,19 +227,28 @@ export function FlowerComputerConnections(props: {
           <div class="flower-computer-utilities"><Button variant="outline" onClick={() => go('help')}><Info class="size-3.5" />{props.copy.help}<ChevronRight class="size-3.5" /></Button><Button variant="outline" disabled={!mutable() || !props.threadID || !management()?.discoverBrowser} onClick={() => go('advanced')}><Code class="size-3.5" />{props.copy.advanced}<ChevronRight class="size-3.5" /></Button></div>
         </Show>
         <Show when={page() === 'targets'}>
-          <p class="text-xs text-muted-foreground">{props.copy.selectionScope}</p>
-          <input type="search" class="flower-settings-text-input w-full" aria-label={props.copy.searchTargets} placeholder={props.copy.searchTargets} value={query()} onInput={event => setQuery(event.currentTarget.value)} />
-          <div class="space-y-4" role="radiogroup" aria-label={props.copy.switchTarget}>
-            <For each={[true, false]}>{browser => <Show when={filteredTargets(browser).length}><section class="space-y-2"><h3 class="text-xs font-medium text-muted-foreground">{browser ? props.copy.browserPages : props.copy.applicationWindows}</h3>
-              <For each={filteredTargets(browser)}>{target => <label class="flower-computer-target flex cursor-pointer items-start gap-3 rounded-md border border-border p-3 has-[:disabled]:cursor-not-allowed">
-                <input type="radio" name="flower-computer-target" class="mt-1 cursor-pointer disabled:cursor-not-allowed" value={target.candidate_ref} checked={draft() === target.candidate_ref} disabled={!mutable() || !canSelect(target)} onChange={() => setDraft(target.candidate_ref)} />
-                <span class="min-w-0 flex-1"><span class="block break-words text-sm">{targetLabel(target)}</span><span class="mt-1 block break-all text-xs text-muted-foreground">{[target.profile_name, target.url, stateLabel(candidateState(target))].filter(Boolean).join(' · ')}</span></span>
+          <div class="flower-computer-picker-toolbar">
+            <div class="flower-computer-picker-search-row">
+              <label class="flower-computer-picker-search" data-floe-input-surface><Search aria-hidden="true" /><input type="search" aria-label={props.copy.searchTargets} placeholder={props.copy.searchTargets} value={query()} onInput={event => setQuery(event.currentTarget.value)} /></label>
+              <Button variant="outline" disabled={!readable()} title={props.copy.refresh} aria-label={props.copy.refresh} onClick={() => { setDraft(''); void load(); }}><Refresh aria-hidden="true" /><span>{props.copy.refresh}</span></Button>
+            </div>
+            <div class="flower-computer-picker-filters" role="group" aria-label={props.copy.target}>
+              <For each={['all', 'browser', 'app'] as const}>{filter => <Button variant="ghost" aria-pressed={targetFilter() === filter} onClick={() => setTargetFilter(filter)}><span>{filter === 'all' ? props.copy.allTargets : filter === 'browser' ? props.copy.targetPages : props.copy.targetApps}</span><span class="flower-computer-picker-count">{targetCount(filter)}</span></Button>}</For>
+            </div>
+          </div>
+          <div ref={targetList} class="flower-computer-picker-list" role="radiogroup" aria-label={props.copy.switchTarget}>
+            <For each={[true, false]}>{browser => <Show when={filteredTargets(browser).length}><section class="flower-computer-picker-group"><Show when={targetFilter() === 'all'}><h3>{browser ? props.copy.browserPages : props.copy.applicationWindows}</h3></Show>
+              <For each={filteredTargets(browser)}>{target => <label class="flower-computer-target" title={[targetLabel(target), target.profile_name, target.url].filter(Boolean).join('\n')}>
+                <span class="flower-computer-target-icon" aria-hidden="true"><Show when={target.new_tab} fallback={<Show when={browser} fallback={<MonitorPointer />}><Globe /></Show>}><Plus /></Show></span>
+                <span class="flower-computer-target-text"><span class="flower-computer-target-name">{pickerLabel(target)}</span><Show when={candidateState(target) !== 'ready' || pickerDetail(target) !== pickerLabel(target)}><span class="flower-computer-target-detail" data-unavailable={candidateState(target) !== 'ready'}>{candidateState(target) !== 'ready' ? stateLabel(candidateState(target)) : pickerDetail(target)}</span></Show></span>
+                <Show when={target.target_id && target.target_id === inventory()?.current_target_id}><span class="flower-computer-target-current">{props.copy.currentTarget}</span></Show>
+                <input type="radio" name="flower-computer-target" value={target.candidate_ref} checked={draft() === target.candidate_ref} disabled={!mutable() || !canSelect(target)} onChange={() => setDraft(target.candidate_ref)} />
               </label>}</For>
             </section></Show>}</For>
+            <Show when={!filteredTargets(true).length && !filteredTargets(false).length}><p class="flower-computer-picker-empty">{loading() ? props.copy.checking : targets().length ? props.copy.noMatchingTargets : props.copy.noTargets}</p></Show>
           </div>
           <Show when={inventoryFailed()}><p role="alert" class="text-xs text-destructive">{props.copy.loadFailed}</p></Show>
-          <Show when={!filteredTargets(true).length && !filteredTargets(false).length}><p class="text-xs text-muted-foreground">{props.copy.noTargets}</p></Show>
-          <Button variant="outline" disabled={!mutable()} onClick={() => { setDraft(''); void load(); }}>{props.copy.refresh}</Button>
+          <p class="flower-computer-picker-hint">{props.copy.selectionScope}</p>
         </Show>
         <Show when={page() === 'managed'}>
           <Show when={management()?.loadBrowserInstallation}><FlowerManagedBrowser management={management()!} copy={props.copy} canMutate={props.adapter.canMutate !== false} onChange={() => void load()} onContinue={props.installationOnly ? props.onContinue : undefined} /></Show>

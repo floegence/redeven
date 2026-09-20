@@ -50,7 +50,15 @@ state owner. Shared Floe buttons retain their keyboard and disabled behavior;
 product layout uses theme tokens in both light and dark appearances.
 
 Target selection follows the single
-[target selection contract](computer-use-target-selection.md). Per-resource grants
+[target selection contract](computer-use-target-selection.md). Its bounded dialog
+keeps environment identity, search, category filters and confirmation visible;
+only the compact resource list scrolls. Page and app filters show matching counts
+and combine with title, URL and profile search. Rows keep titles and addresses
+on separate truncated lines, with full identity available in the row title.
+The current conversation target is labeled separately from the staged radio
+selection. Only exceptional availability needs a status label. Filtering retains
+the staged choice and names it beside confirmation; cancel discards it without
+binding anything. Per-resource grants
 are edited on a separate conversation-permissions page. Full access hides
 redundant grant controls and never implies installed components or OS permission.
 Changing approval mode returns to the existing composer editor; settings do not
