@@ -181,6 +181,7 @@ describe('redevenWorkbenchWidgets default geometry', () => {
       'redeven.files': { width: 1200, height: 800 },
       'redeven.terminal': { width: 1120, height: 780 },
       'redeven.preview': { width: 1080, height: 700 },
+      'redeven.git-diff': { width: 1080, height: 700 },
       'redeven.plugin': { width: 1120, height: 760 },
       'redeven.monitor': { width: 1040, height: 800 },
       'redeven.codespaces': { width: 1040, height: 660 },

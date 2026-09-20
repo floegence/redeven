@@ -85,7 +85,6 @@ import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace, type FileBrowserPathSubmitResult } from './FileBrowserWorkspace';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
-import { GitDiffDialog } from './GitDiffDialog';
 import { GitStashWindow } from './GitStashWindow';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { ArchiveExtractionDialog, type ArchiveExtractionRequest } from './ArchiveExtractionDialog';
@@ -102,7 +101,6 @@ import {
   findGitBranchByKey,
   findWorkspaceChangeByKey,
   findWorkspaceChangeByKeyInItems,
-  changeSecondaryPath,
   exactGitPath,
   isGitWorkspaceDirectoryEntry,
   isGitWorkspaceSection,
@@ -715,8 +713,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [filesGitDecorationIndex, setFilesGitDecorationIndex] = createSignal<FileBrowserGitDecorationIndex | null>(null);
   const [gitCapabilityMode, setGitCapabilityMode] = createSignal<GitCapabilityMode>('unknown');
   const decoratedFiles = createMemo(() => applyFileBrowserGitDecorations(files(), filesGitDecorationIndex()));
-  const [filesGitDiffDialogOpen, setFilesGitDiffDialogOpen] = createSignal(false);
-  const [filesGitDiffDialogItem, setFilesGitDiffDialogItem] = createSignal<GitWorkspaceChange | null>(null);
   const [directoryView, setDirectoryView] = createSignal<DirectoryViewState>({
     activePath: '',
     snapshotReady: false,
@@ -1598,16 +1594,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       ? findWorkspaceChangeByKeyInItems(gitWorkspaceVisibleItems('changes'), selectedGitWorkspaceKey())
       : findWorkspaceChangeByKey(gitWorkspace(), selectedGitWorkspaceKey())
   );
-  const filesGitDiffDialogSource = createMemo(() => {
-    const item = filesGitDiffDialogItem();
-    const repoRootPath = exactGitPath(filesGitDecorationIndex()?.repoRootPath ?? repoInfo()?.repoRootPath);
-    if (!item || !repoRootPath || !isGitWorkspaceSection(item.section)) return null;
-    return {
-      kind: 'workspace' as const,
-      repoRootPath,
-      workspaceSection: item.section,
-    };
-  });
   const activeStashRepoRootPath = () => exactGitPath(stashWindowContext()?.repoRootPath);
   const activeStashSource = () => stashWindowContext()?.source ?? 'header';
   const selectedStashSummary = createMemo<GitStashSummary | GitStashDetail | null>(() => {
@@ -5290,8 +5276,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const openFilesGitDiff = (change: GitWorkspaceChange | null | undefined) => {
     if (!change || !isFilesGitDiffableChange(change)) return;
-    setFilesGitDiffDialogItem(change);
-    setFilesGitDiffDialogOpen(true);
+    const repoRootPath = exactGitPath(filesGitDecorationIndex()?.repoRootPath ?? repoInfo()?.repoRootPath);
+    if (!repoRootPath || !isGitWorkspaceSection(change.section)) return;
+    ctx.openFileDiff({
+      repoRootPath, workspaceSection: change.section,
+      path: change.path, oldPath: change.oldPath, newPath: change.newPath, changeType: change.changeType,
+    });
   };
 
   const resolveFilesGitDirectoryTarget = (
@@ -5991,20 +5981,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         )}
         onComplete={handleArchiveExtractionComplete}
         onClose={() => setArchiveExtractionRequest(null)}
-      />
-
-      <GitDiffDialog
-        open={filesGitDiffDialogOpen()}
-        onOpenChange={(open) => {
-          setFilesGitDiffDialogOpen(open);
-          if (!open) setFilesGitDiffDialogItem(null);
-        }}
-        item={filesGitDiffDialogItem()}
-        source={filesGitDiffDialogSource()}
-        title={i18n.t('git.changes.workspaceDiffTitle')}
-        description={filesGitDiffDialogItem() ? changeSecondaryPath(filesGitDiffDialogItem()) : i18n.t('git.changes.workspaceDiffDescription')}
-        emptyMessage={i18n.t('git.changes.workspaceDiffEmpty')}
-        desktopFloatingWindow
       />
 
       <GitStashWindow

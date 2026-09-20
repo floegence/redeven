@@ -10,7 +10,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
-import { FileText } from '@floegence/floe-webapp-core/icons';
+import { FileText, Refresh } from '@floegence/floe-webapp-core/icons';
 import {
   useRedevenRpc,
   type GitCommitDiffPresentation,
@@ -134,6 +134,7 @@ const gitDiffModeButtonClass =
 export interface GitDiffPanelProps {
   open: boolean;
   loading?: boolean;
+  refreshKey?: number;
   item: GitDiffDialogItem | null | undefined;
   source?: GitDiffDialogSource | null;
   emptyMessage: string;
@@ -372,7 +373,7 @@ function createReadyGitDiffDialogLoadSlot(
   return createGitDiffDialogLoadSlot(
     selectionKey,
     requestKey,
-    item ? "ready" : "idle",
+    "ready",
     item,
     null,
     presentation ?? null,
@@ -398,6 +399,7 @@ function createErrorGitDiffDialogLoadSlot(
 export function GitDiffPanel(props: GitDiffPanelProps) {
   const i18n = useI18n();
   const rpc = useRedevenRpc();
+  const [refreshRevision, setRefreshRevision] = createSignal(0);
   // The mode is a browsing preference for this inspection surface. Keep it
   // while the selected file changes so a reviewer can scan every file in the
   // same context without repeating the control selection.
@@ -416,6 +418,8 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
   // A new file summary is a fresh workspace snapshot, even at the same path.
   const selectionRevision = createMemo((revision: number) => {
     void props.item;
+    void props.refreshKey;
+    refreshRevision();
     return revision + 1;
   }, 0);
 
@@ -437,7 +441,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
       fullRequestKey: diffRequestKey(fullRequest),
       previewRequest,
       fullRequest,
-      seededPreviewItem: seedGitDiffContent(props.item),
+      seededPreviewItem: refreshRevision() === 0 ? seedGitDiffContent(props.item) : null,
       unavailableItem: createUnavailableDiffItem(props.item),
       directoryUnavailableItem,
       commitPresentation:
@@ -486,6 +490,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
         message: i18n.t('gitDiff.directoryUnavailable'),
       };
     }
+    if (previewSlotMatchesSelection() && preview.phase === "ready" && !preview.item) return { kind: "empty" };
     const readyItem = previewSlotMatchesSelection()
       ? preview.item ?? session.seededPreviewItem
       : session.seededPreviewItem;
@@ -536,6 +541,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
         message: i18n.t('gitDiff.directoryUnavailable'),
       };
     }
+    if (fullSlotMatchesSelection() && full.phase === "ready" && !full.item) return { kind: "empty" };
     if (fullSlotMatchesSelection() && full.item) {
       return {
         kind: "ready",
@@ -891,6 +897,14 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
             </button>
           </div>
         </Show>
+        <Show when={props.source && props.item}>
+          <button type="button" class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            title={i18n.t('gitDiff.refresh')} aria-label={i18n.t('gitDiff.refresh')}
+            disabled={props.loading || activeBodyState().kind === 'loading' || fullContextLoading()}
+            onClick={() => setRefreshRevision((revision) => revision + 1)}>
+            <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </Show>
       </div>
       <Show when={commitPresentationBadge() || commitPresentationDetail()}>
         <div class="flex shrink-0 flex-wrap items-center gap-2 border-b px-2.5 py-1 text-[11px] text-muted-foreground">
@@ -908,7 +922,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
             <GitStatePane
               tone="error"
               message={activeErrorState()?.message}
-              detail={activeErrorState()?.detail}
+              detail={activeErrorState()?.detail ?? i18n.t('gitDiff.unavailableDetail')}
               surface
               class="min-h-0 flex-1"
             />

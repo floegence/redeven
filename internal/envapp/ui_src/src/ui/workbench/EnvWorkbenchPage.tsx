@@ -1,3 +1,4 @@
+import { useNotification } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import {
   createDefaultWorkbenchState,
@@ -43,6 +44,7 @@ import {
   deleteWorkbenchTerminalSession,
   getWorkbenchLayoutSnapshot,
   openWorkbenchPreview,
+  openWorkbenchGitDiff,
   openWorkbenchPlugin,
   putWorkbenchLayout,
   putWorkbenchWidgetState,
@@ -715,6 +717,7 @@ export type EnvWorkbenchPageProps = Readonly<{
 }>;
 
 export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
+  const notify = useNotification();
   const env = useEnvContext();
   const protocol = useProtocol();
   const terminalCatalog = useTerminalSessionCatalog();
@@ -1324,7 +1327,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
       return item;
     };
     const localizedContextItems = context.items.flatMap((item) => (
-      workbenchWidgetTypeFromMenuID(item.id, 'add') === 'redeven.plugin'
+      ['redeven.plugin', 'redeven.git-diff'].includes(workbenchWidgetTypeFromMenuID(item.id, 'add') ?? '')
         ? []
         : [localizeWorkbenchMenuItem(item)]
     ));
@@ -2141,6 +2144,39 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     });
   });
 
+  createEffect(() => {
+    const request = env.workbenchGitDiffActivation();
+    const api = surfaceApi();
+    if (!request || !api || !runtimeLayoutReady()) return;
+    env.consumeWorkbenchGitDiffActivation(request.requestId);
+    untrack(() => {
+      const stateBefore = workbenchState();
+      const frame = resolveCanvasFrameSize();
+      const center = resolveViewportWorldCenter(stateBefore.viewport, frame);
+      const generation = runtimeLayoutGeneration;
+      const definition = redevenWorkbenchWidgets.find((entry) => entry.type === 'redeven.git-diff')!;
+      void openWorkbenchGitDiff({ diff: request.target, viewport: {
+        ...(center ? { center_x: center.x, center_y: center.y } : {}),
+        default_width: definition.defaultSize.width, default_height: definition.defaultSize.height,
+      } }).then((result) => {
+        if (generation !== runtimeLayoutGeneration) return;
+        const base = runtimeSnapshot();
+        applySnapshotPreservingEdits(result.snapshot, {
+          ...base, widgets: workbenchState().widgets.some((widget) => widget.id === result.widget_id)
+            ? base.widgets : base.widgets.filter((widget) => widget.widget_id !== result.widget_id),
+        });
+        const widget = api.findWidgetById(result.widget_id);
+        if (widget) api.focusWidget(widget, { centerViewport: resolveWorkbenchActivationViewportPolicy({
+          created: result.created,
+          visibleBeforeActivation: !result.created && isWorkbenchWidgetProjectedVisible(widget, stateBefore.viewport, frame),
+          requestedEnsureVisible: true, requestedCenterViewport: undefined, hasAnchorPoint: false,
+        }) === 'center' });
+      }).catch(() => {
+        if (generation === runtimeLayoutGeneration) notify.error(i18n.t('gitDiff.title'), i18n.t('gitDiff.failedPatch'));
+      });
+    });
+  });
+
   const updateWidgetTitle = (widgetId: string, title: string) => {
     const normalizedWidgetId = compact(widgetId);
     const normalizedTitle = compact(title);
@@ -2775,6 +2811,10 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
         current_path: normalizedPath,
         ...(normalizedRootId ? { root_id: normalizedRootId } : {}),
       });
+    },
+    gitDiffTarget: (widgetId) => {
+      const state = runtimeSnapshot().widget_states.find((entry) => entry.widget_id === widgetId);
+      return state?.state.kind === 'git_diff' ? state.state.diff : null;
     },
     previewItem: (widgetId) => {
       const normalizedWidgetId = compact(widgetId);

@@ -48,6 +48,22 @@ func (g *Server) handleWorkbenchLayoutAPI(w http.ResponseWriter, r *http.Request
 	}
 
 	switch {
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/workbench/actions/open_git_diff":
+		if _, ok := g.requirePermission(w, r, requiredPermissionWrite); !ok {
+			return true
+		}
+		var body workbenchlayout.OpenGitDiffRequest
+		if err := decodeWorkbenchLayoutJSON(r.Body, &body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return true
+		}
+		result, err := g.layouts.OpenGitDiff(r.Context(), body)
+		if err != nil {
+			writeWorkbenchLayoutError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+		return true
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/workbench/actions/open_plugin":
 		if _, ok := g.requirePermission(w, r, requiredPermissionWrite); !ok {
 			return true
@@ -154,6 +170,22 @@ func (g *Server) handleWorkbenchWidgetStateAPI(w http.ResponseWriter, r *http.Re
 	}
 
 	switch {
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/workbench/actions/open_git_diff":
+		if _, ok := g.requirePermission(w, r, requiredPermissionWrite); !ok {
+			return true
+		}
+		var body workbenchlayout.OpenGitDiffRequest
+		if err := decodeWorkbenchLayoutJSON(r.Body, &body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return true
+		}
+		result, err := g.layouts.OpenGitDiff(r.Context(), body)
+		if err != nil {
+			writeWorkbenchLayoutError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+		return true
 	case r.Method == http.MethodPut && tail == "state":
 		if _, ok := g.requirePermission(w, r, requiredPermissionWrite); !ok {
 			return true

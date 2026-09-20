@@ -144,6 +144,10 @@ export const enUS = defineDictionary({
     },
   },
   gitDiff: {
+    refresh: "Refresh diff",
+    empty: "No changes are available for this file in the selected diff.",
+    unavailableDetail: "The file, repository, or diff may no longer be available. Refresh to try again.",
+
     title: 'Diff',
     directoryUnavailable: 'Diff preview is unavailable for directory entries.',
     patchUnavailable: 'Patch preview is unavailable for this file.',

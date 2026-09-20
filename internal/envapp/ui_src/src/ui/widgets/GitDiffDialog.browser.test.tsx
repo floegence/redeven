@@ -40,7 +40,7 @@ afterEach(() => {
   localStorage.removeItem(floatingWindowStorageKey('git-diff-dialog'));
 });
 
-async function mount(floating: boolean, projected = false) {
+async function mount(floating: boolean) {
   const host = document.createElement('div');
   document.body.append(host);
   dispose = render(() => {
@@ -49,8 +49,7 @@ async function mount(floating: boolean, projected = false) {
     return <FloeConfigProvider><LayoutProvider><NotificationProvider>
       <button data-testid="background-action" style={{ position: 'fixed', left: '0', top: '0' }} onClick={() => setBackgroundClicks(count => count + 1)}>Background action</button>
       <output data-testid="background-count">{backgroundClicks()}</output>
-      <div data-testid="diff-owner" data-floe-dialog-surface-host={projected ? 'true' : undefined}
-        style={projected ? { width: '420px', height: '320px', transform: 'translate(24px, 16px) scale(0.7)' } : undefined}>
+      <div data-testid="diff-owner">
         <GitDiffDialog open={open()} onOpenChange={setOpen} title="Workspace Diff" description="sample.py"
           desktopFloatingWindow={floating} item={file}
           source={{ kind: 'workspace', repoRootPath: '/workspace/repo', workspaceSection: 'untracked' }}
@@ -123,15 +122,4 @@ describe('Git diff reading surfaces', () => {
     await expect.poll(() => document.querySelector('[data-floe-geometry-surface="floating-window"]')).toBeNull();
   });
 
-  it('keeps a diff launched from a transformed Files surface in the shared floating layer', async () => {
-    await page.viewport(1440, 900);
-    const { viewport, surface } = await mount(true, true);
-    const windowRoot = surface.closest<HTMLElement>('[data-floe-geometry-surface="floating-window"]')!;
-    expect(windowRoot).not.toBeNull();
-    expect(windowRoot.getAttribute('data-floe-local-interaction-surface')).toBe('true');
-    expect(document.querySelector('[data-testid="diff-owner"]')!.contains(windowRoot)).toBe(false);
-    expect(windowRoot.getBoundingClientRect().width).toBe(1100);
-    expectScrollableAndContained(viewport, surface);
-    await expandAndReachLastLine(viewport, surface);
-  });
 });

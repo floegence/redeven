@@ -108,7 +108,23 @@ export type RuntimeWorkbenchOpenPreviewRequest = Readonly<{
   viewport?: RuntimeWorkbenchOpenPreviewViewportHint;
 }>;
 
+export type RuntimeWorkbenchGitDiffTarget = Readonly<{
+  repoRootPath: string;
+  workspaceSection: 'staged' | 'unstaged' | 'untracked' | 'conflicted';
+  path?: string;
+  oldPath?: string;
+  newPath?: string;
+  changeType?: string;
+}>;
+
+export type RuntimeWorkbenchOpenGitDiffRequest = Readonly<{
+  diff: RuntimeWorkbenchGitDiffTarget;
+  viewport?: RuntimeWorkbenchOpenPreviewViewportHint;
+}>;
+export type RuntimeWorkbenchOpenGitDiffResponse = Omit<RuntimeWorkbenchOpenPreviewResponse, 'request_id'>;
+
 export type RuntimeWorkbenchWidgetStateData =
+  | Readonly<{ kind: 'git_diff'; diff: RuntimeWorkbenchGitDiffTarget }>
   | Readonly<{ kind: 'files'; current_path: string; root_id?: string }>
   | Readonly<{ kind: 'terminal'; session_ids: string[]; font_size?: number; font_family_id?: string }>
   | Readonly<{ kind: 'preview'; item: RuntimeWorkbenchPreviewItem | null }>
@@ -363,6 +379,23 @@ function normalizePreviewItem(value: unknown): RuntimeWorkbenchPreviewItem | nul
   };
 }
 
+function normalizeRuntimeWorkbenchGitDiffTarget(value: unknown): RuntimeWorkbenchGitDiffTarget | null {
+  if (!isRecord(value) || typeof value.repoRootPath !== 'string' || !value.repoRootPath.startsWith('/') || value.repoRootPath.includes('\0') || value.repoRootPath.length > 4096) return null;
+  if (!['staged', 'unstaged', 'untracked', 'conflicted'].includes(String(value.workspaceSection))) return null;
+  if (value.changeType != null && (typeof value.changeType !== 'string' || value.changeType.length > 32)) return null;
+  const paths = [value.path, value.oldPath, value.newPath];
+  if (!paths.some((path) => typeof path === 'string' && path.length > 0)) return null;
+  if (paths.some((path) => path != null && (typeof path !== 'string' || path.startsWith('/') || path.includes('\0') || path.split('/').includes('..') || path.length > 4096))) return null;
+  return {
+    repoRootPath: value.repoRootPath,
+    workspaceSection: value.workspaceSection as RuntimeWorkbenchGitDiffTarget['workspaceSection'],
+    ...(value.path ? { path: String(value.path) } : {}),
+    ...(value.oldPath ? { oldPath: String(value.oldPath) } : {}),
+    ...(value.newPath ? { newPath: String(value.newPath) } : {}),
+    ...(typeof value.changeType === 'string' ? { changeType: value.changeType } : {}),
+  };
+}
+
 function normalizeRuntimeWorkbenchWidgetStateData(
   widgetType: string,
   value: unknown,
@@ -371,6 +404,10 @@ function normalizeRuntimeWorkbenchWidgetStateData(
     return null;
   }
   const kind = compact(value.kind);
+  if (widgetType === 'redeven.git-diff' && kind === 'git_diff') {
+    const diff = normalizeRuntimeWorkbenchGitDiffTarget(value.diff);
+    return diff ? { kind: 'git_diff', diff } : null;
+  }
   if (widgetType === 'redeven.files' && (!kind || kind === 'files')) {
     const currentPath = normalizeAbsolutePath(value.current_path);
     const rootId = normalizeRootID(value.root_id);
@@ -866,6 +903,12 @@ export function runtimeWorkbenchWidgetStateDataEqual(
   right: RuntimeWorkbenchWidgetStateData,
 ): boolean {
   if (left.kind !== right.kind) return false;
+  if (left.kind === 'git_diff' && right.kind === 'git_diff') {
+    return left.diff.repoRootPath === right.diff.repoRootPath
+      && left.diff.workspaceSection === right.diff.workspaceSection
+      && left.diff.path === right.diff.path && left.diff.oldPath === right.diff.oldPath
+      && left.diff.newPath === right.diff.newPath && left.diff.changeType === right.diff.changeType;
+  }
   if (left.kind === 'files' && right.kind === 'files') {
     return left.current_path === right.current_path && (left.root_id ?? '') === (right.root_id ?? '');
   }

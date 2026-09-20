@@ -330,6 +330,9 @@
     "notificationTitle": "Flower"
   },
   "gitDiff": {
+    "refresh": "差分を更新",
+    "empty": "選択した差分には、このファイルの変更はありません。",
+    "unavailableDetail": "ファイル、リポジトリ、または差分が利用できなくなった可能性があります。更新して再試行してください。",
     "title": "差分",
     "directoryUnavailable": "フォルダーでは差分プレビューを利用できません。",
     "patchUnavailable": "このファイルではパッチプレビューを利用できません。",

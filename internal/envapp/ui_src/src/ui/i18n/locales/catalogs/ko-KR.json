@@ -330,6 +330,9 @@
     "notificationTitle": "Flower"
   },
   "gitDiff": {
+    "refresh": "차이 새로 고침",
+    "empty": "선택한 차이에 이 파일의 변경 사항이 없습니다.",
+    "unavailableDetail": "파일, 저장소 또는 차이를 더 이상 사용할 수 없을 수 있습니다. 새로 고침하여 다시 시도하세요.",
     "title": "차이",
     "directoryUnavailable": "폴더에서는 차이 미리보기를 사용할 수 없습니다.",
     "patchUnavailable": "이 파일에서는 패치 미리보기를 사용할 수 없습니다.",

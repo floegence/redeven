@@ -69,6 +69,7 @@ const layoutApiMocks = vi.hoisted(() => ({
   })),
   putWorkbenchWidgetState: vi.fn(),
   openWorkbenchPreview: vi.fn(),
+  openWorkbenchGitDiff: vi.fn(),
   openWorkbenchPlugin: vi.fn(),
   createWorkbenchTerminalSession: vi.fn(),
   deleteWorkbenchTerminalSession: vi.fn(),
@@ -148,6 +149,8 @@ vi.mock('../pages/EnvContext', () => ({
     workbenchOverviewEntry: () => null,
     workbenchSurfaceActivationSeq: () => envContextState.workbenchSurfaceActivationSeq,
     workbenchSurfaceActivation: () => envContextState.workbenchSurfaceActivation,
+    workbenchGitDiffActivation: () => null,
+    consumeWorkbenchGitDiffActivation: () => {},
     workbenchFilePreviewActivationSeq: () => 0,
     workbenchFilePreviewActivation: () => null,
     consumeWorkbenchOverviewEntry: vi.fn(),
@@ -185,6 +188,7 @@ vi.mock('../services/workbenchLayoutApi', () => ({
   putWorkbenchLayout: layoutApiMocks.putWorkbenchLayout,
   putWorkbenchWidgetState: layoutApiMocks.putWorkbenchWidgetState,
   openWorkbenchPreview: layoutApiMocks.openWorkbenchPreview,
+  openWorkbenchGitDiff: layoutApiMocks.openWorkbenchGitDiff,
   openWorkbenchPlugin: layoutApiMocks.openWorkbenchPlugin,
   createWorkbenchTerminalSession: layoutApiMocks.createWorkbenchTerminalSession,
   deleteWorkbenchTerminalSession: layoutApiMocks.deleteWorkbenchTerminalSession,
@@ -586,3 +590,8 @@ describe('EnvWorkbenchPage click handoff', () => {
     expect(layoutApiMocks.putWorkbenchLayout).not.toHaveBeenCalled();
   });
 });
+
+vi.mock('@floegence/floe-webapp-core', async (original) => ({
+  ...(await original<typeof import('@floegence/floe-webapp-core')>()),
+  useNotification: () => ({ error: vi.fn() }),
+}));

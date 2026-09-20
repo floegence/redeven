@@ -16,9 +16,10 @@ excluded. Invalid or unavailable explicit boundaries close the menu. Files does
 not raise its global layer or duplicate Workbench coordinate conversion to make
 an obscured action reachable.
 
-Files diff inspection opens a nonmodal desktop window with a constrained patch
-viewport. Users can keep browsing files and reach the last diff line; mobile
-uses the shared small-screen modal presentation.
+Files diff inspection uses a nonmodal desktop Activity window, a normal saved
+Workbench canvas component, or the shared mobile modal. Every presentation has
+a constrained patch viewport, so users can reach the last diff line. Missing
+files or diffs keep a stable empty/error state with explicit refresh.
 
 # Contract
 
@@ -68,13 +69,29 @@ the current menu; the next trigger starts a fresh placement.
 
 ## Diff inspection
 
-View Diff opens the selected workspace change through `PreviewWindow` on
-desktop, reusing shared dragging, resizing, stacking, and geometry persistence.
-Opening the window does not block the Files workspace. Mobile retains the
-viewport-sized modal. Both presentations consume the same request, mode, and
-selection contracts as [Git diff inspection](git-browser-visual-states.md).
+Shell owns View Diff routing and captures the repository, workspace section,
+and exact old/new file paths at activation. Later Files navigation cannot retarget
+an existing inspection. Desktop Activity uses `PreviewWindow`; Workbench uses
+`redeven.git-diff` with the standard projected widget header, movement, resizing,
+selection, removal, and input ownership. Activity windows are hidden while
+Workbench is active. Mobile retains the viewport-sized modal. All presentations
+consume the same request, mode, and selection contracts as
+[Git diff inspection](git-browser-visual-states.md).
 
-The window or modal supplies a definite height and a shrinkable content body.
+Workbench atomically saves target identity and geometry through its runtime
+layout owner. Reopening the same repository, section, and paths focuses the
+existing component without replacing its geometry; a different section is a
+distinct target. Saved targets contain no patch snapshot. Restoration reads
+current Git content, even if the current filesystem path is absent: tracked
+deletions remain valid diffs. Untracked inspection verifies current Git section
+membership before synthesizing a no-index patch, so staging a file cannot leave
+a phantom untracked diff. Unavailable repositories/files/diffs keep their
+component and present a recoverable error; successful responses without a file
+settle as empty and never retain a loading overlay or obsolete patch. Refresh
+invalidates both patch and full-context requests, and late results cannot replace
+the refreshed selection.
+
+The window, canvas widget, or modal supplies a definite height and a shrinkable content body.
 The patch owns vertical scrolling, while the title, mode controls, and patch
 actions stay outside that viewport. The persistent horizontal scrollbar and
 Show All Lines action stay inside the visible surface. Expanding a long patch,
@@ -100,7 +117,10 @@ the common projected host and local interaction contract.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx` - Verifies the Files context action selects desktop floating presentation without preloading diff content.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx` - Verifies that Files passes a stable diff target to Shell in Activity and Workbench without preloading content.
+- `redeven:internal/gitrepo/diff_content_availability_test.go` - Checks disappeared changes, staged former untracked files, exact whitespace paths, and valid tracked deletions.
+- `redeven:internal/workbenchlayout/git_diff_widgets_test.go` - Verifies atomic placement, exact identity, geometry reuse, unavailable targets, and rollback.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchGitDiffWidget.browser.test.tsx` - Verifies projected scrolling, resizing, selection, removal, and unavailable-target recovery.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffDialog.browser.test.tsx` - Checks long-patch expansion, both scroll axes, modal and floating containment, background interaction, resizing, and closing.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserShared.test.ts` - Verifies root-node insertion, duplicate suppression, and loaded-parent requirements against the snapshot tree shape.

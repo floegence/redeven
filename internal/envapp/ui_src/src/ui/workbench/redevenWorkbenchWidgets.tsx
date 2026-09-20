@@ -17,6 +17,7 @@ import { hasRWXPermissions } from '../pages/aiPermissions';
 import { PluginSurfaceContainer } from '../plugins/PluginSurfaceContainer';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
 import { useWorkbenchPluginSurfaceContext } from './WorkbenchPluginSurfaceContext';
+import { WorkbenchGitDiffWidget } from './WorkbenchGitDiffWidget';
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from './surface/workbenchActionSurface';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from './surface/workbenchTextSelectionSurface';
@@ -285,6 +286,17 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
   {
+    type: 'redeven.git-diff',
+    label: 'Diff',
+    icon: Search,
+    body: WorkbenchGitDiffWidget,
+    defaultTitle: 'Diff',
+    defaultSize: { width: 1080, height: 700 },
+    group: 'workspace',
+    singleton: false,
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
+  },
+  {
     type: 'redeven.preview',
     label: 'Preview',
     icon: Search,
@@ -374,6 +386,8 @@ function localizedWorkbenchWidgetCopy(
       return { label: t('workbench.widgets.files.label'), defaultTitle: t('workbench.widgets.files.defaultTitle') };
     case 'redeven.terminal':
       return { label: t('workbench.widgets.terminal.label'), defaultTitle: t('workbench.widgets.terminal.defaultTitle') };
+    case 'redeven.git-diff':
+      return { label: t('gitDiff.title'), defaultTitle: t('gitDiff.title') };
     case 'redeven.preview':
       return { label: t('workbench.widgets.preview.label'), defaultTitle: t('workbench.widgets.preview.defaultTitle') };
     case 'redeven.plugin':
