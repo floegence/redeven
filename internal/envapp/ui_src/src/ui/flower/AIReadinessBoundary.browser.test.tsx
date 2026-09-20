@@ -69,15 +69,17 @@ function mountHarness(
   initial = blocked(),
   pending = false,
   retryResult?: Promise<AIReadinessSnapshot>,
+  options: Readonly<{ presentation?: 'full' | 'companion'; elapsedMs?: number }> = {},
 ): Readonly<{ host: HTMLElement; setSnapshot: (snapshot: AIReadinessSnapshot) => void }> {
   writeStoredLanguagePreference('en-US');
   const [snapshot, setSnapshot] = createSignal(initial);
   const [retryPending, setRetryPending] = createSignal(pending);
+  const startedAt = Date.now() - (options.elapsedMs ?? 0);
   const controller: AIReadinessController = {
     snapshot,
     loading: () => false,
     retryPending,
-    busyStartedAt: () => null,
+    busyStartedAt: () => options.elapsedMs === undefined ? null : startedAt,
     startupElapsedMs: () => null,
     longStartupReadySequence: () => 0,
     refresh: async () => snapshot(),
@@ -105,6 +107,7 @@ function mountHarness(
     <I18nProvider>
       <AIReadinessBoundary
         controller={controller}
+        presentation={options.presentation}
         onOpenUpdate={() => undefined}
         onOpenPermissions={() => undefined}
 	        onReviewIssues={() => undefined}
@@ -149,6 +152,8 @@ afterEach(async () => {
   while (disposers.length > 0) disposers.pop()?.();
   document.body.replaceChildren();
   document.documentElement.style.fontSize = '';
+  document.documentElement.classList.remove('dark');
+  delete document.documentElement.dataset.floeShellTheme;
   writeStoredLanguagePreference('en-US');
   await mediaCommands.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'no-preference' });
   await page.viewport(1280, 720);
@@ -235,10 +240,12 @@ describe('AIReadinessBoundary browser layout', () => {
   });
 
   it.each([
-    [blockedReason('', { state: 'inspecting' }), 'Checking Agent data'],
-    [blockedReason('', { state: 'optimizing' }), 'Preparing Agent data'],
-    [blockedReason('', { state: 'migrating' }), 'Safely updating Agent data'],
-    [blockedReason('', { state: 'verifying' }), 'Finishing the Agent data update'],
+    [blockedReason('', { state: 'backing_up' }), 'Backing up your conversations'],
+    [blockedReason('', { state: 'restoring' }), 'Restoring Flower'],
+    [blockedReason('', { state: 'inspecting' }), 'Getting Flower ready'],
+    [blockedReason('', { state: 'optimizing' }), 'Preparing your conversations'],
+    [blockedReason('', { state: 'migrating' }), 'Updating your conversations'],
+    [blockedReason('', { state: 'verifying' }), 'Checking the final details'],
   ] as const)('audits the %s busy phase without inventing progress', async (snapshot, title) => {
     await page.viewport(1280, 720);
     mount(snapshot);
@@ -247,6 +254,55 @@ describe('AIReadinessBoundary browser layout', () => {
     await expect.element(page.getByText(title, { exact: true })).toBeVisible();
     expect(document.body.textContent).not.toMatch(/\b\d+%/u);
     await expectAuditedVisualEvidence(1280, 720);
+  });
+
+  it.each(['light', 'dark'])('keeps backup progress legible and usable in a narrow %s companion', async (theme) => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    document.documentElement.dataset.floeShellTheme = `porcelain-${theme}`;
+    const { host } = mountHarness(blockedReason('', { state: 'backing_up' }), false, undefined, { presentation: 'companion', elapsedMs: 35_000 });
+    await sizeReadinessSurface(360, 640);
+    await expect.element(page.getByRole('heading', { name: 'Backing up your conversations' })).toBeVisible();
+    const surface = host.querySelector<HTMLElement>('.ai-readiness-surface')!;
+    expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
+    expect(host.querySelector('[data-ai-readiness-elapsed]')?.textContent).toContain('Elapsed:');
+    await page.getByRole('button', { name: 'Startup details', exact: true }).click();
+    await expect.element(page.getByRole('heading', { name: 'Startup details', exact: true })).toBeVisible();
+    expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
+    await expectAuditedVisualEvidence(360, 640);
+  });
+
+  it('keeps the illustration, progress, details, and keyboard focus stable while phases change', async () => {
+    const { host, setSnapshot } = mountHarness(blockedReason('', { state: 'inspecting' }));
+    await sizeReadinessSurface(1280, 720);
+    await page.getByRole('button', { name: 'Startup details', exact: true }).click();
+    const illustration = host.querySelector('.flower-readiness-art');
+    const progress = host.querySelector('[role="progressbar"]');
+    const details = host.querySelector('.ai-readiness-diagnostics');
+    const focused = document.activeElement;
+    for (const state of ['backing_up', 'migrating', 'verifying'] as const) {
+      setSnapshot(blockedReason('', { state }));
+      await settleFrames(1);
+      expect(host.querySelector('.flower-readiness-art')).toBe(illustration);
+      expect(host.querySelector('[role="progressbar"]')).toBe(progress);
+      expect(host.querySelector('.ai-readiness-diagnostics')).toBe(details);
+      expect(document.activeElement).toBe(focused);
+    }
+    expect(progress?.hasAttribute('aria-valuenow')).toBe(false);
+    expect(progress?.getAttribute('aria-label')).toBe('Checking the final details');
+  });
+
+  it('keeps busy content readable at 200% text and disables decorative motion when requested', async () => {
+    document.documentElement.style.fontSize = '200%';
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce', forcedColors: 'active' });
+    const { host } = mountHarness(blockedReason('', { state: 'backing_up' }));
+    await sizeReadinessSurface(320, 720);
+    await expect.element(page.getByRole('heading', { name: 'Backing up your conversations' })).toBeVisible();
+    const surface = host.querySelector<HTMLElement>('.ai-readiness-surface')!;
+    expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
+    for (const selector of ['.flower-readiness-art__bloom', '.ai-readiness-progress__track > span', '.ai-readiness-surface__inner']) {
+      expect(getComputedStyle(host.querySelector(selector)!).animationName).toBe('none');
+    }
+    await expectAuditedVisualEvidence(320, 720);
   });
 
   it('commits retry pending within the input turn and before the next animation frame', async () => {

@@ -266,7 +266,7 @@ describe('AIReadinessBoundary', () => {
       expect(fixture.host.textContent).not.toContain('Check again');
       expect(fixture.host.textContent).not.toContain('Cancel');
       expect(fixture.host.querySelector('.ai-readiness-status-icon--danger')).toBeNull();
-      buttonWithText(fixture.host, 'View diagnostics').click();
+      buttonWithText(fixture.host, 'Startup details').click();
       expect(fixture.host.querySelectorAll('.ai-readiness-diagnostics__row')).toHaveLength(4);
       fixture.dispose();
     } finally {
@@ -313,6 +313,27 @@ describe('AIReadinessBoundary', () => {
     }
   });
 
+  it('keeps the same visible surface and open details throughout busy phase transitions', async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = mount(snapshot('', { state: 'inspecting', retryable: false, safe_to_retry: false }));
+      await vi.advanceTimersByTimeAsync(150);
+      const surface = fixture.host.querySelector('.ai-readiness-surface');
+      buttonWithText(fixture.host, 'Startup details').click();
+      for (const state of ['backing_up', 'optimizing', 'migrating', 'verifying'] as const) {
+        fixture.setCurrent(snapshot('', { state, retryable: false, safe_to_retry: false }));
+        expect(fixture.host.querySelector('.ai-readiness-surface')).toBe(surface);
+        expect(fixture.host.querySelector('.ai-readiness-diagnostics')).not.toBeNull();
+        const progress = fixture.host.querySelector('[role="progressbar"]');
+        expect(progress?.getAttribute('aria-valuenow')).toBeNull();
+        expect(progress?.getAttribute('aria-label')).toBe(fixture.host.querySelector('h1')?.textContent);
+      }
+      fixture.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('presents automatic recovery as progress instead of an unavailable error', async () => {
     vi.useFakeTimers();
     try {
@@ -325,7 +346,7 @@ describe('AIReadinessBoundary', () => {
         retry_reason: 'temporary_store_open',
       }));
       await vi.advanceTimersByTimeAsync(150);
-      expect(fixture.host.textContent).toContain('Preparing Agent data');
+      expect(fixture.host.textContent).toContain('Preparing your conversations');
       expect(fixture.host.textContent).not.toContain('Agent data is unavailable');
       expect(fixture.host.textContent).not.toContain('Check again');
       fixture.dispose();

@@ -47,10 +47,13 @@
   position: relative;
   overflow: hidden;
   background: var(--background);
+  container-type: inline-size;
 }
 
 .ai-readiness-surface {
-  background: color-mix(in srgb, var(--muted) 22%, var(--background));
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(ellipse at 50% 36%, color-mix(in srgb, var(--primary) 4%, transparent), transparent 62%), var(--background);
   color: var(--foreground);
   scrollbar-gutter: stable;
 }
@@ -79,10 +82,15 @@
 }
 
 .ai-readiness-surface__inner {
-  width: min(100%, 40rem);
-  min-height: 100%;
-  margin-inline: auto;
-  padding: clamp(2rem, 8vh, 5rem) clamp(1rem, 5vw, 3rem) 2rem;
+  width: min(100%, 36rem);
+  flex: none;
+  margin: auto;
+  padding: clamp(1.5rem, 5vh, 3rem) clamp(1.25rem, 5cqi, 3rem);
+  animation: flower-readiness-enter 320ms ease-out both;
+}
+
+.ai-readiness-surface[data-mode='busy'] .ai-readiness-surface__inner {
+  text-align: center;
 }
 
 .ai-readiness-status-icon {
@@ -112,9 +120,10 @@
 .ai-readiness-title {
   margin-top: 0.4rem;
   max-width: 34rem;
-  font-size: 1.5rem;
+  font-size: 1.625rem;
   font-weight: 650;
-  line-height: 1.25;
+  line-height: 1.35;
+  letter-spacing: -0.025em;
   overflow-wrap: anywhere;
 }
 
@@ -125,6 +134,151 @@
   font-size: 0.875rem;
   line-height: 1.6;
   overflow-wrap: anywhere;
+}
+
+.ai-readiness-surface[data-mode='busy'] .ai-readiness-description {
+  max-width: 25rem;
+  margin-inline: auto;
+}
+
+.flower-readiness-art {
+  position: relative;
+  width: 17rem;
+  max-width: 100%;
+  height: 10rem;
+  margin: 0 auto 0.75rem;
+  color: var(--foreground);
+}
+
+.flower-readiness-art__halo {
+  position: absolute;
+  inset: -0.75rem 1.5rem;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--primary) 10%, transparent), transparent 70%);
+}
+
+.flower-readiness-art__orbit {
+  position: absolute;
+  inset: 0 3.75rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 12%, transparent);
+  border-radius: 50%;
+}
+
+.flower-readiness-art__page {
+  position: absolute;
+  width: 6.5rem;
+  height: 4.75rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 12%, var(--background));
+  border-radius: 0.875rem;
+  background: var(--card, var(--background));
+  padding: 1rem;
+  box-shadow: 0 8px 24px -12px color-mix(in srgb, var(--foreground) 15%, transparent);
+}
+
+.flower-readiness-art__page--back {
+  top: 3rem;
+  left: 0.75rem;
+  transform: rotate(-12deg);
+  opacity: 0.65;
+}
+
+.flower-readiness-art__page--front {
+  top: 4rem;
+  right: 0.75rem;
+  transform: rotate(10deg);
+}
+
+.flower-readiness-art__page > span {
+  display: block;
+  width: 70%;
+  height: 0.2rem;
+  margin-bottom: 0.5rem;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--foreground) 14%, transparent);
+}
+
+.flower-readiness-art__page > span:first-child { width: 35%; }
+.flower-readiness-art__page > span:last-of-type { width: 55%; }
+
+.flower-readiness-art__seal {
+  position: absolute;
+  right: -0.5rem;
+  bottom: -0.5rem;
+  display: grid;
+  width: 1.875rem;
+  height: 1.875rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 7%, var(--background));
+  color: var(--primary);
+  transform: rotate(-10deg);
+}
+
+.flower-readiness-art__seal svg { width: 1rem; height: 1rem; }
+
+.flower-readiness-art__bloom {
+  position: absolute;
+  top: 0.65rem;
+  left: calc(50% - 3rem);
+  width: 6rem;
+  height: 6rem;
+  filter: drop-shadow(0 8px 12px color-mix(in srgb, var(--foreground) 12%, transparent));
+  animation: flower-readiness-breathe 4.8s ease-in-out infinite;
+}
+
+.flower-readiness-art__bloom svg { width: 100%; height: 100%; }
+
+.flower-readiness-art__seed {
+  position: absolute;
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 45%, var(--background));
+}
+
+.flower-readiness-art__seed--first { top: 1.75rem; right: 2.5rem; }
+.flower-readiness-art__seed--second { bottom: 0.5rem; left: 5.5rem; opacity: 0.45; }
+
+.ai-readiness-surface[data-mode='busy'] .ai-readiness-eyebrow {
+  margin-top: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+}
+
+.ai-readiness-progress { max-width: 20rem; margin: 1.75rem auto 1.5rem; }
+
+.ai-readiness-progress__caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+
+.ai-readiness-progress__status { display: inline-flex; align-items: center; gap: 0.375rem; }
+.ai-readiness-progress__status > span { width: 0.25rem; height: 0.25rem; border-radius: 50%; background: var(--primary); }
+.ai-readiness-progress .ai-readiness-elapsed { margin-top: 0; font-size: inherit; }
+
+.ai-readiness-progress__track {
+  height: 0.1875rem;
+  margin-top: 0.625rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+}
+
+.ai-readiness-progress__track > span {
+  display: block;
+  width: 38%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  animation: flower-readiness-progress 2.8s ease-in-out infinite;
 }
 
 .ai-readiness-data-statement {
@@ -140,6 +294,22 @@
   font-size: 0.8125rem;
   line-height: 1.5;
 }
+
+.ai-readiness-surface[data-mode='busy'] .ai-readiness-data-statement {
+  max-width: 24rem;
+  min-height: 0;
+  margin-inline: auto;
+  margin-top: 0;
+  justify-content: center;
+  border: 0;
+  padding: 0;
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+.ai-readiness-surface[data-mode='busy'] .ai-readiness-data-statement > svg { margin-top: 0.1rem; color: var(--primary); }
+.ai-readiness-workspace-hint { margin-top: 0.5rem; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.7; }
+.ai-readiness-details-entry { margin-top: 1.25rem; }
 
 .ai-readiness-actions {
   display: flex;
@@ -157,24 +327,30 @@
 }
 
 .ai-readiness-long-task {
-  display: flex;
   max-width: 36rem;
   margin-top: 0.75rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
   color: var(--muted-foreground);
   font-size: 0.8125rem;
   line-height: 1.5;
 }
 
 .ai-readiness-long-task__details {
-  flex: none;
-  color: var(--foreground);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  border-radius: 0.375rem;
+  padding-inline: 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  transition: color 140ms ease, background-color 140ms ease;
 }
+
+.ai-readiness-long-task__details:hover { color: var(--foreground); background: var(--muted); }
+.ai-readiness-long-task__details:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
 .ai-readiness-action,
 .ai-readiness-copy,
@@ -209,6 +385,7 @@
   margin-top: 1.75rem;
   border-top: 1px solid var(--border);
   padding-top: 0.5rem;
+  text-align: left;
 }
 
 .ai-readiness-diagnostics__toggle {
@@ -244,9 +421,29 @@
   overflow-wrap: anywhere;
 }
 
-.ai-readiness-copy { margin-top: 0.875rem; }
+.ai-readiness-copy { max-width: 100%; margin-top: 0.875rem; padding-block: 0.5rem; }
+.ai-readiness-copy > span { min-width: 0; overflow-wrap: anywhere; }
+.ai-readiness-copy > svg { flex-shrink: 0; }
 
-@media (max-width: 420px) {
+@keyframes flower-readiness-enter {
+  from { transform: translateY(4px); }
+  to { transform: translateY(0); }
+}
+
+@keyframes flower-readiness-breathe {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-4px) rotate(3deg); }
+}
+
+@keyframes flower-readiness-progress {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(375%); }
+}
+
+.ai-readiness-surface[data-presentation='companion'] .flower-readiness-art { height: 8rem; zoom: 0.8; }
+.ai-readiness-surface[data-presentation='companion'] .ai-readiness-surface__inner { padding-block: 1.5rem; }
+
+@container (max-width: 420px) {
   .ai-readiness-surface__inner { padding-top: 2rem; }
   .ai-readiness-title { font-size: 1.25rem; }
   .ai-readiness-actions { flex-direction: column; }
@@ -258,12 +455,18 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ai-readiness-surface__inner,
+  .flower-readiness-art__bloom,
+  .ai-readiness-progress__track > span { animation: none; }
+  .ai-readiness-progress__track > span { transform: translateX(80%); background: var(--primary); opacity: 0.5; }
   .ai-readiness-action,
+  .ai-readiness-long-task__details,
   .ai-readiness-copy,
   .ai-readiness-diagnostics__toggle {
     transition: none;
   }
   .ai-readiness-action svg { transition: none !important; }
+  .ai-readiness-long-task__details svg { transition: none !important; }
 }
 
 @media (forced-colors: active) {
@@ -273,6 +476,12 @@
   .ai-readiness-data-statement {
     border-color: CanvasText;
   }
+  .flower-readiness-art__page,
+  .flower-readiness-art__orbit,
+  .flower-readiness-art__seal { border-color: CanvasText; background: Canvas; }
+  .flower-readiness-art__halo { display: none; }
+  .ai-readiness-progress__track { border: 1px solid CanvasText; }
+  .ai-readiness-progress__track > span { background: Highlight; }
   .ai-readiness-action--primary {
     background: Highlight;
     color: HighlightText;

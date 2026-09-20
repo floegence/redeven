@@ -64,12 +64,12 @@ describe('createAIReadinessPresentation', () => {
   });
 
   it.each([
-    ['unavailable', 'busy', 'Checking Agent data'],
-    ['inspecting', 'busy', 'Checking Agent data'],
-    ['optimizing', 'busy', 'Preparing Agent data'],
-    ['migrating', 'busy', 'Safely updating Agent data'],
-    ['verifying', 'busy', 'Finishing the Agent data update'],
-    ['recovering', 'busy', 'Preparing Agent data'],
+    ['unavailable', 'busy', 'Getting Flower ready'],
+    ['inspecting', 'busy', 'Getting Flower ready'],
+    ['optimizing', 'busy', 'Preparing your conversations'],
+    ['migrating', 'busy', 'Updating your conversations'],
+    ['verifying', 'busy', 'Checking the final details'],
+    ['recovering', 'busy', 'Preparing your conversations'],
     ['ready', 'ready', 'Ready'],
   ] as const)('maps %s to the %s presentation mode', (state, mode, title) => {
     const projection = createAIReadinessPresentation({
