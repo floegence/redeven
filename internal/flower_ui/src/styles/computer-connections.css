@@ -69,6 +69,32 @@
   font-weight: 400;
 }
 
+.flower-chrome-readiness { display: grid; min-width: 0; gap: 0.875rem; }
+.flower-chrome-facts { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.875rem; }
+.flower-chrome-facts .flower-computer-environment { margin-right: auto; }
+.flower-chrome-browser-state { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--muted-foreground); font-size: 0.6875rem; }
+.flower-chrome-browser-state > svg { width: 0.875rem; height: 0.875rem; flex: none; }
+.flower-chrome-browser-state[data-ready='true'] > svg { color: var(--redeven-status-success-foreground); }
+.flower-chrome-connection-state { color: var(--muted-foreground); font-size: 0.6875rem; }
+.flower-chrome-status { display: grid; grid-template-columns: 1rem minmax(0, 1fr); align-items: start; gap: 0.625rem; border: 1px solid var(--border); border-radius: 0.625rem; padding: 0.875rem; background: color-mix(in srgb, var(--foreground) 2%, transparent); }
+.flower-chrome-status-icon { width: 1rem; height: 1rem; margin-top: 0.125rem; color: var(--muted-foreground); }
+.flower-chrome-status[data-tone='attention'] > .flower-chrome-status-icon { color: var(--redeven-status-warning-foreground); }
+.flower-chrome-status[data-tone='positive'] > .flower-chrome-status-icon { color: var(--redeven-status-success-foreground); }
+.flower-chrome-status-copy { display: grid; min-width: 0; gap: 0.25rem; }
+.flower-chrome-status-title { margin: 0; color: var(--foreground); font-size: 0.8125rem; font-weight: 600; line-height: 1.55; }
+.flower-chrome-status-hint { margin: 0; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.65; }
+.flower-chrome-status-actions { display: flex; flex-wrap: wrap; min-width: 0; align-items: start; justify-content: space-between; gap: 0.75rem; }
+.flower-chrome-details { flex: 1; min-width: 0; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.65; }
+.flower-chrome-details > summary { display: flex; width: fit-content; align-items: center; gap: 0.25rem; min-height: 2rem; list-style: none; cursor: pointer; }
+.flower-chrome-details > summary::-webkit-details-marker { display: none; }
+.flower-chrome-details > summary > svg { width: 0.875rem; height: 0.875rem; flex: none; }
+.flower-chrome-details[open] { flex-basis: 100%; }
+.flower-chrome-details[open] > summary > svg { transform: rotate(90deg); }
+.flower-chrome-details-body { display: grid; gap: 0.75rem; padding-top: 0.5rem; }
+.flower-chrome-details-body > p { margin: 0; }
+.flower-chrome-diagnostics > summary { cursor: pointer; }
+.flower-chrome-recheck { flex: none; margin-left: auto; }
+
 .flower-computer-selection {
   border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
   border-radius: 0.75rem;

@@ -5,6 +5,7 @@ import type { FlowerComputerAccess, FlowerComputerCandidate, FlowerComputerEnvir
 import type { FlowerComputerCopy } from './computerUseCopy';
 import { FlowerManagedBrowser } from './FlowerManagedBrowser';
 import { FlowerChromeConnection } from './FlowerChromeConnection';
+import { FlowerChromeReadiness } from './FlowerChromeReadiness';
 
 export type FlowerRequestedComputerAccess = Readonly<{ origin?: string; app?: string; foreground?: boolean }>;
 type Page = 'overview' | 'targets' | 'managed' | 'chrome' | 'setup' | 'access' | 'advanced' | 'help' | 'diagnostics';
@@ -183,7 +184,7 @@ export function FlowerComputerConnections(props: {
       <Show when={guideKey()} keyed>{_key => <FlowerChromeConnection environmentName={environment()?.hostname || props.adapter.runtime.display_name} reuseConnected management={management()!} copy={props.copy} onConnected={async () => { await props.onContinue?.(); }} />}</Show>
     </Show>}>
       <div class={`flower-computer-panel text-sm${page() === 'targets' ? ' flower-computer-picker' : ' space-y-5'}`} data-flower-computer-panel={page()} aria-busy={loading() || busy()}>
-        <div class="flower-computer-environment"><span>{props.copy.environmentTitle}</span><span class="flower-computer-host"><MonitorPointer aria-hidden="true" />{environment()?.hostname || props.adapter.runtime.display_name}</span><Show when={environment()?.platform}><span class="flower-computer-platform">{environment()!.platform === 'darwin' ? 'macOS' : environment()!.platform === 'linux' ? 'Linux' : environment()!.platform}</span></Show></div>
+        <Show when={page() !== 'chrome' && page() !== 'setup'}><div class="flower-computer-environment"><span>{props.copy.environmentTitle}</span><span class="flower-computer-host"><MonitorPointer aria-hidden="true" />{environment()?.hostname || props.adapter.runtime.display_name}</span><Show when={environment()?.platform}><span class="flower-computer-platform">{environment()!.platform === 'darwin' ? 'macOS' : environment()!.platform === 'linux' ? 'Linux' : environment()!.platform}</span></Show></div></Show>
         <Show when={page() === 'overview'}>
           <Show when={props.threadID} fallback={<p class="text-xs text-muted-foreground">{props.copy.noThread}</p>}>
             <section class="flower-computer-selection">
@@ -262,13 +263,15 @@ export function FlowerComputerConnections(props: {
           }, props.copy.profileFailed); }}><label class="min-w-0 flex-1 space-y-1 text-xs">{props.copy.profileName}<input class="flower-settings-text-input w-full" value={profileName()} maxlength={120} required onInput={event => setProfileName(event.currentTarget.value)} /></label><Button size="sm" type="submit" disabled={!mutable() || !profileName().trim() || !management()?.createManagedProfile}>{props.copy.createProfile}</Button></form></details></Show>
         </Show>
         <Show when={page() === 'chrome'}>
-          <p class="text-muted-foreground">{props.copy.chromeOnlineHint}</p>
-          <div class="flower-computer-detail-card space-y-3"><span class="flower-computer-status" data-tone={environment()?.chrome.profiles.length ? 'positive' : 'neutral'}>{!environment() ? props.copy.unknown : environment()!.chrome.profiles.length ? props.copy.connected : props.copy.chromeOffline}</span><For each={environment()?.chrome.profiles ?? []}>{profile => <div class="flower-computer-profile"><Globe aria-hidden="true" /><span>{profile.name}</span></div>}</For><Show when={!environment()?.chrome.profiles.length}><p class="flower-computer-description">{environment() ? props.copy.chromeOfflineHint : props.copy.loadFailed}</p></Show></div>
-          <div class="flower-computer-note"><Info aria-hidden="true" /><div><p class="flower-computer-description">{props.copy.pairingPersistence}</p><p class="mt-2 flower-computer-description">{props.copy.setupHostHint}</p></div></div>
+          <FlowerChromeReadiness status={environment()?.chrome} diagnostic={environment()?.chrome.diagnostic} environmentName={environment()?.hostname || props.adapter.runtime.display_name}
+            platform={environment()?.platform} copy={props.copy} showConnectionStatus>
+            <p>{props.copy.pairingPersistence}</p><p>{props.copy.setupHostHint}</p>
+          </FlowerChromeReadiness>
+          <Show when={environment()?.chrome.profiles.length}><div class="flower-computer-profile-list"><For each={environment()?.chrome.profiles ?? []}>{profile => <div class="flower-computer-profile"><Globe aria-hidden="true" /><span>{profile.name}</span></div>}</For></div></Show>
           <div class="flower-computer-action-row"><Button disabled={!mutable() || !management()?.setupExtension || !management()?.openExtension || !management()?.loadExtensionStatus} onClick={() => go('setup')}>{props.copy.setupChrome}</Button>
           <Button variant="outline" disabled={!readable()} onClick={() => void load()}>{props.copy.refresh}</Button></div>
         </Show>
-        <Show when={page() === 'setup' && guideKey()} keyed>{_key => <FlowerChromeConnection environmentName={environment()?.hostname || props.adapter.runtime.display_name} management={management()!} copy={props.copy} onConnected={async () => { const epoch = generation; await refreshEnvironment(epoch); if (epoch === generation) go('chrome'); }} />}</Show>
+        <Show when={page() === 'setup' && guideKey()} keyed>{_key => <FlowerChromeConnection environmentName={environment()?.hostname || props.adapter.runtime.display_name} platform={environment()?.platform} management={management()!} copy={props.copy} onConnected={async () => { const epoch = generation; await refreshEnvironment(epoch); if (epoch === generation) go('chrome'); }} />}</Show>
         <Show when={page() === 'diagnostics'}>
           <div class="flower-computer-detail-card space-y-3"><div class="flower-computer-section-heading"><h3 class="font-medium text-foreground">{diagnostic() === 'managed' ? props.copy.managed : props.copy.desktopTitle}</h3><span class="flower-computer-status" data-tone={capabilityTone(capability()?.state)}>{stateLabel(capability()?.state)}</span></div><p class="leading-relaxed text-muted-foreground">{capabilityHint(diagnostic())}</p>
           <Show when={!capability() || capability()?.state === 'setup_required'}><p class="text-xs leading-relaxed text-muted-foreground">{environmentFailed() ? props.copy.loadFailed : props.copy.repairHint}</p></Show>

@@ -3865,7 +3865,7 @@
         "title": "Chrome connection diagnostics and recovery",
         "type": "Runtime and Product Contract"
       },
-      "body_length": 4732,
+      "body_length": 5733,
       "summary": "ComputerUseRuntime owns Chrome readiness and its live handshake inventory.\nDesktop and Env App present the same host-specific prerequisite and failure\nfacts. Installed Chrome alone does not establish browser-control readiness.\nMissing resources, unavailable graphical sessions, application launch failures,\nstatus-read failures and conversation-continuation failures have separate recovery\ninstructions. Neither a successful launch nor installation acknowledgement resumes\na task; only a compatible live profile can reach the existing Floret Respond path.\nFailures preserve user guidance and never substitute a different browser.",
       "sections": [
         {
@@ -3879,8 +3879,8 @@
           "id": "recovery-on-the-environment-host",
           "title": "Recovery on the environment host",
           "level": 1,
-          "body": "The guide names the actual environment and shows Chrome detection independently\nof the failure. Missing helpers or extension assets direct users to update or\nreinstall the complete Runtime while keeping data; retry checks readiness after\nthat repair. Self-managed installations use the matching complete Runtime suite.\nThe browser installation contract owns [package completeness](computer-use-browser-installation.md).\n\nOn Linux, opening Chrome or a folder checks the executable and this Runtime's\n`DISPLAY` or `WAYLAND_DISPLAY`. An absent graphical launch context is distinct\nfrom an uninstalled browser. Redeven does not discover or borrow another user's\nsession. A user may sign in to the environment's desktop, install the staged\nextension there and paste the exact connection-page link provided by the guide.\nThat link carries only the existing native-host configuration. The extension's\nConnect action still supplies consent. A connection from the client computer is\nnot treated as a connection to a remote Runtime.\n\nOpening a native application observes its early process exit. A later failure is\nretained in the existing extension hub only if the same launch generation\nis current and no profile has connected. Fresh setup and a successful handshake\nclear that diagnostic. Closing a process or reporting an error never replays a\nbrowser action. The log records the process exit without capturing page content.\n\nA failed connection check preserves installation steps and the staged folder.\nA failed conversation continuation says Chrome connected but the task did not\ncontinue; explicit retry rechecks the live profile before invoking the existing\ncontinuation. Closing the guide or starting another preparation retires stale\nresponses. Connection observation remains bounded to the open guide; pressing\nConnect or copying the manual connection link starts a fresh observation window\nafter installation, timeout or a failed check.",
-          "char_count": 1938
+          "body": "The Chrome overview and connection guide share one compact readiness surface.\nBoth consume the existing Runtime snapshot, including diagnostics embedded in\n`environment.chrome`; the overview must not reduce an explicit blocker to a\ngeneric disconnected state. The surface names the environment once, distinguishes\nChrome detection from extension connectivity, and shows the cause plus one short\nrecovery instruction. Pairing rules, detailed instructions and copyable technical\ndiagnostics are disclosed on demand. Installation steps retain their own flow\nbelow this summary.\n\nAn absent launch context means this Runtime cannot access a desktop, not that the\nmachine has no graphical desktop or that Chrome is missing. Product copy must not\ninfer the user's login state from display environment variables.\n\nMissing helpers or extension assets direct users to update or\nreinstall the complete Runtime while keeping data; retry checks readiness after\nthat repair. Self-managed installations use the matching complete Runtime suite.\nThe browser installation contract owns [package completeness](computer-use-browser-installation.md).\n\nOn Linux, opening Chrome or a folder checks the executable and this Runtime's\n`DISPLAY` or `WAYLAND_DISPLAY`. An absent graphical launch context is distinct\nfrom an uninstalled browser. Redeven does not discover or borrow another user's\nsession. A user may sign in to the environment's desktop, install the staged\nextension there and paste the exact connection-page link provided by the guide.\nThat link carries only the existing native-host configuration. The extension's\nConnect action still supplies consent. A connection from the client computer is\nnot treated as a connection to a remote Runtime.\n\nOpening a native application observes its early process exit. A later failure is\nretained in the existing extension hub only if the same launch generation\nis current and no profile has connected. Fresh setup and a successful handshake\nclear that diagnostic. Closing a process or reporting an error never replays a\nbrowser action. The log records the process exit without capturing page content.\n\nA failed connection check preserves installation steps and the staged folder.\nA failed conversation continuation says Chrome connected but the task did not\ncontinue; explicit retry rechecks the live profile before invoking the existing\ncontinuation. Closing the guide or starting another preparation retires stale\nresponses. Connection observation remains bounded to the open guide; pressing\nConnect or copying the manual connection link starts a fresh observation window\nafter installation, timeout or a failed check.",
+          "char_count": 2648
         }
       ],
       "evidence": [
@@ -3913,6 +3913,16 @@
           "id": "redeven:internal/flower_ui/src/FlowerChromeConnection.tsx:0:retained guidance, manual host connection and continuation recovery.",
           "source": "redeven:internal/flower_ui/src/FlowerChromeConnection.tsx",
           "description": "retained guidance, manual host connection and continuation recovery."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/FlowerChromeReadiness.tsx:0:shared cause-first summary with progressive disclosure.",
+          "source": "redeven:internal/flower_ui/src/FlowerChromeReadiness.tsx",
+          "description": "shared cause-first summary with progressive disclosure."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerComputerDialog.browser.test.tsx:0:overview blocker visibility, unique environment identity and compact narrow presentation.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerComputerDialog.browser.test.tsx",
+          "description": "overview blocker visibility, unique environment identity and compact narrow presentation."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/FlowerComputerConnections.browser.test.tsx:0:diagnosis, narrow layout, stale results and handshake-only continuation.",
@@ -22555,5 +22565,5 @@
       ]
     }
   ],
-  "source_sha256": "e8e7e0127b07712e5371c80b0e21fcbee117e48697eeb4daabb26e4bd7c7444e"
+  "source_sha256": "7e614423685d090a84c2e995440641360e607ef03d59eb6708d399c97ccc6296"
 }
