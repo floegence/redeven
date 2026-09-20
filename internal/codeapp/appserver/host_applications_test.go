@@ -35,7 +35,8 @@ func (s *hostAppsStub) Add(context.Context, hostapps.AddRequest) error { s.calls
 func (s *hostAppsStub) ForTarget(target string) (hostapps.Session, string, bool) {
 	return hostapps.Session{ID: "one", State: "running"}, "alice", target == "http://127.0.0.1:40000"
 }
-func (s *hostAppsStub) Password(string) string { return "private-password" }
+func (s *hostAppsStub) Permissions(context.Context, string) error { s.calls++; return nil }
+func (s *hostAppsStub) Password(string) string                    { return "private-password" }
 
 func TestHostApplicationPermissionsAndAuthoritativeOwner(t *testing.T) {
 	for _, full := range []bool{false, true} {
@@ -51,7 +52,7 @@ func TestHostApplicationPermissionsAndAuthoritativeOwner(t *testing.T) {
 			}
 		}
 		backend.calls = 0
-		for _, test := range []struct{ method, path string }{{"POST", hostApplicationsAPI}, {"POST", hostApplicationsAPI + "/sessions"}, {"DELETE", hostApplicationsAPI + "/sessions/one"}} {
+		for _, test := range []struct{ method, path string }{{"POST", hostApplicationsAPI}, {"POST", hostApplicationsAPI + "/sessions"}, {"POST", hostApplicationsAPI + "/permissions"}, {"DELETE", hostApplicationsAPI + "/sessions/one"}} {
 			r := httptest.NewRequest(test.method, test.path, strings.NewReader(`{}`))
 			r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
 			w := httptest.NewRecorder()

@@ -40,6 +40,11 @@ func screenshot(_ window: NativeWindow) throws -> [String: Any] {
             "width": width, "height": height, "device_pixel_ratio": 1]
 }
 
+if CommandLine.arguments.contains("--host-applications") {
+    HostApplications.run()
+    exit(0)
+}
+
 let accessibility = NativeAccessibility()
 let foreground = NativeForegroundInput()
 

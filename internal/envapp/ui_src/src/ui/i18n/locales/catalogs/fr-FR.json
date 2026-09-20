@@ -6175,6 +6175,7 @@
     }
   },
   "hostApplications": {
+    "macMenu": "Menu de l’application",
     "connecting": "Connexion à l’application…",
     "reconnecting": "Reconnexion en cours…",
     "disconnected": "Connexion interrompue",
@@ -6217,15 +6218,28 @@
     "setupDescription": "Installez Xpra 6.x, Xpra HTML5 v20 / v21, Xvfb, D-Bus, xauth et les liaisons Python GIO/GTK 3 sur cet hôte, puis actualisez. Les paquets varient selon la distribution. Aucun environnement de bureau ni écran n’est nécessaire.",
     "setupRequirements": "À préparer : {requirements}",
     "setupGuide": "Guide d’installation",
-    "catalogUnavailable": "Impossible de lire le catalogue d’applications de l’hôte. Vérifiez l’installation de GIO/GTK sur l’hôte, puis actualisez.",
+    "catalogUnavailable": "Impossible de lire le catalogue des applications de l’hôte. Vérifiez que l’environnement d’exécution fonctionne sur cet hôte, puis actualisez la liste.",
     "setupTitle": "Préparer cet hôte",
     "starting": "Démarrage de l’application…",
     "stop": "Terminer la session",
     "stopDescription": "L’application et toutes ses fenêtres seront fermées. Les modifications non enregistrées risquent d’être perdues.",
     "stopTitle": "Terminer cette session d’application ?",
     "title": "Applications de l’hôte",
-    "unsupportedDescription": "Cette fonctionnalité nécessite actuellement un environnement d’exécution Linux. Connectez-vous à un hôte Linux pour l’utiliser.",
-    "unsupportedTitle": "Hôte Linux requis",
-    "allApplications": "Toutes les applications"
+    "unsupportedDescription": "Les applications hôtes nécessitent un environnement d’exécution Linux ou macOS. Connectez-vous à un hôte compatible.",
+    "unsupportedTitle": "Hôte compatible requis",
+    "allApplications": "Toutes les applications",
+    "macPermissions": "Sur ce Mac, autorisez Redeven à enregistrer l’écran et à utiliser l’accessibilité dans Réglages Système, puis actualisez. L’ouverture directe des applications sur ce Mac ne nécessite pas l’enregistrement de l’écran.",
+    "macSessionRequired": "Connectez-vous à la session graphique de ce Mac et déverrouillez-la, puis actualisez.",
+    "macHelperMissing": "Le composant d’applications macOS est indisponible. Mettez à jour ou réinstallez l’environnement d’exécution Redeven sur cet hôte, puis actualisez.",
+    "macAllowScreen": "Autoriser l’enregistrement de l’écran",
+    "macAllowAccessibility": "Autoriser l’accessibilité",
+    "macSharedControl": "Les commandes à distance utilisent la session utilisateur actuelle de ce Mac et peuvent changer la fenêtre active.",
+    "macWindows": "Fenêtres de l’application",
+    "macCloseWindow": "Fermer la fenêtre de l’application",
+    "macInput": "Saisie clavier de l’application",
+    "macRetained": "Fermer la fenêtre de visualisation laisse l’application ouverte sur le Mac. Arrêter l’environnement d’exécution coupe la connexion sans supprimer le travail non enregistré.",
+    "macStopDescription": "Demander à cette application de quitter. En cas de travail non enregistré, répondez à la boîte de dialogue d’enregistrement dans sa fenêtre.",
+    "macAddDescription": "Indiquez le chemin absolu d’un paquet .app installé. Son nom et son icône sont lus depuis macOS.",
+    "macBundlePath": "Chemin du paquet d’application"
   }
 }

@@ -27,6 +27,7 @@ import (
 var desktopHelper []byte
 
 type ownedSession struct {
+	native    *macSession
 	view      Session
 	owner     string
 	password  string
@@ -45,6 +46,8 @@ type Manager struct {
 	closed                      bool
 	prepareOnce                 sync.Once
 	prepareErr                  error
+	nativePrepare               sync.Once
+	nativePath                  string
 }
 
 func New(state, home string, forwards *portforward.Service) *Manager {
@@ -89,6 +92,9 @@ func (m *Manager) Sessions(owner string) []Session {
 }
 
 func (m *Manager) Catalog(ctx context.Context, owner, locale string) (Catalog, error) {
+	if runtime.GOOS == "darwin" {
+		return m.macCatalog(ctx, owner)
+	}
 	catalog, _, err := m.catalog(ctx, owner, locale)
 	return catalog, err
 }
@@ -117,6 +123,9 @@ func (m *Manager) catalog(ctx context.Context, owner, locale string) (Catalog, h
 }
 
 func (m *Manager) Add(ctx context.Context, req AddRequest) error {
+	if runtime.GOOS == "darwin" {
+		return m.macAdd(ctx, req)
+	}
 	if strings.TrimSpace(req.Name) == "" || len(req.Name) > 120 || len(req.Executable) > 4096 || len(req.Arguments) > 8192 || strings.ContainsAny(req.Name+req.Executable+req.Arguments, "\x00\r\n") {
 		return ErrInvalid
 	}
@@ -147,6 +156,17 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 		if strings.TrimSpace(s) == "" || len(s) > 1024 {
 			return Session{}, ErrInvalid
 		}
+	}
+	if runtime.GOOS == "darwin" {
+		for _, value := range []string{req.Presentation.Menu, req.Presentation.Input, req.Presentation.Windows, req.Presentation.CloseWindow, req.Presentation.SharedControl} {
+			if strings.TrimSpace(value) == "" || len(value) > 1024 {
+				return Session{}, ErrInvalid
+			}
+		}
+		return m.macLaunch(ctx, owner, req)
+	}
+	if req.Mode != "" && req.Mode != "stream" {
+		return Session{}, ErrInvalid
 	}
 	m.mu.Lock()
 	for _, s := range m.sessions {
@@ -192,22 +212,7 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 	if active >= 12 {
 		return Session{}, ErrLimit
 	}
-	// Bound retained diagnostics to the most recent completed sessions.
-	if len(m.sessions) >= 48 {
-		var oldest *ownedSession
-		for _, candidate := range m.sessions {
-			if candidate.view.State != "ended" && candidate.view.State != "failed" {
-				continue
-			}
-			if oldest == nil || candidate.view.StartedAt < oldest.view.StartedAt {
-				oldest = candidate
-			}
-		}
-		if oldest != nil {
-			delete(m.sessions, oldest.view.ID)
-			_ = os.RemoveAll(filepath.Join(m.state, "sessions", oldest.view.ID))
-		}
-	}
+	m.trimCompletedLocked()
 	id := randomID()
 	dir := filepath.Join(m.state, "sessions", id)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -406,6 +411,14 @@ func (m *Manager) Stop(ctx context.Context, owner, id string) error {
 		m.mu.Unlock()
 		return ErrNotFound
 	}
+	if s.native != nil {
+		ended := s.view.State == "ended" || s.view.State == "failed"
+		m.mu.Unlock()
+		if ended {
+			return nil
+		}
+		return s.native.send(map[string]any{"action": "stop"})
+	}
 	s.stopping = true
 	cmd := s.cmd
 	m.mu.Unlock()
@@ -424,6 +437,14 @@ func (m *Manager) Close() error {
 	}
 	m.mu.Unlock()
 	for _, s := range all {
+		if s.native != nil {
+			s.native.cancel()
+			select {
+			case <-s.done:
+			case <-time.After(5 * time.Second):
+			}
+			continue
+		}
 		_ = m.Stop(context.Background(), s.owner, s.view.ID)
 	}
 	return nil
@@ -492,4 +513,23 @@ func supportedVersion(version string) bool {
 	}
 	major, _ := strconv.Atoi(parts[1])
 	return major == 6
+}
+
+func (m *Manager) trimCompletedLocked() {
+	// Bound retained diagnostics to the most recent completed sessions.
+	if len(m.sessions) >= 48 {
+		var oldest *ownedSession
+		for _, candidate := range m.sessions {
+			if candidate.view.State != "ended" && candidate.view.State != "failed" {
+				continue
+			}
+			if oldest == nil || candidate.view.StartedAt < oldest.view.StartedAt {
+				oldest = candidate
+			}
+		}
+		if oldest != nil {
+			delete(m.sessions, oldest.view.ID)
+			_ = os.RemoveAll(filepath.Join(m.state, "sessions", oldest.view.ID))
+		}
+	}
 }

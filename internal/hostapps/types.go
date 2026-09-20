@@ -1,5 +1,5 @@
 // Package hostapps connects Redeven's application catalog and owned sessions to
-// the installed GIO and Xpra runtimes. Applications execute as the Runtime user.
+// native macOS applications or installed GIO and Xpra runtimes. Applications execute as the Runtime user.
 package hostapps
 
 import (
@@ -19,11 +19,14 @@ type Application struct {
 }
 
 type Availability struct {
-	Supported    bool     `json:"supported"`
-	Ready        bool     `json:"ready"`
-	Reason       string   `json:"reason,omitempty"`
-	Version      string   `json:"version,omitempty"`
-	Requirements []string `json:"requirements,omitempty"`
+	Backend      string          `json:"backend,omitempty"`
+	NativeReady  bool            `json:"native_ready,omitempty"`
+	Permissions  map[string]bool `json:"permissions,omitempty"`
+	Supported    bool            `json:"supported"`
+	Ready        bool            `json:"ready"`
+	Reason       string          `json:"reason,omitempty"`
+	Version      string          `json:"version,omitempty"`
+	Requirements []string        `json:"requirements,omitempty"`
 }
 
 type Catalog struct {
@@ -33,6 +36,8 @@ type Catalog struct {
 }
 
 type Session struct {
+	Backend      string                      `json:"backend,omitempty"`
+	Mode         string                      `json:"mode,omitempty"`
 	ID           string                      `json:"id"`
 	Application  Application                 `json:"application"`
 	State        string                      `json:"state"`
@@ -45,6 +50,11 @@ type Session struct {
 // Presentation comes from the caller's explicit localized catalog. The window
 // document renders these bounded strings as text, never as markup or script.
 type Presentation struct {
+	Menu           string `json:"menu,omitempty"`
+	Input          string `json:"input,omitempty"`
+	Windows        string `json:"windows,omitempty"`
+	CloseWindow    string `json:"closeWindow,omitempty"`
+	SharedControl  string `json:"sharedControl,omitempty"`
 	Locale         string `json:"locale"`
 	Connecting     string `json:"connecting"`
 	Reconnecting   string `json:"reconnecting"`
@@ -58,6 +68,7 @@ type Presentation struct {
 }
 
 type LaunchRequest struct {
+	Mode          string       `json:"mode,omitempty"`
 	ApplicationID string       `json:"application_id"`
 	Locale        string       `json:"locale"`
 	Presentation  Presentation `json:"presentation"`
@@ -77,6 +88,7 @@ type Backend interface {
 	Add(context.Context, AddRequest) error
 	ForTarget(string) (Session, string, bool)
 	Password(string) string
+	Permissions(context.Context, string) error
 }
 
 var (

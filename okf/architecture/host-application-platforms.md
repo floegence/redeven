@@ -1,7 +1,7 @@
 ---
 type: Runtime Contract
 title: Host application platforms and initialization
-description: Capability-based Linux initialization, dependency diagnostics, distribution evidence, and macOS host limitations.
+description: Capability-based Linux initialization, dependency diagnostics, distribution evidence, and native macOS requirements.
 tags: [runtime, applications, linux, desktop]
 timestamp: 2026-09-20T08:00:00Z
 ---
@@ -12,7 +12,8 @@ distribution name. The Runtime owns dependency detection and isolated session
 initialization; the administrator owns installation of host software and Xpra.
 Missing or incompatible components prevent launch and are reported in the library.
 A desktop environment, systemd user session, and physical monitor are unnecessary.
-macOS can be a viewer but cannot host this X11 seamless backend. Existing
+macOS uses a separate native backend with a logged-in graphical session; it does
+not use Xpra or Linux virtual displays. Existing
 [application permissions and lifecycle](host-applications.md) remain authoritative.
 
 # Required installed capabilities
@@ -76,20 +77,21 @@ service's XDG environment, including exported package desktop entries when prese
 See the [distribution validation record](../operations/host-application-validation.md)
 for tested stacks, architecture boundaries and repeatable installed-host checks.
 
-# macOS boundary
+# macOS initialization
 
-Redeven Desktop or a browser on macOS can operate applications on a supported
-Linux host. macOS as the application host returns unsupported before probing Linux
-dependencies and does not show Linux application installation empty states.
+The [native macOS contract](macos-host-applications.md) owns local launch, remote
+single-window capture, input, and graceful lifecycle. macOS 13 or newer uses the
+packaged `redeven-computer-host` helper. Desktop stages it alongside the Runtime;
+a standalone Runtime extracts it from its shipped `computer.zip` on demand.
+Missing helper bytes produce an explicit update/reinstall diagnostic.
 
-Native AppKit applications do not become X11 applications by installing XQuartz.
-Xpra's macOS shadow mode shares an existing graphical desktop; it is not an
-equivalent isolated per-application session and must not silently replace this
-backend. A native macOS implementation would need its own window discovery,
-ScreenCaptureKit capture, authorized input/window control, and lifecycle adapter.
-It would operate in a logged-in graphical session with screen-recording and
-accessibility permissions. It could not claim Linux-style independent headless
-displays or input isolation. That backend is not implemented here.
+A trusted Desktop local-environment route opens the real application directly.
+Remote access requires screen-recording and accessibility authorization plus a
+logged-in, unlocked graphical session. Permission requests are explicit actions;
+refresh reruns the preflight after the user authorizes the host. Neither route
+installs XQuartz or Xpra. A Mac without a graphical login cannot create a private
+headless AppKit session. Native AppKit applications do not become X11 applications
+by installing XQuartz, and Xpra desktop shadowing is not this implementation.
 
 # Evidence
 

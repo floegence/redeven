@@ -6186,6 +6186,7 @@
     }
   },
   "hostApplications": {
+    "macMenu": "應用程式選單",
     "connecting": "正在連線至應用程式…",
     "reconnecting": "正在重新連線…",
     "disconnected": "連線已中斷",
@@ -6228,15 +6229,28 @@
     "setupDescription": "請在主機上安裝 Xpra 6.x、Xpra HTML5 v20 / v21、Xvfb、D-Bus、xauth 和 Python GIO/GTK 3 繫結，然後重新整理。不同發行版的套件有所差異，無需桌面環境或顯示器。",
     "setupRequirements": "需要準備：{requirements}",
     "setupGuide": "安裝指南",
-    "catalogUnavailable": "無法讀取主機應用程式目錄。請檢查主機的 GIO/GTK 安裝，然後重新整理。",
+    "catalogUnavailable": "無法讀取主機應用程式目錄。請檢查此主機上的執行階段是否正常，然後重新整理。",
     "setupTitle": "設定主機環境",
     "starting": "正在啟動應用程式…",
     "stop": "結束工作階段",
     "stopDescription": "這會關閉應用程式及其所有視窗，未儲存的變更可能遺失。",
     "stopTitle": "結束此應用程式工作階段？",
     "title": "主機應用程式",
-    "unsupportedDescription": "此功能目前需要 Linux 執行階段。請連線至 Linux 主機後使用。",
-    "unsupportedTitle": "需要 Linux 主機",
-    "allApplications": "所有應用程式"
+    "unsupportedDescription": "主機應用程式需要 Linux 或 macOS 執行階段。請連線至支援的主機後使用。",
+    "unsupportedTitle": "需要支援的主機",
+    "allApplications": "所有應用程式",
+    "macPermissions": "請在這台 Mac 的系統設定中，允許 Redeven 錄製螢幕並使用輔助使用功能，然後重新整理。直接在本機開啟應用程式不需要螢幕錄製權限。",
+    "macSessionRequired": "請登入這台 Mac 的圖形工作階段並解鎖，然後重新整理。",
+    "macHelperMissing": "macOS 應用程式元件無法使用。請更新或重新安裝此主機上的 Redeven 執行階段，然後重新整理。",
+    "macAllowScreen": "允許螢幕錄製",
+    "macAllowAccessibility": "允許輔助使用",
+    "macSharedControl": "遠端輸入會使用這台 Mac 目前的使用者工作階段，並可能切換其作用中視窗。",
+    "macWindows": "應用程式視窗",
+    "macCloseWindow": "關閉應用程式視窗",
+    "macInput": "應用程式鍵盤輸入",
+    "macRetained": "關閉檢視視窗後，應用程式仍在 Mac 上執行。停止執行階段會中斷連線，不會捨棄尚未儲存的工作。",
+    "macStopDescription": "要求結束此應用程式。如果有尚未儲存的工作，請在應用程式視窗中處理儲存對話框。",
+    "macAddDescription": "填寫已安裝 .app 應用程式套件的絕對路徑。名稱和圖示將從 macOS 讀取。",
+    "macBundlePath": "應用程式套件路徑"
   }
 }

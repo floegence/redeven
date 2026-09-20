@@ -6175,6 +6175,7 @@
     }
   },
   "hostApplications": {
+    "macMenu": "Menu do aplicativo",
     "connecting": "Conectando ao aplicativo…",
     "reconnecting": "Reconectando…",
     "disconnected": "Conexão interrompida",
@@ -6217,15 +6218,28 @@
     "setupDescription": "Instale Xpra 6.x, Xpra HTML5 v20 / v21, Xvfb, D-Bus, xauth e as vinculações Python GIO/GTK 3 neste host e atualize a lista. Os pacotes variam conforme a distribuição. Não é necessário um ambiente de desktop nem um monitor.",
     "setupRequirements": "Requer atenção: {requirements}",
     "setupGuide": "Guia de instalação",
-    "catalogUnavailable": "Não foi possível ler o catálogo de aplicativos do host. Verifique a instalação do GIO/GTK no host e atualize a lista.",
+    "catalogUnavailable": "Não foi possível ler o catálogo de aplicativos do host. Verifique se o ambiente de execução está funcionando neste host e atualize a lista.",
     "setupTitle": "Preparar este host",
     "starting": "Iniciando aplicativo…",
     "stop": "Encerrar sessão",
     "stopDescription": "Isso fecha o aplicativo e todas as suas janelas. Alterações não salvas podem ser perdidas.",
     "stopTitle": "Encerrar esta sessão do aplicativo?",
     "title": "Aplicativos do host",
-    "unsupportedDescription": "No momento, este recurso requer um ambiente de execução Linux. Conecte-se a um host Linux para utilizá-lo.",
-    "unsupportedTitle": "Host Linux necessário",
-    "allApplications": "Todos os aplicativos"
+    "unsupportedDescription": "Os aplicativos do host exigem um ambiente de execução Linux ou macOS. Conecte-se a um host compatível.",
+    "unsupportedTitle": "Host compatível necessário",
+    "allApplications": "Todos os aplicativos",
+    "macPermissions": "Neste Mac, permita que o Redeven grave a tela e use a Acessibilidade nos Ajustes do Sistema e atualize a lista. Abrir aplicativos diretamente neste Mac não exige gravação de tela.",
+    "macSessionRequired": "Entre na sessão gráfica deste Mac, desbloqueie-a e atualize a lista.",
+    "macHelperMissing": "O componente de aplicativos do macOS está indisponível. Atualize ou reinstale o ambiente de execução do Redeven neste host e atualize a lista.",
+    "macAllowScreen": "Permitir gravação de tela",
+    "macAllowAccessibility": "Permitir acessibilidade",
+    "macSharedControl": "A entrada remota usa a sessão atual do usuário deste Mac e pode mudar a janela ativa.",
+    "macWindows": "Janelas do aplicativo",
+    "macCloseWindow": "Fechar janela do aplicativo",
+    "macInput": "Entrada de teclado do aplicativo",
+    "macRetained": "Fechar o visualizador mantém o aplicativo aberto no Mac. Parar o ambiente de execução desconecta o visualizador sem descartar o trabalho não salvo.",
+    "macStopDescription": "Solicitar que este aplicativo seja encerrado. Se houver trabalho não salvo, responda à caixa de diálogo de salvamento na janela do aplicativo.",
+    "macAddDescription": "Informe o caminho absoluto de um pacote .app instalado. O nome e o ícone são obtidos do macOS.",
+    "macBundlePath": "Caminho do pacote do aplicativo"
   }
 }

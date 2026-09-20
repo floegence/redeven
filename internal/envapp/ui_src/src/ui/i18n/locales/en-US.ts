@@ -7,6 +7,7 @@ import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
   hostApplications: {
+    "macMenu": "Application menu",
     "connecting": "Connecting to your application…",
     "reconnecting": "Reconnecting…",
     "disconnected": "Connection interrupted",
@@ -49,16 +50,29 @@ export const enUS = defineDictionary({
     "setupDescription": "Install Xpra 6.x, Xpra HTML5 v20 / v21, Xvfb, D-Bus, xauth, and Python GIO/GTK 3 bindings on this host, then refresh. Packages vary by distribution. No desktop environment or monitor is required.",
     "setupRequirements": "Needs attention: {requirements}",
     "setupGuide": "Installation guide",
-    "catalogUnavailable": "The host application catalog could not be read. Check the host’s GIO/GTK installation and refresh.",
+    "catalogUnavailable": "The host application catalog could not be read. Check that the runtime is working on this host, then refresh.",
     "setupTitle": "Prepare this host",
     "starting": "Starting application…",
     "stop": "End session",
     "stopDescription": "This closes the application and all its windows. Unsaved changes may be lost.",
     "stopTitle": "End this application session?",
     "title": "Host Applications",
-    "unsupportedDescription": "Host applications currently require a Linux runtime. Connect to a Linux host to use this feature.",
-    "unsupportedTitle": "Linux host required",
-    "allApplications": "All applications"
+    "unsupportedDescription": "Host applications require a Linux or macOS runtime. Connect to a supported host to use this feature.",
+    "unsupportedTitle": "Supported host required",
+    "allApplications": "All applications",
+    "macPermissions": "On this Mac, allow screen recording and accessibility for Redeven in System Settings, then refresh. Opening applications directly on this Mac does not require screen recording.",
+    "macSessionRequired": "Sign in to the graphical session on this Mac and unlock it, then refresh.",
+    "macHelperMissing": "The macOS application component is unavailable. Update or reinstall the Redeven runtime on this host, then refresh.",
+    "macAllowScreen": "Allow screen recording",
+    "macAllowAccessibility": "Allow accessibility",
+    "macSharedControl": "Remote input uses this Mac’s current user session and may change its active window.",
+    "macWindows": "Application windows",
+    "macCloseWindow": "Close application window",
+    "macInput": "Application keyboard input",
+    "macRetained": "Closing the viewer keeps the application open on the Mac. Stopping the runtime disconnects the viewer without discarding unsaved work.",
+    "macStopDescription": "Request this application to quit. If it has unsaved work, respond to its save dialog in the application window.",
+    "macAddDescription": "Choose an installed .app bundle by its absolute path. Its name and icon are read from macOS.",
+    "macBundlePath": "Application bundle path"
   },
   flowerSurface: flowerSurfaceEnUS,
   document: {

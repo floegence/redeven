@@ -6171,6 +6171,7 @@
     }
   },
   "hostApplications": {
+    "macMenu": "アプリのメニュー",
     "connecting": "アプリに接続しています…",
     "reconnecting": "再接続しています…",
     "disconnected": "接続が切れました",
@@ -6213,15 +6214,28 @@
     "setupDescription": "ホストに Xpra 6.x、Xpra HTML5 v20 / v21、Xvfb、D-Bus、xauth、Python GIO/GTK 3 バインディングをインストールして更新してください。パッケージはディストリビューションによって異なります。デスクトップ環境やモニターは不要です。",
     "setupRequirements": "準備が必要な項目：{requirements}",
     "setupGuide": "インストールガイド",
-    "catalogUnavailable": "ホストのアプリケーション一覧を読み取れませんでした。ホストの GIO/GTK のインストール状態を確認して更新してください。",
+    "catalogUnavailable": "ホストのアプリ一覧を読み取れませんでした。このホストのランタイムが動作していることを確認してから、更新してください。",
     "setupTitle": "ホストの環境を準備",
     "starting": "アプリを起動中…",
     "stop": "セッションを終了",
     "stopDescription": "アプリとすべてのウィンドウが閉じます。未保存の変更が失われる可能性があります。",
     "stopTitle": "このアプリのセッションを終了しますか？",
     "title": "ホストアプリ",
-    "unsupportedDescription": "この機能は現在 Linux ランタイムが必要です。Linux ホストに接続してご利用ください。",
-    "unsupportedTitle": "Linux ホストが必要です",
-    "allApplications": "すべてのアプリ"
+    "unsupportedDescription": "ホストアプリには Linux または macOS のランタイムが必要です。対応ホストに接続してください。",
+    "unsupportedTitle": "対応ホストが必要です",
+    "allApplications": "すべてのアプリ",
+    "macPermissions": "この Mac のシステム設定で Redeven の画面収録とアクセシビリティを許可し、再読み込みしてください。この Mac でアプリを直接開く場合、画面収録の許可は不要です。",
+    "macSessionRequired": "この Mac のグラフィカルセッションにログインしてロックを解除し、再読み込みしてください。",
+    "macHelperMissing": "macOS アプリ用コンポーネントを利用できません。このホストの Redeven ランタイムを更新または再インストールし、再読み込みしてください。",
+    "macAllowScreen": "画面収録を許可",
+    "macAllowAccessibility": "アクセシビリティを許可",
+    "macSharedControl": "リモート入力はこの Mac の現在のユーザーセッションを使用し、アクティブなウインドウを切り替える場合があります。",
+    "macWindows": "アプリのウインドウ",
+    "macCloseWindow": "アプリのウインドウを閉じる",
+    "macInput": "アプリへのキーボード入力",
+    "macRetained": "表示ウインドウを閉じても、Mac 上のアプリは開いたままです。ランタイムを停止すると接続が切れますが、未保存の作業は破棄されません。",
+    "macStopDescription": "このアプリに終了を要求します。未保存の作業がある場合は、アプリのウインドウで保存ダイアログに応答してください。",
+    "macAddDescription": "インストール済みの .app バンドルの絶対パスを入力してください。名前とアイコンは macOS から取得します。",
+    "macBundlePath": "アプリバンドルのパス"
   }
 }
