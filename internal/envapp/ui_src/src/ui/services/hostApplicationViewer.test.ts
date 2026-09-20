@@ -7,14 +7,14 @@ const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.js'), 'utf8');
-const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0];
+const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '');
 const copy = {starting:'Starting', connecting:'Connecting', reconnecting:'Reconnecting', disconnected:'Disconnected', failed:'Failed', ended:'Ended', retry:'Retry', reconnect:'Reconnect', connectionHint:'Return to your application'};
 let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.close(); });
 
-async function viewer(deferredInitialization = false, native = false) {
-  dom = new JSDOM(html, { url:'http://localhost/pf/test/_redeven_host_app/', runScripts:'outside-only', pretendToBeVisual:true });
+async function viewer(deferredInitialization = false, native = false, lexicalClient = false) {
+  dom = new JSDOM(html, { url:'http://localhost/pf/test/_redeven_host_app/', runScripts:'dangerously', pretendToBeVisual:true });
   const fetch = vi.fn().mockResolvedValue({ok:true, json:async () => ({state:'running', password:'private'})});
   dom.window.fetch = fetch;
   dom.window.requestAnimationFrame = cb => { cb(0); return 1; };
@@ -47,7 +47,14 @@ async function viewer(deferredInitialization = false, native = false) {
     _new_window:vi.fn(), do_send_damage_sequence:vi.fn(), send_configure_window:vi.fn(),
     send_control_refresh:vi.fn(), close:vi.fn(), callback_close:() => {}, on_last_window:vi.fn(),
   };
-  if (!deferredInitialization) Object.assign(frame.contentWindow!, {client});
+  if (!deferredInitialization) {
+    Object.assign(frame.contentWindow!, {client});
+    if (lexicalClient) {
+      const declaration = doc.createElement('script');
+      declaration.textContent = 'let client = window.client; delete window.client;';
+      doc.head.append(declaration);
+    }
+  }
   frame.dispatchEvent(new dom.window.Event('load'));
   return {frame, doc, client, appWindow, fetch, nativeWindow, windowStateChanged: (state: { maximized: boolean; minimized: boolean }) => windowStateChanged(state), state:() => dom.window.document.body.dataset.state};
 }
@@ -71,6 +78,13 @@ describe('host application viewer', () => {
     v.client.do_send_damage_sequence(2, 1, 100, 100, 10, '');
     expect(v.state()).toBe('active');
     expect(v.frame.getAttribute('aria-hidden')).toBe('false');
+  });
+
+  it('connects to an HTML5 client declared as a lexical global', async () => {
+    const v = await viewer(false, false, true);
+    v.appWindow(1); v.client._new_window(1);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    expect(v.state()).toBe('active');
   });
 
   it('waits for asynchronous client initialization on cached document reloads', async () => {

@@ -18,9 +18,11 @@ launch failures, and insufficient permissions fail explicitly.
 
 # Host and application boundary
 
-The supported host is Linux with Xpra 6 or newer and the separately installed
-Xpra HTML5 v20 client, Xvfb, D-Bus, xauth, and Python GIO/GTK 3 bindings. These remain
-external host dependencies; Redeven does not vendor or download Xpra. A desktop
+The supported host is Linux with Xpra 6.x and a separately installed
+Xpra HTML5 v20 or v21 client, Xvfb, D-Bus, xauth, and Python GIO/GTK 3 bindings. These remain
+external host dependencies; Redeven does not vendor or download Xpra. The
+[platform and initialization contract](host-application-platforms.md) owns capability
+detection, installation boundaries, and distribution validation. A desktop
 environment and physical display are unnecessary. The launcher creates a private
 virtual X11 display and D-Bus session, clearing inherited desktop display and bus
 addresses. The application's files, OS permissions, executable, and home directory
@@ -109,7 +111,9 @@ callbacks cannot restore a disconnected or superseded view. Terminated sessions
 cannot offer an unusable retry. A failed initial Desktop
 navigation also has a localized, bridge-free reconnect page.
 
-The adapter integrates the separately installed HTML5 v20 client. Primary normal
+The adapter integrates the separately installed HTML5 v20/v21 client. It reads
+the client binding inside the upstream document, including v21’s lexical global,
+without modifying installed upstream assets. Primary normal
 windows fill the viewer and track its size through Xpra's window geometry API;
 Xpra decorations, wallpaper, toolbar, and loading UI are hidden. Native viewer
 chrome owns primary-window movement and the authoritative maximize/minimize state.

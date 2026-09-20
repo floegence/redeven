@@ -58,3 +58,6 @@
 @keyframes host-app-spin { to{transform:rotate(360deg)} }
 @keyframes host-app-breathe { from{opacity:.55}to{opacity:1} }
 @media(prefers-reduced-motion:reduce) { .host-app-tile[aria-busy=true]::after,.host-app-launch-indicator,.host-app-skeleton-tile { animation:none; }.host-app-tile[aria-busy=true]::after{width:100%} }
+
+.host-apps-setup-guide { display:inline-flex; align-items:center; gap:6px; margin-top:10px; color:var(--primary); cursor:pointer; }
+.host-apps-setup-guide:hover { text-decoration:underline; }
