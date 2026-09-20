@@ -24,7 +24,9 @@ and HTML5 generations need explicit adapter validation before being advertised.
 
 The Runtime checks actual executable availability, Xpra's version and advertised
 local server commands, imports the GIO/GTK bindings, and validates the installed
-HTML5 version and principal assets. It obtains the resource root from `xpra
+HTML5 version, principal assets, and referenced scripts/stylesheets, including
+distribution symlinks into shared resource directories. Broken links report a
+missing HTML5 client before a viewer opens. It obtains the resource root from `xpra
 path-info` and selects its `www` or `html5` directory, passing that exact directory
 to the session's HTTP server. A nonstandard installation must expose its assets
 under that resource root; Xpra's `XPRA_RESOURCES_DIR` override is respected. Neither
@@ -40,7 +42,9 @@ system service inherits it.
 
 Detection is a prerequisite check, not a promise that every application will work.
 The actual launch still requires a GIO receipt, an HTTP endpoint, and Xpra's
-nonempty window inventory. Application-specific failures retain the bounded
+nonempty window inventory. The inventory probe allows up to eight seconds because
+Xpra 6.2 spends about five seconds gathering optional codec information even when
+its X11 windows are ready. Application-specific failures retain the bounded
 startup and cleanup contract. Library refresh reruns detection after installation.
 Redeven does not elevate privileges, change package repositories, install system
 packages, or disable SELinux/AppArmor automatically.
@@ -67,49 +71,10 @@ integration, hardware acceleration, and privileged dialogs require separate
 application-specific verification. Application discovery follows GIO and the
 service's XDG environment, including exported package desktop entries when present.
 
-# Distribution validation
+# Validation
 
-The September 2026 focused matrix covers ARM64 userspace installations without a
-desktop environment or monitor. Debian, Fedora, and openSUSE checks run as an
-unprivileged user in disposable test images. These images are a test harness;
-the product runs applications directly on its host. Container checks cannot
-certify a distribution's boot, kernel, SELinux/AppArmor, GPU, or login policies.
-
-| Environment | Installed stack | Evidence scope |
-| --- | --- | --- |
-| Ubuntu 22.04, orange host | Xpra 6.5.3, HTML5 v20 | Native host application acceptance, browser/Desktop window controls, input and reconnect |
-| Debian 13 | Upstream Xpra 6.5.3 packages with explicit `xpra-x11`, HTML5 v21 | GIO checks; X11 launch/resume/stop; browser display, input, reconnect and application-exit closure |
-| Fedora 43 | Distribution Xpra 6.5.3, separately installed HTML5 v20 | Same installed-stack and GIO checks |
-| openSUSE Tumbleweed | Distribution Xpra 6.5.3, separately installed HTML5 v20 | Same installed-stack and GIO checks |
-
-Observed packaging differences must remain visible in installation guidance:
-
-- Debian 13's tested default repository did not supply Xpra. The upstream signed
-  repository supplied it, with `xpra-x11` needed explicitly when recommendations
-  were disabled. Installing `xpra-server` alone did not enable seamless X11.
-- The tested Fedora minimal installation needed `gobject-introspection` in
-  addition to Python GObject and GTK to supply `xlib-2.0.typelib`.
-- The tested Fedora/openSUSE repositories did not supply `xpra-html5`; the
-  separately released v20 assets were installed in Xpra's resource directory.
-- Enterprise Linux can package Xpra against a newer Python than the system
-  interpreter. Upstream package repositories and prerequisite repositories vary
-  by release and architecture; installing the LTS Xpra 5.x line does not satisfy
-  this integration.
-
-Arch, RHEL/Rocky/AlmaLinux, Alpine, NixOS, other versions, and x86_64 are not certified
-by this matrix. They are not blocked by a distribution allowlist; their exact
-packages, libc/runtime requirements, filesystem layout, policies, and application
-backends must satisfy the same checks. Do not describe all Linux distributions or
-all graphical applications as verified.
-
-Run the reusable installed-stack checks on a prepared Linux host with Go and xterm:
-
-```sh
-REDEVEN_TEST_HOST_APPLICATIONS=1 GOWORK=off go test ./internal/hostapps -run TestInstalled -count=1 -v
-```
-
-The tests create their own custom entry, state, configuration fixture, and
-processes. They do not assume a distribution-specific desktop-entry identifier.
+See the [distribution validation record](../operations/host-application-validation.md)
+for tested stacks, architecture boundaries and repeatable installed-host checks.
 
 # macOS boundary
 

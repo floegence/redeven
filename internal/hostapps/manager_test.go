@@ -3,10 +3,12 @@ package hostapps
 import (
 	"context"
 	_ "embed"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +16,31 @@ import (
 	"github.com/floegence/redeven/internal/portforward"
 	"github.com/floegence/redeven/internal/portforward/registry"
 )
+
+func TestWindowReadinessAllowsOlderXpraInfoLatency(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires Unix sockets and a shell")
+	}
+	dir, err := os.MkdirTemp("", "xpra-probe-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	listener, err := net.Listen("unix", filepath.Join(dir, "xpra"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	probe := filepath.Join(dir, "probe")
+	// Xpra 6.2 collects server information for about five seconds even when
+	// the application's X11 window is already mapped.
+	if err := os.WriteFile(probe, []byte("#!/bin/sh\nsleep 3\nprintf 'state.windows=1\\n'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if !sessionHasWindows(probe, dir) {
+		t.Fatal("a mapped window was rejected because server information was slow")
+	}
+}
 
 //go:embed desktop_test.py
 var desktopTests []byte

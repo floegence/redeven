@@ -120,7 +120,8 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
       const packageLabel = `package-${target.goos}-${target.goarch}`;
       const redevenTarball = `redeven_${target.goos}_${target.goarch}.tar.gz`;
       const gatewayTarball = `redeven-gateway_${target.goos}_${target.goarch}.tar.gz`;
-      const packageNames = [...packageSharedFiles, redevenTarball, gatewayTarball];
+      const relinkTarballs = target.goos === 'linux' ? [`redeven_relink_linux_${target.goarch}.tar.gz`] : [];
+      const packageNames = [...packageSharedFiles, redevenTarball, gatewayTarball, ...relinkTarballs];
       requireClosedDirectory(packageDirectory, packageNames, packageLabel);
       sourceInventories.push([packageDirectory, packageNames, packageLabel]);
 
@@ -136,6 +137,7 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
       }
       addOutput(outputs, redevenTarball, stage(path.join(packageDirectory, redevenTarball)));
       addOutput(outputs, gatewayTarball, stage(path.join(packageDirectory, gatewayTarball)));
+      for (const name of relinkTarballs) addOutput(outputs, name, stage(path.join(packageDirectory, name)));
 
       const desktopDirectory = path.join(downloadsDir, `desktop-${target.goos}-${target.goarch}`);
       const desktopLabel = `desktop-${target.goos}-${target.goarch}`;
@@ -344,6 +346,7 @@ function expectedReleaseOutputNames(version, stableRelease) {
     ...targetDefinitions.flatMap((target) => [
       `redeven_${target.goos}_${target.goarch}.tar.gz`,
       `redeven-gateway_${target.goos}_${target.goarch}.tar.gz`,
+      ...(target.goos === 'linux' ? [`redeven_relink_linux_${target.goarch}.tar.gz`] : []),
       ...target.extensions.flatMap((extension) => {
         const installer = `Redeven-Desktop-${version}-${target.desktopOS}-${target.desktopArch}.${extension}`;
         return [installer, `${installer}.redevplugin-verification.json`];
@@ -370,6 +373,7 @@ function requireManagedOutputInventory(directory, expectedNames, phase) {
 
 function isManagedReleaseOutput(name) {
   return name === markerName || packageSharedFiles.includes(name) || /^redeven_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
+    /^redeven_relink_linux_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
     /^redeven-gateway_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
     /^Redeven-Desktop-.+\.(?:deb|rpm|dmg)(?:\.redevplugin-verification\.json)?$/u.test(name) ||
     /^Redeven-Desktop-.+-mac-(?:x64|arm64)\.md$/u.test(name) ||

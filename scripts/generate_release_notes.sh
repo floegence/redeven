@@ -274,6 +274,7 @@ curl -fsSL ${install_script_url} | REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION=
 - \`redeven-gateway_linux_arm64.tar.gz\`
 - \`redeven-gateway_darwin_amd64.tar.gz\`
 - \`redeven-gateway_darwin_arm64.tar.gz\`
+- \`redeven_relink_linux_amd64.tar.gz\` and \`redeven_relink_linux_arm64.tar.gz\`: matching GNU libc source, licenses, and Runtime/Gateway relink objects
 - \`Redeven-Desktop-${release_tag#v}-linux-x64.deb\`
 - \`Redeven-Desktop-${release_tag#v}-linux-x64.rpm\`
 - \`Redeven-Desktop-${release_tag#v}-linux-arm64.deb\`

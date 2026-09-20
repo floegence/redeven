@@ -113,3 +113,34 @@ func TestRelativeExecutableDirectoriesAreNotSearched(t *testing.T) {
 		t.Fatalf("unsafe executable search: %v", paths)
 	}
 }
+
+func TestDependenciesRejectBrokenHTMLResourceLinks(t *testing.T) {
+	bin := dependencyFixture(t, "xpra v6.2.2", true, true)
+	dir := filepath.Join(filepath.Dir(bin), "shared assets", "www")
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(`<script src="js/jquery.js?v=20"></script><link rel="stylesheet" href="client.css">`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "client.css"), []byte("body {}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	shared := filepath.Join(t.TempDir(), "jquery.js")
+	if err := os.Symlink(shared, filepath.Join(dir, "js", "jquery.js")); err != nil {
+		t.Fatal(err)
+	}
+	check := func(ready bool) {
+		t.Helper()
+		a, _ := detectDependencies(context.Background(), "linux", []string{"PATH=" + bin})
+		if a.Ready != ready {
+			t.Fatalf("HTML resources: %+v, want ready=%v", a, ready)
+		}
+	}
+	check(false)
+	if err := os.WriteFile(shared, []byte("/* installed distribution resource */"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	check(true)
+	if err := os.Remove(filepath.Join(dir, "client.css")); err != nil {
+		t.Fatal(err)
+	}
+	check(false)
+}
