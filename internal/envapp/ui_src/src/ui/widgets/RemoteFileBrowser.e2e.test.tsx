@@ -190,6 +190,7 @@ const gitStashWindowRenderStore = vi.hoisted(() => ({
 const gitDiffDialogRenderStore = vi.hoisted(() => ({
   snapshots: [] as Array<{
     open: boolean;
+    desktopFloatingWindow: boolean;
     itemPath?: string;
     itemOldPath?: string;
     itemNewPath?: string;
@@ -1207,6 +1208,7 @@ vi.mock('./GitWorkspace', () => ({
 vi.mock('./GitDiffDialog', () => ({
   GitDiffDialog: (props: {
     open: boolean;
+    desktopFloatingWindow?: boolean;
     item?: {
       path?: string;
       oldPath?: string;
@@ -1225,6 +1227,7 @@ vi.mock('./GitDiffDialog', () => ({
     createEffect(() => {
       gitDiffDialogRenderStore.snapshots.push({
         open: Boolean(props.open),
+        desktopFloatingWindow: Boolean(props.desktopFloatingWindow),
         itemPath: props.item?.path,
         itemOldPath: props.item?.oldPath,
         itemNewPath: props.item?.newPath,
@@ -1864,7 +1867,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('adds a Files context menu diff action for modified files without preloading diff content', async () => {
+  it('opens Files context menu diffs in a floating window without preloading diff content', async () => {
     widgetStateStore.values['widget-1'] = {
       browserSidebarWidth: 312,
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
@@ -1917,6 +1920,7 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.querySelector('[data-testid="git-diff-dialog"]')).toBeTruthy();
       expect(gitDiffDialogRenderStore.snapshots.at(-1)).toMatchObject({
         open: true,
+        desktopFloatingWindow: true,
         itemPath: 'src/.env',
         itemSection: 'unstaged',
         sourceKind: 'workspace',

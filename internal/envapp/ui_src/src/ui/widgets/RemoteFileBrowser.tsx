@@ -6004,6 +6004,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         title={i18n.t('git.changes.workspaceDiffTitle')}
         description={filesGitDiffDialogItem() ? changeSecondaryPath(filesGitDiffDialogItem()) : i18n.t('git.changes.workspaceDiffDescription')}
         emptyMessage={i18n.t('git.changes.workspaceDiffEmpty')}
+        desktopFloatingWindow
       />
 
       <GitStashWindow

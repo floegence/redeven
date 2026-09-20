@@ -1272,7 +1272,7 @@
               "ui",
               "workbench"
             ],
-            "summary": "Published Floe Webapp owns file-menu placement, visible-viewport intersection,\nmeasurement, scrolling, submenu navigation, gesture handling, and dismissal.\nRedeven supplies the complete Files workspace boundary, product actions, and\nlocalized labels. Menus stay at least 8 CSS px inside the usable intersection of\nFiles, the owning surface, and the visible viewport, with mobile Flower chrome\nexcluded. Invalid or unavailable explicit boundaries close the menu. Files does\nnot raise its global layer or duplicate Workbench coordinate conversion to make\nan obscured action reachable.",
+            "summary": "Published Floe Webapp owns file-menu placement, visible-viewport intersection,\nmeasurement, scrolling, submenu navigation, gesture handling, and dismissal.\nRedeven supplies the complete Files workspace boundary, product actions, and\nlocalized labels. Menus stay at least 8 CSS px inside the usable intersection of\nFiles, the owning surface, and the visible viewport, with mobile Flower chrome\nexcluded. Invalid or unavailable explicit boundaries close the menu. Files does\nnot raise its global layer or duplicate Workbench coordinate conversion to make\nan obscured action reachable.\n\nFiles diff inspection opens a nonmodal desktop window with a constrained patch\nviewport. Users can keep browsing files and reach the last diff line; mobile\nuses the shared small-screen modal presentation.",
             "section_count": 2
           },
           {
@@ -16512,7 +16512,7 @@
         "ui",
         "workbench"
       ],
-      "timestamp": "2026-09-15T00:00:00Z",
+      "timestamp": "2026-09-20T00:00:00Z",
       "frontmatter": {
         "description": "Keep file operations reachable inside the complete Files workspace across Activity, floating windows, Workbench, and touch layouts.",
         "tags": [
@@ -16522,12 +16522,12 @@
           "ui",
           "workbench"
         ],
-        "timestamp": "2026-09-15T00:00:00Z",
+        "timestamp": "2026-09-20T00:00:00Z",
         "title": "Files context menus",
         "type": "UI Contract"
       },
-      "body_length": 5296,
-      "summary": "Published Floe Webapp owns file-menu placement, visible-viewport intersection,\nmeasurement, scrolling, submenu navigation, gesture handling, and dismissal.\nRedeven supplies the complete Files workspace boundary, product actions, and\nlocalized labels. Menus stay at least 8 CSS px inside the usable intersection of\nFiles, the owning surface, and the visible viewport, with mobile Flower chrome\nexcluded. Invalid or unavailable explicit boundaries close the menu. Files does\nnot raise its global layer or duplicate Workbench coordinate conversion to make\nan obscured action reachable.",
+      "body_length": 6762,
+      "summary": "Published Floe Webapp owns file-menu placement, visible-viewport intersection,\nmeasurement, scrolling, submenu navigation, gesture handling, and dismissal.\nRedeven supplies the complete Files workspace boundary, product actions, and\nlocalized labels. Menus stay at least 8 CSS px inside the usable intersection of\nFiles, the owning surface, and the visible viewport, with mobile Flower chrome\nexcluded. Invalid or unavailable explicit boundaries close the menu. Files does\nnot raise its global layer or duplicate Workbench coordinate conversion to make\nan obscured action reachable.\n\nFiles diff inspection opens a nonmodal desktop window with a constrained patch\nviewport. Users can keep browsing files and reach the last diff line; mobile\nuses the shared small-screen modal presentation.",
       "sections": [
         {
           "id": "contract",
@@ -16540,11 +16540,21 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "## Mutation results\n\nSuccessful creation closes the name dialog, inserts the entry into the loaded\nparent directory, and reveals the new entry. Creation, duplication, and moves\nuse the same concrete directory-node tree as loaded snapshots: scoped roots,\nincluding `/`, contain entries in their children rather than as sibling nodes.\nInsertion requires a loaded parent and does not duplicate an existing path.\nUsers do not need to refresh a loaded root to see a successful creation or copy.\n\n## Menu ownership\n\nExisting context-event target snapshots, multi-selection, permissions, file\noperations, and confirmation owners are unchanged. The menu does not add backend\nAPIs, perform mutations outside the existing callbacks, or replace deletion\nconfirmation. [Workbench surface lifecycle](workbench-surface-lifecycle.md) owns\nthe common projected host and local interaction contract.",
-          "char_count": 881
+          "body": "## Diff inspection\n\nView Diff opens the selected workspace change through `PreviewWindow` on\ndesktop, reusing shared dragging, resizing, stacking, and geometry persistence.\nOpening the window does not block the Files workspace. Mobile retains the\nviewport-sized modal. Both presentations consume the same request, mode, and\nselection contracts as [Git diff inspection](git-browser-visual-states.md).\n\nThe window or modal supplies a definite height and a shrinkable content body.\nThe patch owns vertical scrolling, while the title, mode controls, and patch\nactions stay outside that viewport. The persistent horizontal scrollbar and\nShow All Lines action stay inside the visible surface. Expanding a long patch,\nloading full context, and resizing the surface must keep its last line\nreachable. A modal height ceiling alone cannot establish this scroll boundary.\n\n## Mutation results\n\nSuccessful creation closes the name dialog, inserts the entry into the loaded\nparent directory, and reveals the new entry. Creation, duplication, and moves\nuse the same concrete directory-node tree as loaded snapshots: scoped roots,\nincluding `/`, contain entries in their children rather than as sibling nodes.\nInsertion requires a loaded parent and does not duplicate an existing path.\nUsers do not need to refresh a loaded root to see a successful creation or copy.\n\n## Menu ownership\n\nExisting context-event target snapshots, multi-selection, permissions, file\noperations, and confirmation owners are unchanged. The menu does not add backend\nAPIs, perform mutations outside the existing callbacks, or replace deletion\nconfirmation. [Workbench surface lifecycle](workbench-surface-lifecycle.md) owns\nthe common projected host and local interaction contract.",
+          "char_count": 1743
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx:0:verifies the files context action selects desktop floating presentation without preloading diff content.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx",
+          "description": "Verifies the Files context action selects desktop floating presentation without preloading diff content."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffDialog.browser.test.tsx:0:checks long-patch expansion, both scroll axes, modal and floating containment, background interaction, resizing, and closing.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffDialog.browser.test.tsx",
+          "description": "Checks long-patch expansion, both scroll axes, modal and floating containment, background interaction, resizing, and closing."
+        },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserShared.test.ts:0:verifies root-node insertion, duplicate suppression, and loaded-parent requirements against the snapshot tree shape.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserShared.test.ts",
@@ -16593,6 +16603,12 @@
           "path": "ui/flower-activity-companion.md",
           "concept_id": "ui.flower-activity-companion",
           "title": "Flower Activity companion"
+        },
+        {
+          "label": "Git diff inspection",
+          "path": "ui/git-browser-visual-states.md",
+          "concept_id": "ui.git-browser-visual-states",
+          "title": "Git browser visual states"
         },
         {
           "label": "Workbench input ownership",
@@ -19104,6 +19120,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Files context menus",
+          "path": "ui/files-context-menu.md",
+          "concept_id": "ui.files-context-menu",
+          "title": "Files context menus"
         }
       ]
     },
@@ -21306,5 +21328,5 @@
       ]
     }
   ],
-  "source_sha256": "d6442f9560245f7df0d11316c5d6641ad0d00f7a4e05b3fd7bcc24de7710d838"
+  "source_sha256": "3416c4e0fc51fcdea4585bc9d97b9846566f4ba9ade2ddccf98d3315c7bb9a82"
 }

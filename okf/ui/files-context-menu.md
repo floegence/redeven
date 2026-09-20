@@ -3,7 +3,7 @@ type: UI Contract
 title: Files context menus
 description: Keep file operations reachable inside the complete Files workspace across Activity, floating windows, Workbench, and touch layouts.
 tags: [ui, files, menus, mobile, workbench]
-timestamp: 2026-09-15T00:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 # Summary
 
@@ -15,6 +15,10 @@ Files, the owning surface, and the visible viewport, with mobile Flower chrome
 excluded. Invalid or unavailable explicit boundaries close the menu. Files does
 not raise its global layer or duplicate Workbench coordinate conversion to make
 an obscured action reachable.
+
+Files diff inspection opens a nonmodal desktop window with a constrained patch
+viewport. Users can keep browsing files and reach the last diff line; mobile
+uses the shared small-screen modal presentation.
 
 # Contract
 
@@ -62,6 +66,21 @@ the current menu; the next trigger starts a fresh placement.
 
 # Boundaries
 
+## Diff inspection
+
+View Diff opens the selected workspace change through `PreviewWindow` on
+desktop, reusing shared dragging, resizing, stacking, and geometry persistence.
+Opening the window does not block the Files workspace. Mobile retains the
+viewport-sized modal. Both presentations consume the same request, mode, and
+selection contracts as [Git diff inspection](git-browser-visual-states.md).
+
+The window or modal supplies a definite height and a shrinkable content body.
+The patch owns vertical scrolling, while the title, mode controls, and patch
+actions stay outside that viewport. The persistent horizontal scrollbar and
+Show All Lines action stay inside the visible surface. Expanding a long patch,
+loading full context, and resizing the surface must keep its last line
+reachable. A modal height ceiling alone cannot establish this scroll boundary.
+
 ## Mutation results
 
 Successful creation closes the name dialog, inserts the entry into the loaded
@@ -80,6 +99,9 @@ confirmation. [Workbench surface lifecycle](workbench-surface-lifecycle.md) owns
 the common projected host and local interaction contract.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx` - Verifies the Files context action selects desktop floating presentation without preloading diff content.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffDialog.browser.test.tsx` - Checks long-patch expansion, both scroll axes, modal and floating containment, background interaction, resizing, and closing.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserShared.test.ts` - Verifies root-node insertion, duplicate suppression, and loaded-parent requirements against the snapshot tree shape.
 
