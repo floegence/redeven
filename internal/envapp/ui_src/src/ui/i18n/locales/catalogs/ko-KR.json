@@ -1680,7 +1680,7 @@
     "opening": "열기...",
     "pathNavigationCanceled": "경로 탐색이 취소되었습니다.",
     "navigationFailure": {
-      "title": "요청한 폴더를 열 수 없습니다",
+      "title": "폴더를 사용할 수 없음",
       "outsideScope": "이 폴더는 현재 환경에 허용된 파일 시스템 루트 밖에 있습니다.",
       "sessionPermissionDenied": "현재 세션에는 이 폴더를 읽을 권한이 없습니다.",
       "hostPermissionDenied": "운영 체제가 이 폴더에 대한 접근을 거부했습니다.",

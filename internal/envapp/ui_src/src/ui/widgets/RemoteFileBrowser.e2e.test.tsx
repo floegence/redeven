@@ -2596,7 +2596,7 @@ describe('RemoteFileBrowser persistence', () => {
       expect(panel?.textContent).toContain('outside the filesystem roots authorized for this environment');
       expect(panel?.textContent).toContain('Retry');
       expect(panel?.textContent).toContain('Open Home');
-      expect(panel?.textContent).toContain('Copy path');
+      expect(panel?.querySelector('button[aria-label="Copy path"]')).not.toBeNull();
       expect(panel?.textContent).toContain('Ask an environment administrator');
       expect(widgetStateStore.updateCalls).toEqual([]);
     } finally {

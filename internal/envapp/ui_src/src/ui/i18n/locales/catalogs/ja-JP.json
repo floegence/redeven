@@ -1680,7 +1680,7 @@
     "opening": "オープニング...",
     "pathNavigationCanceled": "パス ナビゲーションがキャンセルされました。",
     "navigationFailure": {
-      "title": "指定されたフォルダーを開けませんでした",
+      "title": "フォルダーを開けません",
       "outsideScope": "このフォルダーは、この環境で許可されたファイルシステムルートの外にあります。",
       "sessionPermissionDenied": "現在のセッションには、このフォルダーを読み取る権限がありません。",
       "hostPermissionDenied": "オペレーティングシステムによって、このフォルダーへのアクセスが拒否されました。",
