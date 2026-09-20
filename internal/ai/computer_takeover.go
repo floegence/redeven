@@ -47,6 +47,30 @@ func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, saf
 	}}
 }
 
+func computerInstallExecution() targetToolExecution {
+	return targetToolExecution{Payload: map[string]any{"browser_installation_required": true}, inputRequired: &fltools.InputRequest{
+		Summary:   "Install the built-in browser?",
+		Questions: []fltools.InputQuestion{{ID: "browser_install", Kind: "select", Prompt: "The built-in browser is not installed. Review the download size and choose environment download or a local Desktop upload. Nothing downloads until you confirm. You can disable this browser to continue without it and stop future installation requests.", Options: []string{"Continue with installed browser", "Continue without built-in browser"}}},
+	}}
+}
+func computerInstallInteraction(view flruntime.ThreadView, interaction flruntime.ThreadInteraction) bool {
+	if interaction.Input == nil || len(interaction.Input.Questions) != 1 || interaction.Input.Questions[0].ID != "browser_install" {
+		return false
+	}
+	for _, item := range view.Items {
+		activity := item.Activity
+		if item.TurnID != interaction.TurnID || item.RunID != interaction.RunID || activity == nil || activity.ToolID != interaction.ToolCallID || activity.Presentation == nil {
+			continue
+		}
+		for _, ref := range activity.Presentation.TargetRefs {
+			if ref.Kind == "computer_browser_install" && ref.ResourceRef == "managed" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func computerConnectionExecution() targetToolExecution {
 	return targetToolExecution{Payload: map[string]any{"browser_source": "system", "connection_required": true}, inputRequired: &fltools.InputRequest{
 		Summary:   "Connect your system browser",
@@ -129,7 +153,7 @@ func computerAssistanceInstructions(safety InteractionSafetyDecision) (string, s
 // Re-observation is a host control command, never replay of the paused model
 // action. Canonical tool provenance selects the target even if current changed.
 func computerControlCall(view flruntime.ThreadView, interaction flruntime.ThreadInteraction) (TargetToolCall, bool, error) {
-	if computerConnectionInteraction(view, interaction) {
+	if computerConnectionInteraction(view, interaction) || computerInstallInteraction(view, interaction) {
 		return TargetToolCall{}, false, nil
 	}
 	for _, item := range view.Items {
@@ -157,6 +181,25 @@ func computerControlCall(view flruntime.ThreadView, interaction flruntime.Thread
 }
 
 func (s *Service) respondComputerControl(ctx context.Context, meta *session.Meta, view flruntime.ThreadView, interaction flruntime.ThreadInteraction, answers map[string]string, respond func() (flruntime.ThreadView, error)) (flruntime.ThreadView, error) {
+	if computerInstallInteraction(view, interaction) {
+		host, err := s.browserInstaller(meta)
+		if err != nil {
+			return flruntime.ThreadView{}, err
+		}
+		state := host.browserInstallation.Snapshot()
+		answer := answers["browser_install"]
+		if len(answers) != 1 || (answer != "Continue with installed browser" && answer != "Continue without built-in browser") {
+			return flruntime.ThreadView{}, errors.New("invalid browser installation acknowledgement")
+		}
+		if answer == "Continue with installed browser" {
+			if _, err := host.requireManagedBrowser(); err != nil {
+				return flruntime.ThreadView{}, err
+			}
+		} else if state.Enabled {
+			return flruntime.ThreadView{}, errors.New("disable the built-in browser before continuing without it")
+		}
+		return respond()
+	}
 	if computerConnectionInteraction(view, interaction) {
 		if err := requireRWX(meta); err != nil {
 			return flruntime.ThreadView{}, err

@@ -3,6 +3,7 @@ import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { ArrowRightLeft, ChevronLeft, ChevronRight, Code, Globe, Info, MonitorPointer, Settings, Shield, Sparkles } from '@floegence/floe-webapp-core/icons';
 import type { FlowerComputerAccess, FlowerComputerCandidate, FlowerComputerEnvironment, FlowerComputerInventory, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 import type { FlowerComputerCopy } from './computerUseCopy';
+import { FlowerManagedBrowser } from './FlowerManagedBrowser';
 import { FlowerChromeConnection } from './FlowerChromeConnection';
 
 export type FlowerRequestedComputerAccess = Readonly<{ origin?: string; app?: string; foreground?: boolean }>;
@@ -13,7 +14,7 @@ export function FlowerComputerConnections(props: {
   threadID: string; adapter: Pick<FlowerSurfaceAdapter, 'runtime' | 'canMutate' | 'computerManagement'>; copy: FlowerComputerCopy;
   requested?: FlowerRequestedComputerAccess; fullAccess?: boolean; connectionOnly?: boolean;
   permissionLabel?: string; onEditPermissionMode?: () => void;
-  onContinue?: () => Promise<void>;
+  onContinue?: (enabled?: boolean) => Promise<void>; installationOnly?: boolean;
 }) {
   const [page, setPage] = createSignal<Page>('overview');
   const [inventory, setInventory] = createSignal<FlowerComputerInventory>();
@@ -46,7 +47,7 @@ export function FlowerComputerConnections(props: {
     : target.title || (target.kind === 'browser.managed' ? props.copy.managed : target.display_name);
   const stateLabel = (state?: string) => ({ ready: props.copy.available, on_demand: props.copy.onDemand,
     in_use: props.copy.inUse, user_control: props.copy.waitingControl, permission_required: props.copy.permissionRequired,
-    setup_required: props.copy.setupRequired, stopped: props.copy.stopped, connection_required: props.copy.disconnected }[state ?? ''] ?? props.copy.unknown);
+    disabled: props.copy.browserDisabled, installation_required: props.copy.browserNotInstalled, setup_required: props.copy.setupRequired, stopped: props.copy.stopped, connection_required: props.copy.disconnected }[state ?? ''] ?? props.copy.unknown);
   const candidateState = (target: FlowerComputerCandidate) => target.kind === 'browser.managed'
     && environment()?.managed.state !== 'on_demand' && environment()?.managed.state !== 'ready'
     ? environment()?.managed.state ?? 'unknown' : target.state;
@@ -83,8 +84,8 @@ export function FlowerComputerConnections(props: {
     await Promise.all([refreshEnvironment(epoch), refreshInventory(epoch)]);
     if (epoch === generation) setLoading(false);
   };
-  createEffect(on(() => [props.open, props.threadID, props.connectionOnly] as const, ([open]) => {
-    generation++; setPage('overview'); setInventory(undefined); setEnvironment(undefined); setAccess(undefined);
+  createEffect(on(() => [props.open, props.threadID, props.connectionOnly, props.installationOnly] as const, ([open]) => {
+    generation++; setPage(props.installationOnly ? 'managed' : 'overview'); setInventory(undefined); setEnvironment(undefined); setAccess(undefined);
     setProfiles([]); setError(''); setSaved(false); setDraft(''); setQuery(''); setOrigin(''); setProfileName(''); setEndpoint(''); setBusy(false);
     setInventoryFailed(false); setEnvironmentFailed(false);
     if (open && !props.connectionOnly) void load(); else setLoading(false);
@@ -96,8 +97,8 @@ export function FlowerComputerConnections(props: {
       if (epoch === generation) setAccess({ origins: value.origins ?? [], apps: value.apps ?? [], allow_foreground: value.allow_foreground });
     }, props.copy.accessSettingsFailed, true);
   };
-  const openProfiles = () => {
-    go('managed'); setProfiles([]);
+  const loadProfiles = () => {
+    setProfiles([]);
     void run(async epoch => {
       const value = await management()!.listManagedProfiles!();
       if (epoch === generation) setProfiles(value);
@@ -139,6 +140,7 @@ export function FlowerComputerConnections(props: {
   const capabilityHint = (kind: 'managed' | 'desktop') => {
     const state = environment()?.[kind].state;
     if (!state) return props.copy.loadFailed;
+    if (state === 'disabled') return props.copy.browserDisabledHint;
     if (state === 'permission_required') return props.copy.desktopPermissionHint;
     if (state === 'setup_required') return kind === 'managed' ? props.copy.managedMissingHint : props.copy.desktopMissingHint;
     return kind === 'managed' ? props.copy.managedHint : props.copy.desktopHint;
@@ -190,7 +192,7 @@ export function FlowerComputerConnections(props: {
                 <h4>{props.copy.managed}</h4>
                 <span class="flower-computer-status" data-tone={capabilityTone(environment()?.managed.state)}>{stateLabel(environment()?.managed.state)}</span>
                 <p class="flower-computer-description">{capabilityHint('managed')}</p>
-                <Show when={environment()?.managed.state === 'on_demand' || environment()?.managed.state === 'ready'} fallback={<Button variant="outline" onClick={() => diagnose('managed')}>{props.copy.details}<ChevronRight class="size-3.5" /></Button>}><Button variant="outline" disabled={!readable() || !management()?.listManagedProfiles} onClick={openProfiles}>{props.copy.managedDetails}<ChevronRight class="size-3.5" /></Button></Show>
+                <Button variant="outline" disabled={!readable()} onClick={() => go('managed')}>{props.copy.browserSettings}<ChevronRight class="size-3.5" /></Button>
               </section>
               <section class="flower-computer-capability">
                 <span class="flower-computer-capability-icon" aria-hidden="true"><Globe /></span>
@@ -226,19 +228,15 @@ export function FlowerComputerConnections(props: {
           <Button variant="outline" disabled={!mutable()} onClick={() => { setDraft(''); void load(); }}>{props.copy.refresh}</Button>
         </Show>
         <Show when={page() === 'managed'}>
-          <dl class="flower-computer-browser-facts">
-            <div><dt>{props.copy.managedEngine}</dt><dd>{props.copy.managedEngineValue}</dd></div>
-            <div><dt>{props.copy.managedInstall}</dt><dd>{props.copy.managedInstallValue}</dd></div>
-            <div><dt>{props.copy.managedMode}</dt><dd>{props.copy.managedModeValue}</dd></div>
-          </dl>
-          <div class="flower-computer-note"><Info aria-hidden="true" /><p class="flower-computer-description">{props.copy.profileHint}</p></div>
-          <details class="flower-computer-detail-card"><summary class="cursor-pointer text-xs font-medium">{props.copy.createProfileHint}</summary>
-            <p class="mt-3 flower-computer-description">{props.copy.profileIsolationHint}</p>
+          <Show when={management()?.loadBrowserInstallation}><FlowerManagedBrowser management={management()!} copy={props.copy} canMutate={props.adapter.canMutate !== false} onChange={() => void load()} onContinue={props.installationOnly ? props.onContinue : undefined} /></Show>
+          <p class="flower-computer-description">{props.copy.managedModeValue}</p>
+          <Show when={!props.installationOnly}><details class="flower-computer-detail-card" onToggle={event => { if (event.currentTarget.open) loadProfiles(); }}><summary class="cursor-pointer text-xs font-medium">{props.copy.createProfileHint}</summary>
+            <p class="mt-3 flower-computer-description">{props.copy.profileHint} {props.copy.profileIsolationHint}</p>
             <div class="mt-3 flower-computer-profile-list"><For each={profiles()}>{profile => <div class="flower-computer-profile"><Globe aria-hidden="true" /><span>{profile.id === 'browser-main' ? props.copy.profileDefault : profile.name}</span></div>}</For></div>
             <form class="mt-3 flex flex-wrap items-end gap-2" onSubmit={event => { event.preventDefault(); void run(async epoch => {
             const value = await management()!.createManagedProfile!(profileName().trim());
             if (epoch === generation) { setProfiles(value); setProfileName(''); }
-          }, props.copy.profileFailed); }}><label class="min-w-0 flex-1 space-y-1 text-xs">{props.copy.profileName}<input class="flower-settings-text-input w-full" value={profileName()} maxlength={120} required onInput={event => setProfileName(event.currentTarget.value)} /></label><Button size="sm" type="submit" disabled={!mutable() || !profileName().trim() || !management()?.createManagedProfile}>{props.copy.createProfile}</Button></form></details>
+          }, props.copy.profileFailed); }}><label class="min-w-0 flex-1 space-y-1 text-xs">{props.copy.profileName}<input class="flower-settings-text-input w-full" value={profileName()} maxlength={120} required onInput={event => setProfileName(event.currentTarget.value)} /></label><Button size="sm" type="submit" disabled={!mutable() || !profileName().trim() || !management()?.createManagedProfile}>{props.copy.createProfile}</Button></form></details></Show>
         </Show>
         <Show when={page() === 'chrome'}>
           <p class="text-muted-foreground">{props.copy.chromeOnlineHint}</p>

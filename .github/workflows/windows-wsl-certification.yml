@@ -60,8 +60,10 @@ jobs:
           mkdir -p dist
           bundle=desktop/.bundle/linux-amd64
           cp LICENSE THIRD_PARTY_NOTICES.md "$bundle/"
+          node scripts/stage_computer_archive.mjs "$bundle/computer.zip" "$bundle/computer"
           tar -C "$bundle" -czf dist/redeven_linux_amd64.tar.gz \
             redeven \
+            computer.zip \
             redevplugin-runtime \
             REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
             REDEVPLUGIN_RUNTIME.spdx.json \

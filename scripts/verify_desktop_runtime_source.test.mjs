@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
@@ -21,7 +22,8 @@ test('Windows staging binds the Linux source version and commit to every extract
     const identity = { schema_version: 1, files: runtimeFiles.map((file) => ({ name: file.path,
       sha256: `sha256:${file.sha256}`, size_bytes: file.size_bytes, executable: file.executable,
     })).sort((a, b) => a.name.localeCompare(b.name)) };
-    const manifest = { schema_version: 5, platform: 'linux', architecture: 'amd64', provenance: 'packaged_bundle',
+    execFileSync('python3', ['-c', "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1],'w'); z.writestr('manifest.json',b'{}'); z.close()", path.join(root, 'computer.zip')]);
+    const manifest = { computer_manifest_sha256: createHash('sha256').update('{}').digest('hex'), schema_version: 5, platform: 'linux', architecture: 'amd64', provenance: 'packaged_bundle',
       distribution_kind: 'bundled_host_runtime', managed_wsl_runtime: null,
       version: 'v0.12.0-test.1', commit: '0123456789ab', runtime_files: runtimeFiles,
       runtime_files_sha256: `sha256:${createHash('sha256').update(JSON.stringify(identity)).digest('hex')}` };

@@ -27,6 +27,7 @@ import (
 	"github.com/floegence/redeven/internal/accessrpc"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
+	"github.com/floegence/redeven/internal/browserinstall"
 	"github.com/floegence/redeven/internal/codeapp"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
@@ -59,6 +60,21 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 	// from the executable or explicit configuration; never from the process
 	// working directory, which is not stable for packaged or remote runtimes.
 	helper := firstRegularFile(computerHelperCandidates(os.Args[0], stateDir))
+	if helper == "" && strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_HOST_HELPER_PATH")) == "" {
+		executable, err := os.Executable()
+		if err == nil {
+			executable, err = filepath.EvalSymlinks(executable)
+		}
+		if err == nil {
+			archive := filepath.Join(filepath.Dir(executable), "computer.zip")
+			if _, statErr := os.Stat(archive); statErr == nil {
+				helper, err = browserinstall.PrepareComputerHelpers(archive, filepath.Join(stateDir, "computer"))
+			}
+		}
+		if err != nil {
+			slog.Warn("computer helper resources unavailable", "error", err)
+		}
+	}
 	registry := ai.NewTargetRegistry()
 	target := ai.TargetDescriptor{
 		ID: "browser-main", Kind: "browser.managed", DisplayName: "Redeven Managed Browser",
@@ -90,6 +106,7 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 	}
 	registerVirtualDesktop(stateDir, registry, executors)
 	runtime := ai.NewComputerUseRuntime(registry, executors, filepath.Join(stateDir, "computer", "keyframes"))
+	runtime.ConfigureManagedBrowser(filepath.Join(stateDir, "computer"))
 	return runtime, runtime
 }
 

@@ -190,6 +190,10 @@ func (r *ComputerUseRuntime) managedProfilesLocked() ([]ComputerManagedProfile, 
 	return profiles, nil
 }
 func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID string) (*managedBrowserProfile, error) {
+	executable, err := r.requireManagedBrowser()
+	if err != nil {
+		return nil, err
+	}
 	profiles, err := r.managedProfilesLocked()
 	if err != nil {
 		return nil, err
@@ -215,7 +219,7 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 	if info, err := os.Lstat(directory); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, errors.New("invalid managed profile directory")
 	}
-	cmd := exec.Command(resources.NodeBinary, filepath.Join(filepath.Dir(resources.HelperPath), "redevenManagedBrowser.mjs"), directory)
+	cmd := exec.Command(resources.NodeBinary, filepath.Join(filepath.Dir(resources.HelperPath), "redevenManagedBrowser.mjs"), directory, executable)
 	input, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err

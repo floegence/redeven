@@ -54,7 +54,7 @@ async function picker() { button(copy.switchTarget).click(); await waitFor(() =>
 it('gives capability actions visible button boundaries before hover', async () => {
   mount(); await ready();
   const actions = [...document.querySelectorAll<HTMLButtonElement>('button')]
-    .filter(item => [copy.managedDetails, copy.manage, copy.details].includes(item.textContent?.trim() ?? ''));
+    .filter(item => [copy.browserSettings, copy.manage, copy.details].includes(item.textContent?.trim() ?? ''));
   expect(actions).toHaveLength(3);
   for (const action of actions) {
     const style = getComputedStyle(action);
@@ -84,19 +84,17 @@ it('returns a remote user to chat without selecting a replacement or resuming a 
   expect(management.createManagedProfile).not.toHaveBeenCalled();
   expect(onContinue).not.toHaveBeenCalled();
 });
-it('explains the bundled headless browser before offering optional account groups', async () => {
-  const { management } = mount(); await ready(); button(copy.managedDetails).click();
-  await waitFor(() => management.listManagedProfiles.mock.calls.length === 1 && !document.querySelector('[aria-busy="true"]'));
-  const facts = document.querySelector('dl')!;
-  expect(facts.querySelectorAll('dt')).toHaveLength(3);
-  expect(facts.textContent).toContain(copy.managedEngineValue);
-  expect(facts.textContent).toContain(copy.managedInstallValue);
-  expect(facts.textContent).toContain(copy.managedModeValue);
+it('explains the headless browser before offering optional account groups', async () => {
+  const { management } = mount(); await ready(); button(copy.browserSettings).click();
+  await waitFor(() => !!document.querySelector('details'));
+  expect(management.listManagedProfiles).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain(copy.managedModeValue);
   expect(document.body.textContent).not.toContain('Default');
   const details = document.querySelector('details')!;
   expect(details.open).toBe(false);
   expect(details.querySelector('form')!.checkVisibility()).toBe(false);
   (details.querySelector('summary') as HTMLElement).click();
+  await waitFor(() => management.listManagedProfiles.mock.calls.length === 1 && !document.querySelector('[aria-busy="true"]'));
   expect(details.textContent).toContain(copy.profileDefault);
   expect(details.textContent).toContain(copy.profileIsolationHint);
   expect(management.createManagedProfile).not.toHaveBeenCalled();
@@ -151,9 +149,10 @@ it('discards late access results across threads and still permits read-only insp
 });
 it('creates separate managed profiles without connecting a page or changing grants', async () => {
   const { management } = mount(); await ready();
-  button(copy.managedDetails).click(); await waitFor(() => management.listManagedProfiles.mock.calls.length === 1);
+  button(copy.browserSettings).click(); await waitFor(() => !!document.querySelector('summary'));
   await waitFor(() => !button(copy.createProfile).closest('form')?.querySelector('input')?.disabled);
   (document.querySelector('summary') as HTMLElement).click();
+  await waitFor(() => management.listManagedProfiles.mock.calls.length === 1 && !document.querySelector('[aria-busy="true"]'));
   const input = document.querySelector<HTMLInputElement>('form input')!;
   input.value = 'Work'; input.dispatchEvent(new Event('input', { bubbles: true }));
   button(copy.createProfile).focus(); await userEvent.keyboard('{Enter}');
@@ -286,7 +285,7 @@ it('keeps the connected overview and its settings pages balanced in Chinese', as
     if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-computer-polish-${name}.png` });
   };
   await screenshot('zh-CN-overview');
-  for (const [name, action] of [['managed', localizedCopy.managedDetails], ['diagnostics', localizedCopy.details], ['help', localizedCopy.help], ['advanced', localizedCopy.advanced], ['access', localizedCopy.fullAccessTitle]] as const) {
+  for (const [name, action] of [['managed', localizedCopy.browserSettings], ['diagnostics', localizedCopy.details], ['help', localizedCopy.help], ['advanced', localizedCopy.advanced], ['access', localizedCopy.fullAccessTitle]] as const) {
     button(action).click();
     await waitFor(() => document.querySelector('[data-flower-computer-panel]')?.getAttribute('aria-busy') === 'false');
     expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
@@ -327,10 +326,10 @@ it('keeps narrow settings pages and long resource names inside their scroll view
       }
     }
   };
-  for (const action of [localizedCopy.managedDetails, localizedCopy.details, localizedCopy.help, localizedCopy.advanced, localizedCopy.permissions]) {
+  for (const action of [localizedCopy.browserSettings, localizedCopy.details, localizedCopy.help, localizedCopy.advanced, localizedCopy.permissions]) {
     button(action).click();
     await waitFor(() => document.querySelector('[data-flower-computer-panel]')?.getAttribute('aria-busy') === 'false');
-    if (action === localizedCopy.managedDetails) (dialog.querySelector('summary') as HTMLElement).click();
+    if (action === localizedCopy.browserSettings) (dialog.querySelector('summary') as HTMLElement).click();
     inspect();
     button(localizedCopy.back).click();
   }

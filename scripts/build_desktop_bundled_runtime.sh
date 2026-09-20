@@ -145,6 +145,7 @@ bundle_from_tarball() {
   local goos="$3"
   local allow_args=(
     --allow-file redeven
+    --optional-file computer.zip
     --allow-file LICENSE
     --allow-file THIRD_PARTY_NOTICES.md
   )
@@ -170,7 +171,7 @@ bundle_from_tarball() {
       --allow-file redevplugin-runtime.pem
       --allow-file .redevplugin-release-artifacts-verified.json
     )
-    max_files=10
+    max_files=11
   fi
   "$SCRIPT_DIR/safe_extract_tar.py" \
     --archive "$tarball_path" \
@@ -273,6 +274,7 @@ const runtimeFiles = platform === "windows"
 const runtimeSuite = runtimeFiles.map(([name, executable]) => descriptor(name, executable));
 const managedWSLArchive = platform === "windows" ? runtimeSuite[0] : null;
 const managedWSLArchiveFiles = [
+  "computer.zip",
   ".redevplugin-release-artifacts-verified.json",
   "LICENSE",
   "REDEVPLUGIN_RUNTIME.spdx.json",
@@ -462,6 +464,7 @@ main() {
   if [ "$goos" != "windows" ]; then
     local node_arch="$goarch"
     if [ "$node_arch" = "amd64" ]; then node_arch="x64"; fi
+    rm -f "$working_bundle/computer.zip"
     node "$SCRIPT_DIR/stage_computer_resources.mjs" "$working_bundle/computer" "$goos" "$node_arch"
   fi
   write_bundle_manifest "$working_bundle" "$goos" "$goarch" "$bundle_version" "$bundle_commit"

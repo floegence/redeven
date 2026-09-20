@@ -1200,7 +1200,7 @@ export type FlowerComputerInventory = Readonly<{
   current_target_id: string; default_candidate_ref?: string; candidates: readonly FlowerComputerCandidate[];
 }>;
 
-export type FlowerComputerCapability = Readonly<{ state: 'ready' | 'on_demand' | 'setup_required' | 'permission_required'; reason?: string }>;
+export type FlowerComputerCapability = Readonly<{ state: 'ready' | 'on_demand' | 'setup_required' | 'permission_required' | 'disabled' | 'installation_required'; reason?: string }>;
 export type FlowerComputerEnvironment = Readonly<{
   hostname: string; platform: string;
   managed: FlowerComputerCapability; desktop: FlowerComputerCapability;
@@ -1213,7 +1213,18 @@ export type FlowerComputerAccess = Readonly<{
   allow_foreground: boolean;
 }>;
 export type FlowerComputerExtensionSetup = Readonly<{ native_host: string; extension_id: string; extension_path: string; extension_home_path: readonly string[]; platform: 'darwin' | 'linux' }>;
+export type FlowerBrowserInstallation = Readonly<{
+  enabled: boolean; state: 'not_installed' | 'installed' | 'downloading' | 'uploading' | 'verifying' | 'installing' | 'failed' | 'cancelled';
+  package: Readonly<{ id: string; name: string; platform: string; architecture: string; version: string; url: string; size_bytes: number; installed_bytes: number }>;
+  directory: string; operation_id?: string; received_bytes: number; error?: string;
+}>;
+export type FlowerBrowserInstallRequest = Readonly<{ action: 'start' | 'chunk' | 'complete' | 'cancel'; package_id?: string; source?: 'download' | 'upload'; operation_id?: string; offset?: number; data?: string }>;
 export type FlowerComputerManagement = Readonly<{
+  loadBrowserInstallation?: () => Promise<FlowerBrowserInstallation>;
+  saveBrowserEnabled?: (enabled: boolean) => Promise<FlowerBrowserInstallation>;
+  installBrowser?: (request: FlowerBrowserInstallRequest) => Promise<FlowerBrowserInstallation>;
+  browserUploadSupported?: boolean;
+
   loadEnvironment?: () => Promise<FlowerComputerEnvironment>;
   discoverBrowser?: (threadID: string, endpoint: string) => Promise<FlowerComputerInventory>;
   revealTarget?: (threadID: string, targetID: string) => Promise<void>;

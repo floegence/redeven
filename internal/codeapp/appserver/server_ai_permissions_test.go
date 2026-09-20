@@ -133,6 +133,12 @@ func TestServer_AI_Permissions_AllowReadsAndProtectMutations(t *testing.T) {
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/threads/th_test/cancel")
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/uploads")
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/computer/input")
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodPost} {
+		rr := performServerRequest(srv, method, "/_redeven_proxy/api/ai/computer/managed/browser", envOrigin, `{}`)
+		if rr.Code != http.StatusForbidden || !strings.Contains(rr.Body.String(), "write permission denied") {
+			t.Fatalf("browser installation permission: %d %s", rr.Code, rr.Body.String())
+		}
+	}
 	for _, path := range []string{"/_redeven_proxy/api/ai/computer/extension/open", "/_redeven_proxy/api/ai/computer/extension/setup"} {
 		rr := performServerRequest(srv, http.MethodPost, path, envOrigin, `{}`)
 		if rr.Code != http.StatusForbidden || !strings.Contains(rr.Body.String(), "write permission denied") {

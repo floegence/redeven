@@ -140,6 +140,7 @@ scan_root() {
       --archive "$archive" \
       --dest "$extracted" \
       --allow-file redeven \
+      --optional-file computer.zip \
       --allow-file redevplugin-runtime \
       --allow-file "$RUNTIME_MARKER" \
       --allow-file "$RUNTIME_NOTICES" \
@@ -149,7 +150,7 @@ scan_root() {
       --allow-file "$RUNTIME_CERTIFICATE" \
       --allow-file LICENSE \
       --allow-file THIRD_PARTY_NOTICES.md \
-      --max-files 10 \
+      --max-files 11 \
       --max-total-bytes 536870912; then
       rm -rf "$extract_parent"
       die "runtime archive failed controlled extraction: $archive"

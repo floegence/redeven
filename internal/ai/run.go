@@ -24,6 +24,7 @@ import (
 	fltools "github.com/floegence/floret/v7/tools"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/browserinstall"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/logsafe"
@@ -3102,6 +3103,11 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	// Every admitted computer operation uses this one pause boundary, including
 	// discovery/selection and pre-dispatch checks after a viewer detected safety.
 	defer func() {
+		if errors.Is(outputErr, browserinstall.ErrInstallRequired) {
+			output = computerInstallExecution()
+			outputErr = nil
+			return
+		}
 		var failure *targetToolPolicyError
 		if !errors.As(outputErr, &failure) || failure.code != "interaction_takeover_required" {
 			return

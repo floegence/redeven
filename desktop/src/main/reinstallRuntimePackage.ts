@@ -94,6 +94,7 @@ const stageScript = [
   'case "$reported_release" in v*) ;; *) reported_release="v$reported_release" ;; esac; case "$release_tag" in v*) ;; *) release_tag="v$release_tag" ;; esac; [ "$reported_release" = "$release_tag" ] || { echo "package release mismatch" >&2; exit 9; }; [ "$reported_commit" = "$expected_commit" ] || { echo "package commit mismatch" >&2; exit 10; }',
   `cp "$binary" "$stage/managed/bin/redeven"; chmod ${MANAGED_RUNTIME_EXECUTABLE_MODE} "$stage/managed/bin/redeven"`,
   `for companion in ${MANAGED_RUNTIME_COMPANION_FILENAMES.join(' ')}; do [ -e "$extract/$companion" ] || { echo "Runtime package companion is missing: $companion" >&2; exit 11; }; cp "$extract/$companion" "$stage/managed/bin/$companion"; done; chmod ${MANAGED_RUNTIME_EXECUTABLE_MODE} "$stage/managed/bin/redevplugin-runtime"`,
+  'if [ -f "$extract/computer.zip" ] && [ ! -L "$extract/computer.zip" ]; then cp "$extract/computer.zip" "$stage/managed/bin/computer.zip"; fi',
   `stamp="$stage/managed/${MANAGED_RUNTIME_STAMP_FILENAME}"`,
   `{ printf "schema_version=${MANAGED_RUNTIME_STAMP_SCHEMA_VERSION}\\nmanaged_by=redeven-desktop\\nslot_release_tag=%s\\ninstall_strategy=%s\\ninstalled_at_unix_ms=%s\\ncommit=%s\\nplatform=%s\\narchitecture=%s\\narchive_sha256=%s\\nexecutable_sha256=%s\\n" "$reported_release" "$strategy" "$installed_at_unix_ms" "$reported_commit" "$platform" "$architecture" "$actual_sha" "$executable_sha"; } > "$stamp"`,
   `chmod ${MANAGED_RUNTIME_DIRECTORY_MODE} "$stage" "$stage/managed" "$stage/managed/bin"`,

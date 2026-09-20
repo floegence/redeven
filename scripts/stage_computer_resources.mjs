@@ -1,5 +1,5 @@
 import { stageBrowserExtension } from './stage_browser_extension.mjs';
-import { cpSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -20,9 +20,8 @@ export function stageComputerResources(destination, platform = process.platform,
   }
   if (existsSync(destination)) throw new Error('Computer resource destination must be new.');
   const requireUI = createRequire(path.join(repo, 'internal/envapp/ui_src/package.json'));
-  const { chromium } = requireUI('playwright');
-  const browserExecutable = chromium.executablePath();
-  if (!existsSync(browserExecutable)) throw new Error('Playwright Chromium is missing. Run pnpm exec playwright install chromium in the Env App workspace before building.');
+  const catalog = JSON.parse(readFileSync(path.join(repo, 'internal/browserinstall/catalog.json')));
+  if (requireUI('playwright/package.json').version !== catalog.playwright_version) throw new Error('Browser catalog must match the published Playwright version.');
   mkdirSync(destination, { recursive: true });
   stageBrowserExtension(path.join(destination, "extension"));
   function copyTree(source, target) {
@@ -77,20 +76,6 @@ export function stageComputerResources(destination, platform = process.platform,
       : createRequire(requireUI.resolve('playwright/package.json')).resolve(`${name}/package.json`);
     copy(path.dirname(packageFile), `node_modules/${name}`);
   }
-  // A macOS executable depends on its containing app/framework; Linux depends
-  // on sibling libraries. Copy the complete Chromium distribution, not one file.
-  let browserRoot = path.dirname(browserExecutable);
-  if (platform === 'darwin') {
-    while (!browserRoot.endsWith('.app')) {
-      const parent = path.dirname(browserRoot);
-      if (parent === browserRoot) throw new Error('Chromium app bundle was not found.');
-      browserRoot = parent;
-    }
-  }
-  const browserDirectory = path.join('chromium', path.basename(browserRoot));
-  cpSync(browserRoot, path.join(destination, browserDirectory), { recursive: true, verbatimSymlinks: true });
-  const browserRelativePath = path.posix.join(browserDirectory, path.relative(browserRoot, browserExecutable).split(path.sep).join('/'));
-  writeFileSync(path.join(destination, 'browser.json'), `${JSON.stringify({ executable: browserRelativePath })}\n`);
   if (platform === 'darwin') {
     const nativePackage = path.join(repo, 'desktop/native/computer-host');
     execFileSync('/usr/bin/swift', ['build', '-c', 'release', '--package-path', nativePackage], { stdio: 'inherit' });
@@ -104,12 +89,7 @@ export function stageComputerResources(destination, platform = process.platform,
       const stat = lstatSync(absolute);
       if (stat.isDirectory()) inventory(absolute, relative + '/');
       else if (stat.isFile()) files.push({ path: relative, sha256: createHash('sha256').update(readFileSync(absolute)).digest('hex'), size_bytes: stat.size, executable: Boolean(stat.mode & 0o111) });
-      else if (stat.isSymbolicLink() && relative.startsWith('chromium/')) {
-        const link = readlinkSync(absolute);
-        const resolved = realpathSync(absolute);
-        if (path.isAbsolute(link) || !resolved.startsWith(realpathSync(destination) + path.sep)) throw new Error(`Computer resource symlink escapes bundle: ${relative}`);
-        files.push({ path: relative, link_target: link });
-      } else throw new Error(`Unsupported computer resource: ${relative}`);
+      else throw new Error(`Unsupported computer resource: ${relative}`);
     }
   }
   inventory(destination);

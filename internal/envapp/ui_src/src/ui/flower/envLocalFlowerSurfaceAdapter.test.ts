@@ -2066,3 +2066,11 @@ it('fetches the current restore generation only when explicitly requested', asyn
   fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { storage_generation: 'invalid' } }));
   await expect(adapter.resolveStorageGeneration?.()).rejects.toThrow();
 });
+
+it('offers local browser ZIP upload in both Desktop environment routes without starting installation', () => {
+  for (const desktopSessionTargetRoute of [undefined, 'local_host', 'remote_desktop'] as const) {
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_browser', envLabel: 'Browser', rpc: { ai: {} } as any, desktopSessionTargetRoute });
+    expect(adapter.computerManagement?.browserUploadSupported).toBe(desktopSessionTargetRoute !== undefined);
+  }
+  expect(fetchMock).not.toHaveBeenCalled();
+});

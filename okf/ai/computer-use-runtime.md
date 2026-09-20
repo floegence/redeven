@@ -89,9 +89,10 @@ minimum version v0.13.0. Older execution helpers and
 resource inventories are rejected instead of used as a silent substitute. The
 compatibility JSON remains the release authority, independently of this document.
 
-Desktop bundles a verified official Node distribution, Playwright and Chromium,
+Runtime and Desktop bundle a verified official Node distribution and Playwright,
 QuickJS/WASM pinned at 0.32.0, the Chrome extension and the native helper. Every
-required resource is covered by the existing SHA-256 inventory. Runtime paths
+required helper resource is covered by the existing SHA-256 inventory. Chromium
+uses the separate [user-confirmed installation contract](computer-use-browser-installation.md). Runtime paths
 are absolute packaged paths; source checkouts, ambient browser caches and PATH
 lookups are not runtime dependencies. Startup emits closed diagnostic codes,
 not raw browser exceptions, credentials or page contents.
@@ -105,8 +106,8 @@ transfers resume only the current build's temporary file. HTTP rejection,
 certificate validation failures and checksum mismatches stop without retry.
 Even cached or explicitly supplied archives require successful retrieval of the
 official checksum and a matching SHA-256 before use.
-Relocated-bundle qualification must run both Chromium and QuickJS without source
-or a browser cache. Native window capture continues to respect Desktop-window
+Relocated-bundle qualification runs QuickJS and an explicitly installed Chromium
+without a source checkout or ambient browser cache. Native window capture continues to respect Desktop-window
 exclusion and never substitutes an unrestricted display capture after failure.
 
 # Boundaries

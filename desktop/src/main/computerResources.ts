@@ -13,13 +13,13 @@ export async function validateComputerResources(root: string, expectedDigest: un
   }
   const manifest = JSON.parse(bytes.toString('utf8')) as {
     schema_version: number; platform: string; architecture: string; node_version: string;
-    files: Array<{ path: string; sha256: string; size_bytes: number; executable: boolean; link_target?: string }>;
+    files: Array<{ path: string; sha256: string; size_bytes: number; executable: boolean }>;
   };
   if (manifest.schema_version !== 1 || manifest.platform !== platform || manifest.architecture !== (architecture === 'amd64' ? 'x64' : architecture) || !Array.isArray(manifest.files)) {
     throw new Error('Computer resource manifest target mismatch.');
   }
   const declared = new Map(manifest.files.map(file => [file.path, file]));
-  const required = ['node', 'NODE_LICENSE', 'browser.json', 'redevenComputerHost.mjs', 'redevenComputerScript.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'node_modules/quickjs-emscripten/package.json', 'extension/manifest.json', 'extension/background.mjs', 'extension/computerBrowserController.mjs', 'extension/computerBrowserPage.mjs', 'extension/computerBrowserKeys.mjs', 'extension/popup.html', 'extension/popup.css', 'extension/popup.mjs', 'extension/messages.mjs', 'extension/input-focus.css', 'node_modules/playwright/package.json', 'node_modules/playwright-core/package.json'];
+  const required = ['node', 'NODE_LICENSE', 'redevenComputerHost.mjs', 'redevenComputerScript.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'node_modules/quickjs-emscripten/package.json', 'extension/manifest.json', 'extension/background.mjs', 'extension/computerBrowserController.mjs', 'extension/computerBrowserPage.mjs', 'extension/computerBrowserKeys.mjs', 'extension/popup.html', 'extension/popup.css', 'extension/popup.mjs', 'extension/messages.mjs', 'extension/input-focus.css', 'node_modules/playwright/package.json', 'node_modules/playwright-core/package.json'];
   if (platform === 'darwin') required.push('redeven-computer-host');
   if (declared.size !== manifest.files.length || required.some(name => !declared.has(name))) throw new Error('Computer resource inventory is incomplete.');
   const seen = new Set<string>();
@@ -28,14 +28,7 @@ export async function validateComputerResources(root: string, expectedDigest: un
       const relative = prefix + name;
       const absolute = path.join(directory, name);
       const stat = await fs.promises.lstat(absolute);
-      if (stat.isSymbolicLink()) {
-        const descriptor = declared.get(relative);
-        const link = await fs.promises.readlink(absolute);
-        const resolved = await fs.promises.realpath(absolute);
-        if (!relative.startsWith('chromium/') || !descriptor || descriptor.link_target !== link || path.isAbsolute(link) || !resolved.startsWith(await fs.promises.realpath(resources) + path.sep)) throw new Error('Computer resource symlink is invalid.');
-        seen.add(relative);
-        continue;
-      }
+      if (stat.isSymbolicLink()) throw new Error('Computer resource symlinks are not allowed.');
       if (stat.isDirectory()) { await walk(absolute, relative + '/'); continue; }
       if (relative === 'manifest.json') continue;
       const descriptor = declared.get(relative);

@@ -251,7 +251,7 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 	}
 
 	for _, target := range targets {
-		if !targetAllowedByPolicy(policy, target.ID) || target.ID == "browser-main" || r.browserTargetHasInventory(target.ID) || (source == "system" && target.Kind != "browser.connected") || (source == "managed" && target.Kind != "browser.managed") {
+		if (target.Kind == "browser.managed" && !r.managedBrowserEnabled()) || !targetAllowedByPolicy(policy, target.ID) || target.ID == "browser-main" || r.browserTargetHasInventory(target.ID) || (source == "system" && target.Kind != "browser.connected") || (source == "managed" && target.Kind != "browser.managed") {
 			continue
 		}
 		if err := r.appendComputerCandidate(&inventory, call.ThreadID, ComputerCandidate{TargetID: target.ID, Kind: target.Kind, DisplayName: target.DisplayName, URL: target.CurrentURL, AppBundleID: target.AppBundleID, State: r.computerTargetState(target, call.ThreadID)}, nil); err != nil {
@@ -263,7 +263,7 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 	if source != "managed" {
 		profiles = r.personalBrowserProfiles()
 	}
-	if source != "system" {
+	if source != "system" && r.managedBrowserEnabled() {
 		r.connectMu.Lock()
 		managed, managedErr := r.managedProfilesLocked()
 		r.connectMu.Unlock()
@@ -286,6 +286,11 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 		}
 		tabs, tabsErr := r.candidateBrowserTabs(ctx, connection)
 		state := "ready"
+		if profile.kind == "browser.managed" {
+			if _, err := r.requireManagedBrowser(); err != nil {
+				state = "installation_required"
+			}
+		}
 		if tabsErr != nil {
 			state = "connection_required"
 		}
@@ -293,7 +298,7 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 			if err := r.appendComputerCandidate(&inventory, call.ThreadID, ComputerCandidate{Kind: profile.kind, DisplayName: computerBrowserDisplayName(profile), ProfileName: profileName, NewTab: true, State: state}, &connection); err != nil {
 				return inventory, err
 			}
-			if state == "ready" && computerProfileIdentity(connection) == computerProfileIdentity(defaultProfile.connection) {
+			if (state == "ready" || state == "installation_required") && computerProfileIdentity(connection) == computerProfileIdentity(defaultProfile.connection) {
 				inventory.DefaultCandidateRef = inventory.Candidates[len(inventory.Candidates)-1].CandidateRef
 			}
 		}
@@ -558,7 +563,10 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 // profile participates in the identity, so a changed connection cannot replace
 // an already authorized resource between planning and execution.
 func (r *ComputerUseRuntime) defaultThreadBrowser(threadID string) (TargetDescriptor, error) {
-	profiles := append(r.personalBrowserProfiles(), computerBrowserProfile{name: "Default", kind: "browser.managed", connection: ComputerBrowserConnection{ManagedProfileID: "browser-main", NewTab: true}})
+	profiles := r.personalBrowserProfiles()
+	if r.managedBrowserEnabled() {
+		profiles = append(profiles, computerBrowserProfile{name: "Default", kind: "browser.managed", connection: ComputerBrowserConnection{ManagedProfileID: "browser-main", NewTab: true}})
+	}
 	selected, err := defaultComputerBrowserProfile(profiles)
 	if err != nil {
 		return TargetDescriptor{}, err

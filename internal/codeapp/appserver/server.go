@@ -3496,6 +3496,50 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: tabs})
 		return
 
+	case (r.Method == http.MethodGet || r.Method == http.MethodPut || r.Method == http.MethodPost) && r.URL.Path == "/_redeven_proxy/api/ai/computer/managed/browser":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		if r.Method == http.MethodGet {
+			status, err := aiSvc.ComputerBrowserInstallation(r.Context(), meta)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_installer_unavailable"})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
+			return
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 360*1024))
+		dec.DisallowUnknownFields()
+		if r.Method == http.MethodPut {
+			var body struct {
+				Enabled *bool `json:"enabled"`
+			}
+			if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF || body.Enabled == nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			status, err := aiSvc.SetComputerBrowserEnabled(r.Context(), meta, *body.Enabled)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_settings_failed"})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
+			return
+		}
+		var body ai.ComputerBrowserInstallRequest
+		if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		status, err := aiSvc.InstallComputerBrowser(r.Context(), meta, body)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_installation_failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
+		return
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/environment":
 		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
 		if !ok || !g.requireAIService(w, aiSvc) {

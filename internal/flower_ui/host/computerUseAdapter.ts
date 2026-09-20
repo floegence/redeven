@@ -4,6 +4,9 @@ import type { FlowerComputerManagement } from '../src/contracts/flowerSurfaceCon
 export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown) => Promise<T>): FlowerComputerManagement {
   const path = '/_redeven_proxy/api/ai/computer';
   return {
+    loadBrowserInstallation: () => request('GET', `${path}/managed/browser`),
+    saveBrowserEnabled: enabled => request('PUT', `${path}/managed/browser`, { enabled }),
+    installBrowser: body => request('POST', `${path}/managed/browser`, body),
     loadEnvironment: () => request('GET', `${path}/environment`),
     discoverBrowser: (threadID, cdpURL) => request('POST', `${path}/candidates`, { thread_id: threadID, cdp_url: cdpURL }),
     revealTarget: async (threadID, targetID) => { await request('POST', `${path}/reveal`, { thread_id: threadID, target_id: targetID }); },
