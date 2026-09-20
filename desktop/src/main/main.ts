@@ -1,3 +1,5 @@
+import { HostApplicationComponents } from './hostApplicationComponents';
+import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRESS, type HostApplicationComponentsRequest } from '../shared/hostApplicationComponents';
 import { desktopEnvironmentID } from './desktopPreferences';
 import { environmentSettingsFailure, withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, type EnvironmentAccessOwner } from './environmentAccessSettings';
 import { assertRuntimeFlowerCompatible } from '../shared/runtimeFlowerAccess';
@@ -282,6 +284,8 @@ import {
 } from './navigation';
 import { resolveBundledRuntimePath, resolveDesktopBundleRoot, resolveHostApplicationWindowPreloadPath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { attachHostApplicationWindow } from './hostApplicationWindow';
+import { HostApplicationPreparationWindows } from './hostApplicationPreparationWindows';
+import { HOST_APPLICATION_PREPARATION_CHANNEL, HOST_APPLICATION_PREPARATION_CLOSED_CHANNEL, hostApplicationPreparationDocument, updateHostApplicationPreparationDocument, validHostApplicationPreparationView, type HostApplicationPreparationRequest, type HostApplicationPreparationResult } from '../shared/hostApplicationPreparation';
 import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
 import { webServiceBrowserContentBounds } from '../shared/webServiceBrowserLayout';
 import { openWebServiceInSystemBrowser } from './webServiceBrowserExternal';
@@ -960,6 +964,14 @@ type CreateBrowserWindowArgs = Readonly<{
 }>;
 
 const utilityWindows = new Map<DesktopUtilityWindowKind, DesktopTrackedWindow>();
+const hostApplicationPreparations = new HostApplicationPreparationWindows<DesktopTrackedWindow>(
+  record => Boolean(liveTrackedBrowserWindow(record)),
+  record => liveTrackedBrowserWindow(record)?.close(),
+);
+const hostApplicationComponents = new HostApplicationComponents(bundledRuntimeExecutablePath, () => path.join(app.getPath('userData'), 'native-application-components'));
+const hostApplicationComponentOwners = new Set<number>();
+const observedPreparationWindows = new WeakSet<BrowserWindow>();
+const hostApplicationPreparationObservers = new Set<number>();
 const utilityWindowState = new Map<DesktopUtilityWindowKind, DesktopUtilityWindowState>([
   ['launcher', {
     surface: 'connect_environment',
@@ -8612,6 +8624,7 @@ function createWebServiceBrowserController(
   request: NormalizedDesktopShellOpenWebServiceWindowRequest,
   partition: string,
   loopbackGateway?: WebServiceLoopbackGateway,
+  preparedWindow?: DesktopTrackedWindow,
 ): DesktopWebServiceBrowserController {
   let errorMessage = '';
   let pendingExternalURL = '';
@@ -8623,7 +8636,22 @@ function createWebServiceBrowserController(
   const webSession = session.fromPartition(partition);
   const targetAddress = new URL(request.target_url).origin;
   const applicationWindow = request.presentation === 'application';
-  const windowRecord = createBrowserWindow({
+  const onApplicationClosed = (closedWindow: Readonly<{ webContentsID: number }>) => {
+    webServiceBrowserByToolbarWebContentsID.delete(closedWindow.webContentsID);
+    sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
+    sessionKeyByWebContentsID.delete(contentViewIdentity.webContentsID);
+    const current = sessionRecord.web_service_windows.get(request.forward_id);
+    if (current?.webContentsID !== closedWindow.webContentsID) return;
+    sessionRecord.web_service_windows.delete(request.forward_id);
+    const currentGateway = sessionRecord.web_service_loopback_gateways.get(request.forward_id);
+    if (currentGateway && currentGateway === loopbackGateway) {
+      sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
+      void currentGateway.close();
+    }
+    if (!contentView.webContents.isDestroyed()) contentView.webContents.close();
+    clearWebServiceWindowPartition(partition);
+  };
+  const windowRecord = preparedWindow ?? createBrowserWindow({
     targetURL: applicationWindow ? 'about:blank' : webServiceBrowserDocumentURL(),
     stateKey: sessionWebServiceWindowStateKey(sessionRecord.session_key, request.forward_id),
     role: 'web_service_child',
@@ -8632,23 +8660,10 @@ function createWebServiceBrowserController(
     preload: applicationWindow ? 'none' : 'web_service_browser',
     stealAppFocus: true,
     presentOnReadyToShow: !applicationWindow,
-    onClosed: (closedWindow) => {
-      webServiceBrowserByToolbarWebContentsID.delete(closedWindow.webContentsID);
-      sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
-      sessionKeyByWebContentsID.delete(contentViewIdentity.webContentsID);
-      const current = sessionRecord.web_service_windows.get(request.forward_id);
-      if (current?.webContentsID !== closedWindow.webContentsID) return;
-      sessionRecord.web_service_windows.delete(request.forward_id);
-      const currentGateway = sessionRecord.web_service_loopback_gateways.get(request.forward_id);
-      if (currentGateway && currentGateway === loopbackGateway) {
-        sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
-        void currentGateway.close();
-      }
-      if (!contentView.webContents.isDestroyed()) contentView.webContents.close();
-      clearWebServiceWindowPartition(partition);
-    },
+    onClosed: onApplicationClosed,
   });
   const win = windowRecord.browserWindow;
+  if (preparedWindow) win.once('closed', () => onApplicationClosed(windowRecord));
   const contentView = new WebContentsView({
     webPreferences: {
       partition,
@@ -8970,6 +8985,7 @@ function createWebServiceBrowserController(
 async function openWebServiceWindowFromShellNow(
   sessionRecord: DesktopSessionRecord | null,
   request: NormalizedDesktopShellOpenWebServiceWindowRequest,
+  preparationOwner?: string,
 ): Promise<DesktopShellOpenWebServiceWindowResponse> {
   if (!sessionRecord || sessionRecord.closing) {
     return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
@@ -8981,6 +8997,7 @@ async function openWebServiceWindowFromShellNow(
     };
   }
 
+  if (request.preparation_id && (!preparationOwner || !hostApplicationPreparations.get(preparationOwner, request.preparation_id))) return { ok: false, message: 'The application preparation window was closed.' };
   const existing = sessionRecord.web_service_windows.get(request.forward_id);
   const existingWindow = liveTrackedBrowserWindow(existing);
   if (existing && existingWindow) {
@@ -8988,6 +9005,7 @@ async function openWebServiceWindowFromShellNow(
     if (controller?.accessMode === request.access_mode && controller.targetURL === request.target_url && controller.presentation === request.presentation) {
       const response = controller.navigateProtectedRoute(request.url);
       if (!response.ok) return response;
+      if (request.preparation_id && preparationOwner) hostApplicationPreparations.discard(preparationOwner, request.preparation_id);
       presentAppWindow(existingWindow, { stealAppFocus: true });
       return { ok: true };
     }
@@ -9057,6 +9075,7 @@ async function openWebServiceWindowFromShellNow(
       await loopbackGateway?.close();
       const response = controller.navigateProtectedRoute(request.url);
       if (!response.ok) return response;
+      if (request.preparation_id && preparationOwner) hostApplicationPreparations.discard(preparationOwner, request.preparation_id);
       presentAppWindow(preparedExistingWindow, { stealAppFocus: true });
       return { ok: true };
     }
@@ -9067,7 +9086,15 @@ async function openWebServiceWindowFromShellNow(
     sessionKeyByWebContentsID.delete(preparedExisting.webContentsID);
   }
 
-  const controller = createWebServiceBrowserController(sessionRecord, request, partition, loopbackGateway);
+  const preparedWindow = request.preparation_id && preparationOwner
+    ? hostApplicationPreparations.claim(preparationOwner, request.preparation_id) : null;
+  if (request.preparation_id && !preparedWindow) {
+    sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
+    await loopbackGateway?.close();
+    clearWebServiceWindowPartition(partition);
+    return { ok: false, message: 'The application preparation window was closed.' };
+  }
+  const controller = createWebServiceBrowserController(sessionRecord, request, partition, loopbackGateway, preparedWindow ?? undefined);
   const { windowRecord } = controller;
   sessionRecord.web_service_windows.set(request.forward_id, windowRecord);
   sessionKeyByWebContentsID.set(windowRecord.webContentsID, sessionRecord.session_key);
@@ -9077,12 +9104,13 @@ async function openWebServiceWindowFromShellNow(
 async function openWebServiceWindowFromShell(
   sessionRecord: DesktopSessionRecord | null,
   request: NormalizedDesktopShellOpenWebServiceWindowRequest,
+  preparationOwner?: string,
 ): Promise<DesktopShellOpenWebServiceWindowResponse> {
-  if (!sessionRecord) return openWebServiceWindowFromShellNow(sessionRecord, request);
+  if (!sessionRecord) return openWebServiceWindowFromShellNow(sessionRecord, request, preparationOwner);
   const taskKey = `${sessionRecord.session_key}:${request.forward_id}`;
   const existing = webServiceWindowOpenTasks.get(taskKey);
   if (existing) return existing;
-  const task = openWebServiceWindowFromShellNow(sessionRecord, request);
+  const task = openWebServiceWindowFromShellNow(sessionRecord, request, preparationOwner);
   webServiceWindowOpenTasks.set(taskKey, task);
   try {
     return await task;
@@ -18357,7 +18385,81 @@ if (!app.requestSingleInstanceLock()) {
     if (!normalized) {
       return { ok: false, message: 'Invalid Web Service window request.' };
     }
-    return openWebServiceWindowFromShell(sessionRecordForWebContentsID(event.sender.id), normalized);
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    if (normalized.preparation_id && (!record || event.senderFrame !== event.sender.mainFrame)) return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
+    return openWebServiceWindowFromShell(record, normalized, record ? `${record.session_key}:${event.sender.id}` : undefined);
+  });
+  ipcMain.handle(HOST_APPLICATION_COMPONENTS_CHANNEL, async (event, value: unknown) => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    if (!record || record.closing || record.root_window.webContentsID !== event.sender.id || event.senderFrame !== event.sender.mainFrame || !value || typeof value !== 'object') return { ok: false };
+    const request = value as HostApplicationComponentsRequest;
+    const owner = event.sender.id;
+    if (!hostApplicationComponentOwners.has(owner)) {
+      hostApplicationComponentOwners.add(owner);
+      event.sender.on('did-start-navigation', (_navigation, _url, inPlace, mainFrame) => {
+        if (mainFrame && !inPlace) void hostApplicationComponents.cancel(owner);
+      });
+      event.sender.once('destroyed', () => { void hostApplicationComponents.cancel(owner); hostApplicationComponentOwners.delete(owner); });
+    }
+    try {
+      if (request.action === 'cancel') { await hostApplicationComponents.cancel(owner); return { ok: true }; }
+      if (request.action === 'read') return await hostApplicationComponents.read(owner, request.offset);
+      if (request.action !== 'acquire' || !['amd64', 'arm64'].includes(request.architecture)) return { ok: false };
+      return await hostApplicationComponents.acquire(owner, request.architecture, progress => {
+        if (!event.sender.isDestroyed()) event.sender.send(HOST_APPLICATION_COMPONENTS_PROGRESS, progress);
+      });
+    } catch { return { ok: false }; }
+  });
+  ipcMain.handle(HOST_APPLICATION_PREPARATION_CHANNEL, async (event, value: unknown): Promise<HostApplicationPreparationResult> => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    if (!record || record.closing || event.senderFrame !== event.sender.mainFrame || record.root_window.webContentsID !== event.sender.id
+      || !value || typeof value !== 'object') return { ok: false };
+    const request = value as HostApplicationPreparationRequest;
+    const owner = `${record.session_key}:${event.sender.id}`;
+    if (request.action === 'create') {
+      if (typeof request.application_id !== 'string' || !request.application_id || request.application_id.length > 4096
+        || !validHostApplicationPreparationView(request.view)) return { ok: false };
+      const theme = desktopThemeState().getSnapshot();
+      const document = hostApplicationPreparationDocument(request.view, {
+        background: theme.semantic.background, foreground: theme.semantic.foreground,
+        muted: theme.semantic.mutedForeground, primary: theme.semantic.primary,
+        border: theme.semantic.border, colorScheme: theme.resolvedTheme,
+      });
+      const entry = hostApplicationPreparations.reserve(owner, request.application_id, () => createBrowserWindow({
+        targetURL: `data:text/html;charset=utf-8,${encodeURIComponent(document)}`,
+        stateKey: sessionWebServiceWindowStateKey(record.session_key, 'preparing-application'),
+        role: 'web_service_child', diagnostics: record.diagnostics, chrome: 'native', preload: 'none', stealAppFocus: true,
+      }));
+      if (!hostApplicationPreparationObservers.has(event.sender.id)) {
+        hostApplicationPreparationObservers.add(event.sender.id);
+        event.sender.on('did-start-navigation', (_navigation, _url, inPlace, mainFrame) => {
+          if (mainFrame && !inPlace) hostApplicationPreparations.releaseOwner(owner);
+        });
+        event.sender.once('destroyed', () => {
+          hostApplicationPreparations.releaseOwner(owner);
+          hostApplicationPreparationObservers.delete(event.sender.id);
+        });
+      }
+      if (!observedPreparationWindows.has(entry.window.browserWindow)) {
+      observedPreparationWindows.add(entry.window.browserWindow);
+      entry.window.browserWindow.once('closed', () => {
+        hostApplicationPreparations.discard(owner, entry.id);
+        if (!event.sender.isDestroyed()) event.sender.send(HOST_APPLICATION_PREPARATION_CLOSED_CHANNEL, entry.id);
+      });
+      }
+      presentAppWindow(entry.window.browserWindow, { stealAppFocus: true });
+      return { ok: true, id: entry.id };
+    }
+    if (!('id' in request) || typeof request.id !== 'string') return { ok: false };
+    const window = hostApplicationPreparations.get(owner, request.id);
+    if (!window) return { ok: false };
+    if (request.action === 'check') return { ok: true, id: request.id };
+    if (request.action === 'close') { hostApplicationPreparations.discard(owner, request.id); return { ok: true }; }
+    if (request.action !== 'update' || !validHostApplicationPreparationView(request.view)) return { ok: false };
+    try {
+      await window.browserWindow.webContents.executeJavaScript(`(${updateHostApplicationPreparationDocument.toString()})(${JSON.stringify(request.view)})`);
+      return { ok: true, id: request.id };
+    } catch { return { ok: false }; }
   });
   ipcMain.handle(DESKTOP_WEB_SERVICE_BROWSER_GET_STATE_CHANNEL, (event): DesktopWebServiceBrowserState => {
     return webServiceBrowserByToolbarWebContentsID.get(event.sender.id)?.snapshot() ?? {

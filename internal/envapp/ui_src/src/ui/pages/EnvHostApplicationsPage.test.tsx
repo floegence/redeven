@@ -3,12 +3,12 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ full: true, localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
+const state = vi.hoisted(() => ({ full: true, setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
   env_id: () => 'host', localRuntime: () => ({}),
 }) }));
-vi.mock('../services/hostApplicationsApi', () => ({ listHostApplications: state.catalog, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, stopHostApplication: state.stop, addHostApplication: state.add, requestHostApplicationPermission: state.permission }));
+vi.mock('../services/hostApplicationsApi', async importOriginal => ({ ...await importOriginal<object>(), cancelHostApplicationSetup: state.setupCancel, uploadHostApplicationSetup: state.setupUpload, getHostApplicationSetup: state.setupStatus, startHostApplicationSetup: state.setupStart, observeHostApplicationSetup: state.setupObserve, listHostApplications: state.catalog, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, stopHostApplication: state.stop, addHostApplication: state.add, requestHostApplicationPermission: state.permission }));
 vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => true }));
 vi.mock('../services/desktopSessionContext', () => ({ readDesktopSessionContextSnapshot: () => state.localMac ? {target_kind: 'local_environment',target_route:'local_host'} : null }));
 vi.mock('../services/webServiceWindows', () => ({ resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
@@ -25,6 +25,12 @@ beforeEach(() => {
   state.sessions.mockResolvedValue([{ id: 'session', application: app, state: 'running', forward }]);
   state.launch.mockResolvedValue({ id: 'session', application: app, state: 'starting', forward });
   state.open.mockResolvedValue(undefined);
+  state.setupCancel.mockResolvedValue({ state: "cancelled", received_bytes: 0, expected_bytes: 100 });
+  state.setupStatus.mockResolvedValue({ state: 'available', received_bytes: 0, expected_bytes: 100, can_cancel: false, package: { id: 'fixture', size_bytes: 100, installed_bytes: 200 } });
+  state.setupStart.mockResolvedValue({ state: 'downloading', operation_id: 'install', received_bytes: 0, expected_bytes: 100, can_cancel: true });
+  state.setupObserve.mockImplementation((_callback, signal: AbortSignal) => new Promise<void>(resolve => signal.addEventListener('abort', () => resolve())));
+  state.preparation.mockImplementation(async (request: { action: string }) => ({ ok: true, ...(request.action === 'create' ? { id: 'preparation-window' } : {}) }));
+  Object.defineProperty(window, 'redevenDesktopShell', { configurable: true, value: { applicationPreparation: state.preparation } });
   host = document.createElement('div'); document.body.append(host);
 });
 afterEach(() => { dispose?.(); host.remove(); });
@@ -60,12 +66,13 @@ describe('host application interaction', () => {
     button('Open in new window · Text Editor').click();
     expect(state.launch).not.toHaveBeenCalled();
   });
-  it('explains missing host components without suggesting an application can launch', async () => {
+  it('offers preparation while preserving the real application library', async () => {
     state.catalog.mockResolvedValue({ availability: { supported: true, ready: false, requirements: ['Xpra X11 server', 'Xpra HTML5 v20 / v21'] }, applications: [app], sessions: [] });
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
-    expect(host.textContent).toContain('Needs attention: Xpra X11 server, Xpra HTML5 v20 / v21');
-    expect(host.querySelector('a[href="https://github.com/Xpra-org/xpra/wiki/Download"]')).not.toBeNull();
-    expect(button('Open in new window · Text Editor').disabled).toBe(true);
+    expect(host.textContent).toContain('Prepare host applications');
+    expect(host.querySelector('a[href="https://github.com/Xpra-org/xpra/wiki/Download"]')).toBeNull();
+    expect(button('Open in new window · Text Editor').disabled).toBe(false);
+    expect(state.launch).not.toHaveBeenCalled();
   });
   it('explains unsupported hosts without inviting Linux application installation', async () => {
     state.catalog.mockResolvedValue({ availability: { supported: false, ready: false, reason: 'unsupported_platform' }, applications: [], sessions: [] });
@@ -125,7 +132,151 @@ it('guides remote macOS authorization and prevents launching until the host is r
   dispose=render(()=><EnvHostApplicationsPage />,host);await settle();
   expect(host.textContent).toContain('Allow screen recording');
   expect(host.textContent).not.toContain('Install Xpra');
-  expect(button('Open in new window · Text Editor').disabled).toBe(true);
+  expect(button('Open in new window · Text Editor').disabled).toBe(false);
   [...host.querySelectorAll('button')].find(button=>button.textContent==='Allow screen recording')!.click();await settle();
   expect(state.permission).toHaveBeenCalledWith('screen_recording');
+});
+
+function preparationButton() { return [...document.querySelectorAll('button')].find(el => el.textContent === 'Prepare and open')!; }
+function requireSetup() { state.catalog.mockResolvedValue({ availability: { supported: true, ready: false }, applications: [app], sessions: [] }); }
+async function selectAndPrepare() {
+ dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ button('Open in new window · Text Editor').click(); await settle();
+ preparationButton().click(); await settle();
+}
+it('reserves one physical window and continues there after verified preparation', async () => {
+ requireSetup(); await selectAndPrepare();
+ expect(state.launch).not.toHaveBeenCalled();
+ expect(state.preparation).toHaveBeenCalledWith(expect.objectContaining({ action: 'create', application_id: app.id }));
+ state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
+ state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 }); await settle();
+ expect(state.launch).toHaveBeenCalledTimes(1);
+ expect(state.open.mock.calls[0].at(-1)).toBe('preparation-window');
+});
+it('does not launch after the reserved window is closed during preparation', async () => {
+ requireSetup(); await selectAndPrepare();
+ state.preparation.mockResolvedValue({ ok: false });
+ state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
+ state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 }); await settle();
+ expect(state.launch).not.toHaveBeenCalled();
+});
+it('stops a newly launched application if its reserved window closes before the launch response', async () => {
+ requireSetup(); await selectAndPrepare();
+ let resolveLaunch!: (value: unknown) => void;
+ state.launch.mockImplementation(() => new Promise(resolve => { resolveLaunch = resolve; }));
+ state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
+ state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 }); await settle();
+ state.preparation.mockResolvedValue({ ok: false });
+ resolveLaunch({ id: 'fresh-session', application: app, state: 'starting', forward }); await settle();
+ expect(state.stop).toHaveBeenCalledWith('fresh-session');
+ expect(state.open).not.toHaveBeenCalled();
+});
+it('continues when the start response is already ready without waiting for a second event', async () => {
+ requireSetup();
+ state.setupStart.mockImplementation(async () => {
+  state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
+  return { state: 'ready', received_bytes: 100, expected_bytes: 100 };
+ });
+ await selectAndPrepare();
+ expect(state.launch).toHaveBeenCalledTimes(1);
+});
+
+it('continues an application selected while preparation is already running', async () => {
+ requireSetup();
+ state.setupStatus.mockResolvedValue({ state: 'downloading', operation_id: 'install', received_bytes: 20, expected_bytes: 100, can_cancel: true });
+ dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ button('Open in new window · Text Editor').click(); await settle();
+ expect(state.preparation).toHaveBeenCalledWith(expect.objectContaining({ action: 'create', application_id: app.id }));
+ state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
+ state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 }); await settle();
+ expect(state.launch).toHaveBeenCalledTimes(1);
+ expect(state.setupStart).not.toHaveBeenCalled();
+});
+it('retires opening immediately on cancel even if preparation completes before cancellation responds', async () => {
+ requireSetup(); await selectAndPrepare();
+ state.setupCancel.mockReturnValue(new Promise(() => {}));
+ [...host.querySelectorAll('button')].find(el => el.textContent === 'Cancel')!.click();
+ state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
+ state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 }); await settle();
+ expect(state.preparation).toHaveBeenCalledWith({ action: 'close', id: 'preparation-window' });
+ expect(state.launch).not.toHaveBeenCalled();
+});
+it('reuses the exact admission after a lost start response and reconnects observation without restarting', async () => {
+ requireSetup(); state.setupStart.mockRejectedValueOnce(new Error('Response lost'));
+ let disconnect!: (reason: Error) => void;
+ state.setupObserve.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { disconnect = reject; }));
+ await selectAndPrepare();
+ disconnect(new Error('Disconnected')); await settle();
+ const requestID = state.setupStart.mock.calls[0][0];
+ [...host.querySelectorAll('button')].find(el => el.textContent === 'Reconnect')!.click(); await settle();
+ expect(state.setupStart).toHaveBeenCalledTimes(1);
+ preparationButton().click(); await settle();
+ expect(state.setupStart.mock.calls[1][0]).toBe(requestID);
+});
+it('automatically relays a failed host download through Desktop and verifies on the host', async () => {
+ requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
+ state.components.mockImplementation(async (request: { action: string }) => request.action === 'acquire' ? { ok: true, size: 180 } : { ok: true, data: new Uint8Array([1]) });
+ state.setupStart.mockImplementation(async (_id: string, source: string) => source === 'upload'
+  ? { state: 'receiving', operation_id: 'relay', received_bytes: 0, expected_bytes: 180, can_cancel: true }
+  : { state: 'downloading', operation_id: 'install', received_bytes: 0, expected_bytes: 100, can_cancel: true });
+ state.setupUpload.mockResolvedValue({ state: 'validating', operation_id: 'relay', received_bytes: 180, expected_bytes: 180, can_cancel: true });
+ await selectAndPrepare();
+ state.setupObserve.mock.calls[0][0]({ state: 'failed', operation_id: 'install', error_code: 'download_failed', package: { architecture: 'arm64' }, received_bytes: 10, expected_bytes: 100 }); await settle();
+ expect(state.components).toHaveBeenCalledWith({ action: 'acquire', architecture: 'arm64' });
+ expect(state.setupStart.mock.calls[1]).toEqual([expect.any(String), 'upload', 180]);
+ expect(state.setupUpload).toHaveBeenCalledWith('relay', expect.objectContaining({ size: 180, read: expect.any(Function) }), expect.any(AbortSignal));
+ expect(state.launch).not.toHaveBeenCalled();
+});
+it('resumes the selected remote macOS app in its reserved window after actual authorization', async () => {
+ state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: false, native_ready: true, reason: 'macos_permissions', permissions: { screen_recording: false, accessibility: false } }, applications: [app], sessions: [] });
+ dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ button('Open in new window · Text Editor').click(); await settle();
+ [...document.querySelectorAll('[role="dialog"] button')].find(el => el.textContent === 'Allow screen recording')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); await settle();
+ expect(state.preparation).toHaveBeenCalledWith(expect.objectContaining({ action: 'create' }));
+ expect(state.launch).not.toHaveBeenCalled();
+ state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [] });
+ window.dispatchEvent(new Event('focus')); await settle();
+ expect(state.launch).toHaveBeenCalledTimes(1);
+ expect(state.open.mock.calls[0].at(-1)).toBe('preparation-window');
+});
+
+it('cancels a relay admitted after cancellation without uploading or reopening the application', async () => {
+ requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
+ state.components.mockResolvedValue({ ok: true, size: 180 });
+ let receive!: (value: unknown) => void;
+ state.setupStart.mockImplementation(async (_id: string, source: string) => source === 'upload' ? new Promise(resolve => { receive = resolve; }) : { state: 'downloading', operation_id: 'install', can_cancel: true });
+ await selectAndPrepare();
+ state.setupObserve.mock.calls[0][0]({ state: 'failed', operation_id: 'install', error_code: 'download_failed', package: { architecture: 'arm64' }, received_bytes: 0, expected_bytes: 100 }); await settle();
+ [...host.querySelectorAll('button')].find(el => el.textContent === 'Cancel')!.click(); await settle();
+ receive({ state: 'receiving', operation_id: 'relay', received_bytes: 0, expected_bytes: 180, can_cancel: true }); await settle();
+ expect(state.setupCancel).toHaveBeenCalledWith('relay');
+ expect(state.setupUpload).not.toHaveBeenCalled();
+ expect(state.launch).not.toHaveBeenCalled();
+});
+it('resumes an interrupted Desktop transfer into the same host operation', async () => {
+ requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
+ state.components.mockResolvedValue({ ok: true, size: 180 });
+ state.setupStatus.mockResolvedValue({ state: 'receiving', operation_id: 'existing-transfer', received_bytes: 50, expected_bytes: 180, can_cancel: true, package: { architecture: 'arm64', size_bytes: 100 } });
+ state.setupUpload.mockResolvedValue({ state: 'validating', operation_id: 'existing-transfer', received_bytes: 180, expected_bytes: 180, can_cancel: true });
+ dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ [...host.querySelectorAll('button')].find(el => el.textContent === 'Continue preparation')!.click(); await settle();
+ expect(state.setupStart).not.toHaveBeenCalled();
+ expect(state.setupUpload).toHaveBeenCalledWith('existing-transfer', expect.objectContaining({ size: 180 }), expect.any(AbortSignal));
+});
+it('ignores a download failure from a different operation', async () => {
+ requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
+ await selectAndPrepare();
+ state.setupObserve.mock.calls[0][0]({ state: 'failed', operation_id: 'someone-else', error_code: 'download_failed', package: { architecture: 'arm64' } }); await settle();
+ expect(state.components).not.toHaveBeenCalled();
+});
+
+it('refreshes the real application library after preparation without a pending application', async () => {
+ state.catalog.mockResolvedValue({ availability: { supported: true, ready: false }, applications: [], sessions: [] });
+ dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ [...host.querySelectorAll('button')].find(el => el.textContent === 'Prepare')!.click(); await settle();
+ state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
+ state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 }); await settle();
+ expect(button('Open in new window · Text Editor')).toBeDefined();
+ expect(host.textContent).not.toContain('Prepare host applications');
+ expect(state.launch).not.toHaveBeenCalled();
 });

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	nativeapps "github.com/floegence/floe-native-apps"
 	"github.com/floegence/redeven/internal/hostapps"
 )
 
@@ -31,6 +32,13 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Cache-Control", "no-store")
 	if g.hostApps == nil {
 		writeHostAppError(w, hostapps.ErrUnavailable)
+		return true
+	}
+	if r.URL.Path == hostApplicationsAPI+"/setup" || strings.HasPrefix(r.URL.Path, hostApplicationsAPI+"/setup/") {
+		g.handleHostApplicationSetup(w, r, meta.UserPublicID)
+		if r.Method != http.MethodGet {
+			g.appendAudit(meta, "host_application_setup_request", "requested", map[string]any{"method": r.Method}, nil)
+		}
 		return true
 	}
 	switch {
@@ -106,11 +114,15 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 func writeHostAppError(w http.ResponseWriter, err error) {
 	status, code := http.StatusInternalServerError, "HOST_APP_FAILED"
 	switch {
-	case errors.Is(err, hostapps.ErrUnavailable):
+	case errors.Is(err, nativeapps.ErrForbidden):
+		status, code = http.StatusForbidden, "HOST_APP_FORBIDDEN"
+	case errors.Is(err, nativeapps.ErrBusy):
+		status, code = http.StatusConflict, "HOST_APP_SETUP_BUSY"
+	case errors.Is(err, hostapps.ErrUnavailable), errors.Is(err, nativeapps.ErrUnsupported):
 		status, code = http.StatusServiceUnavailable, "HOST_APP_UNAVAILABLE"
 	case errors.Is(err, hostapps.ErrNotFound):
 		status, code = http.StatusNotFound, "HOST_APP_NOT_FOUND"
-	case errors.Is(err, hostapps.ErrInvalid):
+	case errors.Is(err, hostapps.ErrInvalid), errors.Is(err, nativeapps.ErrInvalid):
 		status, code = http.StatusBadRequest, "HOST_APP_INVALID"
 	case errors.Is(err, hostapps.ErrLimit):
 		status, code = http.StatusConflict, "HOST_APP_LIMIT"

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	nativeapps "github.com/floegence/floe-native-apps"
 	"golang.org/x/net/html"
 )
 
@@ -18,6 +19,7 @@ import (
 // Keep these exact paths for launch so a different Python/Xpra cannot take over
 // between catalog discovery and the application process.
 type hostTools struct {
+	managed                        *nativeapps.Tools
 	xpra, python, xvfb, dbus, html string
 }
 
@@ -212,10 +214,10 @@ func xpraEnvironment(env []string) []string {
 	for _, item := range env {
 		key, _, _ := strings.Cut(item, "=")
 		switch key {
-		case "XPRA_DEFAULT_CONF_DIRS", "XPRA_SYSTEM_CONF_DIRS", "XPRA_USER_CONF_DIRS":
+		case "XPRA_DEFAULT_CONF_DIRS", "XPRA_SYSTEM_CONF_DIRS", "XPRA_USER_CONF_DIRS", "XPRA_PRIVATE_XAUTH", "XPRA_SHARED_XAUTHORITY":
 			continue
 		}
 		out = append(out, item)
 	}
-	return append(out, "XPRA_DEFAULT_CONF_DIRS=", "XPRA_SYSTEM_CONF_DIRS=", "XPRA_USER_CONF_DIRS=")
+	return append(out, "XPRA_PRIVATE_XAUTH=1", "XPRA_SHARED_XAUTHORITY=0", "XPRA_DEFAULT_CONF_DIRS=", "XPRA_SYSTEM_CONF_DIRS=", "XPRA_USER_CONF_DIRS=")
 }

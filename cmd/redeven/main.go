@@ -86,6 +86,8 @@ func (c *cli) run(args []string) int {
 		return c.desktopTargetProcessInventoryCmd(args[1:])
 	case "desktop-target-process-stop":
 		return c.desktopTargetProcessStopCmd(args[1:])
+	case "host-application-package":
+		return c.hostApplicationPackageCmd(args[1:])
 	case "desktop-model-source":
 		return c.desktopModelSourceCmd(args[1:])
 	case "local-authority":

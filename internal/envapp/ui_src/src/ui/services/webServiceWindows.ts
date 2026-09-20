@@ -134,6 +134,7 @@ export async function openWebServiceRoute(
   copy: OpenWebServiceCopy,
   win?: Window | null,
   presentation: ForwardWindowPresentation = 'browser',
+  preparationID?: string,
 ): Promise<void> {
   let browserTargetURL: string;
   if (route.kind === 'e2ee_tunnel') {
@@ -154,6 +155,7 @@ export async function openWebServiceRoute(
       target_url: serviceTargetURL,
       access_mode: accessMode,
       presentation,
+      ...(preparationID ? { preparation_id: preparationID } : {}),
     });
     if (!response?.ok) throw new Error(response?.message || copy.desktopWindowFailed);
     return;

@@ -8,15 +8,16 @@ timestamp: 2026-09-20T08:00:00Z
 # Summary
 
 Redeven's host application backend supports Linux by installed capability, not by
-distribution name. The Runtime owns dependency detection and isolated session
-initialization; the administrator owns installation of host software and Xpra.
-Missing or incompatible components prevent launch and are reported in the library.
+distribution name. The Runtime owns dependency detection and isolated session initialization.
+The [managed preparation contract](host-application-preparation.md) owns automatic
+private component acquisition and recovery; users install only their own applications.
+Missing support components offer preparation in the library.
 A desktop environment, systemd user session, and physical monitor are unnecessary.
 macOS uses a separate native backend with a logged-in graphical session; it does
 not use Xpra or Linux virtual displays. Existing
 [application permissions and lifecycle](host-applications.md) remain authoritative.
 
-# Required installed capabilities
+# Required graphical capabilities
 
 The integration accepts Xpra 6.x with local X11 server and command-line client
 support, HTML5 client v20 or v21, Xvfb, xauth, dbus-run-session, dbus-daemon, and a
@@ -88,7 +89,7 @@ Missing helper bytes produce an explicit update/reinstall diagnostic.
 A trusted Desktop local-environment route opens the real application directly.
 Remote access requires screen-recording and accessibility authorization plus a
 logged-in, unlocked graphical session. Permission requests are explicit actions;
-refresh reruns the preflight after the user authorizes the host. Neither route
+the pending opening rechecks preflight after the user authorizes the host. Neither route
 installs XQuartz or Xpra. A Mac without a graphical login cannot create a private
 headless AppKit session. Native AppKit applications do not become X11 applications
 by installing XQuartz, and Xpra desktop shadowing is not this implementation.

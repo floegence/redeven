@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	nativeapps "github.com/floegence/floe-native-apps"
 	"github.com/floegence/redeven/internal/portforward"
 )
 
@@ -39,6 +40,9 @@ type ownedSession struct {
 }
 
 type Manager struct {
+	setupMu                     sync.Mutex
+	setup                       *nativeapps.Manager
+	setupClosed                 bool
 	mu                          sync.Mutex
 	state, home, helper, custom string
 	forwards                    *portforward.Service
@@ -100,7 +104,7 @@ func (m *Manager) Catalog(ctx context.Context, owner, locale string) (Catalog, e
 }
 
 func (m *Manager) catalog(ctx context.Context, owner, locale string) (Catalog, hostTools, error) {
-	availability, tools := detectDependencies(ctx, runtime.GOOS, os.Environ())
+	availability, tools := m.tools(ctx)
 	result := Catalog{Availability: availability, Applications: []Application{}, Sessions: m.Sessions(owner)}
 	if !availability.Supported || tools.python == "" {
 		return result, tools, nil
@@ -110,7 +114,9 @@ func (m *Manager) catalog(ctx context.Context, owner, locale string) (Catalog, h
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	data, err := helperCommand(ctx, tools.python, m.helper, m.custom, "catalog", locale).Output()
+	cmd := helperCommand(ctx, tools.python, m.helper, m.custom, "catalog", locale)
+	cmd.Env = tools.environment(cmd.Env)
+	data, err := cmd.Output()
 	if err != nil {
 		result.Availability.Ready = false
 		result.Availability.Reason = "catalog_unavailable"
@@ -134,11 +140,12 @@ func (m *Manager) Add(ctx context.Context, req AddRequest) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	python := desktopPython(ctx, os.Environ())
-	if python == "" {
+	_, tools := m.tools(ctx)
+	if tools.python == "" {
 		return ErrUnavailable
 	}
-	cmd := helperCommand(ctx, python, m.helper, m.custom, "add", "", randomID())
+	cmd := helperCommand(ctx, tools.python, m.helper, m.custom, "add", "", randomID())
+	cmd.Env = tools.environment(cmd.Env)
 	data, _ := json.Marshal(req)
 	cmd.Stdin = bytes.NewReader(data)
 	if err := cmd.Run(); err != nil {
@@ -238,6 +245,12 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 		m.forwards.ReleaseOwnedForwardSession(forward.Forward.ForwardID)
 		return Session{}, err
 	}
+	if err := os.Mkdir(filepath.Join(socketDir, "xpra"), 0700); err != nil {
+		_ = listener.Close()
+		_ = os.RemoveAll(socketDir)
+		m.forwards.ReleaseOwnedForwardSession(forward.Forward.ForwardID)
+		return Session{}, err
+	}
 	view := Session{ID: id, Application: app, State: "starting", StartedAt: time.Now().UnixMilli(), Forward: forward, Presentation: req.Presentation}
 	s := &ownedSession{view: view, owner: owner, password: password, socketDir: socketDir, tools: tools, done: make(chan struct{})}
 	m.sessions[id] = s
@@ -251,14 +264,18 @@ func (m *Manager) run(s *ownedSession, dir, address string) {
 		"--ws-auth=file:filename=" + filepath.Join(dir, "password"), "--html=" + s.tools.html, "--sessions-dir=" + filepath.Join(s.socketDir, "sessions"), "--socket-dir=" + s.socketDir,
 		"--socket-dirs=" + s.socketDir, "--exit-with-client=no", "--exit-with-windows=yes", "--exit-with-children=no",
 		"--terminate-children=yes", "--start-new-commands=no", "--sharing=no", "--mdns=no", "--pulseaudio=no",
-		"--speaker=off", "--microphone=off", "--webcam=no", "--printing=no", "--file-transfer=no",
+		"--source=", "--source-start=", "--input-method=none", "--speaker=off", "--microphone=off", "--webcam=no", "--printing=no", "--file-transfer=no",
 		"--notifications=no", "--dbus-launch=", "--session-name=" + s.view.Application.Name,
 		"--xvfb=" + quoteArgv([]string{s.tools.xvfb, "-screen", "0", "3840x2160x24", "-nolisten", "tcp", "-noreset", "+extension", "Composite", "-auth", "$XAUTHORITY"}),
 		"--start-child=" + quoteArgv([]string{s.tools.python, m.helper, "launch", m.custom, s.view.Application.ID, filepath.Join(dir, "launch.json")}),
 	}
-	cmd := exec.Command(s.tools.dbus, append([]string{"--"}, args...)...)
+	// Xpra clears inherited DBUS_* variables before configuring its session.
+	// Pass our newly created private bus through its explicit child environment;
+	// dbus-run-session remains the lifetime owner of both the bus and Xpra.
+	launcher := []string{"--", "/bin/sh", "-c", `exec "$@" --dbus=no --dbus-control=no "--start-env=DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"`, "redeven-xpra"}
+	cmd := exec.Command(s.tools.dbus, append(launcher, args...)...)
 	cmd.Dir = m.home
-	cmd.Env = append(xpraEnvironment(applicationEnvironment(os.Environ())), "XDG_RUNTIME_DIR="+s.socketDir)
+	cmd.Env = append(xpraEnvironment(s.tools.environment(applicationEnvironment(os.Environ()))), "XDG_RUNTIME_DIR="+s.socketDir)
 	configureProcess(cmd)
 	log, err := os.OpenFile(filepath.Join(dir, "session.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
@@ -429,6 +446,12 @@ func (m *Manager) Stop(ctx context.Context, owner, id string) error {
 }
 
 func (m *Manager) Close() error {
+	m.setupMu.Lock()
+	m.setupClosed = true
+	if m.setup != nil {
+		m.setup.Close()
+	}
+	m.setupMu.Unlock()
 	m.mu.Lock()
 	m.closed = true
 	var all []*ownedSession
