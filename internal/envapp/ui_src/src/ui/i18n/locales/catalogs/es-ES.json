@@ -1635,6 +1635,8 @@
     "filteredView": "Vista filtrada",
     "openingPath": "Abriendo camino...",
     "pathEditHint": "Enter para abrir / Esc para cancelar",
+    "pathInputInvalid": "Introduce una ruta absoluta, ~ o una ruta que empiece por ~/.",
+    "pathHomeUnavailable": "El directorio personal no está disponible. Introduce una ruta absoluta.",
     "folderTree": "Árbol de carpetas",
     "compactDepth": "Profundidad compacta",
     "roots": "Raíces",

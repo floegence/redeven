@@ -1635,6 +1635,8 @@
     "filteredView": "篩選視圖",
     "openingPath": "正在開啟路徑...",
     "pathEditHint": "Enter 開啟 / Esc 取消",
+    "pathInputInvalid": "請輸入絕對路徑、~，或以 ~/ 開頭的路徑。",
+    "pathHomeUnavailable": "家目錄無法使用。請輸入絕對路徑。",
     "folderTree": "資料夾樹",
     "compactDepth": "緊湊層級",
     "roots": "根目錄",

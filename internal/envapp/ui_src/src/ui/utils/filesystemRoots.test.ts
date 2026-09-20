@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   defaultFilesystemPath,
-  formatFilesystemPath,
   matchFilesystemRoot,
   normalizeFilesystemContext,
-  parseFilesystemPathInput,
+  hasHiddenFilesystemPathSegment,
 } from './filesystemRoots';
 
 describe('filesystemRoots', () => {
@@ -29,13 +28,18 @@ describe('filesystemRoots', () => {
     expect(matchFilesystemRoot('/etc', ctx.roots)?.id).toBe('computer');
   });
 
-  it('formats home-relative labels without hiding the real OS root', () => {
-    expect(formatFilesystemPath('/Users/alice/project', ctx.homePathAbs)).toBe('~/project');
-    expect(formatFilesystemPath('/', ctx.homePathAbs)).toBe('/');
+  it('detects hidden segments within the matching filesystem root', () => {
+    expect(hasHiddenFilesystemPathSegment('/Users/alice/.config/redeven', ctx.homePathAbs, ctx.roots)).toBe(true);
+    expect(hasHiddenFilesystemPathSegment('/Volumes/team/.config', ctx.homePathAbs, ctx.roots)).toBe(true);
+    expect(hasHiddenFilesystemPathSegment('/Users/alice/project/src', ctx.homePathAbs, ctx.roots)).toBe(false);
+    expect(hasHiddenFilesystemPathSegment('/outside/.config', ctx.homePathAbs)).toBe(false);
+    expect(hasHiddenFilesystemPathSegment('/Users/alice/.config/redeven', ctx.homePathAbs)).toBe(true);
+    expect(hasHiddenFilesystemPathSegment('/Users/alice', ctx.homePathAbs, ctx.roots)).toBe(false);
   });
 
-  it('parses tilde and absolute inputs', () => {
-    expect(parseFilesystemPathInput('~/Desktop', ctx.homePathAbs)).toBe('/Users/alice/Desktop');
-    expect(parseFilesystemPathInput('/var', ctx.homePathAbs)).toBe('/var');
+  it('does not treat hidden segments in a custom root itself as hidden contents', () => {
+    const roots = [...ctx.roots, { ...ctx.roots[0]!, id: 'hidden-project', pathAbs: '/srv/.project' }];
+    expect(hasHiddenFilesystemPathSegment('/srv/.project/src', ctx.homePathAbs, roots)).toBe(false);
+    expect(hasHiddenFilesystemPathSegment('/srv/.project/.git', ctx.homePathAbs, roots)).toBe(true);
   });
 });

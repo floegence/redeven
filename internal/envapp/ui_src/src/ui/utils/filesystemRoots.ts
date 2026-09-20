@@ -80,24 +80,28 @@ export function defaultFilesystemPath(ctx: NormalizedFilesystemContext): string 
   return defaultFilesystemRoot(ctx)?.pathAbs || ctx.homePathAbs || '/';
 }
 
-export function formatFilesystemPath(pathAbs: string, homePathAbs?: string): string {
+export function hasHiddenFilesystemPathSegment(
+  pathAbs: string,
+  defaultRootPathAbs?: string | null,
+  roots?: readonly NormalizedFilesystemRoot[],
+): boolean {
   const normalizedPath = normalizeAbsolutePath(pathAbs);
-  if (!normalizedPath) return '';
-  const home = normalizeAbsolutePath(homePathAbs ?? '');
-  if (home && normalizedPath === home) return '~';
-  if (home && isWithinAbsolutePath(normalizedPath, home)) {
-    return `~/${normalizedPath.slice(home.length).replace(/^\/+/, '')}`;
-  }
-  return normalizedPath;
-}
+  if (!normalizedPath) return false;
 
-export function parseFilesystemPathInput(rawValue: string, homePathAbs?: string): string {
-  const raw = String(rawValue ?? '').trim();
-  if (!raw) return '';
-  const home = normalizeAbsolutePath(homePathAbs ?? '');
-  if (raw === '~') return home;
-  if (raw.startsWith('~/')) {
-    return home ? normalizeAbsolutePath(`${home}/${raw.slice(2)}`) : '';
+  const matchedRoot = matchFilesystemRoot(normalizedPath, roots ?? []);
+  const normalizedRoot = normalizeAbsolutePath(matchedRoot?.pathAbs ?? defaultRootPathAbs ?? '');
+  if (normalizedRoot && !isWithinAbsolutePath(normalizedPath, normalizedRoot)) {
+    return false;
   }
-  return normalizeAbsolutePath(raw);
+
+  const relativePath = normalizedRoot && normalizedPath !== normalizedRoot
+    ? normalizedPath.slice(normalizedRoot.length)
+    : normalizedRoot
+      ? ''
+      : normalizedPath;
+
+  return relativePath
+    .split('/')
+    .filter(Boolean)
+    .some((segment) => segment.startsWith('.'));
 }

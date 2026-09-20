@@ -1635,6 +1635,8 @@
     "filteredView": "筛选视图",
     "openingPath": "正在打开路径...",
     "pathEditHint": "Enter 打开 / Esc 取消",
+    "pathInputInvalid": "请输入绝对路径、~，或以 ~/ 开头的路径。",
+    "pathHomeUnavailable": "主目录不可用。请输入绝对路径。",
     "folderTree": "文件夹树",
     "compactDepth": "紧凑层级",
     "roots": "根目录",

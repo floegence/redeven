@@ -55,11 +55,11 @@ import {
   basenameFromAbsolutePath,
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
-import { pathInputIncludesHiddenSegment } from '../utils/fileBrowserPathInput';
 import { fetchFilesystemSettings, saveFilesystemRootWritePermission } from '../services/filesystemScopeSettings';
 import {
   defaultFilesystemPath,
   matchFilesystemRoot,
+  hasHiddenFilesystemPathSegment,
   normalizeFilesystemContext,
   type NormalizedFilesystemContext,
   type NormalizedFilesystemRoot,
@@ -4101,7 +4101,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const normalizedCurrentPath = normalizeAbsolutePath(activeDirectoryPath())
       ? normalizePath(activeDirectoryPath())
       : rootPath;
-    const nextShowHidden = !showHidden() && pathInputIncludesHiddenSegment(normalizedRequestedPath, rootPath, filesystemRoots());
+    const nextShowHidden = !showHidden() && hasHiddenFilesystemPathSegment(normalizedRequestedPath, rootPath, filesystemRoots());
     const result = await requestDirectoryNavigation(normalizedRequestedPath, {
       fallbackPath: lastStableDirectoryPath() || rootPath,
       persistEnvId: id || undefined,

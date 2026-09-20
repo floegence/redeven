@@ -3,7 +3,7 @@ type: UI Contract
 title: Absolute filesystem directory selection
 description: Select authorized directories through one navigation core in Flower, Spaces, and other filesystem pickers.
 tags: [ui, filesystem, flower, spaces, workbench]
-timestamp: 2026-09-08T00:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 # Summary
 
@@ -60,6 +60,16 @@ if policy, filesystem contents, or OS permissions change.
 
 ## Product presentations
 
+Files uses the same released `parsePickerPath` and `formatPickerPath` functions
+for its path editor. An entered `/...` path never acquires a Home prefix,
+regardless of the currently selected root. Home expands only `~` and `~/...`;
+the `/` breadcrumb is labeled Root. Invalid input and unavailable Home have
+localized, actionable feedback. Files retains its existing directory request,
+cache, cancellation, and commit owner rather than mounting a picker navigation
+controller. File items, identifiers, menu callbacks, drag targets, and reveal
+requests pass through the workspace with their original absolute paths and
+identity. There is no Home-relative display tree or reverse path conversion.
+
 Flower opens a directory modal at the draft directory and commits only on
 confirmation. Canceling leaves the composer draft unchanged. A created
 conversation keeps its immutable runtime-normalized directory. The default shown
@@ -93,6 +103,8 @@ product operation executes.
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Published path parsing and formatting, absolute identity, and localized input recovery.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx` - Real Files input through runtime directory requests, root selection, persistence, failure, and cancellation.
 - `redeven:internal/envapp/ui_src/src/ui/services/filesystemPicker.ts` - Runtime and Workbench adapter without independent navigation state.
 - `redeven:internal/flower_ui/src/filePicker/filesystemPicker.ts` - Absolute entries, declared roots, and shared runtime failure classification.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Draft selection, runtime-scoped default, and creation intent.

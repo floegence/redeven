@@ -1635,6 +1635,8 @@
     "filteredView": "フィルターされたビュー",
     "openingPath": "パスを開く...",
     "pathEditHint": "Enter で開きます / Esc でキャンセルします",
+    "pathInputInvalid": "絶対パス、~、または ~/ で始まるパスを入力してください。",
+    "pathHomeUnavailable": "ホームディレクトリを利用できません。絶対パスを入力してください。",
     "folderTree": "フォルダー ツリー",
     "compactDepth": "コンパクトな深さ",
     "roots": "ルート",

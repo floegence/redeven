@@ -22,6 +22,8 @@ export const enUSWidgetChrome = defineDictionary({
     filteredView: 'Filtered view',
     openingPath: 'Opening path...',
     pathEditHint: 'Enter to open / Esc to cancel',
+    pathInputInvalid: 'Enter an absolute path, ~, or a path starting with ~/.',
+    pathHomeUnavailable: 'Home directory is unavailable. Enter an absolute path.',
     folderTree: 'Folder Tree',
     compactDepth: 'Compact depth',
     roots: 'Roots',

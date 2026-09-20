@@ -15601,7 +15601,7 @@
         "title": "Permission policy and filesystem scope",
         "type": "Security Contract"
       },
-      "body_length": 12084,
+      "body_length": 12381,
       "summary": "Redeven treats endpoint runtime policy as authoritative. Control-plane grants can authorize a session, but the runtime clamps those grants with a local permission policy and file-facing features use explicit filesystem root policy.\n\nRuntime permissions are clamped by local policy and file features are scoped by directory root policy.",
       "sections": [
         {
@@ -15615,8 +15615,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Browser state, display-only Home hints, provider metadata, and UI affordances cannot widen runtime permissions. A UI that still exposes a terminal under execute-only access is a product bug, but the Terminal RPC independently enforces the same write-and-execute process boundary. Local API filesystem list endpoints are not a write surface and do not grant access outside configured roots. Operating-system readability alone does not authorize a path: access exists only where the current session, configured filesystem root, canonical path boundary, and actual host read all permit it. Future file, Git, Flower, Code App, and terminal changes should update OKF only after the runtime code or typed policy changes.\n\nArchive output is built beside the destination in a private staging file or directory. Entry paths reject absolute paths, volume prefixes, traversal, NUL bytes, duplicates, conflicting parents, and special filesystem nodes. Regular payloads finish before links are created; every symbolic-link and hard-link graph must resolve to an existing safe target inside staging, including forward references, and cycles or escaping targets fail closed. Completed output is published with a platform no-replace rename and a deterministic unused-name suffix, so existing files are never overwritten. Failure or cancellation removes staging before the RPC settles; cleanup failure is surfaced explicitly rather than hidden. Skill import and release-cache writes retain their own equivalent boundary discipline: skill copies reject symbolic links and resolve the nearest existing ancestor, while downloaded release evidence uses exclusive private temporary files and atomic publication. Git fallback rejects option-like paths and invalid refs and places `--` before user-derived operands. Password gates use a computationally expensive password hash, and failed-attempt cooldown timestamps are recorded after verification so hashing latency cannot silently bypass throttling. Structured logs replace control characters and bound untrusted values to prevent log injection.\n\nPermission effects, resource kinds, tool names, arguments, file paths, shell text, approval requirements, and UI queue position must not be used to infer tool-call dependencies or force execution order. Models express dependency by waiting for the prerequisite result and emitting the dependent call in a later response. Provider wire configuration may enable multi-call generation, but it cannot grant permission, bypass approval, or alter runtime scheduling.",
-          "char_count": 2536
+          "body": "Files path entry follows the shared [absolute filesystem navigation contract](../ui/filesystem-picker-navigation.md#product-presentations). Input parsing and display formatting do not authorize access; the existing directory-list boundary still resolves and checks the resulting absolute target.\n\nBrowser state, display-only Home hints, provider metadata, and UI affordances cannot widen runtime permissions. A UI that still exposes a terminal under execute-only access is a product bug, but the Terminal RPC independently enforces the same write-and-execute process boundary. Local API filesystem list endpoints are not a write surface and do not grant access outside configured roots. Operating-system readability alone does not authorize a path: access exists only where the current session, configured filesystem root, canonical path boundary, and actual host read all permit it. Future file, Git, Flower, Code App, and terminal changes should update OKF only after the runtime code or typed policy changes.\n\nArchive output is built beside the destination in a private staging file or directory. Entry paths reject absolute paths, volume prefixes, traversal, NUL bytes, duplicates, conflicting parents, and special filesystem nodes. Regular payloads finish before links are created; every symbolic-link and hard-link graph must resolve to an existing safe target inside staging, including forward references, and cycles or escaping targets fail closed. Completed output is published with a platform no-replace rename and a deterministic unused-name suffix, so existing files are never overwritten. Failure or cancellation removes staging before the RPC settles; cleanup failure is surfaced explicitly rather than hidden. Skill import and release-cache writes retain their own equivalent boundary discipline: skill copies reject symbolic links and resolve the nearest existing ancestor, while downloaded release evidence uses exclusive private temporary files and atomic publication. Git fallback rejects option-like paths and invalid refs and places `--` before user-derived operands. Password gates use a computationally expensive password hash, and failed-attempt cooldown timestamps are recorded after verification so hashing latency cannot silently bypass throttling. Structured logs replace control characters and bound untrusted values to prevent log injection.\n\nPermission effects, resource kinds, tool names, arguments, file paths, shell text, approval requirements, and UI queue position must not be used to infer tool-call dependencies or force execution order. Models express dependency by waiting for the prerequisite result and emitting the dependent call in a later response. Provider wire configuration may enable multi-call generation, but it cannot grant permission, bypass approval, or alter runtime scheduling.",
+          "char_count": 2833
         }
       ],
       "evidence": [
@@ -15767,6 +15767,14 @@
         }
       ],
       "snippet": "Redeven treats endpoint runtime policy as authoritative. Control-plane grants can authorize a session, but the runtime clamps those grants with a local permission policy and file-facing features use explicit filesystem root policy.",
+      "links": [
+        {
+          "label": "absolute filesystem navigation contract",
+          "path": "ui/filesystem-picker-navigation.md",
+          "concept_id": "ui.filesystem-picker-navigation",
+          "title": "Absolute filesystem directory selection"
+        }
+      ],
       "backlinks": [
         {
           "label": "Browser Editor runtime",
@@ -16665,7 +16673,7 @@
         "ui",
         "workbench"
       ],
-      "timestamp": "2026-09-08T00:00:00Z",
+      "timestamp": "2026-09-20T00:00:00Z",
       "frontmatter": {
         "description": "Select authorized directories through one navigation core in Flower, Spaces, and other filesystem pickers.",
         "tags": [
@@ -16675,19 +16683,19 @@
           "ui",
           "workbench"
         ],
-        "timestamp": "2026-09-08T00:00:00Z",
+        "timestamp": "2026-09-20T00:00:00Z",
         "title": "Absolute filesystem directory selection",
         "type": "UI Contract"
       },
-      "body_length": 6060,
+      "body_length": 7123,
       "summary": "Published Floe Webapp owns directory navigation, validation state, and asynchronous\nrequest lifetime. Redeven supplies the target runtime connection, authoritative\npath context, localized copy, and product form state. All picker paths are\nabsolute; `/` always means the target environment's filesystem root. Home and\nRoot are navigation shortcuts and cannot grant access. Failed navigation retains\nthe requested path and form, disables selection, and offers an explicit retry.\nThe runtime revalidates every create or execution request against current policy.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Absolute paths and runtime authority\n\nDirectoryPicker, DirectoryInput, and file pickers consume the same released\nnavigation core. Context comes from `fs.getPathContext()` or the equivalent\nDesktop Local API. The runtime declares roots, their filesystem policy read/write\nflags, the default root ID, and a display-only Home path. A failed or malformed\ncontext cannot be replaced by synthesized Home or Root permissions.\n\nThe initial location is the caller's current absolute directory, otherwise the\nruntime's declared default root. Home, Root, custom roots, breadcrumbs, directory\nrows, and entered paths all use one direct directory-list operation. Navigation\ndoes not enumerate ancestors first. Inputs accept absolute paths, `~`, and\n`~/...`; relative paths are rejected rather than rebased to Home. Home formatting\nmay display `~` only at an exact path boundary. Entry paths, request paths, and\nselection results keep absolute semantics through the product adapter.\n\nThe filesystem service resolves real paths and symlinks. A directory readable\nunder current policy may be selected even when its root has write disabled.\nSelection neither changes policy nor promises a sandbox for code-server or other\nprocesses. Session, filesystem, OS, and process authorization remain governed by\n[permission policy and filesystem scope](../security/permission-policy-and-filesystem-scope.md).\n\n## Navigation state and failures\n\nEvery mounted picker owns its current directory, loaded entries, path input,\nhidden-item switch, and validity. Files uses the same runtime authority but keeps\nits own navigation state. Redeven has no picker directory cache or Home-relative\ntree. Upstream deduplicates only in-flight loads within one open session.\n\nEach open refreshes path context. Environment/session changes, closing, and\nunmounting invalidate pending work. Editing a path invalidates selection; only a\nsuccessful load for the current intent can make it selectable. Earlier successes\nor failures cannot overwrite newer input, navigation, error, or selection state.\nAn error does not become an empty-directory success or trigger a Home fallback.\n\nRuntime errors distinguish missing paths, non-directories, scope denial, session\nread denial, host filesystem denial, invalid paths, and connection failure. The\npath remains visible with localized recovery. A cached or previously validated\nselection is never an authorization token: creation and later operations can fail\nif policy, filesystem contents, or OS permissions change.\n\n## Product presentations\n\nFlower opens a directory modal at the draft directory and commits only on\nconfirmation. Canceling leaves the composer draft unchanged. A created\nconversation keeps its immutable runtime-normalized directory. The default shown\nfor a new conversation and its creation request use the declared default root;\na context from an earlier runtime session cannot supply that default.\n[Working-directory navigation](flower-working-directory-navigation.md) owns\nsubsequent Files and Terminal actions for existing conversations.\n\nSpaces keeps directory navigation inline in its creation form, with name and\ndescription editable alongside it. Successful navigation fills the final path\nsegment as the name, or the localized Root label for `/`. Each metadata field\nstops following directory defaults as soon as the user edits that field. Creation\nrequires a validated directory. A create failure retains all form data; closing\nresets the draft. Spaces and Flower store the backend-normalized absolute path\nwithout a new protocol or database schema.\n\nTerminal groups, managed services, container mounts, Compose file selection, and\narchive extraction retain their own initial positions, file-type constraints,\nselection counts, and operation authorization. Extraction still checks destination\nwrite permission. The shared picker owns navigation only. Its actual scroll\nviewports carry Workbench local-scroll markers; existing modal, keyboard, and\nfocus ownership remains with the host and published presentation components.",
-          "char_count": 4052
+          "body": "## Absolute paths and runtime authority\n\nDirectoryPicker, DirectoryInput, and file pickers consume the same released\nnavigation core. Context comes from `fs.getPathContext()` or the equivalent\nDesktop Local API. The runtime declares roots, their filesystem policy read/write\nflags, the default root ID, and a display-only Home path. A failed or malformed\ncontext cannot be replaced by synthesized Home or Root permissions.\n\nThe initial location is the caller's current absolute directory, otherwise the\nruntime's declared default root. Home, Root, custom roots, breadcrumbs, directory\nrows, and entered paths all use one direct directory-list operation. Navigation\ndoes not enumerate ancestors first. Inputs accept absolute paths, `~`, and\n`~/...`; relative paths are rejected rather than rebased to Home. Home formatting\nmay display `~` only at an exact path boundary. Entry paths, request paths, and\nselection results keep absolute semantics through the product adapter.\n\nThe filesystem service resolves real paths and symlinks. A directory readable\nunder current policy may be selected even when its root has write disabled.\nSelection neither changes policy nor promises a sandbox for code-server or other\nprocesses. Session, filesystem, OS, and process authorization remain governed by\n[permission policy and filesystem scope](../security/permission-policy-and-filesystem-scope.md).\n\n## Navigation state and failures\n\nEvery mounted picker owns its current directory, loaded entries, path input,\nhidden-item switch, and validity. Files uses the same runtime authority but keeps\nits own navigation state. Redeven has no picker directory cache or Home-relative\ntree. Upstream deduplicates only in-flight loads within one open session.\n\nEach open refreshes path context. Environment/session changes, closing, and\nunmounting invalidate pending work. Editing a path invalidates selection; only a\nsuccessful load for the current intent can make it selectable. Earlier successes\nor failures cannot overwrite newer input, navigation, error, or selection state.\nAn error does not become an empty-directory success or trigger a Home fallback.\n\nRuntime errors distinguish missing paths, non-directories, scope denial, session\nread denial, host filesystem denial, invalid paths, and connection failure. The\npath remains visible with localized recovery. A cached or previously validated\nselection is never an authorization token: creation and later operations can fail\nif policy, filesystem contents, or OS permissions change.\n\n## Product presentations\n\nFiles uses the same released `parsePickerPath` and `formatPickerPath` functions\nfor its path editor. An entered `/...` path never acquires a Home prefix,\nregardless of the currently selected root. Home expands only `~` and `~/...`;\nthe `/` breadcrumb is labeled Root. Invalid input and unavailable Home have\nlocalized, actionable feedback. Files retains its existing directory request,\ncache, cancellation, and commit owner rather than mounting a picker navigation\ncontroller. File items, identifiers, menu callbacks, drag targets, and reveal\nrequests pass through the workspace with their original absolute paths and\nidentity. There is no Home-relative display tree or reverse path conversion.\n\nFlower opens a directory modal at the draft directory and commits only on\nconfirmation. Canceling leaves the composer draft unchanged. A created\nconversation keeps its immutable runtime-normalized directory. The default shown\nfor a new conversation and its creation request use the declared default root;\na context from an earlier runtime session cannot supply that default.\n[Working-directory navigation](flower-working-directory-navigation.md) owns\nsubsequent Files and Terminal actions for existing conversations.\n\nSpaces keeps directory navigation inline in its creation form, with name and\ndescription editable alongside it. Successful navigation fills the final path\nsegment as the name, or the localized Root label for `/`. Each metadata field\nstops following directory defaults as soon as the user edits that field. Creation\nrequires a validated directory. A create failure retains all form data; closing\nresets the draft. Spaces and Flower store the backend-normalized absolute path\nwithout a new protocol or database schema.\n\nTerminal groups, managed services, container mounts, Compose file selection, and\narchive extraction retain their own initial positions, file-type constraints,\nselection counts, and operation authorization. Extraction still checks destination\nwrite permission. The shared picker owns navigation only. Its actual scroll\nviewports carry Workbench local-scroll markers; existing modal, keyboard, and\nfocus ownership remains with the host and published presentation components.",
+          "char_count": 4748
         },
         {
           "id": "boundaries",
@@ -16698,6 +16706,16 @@
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx:0:published path parsing and formatting, absolute identity, and localized input recovery.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx",
+          "description": "Published path parsing and formatting, absolute identity, and localized input recovery."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx:0:real files input through runtime directory requests, root selection, persistence, failure, and cancellation.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx",
+          "description": "Real Files input through runtime directory requests, root selection, persistence, failure, and cancellation."
+        },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/services/filesystemPicker.ts:0:runtime and workbench adapter without independent navigation state.",
           "source": "redeven:internal/envapp/ui_src/src/ui/services/filesystemPicker.ts",
@@ -16765,6 +16783,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Permission policy and filesystem scope",
+          "path": "security/permission-policy-and-filesystem-scope.md",
+          "concept_id": "security.permission-policy-and-filesystem-scope",
+          "title": "Permission policy and filesystem scope"
         },
         {
           "label": "Flower working directory navigation",
@@ -21343,5 +21367,5 @@
       ]
     }
   ],
-  "source_sha256": "235f6e68f8525498f8138e5a7d3c036c4a86ba43408dd058d5625315f25a630a"
+  "source_sha256": "ce6b3c45ce2553e758eadff34956200f9d6bdab03214dc63a96b1d2a001f2993"
 }
