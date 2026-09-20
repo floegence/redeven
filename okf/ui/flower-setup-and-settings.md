@@ -1,7 +1,7 @@
 ---
 type: UI Contract
 title: Flower setup and settings
-description: First-time model setup and the shared provider, permission, and computer settings surface.
+description: First-time model setup, actionable starter tasks, and shared provider, permission, and computer settings.
 tags: [ai, flower, settings, onboarding]
 timestamp: 2026-09-21T00:00:00Z
 ---
@@ -10,6 +10,8 @@ timestamp: 2026-09-21T00:00:00Z
 The shared Flower surface owns first-time configuration and settings presentation
 for Desktop and Env App. An empty provider profile with no usable model and no
 selected conversation presents a neutral welcome with explicit setup actions.
+Configured new conversations offer concrete starter tasks as editable drafts;
+selecting one never launches a turn automatically.
 Settings use flat sections, typography, spacing, and separators instead of nested
 rounded panels. Presentation must preserve drafts, model-source identity, and
 permission ownership. Connection failures and configured profiles needing repair
@@ -41,6 +43,30 @@ flower rotation: a 1.2-second turn with a small overshoot and scale rebound,
 after a 150 ms delay. It finishes at rest and does not replay on directory or
 draft edits. Reduced motion disables it. The shared icon artwork stays bare,
 without restoring the removed glow or a continuous animation.
+
+# Starter tasks
+
+The configured new-conversation page offers four concrete tasks: map the current
+project, review uncommitted Git changes, fix one reproducible failing test, and
+analyze directory disk usage. Compact card titles and descriptions name the
+outcome; each localized prompt defines its working-directory scope, execution
+steps, evidence, and deliverable. They do not assume an attachment, selected code,
+transfer destination, or an unspecified workflow already exists.
+
+Project guidance cites real files and distinguishes documented commands from
+verified ones. Change review reports actionable regressions with locations and
+triggering scenarios. Test repair requires reproduction, a focused fix, and
+rerunning affected tests without weakening assertions. Disk analysis measures
+usage, reports incomplete coverage, and identifies cleanup candidates without
+deleting files. Missing project context, clean Git state, passing tests, and
+environment blockers must be reported honestly rather than inventing work.
+
+Activating a card by pointer or keyboard fills the complete editable composer
+draft and places the caret at its end. It never launches a turn automatically;
+the user can revise the request before sending it. Long prompts remain within
+the scrolling composer. Runtime permissions still govern all submitted work.
+The compact companion continues to omit the task grid as specified by the
+[companion presentation contract](flower-activity-companion.md).
 
 # Settings composition
 
@@ -88,6 +114,9 @@ Computer-use save failures restore the confirmed switch and expose the error.
 
 # Evidence
 
+- `redeven:internal/flower_ui/src/i18n/flowerSurfaceMessages.ts` - Canonical localized task copy and complete seeded prompts.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.starterTasks.browser.test.tsx` - Localized card layout, complete draft insertion, keyboard and pointer focus handoff, and no automatic submission.
+- `redeven:desktop/src/welcome/flower/desktopFlowerSurfaceCopy.test.tsx` - Desktop and shared English starter-copy parity.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerWorkingDirectory.browser.test.tsx` - One-shot welcome rotation, overshoot, stable draft edits, and reduced motion.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:2846` - First-time setup eligibility and retained composer ownership.
 - `redeven:internal/flower_ui/src/chat/FlowerSetupWelcome.tsx:7` - Setup destinations and model refresh presentation.

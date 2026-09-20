@@ -980,6 +980,7 @@ export function clearFlowerSurfaceNotifications(): void {
 const mountFlowerSurface = (
   surfaceAdapter: TestFlowerSurfaceAdapter,
   props: Readonly<{
+    copy?: FlowerSurfaceProps['copy'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
     presentation?: 'full' | 'companion';
@@ -1001,6 +1002,7 @@ const mountFlowerSurface = (
   const surface = () => (
     <FlowerSurface
       adapter={surfaceAdapter}
+      copy={props.copy}
       notify={(notification) => {
         notifications.push(notification);
       }}
@@ -1065,6 +1067,7 @@ export function disposeRenderedSurface(runtime: HTMLDivElement): void {
 export function renderSurfaceWithAdapterProps(
   surfaceAdapter: TestFlowerSurfaceAdapter,
   props: Readonly<{
+    copy?: FlowerSurfaceProps['copy'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
     presentation?: 'full' | 'companion';
