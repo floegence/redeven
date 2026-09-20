@@ -126,11 +126,18 @@ stream. When a Runtime restart invalidates local access, the password gate
 replaces the recovery presentation; a successful regrant begins one fresh
 readiness and Flower initialization sequence.
 
-Transient inspection delays use a neutral progress presentation and never
-invent a percentage, remaining time, or polling countdown. After ten seconds
-the UI shows real elapsed time without live-region announcements. After thirty
-seconds it adds one calm explanation and an optional sanitized detail view;
-normal processing never exposes retry or cancel actions. The process-level
+Transient inspection delays use a neutral Flower illustration and an indeterminate
+progress track, never an invented percentage, remaining time, or polling countdown.
+The initial 150 ms delay applies once per busy period; phase changes update the
+same visible surface, retaining open details, keyboard focus, and animation nodes.
+Short copy explains conversation preservation and the continued availability of
+files and terminals. Startup details can be expanded throughout preparation.
+After ten seconds the UI shows real elapsed time without live-region announcements;
+after thirty seconds it adds one calm explanation. Normal processing never exposes
+retry or cancel actions. Companion layout adapts to its own container, and reduced
+motion disables decorative movement without hiding progress or status. Text stays
+fully opaque during entry so contrast does not depend on animation completion.
+The process-level
 `agent.lock` remains the state-root owner, so another runtime attaches or reports
 conflict instead of opening an empty Store. A terminal retry is user-controlled,
 single-flight, and allowed only by typed safety plus current authority. Administrator-confirmed complete-set restoration follows the [Flower backup and recovery contract](../ai/flower-backup-and-recovery.md); it never offers force, reset, or ignore controls. Returning to `ready`

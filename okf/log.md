@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-20: Refine Flower startup and backup presentation
+
+- Give preparation and backup one branded, theme-aware waiting surface with honest progress, concise localized copy, and startup details available on demand.
+- Preserve the mounted surface and keyboard focus across preparation phases; keep the initial delay only at the start of a busy period.
+- Verify light and dark companion layouts, 200% text, forced colors, reduced motion, and accessibility alongside readiness admission and recovery tests.
+
 ## 2026-09-20: Bound Desktop development bundle storage
 
 - Prune verified old development packages after each complete bundle publication.
