@@ -43,6 +43,20 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 		} else {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: catalog})
 		}
+	case r.Method == http.MethodPost && r.URL.Path == hostApplicationsAPI+"/permissions":
+		var req struct {
+			Permission string `json:"permission"`
+		}
+		if decodeManagedJSON(r, &req) != nil {
+			writeHostAppError(w, hostapps.ErrInvalid)
+			return true
+		}
+		if err := g.hostApps.Permissions(r.Context(), req.Permission); err != nil {
+			writeHostAppError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "host_application_permission_request", "success", map[string]any{"permission": req.Permission}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true})
 	case r.Method == http.MethodPost && r.URL.Path == hostApplicationsAPI+"/sessions":
 		var req hostapps.LaunchRequest
 		if decodeManagedJSON(r, &req) != nil {
@@ -144,16 +158,20 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, _ *http.Request
 	var random [18]byte
 	_, _ = rand.Read(random[:])
 	nonce := base64.RawStdEncoding.EncodeToString(random[:])
-	config, _ := json.Marshal(map[string]any{"base": base, "copy": s.Presentation, "icon": s.Application.Icon})
+	config, _ := json.Marshal(map[string]any{"base": base, "copy": s.Presentation, "icon": s.Application.Icon, "backend": s.Backend})
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src data:; connect-src 'self'; frame-src 'self'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src data: blob:; connect-src 'self'; frame-src 'self'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; base-uri 'none'; frame-ancestors 'none'")
+	script := hostApplicationJS
+	if s.Backend == "macos" {
+		script = macHostApplicationJS
+	}
 	_ = hostApplicationBootTemplate.Execute(w, struct {
 		Name, Nonce, Locale string
 		Config, Script      template.JS
 		Style               template.CSS
-	}{s.Application.Name, nonce, s.Presentation.Locale, template.JS(config), template.JS(hostApplicationJS), template.CSS(hostApplicationCSS)})
+	}{s.Application.Name, nonce, s.Presentation.Locale, template.JS(config), template.JS(script), template.CSS(hostApplicationCSS)})
 }
 
 //go:embed host_application_viewer/viewer.html
@@ -166,3 +184,6 @@ var hostApplicationCSS string
 var hostApplicationJS string
 
 var hostApplicationBootTemplate = template.Must(template.New("host-app").Parse(hostApplicationHTML))
+
+//go:embed host_application_viewer/macos.js
+var macHostApplicationJS string

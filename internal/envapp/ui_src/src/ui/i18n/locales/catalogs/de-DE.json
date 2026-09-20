@@ -6175,6 +6175,7 @@
     }
   },
   "hostApplications": {
+    "macMenu": "App-Menü",
     "connecting": "Verbindung zur Anwendung wird hergestellt…",
     "reconnecting": "Verbindung wird wiederhergestellt…",
     "disconnected": "Verbindung unterbrochen",
@@ -6217,15 +6218,28 @@
     "setupDescription": "Installieren Sie Xpra 6.x, Xpra HTML5 v20 / v21, Xvfb, D-Bus, xauth und Python-GIO/GTK-3-Bindings auf diesem Host und aktualisieren Sie die Liste. Die Pakete unterscheiden sich je nach Distribution. Eine Desktopumgebung oder ein Monitor ist nicht erforderlich.",
     "setupRequirements": "Noch erforderlich: {requirements}",
     "setupGuide": "Installationsanleitung",
-    "catalogUnavailable": "Der Anwendungskatalog des Hosts konnte nicht gelesen werden. Prüfen Sie die GIO/GTK-Installation des Hosts und aktualisieren Sie die Liste.",
+    "catalogUnavailable": "Der Anwendungskatalog des Hosts konnte nicht gelesen werden. Prüfen Sie, ob die Laufzeit auf diesem Host funktioniert, und aktualisieren Sie die Ansicht.",
     "setupTitle": "Host vorbereiten",
     "starting": "Anwendung wird gestartet…",
     "stop": "Sitzung beenden",
     "stopDescription": "Die Anwendung und alle ihre Fenster werden geschlossen. Ungespeicherte Änderungen können verloren gehen.",
     "stopTitle": "Diese Anwendungssitzung beenden?",
     "title": "Host-Anwendungen",
-    "unsupportedDescription": "Diese Funktion erfordert derzeit eine Linux-Laufzeit. Verbinden Sie sich mit einem Linux-Host.",
-    "unsupportedTitle": "Linux-Host erforderlich",
-    "allApplications": "Alle Anwendungen"
+    "unsupportedDescription": "Host-Apps benötigen eine Linux- oder macOS-Laufzeit. Verbinde dich mit einem unterstützten Host.",
+    "unsupportedTitle": "Unterstützter Host erforderlich",
+    "allApplications": "Alle Anwendungen",
+    "macPermissions": "Erlaube Redeven auf diesem Mac in den Systemeinstellungen die Bildschirmaufnahme und Bedienungshilfen und aktualisiere anschließend die Ansicht. Zum direkten Öffnen von Apps auf diesem Mac ist keine Bildschirmaufnahme erforderlich.",
+    "macSessionRequired": "Melde dich an der grafischen Sitzung dieses Mac an, entsperre sie und aktualisiere anschließend die Ansicht.",
+    "macHelperMissing": "Die macOS-App-Komponente ist nicht verfügbar. Aktualisiere oder installiere die Redeven-Laufzeit auf diesem Host neu und aktualisiere anschließend die Ansicht.",
+    "macAllowScreen": "Bildschirmaufnahme erlauben",
+    "macAllowAccessibility": "Bedienungshilfen erlauben",
+    "macSharedControl": "Ferneingaben verwenden die aktuelle Benutzersitzung dieses Mac und können das aktive Fenster wechseln.",
+    "macWindows": "App-Fenster",
+    "macCloseWindow": "App-Fenster schließen",
+    "macInput": "Tastatureingabe für die App",
+    "macRetained": "Beim Schließen der Anzeige bleibt die App auf dem Mac geöffnet. Das Stoppen der Laufzeit trennt die Verbindung, ohne ungespeicherte Arbeit zu verwerfen.",
+    "macStopDescription": "Fordere diese App zum Beenden auf. Falls ungespeicherte Arbeit vorhanden ist, beantworte den Speicherdialog im App-Fenster.",
+    "macAddDescription": "Gib den absoluten Pfad eines installierten .app-Pakets an. Name und Symbol werden aus macOS gelesen.",
+    "macBundlePath": "Pfad zum App-Paket"
   }
 }

@@ -1,24 +1,26 @@
 ---
 type: Runtime Contract
-title: Host application catalog and Xpra sessions
-description: Browse Linux host applications and open owned, reconnectable graphical sessions through existing authorized windows.
+title: Host application catalog and owned native sessions
+description: Browse Linux and macOS host applications and open owned, reconnectable graphical sessions through existing authorized windows.
 tags: [runtime, desktop, applications, security, ui]
 timestamp: 2026-09-20T00:00:00Z
 ---
 # Summary
 
 Redeven owns the host application catalog, launch authorization, session lifecycle,
-and private forward. Installed GIO owns desktop-entry resolution and launch;
+and private forward. The [macOS contract](macos-host-applications.md) defines native
+launch and window streaming. On Linux, installed GIO owns desktop-entry resolution and launch;
 installed Xpra owns X11 rendering and interactive transport. Applications execute
 as the Runtime's host OS user, without a container or virtual machine. Each live
 application session has one owner and one authorized window route. Closing its
-viewer preserves the application; ending the session or stopping the Runtime
-closes it. Sessions are not durable across Runtime restarts. Missing dependencies,
+viewer preserves the application. Linux session termination closes its owned
+process group; macOS requests graceful application exit and preserves applications
+on Runtime shutdown to protect unsaved work. Sessions are not durable across Runtime restarts. Missing dependencies,
 launch failures, and insufficient permissions fail explicitly.
 
 # Host and application boundary
 
-The supported host is Linux with Xpra 6.x and a separately installed
+The Linux backend uses Xpra 6.x and a separately installed
 Xpra HTML5 v20 or v21 client, Xvfb, D-Bus, xauth, and Python GIO/GTK 3 bindings. These remain
 external host dependencies; Redeven does not vendor or download Xpra. The
 [platform and initialization contract](host-application-platforms.md) owns capability
@@ -65,7 +67,7 @@ can access or end a session. A per-session Xpra credential independently protect
 the loopback WebSocket and is never placed in URLs or catalog responses.
 
 Launching an already active application for the same owner resumes its session.
-A launch gets a private D-Bus session, virtual X server, authenticated loopback
+On Linux, a launch gets a private D-Bus session, virtual X server, authenticated loopback
 listener, and process group. A GIO launch receipt, responding HTML5 endpoint, and a nonempty Xpra window
 inventory must all be ready before the session becomes running. Startup has a bounded
 deadline; failure stops the owned process group and removes its route and secret.
@@ -80,7 +82,7 @@ owned ephemeral route that is pinned until application termination, is absent
 from saved Web Services, and cannot be saved as a persistent service. It is
 released on termination. The manager's target guard also applies to alternative
 forward openings to the same target. Runtime shutdown prevents new launches and
-terminates its owned sessions. Network loss and viewer closure do not terminate
+terminates its owned streaming sessions; process behavior follows the platform contract. Network loss and viewer closure do not terminate
 applications. Runtime crash recovery and attachment to applications previously
 started on another display are outside this contract.
 
@@ -93,7 +95,7 @@ visible-session observation uses a lightweight session endpoint. Read-only users
 can browse while launch and process controls are disabled. Ending a session asks
 for confirmation because unsaved application data may be lost.
 
-Opening uses an application presentation of the existing
+On Linux and remote macOS targets, opening uses an application presentation of the existing
 [Desktop isolated forward window](../desktop/web-service-browser-window.md), or a
 synchronously reserved popup in browser mode. Desktop uses a native title bar,
 application title, and full content bounds without browser navigation or an
@@ -104,7 +106,7 @@ defined by the Desktop window contract. Browser popups retain browser-owned chro
 The localized bootstrap owns connection presentation. It uses the host application's
 unframed icon, quiet progress motion, and distinct starting, connecting, disconnected,
 reconnecting, ended, and failed states. Application content appears only after a
-successful Xpra paint acknowledgement. Reduced-motion preferences disable motion.
+successful Xpra paint acknowledgement or decoded native macOS frame. Reduced-motion preferences disable motion.
 A broken connection provides explicit reconnection, reseeding credentials from the
 authorized state endpoint without starting another application process. Stale
 callbacks cannot restore a disconnected or superseded view. Terminated sessions

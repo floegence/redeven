@@ -245,13 +245,13 @@ final class NativeWindow {
 final class NativeAccessibility {
     var windows: [String: NativeWindow] = [:]
 
-    func inventory() throws -> [[String: Any]] {
+    func inventory(onlyOwner: pid_t? = nil) throws -> [[String: Any]] {
         guard AXIsProcessTrusted() else { throw HostFailure(code: "TARGET_PERMISSION_REQUIRED", message: "Allow Accessibility in System Settings.") }
         let excluded = try NativeScreenCapture.excludedOwner(environment: ProcessInfo.processInfo.environment)
         guard let cgWindows = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] else { throw NativeInput.unavailable() }
         windows = windows.filter { (try? $0.value.validate()) != nil }
         var result: [[String: Any]] = []
-        for app in NSWorkspace.shared.runningApplications where app.activationPolicy != .prohibited && app.processIdentifier != excluded {
+        for app in NSWorkspace.shared.runningApplications where app.activationPolicy != .prohibited && app.processIdentifier != excluded && (onlyOwner == nil || app.processIdentifier == onlyOwner) {
             guard let bundle = app.bundleIdentifier else { continue }
             let application = AXUIElementCreateApplication(app.processIdentifier)
             AXUIElementSetMessagingTimeout(application, 0.5)

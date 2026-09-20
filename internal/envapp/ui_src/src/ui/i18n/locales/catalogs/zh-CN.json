@@ -6186,6 +6186,7 @@
     }
   },
   "hostApplications": {
+    "macMenu": "应用菜单",
     "connecting": "正在连接应用…",
     "reconnecting": "正在重新连接…",
     "disconnected": "连接已中断",
@@ -6228,15 +6229,28 @@
     "setupDescription": "请在主机上安装 Xpra 6.x、Xpra HTML5 v20 / v21、Xvfb、D-Bus、xauth 和 Python GIO/GTK 3 绑定，然后刷新。不同发行版的安装包有所区别，无需桌面环境或显示器。",
     "setupRequirements": "需要准备：{requirements}",
     "setupGuide": "安装指南",
-    "catalogUnavailable": "无法读取主机应用目录。请检查主机的 GIO/GTK 安装，然后刷新。",
+    "catalogUnavailable": "无法读取主机应用目录。请检查此主机上的运行时是否正常，然后刷新。",
     "setupTitle": "配置主机环境",
     "starting": "正在启动应用…",
     "stop": "结束会话",
     "stopDescription": "这将关闭应用及其所有窗口，未保存的更改可能丢失。",
     "stopTitle": "结束此应用会话？",
     "title": "主机应用",
-    "unsupportedDescription": "此功能目前需要 Linux 运行时。请连接 Linux 主机后使用。",
-    "unsupportedTitle": "需要 Linux 主机",
-    "allApplications": "全部应用"
+    "unsupportedDescription": "主机应用需要 Linux 或 macOS 运行时。请连接受支持的主机后使用。",
+    "unsupportedTitle": "需要受支持的主机",
+    "allApplications": "全部应用",
+    "macPermissions": "请在这台 Mac 的系统设置中，允许 Redeven 录制屏幕并使用辅助功能，然后刷新。直接在本机打开应用无需屏幕录制权限。",
+    "macSessionRequired": "请登录这台 Mac 的图形会话并解锁，然后刷新。",
+    "macHelperMissing": "macOS 应用组件不可用。请更新或重新安装此主机上的 Redeven 运行时，然后刷新。",
+    "macAllowScreen": "允许屏幕录制",
+    "macAllowAccessibility": "允许辅助功能",
+    "macSharedControl": "远程输入会使用这台 Mac 的当前用户会话，并可能切换其活动窗口。",
+    "macWindows": "应用窗口",
+    "macCloseWindow": "关闭应用窗口",
+    "macInput": "应用键盘输入",
+    "macRetained": "关闭查看窗口后，应用仍在 Mac 上运行。停止运行时会断开连接，不会丢弃尚未保存的工作。",
+    "macStopDescription": "请求退出此应用。如果有尚未保存的工作，请在应用窗口中处理保存对话框。",
+    "macAddDescription": "填写已安装 .app 应用包的绝对路径。名称和图标将从 macOS 读取。",
+    "macBundlePath": "应用包路径"
   }
 }

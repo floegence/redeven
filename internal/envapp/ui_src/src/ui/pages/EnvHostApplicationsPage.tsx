@@ -6,7 +6,7 @@ import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { useEnvContext } from './EnvContext';
-import { addHostApplication, launchHostApplication, listHostApplicationSessions, listHostApplications, stopHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSession } from '../services/hostApplicationsApi';
+import { addHostApplication, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, stopHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSession } from '../services/hostApplicationsApi';
 import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopShellBridge';
 import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
 import { LocalApiError } from '../services/localApi';
@@ -30,6 +30,26 @@ export function EnvHostApplicationsPage() {
   const canRead = () => Boolean(ctx.env()?.permissions?.can_read);
   const canLaunch = () => Boolean(canRead() && ctx.env()?.permissions?.can_write && ctx.env()?.permissions?.can_execute);
   const [catalog, setCatalog] = createSignal<HostApplicationCatalog | null>(null);
+  const isMac = () => catalog()?.availability.backend === 'macos';
+  const nativeLaunch = () => isMac() && readDesktopSessionContextSnapshot()?.target_kind === 'local_environment' && readDesktopSessionContextSnapshot()?.target_route === 'local_host';
+  const ready = () => nativeLaunch() ? catalog()?.availability.native_ready : catalog()?.availability.ready;
+  const availabilityDescription = (): EnvAppTranslationKey => {
+    const availability = catalog()!.availability;
+    if (!availability.supported) return 'hostApplications.unsupportedDescription';
+    if (availability.reason === 'catalog_unavailable') return 'hostApplications.catalogUnavailable';
+    if (!isMac()) return 'hostApplications.setupDescription';
+    if (availability.reason === 'graphical_session_required') return 'hostApplications.macSessionRequired';
+    if (availability.reason === 'native_helper_missing') return 'hostApplications.macHelperMissing';
+    return 'hostApplications.macPermissions';
+  };
+  const [permissionBusy, setPermissionBusy] = createSignal(false);
+  const requestPermission = async (permission: 'screen_recording' | 'accessibility') => {
+    if (!canLaunch() || permissionBusy()) return;
+    setPermissionBusy(true);
+    try {await requestHostApplicationPermission(permission);await refresh();}
+    catch (e) {setError(translateError(e));}
+    finally {setPermissionBusy(false);}
+  };
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal('');
   const [query, setQuery] = createSignal('');
@@ -100,8 +120,9 @@ export function EnvHostApplicationsPage() {
     const existing = windows.get(app.id);
     if (existing && !existing.closed && runningByApp().has(app.id)) { existing.focus(); return; }
     const desktop = desktopShellWebServiceWindowOpenAvailable();
-    const popup = desktop ? null : window.open('about:blank', `redeven-host-app-${ctx.env_id()}-${encodeURIComponent(app.id)}`);
-    if (!desktop && !popup) { setAppErrors(v => ({ ...v, [app.id]: i18n.t('webServices.errors.popupBlocked') })); return; }
+    const localNative = nativeLaunch();
+    const popup = desktop || localNative ? null : window.open('about:blank', `redeven-host-app-${ctx.env_id()}-${encodeURIComponent(app.id)}`);
+    if (!desktop && !localNative && !popup) { setAppErrors(v => ({ ...v, [app.id]: i18n.t('webServices.errors.popupBlocked') })); return; }
     if (popup) {
       popup.document.title = app.name;
       popup.document.body.textContent = i18n.t('hostApplications.starting');
@@ -111,11 +132,14 @@ export function EnvHostApplicationsPage() {
     try {
       const result = await launchHostApplication(app.id, i18n.locale(), {
         locale: i18n.locale(),
+        menu: i18n.t('hostApplications.macMenu'), windows: i18n.t('hostApplications.macWindows'), closeWindow: i18n.t('hostApplications.macCloseWindow'),
+        sharedControl: i18n.t('hostApplications.macSharedControl'), input: i18n.t('hostApplications.macInput'),
         connecting: i18n.t('hostApplications.connecting'), reconnecting: i18n.t('hostApplications.reconnecting'),
         disconnected: i18n.t('hostApplications.disconnected'), connectionHint: i18n.t('hostApplications.connectionHint'), reconnect: i18n.t('hostApplications.reconnect'),
         starting: i18n.t('hostApplications.starting'), failed: i18n.t('hostApplications.errors.failed'),
         ended: i18n.t('hostApplications.ended'), retry: i18n.t('hostApplications.retry'),
-      });
+      }, localNative ? 'native' : 'stream');
+      if (result.mode === 'native') {await refresh(true);return;}
       if (!result.forward) throw new Error('Missing application forward');
       const { forward, app_path: appPath } = result.forward;
       const route = resolveWebServiceOpenRoute({ forwardID: forward.forward_id, localRuntime: ctx.localRuntime(), desktopContext: readDesktopSessionContextSnapshot(), appPath, desktopWindowAvailable: desktop });
@@ -140,7 +164,7 @@ export function EnvHostApplicationsPage() {
   };
 
   const add = async () => {
-    if (!name().trim() || !executable().trim() || addBusy()) return;
+    if ((!isMac() && !name().trim()) || !executable().trim() || addBusy()) return;
     setAddBusy(true); setAddError('');
     try {
       await addHostApplication({ name: name().trim(), executable: executable().trim(), arguments: argumentsText() });
@@ -162,16 +186,21 @@ export function EnvHostApplicationsPage() {
       <Show when={!canRead()}><div class="host-apps-empty"><ActivityBarHostApplicationsIcon class="w-9 h-9" /><h2>{i18n.t('hostApplications.permissionTitle')}</h2><p>{i18n.t('hostApplications.readPermission')}</p></div></Show>
       <Show when={canRead()}>
         <Show when={catalog()} fallback={<div role="status" aria-label={i18n.t('hostApplications.loading')} class="host-apps-skeleton"><div class="host-apps-skeleton-heading" aria-hidden="true" /><div class="host-apps-grid" aria-hidden="true"><For each={[0,1,2,3,4,5]}>{() => <div class="host-app-skeleton-tile"><span /><i /><i /><i /></div>}</For></div></div>}>
-          <Show when={!catalog()!.availability.ready}>
-            <div class="host-apps-notice"><ActivityBarHostApplicationsIcon class="w-5 h-5 shrink-0" /><div><strong>{i18n.t(catalog()!.availability.supported ? 'hostApplications.setupTitle' : 'hostApplications.unsupportedTitle')}</strong><p>{i18n.t(!catalog()!.availability.supported ? 'hostApplications.unsupportedDescription' : catalog()!.availability.reason === 'catalog_unavailable' ? 'hostApplications.catalogUnavailable' : 'hostApplications.setupDescription')}</p>
+          <Show when={!ready()}>
+            <div class="host-apps-notice"><ActivityBarHostApplicationsIcon class="w-5 h-5 shrink-0" /><div><strong>{i18n.t(catalog()!.availability.supported ? 'hostApplications.setupTitle' : 'hostApplications.unsupportedTitle')}</strong><p>{i18n.t(availabilityDescription())}</p>
               <Show when={catalog()!.availability.requirements?.length}><p>{i18n.t('hostApplications.setupRequirements', { requirements: catalog()!.availability.requirements!.join(', ') })}</p></Show>
-              <Show when={catalog()!.availability.supported}><a class="host-apps-setup-guide" href="https://github.com/Xpra-org/xpra/wiki/Download" target="_blank" rel="noopener noreferrer">{i18n.t('hostApplications.setupGuide')}<ExternalLink class="w-3 h-3" /></a></Show></div></div>
+              <Show when={catalog()!.availability.supported && !isMac()}><a class="host-apps-setup-guide" href="https://github.com/Xpra-org/xpra/wiki/Download" target="_blank" rel="noopener noreferrer">{i18n.t('hostApplications.setupGuide')}<ExternalLink class="w-3 h-3" /></a></Show>
+              <Show when={isMac() && catalog()!.availability.reason === 'macos_permissions'}><div class="flex flex-wrap gap-2 mt-3">
+                <Show when={!catalog()!.availability.permissions?.screen_recording}><Button variant="outline" size="sm" disabled={!canLaunch() || permissionBusy()} onClick={() => void requestPermission('screen_recording')}>{i18n.t('hostApplications.macAllowScreen')}</Button></Show>
+                <Show when={!catalog()!.availability.permissions?.accessibility}><Button variant="outline" size="sm" disabled={!canLaunch() || permissionBusy()} onClick={() => void requestPermission('accessibility')}>{i18n.t('hostApplications.macAllowAccessibility')}</Button></Show>
+              </div></Show>
+            </div></div>
           </Show>
           <Show when={canRead() && !canLaunch()}><div class="host-apps-notice">{i18n.t('hostApplications.launchPermission')}</div></Show>
           <Show when={running().length}>
             <section class="host-apps-running" aria-label={i18n.t('hostApplications.running')}>
               <div class="host-apps-section-title"><h2>{i18n.t('hostApplications.running')}</h2><span>{running().length}</span></div>
-              <p class="host-apps-hint">{i18n.t('hostApplications.retained')}</p>
+              <p class="host-apps-hint">{i18n.t(isMac() ? 'hostApplications.macRetained' : 'hostApplications.retained')}</p>
               <div class="host-apps-session-grid"><For each={running()}>{session =>
                 <div class={`host-app-session ${redevenSurfaceRoleClass('panelInteractive')}`}>
                   <button class="host-app-session-open" onClick={() => void open(session.application)} disabled={!canLaunch() || busy()[session.application.id]}>
@@ -197,7 +226,7 @@ export function EnvHostApplicationsPage() {
             </div>
             <Show when={apps().length} fallback={<div class="host-apps-empty"><Search class="w-8 h-8" /><h2>{i18n.t(query() ? 'hostApplications.noResults' : 'hostApplications.emptyTitle')}</h2><p>{i18n.t(query() ? 'hostApplications.noResultsDescription' : 'hostApplications.emptyDescription')}</p></div>}>
               <div class="host-apps-grid"><For each={apps()}>{app => <div class="host-app-tile-wrap">
-                <button class={`host-app-tile ${redevenSurfaceRoleClass('panelInteractive')}`} aria-busy={starting(app.id)} disabled={!canLaunch() || !catalog()!.availability.ready || busy()[app.id]} onClick={() => void open(app)} aria-label={`${i18n.t(runningByApp().has(app.id) ? 'hostApplications.resume' : 'hostApplications.open')} · ${app.name}`}>
+                <button class={`host-app-tile ${redevenSurfaceRoleClass('panelInteractive')}`} aria-busy={starting(app.id)} disabled={!canLaunch() || !ready() || busy()[app.id]} onClick={() => void open(app)} aria-label={`${i18n.t(runningByApp().has(app.id) ? 'hostApplications.resume' : 'hostApplications.open')} · ${app.name}`}>
                   <div class="host-app-tile-top"><ApplicationIcon app={app} /><span class="host-app-tile-affordance" aria-hidden="true"><Show when={runningByApp().get(app.id)?.state === 'running'}><span class="host-app-status-dot" /></Show><ExternalLink class="host-app-open-icon w-3.5 h-3.5" /></span></div>
                   <strong>{app.name}</strong><Show when={app.description}><p title={app.description}>{app.description}</p></Show>
                   <Show when={starting(app.id)}><span class="host-app-tile-action" role="status"><span class="host-app-launch-indicator" aria-hidden="true" />{i18n.t('hostApplications.starting')}</span></Show>
@@ -209,12 +238,12 @@ export function EnvHostApplicationsPage() {
         </Show>
       </Show>
     </div>
-    <ConfirmDialog open={Boolean(ending())} onOpenChange={value => { if (!value && !stopBusy()) setEnding(null); }} title={i18n.t('hostApplications.stopTitle')} description={i18n.t('hostApplications.stopDescription')} confirmText={i18n.t('hostApplications.stop')} cancelText={i18n.t('hostApplications.cancel')} variant="destructive" loading={stopBusy()} onConfirm={() => void stop()} />
-    <Dialog open={addOpen()} onOpenChange={value => { if (!addBusy()) setAddOpen(value); }} title={i18n.t('hostApplications.addTitle')} footer={<><Button variant="ghost" onClick={() => setAddOpen(false)} disabled={addBusy()}>{i18n.t('hostApplications.cancel')}</Button><Button onClick={() => void add()} disabled={addBusy() || !name().trim() || !executable().trim()}>{i18n.t('hostApplications.add')}</Button></>}>
-      <div class="space-y-4"><p class="text-sm text-muted-foreground">{i18n.t('hostApplications.addDescription')}</p>
-        <label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t('hostApplications.name')}</span><Input value={name()} onInput={e => setName(e.currentTarget.value)} maxLength={120} /></label>
-        <label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t('hostApplications.executable')}</span><Input value={executable()} onInput={e => setExecutable(e.currentTarget.value)} placeholder="/usr/bin/gedit" /></label>
-        <label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t('hostApplications.arguments')}</span><Input value={argumentsText()} onInput={e => setArgumentsText(e.currentTarget.value)} /></label>
+    <ConfirmDialog open={Boolean(ending())} onOpenChange={value => { if (!value && !stopBusy()) setEnding(null); }} title={i18n.t('hostApplications.stopTitle')} description={i18n.t(isMac() ? 'hostApplications.macStopDescription' : 'hostApplications.stopDescription')} confirmText={i18n.t('hostApplications.stop')} cancelText={i18n.t('hostApplications.cancel')} variant="destructive" loading={stopBusy()} onConfirm={() => void stop()} />
+    <Dialog open={addOpen()} onOpenChange={value => { if (!addBusy()) setAddOpen(value); }} title={i18n.t('hostApplications.addTitle')} footer={<><Button variant="ghost" onClick={() => setAddOpen(false)} disabled={addBusy()}>{i18n.t('hostApplications.cancel')}</Button><Button onClick={() => void add()} disabled={addBusy() || (!isMac() && !name().trim()) || !executable().trim()}>{i18n.t('hostApplications.add')}</Button></>}>
+      <div class="space-y-4"><p class="text-sm text-muted-foreground">{i18n.t(isMac() ? 'hostApplications.macAddDescription' : 'hostApplications.addDescription')}</p>
+        <Show when={!isMac()}><label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t('hostApplications.name')}</span><Input value={name()} onInput={e => setName(e.currentTarget.value)} maxLength={120} /></label></Show>
+        <label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t(isMac() ? 'hostApplications.macBundlePath' : 'hostApplications.executable')}</span><Input value={executable()} onInput={e => setExecutable(e.currentTarget.value)} placeholder={isMac() ? "/Applications/Example.app" : "/usr/bin/example"} /></label>
+        <Show when={!isMac()}><label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t('hostApplications.arguments')}</span><Input value={argumentsText()} onInput={e => setArgumentsText(e.currentTarget.value)} /></label></Show>
         <Show when={addError()}><p role="alert" class="text-sm text-destructive">{addError()}</p></Show>
       </div>
     </Dialog>

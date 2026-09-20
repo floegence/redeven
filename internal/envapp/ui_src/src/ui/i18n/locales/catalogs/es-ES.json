@@ -6175,6 +6175,7 @@
     }
   },
   "hostApplications": {
+    "macMenu": "Menú de la aplicación",
     "connecting": "Conectando con la aplicación…",
     "reconnecting": "Volviendo a conectar…",
     "disconnected": "Conexión interrumpida",
@@ -6217,15 +6218,28 @@
     "setupDescription": "Instala Xpra 6.x, Xpra HTML5 v20 / v21, Xvfb, D-Bus, xauth y los enlaces Python GIO/GTK 3 en este host y actualiza la lista. Los paquetes varían según la distribución. No se necesita un entorno de escritorio ni un monitor.",
     "setupRequirements": "Requiere atención: {requirements}",
     "setupGuide": "Guía de instalación",
-    "catalogUnavailable": "No se pudo leer el catálogo de aplicaciones del host. Comprueba la instalación de GIO/GTK del host y actualiza la lista.",
+    "catalogUnavailable": "No se pudo leer el catálogo de aplicaciones del host. Comprueba que el entorno de ejecución funciona en este host y actualiza la lista.",
     "setupTitle": "Preparar este host",
     "starting": "Iniciando aplicación…",
     "stop": "Finalizar sesión",
     "stopDescription": "Se cerrarán la aplicación y todas sus ventanas. Los cambios sin guardar podrían perderse.",
     "stopTitle": "¿Finalizar esta sesión de aplicación?",
     "title": "Aplicaciones del host",
-    "unsupportedDescription": "Actualmente, esta función requiere un entorno de ejecución Linux. Conéctate a un host Linux para utilizarla.",
-    "unsupportedTitle": "Se requiere un host Linux",
-    "allApplications": "Todas las aplicaciones"
+    "unsupportedDescription": "Las aplicaciones del host requieren un entorno de ejecución Linux o macOS. Conéctate a un host compatible.",
+    "unsupportedTitle": "Se necesita un host compatible",
+    "allApplications": "Todas las aplicaciones",
+    "macPermissions": "En este Mac, permite a Redeven grabar la pantalla y usar Accesibilidad en Ajustes del Sistema y actualiza la vista. Abrir aplicaciones directamente en este Mac no requiere grabar la pantalla.",
+    "macSessionRequired": "Inicia sesión en la sesión gráfica de este Mac, desbloquéala y actualiza la vista.",
+    "macHelperMissing": "El componente de aplicaciones de macOS no está disponible. Actualiza o reinstala el entorno de ejecución de Redeven en este host y actualiza la vista.",
+    "macAllowScreen": "Permitir grabación de pantalla",
+    "macAllowAccessibility": "Permitir accesibilidad",
+    "macSharedControl": "La entrada remota utiliza la sesión de usuario actual de este Mac y puede cambiar la ventana activa.",
+    "macWindows": "Ventanas de la aplicación",
+    "macCloseWindow": "Cerrar ventana de la aplicación",
+    "macInput": "Entrada de teclado de la aplicación",
+    "macRetained": "Cerrar el visor mantiene la aplicación abierta en el Mac. Detener el entorno de ejecución desconecta el visor sin descartar el trabajo sin guardar.",
+    "macStopDescription": "Solicitar que esta aplicación se cierre. Si hay trabajo sin guardar, responde al diálogo de guardado en la ventana de la aplicación.",
+    "macAddDescription": "Introduce la ruta absoluta de un paquete .app instalado. El nombre y el icono se obtienen de macOS.",
+    "macBundlePath": "Ruta del paquete de aplicación"
   }
 }

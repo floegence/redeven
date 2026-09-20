@@ -158,6 +158,16 @@ nonempty X11 window inventory, resume, explicit termination, and exclusion of
 unrelated host Xpra configuration. Finally open an installed application in
 Redeven and verify input, reconnect and application-initiated window closure.
 
+# macOS
+
+Use the packaged native helper on macOS 13 or newer. Local Desktop opens the
+installed app directly. Remote capture requires a logged-in, unlocked desktop and
+screen-recording/accessibility grants; the application library presents explicit
+permission actions. Refresh after changing macOS Privacy & Security settings.
+See the [native Mac contract](../architecture/macos-host-applications.md) for shared
+foreground input, singleton and capture limitations. Linux package commands above
+do not apply to macOS.
+
 # Evidence
 
 - `internal/hostapps/dependencies.go`: executable, Python, server and client checks.

@@ -73,6 +73,30 @@ REDEVEN_TEST_HOST_APPLICATIONS=1 GOWORK=off go test ./internal/hostapps -run Tes
 The tests create their own custom entry, state, configuration fixture, and
 processes. They do not assume a distribution-specific desktop-entry identifier.
 
+# macOS validation
+
+The native adapter was exercised on macOS 26.5.2 ARM64 in a logged-in graphical
+session with capture and accessibility permission. The disposable AppKit fixture
+verifies real bundle metadata/icons, direct launch, captured pixels, pointer input,
+Unicode text, native shortcuts, actual menu invocation, real AX resize, reconnect
+without a new process, stale input rejection, and application-window closure.
+Desktop acceptance verifies local launch without a viewer. Browser acceptance
+exercises the authenticated native stream, input, explicit reconnection and
+script-opened viewer closure. This does not certify every third-party app or all
+macOS versions/architectures; the minimum build target is macOS 13.
+
+Repeat on an authorized Mac with Xcode command-line tools:
+
+```sh
+swift test --package-path desktop/native/computer-host
+python3 scripts/check_macos_host_applications.py desktop/native/computer-host/.build/debug/redeven-computer-host --output /tmp/redeven-native-app-evidence
+```
+
+The harness creates a unique temporary bundle and manipulates only that fixture.
+It records real input receipts and pixels; teardown verifies the exact executable
+path before stopping a fixture process. Missing graphical login or permissions is
+an explicit failure, not a skipped or simulated acceptance run.
+
 # Evidence
 
 - `internal/hostapps/manager_test.go`: installed GIO and Xpra launch/resume/stop tests.
