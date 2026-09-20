@@ -20,9 +20,9 @@ const waitFor = async (predicate: () => boolean) => {
 const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === text)!;
 const radios = () => [...document.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
 const environment: FlowerComputerEnvironment = { hostname: 'Work Mac', platform: 'darwin', managed: { state: 'on_demand' }, desktop: { state: 'permission_required', reason: 'screen_recording_required' }, chrome: { profiles: [] } };
-function mount(options: { current?: string; fullAccess?: boolean; readonly?: boolean; connectionOnly?: boolean; copy?: FlowerComputerCopy } = {}) {
+function mount(options: { current?: string; fullAccess?: boolean; readonly?: boolean; connectionOnly?: boolean; copy?: FlowerComputerCopy; environment?: FlowerComputerEnvironment } = {}) {
   const management = {
-    loadEnvironment: vi.fn().mockResolvedValue(environment),
+    loadEnvironment: vi.fn().mockResolvedValue(options.environment ?? environment),
     listCandidates: vi.fn().mockResolvedValue({ current_target_id: options.current ?? 'lost-page', candidates: [
       { candidate_ref: 'next', target_id: 'next-page', kind: 'browser.connected', display_name: 'Work', title: 'Existing draft', state: 'ready', url: 'https://example.test' },
       { candidate_ref: 'window', target_id: 'notes', kind: 'desktop.window', display_name: 'Notes — Project', app_bundle_id: 'dev.fixture.Notes', state: 'ready' },
@@ -50,6 +50,20 @@ function mount(options: { current?: string; fullAccess?: boolean; readonly?: boo
 }
 async function ready() { await waitFor(() => !!button(copy.switchTarget) && !button(copy.switchTarget).disabled); }
 async function picker() { button(copy.switchTarget).click(); await waitFor(() => radios().length > 0 && !radios()[0].disabled); }
+
+it('gives capability actions visible button boundaries before hover', async () => {
+  mount(); await ready();
+  const actions = [...document.querySelectorAll<HTMLButtonElement>('button')]
+    .filter(item => [copy.manage, copy.details].includes(item.textContent?.trim() ?? ''));
+  expect(actions).toHaveLength(3);
+  for (const action of actions) {
+    const style = getComputedStyle(action);
+    expect(parseFloat(style.borderTopWidth)).toBeGreaterThanOrEqual(1);
+    expect(style.borderTopStyle).toBe('solid');
+    expect(style.cursor).toBe('pointer');
+    expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
+  }
+});
 
 it('never describes a missing persisted page as automatic selection', async () => {
   const { management } = mount();
@@ -205,6 +219,22 @@ for (const [locale, localizedCopy, width, dark] of [
     expect(dialog.textContent).toContain(localizedCopy.chromeOffline);
     expect(button(localizedCopy.confirmTarget)).toBeUndefined();
     expect(management.selectCandidate).not.toHaveBeenCalled();
+    const capabilities = [...dialog.querySelectorAll<HTMLElement>('.flower-computer-capability')];
+    const bounds = capabilities.map(item => item.getBoundingClientRect());
+    expect(bounds).toHaveLength(3);
+    for (const capability of capabilities) {
+      expect(capability.scrollWidth).toBeLessThanOrEqual(capability.clientWidth + 1);
+      expect(capability.querySelector('button')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(width < 480 ? 44 : 32);
+    }
+    if (width > 800) {
+      expect(Math.max(...bounds.map(rect => rect.top)) - Math.min(...bounds.map(rect => rect.top))).toBeLessThan(1);
+      expect(Math.max(...bounds.map(rect => rect.width)) - Math.min(...bounds.map(rect => rect.width))).toBeLessThan(1);
+      const actionBottoms = capabilities.map(item => item.querySelector('button')!.getBoundingClientRect().bottom);
+      expect(Math.max(...actionBottoms) - Math.min(...actionBottoms)).toBeLessThan(1);
+    } else {
+      expect(bounds[1].top).toBeGreaterThanOrEqual(bounds[0].bottom);
+      expect(bounds[2].top).toBeGreaterThanOrEqual(bounds[1].bottom);
+    }
     if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') {
       await page.screenshot({ element: dialog, path: `__screenshots__/flower-computer-${locale}-${width}.png` });
     }
@@ -214,6 +244,33 @@ for (const [locale, localizedCopy, width, dark] of [
     expect(button(localizedCopy.confirmTarget).getBoundingClientRect().right).toBeLessThanOrEqual(width);
   });
 }
+
+it('keeps the connected overview and its settings pages balanced in Chinese', async () => {
+  await page.viewport(1100, 900);
+  const localizedCopy = zhCN.flowerSurface.computer;
+  mount({ fullAccess: true, copy: localizedCopy, environment: { ...environment, hostname: 'MacBook-Pro.local', desktop: { state: 'ready' }, chrome: { profiles: [{ id: 'chrome', name: 'Chrome' }] } } });
+  await waitFor(() => !!button(localizedCopy.switchTarget) && !button(localizedCopy.switchTarget).disabled);
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  await waitFor(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
+  expect(dialog.textContent).toContain(localizedCopy.connected);
+  expect(dialog.textContent).toContain(localizedCopy.available);
+  const footer = dialog.querySelector<HTMLElement>('.flower-computer-footer')!;
+  expect(footer.getBoundingClientRect().width).toBeGreaterThan(dialog.clientWidth * 0.9);
+  const screenshot = async (name: string) => {
+    if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-computer-polish-${name}.png` });
+  };
+  await screenshot('zh-CN-overview');
+  for (const [name, action] of [['managed', localizedCopy.manage], ['diagnostics', localizedCopy.details], ['help', localizedCopy.help], ['advanced', localizedCopy.advanced], ['access', localizedCopy.fullAccessTitle]] as const) {
+    button(action).click();
+    await waitFor(() => document.querySelector('[data-flower-computer-panel]')?.getAttribute('aria-busy') === 'false');
+    expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+    await screenshot(`zh-CN-${name}`);
+    button(localizedCopy.back).click();
+  }
+  const chromeCard = [...dialog.querySelectorAll('section')].find(item => item.querySelector('h4')?.textContent === localizedCopy.chromeTitle)!;
+  chromeCard.querySelector('button')!.click();
+  await screenshot('zh-CN-chrome');
+});
 it('reconciles a lost selection response by reading inventory without retrying the write', async () => {
   const { management } = mount({ current: '' }); await ready(); await picker();
   management.selectCandidate.mockRejectedValue(new Error('response lost'));
@@ -225,6 +282,35 @@ it('reconciles a lost selection response by reading inventory without retrying t
   button(copy.cancel).click();
   expect(document.querySelector('[role="status"]')?.textContent).toContain('Confirmed page');
   expect(management.selectCandidate).toHaveBeenCalledTimes(1);
+});
+
+it('keeps narrow settings pages and long resource names inside their scroll viewport', async () => {
+  await page.viewport(390, 720);
+  const localizedCopy = deDE.flowerSurface.computer;
+  const { management } = mount({ copy: localizedCopy, environment: { ...environment, hostname: 'runtime-with-a-long-workspace-and-device-name.example.test', chrome: { profiles: [{ id: 'work', name: 'Work-profile-with-a-long-unbroken-name-for-layout-qualification' }] } } });
+  management.listManagedProfiles.mockResolvedValue([{ id: 'work', name: 'Work-profile-with-a-long-unbroken-name-for-layout-qualification' }]);
+  await waitFor(() => !!button(localizedCopy.switchTarget) && !button(localizedCopy.switchTarget).disabled);
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  const inspect = () => {
+    const content = dialog.querySelector<HTMLElement>('.flower-computer-content')!;
+    expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
+    for (const action of dialog.querySelectorAll<HTMLButtonElement>('.flower-computer-panel button, .flower-computer-footer button')) {
+      if (action.checkVisibility()) {
+        expect(action.scrollWidth).toBeLessThanOrEqual(action.clientWidth + 1);
+        expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      }
+    }
+  };
+  for (const action of [localizedCopy.manage, localizedCopy.details, localizedCopy.help, localizedCopy.advanced, localizedCopy.permissions]) {
+    button(action).click();
+    await waitFor(() => document.querySelector('[data-flower-computer-panel]')?.getAttribute('aria-busy') === 'false');
+    if (action === localizedCopy.manage) (dialog.querySelector('summary') as HTMLElement).click();
+    inspect();
+    button(localizedCopy.back).click();
+  }
+  const chromeCard = [...dialog.querySelectorAll('section')].find(item => item.querySelector('h4')?.textContent === localizedCopy.chromeTitle)!;
+  chromeCard.querySelector('button')!.click(); inspect();
+  if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: '__screenshots__/flower-computer-polish-de-DE-chrome-390.png' });
 });
 it('rejects a website path or embedded credentials instead of silently widening its grant', async () => {
   const { management } = mount(); await ready(); button(copy.permissions).click();

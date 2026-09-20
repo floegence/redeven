@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
-import { ChevronLeft, Globe, MonitorPointer, Settings } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowRightLeft, ChevronLeft, ChevronRight, Code, Globe, Info, MonitorPointer, Settings, Shield, Sparkles } from '@floegence/floe-webapp-core/icons';
 import type { FlowerComputerAccess, FlowerComputerCandidate, FlowerComputerEnvironment, FlowerComputerInventory, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import { FlowerChromeConnection } from './FlowerChromeConnection';
@@ -147,45 +147,74 @@ export function FlowerComputerConnections(props: {
     managed: props.copy.managed, chrome: props.copy.chromeTitle, setup: props.copy.connectionTitle, access: props.copy.permissions,
     advanced: props.copy.advanced, help: props.copy.help, diagnostics: props.copy.diagnostics }[page()]));
   const openPicker = () => { go('targets'); void load(); };
-  return <Dialog open={props.open} onOpenChange={props.onOpenChange} title={title()} closeLabel={props.copy.close} class={props.connectionOnly ? 'w-[min(30rem,94vw)] max-w-[30rem]' : 'w-[min(42rem,94vw)] max-w-[42rem]'}
-    footer={props.connectionOnly ? undefined : <div class="flex flex-wrap items-center justify-between gap-3">
-      <Show when={page() === 'overview'} fallback={<Button variant="ghost" size="sm" disabled={busy()} onClick={() => go('overview')}><ChevronLeft class="size-3.5" />{props.copy.back}</Button>}>
-        <Show when={props.threadID}><Button variant="ghost" size="sm" disabled={!readable()} onClick={openAccess}>{props.permissionLabel || (props.fullAccess ? props.copy.fullAccessTitle : props.copy.permissions)}</Button></Show>
+  const capabilityTone = (state?: string) => state === 'ready' ? 'positive' : state === 'permission_required' || state === 'setup_required' ? 'attention' : 'neutral';
+  const missingTarget = () => !loading() && !inventoryFailed() && !!inventory()?.current_target_id && !current();
+  return <Dialog open={props.open} onOpenChange={props.onOpenChange}
+    title={<span class="flower-computer-title"><MonitorPointer aria-hidden="true" />{title()}</span>}
+    closeLabel={props.copy.close} class={props.connectionOnly ? 'flower-computer-dialog w-[min(30rem,94vw)] max-w-[30rem]' : 'flower-computer-dialog w-[min(48rem,94vw)] max-w-[48rem]'}
+    contentClass="flower-computer-content"
+    footer={props.connectionOnly ? undefined : <div class="flower-computer-footer">
+      <Show when={page() === 'overview'} fallback={<Button variant="outline" disabled={busy()} onClick={() => go('overview')}><ChevronLeft class="size-3.5" />{props.copy.back}</Button>}>
+        <Show when={props.threadID}><Button variant="outline" disabled={!readable()} onClick={openAccess}><Shield class="size-3.5" />{props.permissionLabel || (props.fullAccess ? props.copy.fullAccessTitle : props.copy.permissions)}<ChevronRight class="size-3.5" /></Button></Show>
       </Show>
       <div class="flex flex-wrap gap-2">
         <Show when={page() === 'targets'}><Button size="sm" variant="outline" disabled={busy()} onClick={() => go('overview')}>{props.copy.cancel}</Button><Button size="sm" disabled={!mutable() || !selected() || !canSelect(selected()!)} onClick={() => void select()}>{props.copy.confirmTarget}</Button></Show>
         <Show when={page() === 'access' && !props.fullAccess}><Button size="sm" disabled={!mutable() || !access()} onClick={() => { const value = access(); if (value) void saveAccess(value); }}>{props.copy.save}</Button></Show>
-        <Show when={page() !== 'targets'}><Button size="sm" variant={page() === 'overview' ? 'default' : 'outline'} onClick={() => props.onOpenChange(false)}>{props.copy.close}</Button></Show>
+        <Show when={page() !== 'targets'}><Button variant="outline" onClick={() => props.onOpenChange(false)}>{props.copy.close}</Button></Show>
       </div>
     </div>}>
     <Show when={!props.connectionOnly} fallback={<Show when={management()?.loadExtensionStatus && management()?.setupExtension && management()?.openExtension && props.adapter.canMutate !== false} fallback={<p role="alert">{props.copy.setupRequired}</p>}>
       <Show when={guideKey()} keyed>{_key => <FlowerChromeConnection reuseConnected management={management()!} copy={props.copy} onConnected={async () => { await props.onContinue?.(); }} />}</Show>
     </Show>}>
-      <div class="space-y-5 text-sm" data-flower-computer-panel={page()} aria-busy={loading() || busy()}>
-        <p class="break-words text-xs text-muted-foreground">{props.copy.environmentTitle} · {environment()?.hostname || props.adapter.runtime.display_name}<Show when={environment()?.platform}> · {environment()!.platform === 'darwin' ? 'macOS' : environment()!.platform === 'linux' ? 'Linux' : environment()!.platform}</Show></p>
+      <div class="flower-computer-panel space-y-5 text-sm" data-flower-computer-panel={page()} aria-busy={loading() || busy()}>
+        <div class="flower-computer-environment"><span>{props.copy.environmentTitle}</span><span class="flower-computer-host"><MonitorPointer aria-hidden="true" />{environment()?.hostname || props.adapter.runtime.display_name}</span><Show when={environment()?.platform}><span class="flower-computer-platform">{environment()!.platform === 'darwin' ? 'macOS' : environment()!.platform === 'linux' ? 'Linux' : environment()!.platform}</span></Show></div>
         <Show when={page() === 'overview'}>
           <Show when={props.threadID} fallback={<p class="text-xs text-muted-foreground">{props.copy.noThread}</p>}>
-            <section class="space-y-3 rounded-lg bg-muted/40 p-4">
-              <div class="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground"><span>{props.copy.target}</span><span>{props.copy.scope}</span></div>
-              <div role="status" class="space-y-1" aria-live="polite"><p class="break-words font-medium">{loading() && !inventory() ? props.copy.checking : currentLabel()}</p><p class="break-words text-xs leading-relaxed text-muted-foreground">{currentHint()}</p></div>
-              <Button size="sm" variant="outline" disabled={!mutable() || !inventory() || inventoryFailed()} onClick={openPicker}>{props.copy.switchTarget}</Button>
-              <Show when={inventoryFailed()}><Button variant="ghost" size="sm" disabled={loading()} onClick={() => void load()}>{props.copy.refresh}</Button></Show>
+            <section class="flower-computer-selection" data-tone={missingTarget() ? 'attention' : 'neutral'}>
+              <div class="flower-computer-section-heading"><h3>{props.copy.target}</h3><span class="flower-computer-scope">{props.copy.scope}</span></div>
+              <div class="flower-computer-selection-body">
+                <span class="flower-computer-selection-icon" aria-hidden="true"><Show when={missingTarget()} fallback={<MonitorPointer />}><AlertTriangle /></Show></span>
+                <div role="status" aria-live="polite"><p class="flower-computer-selection-name">{loading() && !inventory() ? props.copy.checking : currentLabel()}</p><p class="flower-computer-description">{currentHint()}</p></div>
+                <div class="flower-computer-selection-actions"><Button disabled={!mutable() || !inventory() || inventoryFailed()} onClick={openPicker}><ArrowRightLeft class="size-3.5" />{props.copy.switchTarget}</Button>
+                  <Show when={inventoryFailed()}><Button variant="outline" disabled={loading()} onClick={() => void load()}>{props.copy.refresh}</Button></Show>
+                </div>
+              </div>
             </section>
           </Show>
-          <section class="divide-y divide-border" aria-label={props.copy.environmentCapabilities}>
-            <h3 class="pb-2 text-xs font-normal text-muted-foreground">{props.copy.environmentCapabilities}</h3>
-            <div class="flex items-start gap-3 py-4"><Globe class="mt-1 size-5 shrink-0 text-muted-foreground" /><div class="min-w-0 flex-1 space-y-1"><p class="flex flex-wrap items-center gap-2"><span class="font-medium">{props.copy.managed}</span><span class="text-xs text-muted-foreground">{stateLabel(environment()?.managed.state)}</span></p><p class="text-xs leading-relaxed text-muted-foreground">{capabilityHint('managed')}</p><div class="pt-1"><Show when={environment()?.managed.state === 'on_demand' || environment()?.managed.state === 'ready'} fallback={<Button size="sm" variant="ghost" onClick={() => diagnose('managed')}>{props.copy.details}</Button>}><Button size="sm" variant="ghost" disabled={!readable() || !management()?.listManagedProfiles} onClick={openProfiles}>{props.copy.manage}</Button></Show></div></div></div>
-            <div class="flex items-start gap-3 py-4"><Globe class="mt-1 size-5 shrink-0 text-muted-foreground" /><div class="min-w-0 flex-1 space-y-1"><p class="flex flex-wrap items-center gap-2"><span class="font-medium">{props.copy.chromeTitle}</span><span class="text-xs text-muted-foreground">{!environment() ? props.copy.unknown : environment()!.chrome.profiles.length ? props.copy.connected : props.copy.chromeOffline}</span></p><p class="text-xs leading-relaxed text-muted-foreground">{environment()?.chrome.profiles.length ? environment()!.chrome.profiles.map(profile => profile.name).join(' · ') : props.copy.chromeOfflineHint}</p><Button size="sm" variant="ghost" disabled={!readable()} onClick={() => go('chrome')}>{props.copy.manage}</Button></div></div>
-            <div class="flex items-start gap-3 py-4"><MonitorPointer class="mt-1 size-5 shrink-0 text-muted-foreground" /><div class="min-w-0 flex-1 space-y-1"><p class="flex flex-wrap items-center gap-2"><span class="font-medium">{props.copy.desktopTitle}</span><span class="text-xs text-muted-foreground">{stateLabel(environment()?.desktop.state)}</span></p><p class="text-xs leading-relaxed text-muted-foreground">{capabilityHint('desktop')}</p><Button size="sm" variant="ghost" onClick={() => diagnose('desktop')}>{props.copy.details}</Button></div></div>
+          <section class="flower-computer-capabilities" aria-label={props.copy.environmentCapabilities}>
+            <h3 class="flower-computer-section-label">{props.copy.environmentCapabilities}</h3>
+            <div class="flower-computer-capability-grid">
+              <section class="flower-computer-capability">
+                <span class="flower-computer-capability-icon" data-kind="managed" aria-hidden="true"><Sparkles /></span>
+                <h4>{props.copy.managed}</h4>
+                <span class="flower-computer-status" data-tone={capabilityTone(environment()?.managed.state)}>{stateLabel(environment()?.managed.state)}</span>
+                <p class="flower-computer-description">{capabilityHint('managed')}</p>
+                <Show when={environment()?.managed.state === 'on_demand' || environment()?.managed.state === 'ready'} fallback={<Button variant="outline" onClick={() => diagnose('managed')}>{props.copy.details}<ChevronRight class="size-3.5" /></Button>}><Button variant="outline" disabled={!readable() || !management()?.listManagedProfiles} onClick={openProfiles}>{props.copy.manage}<ChevronRight class="size-3.5" /></Button></Show>
+              </section>
+              <section class="flower-computer-capability">
+                <span class="flower-computer-capability-icon" aria-hidden="true"><Globe /></span>
+                <h4>{props.copy.chromeTitle}</h4>
+                <span class="flower-computer-status" data-tone={environment()?.chrome.profiles.length ? 'positive' : 'neutral'}>{!environment() ? props.copy.unknown : environment()!.chrome.profiles.length ? props.copy.connected : props.copy.chromeOffline}</span>
+                <p class="flower-computer-description">{environment()?.chrome.profiles.length ? environment()!.chrome.profiles.map(profile => profile.name).join(' · ') : props.copy.chromeOfflineHint}</p>
+                <Button variant="outline" disabled={!readable()} onClick={() => go('chrome')}>{props.copy.manage}<ChevronRight class="size-3.5" /></Button>
+              </section>
+              <section class="flower-computer-capability">
+                <span class="flower-computer-capability-icon" aria-hidden="true"><MonitorPointer /></span>
+                <h4>{props.copy.desktopTitle}</h4>
+                <span class="flower-computer-status" data-tone={capabilityTone(environment()?.desktop.state)}>{stateLabel(environment()?.desktop.state)}</span>
+                <p class="flower-computer-description">{capabilityHint('desktop')}</p>
+                <Button variant="outline" onClick={() => diagnose('desktop')}>{props.copy.details}<ChevronRight class="size-3.5" /></Button>
+              </section>
+            </div>
           </section>
-          <div class="flex flex-wrap gap-2"><Button size="sm" variant="ghost" onClick={() => go('help')}>{props.copy.help}</Button><Button size="sm" variant="ghost" disabled={!mutable() || !props.threadID || !management()?.discoverBrowser} onClick={() => go('advanced')}>{props.copy.advanced}</Button></div>
+          <div class="flower-computer-utilities"><Button variant="outline" onClick={() => go('help')}><Info class="size-3.5" />{props.copy.help}<ChevronRight class="size-3.5" /></Button><Button variant="outline" disabled={!mutable() || !props.threadID || !management()?.discoverBrowser} onClick={() => go('advanced')}><Code class="size-3.5" />{props.copy.advanced}<ChevronRight class="size-3.5" /></Button></div>
         </Show>
         <Show when={page() === 'targets'}>
           <p class="text-xs text-muted-foreground">{props.copy.selectionScope}</p>
           <input type="search" class="flower-settings-text-input w-full" aria-label={props.copy.searchTargets} placeholder={props.copy.searchTargets} value={query()} onInput={event => setQuery(event.currentTarget.value)} />
           <div class="space-y-4" role="radiogroup" aria-label={props.copy.switchTarget}>
             <For each={[true, false]}>{browser => <Show when={filteredTargets(browser).length}><section class="space-y-2"><h3 class="text-xs font-medium text-muted-foreground">{browser ? props.copy.browserPages : props.copy.applicationWindows}</h3>
-              <For each={filteredTargets(browser)}>{target => <label class="flex cursor-pointer items-start gap-3 rounded-md border border-border p-3 has-[:disabled]:cursor-not-allowed has-[:checked]:bg-muted/50">
+              <For each={filteredTargets(browser)}>{target => <label class="flower-computer-target flex cursor-pointer items-start gap-3 rounded-md border border-border p-3 has-[:disabled]:cursor-not-allowed">
                 <input type="radio" name="flower-computer-target" class="mt-1 cursor-pointer disabled:cursor-not-allowed" value={target.candidate_ref} checked={draft() === target.candidate_ref} disabled={!mutable() || !canSelect(target)} onChange={() => setDraft(target.candidate_ref)} />
                 <span class="min-w-0 flex-1"><span class="block break-words text-sm">{targetLabel(target)}</span><span class="mt-1 block break-all text-xs text-muted-foreground">{[target.profile_name, target.url, stateLabel(candidateState(target))].filter(Boolean).join(' · ')}</span></span>
               </label>}</For>
@@ -193,41 +222,41 @@ export function FlowerComputerConnections(props: {
           </div>
           <Show when={inventoryFailed()}><p role="alert" class="text-xs text-destructive">{props.copy.loadFailed}</p></Show>
           <Show when={!filteredTargets(true).length && !filteredTargets(false).length}><p class="text-xs text-muted-foreground">{props.copy.noTargets}</p></Show>
-          <Button size="sm" variant="ghost" disabled={!mutable()} onClick={() => { setDraft(''); void load(); }}>{props.copy.refresh}</Button>
+          <Button variant="outline" disabled={!mutable()} onClick={() => { setDraft(''); void load(); }}>{props.copy.refresh}</Button>
         </Show>
         <Show when={page() === 'managed'}>
-          <p class="text-muted-foreground">{props.copy.managedHint}</p><p class="text-xs leading-relaxed text-muted-foreground">{props.copy.profileHint}</p>
-          <div class="divide-y divide-border"><For each={profiles()}>{profile => <p class="break-words py-3">{profile.name}</p>}</For></div>
-          <details class="border-t border-border pt-3"><summary class="cursor-pointer text-xs">{props.copy.createProfileHint}</summary><form class="mt-3 flex flex-wrap items-end gap-2" onSubmit={event => { event.preventDefault(); void run(async epoch => {
+          <div class="flower-computer-note"><Sparkles aria-hidden="true" /><div><p class="font-medium">{props.copy.managedHint}</p><p class="mt-2 flower-computer-description">{props.copy.profileHint}</p></div></div>
+          <div class="flower-computer-profile-list"><For each={profiles()}>{profile => <div class="flower-computer-profile"><Globe aria-hidden="true" /><span>{profile.name}</span></div>}</For></div>
+          <details class="flower-computer-detail-card"><summary class="cursor-pointer text-xs font-medium">{props.copy.createProfileHint}</summary><form class="mt-3 flex flex-wrap items-end gap-2" onSubmit={event => { event.preventDefault(); void run(async epoch => {
             const value = await management()!.createManagedProfile!(profileName().trim());
             if (epoch === generation) { setProfiles(value); setProfileName(''); }
           }, props.copy.profileFailed); }}><label class="min-w-0 flex-1 space-y-1 text-xs">{props.copy.profileName}<input class="flower-settings-text-input w-full" value={profileName()} maxlength={120} required onInput={event => setProfileName(event.currentTarget.value)} /></label><Button size="sm" type="submit" disabled={!mutable() || !profileName().trim() || !management()?.createManagedProfile}>{props.copy.createProfile}</Button></form></details>
         </Show>
         <Show when={page() === 'chrome'}>
           <p class="text-muted-foreground">{props.copy.chromeOnlineHint}</p>
-          <div class="space-y-2 rounded-lg bg-muted/40 p-4"><p class="font-medium">{!environment() ? props.copy.unknown : environment()!.chrome.profiles.length ? props.copy.connected : props.copy.chromeOffline}</p><For each={environment()?.chrome.profiles ?? []}>{profile => <p class="break-words text-xs">{profile.name}</p>}</For><Show when={!environment()?.chrome.profiles.length}><p class="text-xs leading-relaxed text-muted-foreground">{environment() ? props.copy.chromeOfflineHint : props.copy.loadFailed}</p></Show></div>
-          <p class="text-xs leading-relaxed text-muted-foreground">{props.copy.pairingPersistence}</p><p class="text-xs leading-relaxed text-muted-foreground">{props.copy.setupHostHint}</p>
-          <Button size="sm" disabled={!mutable() || !management()?.setupExtension || !management()?.openExtension || !management()?.loadExtensionStatus} onClick={() => go('setup')}>{props.copy.setupChrome}</Button>
-          <Button size="sm" variant="ghost" disabled={!readable()} onClick={() => void load()}>{props.copy.refresh}</Button>
+          <div class="flower-computer-detail-card space-y-3"><span class="flower-computer-status" data-tone={environment()?.chrome.profiles.length ? 'positive' : 'neutral'}>{!environment() ? props.copy.unknown : environment()!.chrome.profiles.length ? props.copy.connected : props.copy.chromeOffline}</span><For each={environment()?.chrome.profiles ?? []}>{profile => <div class="flower-computer-profile"><Globe aria-hidden="true" /><span>{profile.name}</span></div>}</For><Show when={!environment()?.chrome.profiles.length}><p class="flower-computer-description">{environment() ? props.copy.chromeOfflineHint : props.copy.loadFailed}</p></Show></div>
+          <div class="flower-computer-note"><Info aria-hidden="true" /><div><p class="flower-computer-description">{props.copy.pairingPersistence}</p><p class="mt-2 flower-computer-description">{props.copy.setupHostHint}</p></div></div>
+          <div class="flower-computer-action-row"><Button disabled={!mutable() || !management()?.setupExtension || !management()?.openExtension || !management()?.loadExtensionStatus} onClick={() => go('setup')}>{props.copy.setupChrome}</Button>
+          <Button variant="outline" disabled={!readable()} onClick={() => void load()}>{props.copy.refresh}</Button></div>
         </Show>
         <Show when={page() === 'setup' && guideKey()} keyed>{_key => <FlowerChromeConnection management={management()!} copy={props.copy} onConnected={async () => { const epoch = generation; await refreshEnvironment(epoch); if (epoch === generation) go('chrome'); }} />}</Show>
         <Show when={page() === 'diagnostics'}>
-          <h3 class="font-medium">{diagnostic() === 'managed' ? props.copy.managed : props.copy.desktopTitle} · {stateLabel(capability()?.state)}</h3><p class="leading-relaxed text-muted-foreground">{capabilityHint(diagnostic())}</p>
+          <div class="flower-computer-detail-card space-y-3"><div class="flower-computer-section-heading"><h3 class="font-medium text-foreground">{diagnostic() === 'managed' ? props.copy.managed : props.copy.desktopTitle}</h3><span class="flower-computer-status" data-tone={capabilityTone(capability()?.state)}>{stateLabel(capability()?.state)}</span></div><p class="leading-relaxed text-muted-foreground">{capabilityHint(diagnostic())}</p>
           <Show when={!capability() || capability()?.state === 'setup_required'}><p class="text-xs leading-relaxed text-muted-foreground">{environmentFailed() ? props.copy.loadFailed : props.copy.repairHint}</p></Show>
-          <p class="rounded-md bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">{props.copy.permissionBoundary}</p>
+          </div><div class="flower-computer-note"><Shield aria-hidden="true" /><p class="flower-computer-description">{props.copy.permissionBoundary}</p></div>
           <Show when={capability()?.reason}><details><summary class="cursor-pointer text-xs">{props.copy.diagnostics}</summary><code class="mt-2 block break-all text-xs">{capability()!.reason}</code></details></Show>
           <Button size="sm" disabled={!readable()} onClick={() => void load()}>{props.copy.refresh}</Button>
         </Show>
-        <Show when={page() === 'help'}><div class="space-y-5 text-xs leading-relaxed text-muted-foreground"><section><h3 class="mb-1 font-medium text-foreground">{props.copy.chromeTitle}</h3><p>{props.copy.pairingPersistence}</p></section><section><h3 class="mb-1 font-medium text-foreground">{props.copy.managed}</h3><p>{props.copy.profileHint}</p></section><section><h3 class="mb-1 font-medium text-foreground">{props.copy.target}</h3><p>{props.copy.selectionPersistence}</p></section><section><h3 class="mb-1 font-medium text-foreground">{props.copy.permissions}</h3><p>{props.copy.permissionBoundary}</p></section></div></Show>
+        <Show when={page() === 'help'}><div class="flower-computer-help-grid text-xs leading-relaxed text-muted-foreground"><section class="flower-computer-detail-card"><Globe class="mb-3 size-5" /><h3 class="mb-2 font-medium text-foreground">{props.copy.chromeTitle}</h3><p>{props.copy.pairingPersistence}</p></section><section class="flower-computer-detail-card"><Sparkles class="mb-3 size-5" /><h3 class="mb-2 font-medium text-foreground">{props.copy.managed}</h3><p>{props.copy.profileHint}</p></section><section class="flower-computer-detail-card"><MonitorPointer class="mb-3 size-5" /><h3 class="mb-2 font-medium text-foreground">{props.copy.target}</h3><p>{props.copy.selectionPersistence}</p></section><section class="flower-computer-detail-card"><Shield class="mb-3 size-5" /><h3 class="mb-2 font-medium text-foreground">{props.copy.permissions}</h3><p>{props.copy.permissionBoundary}</p></section></div></Show>
         <Show when={page() === 'advanced'}>
-          <p class="text-xs leading-relaxed text-muted-foreground">{props.copy.advancedHint}</p>
-          <form class="space-y-3" onSubmit={event => { event.preventDefault(); void run(async epoch => {
+          <div class="flower-computer-note"><Code aria-hidden="true" /><p class="flower-computer-description">{props.copy.advancedHint}</p></div>
+          <form class="flower-computer-detail-card space-y-3" onSubmit={event => { event.preventDefault(); void run(async epoch => {
             const result = await management()!.discoverBrowser!(props.threadID, endpoint().trim());
             if (epoch === generation) { setInventory(result); setInventoryFailed(false); go('targets'); }
           }, props.copy.endpointFailed); }}><label class="block space-y-1 text-xs">{props.copy.endpoint}<input type="url" required class="flower-settings-text-input w-full" value={endpoint()} onInput={event => setEndpoint(event.currentTarget.value)} placeholder="http://127.0.0.1:9222" /></label><Button size="sm" type="submit" disabled={!mutable() || !endpoint().trim()}>{props.copy.listTabs}</Button></form>
         </Show>
         <Show when={page() === 'access'}>
-          <p class="text-xs leading-relaxed text-muted-foreground">{props.copy.permissionBoundary}</p>
+          <div class="flower-computer-note"><Shield aria-hidden="true" /><p class="flower-computer-description">{props.copy.permissionBoundary}</p></div>
           <Show when={props.onEditPermissionMode}><Button size="sm" variant="outline" disabled={!mutable()} onClick={() => { props.onOpenChange(false); props.onEditPermissionMode?.(); }}><Settings class="size-3.5" />{props.copy.editPermissions}</Button></Show>
           <Show when={props.fullAccess} fallback={<Show when={access()}>{value => <>
             <Show when={props.requested?.origin || props.requested?.app || props.requested?.foreground}><div class="space-y-2 rounded-md bg-muted/40 p-3"><p class="font-medium">{props.copy.requestedAccess}</p><p class="break-all text-xs">{[props.requested?.origin, props.requested?.app, props.requested?.foreground ? props.copy.foreground : ''].filter(Boolean).join(' · ')}</p><Button size="sm" variant="outline" disabled={!mutable()} onClick={() => { setAccess({ origins: [...new Set([...value().origins, ...(props.requested?.origin ? [props.requested.origin] : [])])], apps: [...new Set([...value().apps, ...(props.requested?.app ? [props.requested.app] : [])])], allow_foreground: value().allow_foreground || props.requested?.foreground === true }); setSaved(false); }}>{props.copy.grantRequested}</Button></div></Show>
@@ -235,7 +264,7 @@ export function FlowerComputerConnections(props: {
               <form class="flex flex-wrap gap-2" onSubmit={event => { event.preventDefault(); addOrigin(); }}><input type="url" class="flower-settings-text-input min-w-0 flex-1" aria-label={props.copy.sites} placeholder={props.copy.sitePlaceholder} value={origin()} disabled={!mutable()} onInput={event => setOrigin(event.currentTarget.value)} /><Button type="submit" size="sm" disabled={!mutable() || !origin().trim()}>{props.copy.add}</Button></form>
             </section><section class="space-y-2"><h3 class="font-medium">{props.copy.apps}</h3><For each={[...new Set([...value().apps, ...targets().flatMap(target => target.app_bundle_id ? [target.app_bundle_id] : [])])]}>{app => <label class="flex cursor-pointer items-center gap-2 has-[:disabled]:cursor-not-allowed"><input type="checkbox" class="cursor-pointer disabled:cursor-not-allowed" disabled={!mutable()} checked={value().apps.includes(app)} onChange={event => { setAccess({ ...value(), apps: event.currentTarget.checked ? [...value().apps, app] : value().apps.filter(item => item !== app) }); setSaved(false); }} /><span class="break-all text-xs">{app}</span></label>}</For></section>
             <label class="flex cursor-pointer items-start gap-3 has-[:disabled]:cursor-not-allowed"><input type="checkbox" class="mt-1 cursor-pointer disabled:cursor-not-allowed" disabled={!mutable()} checked={value().allow_foreground} onChange={event => { setAccess({ ...value(), allow_foreground: event.currentTarget.checked }); setSaved(false); }} /><span>{props.copy.foreground}<span class="mt-1 block text-xs text-muted-foreground">{props.copy.foregroundHint}</span></span></label>
-            <Button size="sm" variant="ghost" disabled={!mutable()} onClick={() => void saveAccess({ origins: [], apps: [], allow_foreground: false })}>{props.copy.revokeAll}</Button>
+            <Button size="sm" variant="outline" disabled={!mutable()} onClick={() => void saveAccess({ origins: [], apps: [], allow_foreground: false })}>{props.copy.revokeAll}</Button>
           </>}</Show>}><p class="rounded-md bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">{props.copy.fullAccessHint}</p></Show>
         </Show>
         <Show when={environmentFailed() && page() === 'overview'}><p role="alert" class="text-xs text-destructive">{props.copy.loadFailed}</p><Button size="sm" variant="ghost" disabled={loading()} onClick={() => void load()}>{props.copy.refresh}</Button></Show>
