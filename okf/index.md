@@ -18,6 +18,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Managed host application preparation](architecture/host-application-preparation.md) - Prepare native graphical support and recover interrupted setup without host configuration.
 - [Host Applications](architecture/host-applications.md) - Browse host applications and apply shared authorization and session lifecycle rules.
 - [Host Application Platforms](architecture/host-application-platforms.md) - Prepare a headless host, diagnose missing capabilities, and distinguish Linux capability requirements from native macOS initialization.
+- [macOS Application Picture](architecture/macos-application-picture.md) - Adjust Retina resolution and streaming quality, and understand actual frame rate and bandwidth.
 - [Native macOS Applications](architecture/macos-host-applications.md) - Open local Mac apps directly or operate owned remote windows with capture, input and reconnection.
 - [Host Application Setup](operations/host-application-setup.md) - Install compatible Arch, Enterprise Linux and Alpine packages and verify native application startup.
 - [Host Application Validation](operations/host-application-validation.md) - Check distribution and architecture evidence and repeat the native session acceptance tests.

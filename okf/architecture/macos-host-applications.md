@@ -45,13 +45,12 @@ supply an arbitrary PID, application path or capture source.
 
 ScreenCaptureKit captures a selected application window on macOS 13 or newer.
 Child-window inclusion uses the macOS 14.2 API when available. A native window list
-allows selection among the bound process's windows. The current transport sends
-JPEG frames over the authenticated WebSocket, at up to 20 frames/second and a
-maximum 2560-pixel dimension; it is not an audio or hardware video stream. A latest
-frame slot bounds buffering for slow/disconnected clients. A new capture generation
-invalidates previous pixels and input coordinates. The viewer reveals only decoded
-pixels, preserves aspect ratio, and requests real AX window resizing. macOS and
-application minimum/maximum sizes can constrain the result.
+allows selection among the bound process's windows. The [picture and transport contract](macos-application-picture.md) defines Retina
+sampling, live quality controls, hardware video, lossless still refresh and bounded
+delivery. A new capture generation invalidates previous pixels and input coordinates.
+The viewer reveals only decoded pixels, preserves aspect ratio, and requests real
+AX window resizing. macOS and application minimum/maximum sizes can constrain the
+result.
 
 An ephemeral loopback listener requires an unpredictable per-session credential
 via WebSocket subprotocol, independently of the existing owner/full-permission
