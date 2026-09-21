@@ -56,8 +56,10 @@ dialog, keeps quit available, and removes the row only after an OS snapshot conf
 exit. An unconfirmed transport result remains an actionable error without automatic
 retry. Explicit quit intent for an attached windowless process prevents a confirmed
 exit from being mislabeled as startup failure; it never ends a session optimistically.
-There is no force-quit fallback. Existing launch rollback retains its narrower
-ownership rule and may request termination only for its newly launched process.
+There is no force-quit fallback. A sharing stop never requests application
+termination; only the explicit Quit application action may request graceful
+termination of the exact selected process generation. A failed viewer opening
+also never rolls back a host session based on stale catalog state.
 
 # Evidence
 

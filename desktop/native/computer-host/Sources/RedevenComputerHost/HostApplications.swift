@@ -144,7 +144,8 @@ final class HostApplicationSession {
     private var app: NSRunningApplication?
     private let inventory = HostApplicationWindows()
     private var presence = HostApplicationWindowPresence()
-    private var ownsApplication = false
+    private var ended = false
+    private var ending = false
     private var blockedReason: String?
     private var knownWindowIDs = Set<String>()
     private var waiting = false
@@ -167,6 +168,7 @@ final class HostApplicationSession {
         do {
             guard request["protocol_version"] as? Int == 1,
                   let action = request["action"] as? String else { throw NativeInput.invalid("Host application protocol version 1 is required.") }
+            guard !ended, !ending else { return }
             switch action {
             case "catalog":
                 extra = (request["paths"] as? [String] ?? []).filter { $0.hasPrefix("/") && $0.hasSuffix(".app") }.map { URL(fileURLWithPath: $0) }
@@ -177,7 +179,14 @@ final class HostApplicationSession {
             case "quit":
                 try HostApplicationCatalog.quit(request)
                 emit(["type": "quit_requested"])
-            case "detach": end(reason: "sharing_stopped")
+            case "detach", "stop": end(reason: "sharing_stopped")
+            case "suspend":
+                viewerReady = false
+                generation += 1
+                releaseButtons()
+                delivery = nil
+                menuItems.removeAll()
+                updateCapture()
             case "validate":
                 guard let path = request["path"] as? String, path.hasPrefix("/"), path.hasSuffix(".app") else { throw NativeInput.invalid("An absolute application bundle path is required.") }
                 let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
@@ -240,9 +249,6 @@ final class HostApplicationSession {
                 // The viewer may quit only this session's exact process. A window
                 // change cannot grant it a renderer-selected application target.
                 try HostApplicationCatalog.quit(["application_id": HostApplicationCatalog.identifier(url), "instances": [instance]])
-            case "stop":
-                guard let app, !app.isTerminated else { end(reason: "application_exited"); return }
-                if ownsApplication { _ = app.terminate() } else { end(reason: "sharing_stopped") }
             case "menu":
                 let application = AXUIElementCreateApplication(try applicationTarget(request).processIdentifier)
                 menuItems.removeAll()
@@ -302,13 +308,13 @@ final class HostApplicationSession {
         NSWorkspace.shared.openApplication(at: url, configuration: configuration) { application, error in
             DispatchQueue.main.async {
                 self.starting = false
+                guard !self.ended, !self.ending else { return }
                 guard error == nil, let application else { emit(["type": "error", "code": "LAUNCH_FAILED"]); return }
                 if native { emit(["type": "opened"]); return }
                 guard application.bundleURL?.resolvingSymlinksInPath() == url else { emit(["type": "error", "code": "APPLICATION_MISMATCH"]); return }
-                self.ownsApplication = !existing.contains(application.processIdentifier)
                 self.app = application
-                self.delivery = HostApplicationDelivery(pid: application.processIdentifier)
-                emit(["type": "launched", "instance": HostApplicationCatalog.instanceIdentifier(application) ?? "", "pid": application.processIdentifier, "existing_application": !self.ownsApplication])
+                if self.viewerReady { self.delivery = HostApplicationDelivery(pid: application.processIdentifier) }
+                emit(["type": "launched", "instance": HostApplicationCatalog.instanceIdentifier(application) ?? "", "pid": application.processIdentifier, "existing_application": existing.contains(application.processIdentifier)])
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
                     guard let self else { return }
                     if application.isTerminated {
@@ -410,7 +416,9 @@ final class HostApplicationSession {
         func begin() {
             capture = nil
             guard let window = selected, app != nil, viewerReady, blockedReason == nil else {
-                selectionInFlight = false; return
+                selectionInFlight = false
+                if !viewerReady && !ended { emit(["type": "suspended", "generation": generation]) }
+                return
             }
             let selectionGeneration = generation
             let started = ProcessInfo.processInfo.systemUptime
@@ -449,14 +457,14 @@ final class HostApplicationSession {
     private func applicationTarget(_ request: [String: Any]) throws -> NSRunningApplication {
         // Application controls remain bound even when the app has no window.
         // Every capture/wait transition revokes old menu handles and generations.
-        guard checkAccess(),
+        guard viewerReady, checkAccess(),
               let app, !app.isTerminated, request["generation"] as? Int == generation else {
             throw HostFailure(code: "STALE_WINDOW", message: "Wait for the current application.")
         }
         return app
     }
     private func target(_ request: [String: Any]) throws -> NativeWindow {
-        guard checkAccess(),
+        guard viewerReady, checkAccess(),
               let selected, request["window"] as? String == selected.id,
               request["generation"] as? Int == generation else { throw HostFailure(code: "STALE_WINDOW", message: "Wait for the current window.") }
         try selected.validate()
@@ -554,7 +562,33 @@ final class HostApplicationSession {
         }
         heldButtons.removeAll()
     }
-    func end(reason: String = "sharing_stopped") { generation += 1; releaseButtons(); app = nil; selected = nil; delivery = nil; capture?.stop(); capture = nil; timer?.invalidate(); timer = nil; emit(["type": "ended", "end_reason": reason]) }
+    func end(reason: String = "sharing_stopped", completion: (() -> Void)? = nil) {
+        guard !ended, !ending else { return }
+        ending = true
+        viewerReady = false
+        generation += 1
+        releaseButtons()
+        app = nil
+        selected = nil
+        delivery = nil
+        menuItems.removeAll()
+        timer?.invalidate()
+        timer = nil
+        let previous = capture
+        capture = nil
+        let complete = { [weak self] in
+            guard let self, !self.ended else { return }
+            self.ending = false
+            self.ended = true
+            emit(["type": "ended", "end_reason": reason])
+            completion?()
+        }
+        if let previous {
+            previous.stop(completion: complete)
+        } else {
+            complete()
+        }
+    }
 }
 
 enum HostApplications {
@@ -576,7 +610,7 @@ enum HostApplications {
                 }
                 if buffer.count > 262144 { exit(2) }
             }
-            DispatchQueue.main.async { host.end(); exit(0) }
+            DispatchQueue.main.async { host.end { exit(0) } }
         }
         RunLoop.main.run()
     }

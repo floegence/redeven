@@ -435,8 +435,7 @@ func TestMacSnapshotDeliversWindowBeforeGenerationBoundMenu(t *testing.T) {
 		}
 		n.mu.Lock()
 		n.window = []byte(`{"type":"window","window":"second","generation":2}`)
-		n.notice = []byte(`{"type":"menu","generation":2,"items":[]}`)
-		n.noticeRevision++
+		n.notices = [][]byte{[]byte(`{"type":"menu","generation":2,"items":[]}`)}
 		n.changed <- struct{}{}
 		n.mu.Unlock()
 	}}
@@ -583,17 +582,14 @@ done
 				if painted {
 					waitMac(t, m, view.ID, "running")
 				}
-				// Stop the fixture only after helper admission; Detach itself never invents a reason.
-				deadline := time.Now().Add(3 * time.Second)
-				for {
-					err = m.Detach(context.Background(), "alice", view.ID)
-					if err == nil {
-						break
-					}
-					if time.Now().After(deadline) {
-						t.Fatal(err)
-					}
-					time.Sleep(10 * time.Millisecond)
+				// Ask the fixture to emit authoritative native lifecycle evidence.
+				// Product detachment itself always means sharing_stopped.
+				m.mu.Lock()
+				native := m.sessions[view.ID].native
+				m.mu.Unlock()
+				<-native.ready
+				if err = native.send(map[string]any{"action": "detach"}); err != nil {
+					t.Fatal(err)
 				}
 				waitMac(t, m, view.ID, "ended")
 				terminal, owner, found := m.ForForward(view.Forward.Forward.ForwardID)
@@ -619,7 +615,7 @@ func TestMacViewerNegotiatesOnceBeforeControlAndWaitsForHelper(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		if request["action"] != "release" {
+		if request["action"] != "release" && request["action"] != "suspend" {
 			requests <- request
 		}
 	}}

@@ -230,6 +230,12 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return Session{}, err
 	}
+	allocated := false
+	defer func() {
+		if !allocated {
+			_ = os.RemoveAll(dir)
+		}
+	}()
 	password := randomID() + randomID()
 	if err := os.WriteFile(filepath.Join(dir, "password"), []byte(password), 0o600); err != nil {
 		return Session{}, err
@@ -259,12 +265,15 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 	view := Session{ID: id, Application: app, State: "starting", StartedAt: time.Now().UnixMilli(), Forward: forward, Presentation: req.Presentation}
 	s := &ownedSession{view: view, owner: owner, password: password, socketDir: socketDir, tools: tools, done: make(chan struct{})}
 	m.sessions[id] = s
+	allocated = true
 	_ = listener.Close()
 	go m.run(s, dir, address)
 	return cloneSession(view), nil
 }
 
 func (m *Manager) run(s *ownedSession, dir, address string) {
+	code := ""
+	defer func() { m.finish(s, code, nil) }()
 	args := []string{s.tools.xpra, "start", "--daemon=no", "--systemd-run=no", "--attach=no", "--use-display=no", "--bind-ws=" + address,
 		"--ws-auth=file:filename=" + filepath.Join(dir, "password"), "--html=" + s.tools.html, "--sessions-dir=" + filepath.Join(s.socketDir, "sessions"), "--socket-dir=" + s.socketDir,
 		"--socket-dirs=" + s.socketDir, "--exit-with-client=no", "--exit-with-windows=yes", "--exit-with-children=no",
@@ -284,7 +293,7 @@ func (m *Manager) run(s *ownedSession, dir, address string) {
 	configureProcess(cmd)
 	log, err := os.OpenFile(filepath.Join(dir, "session.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		m.finish(s, "launch_failed")
+		code = "launch_failed"
 		return
 	}
 	defer log.Close()
@@ -292,7 +301,7 @@ func (m *Manager) run(s *ownedSession, dir, address string) {
 	m.mu.Lock()
 	if s.stopping || m.closed {
 		m.mu.Unlock()
-		m.finish(s, "")
+
 		return
 	}
 	err = cmd.Start()
@@ -301,23 +310,27 @@ func (m *Manager) run(s *ownedSession, dir, address string) {
 	}
 	m.mu.Unlock()
 	if err != nil {
-		m.finish(s, "launch_failed")
+		code = "launch_failed"
 		return
 	}
+	readyCtx, cancelReady := context.WithCancel(context.Background())
+	defer cancelReady()
 	readyDone := make(chan struct{})
-	go func() { defer close(readyDone); m.waitReady(s, dir, address) }()
+	go func() { defer close(readyDone); m.waitReady(readyCtx, s, dir, address) }()
 	err = cmd.Wait()
-	code := ""
+	// The private process group belongs to this session, including descendants
+	// whose launcher has already exited. Never retain orphaned X11 resources.
+	_ = killProcess(cmd)
+	cancelReady()
+	<-readyDone
 	m.mu.Lock()
 	if err != nil && !s.stopping {
 		code = "application_exited"
 	}
 	m.mu.Unlock()
-	m.finish(s, code)
-	<-readyDone
 }
 
-func (m *Manager) waitReady(s *ownedSession, dir, address string) {
+func (m *Manager) waitReady(ctx context.Context, s *ownedSession, dir, address string) {
 	timer := time.NewTimer(40 * time.Second)
 	defer timer.Stop()
 	tick := time.NewTicker(250 * time.Millisecond)
@@ -325,13 +338,13 @@ func (m *Manager) waitReady(s *ownedSession, dir, address string) {
 	client := http.Client{Timeout: time.Second}
 	for {
 		select {
-		case <-s.done:
+		case <-ctx.Done():
 			return
 		case <-timer.C:
 			m.mu.Lock()
 			s.view.ErrorCode = "launch_timeout"
 			m.mu.Unlock()
-			_ = m.Stop(context.Background(), s.owner, s.view.ID)
+			m.requestStop(s)
 			return
 		case <-tick.C:
 			data, err := os.ReadFile(filepath.Join(dir, "launch.json"))
@@ -348,10 +361,11 @@ func (m *Manager) waitReady(s *ownedSession, dir, address string) {
 				m.mu.Lock()
 				s.view.ErrorCode = "launch_failed"
 				m.mu.Unlock()
-				_ = m.Stop(context.Background(), s.owner, s.view.ID)
+				m.requestStop(s)
 				return
 			}
-			res, err := client.Get("http://" + address + "/index.html")
+			request, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+address+"/index.html", nil)
+			res, err := client.Do(request)
 			if err != nil {
 				continue
 			}
@@ -361,7 +375,7 @@ func (m *Manager) waitReady(s *ownedSession, dir, address string) {
 			}
 			// A successful GIO launch alone can still redirect a singleton to
 			// another display. Read Xpra's own inventory before reporting ready.
-			if !sessionHasWindows(s.tools.xpra, s.socketDir) {
+			if !sessionHasWindows(ctx, s.tools.xpra, s.socketDir) {
 				continue
 			}
 			m.mu.Lock()
@@ -374,7 +388,7 @@ func (m *Manager) waitReady(s *ownedSession, dir, address string) {
 	}
 }
 
-func sessionHasWindows(xpra, socketDir string) bool {
+func sessionHasWindows(parent context.Context, xpra, socketDir string) bool {
 	entries, err := os.ReadDir(socketDir)
 	if err != nil {
 		return false
@@ -386,8 +400,13 @@ func sessionHasWindows(xpra, socketDir string) bool {
 		// Xpra 6.2 can spend five seconds collecting optional codec information
 		// even on an otherwise ready server. Keep the probe bounded while allowing
 		// the supported 6.x versions to return their actual window inventory.
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		out, err := commandOutput(ctx, xpraEnvironment(os.Environ()), xpra, "info", "socket://"+filepath.Join(socketDir, entry.Name()))
+		ctx, cancel := context.WithTimeout(parent, 8*time.Second)
+		cmd := exec.CommandContext(ctx, xpra, "info", "socket://"+filepath.Join(socketDir, entry.Name()))
+		cmd.Env = xpraEnvironment(os.Environ())
+		configureProcess(cmd)
+		cmd.Cancel = func() error { return killProcess(cmd) }
+		cmd.WaitDelay = time.Second
+		out, err := cmd.Output()
 		cancel()
 		if err == nil && infoHasWindows(string(out)) {
 			return true
@@ -406,7 +425,7 @@ func infoHasWindows(info string) bool {
 	return false
 }
 
-func (m *Manager) finish(s *ownedSession, code string) {
+func (m *Manager) finish(s *ownedSession, code string, release func()) {
 	m.mu.Lock()
 	wasRunning := s.view.State == "running"
 	if s.view.ErrorCode == "" {
@@ -418,36 +437,53 @@ func (m *Manager) finish(s *ownedSession, code string) {
 	if s.view.ErrorCode != "" && (!wasRunning || s.native != nil) {
 		s.view.State = "failed"
 	}
+	s.stopping = true
 	s.password = ""
 	m.forwards.ReleaseOwnedForwardSession(s.view.Forward.Forward.ForwardID)
 	_ = os.Remove(filepath.Join(m.state, "sessions", s.view.ID, "password"))
 	_ = os.RemoveAll(s.socketDir)
-	close(s.done)
 	m.mu.Unlock()
+	// Publish the terminal state before closing transport, but report completion
+	// only after the supervisor has reclaimed every process and connection.
+	if release != nil {
+		release()
+	}
+	close(s.done)
+}
+
+// requestStop commits a single stop independently of the request's lifetime.
+// Cancelling an HTTP request may stop waiting, but cannot abandon process cleanup.
+func (m *Manager) requestStop(s *ownedSession) {
+	m.mu.Lock()
+	first := !s.stopping
+	s.stopping = true
+	cmd := s.cmd
+	native := s.native
+	m.mu.Unlock()
+	if native != nil {
+		native.cancel()
+	} else if first && cmd != nil {
+		go func() { _ = stopProcess(context.Background(), cmd, s.done) }()
+	}
 }
 
 func (m *Manager) Stop(ctx context.Context, owner, id string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	s := m.sessions[id]
+	m.mu.Unlock()
 	if s == nil || s.owner != owner {
-		m.mu.Unlock()
 		return ErrNotFound
 	}
-	if s.native != nil {
-		ended := s.view.State == "ended" || s.view.State == "failed"
-		m.mu.Unlock()
-		if ended {
-			return nil
-		}
-		return s.native.send(map[string]any{"action": "stop"})
+	m.requestStop(s)
+	select {
+	case <-s.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	s.stopping = true
-	cmd := s.cmd
-	m.mu.Unlock()
-	if cmd != nil {
-		return stopProcess(ctx, cmd, s.done)
-	}
-	return nil
 }
 
 func (m *Manager) Close() error {
@@ -459,21 +495,16 @@ func (m *Manager) Close() error {
 	m.setupMu.Unlock()
 	m.mu.Lock()
 	m.closed = true
-	var all []*ownedSession
+	all := make([]*ownedSession, 0, len(m.sessions))
 	for _, s := range m.sessions {
 		all = append(all, s)
 	}
 	m.mu.Unlock()
 	for _, s := range all {
-		if s.native != nil {
-			s.native.cancel()
-			select {
-			case <-s.done:
-			case <-time.After(5 * time.Second):
-			}
-			continue
-		}
-		_ = m.Stop(context.Background(), s.owner, s.view.ID)
+		m.requestStop(s)
+	}
+	for _, s := range all {
+		<-s.done
 	}
 	return nil
 }

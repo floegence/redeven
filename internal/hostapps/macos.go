@@ -87,6 +87,9 @@ func macCommand(helper string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, error)
 	return cmd, input, output, nil
 }
 func macSend(input io.Writer, value map[string]any) error {
+	if pipe, ok := input.(interface{ SetWriteDeadline(time.Time) error }); ok {
+		_ = pipe.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	}
 	value["protocol_version"] = 1
 	return json.NewEncoder(input).Encode(value)
 }
@@ -211,23 +214,17 @@ func (m *Manager) Quit(ctx context.Context, owner string, req QuitRequest) error
 	return nil
 }
 
-func (m *Manager) Detach(_ context.Context, owner, id string) error {
+func (m *Manager) Detach(ctx context.Context, owner, id string) error {
 	m.mu.Lock()
 	s := m.sessions[id]
+	m.mu.Unlock()
 	if s == nil || s.owner != owner {
-		m.mu.Unlock()
 		return ErrNotFound
 	}
 	if s.native == nil {
-		m.mu.Unlock()
 		return ErrInvalid
 	}
-	ended := s.view.State == "ended" || s.view.State == "failed"
-	m.mu.Unlock()
-	if ended {
-		return nil
-	}
-	return s.native.send(map[string]any{"action": "detach"})
+	return m.Stop(ctx, owner, id)
 }
 
 func (m *Manager) macAdd(ctx context.Context, req AddRequest) error {
@@ -267,23 +264,58 @@ func (m *Manager) Permissions(ctx context.Context, permission string) error {
 // Latest-frame delivery bounds memory when a viewer is slow or disconnected.
 // One WebSocket owns input at a time; replacement revokes the previous viewer.
 type macSession struct {
-	mu             sync.Mutex
-	controlMu      sync.Mutex
-	writeMu        sync.Mutex
-	ready          chan struct{}
-	input          io.WriteCloser
-	cancel         context.CancelFunc
-	server         *http.Server
-	latest         []byte
-	window         []byte
-	windows        []byte
-	notice         []byte
-	noticeRevision uint64
-	generation     int
-	revision       uint64
-	connection     *websocket.Conn
-	changed        chan struct{}
-	connectedAt    time.Time
+	viewers     sync.WaitGroup
+	stopped     <-chan struct{}
+	mu          sync.Mutex
+	controlMu   sync.Mutex
+	writeMu     sync.Mutex
+	ready       chan struct{}
+	input       io.WriteCloser
+	cancel      context.CancelFunc
+	server      *http.Server
+	latest      []byte
+	window      []byte
+	windows     []byte
+	notices     [][]byte
+	generation  int
+	revision    uint64
+	connection  *websocket.Conn
+	changed     chan struct{}
+	connectedAt time.Time
+}
+
+// Called with mu held. Immutable packet slices already owned by a writer
+// remain valid; the session no longer retains them after this boundary.
+func (s *macSession) clearPlaybackLocked() {
+	s.latest, s.window, s.notices = nil, nil, nil
+	s.generation = 0
+	s.connectedAt = time.Time{}
+}
+
+// Frames are replaceable snapshots; operation results are ordered events.
+// A stalled viewer is disconnected at the bound instead of losing feedback or
+// accumulating an unbounded queue. The host application remains running.
+func (s *macSession) enqueueNotice(raw []byte) {
+	s.mu.Lock()
+	changed := s.changed
+	if changed == nil {
+		s.mu.Unlock()
+		return
+	}
+	if len(s.notices) < 128 {
+		s.notices = append(s.notices, raw)
+		s.mu.Unlock()
+		return
+	}
+	s.mu.Unlock()
+	s.controlMu.Lock()
+	s.mu.Lock()
+	current := s.changed == changed
+	s.mu.Unlock()
+	if current && s.connection != nil {
+		_ = s.connection.Close()
+	}
+	s.controlMu.Unlock()
 }
 
 func (s *macSession) send(request map[string]any) error {
@@ -340,7 +372,7 @@ func (m *Manager) macLaunch(ctx context.Context, owner string, req LaunchRequest
 			continue
 		}
 		active++
-		if s.owner == owner && s.view.Application.ID == app.ID {
+		if !s.stopping && s.owner == owner && s.view.Application.ID == app.ID {
 			return cloneSession(s.view), nil
 		}
 	}
@@ -358,7 +390,7 @@ func (m *Manager) macLaunch(ctx context.Context, owner string, req LaunchRequest
 		return Session{}, err
 	}
 	life, cancel := context.WithCancel(context.Background())
-	native := &macSession{cancel: cancel, ready: make(chan struct{})}
+	native := &macSession{cancel: cancel, ready: make(chan struct{}), stopped: life.Done()}
 	s := &ownedSession{view: Session{ID: randomID(), Application: app, State: "starting", Backend: "macos", Mode: "stream", StartedAt: time.Now().UnixMilli(), Forward: forward, Presentation: req.Presentation}, owner: owner, password: randomID() + randomID(), done: make(chan struct{}), native: native}
 	native.server = &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { m.serveMacSession(w, r, s) })}
 	m.sessions[s.view.ID] = s
@@ -368,43 +400,60 @@ func (m *Manager) macLaunch(ctx context.Context, owner string, req LaunchRequest
 }
 func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 	n := s.native
-	defer n.cancel()
-	if ctx.Err() != nil {
-		_ = n.server.Close()
-		m.finish(s, "")
-		return
-	}
-	cmd, input, output, err := macCommand(m.macHelper())
-	if err != nil {
-		_ = n.server.Close()
-		m.finish(s, "launch_failed")
-		return
-	}
-	n.writeMu.Lock()
-	err = macSend(input, map[string]any{"action": "launch", "application_id": s.view.Application.ID, "paths": m.macPaths(), "defer_capture": true})
-	n.input = input
-	n.writeMu.Unlock()
-	close(n.ready)
-	defer func() {
-		_ = input.Close()
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-		_ = n.server.Close()
-		n.controlMu.Lock()
-		if n.connection != nil {
-			_ = n.connection.Close()
-		}
-		n.controlMu.Unlock()
-	}()
 	code := ""
-	startup := time.AfterFunc(40*time.Second, n.cancel)
-	defer startup.Stop()
-	defer func() { m.finish(s, code) }()
+	var cmd *exec.Cmd
+	var input io.WriteCloser
+	defer func() {
+		n.cancel()
+		m.mu.Lock()
+		if s.stopping {
+			code = ""
+			if s.view.EndReason == "" {
+				s.view.EndReason = "sharing_stopped"
+			}
+		}
+		m.mu.Unlock()
+		m.finish(s, code, func() {
+			if input != nil {
+				_ = input.Close()
+			}
+			if cmd != nil {
+				_ = cmd.Process.Kill()
+				_ = cmd.Wait()
+			}
+			_ = n.server.Close()
+			n.controlMu.Lock()
+			if n.connection != nil {
+				_ = n.connection.Close()
+				n.connection = nil
+			}
+			n.mu.Lock()
+			n.clearPlaybackLocked()
+			n.windows = nil
+			n.changed = nil
+			n.mu.Unlock()
+			n.controlMu.Unlock()
+			n.writeMu.Lock()
+			n.input = nil
+			n.writeMu.Unlock()
+			n.viewers.Wait()
+		})
+	}()
+	if ctx.Err() != nil {
+		return
+	}
+	var output io.ReadCloser
+	var err error
+	cmd, input, output, err = macCommand(m.macHelper())
+	if err != nil {
+		code = "launch_failed"
+		return
+	}
 	go func() {
 		select {
 		case <-ctx.Done():
-			// EOF lets the helper release held input before it exits. Applications
-			// remain open; the deadline bounds an unresponsive helper's lifetime.
+			// EOF releases held input. Bound an unresponsive helper without
+			// transferring application ownership to its transport process.
 			_ = input.Close()
 			select {
 			case <-s.done:
@@ -414,6 +463,13 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 		case <-s.done:
 		}
 	}()
+	n.writeMu.Lock()
+	err = macSend(input, map[string]any{"action": "launch", "application_id": s.view.Application.ID, "paths": m.macPaths(), "defer_capture": true})
+	n.input = input
+	n.writeMu.Unlock()
+	close(n.ready)
+	startup := time.AfterFunc(40*time.Second, n.cancel)
+	defer startup.Stop()
 	if err != nil {
 		code = "launch_failed"
 		return
@@ -470,10 +526,13 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 		case "window":
 			n.mu.Lock()
 			n.window = raw
-			n.notice = nil
 			n.generation = msg.Generation
 			n.latest = nil
 			n.revision++
+			n.mu.Unlock()
+		case "suspended":
+			n.mu.Lock()
+			n.clearPlaybackLocked()
 			n.mu.Unlock()
 		case "windows":
 			n.mu.Lock()
@@ -490,16 +549,10 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			// A failed application launch arrives as a separate native error.
 			return
 		case "menu", "operation_error", "operation_complete":
-			n.mu.Lock()
-			n.notice = raw
-			n.noticeRevision++
-			n.mu.Unlock()
+			n.enqueueNotice(raw)
 		case "error":
 			slog.Warn("native application error", "session", s.view.ID, "code", msg.Code)
-			n.mu.Lock()
-			n.notice = raw
-			n.noticeRevision++
-			n.mu.Unlock()
+			n.enqueueNotice(raw)
 			if !started {
 				code = strings.ToLower(msg.Code)
 				return
@@ -541,8 +594,9 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 	protocols := websocket.Subprotocols(r)
 	m.mu.Lock()
 	password := s.password
+	stopping := s.stopping
 	m.mu.Unlock()
-	if len(protocols) != 2 || protocols[0] != "redeven-host-application-v1" || password == "" || subtle.ConstantTimeCompare([]byte(protocols[1]), []byte(password)) != 1 {
+	if len(protocols) != 2 || protocols[0] != "redeven-host-application-v1" || password == "" || stopping || subtle.ConstantTimeCompare([]byte(protocols[1]), []byte(password)) != 1 {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -560,15 +614,23 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 	// consume the successor's only notification for an unchanged window.
 	changed := make(chan struct{}, 1)
 	n.controlMu.Lock()
+	m.mu.Lock()
+	stopping = s.stopping
+	m.mu.Unlock()
+	if stopping {
+		n.controlMu.Unlock()
+		return
+	}
+	n.viewers.Add(1)
+	defer n.viewers.Done()
 	previous := n.connection
 	n.connection = connection
 	n.mu.Lock()
 	n.changed = changed
+	n.clearPlaybackLocked()
 	n.connectedAt = time.Now()
-	n.notice, n.window, n.latest = nil, nil, nil
-	n.generation = 0
 	n.mu.Unlock()
-	_ = n.send(map[string]any{"action": "release"})
+	_ = n.send(map[string]any{"action": "suspend"})
 	n.controlMu.Unlock()
 	if previous != nil {
 		_ = previous.Close()
@@ -578,11 +640,16 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 		current := n.connection == connection
 		if current {
 			n.connection = nil
-			_ = n.send(map[string]any{"action": "release"})
+			n.mu.Lock()
+			n.clearPlaybackLocked()
+			n.changed = nil
+			n.mu.Unlock()
+			_ = n.send(map[string]any{"action": "suspend"})
 		}
 		n.controlMu.Unlock()
 	}()
 	done := make(chan struct{})
+	defer func() { _ = connection.Close(); <-done }()
 	go func() {
 		defer close(done)
 		resumed := false
@@ -608,6 +675,8 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 				case <-n.ready:
 				case <-s.done:
 					return
+				case <-n.stopped:
+					return
 				case <-r.Context().Done():
 					return
 				}
@@ -629,7 +698,6 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 	defer ping.Stop()
 	var revision uint64
 	var window, windows string
-	var noticeRevision uint64
 	for {
 		select {
 		case <-done:
@@ -641,14 +709,20 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 				return
 			}
 		case <-changed:
+			n.controlMu.Lock()
+			if n.connection != connection {
+				n.controlMu.Unlock()
+				return
+			}
 			n.mu.Lock()
 			frame := n.latest
 			nextRevision := n.revision
 			nextWindow := string(n.window)
 			nextWindows := string(n.windows)
-			nextNotice := string(n.notice)
-			nextNoticeRevision := n.noticeRevision
+			notices := n.notices
+			n.notices = nil
 			n.mu.Unlock()
+			n.controlMu.Unlock()
 			_ = connection.SetWriteDeadline(time.Now().Add(5 * time.Second))
 
 			if nextWindows != "" && nextWindows != windows {
@@ -663,11 +737,10 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 				}
 				window = nextWindow
 			}
-			if nextNotice != "" && nextNoticeRevision != noticeRevision {
-				if connection.WriteMessage(websocket.TextMessage, []byte(nextNotice)) != nil {
+			for _, notice := range notices {
+				if connection.WriteMessage(websocket.TextMessage, notice) != nil {
 					return
 				}
-				noticeRevision = nextNoticeRevision
 			}
 			if len(frame) > 0 && nextRevision != revision {
 				if connection.WriteMessage(websocket.BinaryMessage, frame) != nil {

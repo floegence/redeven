@@ -11,3 +11,5 @@ func configureProcess(cmd *exec.Cmd) {}
 func stopProcess(ctx context.Context, cmd *exec.Cmd, done <-chan struct{}) error {
 	return ErrUnavailable
 }
+
+func killProcess(cmd *exec.Cmd) error { return cmd.Process.Kill() }
