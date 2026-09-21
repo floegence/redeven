@@ -20,7 +20,7 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 button svg { width:16px; height:16px; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
 body[data-state="active"] #application { opacity:1; pointer-events:auto; }
 body[data-state="active"] main { display:none; }
-body:is([data-state="disconnected"],[data-state="failed"],[data-state="captureUnavailable"],[data-state="ended"],[data-state="waiting"]) .progress { display:none; }
+body:is([data-state="disconnected"],[data-state="failed"],[data-state="captureUnavailable"],[data-state="ended"],[data-state="waiting"],[data-state="permissionRequired"],[data-state="sessionUnavailable"],[data-state="sessionFailed"]) .progress { display:none; }
 @keyframes travel { 0% { transform:translateX(-110%); } 100% { transform:translateX(360%); } }
 @keyframes arrive { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; } .progress span { width:100%; opacity:.5; } }
@@ -31,7 +31,7 @@ body:is([data-state="disconnected"],[data-state="failed"],[data-state="captureUn
 .mac-app-controls-toggle:is(:hover,:focus-visible,[aria-expanded="true"]) { opacity:1; }
 .mac-app-drawer { position:absolute; left:42px; top:50%; transform:translateY(-50%); width:320px; max-width:calc(100vw - 62px); max-height:calc(100dvh - 24px); overflow:auto; overscroll-behavior:contain; padding:20px; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:0 12px 40px #0002; text-align:left; animation:unfold .16s ease-out; }
 .mac-app-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
-body[data-state="waiting"] .mac-app-actions { margin-top:0; padding-top:0; border-top:0; }
+body:is([data-state="waiting"],[data-state="captureUnavailable"]) .mac-app-actions { margin-top:0; padding-top:0; border-top:0; }
 .mac-app-actions>select { width:100%; min-width:0; margin-bottom:6px; }
 .mac-app-actions>button { flex:1; min-height:32px; font-size:11px; padding:4px 8px; }
 .mac-app-controls select { font:inherit; font-size:12px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--surface); color:var(--foreground); cursor:pointer; }

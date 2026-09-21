@@ -65,8 +65,10 @@ it.each([390, 1000])('separates connection identity and keeps the left drawer wi
   const identity = doc.querySelector('.app-identity')!.getBoundingClientRect();
   const title = doc.querySelector('h1')!.getBoundingClientRect();
   expect(title.top - identity.bottom).toBeGreaterThanOrEqual(20);
-  doc.body.dataset.state = 'disconnected';
-  expect(view.getComputedStyle(doc.querySelector('.progress')!).display).toBe('none');
+  for (const state of ['disconnected', 'waiting', 'captureUnavailable', 'permissionRequired', 'sessionUnavailable', 'sessionFailed']) {
+    doc.body.dataset.state = state;
+    expect(view.getComputedStyle(doc.querySelector('.progress')!).display).toBe('none');
+  }
   expect(doc.querySelector('h1')!.getBoundingClientRect().top - doc.querySelector('.app-identity')!.getBoundingClientRect().bottom).toBeGreaterThanOrEqual(20);
   doc.body.dataset.state = 'active';
   doc.querySelector<HTMLElement>('.mac-app-controls')!.hidden = false;

@@ -33,9 +33,9 @@
     document.body.dataset.state = state;
     main.setAttribute('aria-busy', String(busy));
     status.textContent = config.copy[state] || config.copy.failed;
-    hint.textContent = state === 'disconnected' ? config.copy.connectionHint : '';
+    hint.textContent = state === 'disconnected' ? config.copy.connectionHint : state === 'sessionFailed' ? config.copy.reopenHint : '';
     hint.hidden = !hint.textContent;
-    retry.hidden = busy || state === 'active' || state === 'ended';
+    retry.hidden = busy || state === 'active' || state === 'ended' || state === 'sessionFailed';
     retry.querySelector('span').textContent = state === 'disconnected' ? config.copy.reconnect : config.copy.retry;
     frame.inert = state !== 'active';
     frame.setAttribute('aria-hidden', String(state !== 'active'));
@@ -81,7 +81,7 @@
         if (current !== generation) return;
         if (response.ok) {
           const data = await response.json();
-          if (current === generation && (data.state === 'ended' || data.state === 'failed')) finish(data.state);
+          if (current === generation && (data.state === 'ended' || data.state === 'failed')) finish(data.state === 'failed' ? 'sessionFailed' : 'ended');
         }
       }).catch(() => {});
   }
@@ -112,6 +112,7 @@
     doc.documentElement.style.backgroundColor = getComputedStyle(document.body).backgroundColor;
 
     const primaryWindows = new Set();
+    const paintableWindows = new Set();
     function syncWindowState(win) {
       const state = nativeState || {maximized:true, minimized:false};
       xpra.send_configure_window(win, {maximized:state.maximized, iconified:state.minimized}, false);
@@ -126,6 +127,7 @@
     function fit(win) {
       if (!win || win.override_redirect || win.tray) return;
       if (win.metadata['transient-for'] || win.metadata.modal || win.has_windowtype(['DIALOG'])) {
+        paintableWindows.add(win.wid);
         // A headless display may be larger than the viewer. Keep dialog controls
         // reachable by negotiating a bounded size, never scaling their pixels.
         const resized = win.screen_resized;
@@ -144,6 +146,7 @@
         return;
       }
       if (win.windowtype.length && !win.has_windowtype(['NORMAL'])) return;
+      paintableWindows.add(win.wid);
       if (!primaryWindows.has(win.wid)) {
         primaryWindows.add(win.wid);
         win.div.classList.add('redeven-primary');
@@ -180,7 +183,7 @@
     const damage = xpra.do_send_damage_sequence;
     xpra.do_send_damage_sequence = function(sequence, wid, width, height, decodeTime, message) {
       damage.call(this, sequence, wid, width, height, decodeTime, message);
-      if (attempt !== generation || !primaryWindows.has(wid) || decodeTime < 0 || message) return;
+      if (attempt !== generation || !paintableWindows.has(wid) || !xpra.id_to_window[wid] || decodeTime < 0 || message) return;
       if (document.body.dataset.state === 'active') return;
       // Reveal only after the server has painted, including the offscreen-worker path.
       requestAnimationFrame(() => {
@@ -238,7 +241,7 @@
           present(wasActive ? 'reconnecting' : 'connecting');
           frame.src = config.base + '/index.html';
         }
-      } else if (data.state !== 'starting') { finish(data.state === 'ended' ? 'ended' : 'failed'); return; }
+      } else if (data.state !== 'starting') { finish(data.state === 'ended' ? 'ended' : 'sessionFailed'); return; }
       timer = setTimeout(() => observe(attempt), attached ? 5000 : 500);
     } catch { if (attempt === generation) finish('disconnected'); }
     finally { clearTimeout(timeout); }

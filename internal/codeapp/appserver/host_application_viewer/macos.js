@@ -162,7 +162,7 @@
     renderedGeneration = 0,
     current,
     pending,
-    drawing = false,
+    drawing = null,
     deadline,
     resizeTimer;
   let abort;
@@ -183,15 +183,19 @@
     hint.textContent =
       state === 'disconnected'
         ? config.copy.connectionHint
-        : state === 'waiting' ? config.copy.waitingHint : config.copy.sharedControl;
+        : state === 'waiting' ? config.copy.waitingHint
+        : state === 'permissionRequired' ? config.copy.permissionHint
+        : state === 'sessionUnavailable' ? config.copy.sessionHint
+        : state === 'sessionFailed' ? config.copy.reopenHint
+        : state === 'captureUnavailable' ? config.copy.captureHint : config.copy.sharedControl;
     hint.hidden = !hint.textContent;
-    retry.hidden = !['waiting', 'disconnected', 'failed', 'captureUnavailable'].includes(state);
+    retry.hidden = !['waiting', 'disconnected', 'failed', 'captureUnavailable', 'permissionRequired', 'sessionUnavailable'].includes(state);
     retry.querySelector('span').textContent =
       ['waiting', 'disconnected'].includes(state) ? config.copy.reconnect : config.copy.retry;
-    controls.hidden = !['active', 'waiting'].includes(state);
+    controls.hidden = !['active', 'waiting', 'captureUnavailable'].includes(state);
     picturePanel.hidden = state !== 'active';
     close.hidden = state !== 'active';
-    windows.disabled = state !== 'active';
+    windows.disabled = !['active', 'captureUnavailable'].includes(state);
     input.disabled = state !== 'active';
     if (state !== 'active') {
       feedback.hidden = true;
@@ -204,7 +208,7 @@
     if (
       socket?.readyState === WebSocket.OPEN &&
       current &&
-      (renderedGeneration === current.generation ||
+      (current.window && renderedGeneration === current.generation ||
         ['resize', 'select', 'release', 'menu', 'menu_action'].includes(value.action))
     )
       socket.send(
@@ -215,15 +219,25 @@
         }),
       );
   }
+  function invalidateCapture() {
+    renderedGeneration = 0;
+    pending = null;
+    drawing = null;
+    resetDecoder();
+    input.value = '';
+    if (move) cancelAnimationFrame(move);
+    move = null;
+    menuPanel.hidden = true;
+    menuPanel.replaceChildren();
+    menu.setAttribute('aria-expanded', 'false');
+  }
   function disconnect(state) {
     clearTimeout(deadline);
     abort?.abort();
     socket?.close();
     socket = null;
     current = null;
-    renderedGeneration = 0;
-    pending = null;
-    resetDecoder();
+    invalidateCapture();
     present(state);
     if (state === 'ended' && active) {
       if (native) native.request('close');
@@ -277,14 +291,15 @@
   }
   async function draw() {
     if (drawing) return;
-    drawing = true;
+    const job = {};
+    drawing = job;
     let decoding;
     try {
-      while (pending) {
+      while (pending && drawing === job) {
         const next = pending; decoding = next; pending = null;
         const image = next.meta.codec === 'h264' ? await decodeVideo(next)
           : await createImageBitmap(new Blob([next.bytes], {type: next.meta.codec === 'png' ? 'image/png' : 'image/jpeg'}));
-        if (next.attempt === attempt && current && next.generation === current.generation && socket?.readyState === WebSocket.OPEN) {
+        if (drawing === job && next.attempt === attempt && current && next.generation === current.generation && socket?.readyState === WebSocket.OPEN) {
           const width = image.displayWidth || image.width, height = image.displayHeight || image.height;
           if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
           context.drawImage(image, 0, 0);
@@ -299,12 +314,12 @@
         image.close();
       }
     } catch {
-      if (socket && decoding?.attempt === attempt && decoding?.generation === current?.generation) {
+      if (drawing === job && socket && decoding?.attempt === attempt && decoding?.generation === current?.generation) {
         if (decoding.meta.codec === 'h264' && videoSupported) {
           videoSupported = false; resetDecoder(); configurePicture();
         } else disconnect('failed');
       }
-    } finally { drawing = false; if (pending) void draw(); }
+    } finally { if (drawing === job) { drawing = null; if (pending) void draw(); } }
   }
   async function connect() {
     const mine = ++attempt;
@@ -323,7 +338,7 @@
       const state = await response.json();
       if (mine !== attempt || abort.signal.aborted) return;
       if (state.state === 'ended' || state.state === 'failed') {
-        disconnect(state.state);
+        disconnect(state.state === 'failed' ? 'sessionFailed' : 'ended');
         return;
       }
       const url = new URL(
@@ -353,7 +368,7 @@
             const meta = JSON.parse(new TextDecoder().decode(packet.subarray(4, 4 + length)));
             if (!['jpeg', 'png', 'h264'].includes(meta.codec)) throw Error('Unsupported frame');
             receivedBytes += packet.length;
-            if (current && meta.generation === current.generation) {
+            if (current?.window && meta.generation === current.generation) {
               pending = { bytes: packet.subarray(4 + length), meta, attempt: mine, generation: meta.generation };
               void draw();
             }
@@ -367,13 +382,11 @@
           disconnect('failed');
           return;
         }
-        if (message.type === 'waiting') {
+        if (message.type === 'waiting' || message.type === 'capture_error') {
           clearTimeout(deadline);
-          resetDecoder();
-          pending = null;
+          invalidateCapture();
           current = { generation: message.generation };
-          renderedGeneration = 0;
-          present('waiting');
+          present(message.type === 'waiting' ? 'waiting' : 'captureUnavailable');
         } else if (message.type === 'operation_error') {
           if (message.code !== 'STALE_WINDOW') {
             feedback.textContent = config.copy.operationFailed;
@@ -384,10 +397,13 @@
         } else if (message.type === 'window') {
           clearTimeout(deadline);
           deadline = setTimeout(() => {
-            if (mine === attempt && socket === connection) disconnect('captureUnavailable');
+            if (mine === attempt && socket === connection) {
+              invalidateCapture();
+              present('captureUnavailable');
+            }
           }, 45000);
-          resetDecoder();
-          pending = null;
+          invalidateCapture();
+          if (current?.window !== message.window) present(active ? 'reconnecting' : 'connecting');
           current = message;
           canvas.setAttribute('aria-busy', 'true');
           windows.value = message.window;
@@ -404,6 +420,7 @@
           windows.hidden = message.windows.length < 2;
           if (current) windows.value = current.window;
         } else if (message.type === 'menu') {
+          if (!current || message.generation !== current.generation) return;
           const build = (items) =>
             items.map((item) => {
               if (item.children.length) {
@@ -429,8 +446,7 @@
         } else if (message.type === 'error' && message.code !== 'STALE_WINDOW')
           disconnect('failed');
         else if (message.type === 'ended') disconnect('ended');
-        else if (message.type === 'capture_error') disconnect('captureUnavailable');
-        else if (message.type === 'blocked') disconnect('disconnected');
+        else if (message.type === 'blocked') disconnect(message.code === 'GRAPHICAL_SESSION_REQUIRED' ? 'sessionUnavailable' : 'permissionRequired');
       };
       connection.onclose = async () => {
         if (mine !== attempt || socket !== connection) return;
@@ -444,7 +460,7 @@
           if (response.ok) {
             const data = await response.json();
             if (mine === attempt && (data.state === 'ended' || data.state === 'failed'))
-              disconnect(data.state);
+              disconnect(data.state === 'failed' ? 'sessionFailed' : 'ended');
           }
         } catch {
           /* Network loss retains the window and its explicit reconnect action. */
@@ -511,9 +527,10 @@
   let move;
   canvas.addEventListener('pointermove', (event) => {
     if (move) return;
-    const position = point(event);
+    const position = point(event), binding = current;
     move = requestAnimationFrame(() => {
       move = null;
+      if (current !== binding) return;
       send({ action: 'input', kind: 'move', ...position });
     });
   });
@@ -562,14 +579,23 @@
       key: [...modifiers, event.key === ' ' ? 'Space' : event.key].join('+'),
     });
   });
+  let compositionBinding;
+  input.addEventListener('compositionstart', () => { compositionBinding = current; });
   input.addEventListener('input', (event) => {
-    if (event.isComposing) return;
+    if (event.isComposing) {
+      if (compositionBinding === undefined) compositionBinding = current;
+      return;
+    }
+    if (compositionBinding !== undefined && compositionBinding !== current) { input.value = ''; return; }
     if (input.value) {
       send({ action: 'input', kind: 'text', text: input.value });
       input.value = '';
     }
   });
   input.addEventListener('compositionend', () => {
+    const binding = compositionBinding;
+    compositionBinding = undefined;
+    if (binding !== current) { input.value = ''; return; }
     if (input.value) {
       send({ action: 'input', kind: 'text', text: input.value });
       input.value = '';

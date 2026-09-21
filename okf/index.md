@@ -22,6 +22,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Native macOS Applications](architecture/macos-host-applications.md) - Open local Mac apps directly or operate owned remote windows with capture, input and reconnection.
 - [Host Application Setup](operations/host-application-setup.md) - Install compatible Arch, Enterprise Linux and Alpine packages and verify native application startup.
 - [Host Application Validation](operations/host-application-validation.md) - Check distribution and architecture evidence and repeat the native session acceptance tests.
+- [Host Application Lifecycle](operations/host-application-lifecycle.md) - Diagnose startup, window, access and transport transitions using the focused acceptance matrix.
 - [Runtime Binary Portability](architecture/runtime-binary-portability.md) - Build native Linux/macOS runtimes and preserve static library source and relink access.
 - [Desktop loopback Web Service access](architecture/web-service-desktop-loopback.md) - Give one HTTP service a protected numeric-loopback Origin in its isolated Desktop window.
 - [Web Service system-browser authorization](architecture/web-service-browser-authorization.md) - Exchange a Desktop-private route for one exact, bounded browser session without a public fallback.

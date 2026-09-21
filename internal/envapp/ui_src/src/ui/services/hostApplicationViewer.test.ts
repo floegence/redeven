@@ -60,6 +60,23 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
 }
 
 describe('host application viewer', () => {
+  it('reveals an application that opens only a dialog window', async () => {
+    const v = await viewer();
+    const dialog = v.appWindow(1, {modal:true}, 'DIALOG');
+    v.client._new_window(1);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    expect(v.state()).toBe('active');
+    expect(dialog.update_metadata).not.toHaveBeenCalled();
+  });
+
+  it('directs a failed session back to the application library instead of retrying it', async () => {
+    const v = await viewer();
+    v.fetch.mockResolvedValue({ok:true,json:async () => ({state:'failed'})});
+    v.doc.dispatchEvent(new dom.window.Event('connection-lost')); await drain();
+    expect(v.state()).toBe('sessionFailed');
+    expect(dom.window.document.querySelector('button')!.hidden).toBe(true);
+  });
+
   it('fits primary windows, preserves transient dialogs and reveals only painted content', async () => {
     const v = await viewer();
     const primary = v.appWindow(1);

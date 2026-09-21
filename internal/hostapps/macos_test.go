@@ -403,3 +403,45 @@ done
 		t.Fatal("native launch diagnostic was lost")
 	}
 }
+
+// A resumed helper may publish a window and its menu before the socket writer
+// wakes. The new generation must reach the viewer before its dependent menu.
+type macPlaybackInput struct{ write func([]byte) }
+
+func (p macPlaybackInput) Write(data []byte) (int, error) { p.write(data); return len(data), nil }
+func (p macPlaybackInput) Close() error                   { return nil }
+
+func TestMacSnapshotDeliversWindowBeforeGenerationBoundMenu(t *testing.T) {
+	m := &Manager{}
+	n := &macSession{}
+	s := &ownedSession{password: "test-credential", native: n, done: make(chan struct{})}
+	n.input = macPlaybackInput{write: func(data []byte) {
+		if !strings.Contains(string(data), `"action":"resume"`) {
+			return
+		}
+		n.mu.Lock()
+		n.window = []byte(`{"type":"window","window":"second","generation":2}`)
+		n.notice = []byte(`{"type":"menu","generation":2,"items":[]}`)
+		n.noticeRevision++
+		n.changed <- struct{}{}
+		n.mu.Unlock()
+	}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { m.serveMacSession(w, r, s) }))
+	defer server.Close()
+	dialer := websocket.Dialer{Subprotocols: []string{"redeven-host-application-v1", "test-credential"}}
+	c, _, err := dialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/_redeven_host_app/stream", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+	for _, want := range []string{"window", "menu"} {
+		var message macMessage
+		if err := c.ReadJSON(&message); err != nil {
+			t.Fatal(err)
+		}
+		if message.Type != want {
+			t.Fatalf("expected %s before dependent events, got %s", want, message.Type)
+		}
+	}
+}

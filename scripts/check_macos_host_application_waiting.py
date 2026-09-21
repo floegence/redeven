@@ -24,9 +24,9 @@ def run(helper_path, scenario):
                     CFBundleName=name, CFBundlePackageType='APPL', NSHighResolutionCapable=True)
         if scenario == 'reopen':
             info['RedevenFixtureWindowOnReopen'] = True
-        elif scenario == 'menu':
+        elif scenario in ('menu', 'stop'):
             info['RedevenFixtureWindowOnMenu'] = True
-        else:
+        elif scenario == 'delayed':
             info['RedevenFixtureInitialWindowDelay'] = 48.0
         with (bundle / 'Contents/Info.plist').open('wb') as file:
             plistlib.dump(info, file)
@@ -59,6 +59,12 @@ def run(helper_path, scenario):
                 # A new viewer must receive the same waiting state on reconnect.
                 helper.send('resume')
                 helper.wait('waiting')
+            if scenario == 'stop':
+                helper.wait('waiting')
+                helper.send('stop')
+                helper.wait('ended')
+                print(json.dumps(dict(scenario=scenario, passed=True, pid=pid)))
+                return
             if scenario == 'menu':
                 waiting = helper.wait('waiting')
                 def items(values):
@@ -77,6 +83,47 @@ def run(helper_path, scenario):
                 helper.send('menu_action', generation=waiting['generation'], item=menu['id'])
             window = helper.wait('window', timeout=60)
             helper.wait('frame')
+            if scenario == 'windows':
+                def items(values):
+                    for item in values:
+                        yield item
+                        yield from items(item['children'])
+                def menu_action(title, current):
+                    helper.send('menu', generation=current['generation'])
+                    item = next(i for i in items(helper.wait('menu')['items']) if i['title'] == title)
+                    helper.send('menu_action', generation=current['generation'], item=item['id'])
+                main = window
+                menu_action('Open second window', window)
+                window = helper.wait('window', timeout=5, predicate=lambda w: w['window'] != main['window'])
+                helper.wait('frame')
+                secondary = window
+                helper.send('select', window=main['window'])
+                window = helper.wait('window', predicate=lambda w: w['window'] == main['window'])
+                helper.wait('frame', predicate=lambda f: f['generation'] == window['generation'])
+                time.sleep(1.2)
+                assert next(e for e in reversed(helper.events) if e['type'] == 'window')['window'] == main['window'], 'Inventory overrode explicit selection'
+                helper.send('select', window=main['window'])
+                helper.send('select', window=secondary['window'])
+                window = helper.wait('window', timeout=5, predicate=lambda w: w['window'] == secondary['window'])
+                helper.wait('frame', predicate=lambda f: f['generation'] == window['generation'])
+                helper.send('close', window=window['window'], generation=window['generation'])
+                window = helper.wait('window', predicate=lambda w: w['window'] == main['window'])
+                helper.wait('frame')
+                menu_action('Cancel next close', window)
+                helper.wait('operation_complete', predicate=lambda m: m.get('action') == 'menu_action')
+                helper.send('close', window=window['window'], generation=window['generation'])
+                eventually(lambda: receipt().get('cancelled_closes') == 1, 'Close cancellation was not respected')
+                for title, field in [('Minimize main window', 'minimized'), ('Hide fixture', 'hidden')]:
+                    menu_action(title, window)
+                    eventually(lambda: receipt().get(field), title + ' did not complete')
+                    time.sleep(1.6)
+                    assert receipt().get(field), title + ' was unexpectedly undone'
+                    assert not any(e['type'] == 'ended' for e in helper.events), 'Hidden window ended the session'
+                    helper.send('resume')
+                    window = helper.wait('window')
+                    helper.wait('frame', predicate=lambda f: f['generation'] == window['generation'])
+                    eventually(lambda: not receipt().get(field), title + ' did not recover on reconnect')
+                assert receipt()['pid'] == pid
             if scenario == 'reopen':
                 assert receipt()['reopens'] > 0 and launch['existing_application'], receipt()
             elif scenario == 'delayed':
@@ -101,6 +148,6 @@ def run(helper_path, scenario):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--helper', type=Path, required=True)
-    parser.add_argument('--scenario', choices=['reopen', 'delayed', 'menu'], required=True)
+    parser.add_argument('--scenario', choices=['reopen', 'delayed', 'menu', 'stop', 'windows'], required=True)
     args = parser.parse_args()
     run(args.helper, args.scenario)

@@ -14,6 +14,9 @@ final class FixtureApplication: NSApplication {
 final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: NSWindow!
     var field: NSTextField!
+    var secondary: NSWindow?
+    var cancelNextClose = false
+    var cancelledCloses = 0
     var menuClicks = 0
     var clicks = 0
     var animation: Timer?
@@ -53,6 +56,10 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
         replace.target = self; actions.addItem(replace); root.submenu = actions
         let animate = NSMenuItem(title: "Toggle animation", action: #selector(toggleAnimation), keyEquivalent: "")
         animate.target = self; actions.addItem(animate)
+        for (title, selector) in [("Open second window", #selector(openSecond)), ("Minimize main window", #selector(minimizeMain)), ("Hide fixture", #selector(hideFixture)), ("Cancel next close", #selector(cancelClose))] {
+            let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+            item.target = self; actions.addItem(item)
+        }
         menu.addItem(root)
         let edit = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         edit.submenu = NSMenu(title: "Edit")
@@ -66,6 +73,22 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
         save()
         return true
     }
+    @objc func openSecond() {
+        let second = NSWindow(contentRect: NSRect(x: 250, y: 250, width: 420, height: 260), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        second.isReleasedWhenClosed = false; second.title = "Secondary fixture window"; second.delegate = self
+        secondary = second; second.makeKeyAndOrderFront(nil); save()
+    }
+    @objc func minimizeMain() { window.miniaturize(nil); save() }
+    @objc func hideFixture() { NSApp.hide(nil); save() }
+    @objc func cancelClose() { cancelNextClose = true; save() }
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if cancelNextClose { cancelNextClose = false; cancelledCloses += 1; save(); return false }
+        return true
+    }
+    func windowDidMiniaturize(_ notification: Notification) { save() }
+    func windowDidDeminiaturize(_ notification: Notification) { save() }
+    func applicationDidHide(_ notification: Notification) { save() }
+    func applicationDidUnhide(_ notification: Notification) { save() }
     @objc func openWindow() { if window == nil { makeWindow(); save() } }
     @objc func replaceWindow() {
         let text = field.stringValue
@@ -89,11 +112,13 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func recordMenu() { menuClicks += 1; save() }
     @objc func click() { clicks += 1; save() }
     @objc func save() {
-        let value: [String: Any] = ["menu_clicks": menuClicks, "events": events, "pid": ProcessInfo.processInfo.processIdentifier, "clicks": clicks, "text": field?.stringValue ?? "", "window": window?.windowNumber ?? 0, "width": window?.frame.width ?? 0, "height": window?.frame.height ?? 0, "reopens": reopens]
+        let value: [String: Any] = ["menu_clicks": menuClicks, "events": events, "pid": ProcessInfo.processInfo.processIdentifier, "clicks": clicks, "text": field?.stringValue ?? "", "window": window?.windowNumber ?? 0, "width": window?.frame.width ?? 0, "height": window?.frame.height ?? 0, "reopens": reopens, "secondary": secondary?.windowNumber ?? 0, "minimized": window?.isMiniaturized ?? false, "hidden": NSApp.isHidden, "cancelled_closes": cancelledCloses]
         try! JSONSerialization.data(withJSONObject: value).write(to: URL(fileURLWithPath: receipt), options: .atomic)
     }
     func windowDidResize(_ notification: Notification) { if field != nil { save() } }
-    func windowWillClose(_ notification: Notification) { save(); if !replacing { DispatchQueue.main.async { NSApp.terminate(nil) } } }
+    func windowWillClose(_ notification: Notification) {
+        if let closed = notification.object as? NSWindow, closed === secondary { secondary = nil; window.makeKeyAndOrderFront(nil); save(); return }
+        save(); if !replacing { DispatchQueue.main.async { NSApp.terminate(nil) } } }
 }
 let app = FixtureApplication.shared
 app.setActivationPolicy(.regular)

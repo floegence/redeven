@@ -544,12 +544,7 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 			nextNoticeRevision := n.noticeRevision
 			n.mu.Unlock()
 			_ = connection.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			if nextNotice != "" && nextNoticeRevision != noticeRevision {
-				if connection.WriteMessage(websocket.TextMessage, []byte(nextNotice)) != nil {
-					return
-				}
-				noticeRevision = nextNoticeRevision
-			}
+
 			if nextWindows != "" && nextWindows != windows {
 				if connection.WriteMessage(websocket.TextMessage, []byte(nextWindows)) != nil {
 					return
@@ -561,6 +556,12 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 					return
 				}
 				window = nextWindow
+			}
+			if nextNotice != "" && nextNoticeRevision != noticeRevision {
+				if connection.WriteMessage(websocket.TextMessage, []byte(nextNotice)) != nil {
+					return
+				}
+				noticeRevision = nextNoticeRevision
 			}
 			if len(frame) > 0 && nextRevision != revision {
 				if connection.WriteMessage(websocket.BinaryMessage, frame) != nil {
