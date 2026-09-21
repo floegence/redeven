@@ -508,6 +508,28 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         jsonResponse(response, { threads: [] });
         return;
       }
+      if (accessReady && requestURL.pathname === '/_redeven_proxy/api/settings') {
+        // The composer lifecycle fixture represents a configured environment.
+        // An empty settings object correctly opens product setup instead of chat.
+        jsonResponse(response, {
+          ai: {
+            current_model_id: 'fixture/fixture-model',
+            providers: [{
+              id: 'fixture', type: 'openai_compatible',
+              models: [{ model_name: 'fixture-model', context_window: 128000 }],
+            }],
+          },
+          ai_secrets: { provider_api_key_set: { fixture: true } },
+        });
+        return;
+      }
+      if (accessReady && requestURL.pathname === '/_redeven_proxy/api/ai/models') {
+        jsonResponse(response, {
+          current_model: 'fixture/fixture-model',
+          models: [{ id: 'fixture/fixture-model', provider_id: 'fixture', model_name: 'fixture-model' }],
+        });
+        return;
+      }
       if (accessReady && [
         '/_redeven_proxy/api/ai/flower/stream',
         '/_redeven_proxy/api/workbench/layout/events',
@@ -861,6 +883,8 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
         companion: expandedCompanionBox,
         composer: expandedComposerBox,
         textarea: expandedTextareaBox,
+        pageErrors,
+        content: await product.innerText(),
       })}`);
     }
     const expandedBottom = expandedCompanionBox.y + expandedCompanionBox.height;
