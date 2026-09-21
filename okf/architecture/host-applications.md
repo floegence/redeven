@@ -14,8 +14,9 @@ Xpra owns X11 rendering and interactive transport. Applications execute
 as the Runtime's host OS user, without a container or virtual machine. Each live
 application session has one owner and one authorized window route. Closing its
 viewer preserves the application. Linux session termination closes its owned
-process group; macOS requests graceful application exit and preserves applications
-on Runtime shutdown to protect unsaved work. Sessions are not durable across Runtime restarts. Missing dependencies,
+process group; macOS requests graceful exit for newly launched applications and
+only stops sharing previously running ones. Runtime shutdown preserves native
+macOS applications to protect unsaved work. Sessions are not durable across Runtime restarts. Missing dependencies,
 launch failures, and insufficient permissions fail explicitly.
 
 # Host and application boundary

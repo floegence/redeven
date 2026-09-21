@@ -3,6 +3,38 @@ import AppKit
 @testable import RedevenComputerHost
 
 final class HostApplicationTests: XCTestCase {
+    func testWindowBindingPrefersUniqueVisibleWindowOverRetiredSurfaces() {
+        let bounds = CGRect(x: 63, y: 703, width: 971, height: 712)
+        func candidate(_ id: Int, visible: Bool) -> [String: Any] {
+            [kCGWindowNumber as String: NSNumber(value: id), kCGWindowBounds as String: bounds.dictionaryRepresentation,
+             kCGWindowIsOnscreen as String: visible]
+        }
+        let retired = candidate(1, visible: false), live = candidate(2, visible: true)
+        XCTAssertEqual(HostApplicationWindows.matchingWindowID(bounds, candidates: [retired, live]), 2)
+        XCTAssertEqual(HostApplicationWindows.matchingWindowID(bounds, candidates: [retired]), 1)
+        XCTAssertNil(HostApplicationWindows.matchingWindowID(bounds, candidates: [live, candidate(3, visible: true)]))
+        XCTAssertNil(HostApplicationWindows.matchingWindowID(bounds, candidates: [retired, candidate(3, visible: false)]))
+    }
+
+    func testUnreadableInventoryCannotConfirmClosure() {
+        var presence = HostApplicationWindowPresence()
+        let now = Date()
+        XCTAssertFalse(presence.observe(windowCount: 1, at: now))
+        XCTAssertFalse(presence.observe(windowCount: 0, at: now))
+        XCTAssertFalse(presence.observe(windowCount: nil, at: now.addingTimeInterval(2)))
+        XCTAssertFalse(presence.observe(windowCount: 0, at: now.addingTimeInterval(3)))
+        XCTAssertTrue(presence.observe(windowCount: 0, at: now.addingTimeInterval(4)))
+    }
+    func testWindowReplacementDoesNotEndSession() {
+        var presence = HostApplicationWindowPresence()
+        let now = Date()
+        XCTAssertFalse(presence.observe(windowCount: 0, at: now))
+        XCTAssertFalse(presence.observe(windowCount: 1, at: now))
+        XCTAssertFalse(presence.observe(windowCount: 0, at: now))
+        XCTAssertFalse(presence.observe(windowCount: 1, at: now.addingTimeInterval(0.5)))
+        XCTAssertFalse(presence.observe(windowCount: 0, at: now.addingTimeInterval(2)))
+    }
+
     func testCatalogUsesBundleMetadataAndCanonicalIdentity() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

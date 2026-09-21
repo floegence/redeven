@@ -6298,6 +6298,11 @@
     "macCloseWindow": "Fermer la fenêtre de l’application",
     "macInput": "Saisie clavier de l’application",
     "macRetained": "Fermer la fenêtre de visualisation laisse l’application ouverte sur le Mac. Arrêter l’environnement d’exécution coupe la connexion sans supprimer le travail non enregistré.",
+    "macStopSharing": "Arrêter le partage",
+    "macStopSharingDescription": "Déconnecter cette application de Redeven. Ses fenêtres et le travail non enregistré resteront ouverts sur le Mac.",
+    "macOperationFailed": "L’application n’a pas pu effectuer cette action. Réessayez lorsque sa fenêtre sera prête.",
+    "macWaiting": "En attente de la fenêtre de l’application…",
+    "macCaptureUnavailable": "La capture de la fenêtre est indisponible. Reconnectez-vous pour réessayer.",
     "macStopDescription": "Demander à cette application de quitter. En cas de travail non enregistré, répondez à la boîte de dialogue d’enregistrement dans sa fenêtre.",
     "macAddDescription": "Indiquez le chemin absolu d’un paquet .app installé. Son nom et son icône sont lus depuis macOS.",
     "macBundlePath": "Chemin du paquet d’application"

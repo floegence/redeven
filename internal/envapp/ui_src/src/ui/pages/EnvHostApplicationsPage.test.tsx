@@ -280,3 +280,18 @@ it('refreshes the real application library after preparation without a pending a
  expect(host.textContent).not.toContain('Prepare host applications');
  expect(state.launch).not.toHaveBeenCalled();
 });
+
+it.each([true, false])('uses the correct stop action for existing macOS application: %s', async existing => {
+ const session = { id: 'shared', application: app, state: 'running', backend: 'macos', existing_application: existing, forward };
+ state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: true }, applications: [app], sessions: [session] });
+ state.sessions.mockResolvedValue([session]);
+ dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ const label = existing ? 'Stop sharing' : 'End session';
+ button(`${label} · Text Editor`).click(); await settle();
+ const dialog = document.querySelector('[role="dialog"]')!;
+ expect(dialog.textContent).toContain(existing ? 'Stop sharing' : 'End this application session?');
+ if (existing) expect(dialog.textContent).toContain('Its windows and unsaved work will remain open on the Mac.');
+ const confirm = [...dialog.querySelectorAll('button')].find(el => el.textContent === label)!;
+ confirm.click(); await settle();
+ expect(state.stop).toHaveBeenCalledWith('shared');
+});

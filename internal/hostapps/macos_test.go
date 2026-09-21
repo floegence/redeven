@@ -18,9 +18,7 @@ import (
 
 func macFixture(t *testing.T) *Manager {
 	t.Helper()
-	root := t.TempDir()
-	helper := filepath.Join(root, "helper")
-	script := `#!/bin/sh
+	return macFixtureScript(t, `#!/bin/sh
 while IFS= read -r request; do
  case "$request" in
  *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"backend":"macos","supported":true,"ready":true,"native_ready":true},"applications":[{"id":"macos-fixture","name":"Host Name","categories":[],"icon":""}]}' ;;
@@ -29,7 +27,12 @@ while IFS= read -r request; do
  *'"action":"stop"'*) printf '%s\n' '{"type":"ended"}'; exit 0 ;;
  esac
 done
-`
+`)
+}
+func macFixtureScript(t *testing.T, script string) *Manager {
+	t.Helper()
+	root := t.TempDir()
+	helper := filepath.Join(root, "helper")
 	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -150,4 +153,68 @@ func TestMacClosedManagerCannotStartAnApplication(t *testing.T) {
 	if _, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture"}); err != ErrUnavailable {
 		t.Fatal("closed manager accepted launch")
 	}
+}
+
+func TestMacRecoverableOperationsAndWindowReplacementPreserveSession(t *testing.T) {
+	m := macFixtureScript(t, `#!/bin/sh
+while IFS= read -r request; do
+ case "$request" in
+ *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"backend":"macos","supported":true,"ready":true},"applications":[{"id":"macos-fixture","name":"Host App"}]}' ;;
+ *'"action":"launch"'*) printf '%s\n' '{"type":"launched","existing_application":true}' '{"type":"operation_error","code":"WINDOW_NOT_FOCUSED"}' '{"type":"window","window":"one","generation":1}' '{"type":"frame","generation":1,"data":"ZnJhbWU="}' ;;
+ *'"action":"resume"'*) printf '%s\n' '{"type":"window","window":"one","generation":1}' '{"type":"frame","generation":1,"data":"ZnJhbWU="}' ;;
+ *'"action":"input"'*) printf '%s\n' '{"type":"operation_error","action":"input","code":"WINDOW_NOT_FOCUSED"}' ;;
+ *'"action":"menu"'*) printf '%s\n' '{"type":"menu","items":[]}' ;;
+ *'"action":"select"'*) printf '%s\n' '{"type":"waiting","generation":2}' '{"type":"frame","generation":1,"data":"c3RhbGU="}' ;;
+ *'"action":"resize"'*) printf '%s\n' '{"type":"window","window":"replacement","generation":3}' '{"type":"frame","generation":3,"data":"bmV3"}' ;;
+ esac
+done
+`)
+	view, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, view.ID, "running")
+	if sessions := m.Sessions("alice"); len(sessions) != 1 || !sessions[0].ExistingApplication {
+		t.Fatalf("existing application ownership was lost: %+v", sessions)
+	}
+	m.mu.Lock()
+	s := m.sessions[view.ID]
+	m.mu.Unlock()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { m.serveMacSession(w, r, s) }))
+	defer server.Close()
+	dialer := websocket.Dialer{Subprotocols: []string{"redeven-host-application-v1", m.Password(view.ID)}}
+	c, _, err := dialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/_redeven_host_app/stream", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	read := func(kind int, expected string) {
+		t.Helper()
+		_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+		actual, data, err := c.ReadMessage()
+		if err != nil || actual != kind || !strings.Contains(string(data), expected) {
+			t.Fatalf("expected %q, got %s (%v)", expected, data, err)
+		}
+	}
+	send := func(action string) {
+		t.Helper()
+		if err := c.WriteJSON(map[string]any{"action": action}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read(websocket.TextMessage, `"window":"one"`)
+	read(websocket.BinaryMessage, "frame")
+	// Identical failures from separate user actions must each reach the viewer.
+	for range 2 {
+		send("input")
+		read(websocket.TextMessage, "operation_error")
+	}
+	send("menu")
+	read(websocket.TextMessage, `"type":"menu"`)
+	send("select")
+	read(websocket.TextMessage, `"type":"waiting"`)
+	send("resize")
+	read(websocket.TextMessage, `"window":"replacement"`)
+	read(websocket.BinaryMessage, "new")
+	waitMac(t, m, view.ID, "running")
 }

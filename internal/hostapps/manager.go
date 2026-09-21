@@ -165,7 +165,7 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 		}
 	}
 	if runtime.GOOS == "darwin" {
-		for _, value := range []string{req.Presentation.Menu, req.Presentation.Input, req.Presentation.Windows, req.Presentation.CloseWindow, req.Presentation.SharedControl} {
+		for _, value := range []string{req.Presentation.Menu, req.Presentation.Input, req.Presentation.Windows, req.Presentation.CloseWindow, req.Presentation.SharedControl, req.Presentation.OperationFailed, req.Presentation.Waiting, req.Presentation.CaptureUnavailable} {
 			if strings.TrimSpace(value) == "" || len(value) > 1024 {
 				return Session{}, ErrInvalid
 			}

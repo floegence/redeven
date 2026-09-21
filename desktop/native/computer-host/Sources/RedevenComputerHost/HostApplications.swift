@@ -6,8 +6,8 @@ import ScreenCaptureKit
 import UniformTypeIdentifiers
 
 // Human-operated host application sessions are separate from Flower's versioned
-// automation protocol. A session binds one newly launched process; it cannot
-// select arbitrary process IDs, capture the desktop, or terminate existing apps.
+// automation protocol. A session binds the catalog application returned by
+// AppKit; it cannot select arbitrary process IDs or terminate an existing app.
 enum HostApplicationCatalog {
     static func identifier(_ url: URL) -> String {
         "macos-" + SHA256.hash(data: Data(url.resolvingSymlinksInPath().path.utf8)).map { String(format: "%02x", $0) }.joined()
@@ -65,11 +65,13 @@ final class HostApplicationStream: NSObject, SCStreamOutput, SCStreamDelegate {
     private let lock = NSLock()
     private var stopped = false
     let generation: Int
-    let failed: () -> Void
-    init(generation: Int, failed: @escaping () -> Void) { self.generation = generation; self.failed = failed }
-    private func failure() {
+    let failed: (Error) -> Void
+    init(generation: Int, failed: @escaping (Error) -> Void) { self.generation = generation; self.failed = failed }
+    private func failure(_ error: Error) {
         lock.lock(); let inactive = stopped; lock.unlock()
-        if !inactive { DispatchQueue.main.async { self.failed() } }
+        if !inactive {
+            DispatchQueue.main.async { self.failed(error) }
+        }
     }
     func start(_ window: SCWindow) {
         let configuration = SCStreamConfiguration()
@@ -87,13 +89,13 @@ final class HostApplicationStream: NSObject, SCStreamOutput, SCStreamDelegate {
         do {
             try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
             stream.startCapture { error in
-                if error != nil { self.failure() }
+                if let error { self.failure(error) }
             }
-        } catch { failure() }
+        } catch { failure(error) }
     }
     func stop() { lock.lock(); stopped = true; lock.unlock(); stream?.stopCapture(); stream = nil }
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        failure()
+        failure(error)
     }
     func stream(_ stream: SCStream, didOutputSampleBuffer sample: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen, sample.isValid,
@@ -151,7 +153,10 @@ private final class HostApplicationDelivery {
 
 final class HostApplicationSession {
     private var app: NSRunningApplication?
-    private let accessibility = NativeAccessibility()
+    private let inventory = HostApplicationWindows()
+    private var presence = HostApplicationWindowPresence()
+    private var ownsApplication = false
+    private var waiting = false
     private var selected: NativeWindow?
     private var capture: HostApplicationStream?
     private var delivery: HostApplicationDelivery?
@@ -160,7 +165,6 @@ final class HostApplicationSession {
     private var refreshing = false
     private var starting = false
     private var captureFailed = false
-    private var hadWindows = false
     private var lastInventory = ""
     private var extra: [URL] = []
     private var heldButtons = Set<Int>()
@@ -187,9 +191,9 @@ final class HostApplicationSession {
             case "launch", "native": try launch(request, native: action == "native")
             case "resume":
                 captureFailed = false
-                if let selected { try select(selected) }
+                if let selected { try select(selected) } else { refresh() }
             case "select":
-                guard let id = request["window"] as? String, let window = ownedWindows().first(where: { $0.id == id }) else { throw NativeInput.invalid("Unknown application window.") }
+                guard let id = request["window"] as? String, let window = try currentWindows().windows.first(where: { $0.id == id }) else { throw NativeInput.invalid("Unknown application window.") }
                 try select(window)
             case "resize":
                 let window = try target(request)
@@ -203,7 +207,7 @@ final class HostApplicationSession {
                 // Save dialogs remain part of the live session; never force quit.
             case "stop":
                 guard let app, !app.isTerminated else { end(); return }
-                _ = app.terminate()
+                if ownsApplication { _ = app.terminate() } else { end() }
             case "menu":
                 let window = try target(request)
                 menuItems.removeAll()
@@ -236,9 +240,15 @@ final class HostApplicationSession {
             case "release": releaseButtons()
             default: throw NativeInput.invalid("Unknown host application action.")
             }
+            if ["input", "close", "menu_action", "resize"].contains(action) && request["kind"] as? String != "move" {
+                emit(["type": "operation_complete", "action": action])
+            }
         } catch {
             let failure = error as? HostFailure
-            emit(["type": "error", "code": failure?.code ?? "APPLICATION_FAILED"])
+            let action = request["action"] as? String ?? ""
+            let operation = ["input", "close", "menu", "menu_action", "resize", "select", "release", "resume"].contains(action)
+            if operation { releaseButtons() }
+            emit(["type": operation ? "operation_error" : "error", "action": action, "code": failure?.code ?? "APPLICATION_FAILED"])
         }
     }
 
@@ -250,52 +260,70 @@ final class HostApplicationSession {
         if !native && (!CGPreflightScreenCaptureAccess() || !AXIsProcessTrusted()) { throw HostFailure(code: "PERMISSION_REQUIRED", message: "Authorize screen recording and accessibility on the host.") }
         let existing = Set(NSWorkspace.shared.runningApplications.map(\.processIdentifier))
         let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = native
-        configuration.createsNewApplicationInstance = !native
+        configuration.activates = true
+        configuration.createsNewApplicationInstance = false
         starting = true
         NSWorkspace.shared.openApplication(at: url, configuration: configuration) { application, error in
             DispatchQueue.main.async {
                 self.starting = false
                 guard error == nil, let application else { emit(["type": "error", "code": "LAUNCH_FAILED"]); return }
                 if native { emit(["type": "opened"]); return }
-                guard !existing.contains(application.processIdentifier) else { emit(["type": "error", "code": "APPLICATION_IN_USE"]); return }
+                guard application.bundleURL?.resolvingSymlinksInPath() == url else { emit(["type": "error", "code": "APPLICATION_MISMATCH"]); return }
+                self.ownsApplication = !existing.contains(application.processIdentifier)
                 self.app = application
                 self.delivery = HostApplicationDelivery(pid: application.processIdentifier)
-                emit(["type": "launched", "pid": application.processIdentifier])
+                emit(["type": "launched", "pid": application.processIdentifier, "existing_application": !self.ownsApplication])
                 let deadline = Date().addingTimeInterval(25)
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
                     guard let self else { return }
-                    if application.isTerminated { self.end(); return }
+                    if application.isTerminated {
+                        if !self.presence.hadWindows { emit(["type": "error", "code": "APPLICATION_EXITED"]) }
+                        self.end(); return
+                    }
                     if !HostApplicationCatalog.consoleAvailable || !CGPreflightScreenCaptureAccess() || !AXIsProcessTrusted() {
                         self.capture?.stop(); self.capture = nil
                         emit(["type": "blocked", "code": "PERMISSION_REQUIRED"])
                         return
                     }
-                    if Date() > deadline && !self.hadWindows { emit(["type": "error", "code": "WINDOW_UNAVAILABLE"]); self.end(); return }
+                    if Date() > deadline && !self.presence.hadWindows { emit(["type": "error", "code": "WINDOW_UNAVAILABLE"]); self.end(); return }
                     self.refresh()
                 }
                 self.refresh()
             }
         }
     }
-    private func ownedWindows() -> [NativeWindow] {
-        guard let app, !app.isTerminated else { return [] }
-        _ = try? accessibility.inventory(onlyOwner: app.processIdentifier)
-        return accessibility.windows.values.filter { $0.app.processIdentifier == app.processIdentifier && (try? $0.validate()) != nil }.sorted { $0.windowID < $1.windowID }
+    private func currentWindows() throws -> HostApplicationWindows.Snapshot {
+        guard let app, !app.isTerminated else { throw NativeInput.unavailable() }
+        return try inventory.snapshot(app)
+    }
+    private func suspendWindow() {
+        guard !waiting else { return }
+        waiting = true
+        generation += 1
+        releaseButtons()
+        capture?.stop(); capture = nil
+        selected = nil
+        emit(["type": "waiting", "generation": generation])
     }
     private func refresh() {
-        let windows = ownedWindows()
-        if windows.isEmpty {
-            if hadWindows { end() }
+        let snapshot: HostApplicationWindows.Snapshot
+        do { snapshot = try currentWindows() }
+        catch {
+            _ = presence.observe(windowCount: nil, at: Date())
+            // A failed AX read is not proof of closure. Keep the capture and
+            // binding until an authoritative inventory or process exit arrives.
             return
         }
-        hadWindows = true
-        let inventory = windows.map { ["id": $0.id, "title": axString($0.element, kAXTitleAttribute)] }
-        let signature = String(data: (try? JSONSerialization.data(withJSONObject: inventory, options: .sortedKeys)) ?? Data(), encoding: .utf8) ?? ""
-        if signature != lastInventory { lastInventory = signature; emit(["type": "windows", "windows": inventory]) }
-        if !captureFailed && (selected == nil || (try? selected?.validate()) == nil || capture == nil) {
-            if let first = windows.first { try? select(first) }
-        }
+        if presence.observe(windowCount: snapshot.count, at: Date()) { end(); return }
+        let windows = snapshot.windows
+        guard !windows.isEmpty else { suspendWindow(); return }
+        let list = windows.map { ["id": $0.id, "title": axString($0.element, kAXTitleAttribute)] }
+        let signature = String(data: (try? JSONSerialization.data(withJSONObject: list, options: .sortedKeys)) ?? Data(), encoding: .utf8) ?? ""
+        if signature != lastInventory { lastInventory = signature; emit(["type": "windows", "windows": list]) }
+        if selected == nil || !windows.contains(where: { $0.id == selected?.id }) {
+            captureFailed = false
+            try? select(windows[0])
+        } else if let selected, !captureFailed && capture == nil { try? select(selected) }
     }
     private func select(_ window: NativeWindow) throws {
         guard !refreshing else { return }
@@ -304,24 +332,37 @@ final class HostApplicationSession {
         }
         try window.validate()
         refreshing = true
+        selected = window
+        capture?.stop(); capture = nil
+        generation += 1
+        let selectionGeneration = generation
         releaseButtons()
         SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
             DispatchQueue.main.async {
                 self.refreshing = false
-                guard self.app != nil, let candidate = content?.windows.first(where: { $0.windowID == window.windowID && $0.owningApplication?.processID == self.app?.processIdentifier }), error == nil else {
-                    emit(["type": "capture_error"]); return
+                guard self.app != nil, self.generation == selectionGeneration else { return }
+                guard let candidate = content?.windows.first(where: { $0.windowID == window.windowID && $0.owningApplication?.processID == self.app?.processIdentifier }), error == nil else {
+                    self.captureFailed = true
+                    emit(["type": "capture_error", "code": "CAPTURE_SOURCE_UNAVAILABLE"]); return
                 }
                 self.capture?.stop()
                 AXUIElementSetAttributeValue(window.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
                 self.selected = window
-                self.generation += 1
+                self.waiting = false
                 let currentGeneration = self.generation
-                let stream = HostApplicationStream(generation: currentGeneration) { [weak self] in
+                let stream = HostApplicationStream(generation: currentGeneration) { [weak self] error in
                     guard let self, self.app != nil, self.generation == currentGeneration else { return }
-                    if (try? window.validate()) == nil { self.refresh(); return }
+                    let failure = error as NSError
+                    if failure.domain == SCStreamErrorDomain && failure.code == SCStreamError.Code.noCaptureSource.rawValue {
+                        // Closing or replacing a window ends its capture source.
+                        // Only the native inventory/process can end the session.
+                        self.suspendWindow()
+                        self.refresh()
+                        return
+                    }
                     self.captureFailed = true
                     self.capture?.stop(); self.capture = nil
-                    emit(["type": "capture_error", "generation": currentGeneration])
+                    emit(["type": "capture_error", "code": "SC_\(failure.code)", "generation": currentGeneration])
                 }
                 self.capture = stream
                 emit(["type": "window", "window": window.id, "width": candidate.frame.width, "height": candidate.frame.height, "generation": self.generation])
@@ -343,7 +384,7 @@ final class HostApplicationSession {
     private func input(_ request: [String: Any]) throws {
         let window = try target(request)
         guard let kind = request["kind"] as? String else { throw NativeInput.invalid("Missing input kind.") }
-        // Explicit human input may activate this owned application. Events are
+        // Explicit human input may activate this bound application. Events are
         // posted only after verifying the exact application and focused window.
         if kind != "move" {
             _ = window.app.activate(options: [])
@@ -419,16 +460,16 @@ final class HostApplicationSession {
         }
     }
     func releaseButtons() {
-        if app != nil {
+        if let app {
             for button in heldButtons {
                 let type: CGEventType = button == 2 ? .rightMouseUp : button == 1 ? .otherMouseUp : .leftMouseUp
                 let mouse: CGMouseButton = button == 2 ? .right : button == 1 ? .center : .left
-                CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: CGEvent(source: nil)?.location ?? .zero, mouseButton: mouse)?.post(tap: .cghidEventTap)
+                CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: CGEvent(source: nil)?.location ?? .zero, mouseButton: mouse)?.postToPid(app.processIdentifier)
             }
         }
         heldButtons.removeAll()
     }
-    func end() { releaseButtons(); app = nil; delivery = nil; capture?.stop(); capture = nil; timer?.invalidate(); timer = nil; emit(["type": "ended"]) }
+    func end() { generation += 1; releaseButtons(); app = nil; selected = nil; delivery = nil; capture?.stop(); capture = nil; timer?.invalidate(); timer = nil; emit(["type": "ended"]) }
 }
 
 enum HostApplications {
