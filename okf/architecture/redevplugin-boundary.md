@@ -41,14 +41,13 @@ issuer, asset session, broker, Execution/Event protocol, runtime supervisor,
 IPC implementation, WASM executor, package fetcher, signature state machine, or
 external-package inspection or receipt store.
 
-Cloud Env App accesses the canonical `/_redevplugin/api/plugins/` HTTP routes
-through the authorized Flowersec proxy. Its acquisition explicitly declares
-that additional HTTP path and `X-ReDevPlugin-CSRF`; Floe applies only the
-validated acquisition policy, and Redeven allows that header only on the Env App
-Go proxy. WebSocket access and other application proxies receive no additional
-plugin authority. Cloud identity remains bound to the authenticated channel;
-Local UI retains its session credential admission. The mounted platform still
-checks the trusted origin, CSRF proof, current session, and action permission.
+Env App's canonical `/_redevplugin/api/plugins` host request adapter uses the
+[session event transport](env-event-transport.md), including SDK-managed event
+observations. The signed Env App scope admits the CSRF proof, expected management
+revision, and published package upload limit. Other application proxies gain no
+plugin authority. The mounted platform checks the trusted origin, CSRF proof,
+current session, and action permission. Local bootstrap readiness retains its
+short credential admission request before the session is ready.
 
 ## Published dependency set
 

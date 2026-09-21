@@ -1,3 +1,4 @@
+import { readSessionEvents } from '../services/sessionHTTP';
 import {
   type PluginExecution,
   type PluginPlatformClient,
@@ -5,7 +6,7 @@ import {
 } from '@floegence/redevplugin-ui';
 
 import { officialPluginCatalog } from './officialPluginCatalog';
-import { fetchLocalApi, fetchLocalApiJSON, fetchLocalApiJSONResponse, prepareLocalApiRequestInit } from '../services/localApi';
+import { fetchLocalApiJSON, fetchLocalApiJSONResponse, prepareLocalApiRequestInit } from '../services/localApi';
 import { projectPluginInventory } from './pluginInventoryProjection';
 import type {
   OfficialPluginCatalogItem,
@@ -409,49 +410,11 @@ export async function connectPluginMarketEventStream(args: {
   signal: AbortSignal;
   onEvent: (event: PluginMarketRefreshEvent) => void;
 }): Promise<void> {
-  const { createServerSentEventRequestInit } = await import('@floegence/floe-webapp-boot');
-  const response = await fetchLocalApi(
-    `/_redeven_proxy/api/plugins/market/catalog/events?after_seq=${encodeURIComponent(String(args.afterSeq))}`,
-    createServerSentEventRequestInit({ method: 'GET', headers: { Accept: 'text/event-stream' }, signal: args.signal }),
-  );
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `HTTP ${response.status}`);
-  }
-  if (!response.body) throw new Error('Plugin market event stream unavailable');
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  const flushBlock = (block: string) => {
-    const payload = block
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).trimStart())
-      .join('\n');
-    if (!payload) return;
-    const event = normalizePluginMarketRefreshEvent(JSON.parse(payload));
+  for await (const frame of readSessionEvents(`/_redeven_proxy/api/plugins/market/catalog/events?after_seq=${encodeURIComponent(String(args.afterSeq))}`, { method: 'GET', signal: args.signal })) {
+    if (!frame.data) continue;
+    const event = normalizePluginMarketRefreshEvent(JSON.parse(frame.data));
     if (!event) throw new Error('Plugin market event stream returned an invalid event');
     args.onEvent(event);
-  };
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      buffer = buffer.replace(/\r\n/g, '\n');
-      let boundary = buffer.indexOf('\n\n');
-      while (boundary >= 0) {
-        flushBlock(buffer.slice(0, boundary));
-        buffer = buffer.slice(boundary + 2);
-        boundary = buffer.indexOf('\n\n');
-      }
-    }
-    buffer += decoder.decode();
-    buffer = buffer.replace(/\r\n/g, '\n');
-    if (buffer.trim()) flushBlock(buffer.trim());
-  } finally {
-    reader.releaseLock();
   }
 }
 

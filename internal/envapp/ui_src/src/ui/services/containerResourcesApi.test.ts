@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
+
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
 const localApiMocks = vi.hoisted(() => ({
   fetchLocalApi: vi.fn(),
@@ -166,7 +168,7 @@ describe('native container resources API', () => {
         controller.enqueue(encoded);
         controller.close();
       },
-    }), { status: 200 }));
+    }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
     localApiMocks.fetchLocalApiJSON.mockResolvedValue(terminal);
     const observed = vi.fn();
 
@@ -202,7 +204,7 @@ describe('native container resources API', () => {
         controller.enqueue(encoded);
         controller.close();
       },
-    }), { status: 200 }));
+    }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
     const observed = vi.fn();
     await subscribeContainerOperationEvents('container_operation_1', observed, new AbortController().signal, 2);
     expect(observed).toHaveBeenCalledWith(event);
@@ -244,7 +246,7 @@ describe('native container resources API', () => {
     localApiMocks.fetchLocalApiJSON
       .mockResolvedValueOnce({ Config: { Image: 'alpine:3.22' } })
       .mockResolvedValueOnce({ path: '/etc', entries: [{ name: 'hosts', path: '/etc/hosts', kind: 'file' }], truncated: false });
-    localApiMocks.fetchLocalApi.mockResolvedValue(new Response('127.0.0.1 localhost', { status: 200 }));
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response('127.0.0.1 localhost', { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
 
     await expect(getRawContainerInspect('container/one', 'docker', 'endpoint/primary')).resolves.toMatchObject({ Config: { Image: 'alpine:3.22' } });
     await expect(listContainerResourceFiles('volumes', 'container/one', '/etc', 'podman', 'endpoint/primary')).resolves.toMatchObject({ path: '/etc' });
@@ -282,7 +284,7 @@ describe('native container resources API', () => {
         controller.enqueue(encoded);
         controller.close();
       },
-    }), { status: 200 }));
+    }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
     const observed = vi.fn();
     await subscribeContainerStatsCollection('podman', 'rootless', observed, new AbortController().signal);
 
@@ -293,3 +295,9 @@ describe('native container resources API', () => {
     );
   });
 });
+
+let releaseTestTransport: (() => void) | undefined;
+beforeEach(async () => {
+  releaseTestTransport = await bindTestSessionHTTP(localApiMocks.fetchLocalApi);
+});
+afterEach(() => releaseTestTransport?.());

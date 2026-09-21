@@ -1,7 +1,8 @@
 import type { ArtifactSource } from '@floegence/flowersec-core';
 import type { HTTPDirectArtifactSourceV1, PrivateLoopbackArtifactSourceV1 } from '@floegence/flowersec-core/browser';
 import type { ConnectConfig } from '@floegence/floe-webapp-protocol';
-import type { ProxyBootstrapOwnerOptions } from '@floegence/floe-webapp-boot';
+import { bindSessionHTTP } from './sessionHTTP';
+import type { FlowersecConnectionConfig, ProxyBootstrapOwnerOptions } from '@floegence/floe-webapp-boot';
 
 export type EnvAppConnectionMode = 'local' | 'remote';
 
@@ -65,15 +66,18 @@ function createCachedSource<Source>(
   };
 }
 
-function createConfigLease(config: ConnectConfig): EnvAppConnectionConfigLease {
+function createConfigLease(config: FlowersecConnectionConfig): EnvAppConnectionConfigLease {
+  const release = bindSessionHTTP(config.lifecycle);
   let disposed = false;
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    release();
+    config.lifecycle.dispose();
+  };
   return Object.freeze({
-    config,
-    dispose() {
-      if (disposed) return;
-      disposed = true;
-      config.lifecycle?.dispose();
-    },
+    config: { ...config, lifecycle: { ...config.lifecycle, dispose } },
+    dispose,
   });
 }
 

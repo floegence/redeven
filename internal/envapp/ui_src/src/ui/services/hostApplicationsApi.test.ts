@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { observeHostApplicationSetup, uploadHostApplicationSetup, quitHostApplication, detachHostApplication, listRunningHostApplications } from './hostApplicationsApi';
 const api = vi.hoisted(() => ({ raw: vi.fn(), json: vi.fn() }));
 vi.mock('./localApi', () => ({ fetchLocalApi: api.raw, fetchLocalApiJSON: api.json }));
@@ -39,3 +40,9 @@ it('separates process-generation quit from owner-scoped sharing detach', async (
  await detachHostApplication('owned/id');
  expect(api.json).toHaveBeenLastCalledWith('/_redeven_proxy/api/host-applications/sessions/owned%2Fid/detach', { method: 'POST' });
 });
+
+let releaseTestTransport: (() => void) | undefined;
+beforeEach(async () => {
+  releaseTestTransport = await bindTestSessionHTTP(api.raw);
+});
+afterEach(() => releaseTestTransport?.());

@@ -159,6 +159,7 @@ type Server struct {
 }
 
 type pendingDirect struct {
+	externalOrigin            string
 	pluginCredentialHash      [sha256.Size]byte
 	accessSessionID           string
 	initExpireAtUnixS         int64
@@ -522,7 +523,7 @@ func (s *Server) configureAcceptor() error {
 			if !ok {
 				return nil, errors.New("local session authorization is unavailable")
 			}
-			handlers, cleanup, err := s.a.NewLocalSessionHandlers(&pending.meta)
+			handlers, cleanup, err := s.a.NewLocalSessionHandlers(&pending.meta, pending.externalOrigin)
 			if err != nil {
 				if cleanupErr := s.authStore.burnLeased(lookupKey); cleanupErr != nil && s.log != nil {
 					s.log.Error("terminate local authorization after handler failure", "error", cleanupErr)

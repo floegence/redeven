@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/floegence/redeven/internal/accessgate"
@@ -34,8 +35,10 @@ type Server struct {
 	upstream *url.URL
 	proxy    *httputil.ReverseProxy
 
-	ln  net.Listener
-	srv *http.Server
+	mu   sync.Mutex
+	ln   net.Listener
+	srv  *http.Server
+	done chan struct{}
 }
 
 type apiResp struct {
@@ -152,6 +155,8 @@ func (s *Server) Start(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.srv != nil {
 		return nil
 	}
@@ -160,13 +165,18 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	s.ln = ln
-	s.srv = &http.Server{Handler: http.HandlerFunc(s.serveHTTP), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: http.HandlerFunc(s.serveHTTP), ReadHeaderTimeout: 10 * time.Second}
+	done := make(chan struct{})
+	s.srv, s.done = srv, done
 	go func() {
-		<-ctx.Done()
-		_ = s.Close()
+		select {
+		case <-ctx.Done():
+			_ = s.closeServer(srv)
+		case <-done:
+		}
 	}()
 	go func() {
-		if err := s.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.log.Warn("access proxy stopped", "channel_id", strings.TrimSpace(s.meta.ChannelID), "error", err)
 		}
 	}()
@@ -174,24 +184,34 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 func (s *Server) Close() error {
+	return s.closeServer(nil)
+}
+
+func (s *Server) closeServer(expected *http.Server) error {
 	if s == nil {
 		return nil
 	}
-	if s.srv != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = s.srv.Shutdown(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.srv != nil && (expected == nil || expected == s.srv) {
+		close(s.done)
+		// Session teardown cancels observers immediately; background operations
+		// remain owned by their product services.
+		_ = s.srv.Close()
+		s.srv = nil
+		s.ln = nil
+		s.done = nil
 	}
-	if s.ln != nil {
-		_ = s.ln.Close()
-	}
-	s.srv = nil
-	s.ln = nil
 	return nil
 }
 
 func (s *Server) URL() string {
-	if s == nil || s.ln == nil {
+	if s == nil {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ln == nil {
 		return ""
 	}
 	return "http://" + s.ln.Addr().String()

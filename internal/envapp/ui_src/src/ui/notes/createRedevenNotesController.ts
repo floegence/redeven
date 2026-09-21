@@ -1,3 +1,4 @@
+import { isSessionEventAuthorizationError } from '../services/sessionHTTP';
 import { createEffect, createSignal, onCleanup, type Accessor } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import {
@@ -115,8 +116,12 @@ export function useRedevenNotesController(open: Accessor<boolean>): NotesControl
         });
         if (signal.aborted) return;
         connectedOnce = true;
-      } catch {
+      } catch (error) {
         if (signal.aborted) return;
+        if (isSessionEventAuthorizationError(error)) {
+          setConnectionStateSignal('idle');
+          return;
+        }
         connectedOnce = true;
         setConnectionStateSignal('reconnecting');
       }

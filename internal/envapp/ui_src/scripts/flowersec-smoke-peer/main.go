@@ -39,14 +39,15 @@ func main() {
 	nativeCode := flag.Bool("native-codespace", false, "serve the native CodeSpace HTTP fixture")
 	visualGit := flag.Bool("visual-git", false, "serve read-only Git appearance fixtures")
 	allowedOrigin := flag.String("allowed-origin", "", "exact browser origin")
+	httpUpstream := flag.String("http-upstream", "", "fixture HTTP upstream for session requests")
 	flag.Parse()
-	if err := run(*certificatePath, *privateKeyPath, *allowedOrigin, *nativeCode, *visualGit); err != nil {
+	if err := run(*certificatePath, *privateKeyPath, *allowedOrigin, *httpUpstream, *nativeCode, *visualGit); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(certificatePath, privateKeyPath, allowedOrigin string, nativeCode, visualGit bool) error {
+func run(certificatePath, privateKeyPath, allowedOrigin, httpUpstream string, nativeCode, visualGit bool) error {
 	if strings.TrimSpace(certificatePath) == "" || strings.TrimSpace(privateKeyPath) == "" || strings.TrimSpace(allowedOrigin) == "" {
 		return errors.New("certificate, private key, and allowed origin are required")
 	}
@@ -68,7 +69,7 @@ func run(certificatePath, privateKeyPath, allowedOrigin string, nativeCode, visu
 		return fmt.Errorf("create endpoint set: %w", err)
 	}
 	expiresAt := time.Now().UTC().Add(4 * time.Minute).Truncate(time.Second)
-	projection := json.RawMessage(`{"appBasePath":"/_redeven_proxy/env/","mode":"service_worker","serviceWorker":{"scope":"/_redeven_proxy/env/","scriptUrl":"/_redeven_proxy/env/_redeven_sw.js"},"version":2}`)
+	projection := json.RawMessage(`{"appBasePath":"/_redeven_proxy/env/","http":{"additionalPathPrefixes":["/_redeven_proxy/api/","/_redevplugin/api/plugins"],"extraRequestHeaders":["X-ReDevPlugin-CSRF","X-ReDevPlugin-Expected-Management-Revision"]},"limits":{"maxBodyBytes":268435456},"mode":"service_worker","serviceWorker":{"scope":"/_redeven_proxy/env/","scriptUrl":"/_redeven_proxy/env/_redeven_sw.js"},"version":2}`)
 	if nativeCode {
 		projection = json.RawMessage(`{"appBasePath":"/","controllerBridge":{"allowedOrigins":["https://app.native.test"]},"mode":"controller_bridge","version":2}`)
 	}
@@ -95,6 +96,20 @@ func run(certificatePath, privateKeyPath, allowedOrigin string, nativeCode, visu
 	handlers, err := newHandlers(nativeCode, visualGit)
 	if err != nil {
 		return err
+	}
+	if httpUpstream != "" {
+		proxy, err := flowersec.NewProxyServer(flowersec.ProxyServerOptions{
+			Upstream: httpUpstream, UpstreamOrigin: allowedOrigin,
+			ExtraRequestHeaders: []string{"X-ReDevPlugin-CSRF", "X-ReDevPlugin-Expected-Management-Revision"},
+			MaxBodyBytes:        256 << 20,
+		})
+		if err != nil {
+			return err
+		}
+		defer proxy.Close()
+		if err := proxy.RegisterStreamHandlers(handlers); err != nil {
+			return err
+		}
 	}
 	var authorized atomic.Bool
 	writer := &outputWriter{}

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
+
 import { render } from 'solid-js/web';
 import { createSignal, Show } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -3032,3 +3034,9 @@ describe('EnvPortForwardsPage', () => {
     expect(close).not.toHaveBeenCalled();
   });
 });
+
+let releaseTestTransport: (() => void) | undefined;
+beforeEach(async () => {
+  releaseTestTransport = await bindTestSessionHTTP(localApiMocks.fetchLocalApi);
+});
+afterEach(() => releaseTestTransport?.());

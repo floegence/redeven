@@ -5,7 +5,7 @@
 // optional --local-video is read only and is never copied into the fixture set.
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -25,17 +25,6 @@ const marker = randomUUID();
 const owned = [];
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), marker, state: temp, carriers: [] };
 let browser;
-// Keep one explicit Notes observer open so every carrier exercises at least three
-// persistent requests, including Desktop sessions without a plugin catalog stream.
-const probe = await requireDesktop('esbuild').build({
-  stdin: { contents: `import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
-    globalThis.__redevenMediaProbe = { events: 0, error: null, start() {
-      (async () => { for await (const frame of fetchServerSentEvents('/_redeven_proxy/api/notes/events?after_seq=0', { headers: { Accept: 'text/event-stream' } })) {
-        if (frame.data) globalThis.__redevenMediaProbe.events += 1;
-      } })().catch((error) => { globalThis.__redevenMediaProbe.error = String(error); });
-    } };`, resolveDir: path.resolve(import.meta.dirname, '..') },
-  bundle: true, platform: 'browser', format: 'iife', write: false,
-});
 
 function start(command, commandArgs, extra = {}) {
   const child = spawn(command, commandArgs, {
@@ -109,6 +98,32 @@ async function checkMedia(page, kind, file, output, surface) {
   await media.evaluate((el, time) => { el.pause(); el.currentTime = time; }, target);
   await page.waitForFunction(({ kind, target }) => [...document.querySelectorAll(kind)].some((el) => !el.seeking && Math.abs(el.currentTime - target) < 0.2 && el.readyState >= 2), { kind, target }, { timeout: 5000 });
   output.media.push({ surface, kind, file: path.basename(file), ...ready, readyWithinMs, seek: target });
+  if (output.name === 'chromium' && surface === 'Activity' && !output.download) {
+    const expectedBytes = await readFile(file);
+    // Select an isolated real browser file handle without a native picker dialog.
+    // The product download manager and session file stream remain unchanged.
+    await page.evaluate(async () => {
+      const directory = await globalThis.navigator.storage.getDirectory();
+      const handle = await directory.getFileHandle('event-transport-download', { create: true });
+      globalThis.showSaveFilePicker = async () => handle;
+    });
+    const download = page.getByRole('button', { name: 'Download file', exact: true }).filter({ visible: true }).last();
+    if (await download.count()) await download.click();
+    else {
+      await page.getByRole('button', { name: 'More actions', exact: true }).filter({ visible: true }).last().click();
+      await page.getByRole('menuitem', { name: 'Download file', exact: true }).click();
+    }
+    const saved = await until(async () => page.evaluate(async (expectedSize) => {
+      const directory = await globalThis.navigator.storage.getDirectory();
+      const file = await (await directory.getFileHandle('event-transport-download')).getFile();
+      if (file.size !== expectedSize) return null;
+      const bytes = await file.arrayBuffer();
+      const hash = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+      return { bytes: file.size, sha256: Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('') };
+    }, expectedBytes.length));
+    assert.equal(saved.sha256, createHash('sha256').update(expectedBytes).digest('hex'));
+    output.download = saved;
+  }
   if (reportPath) await page.screenshot({ path: `${reportPath}.${output.name}.${surface}.${kind}.png` });
   const preview = media.locator('xpath=ancestor::*[@data-floe-geometry-surface="floating-window"][1]');
   if (await preview.count()) {
@@ -129,11 +144,12 @@ async function checkMedia(page, kind, file, output, surface) {
 }
 async function verify(page, url, name) {
   page.setDefaultTimeout(10000);
-  const output = { name, media: [], streams: [] };
+  const output = { name, media: [], streams: [], sessionConnections: 0 };
   report.carriers.push(output);
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Network.enable');
   const streams = new Map();
+  cdp.on('Network.webSocketCreated', () => { output.sessionConnections += 1; });
   cdp.on('Network.requestWillBeSent', ({ requestId, request }) => {
     const url = new URL(request.url);
     if (/\/(events|stream)$/.test(url.pathname) && url.pathname.startsWith('/_redeven_proxy/')) {
@@ -144,15 +160,18 @@ async function verify(page, url, name) {
   cdp.on('Network.dataReceived', ({ requestId }) => { const stream = streams.get(requestId); if (stream) stream.chunks += 1; });
   cdp.on('Network.loadingFinished', ({ requestId }) => { const stream = streams.get(requestId); if (stream) stream.active = false; });
   cdp.on('Network.loadingFailed', ({ requestId }) => { const stream = streams.get(requestId); if (stream) stream.active = false; });
-  await page.addInitScript({ content: probe.outputFiles[0].text });
   await page.goto(url);
   await page.getByRole('tab', { name: 'Activity', exact: true }).waitFor();
   output.effectiveType = await page.evaluate(() => navigator.connection.effectiveType);
   assert.equal(output.effectiveType, '3g');
   await page.getByRole('tab', { name: 'Activity', exact: true }).click();
-  await page.evaluate(() => globalThis.__redevenMediaProbe.start());
-  await until(() => [...streams.values()].filter((s) => s.active).length >= 3);
-  assert.ok([...streams.values()].filter((s) => s.active).every((s) => s.priority === 'Low'));
+  const observer = await page.context().newPage();
+  await observer.goto(url);
+  await observer.getByRole('button', { name: 'Notes overlay', exact: true }).waitFor();
+  await Promise.all([
+    observer.waitForResponse((response) => response.url().includes('/api/notes/snapshot') && response.ok()),
+    observer.getByRole('button', { name: 'Notes overlay', exact: true }).click(),
+  ]);
   await page.getByRole('tab', { name: 'Activity', exact: true }).click();
   await page.getByRole('button', { name: 'File Browser', exact: true }).filter({ visible: true }).last().click();
   const files = [path.join(temp, 'media/preview.mp4'), path.join(temp, 'media/preview.m4a')];
@@ -166,18 +185,18 @@ async function verify(page, url, name) {
     await checkMedia(page, 'audio', files[1], output, surface);
     if (option('--local-video')) await checkMedia(page, 'video', path.resolve(option('--local-video')), output, surface);
   }
-  const notes = [...streams.values()].find((s) => s.path.endsWith('/notes/events') && s.active);
-  assert.ok(notes, 'Notes stream stays open');
-  const before = await page.evaluate(() => globalThis.__redevenMediaProbe.events);
-  const result = await page.evaluate(async () => {
-    const response = await fetch('/_redeven_proxy/api/notes/topics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Media acceptance' }) });
+  const topic = `Media acceptance ${name}`;
+  const result = await page.evaluate(async (topic) => {
+    const response = await fetch('/_redeven_proxy/api/notes/topics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: topic }) });
     return response.status;
-  });
+  }, topic);
   assert.equal(result, 200);
-  await page.waitForFunction((before) => globalThis.__redevenMediaProbe.events > before, before);
-  assert.equal(await page.evaluate(() => globalThis.__redevenMediaProbe.error), null);
-  output.notesEvents = await page.evaluate(() => globalThis.__redevenMediaProbe.events);
+  await observer.getByText(topic, { exact: true }).waitFor();
+  output.notesObservation = 'received';
   output.streams = [...streams.values()];
+  assert.equal(output.streams.length, 0, 'Env App must not open native HTTP event subscriptions');
+  assert.equal(output.sessionConnections, 1, 'media and events share one Flowersec session');
+  await observer.close();
   output.status = 'passed';
   await cdp.detach();
 }

@@ -3754,3 +3754,41 @@ func TestServer_PluginOriginCannotAccessManagementSurfaces(t *testing.T) {
 func (s *stubBackend) BindRunningCodeSpace(context.Context, string) (NativeCodeSpaceBinding, error) {
 	return NativeCodeSpaceBinding{}, errors.New("not implemented")
 }
+
+func TestServer_LocalSessionProxyUsesAuthenticatedEnvPermissions(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		active bool
+		meta   session.Meta
+		want   int
+	}{
+		{"authorized", true, session.Meta{EndpointID: "env_local", CodeSpaceID: "env-ui", FloeApp: "com.floegence.redeven.agent", CanRead: true}, http.StatusOK},
+		{"permission denied", true, session.Meta{EndpointID: "env_local", CodeSpaceID: "env-ui", FloeApp: "com.floegence.redeven.agent"}, http.StatusForbidden},
+		{"revoked", false, session.Meta{}, http.StatusNotFound},
+		{"codespace", true, session.Meta{EndpointID: "env_local", CodeSpaceID: "space-1", FloeApp: "com.floegence.redeven.code", CanRead: true}, http.StatusNotFound},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			backend := &stubBackend{listSpaces: func(context.Context) ([]SpaceStatus, error) { return []SpaceStatus{}, nil }}
+			srv, err := New(Options{Backend: backend, DistFS: fstest.MapFS{}, ConfigPath: writeTestConfig(t),
+				ResolveSessionMeta: func(channel string) (*session.Meta, bool) {
+					if channel != "local-session" || !test.active {
+						return nil, false
+					}
+					meta := test.meta
+					meta.ChannelID = channel
+					return &meta, true
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/api/spaces", nil)
+			req.Header.Set(sessionhop.HeaderChannelID, "local-session")
+			rec := httptest.NewRecorder()
+			srv.serveHTTP(rec, req)
+			if rec.Code != test.want {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, test.want, rec.Body.String())
+			}
+		})
+	}
+}

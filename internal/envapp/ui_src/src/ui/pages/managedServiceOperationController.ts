@@ -1,6 +1,7 @@
+import { readSessionEvents } from '../services/sessionHTTP';
 import { createSignal } from 'solid-js';
 
-import { fetchLocalApi, fetchLocalApiJSON } from '../services/localApi';
+import { fetchLocalApiJSON } from '../services/localApi';
 
 export type ManagedOperation = Readonly<{
 	cancel_requested?: boolean;
@@ -129,37 +130,17 @@ export function createManagedServiceOperationController(options: ManagedOperatio
       controller.abort();
     }, 35 * 60_000);
     const promise = (async () => {
-      let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
       try {
-        const { createServerSentEventRequestInit } = await import('@floegence/floe-webapp-boot');
-        const response = await fetchLocalApi(`/_redeven_proxy/api/managed-web-service-operations/${encodeURIComponent(operation.operation_id)}/events`, createServerSentEventRequestInit({
-          method: 'GET',
-          headers: { Accept: 'text/event-stream' },
-          signal: controller.signal,
-        }));
-        if (!response.ok || !response.body) throw new Error(options.streamFailedMessage());
-        reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        for (;;) {
-          const result = await reader.read();
-          if (result.done) break;
-          buffer += decoder.decode(result.value, { stream: true });
-          const events = buffer.split(/\r?\n\r?\n/);
-          buffer = events.pop() ?? '';
-          for (const event of events) {
-            const data = event.split(/\r?\n/)
-              .filter((line) => line.startsWith('data:'))
-              .map((line) => line.slice(5).trim())
-              .join('\n');
-            if (!data) continue;
-            try {
-              const snapshot = JSON.parse(data) as ManagedOperation;
-              update(snapshot);
-              if (operationTerminal(snapshot)) return snapshot;
-            } catch {
-              // Continue until the stream provides a complete operation snapshot.
-            }
+        for await (const frame of readSessionEvents(`/_redeven_proxy/api/managed-web-service-operations/${encodeURIComponent(operation.operation_id)}/events`, {
+          method: 'GET', signal: controller.signal,
+        })) {
+          if (!frame.data) continue;
+          try {
+            const snapshot = JSON.parse(frame.data) as ManagedOperation;
+            update(snapshot);
+            if (operationTerminal(snapshot)) return snapshot;
+          } catch {
+            // Continue until the stream provides a complete operation snapshot.
           }
         }
         throw new Error(options.streamFailedMessage());
@@ -168,7 +149,6 @@ export function createManagedServiceOperationController(options: ManagedOperatio
         throw error;
       } finally {
         window.clearTimeout(timeout);
-        await reader?.cancel().catch(() => undefined);
       }
     })().finally(() => {
       if (streams.get(operation.operation_id)?.controller === controller) streams.delete(operation.operation_id);

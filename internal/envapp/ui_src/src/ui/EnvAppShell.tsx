@@ -1,3 +1,4 @@
+import { isSessionEventAuthorizationError } from './services/sessionHTTP';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
 import { ActivityPageLoading } from './primitives/ActivityPageLoading';
 import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
@@ -1405,8 +1406,8 @@ export function EnvAppShell() {
               }
             },
           });
-        } catch {
-          if (controller.signal.aborted) return;
+        } catch (error) {
+          if (controller.signal.aborted || isSessionEventAuthorizationError(error)) return;
         }
         await new Promise<void>((resolve) => {
           const timer = window.setTimeout(resolve, 900);

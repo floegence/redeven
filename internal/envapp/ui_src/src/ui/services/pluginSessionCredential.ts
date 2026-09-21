@@ -55,8 +55,3 @@ export function clearPluginSessionCredential(): void {
   activePluginSessionCredential = undefined;
   stagedPluginSessionCredential = undefined;
 }
-
-export function applyPluginSessionCredential(headers: Headers): void {
-  const credential = readPluginSessionCredential();
-  if (credential) headers.set(PLUGIN_SESSION_HEADER, credential);
-}

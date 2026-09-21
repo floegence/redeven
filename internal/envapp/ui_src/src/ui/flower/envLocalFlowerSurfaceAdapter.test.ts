@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
+
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
 import { createEnvLocalFlowerSurfaceAdapter } from './envLocalFlowerSurfaceAdapter';
 import type {
@@ -205,31 +207,6 @@ describe('Env local Flower surface adapter', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
-	it('aborts an inactive SSE stream and releases the reader after 45 seconds', async () => {
-		vi.useFakeTimers();
-		let cancelled = false;
-		fetchMock.mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => new Promise((_resolve, reject) => {
-			init?.signal?.addEventListener('abort', () => {
-				cancelled = true;
-				reject(new DOMException('aborted', 'AbortError'));
-			}, { once: true });
-		}));
-		const adapter = createEnvLocalFlowerSurfaceAdapter({
-			envPublicID: 'env_a', envLabel: 'Demo Env', rpc: { ai: {} } as any,
-		});
-		const controller = new AbortController();
-		const iterator = adapter.connectLiveStream!({
-			signal: controller.signal,
-		})[Symbol.asyncIterator]();
-		let failure: unknown;
-		const pending = iterator.next().catch((error) => { failure = error; });
-		await vi.advanceTimersByTimeAsync(45_000);
-		await pending;
-		expect(failure).toBeTruthy();
-		expect(cancelled).toBe(true);
-		vi.useRealTimers();
-	});
-
 	it('cancels the fetch-SSE reader immediately when the caller aborts', async () => {
 		let cancelled = false;
 		fetchMock.mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => new Promise((_resolve, reject) => {
@@ -270,7 +247,7 @@ describe('Env local Flower surface adapter', () => {
 
 		expect(frames).toEqual([expect.objectContaining({ kind: 'ready', summaries: [] })]);
 		const url = String(fetchMock.mock.calls[0]?.[0]);
-		expect(url).toContain('/_redeven_proxy/api/ai/flower/stream?');
+		expect(url).toBe('/_redeven_proxy/api/ai/flower/stream');
 		expect(url).not.toContain('thread_id=');
 		expect(url).not.toContain('thread_after_seq=');
 		expect(url).not.toContain('summary_after_seq=');
@@ -2079,3 +2056,9 @@ it('offers automatic installation only when the Desktop acquisition bridge exist
   Reflect.deleteProperty(window, 'redevenBrowserPackage');
   expect(fetchMock).not.toHaveBeenCalled(); expect(bridge.request).not.toHaveBeenCalled();
 });
+
+let releaseTestTransport: (() => void) | undefined;
+beforeEach(async () => {
+  releaseTestTransport = await bindTestSessionHTTP(fetchMock);
+});
+afterEach(() => releaseTestTransport?.());

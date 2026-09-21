@@ -1,3 +1,4 @@
+import { readSessionEvents } from './sessionHTTP';
 import { fetchLocalApi, fetchLocalApiJSON } from './localApi';
 
 export type HostApplicationSetup = Readonly<{
@@ -164,9 +165,8 @@ export function cancelHostApplicationSetup(operationID: string) {
 }
 
 export async function observeHostApplicationSetup(onUpdate: (setup: HostApplicationSetup) => void, signal: AbortSignal) {
-  const { fetchServerSentEvents } = await import('@floegence/floe-webapp-boot');
-  for await (const event of fetchServerSentEvents(`${base}/setup/events`, {
-    signal, fetch: (url, init) => fetchLocalApi(String(url), init),
+  for await (const event of readSessionEvents(`${base}/setup/events`, {
+    signal,
     maxFrameBytes: 16 * 1024, maxBufferBytes: 32 * 1024,
   })) {
     if (event.event === 'setup') onUpdate(JSON.parse(event.data) as HostApplicationSetup);

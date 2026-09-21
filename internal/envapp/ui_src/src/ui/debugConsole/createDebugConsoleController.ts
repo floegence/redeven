@@ -1,3 +1,4 @@
+import { isSessionEventAuthorizationError } from '../services/sessionHTTP';
 import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
 
 import {
@@ -505,6 +506,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
           }
           setStreamConnected(false);
           setStreamError(error instanceof Error ? error.message : String(error));
+          if (isSessionEventAuthorizationError(error)) return;
         }
         try {
           await waitBeforeRetry(controller.signal);

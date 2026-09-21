@@ -135,6 +135,10 @@ func TestLocalAuthorizationStoreHandlerFailureBurnsLeasedRow(t *testing.T) {
 	if err := store.markLeased(reserved.LookupKey, reserved.LeaseID); err != nil {
 		t.Fatal(err)
 	}
+	binding, _, ok := store.bindingByLookup(reserved.LookupKey)
+	if !ok || binding.externalOrigin != "https://local.example" {
+		t.Fatalf("handler origin = %q, available = %v", binding.externalOrigin, ok)
+	}
 	if err := store.burnLeased(reserved.LookupKey); err != nil {
 		t.Fatal(err)
 	}

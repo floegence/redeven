@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   activatePluginSessionCredential,
   applyPendingPluginSessionCredential,
-  applyPluginSessionCredential,
   clearPluginSessionCredential,
   readPluginSessionCredential,
   replacePendingPluginSessionCredential,
@@ -21,9 +20,6 @@ describe('plugin session credential binding', () => {
     expect(second && activatePluginSessionCredential(second)).toBe(true);
     expect(readPluginSessionCredential()).toBe('credential-b');
 
-    const headers = new Headers();
-    applyPluginSessionCredential(headers);
-    expect(headers.get('X-Redeven-Plugin-Session')).toBe('credential-b');
   });
 
   it('does not publish incomplete or unknown channel credentials', () => {

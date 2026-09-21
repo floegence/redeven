@@ -55,7 +55,7 @@ export function createLiveTransport<T>(): LiveTransport<T> {
             input.onBoundary?.();
             const status = Number((error as { status?: unknown })?.status ?? 0);
             const code = String((error as { code?: unknown })?.code ?? '').trim();
-            if (status === 401 || status === 403) {
+            if (status === 401 || status === 403 || status === 423) {
               input.onTerminalError(error);
               return;
             }

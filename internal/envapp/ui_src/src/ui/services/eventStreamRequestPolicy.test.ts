@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./controlplaneApi', () => ({ getLocalRuntime: async () => ({ mode: 'local' }) }));
 
@@ -10,7 +10,7 @@ import { connectDiagnosticsStream } from './diagnosticsApi';
 import { subscribeContainerOperation, subscribeContainerOperationEvents } from './containerResourcesApi';
 import { connectPluginMarketEventStream } from '../plugins/pluginApi';
 import { createManagedServiceOperationController, type ManagedOperation } from '../pages/managedServiceOperationController';
-import { clearLocalAccessResumeToken, writeLocalAccessResumeToken } from './localAccessAuth';
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 
 const operation: ManagedOperation = {
   operation_id: 'operation-1', service_id: 'service-1', action: 'start',
@@ -33,32 +33,33 @@ const adapters = [
     connect: (signal: AbortSignal, onEvent: Listener) => subscribeContainerOperation('operation-1', onEvent, signal) },
 ];
 
-describe('background event stream request policy', () => {
-  beforeEach(() => writeLocalAccessResumeToken('test-resume-token'));
+describe('session event transport', () => {
+  let release: (() => void) | undefined;
   afterEach(() => {
-    clearLocalAccessResumeToken();
+    release?.();
     vi.unstubAllGlobals();
   });
 
   for (const adapter of adapters) {
-    it(`${adapter.name} keeps authentication, messages, and resumed cursors at low priority`, async () => {
+    it(`${adapter.name} preserves messages and cursors without native HTTP subscriptions`, async () => {
       const onEvent = vi.fn();
       const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
         if (!url.includes('/events') && !url.includes('/stream')) {
           return new Response(JSON.stringify({ data: terminal }));
         }
         expect(url).toBe(`/_redeven_proxy/api${adapter.path}`);
-        expect(init).toMatchObject({ priority: 'low', method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+        expect(init).toMatchObject({ method: 'GET' });
         expect(new Headers(init?.headers).get('Accept')).toBe('text/event-stream');
-        expect(new Headers(init?.headers).get('X-Redeven-Access-Resume')).toBe('test-resume-token');
         const bytes = new TextEncoder().encode(`: keepalive\n\nevent: ${adapter.event}\ndata: ${JSON.stringify(adapter.payload)}\n\n`);
         return new Response(new ReadableStream({ start(controller) {
           controller.enqueue(bytes.slice(0, 19));
           controller.enqueue(bytes.slice(19));
           controller.close();
-        } }));
+        } }), { headers: { 'Content-Type': 'text/event-stream' } });
       });
-      vi.stubGlobal('fetch', fetchMock);
+      const nativeFetch = vi.fn(async () => new Response(JSON.stringify({ data: terminal })));
+      vi.stubGlobal('fetch', nativeFetch);
+      release = await bindTestSessionHTTP(fetchMock as typeof fetch);
       // Each reconnect receives a fresh abort signal while preserving the caller's cursor.
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const controller = new AbortController();
@@ -68,6 +69,7 @@ describe('background event stream request policy', () => {
         controller.abort();
         expect(streamCall?.[1]?.signal?.aborted).toBe(true);
       }
+      expect(nativeFetch).toHaveBeenCalledTimes(adapter.name === 'container operation' ? 2 : 0);
       expect(onEvent).toHaveBeenCalledTimes(2);
       expect(onEvent.mock.lastCall?.[0]).toMatchObject(adapter.name === 'container operation' ? terminal : adapter.payload);
     });
@@ -77,10 +79,12 @@ describe('background event stream request policy', () => {
       const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), { once: true });
       }));
-      vi.stubGlobal('fetch', fetchMock);
+      const nativeFetch = vi.fn(async () => new Response(JSON.stringify({ data: terminal })));
+      vi.stubGlobal('fetch', nativeFetch);
+      release = await bindTestSessionHTTP(fetchMock as typeof fetch);
       const onEvent = vi.fn();
       const result = adapter.connect(controller.signal, onEvent);
-      const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      const rejected = expect(result).rejects.toMatchObject({ code: 'transport', cause: { name: 'AbortError' } });
       await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
       controller.abort();
       await rejected;
@@ -89,12 +93,14 @@ describe('background event stream request policy', () => {
     });
   }
 
-  it('tracks managed service progress with authenticated low priority and releases its reader', async () => {
+  it('releases managed service observation without canceling the operation', async () => {
     const cancelled = vi.fn();
     const fetchMock = vi.fn(async () => new Response(new ReadableStream({ start(controller) {
       controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(terminal)}\n\n`));
-    }, cancel: cancelled })));
-    vi.stubGlobal('fetch', fetchMock);
+    }, cancel: cancelled }), { headers: { 'Content-Type': 'text/event-stream' } }));
+    const nativeFetch = vi.fn();
+    vi.stubGlobal('fetch', nativeFetch);
+    release = await bindTestSessionHTTP(fetchMock as typeof fetch);
     const onOperationUpdated = vi.fn();
     const controller = createManagedServiceOperationController({
       streamFailedMessage: () => 'Stream failed', timedOutMessage: () => 'Timed out', onOperationUpdated,
@@ -103,8 +109,8 @@ describe('background event stream request policy', () => {
       await expect(controller.track(operation)).resolves.toEqual(terminal);
       const [url, init] = (fetchMock.mock.calls as unknown as [string, RequestInit][])[0];
       expect(url).toBe('/_redeven_proxy/api/managed-web-service-operations/operation-1/events');
-      expect(init).toMatchObject({ priority: 'low', credentials: 'same-origin', cache: 'no-store', method: 'GET' });
-      expect(new Headers(init.headers).get('X-Redeven-Access-Resume')).toBe('test-resume-token');
+      expect(init).toMatchObject({ method: 'GET' });
+      expect(nativeFetch).not.toHaveBeenCalled();
       expect(onOperationUpdated).toHaveBeenLastCalledWith(terminal);
       expect(cancelled).toHaveBeenCalledOnce();
     } finally {
@@ -116,10 +122,12 @@ describe('background event stream request policy', () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), { once: true });
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    const nativeFetch = vi.fn();
+    vi.stubGlobal('fetch', nativeFetch);
+    release = await bindTestSessionHTTP(fetchMock as typeof fetch);
     const controller = createManagedServiceOperationController({ streamFailedMessage: () => 'Stream failed', timedOutMessage: () => 'Timed out' });
     const result = controller.track(operation);
-    const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    const rejected = expect(result).rejects.toMatchObject({ code: 'transport', cause: { name: 'AbortError' } });
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     controller.dispose();
     await rejected;

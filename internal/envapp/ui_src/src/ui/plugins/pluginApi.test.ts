@@ -1,8 +1,9 @@
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 import {
   type PluginExecution,
   type PluginPlatformClient,
 } from '@floegence/redevplugin-ui';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 import { fetchLocalApi, fetchLocalApiJSONResponse } from '../services/localApi';
 import { connectPluginMarketEventStream, createPluginLifecycleAPI, loadPluginMarketDetail } from './pluginApi';
@@ -445,6 +446,7 @@ describe('plugin lifecycle client integration', () => {
       'event: message',
       'data: {"seq":7,"state":"ready","generation":41,"stale":false,"checked_at":"2026-09-03T01:00:00Z"}',
       '',
+      '',
     ].join('\r\n'), {
       status: 200,
       headers: { 'Content-Type': 'text/event-stream' },
@@ -470,7 +472,7 @@ describe('plugin lifecycle client integration', () => {
   it('rejects invalid market stream events without mutating catalog state', async () => {
     vi.mocked(fetchLocalApi).mockResolvedValueOnce(new Response(
       'data: {"seq":0,"state":"ready","generation":41,"stale":false}\n\n',
-      { status: 200 },
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
     ));
 
     await expect(connectPluginMarketEventStream({
@@ -887,3 +889,9 @@ describe('plugin lifecycle client integration', () => {
     }, {});
   });
 });
+
+let releaseTestTransport: (() => void) | undefined;
+beforeEach(async () => {
+  releaseTestTransport = await bindTestSessionHTTP((input, init) => fetchLocalApi(input instanceof Request ? input.url : String(input), init));
+});
+afterEach(() => releaseTestTransport?.());

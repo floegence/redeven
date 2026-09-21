@@ -1,4 +1,5 @@
-import { fetchLocalApiJSON, prepareLocalApiRequestInit } from './localApi';
+import { readSessionEvents } from './sessionHTTP';
+import { fetchLocalApiJSON } from './localApi';
 import type { NoteColorToken, NotesEvent, NotesItem, NotesSnapshot, NotesTopic } from '../notes/notesModel';
 
 export type CreateTopicInput = Readonly<{
@@ -130,55 +131,8 @@ export async function connectNotesEventStream(args: {
   signal: AbortSignal;
   onEvent: (event: NotesEvent) => void;
 }): Promise<void> {
-  const { createServerSentEventRequestInit } = await import('@floegence/floe-webapp-boot');
-  const response = await fetch(
-    `/_redeven_proxy/api/notes/events?after_seq=${encodeURIComponent(String(args.afterSeq ?? 0))}`,
-    await prepareLocalApiRequestInit(createServerSentEventRequestInit({
-      method: 'GET',
-      headers: { Accept: 'text/event-stream' },
-      signal: args.signal,
-    })),
-  );
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `HTTP ${response.status}`);
-  }
-  if (!response.body) {
-    throw new Error('Notes event stream unavailable');
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  const flushBlock = (block: string) => {
-    const lines = block.split(/\r?\n/);
-    const dataLines = lines
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).trimStart());
-    if (dataLines.length === 0) return;
-    const payload = dataLines.join('\n');
-    if (!payload) return;
-    args.onEvent(JSON.parse(payload) as NotesEvent);
-  };
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let boundary = buffer.indexOf('\n\n');
-      while (boundary >= 0) {
-        const block = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        flushBlock(block);
-        boundary = buffer.indexOf('\n\n');
-      }
-    }
-    buffer += decoder.decode();
-    const finalBlock = buffer.trim();
-    if (finalBlock) flushBlock(finalBlock);
-  } finally {
-    reader.releaseLock();
+  for await (const frame of readSessionEvents(`/_redeven_proxy/api/notes/events?after_seq=${encodeURIComponent(String(args.afterSeq ?? 0))}`, { method: 'GET', signal: args.signal })) {
+    if (!frame.data) continue;
+    args.onEvent(JSON.parse(frame.data) as NotesEvent);
   }
 }

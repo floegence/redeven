@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
+
 import {
   PluginPlatformClient,
   PluginPlatformRequestError,
@@ -9,7 +11,7 @@ import {
   type PluginSurfaceHost,
   type PluginSurfaceSlot,
 } from '@floegence/redevplugin-ui';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 
 import {
   createAuthenticatedReDevPluginFetch,
@@ -492,19 +494,24 @@ describe('createAuthenticatedReDevPluginFetch', () => {
     const binding = replacePendingPluginSessionCredential('channel-1', 'generation-secret');
     expect(binding && activatePluginSessionCredential(binding)).toBe(true);
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+    releaseTestTransport?.();
+    releaseTestTransport = await bindTestSessionHTTP(fetchMock);
+    const nativeFetch = vi.fn();
+    vi.stubGlobal('fetch', nativeFetch);
     const platformFetch = createAuthenticatedReDevPluginFetch();
 
     await platformFetch(`${redevPluginAPIPath}/catalog`, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'X-ReDevPlugin-Expected-Management-Revision': '7' },
     });
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const headers = new Headers(init.headers);
     expect(headers.get(redevPluginCSRFHeader)).toBe(redevPluginCSRFProof);
-    expect(headers.get('X-Redeven-Plugin-Session')).toBe('generation-secret');
+    expect(headers.has('X-Redeven-Plugin-Session')).toBe(false);
+    expect(headers.get('X-ReDevPlugin-Expected-Management-Revision')).toBe('7');
     expect(init.cache).toBeUndefined();
+    expect(nativeFetch).not.toHaveBeenCalled();
   });
 
   it('rejects external origins and non-platform same-origin routes before fetch', async () => {
@@ -539,3 +546,9 @@ describe('createRedevenPluginPlatform', () => {
     expect(revoke).toHaveBeenCalledTimes(2);
   });
 });
+
+let releaseTestTransport: (() => void) | undefined;
+beforeEach(async () => {
+  releaseTestTransport = await bindTestSessionHTTP((input, init) => globalThis.fetch(input, init));
+});
+afterEach(() => releaseTestTransport?.());
