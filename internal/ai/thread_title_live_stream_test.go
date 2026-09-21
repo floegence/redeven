@@ -72,7 +72,7 @@ func (mock *liveAutomaticTitleOpenAIMock) handle(w http.ResponseWriter, r *http.
 	if !isTitle || !mock.failTitle {
 		text := "Assistant response"
 		if isTitle {
-			text = "Live title"
+			text = "Brief system health check"
 		}
 		writeTestRealtimeSSE(w, flusher, map[string]any{"type": "response.output_text.delta", "delta": text})
 	}
@@ -94,7 +94,7 @@ func TestAutomaticTitleSettlementPublishesCanonicalWorkspaceSummary(t *testing.T
 		finalTitle  string
 		finalStatus flruntime.ThreadTitleStatus
 	}{
-		{name: "ready", finalTitle: "Live title", finalStatus: flruntime.ThreadTitleStatusReady},
+		{name: "ready", finalTitle: "Brief system health check", finalStatus: flruntime.ThreadTitleStatusReady},
 		{name: "failed", failTitle: true, finalTitle: "First user request", finalStatus: flruntime.ThreadTitleStatusFailed},
 	} {
 		t.Run(test.name, func(t *testing.T) {
