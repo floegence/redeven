@@ -1,12 +1,14 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -114,6 +116,7 @@ func linkProviderControlForTest(a *Agent, caller *providerDisconnectFakeRPC) {
 	a.effectiveRunMode = "hybrid"
 	a.controlRPCSerial++
 	a.controlRPC = caller
+	a.controlRegistered = true
 }
 
 func newProviderLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) *Agent {
@@ -193,10 +196,11 @@ func writeProviderRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *ht
 		t.Fatalf("Authorization = %q, want %q", got, "Bearer ticket-123")
 	}
 	var payload struct {
-		ProtocolVersion          string `json:"protocol_version"`
-		EnvPublicID              string `json:"env_public_id"`
-		ProviderOrigin           string `json:"provider_origin"`
-		LocalEnvironmentPublicID string `json:"local_environment_public_id"`
+		ExpectedBindingGeneration int64  `json:"expected_binding_generation"`
+		ProtocolVersion           string `json:"protocol_version"`
+		EnvPublicID               string `json:"env_public_id"`
+		ProviderOrigin            string `json:"provider_origin"`
+		LocalEnvironmentPublicID  string `json:"local_environment_public_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		t.Fatalf("Decode(request) error = %v", err)
@@ -210,11 +214,15 @@ func writeProviderRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *ht
 	if err != nil {
 		t.Fatal(err)
 	}
+	generation := int64(7)
+	if payload.ExpectedBindingGeneration > 0 {
+		generation = payload.ExpectedBindingGeneration + 1
+	}
 	expires := time.Now().Add(4 * time.Minute).Truncate(time.Second)
 	pool := providerLinkRuntimeLinkPool{
 		Version:                       config.ControlArtifactPoolContractVersion,
 		LogicalProviderBindingID:      "binding-7",
-		BindingGeneration:             7,
+		BindingGeneration:             generation,
 		TargetWaterline:               config.ControlArtifactTargetWaterline,
 		RefreshHorizonSeconds:         config.ControlArtifactRefreshHorizonS,
 		ServerHighestArtifactSequence: config.ControlArtifactTargetWaterline,
@@ -238,7 +246,7 @@ func writeProviderRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *ht
 		pool.Entries = append(pool.Entries, providerLinkRuntimeLinkPoolEntry{
 			ArtifactJSON:      issued.ArtifactJSON(),
 			ArtifactChannelID: channelID,
-			BindingGeneration: 7,
+			BindingGeneration: generation,
 			ArtifactSequence:  uint64(sequence),
 			ExpiresAtUnixS:    expires.Unix(),
 		})
@@ -261,7 +269,7 @@ func writeProviderRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *ht
 		"local_environment_binding": map[string]any{
 			"local_environment_public_id": payload.LocalEnvironmentPublicID,
 			"env_public_id":               payload.EnvPublicID,
-			"generation":                  7,
+			"generation":                  generation,
 		},
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -289,8 +297,8 @@ func TestConnectProviderPersistsConfigOnlyAfterRuntimeLinkExchangeSucceeds(t *te
 		t.Fatalf("ConnectProvider() error = nil, want Runtime link exchange failure")
 	}
 	var linkErr *ProviderLinkError
-	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorExchangeFailed {
-		t.Fatalf("ConnectProvider() error = %v, want %s", err, ProviderLinkErrorExchangeFailed)
+	if !errors.As(err, &linkErr) || linkErr.Code != "PROVIDER_LINK_AUTHORIZATION_REQUIRED" {
+		t.Fatalf("ConnectProvider() error = %v, want %s", err, "PROVIDER_LINK_AUTHORIZATION_REQUIRED")
 	}
 	if binding := a.ProviderLinkBinding(); binding.State != runtimeservice.ProviderLinkStateUnbound {
 		t.Fatalf("ProviderLinkBinding() = %#v, want unbound", binding)
@@ -585,5 +593,59 @@ func TestDisconnectProviderClearsConfigWithoutActiveControlChannel(t *testing.T)
 	}
 	if binding := a.ProviderLinkBinding(); binding.State != runtimeservice.ProviderLinkStateUnbound {
 		t.Fatalf("ProviderLinkBinding() = %#v, want unbound", binding)
+	}
+}
+
+func TestConnectProviderRenewsExactBindingWithoutRestartingLocalWork(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := providerLinkRemoteConfig(t, cfgPath)
+	var expectedGeneration int64
+	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		var request struct {
+			ExpectedBindingGeneration int64 `json:"expected_binding_generation"`
+		}
+		if err := json.Unmarshal(raw, &request); err != nil {
+			t.Error(err)
+			return
+		}
+		expectedGeneration = request.ExpectedBindingGeneration
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		writeProviderRuntimeLinkResponse(t, w, r, "renewal")
+	})
+	defer server.Close()
+	cfg.ControlplaneBaseURL = server.URL
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	a := newProviderLinkTestAgent(t, cfgPath, cfg)
+	localWork := &activeSession{connectedAtUnixMs: 1, meta: session.Meta{EndpointID: LocalEnvPublicIDForAgent()}}
+	a.sessions["local-work"] = localWork
+	result, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
+		ProviderOrigin: cfg.ProviderOrigin, ProviderID: cfg.ControlplaneProviderID, EnvPublicID: cfg.EnvironmentID,
+		AccessPointOrigin: cfg.ControlplaneBaseURL, RuntimeLinkTicket: "ticket-123", RenewCurrentBinding: true,
+		ExpectedProviderOrigin: cfg.ProviderOrigin, ExpectedProviderID: cfg.ControlplaneProviderID,
+		ExpectedEnvPublicID: cfg.EnvironmentID, ExpectedAccessPointOrigin: cfg.ControlplaneBaseURL,
+		ExpectedGeneration: cfg.BindingGeneration, runtimeLinkHTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expectedGeneration != cfg.BindingGeneration || result.Binding.BindingGeneration != cfg.BindingGeneration+1 {
+		t.Fatal("renewal did not fence and advance the current generation")
+	}
+	if result.Binding.LocalEnvironmentPublicID != cfg.LocalEnvironmentPublicID || a.sessions["local-work"] != localWork {
+		t.Fatal("renewal changed local identity or interrupted local work")
+	}
+	saved, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.AgentHomeDir != cfg.AgentHomeDir || saved.AgentInstanceID != cfg.AgentInstanceID {
+		t.Fatal("renewal replaced local runtime configuration")
 	}
 }

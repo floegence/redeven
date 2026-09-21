@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -110,6 +111,7 @@ type ProviderLinkRequest struct {
 	ExpectedAccessPointOrigin string
 	ExpectedGeneration        int64
 	AllowRelinkWhenIdle       bool
+	RenewCurrentBinding       bool
 	runtimeLinkHTTPClient     *http.Client
 }
 
@@ -139,7 +141,7 @@ func (a *Agent) providerControlChannelActiveLocked() bool {
 }
 
 func (a *Agent) ProviderLinkBinding() runtimeservice.ProviderLinkBinding {
-	if a == nil || a.cfg == nil {
+	if a == nil {
 		return runtimeservice.ProviderLinkBinding{State: runtimeservice.ProviderLinkStateUnbound}
 	}
 	a.mu.Lock()
@@ -158,8 +160,12 @@ func (a *Agent) providerLinkBindingLocked(errorCode string) runtimeservice.Provi
 			LastDisconnectedAtUnixMS: time.Now().UnixMilli(),
 		}
 	}
+	connectionState, connectionCode, connectionMessage := a.providerConnectionLocked()
 	return runtimeservice.NormalizeProviderLinkBinding(runtimeservice.ProviderLinkBinding{
 		State:                    runtimeservice.ProviderLinkStateLinked,
+		ConnectionState:          connectionState,
+		LastErrorCode:            connectionCode,
+		LastErrorMessage:         connectionMessage,
 		ProviderOrigin:           a.cfg.ProviderOrigin,
 		ProviderID:               a.cfg.ControlplaneProviderID,
 		EnvPublicID:              a.cfg.EnvironmentID,
@@ -237,14 +243,14 @@ func providerDisconnectSnapshotFromConfig(cfg *config.Config) (providerDisconnec
 
 func (a *Agent) providerLinkCanReplaceCurrentLocked(req ProviderLinkRequest) *ProviderLinkError {
 	current := a.providerLinkBindingLocked("")
-	if current.State == runtimeservice.ProviderLinkStateLinked && providerLinkMatches(current, req) {
-		return nil
-	}
 	if !requestedExpectedProviderLinkMatches(current, req) {
 		return &ProviderLinkError{
 			Code:    ProviderLinkErrorAlreadyLinked,
 			Message: "Local Runtime is already connected to another provider Environment.",
 		}
+	}
+	if current.State == runtimeservice.ProviderLinkStateLinked && providerLinkMatches(current, req) {
+		return nil
 	}
 	if current.State == runtimeservice.ProviderLinkStateLinked && !req.AllowRelinkWhenIdle {
 		return &ProviderLinkError{
@@ -304,44 +310,62 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	a.mu.Lock()
 	current := a.providerLinkBindingLocked("")
 	matchingCurrent := current.State == runtimeservice.ProviderLinkStateLinked && providerLinkMatches(current, req)
+	if req.RenewCurrentBinding && (!matchingCurrent || req.ExpectedGeneration <= 0 || !requestedExpectedProviderLinkMatches(current, req)) {
+		a.mu.Unlock()
+		return nil, &ProviderLinkError{Code: "PROVIDER_LINK_BINDING_CHANGED", Message: "The saved Redeven Cloud connection has changed. Review the current connection before reconnecting."}
+	}
+	if linkErr := a.providerLinkCanReplaceCurrentLocked(req); linkErr != nil {
+		a.mu.Unlock()
+		return nil, linkErr
+	}
 	// IMPORTANT: A persisted provider link is explicit user authorization for
 	// runtime startup to restore the provider control channel. This
 	// idempotent path exists for explicit refreshes, not as normal UI repair.
-	if matchingCurrent && a.providerControlChannelActiveLocked() && a.controlRPC != nil {
+	if matchingCurrent && a.providerControlChannelActiveLocked() && a.controlRegistered {
 		a.mu.Unlock()
 		return &ProviderLinkResponse{Binding: current}, nil
-	}
-	if !matchingCurrent {
-		if linkErr := a.providerLinkCanReplaceCurrentLocked(req); linkErr != nil {
-			a.mu.Unlock()
-			return nil, linkErr
-		}
 	}
 	a.mu.Unlock()
 
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	expectedGeneration := int64(0)
+	if req.RenewCurrentBinding {
+		expectedGeneration = req.ExpectedGeneration
+	}
 	cfg, err := config.ResolveProviderRuntimeLinkConfig(ctx, config.ProviderRuntimeLinkArgs{
-		ConfigPath:               a.configPath,
-		ProviderOrigin:           providerOrigin,
-		ControlplaneBaseURL:      accessPointOrigin,
-		ControlplaneProviderID:   strings.TrimSpace(req.ProviderID),
-		EnvironmentID:            envPublicID,
-		RuntimeLinkTicket:        runtimeLinkTicket,
-		RuntimeVersion:           strings.TrimSpace(a.version),
-		RuntimeGOOS:              runtime.GOOS,
-		RuntimeGOARCH:            runtime.GOARCH,
-		RuntimeHostname:          hostnameBestEffort(),
-		PreservePermissionPolicy: true,
-		HTTPClient:               req.runtimeLinkHTTPClient,
+		ExpectedBindingGeneration: expectedGeneration,
+		ConfigPath:                a.configPath,
+		ProviderOrigin:            providerOrigin,
+		ControlplaneBaseURL:       accessPointOrigin,
+		ControlplaneProviderID:    strings.TrimSpace(req.ProviderID),
+		EnvironmentID:             envPublicID,
+		RuntimeLinkTicket:         runtimeLinkTicket,
+		RuntimeVersion:            strings.TrimSpace(a.version),
+		RuntimeGOOS:               runtime.GOOS,
+		RuntimeGOARCH:             runtime.GOARCH,
+		RuntimeHostname:           hostnameBestEffort(),
+		PreservePermissionPolicy:  true,
+		HTTPClient:                req.runtimeLinkHTTPClient,
 	})
 	if err != nil {
-		return nil, &ProviderLinkError{
-			Code:    ProviderLinkErrorExchangeFailed,
-			Message: fmt.Sprintf("Provider link exchange failed: %v", err),
-			Err:     err,
+		code := ProviderLinkErrorExchangeFailed
+		var exchangeErr *config.RuntimeLinkExchangeError
+		var networkErr net.Error
+		if errors.As(err, &exchangeErr) {
+			switch {
+			case exchangeErr.Code == "RUNTIME_LINK_BINDING_STALE":
+				code = "PROVIDER_LINK_BINDING_CHANGED"
+			case exchangeErr.StatusCode == 401 || exchangeErr.StatusCode == 403:
+				code = "PROVIDER_LINK_AUTHORIZATION_REQUIRED"
+			case exchangeErr.StatusCode == 429 || exchangeErr.StatusCode >= 500:
+				code = "PROVIDER_LINK_UNAVAILABLE"
+			}
+		} else if errors.As(err, &networkErr) && networkErr.Timeout() {
+			code = "PROVIDER_LINK_UNAVAILABLE"
 		}
+		return nil, &ProviderLinkError{Code: code, Message: fmt.Sprintf("Provider link exchange failed: %v", err), Err: err}
 	}
 
 	a.mu.Lock()

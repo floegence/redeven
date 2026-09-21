@@ -51,6 +51,9 @@ func (source *controlArtifactSource) Acquire(ctx context.Context) (flowersec.Art
 	}
 	entry, generation, err := source.agent.acquireControlArtifactEntry()
 	if err != nil {
+		source.agent.mu.Lock()
+		source.agent.controlCredentialsUnavailable = errors.Is(err, errControlArtifactPoolEmpty) || errors.Is(err, errControlArtifactPoolRelinkRequired)
+		source.agent.mu.Unlock()
 		return flowersec.ArtifactLease{}, classifyControlArtifactSourceError(err)
 	}
 	artifact, err := flowersec.ParseArtifact(entry.ArtifactJSON)
@@ -93,6 +96,9 @@ func (a *Agent) acquireControlArtifactEntry() (config.ControlArtifactEntry, int6
 	defer a.mu.Unlock()
 	if a.cfg == nil {
 		return config.ControlArtifactEntry{}, 0, errors.New("missing config")
+	}
+	if a.controlBusinessRejected {
+		return config.ControlArtifactEntry{}, 0, errControlArtifactPoolRelinkRequired
 	}
 	if a.cfg.ControlArtifactPool == nil {
 		if a.cfg.Direct == nil || len(a.cfg.Direct.ArtifactJSON) == 0 {

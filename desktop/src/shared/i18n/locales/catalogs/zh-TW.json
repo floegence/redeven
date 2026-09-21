@@ -2845,5 +2845,20 @@
     "runtimeDetail": "此執行階段與 Desktop Flower 不相容。請更新執行階段後繼續。草稿已保留，仍可使用環境內建的應用程式。",
     "desktopDetail": "此執行階段需要較新版本的 Desktop。請更新 Desktop 後繼續。草稿已保留，仍可使用環境內建的應用程式。",
     "connectedBuild": "已連線的執行階段：{version} · {commit}"
+  },
+  "providerRecovery": {
+    "restore": "恢復 Redeven Cloud 連線",
+    "required": "恢復已儲存的 Redeven Cloud 連線，本機工作可繼續使用。如果權限已遭撤銷或關聯已變更，請先檢查帳號和關聯，再重新連線。",
+    "needsAuthorization": "需要授權",
+    "connected": "已連線",
+    "connecting": "正在連線",
+    "retrying": "正在自動重新連線",
+    "restoring": "正在恢復連線",
+    "waiting": "等待恢復連線",
+    "attention": "連線需要處理",
+    "disabled": "Cloud 存取已關閉",
+    "unknown": "連線尚未驗證",
+    "expired": "連線憑證已過期",
+    "requested": "已要求連線至 {label}，Redeven Cloud 狀態將自動更新。"
   }
 }

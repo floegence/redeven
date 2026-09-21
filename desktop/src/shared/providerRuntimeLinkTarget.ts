@@ -50,6 +50,7 @@ export type DesktopProviderRuntimeLinkTarget = Readonly<{
   runtime_control_status: DesktopRuntimeControlStatus;
   runtime_service?: RuntimeServiceSnapshot;
   provider_connection_state: RuntimeServiceProviderConnectionState;
+  credential_recovery?: 'restoring' | 'waiting' | 'attention';
   provider_link_state: RuntimeServiceProviderLinkState;
   provider_link_binding?: RuntimeServiceProviderLinkBinding;
   provider_origin?: string;

@@ -15,6 +15,7 @@ export type DesktopProviderRuntimeLinkPlanState =
   | 'runtime_control_missing'
   | 'provider_link_unsupported'
   | 'already_linked'
+  | 'renewal_required'
   | 'provider_environment_occupied'
   | 'linked_elsewhere'
   | 'blocked_active_work'
@@ -58,6 +59,8 @@ function planMessage(
       return `${runtimeLabel} does not expose Desktop runtime-control. Restart it from Desktop, then connect again.`;
     case 'provider_link_unsupported':
       return `${runtimeLabel} does not support Redeven Cloud linking. Restart it with the current Desktop Runtime, then connect again.`;
+    case 'renewal_required':
+      return `Restore the saved Redeven Cloud connection for ${runtimeLabel}. Local work remains available.`;
     case 'already_linked':
       return `${runtimeLabel} is already connected to ${providerEnvironment.label}.`;
     case 'provider_environment_occupied':
@@ -102,9 +105,11 @@ export function buildDesktopProviderRuntimeLinkPlan(
     }
     if (binding?.state === 'linked') {
       if (runtimeMatchesProvider) {
-        return runtimeTarget.provider_connection_state === 'connected'
-          ? 'already_linked'
-          : 'blocked_runtime';
+        if (runtimeTarget.provider_connection_state === 'connected') return 'already_linked';
+        return runtimeTarget.provider_connection_state === 'authorization_required'
+          || runtimeTarget.provider_connection_state === 'disabled'
+          || runtimeTarget.provider_connection_state === 'error'
+          ? 'renewal_required' : 'blocked_runtime';
       }
       return runtimeServiceHasActiveWork(runtimeTarget.runtime_service)
           ? 'blocked_active_work'
@@ -122,9 +127,9 @@ export function buildDesktopProviderRuntimeLinkPlan(
     provider_environment_id: providerEnvironment.provider_environment_id,
     runtime_running: runtimeTarget.runtime_running,
     runtime_matches_provider: runtimeMatchesProvider,
-    requires_confirmation: state === 'target_ready' || state === 'already_linked',
-    can_connect: state === 'target_ready',
-    can_disconnect: state === 'already_linked',
+    requires_confirmation: state === 'target_ready' || state === 'already_linked' || state === 'renewal_required',
+    can_connect: state === 'target_ready' || state === 'renewal_required',
+    can_disconnect: state === 'already_linked' || state === 'renewal_required',
     ...(binding ? { current_binding: binding } : {}),
     target_binding: {
       provider_origin: providerEnvironment.provider_origin,

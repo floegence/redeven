@@ -2851,5 +2851,20 @@
     "runtimeDetail": "Este entorno de ejecución es incompatible con Desktop Flower. Actualízalo para continuar. Tu borrador se conserva y la aplicación del entorno sigue disponible.",
     "desktopDetail": "Este entorno de ejecución requiere una versión más reciente de Desktop. Actualiza Desktop para continuar. Tu borrador se conserva y la aplicación del entorno sigue disponible.",
     "connectedBuild": "Entorno de ejecución conectado: {version} · {commit}"
+  },
+  "providerRecovery": {
+    "restore": "Restablecer la conexión con Redeven Cloud",
+    "required": "Restablece la conexión guardada con Redeven Cloud. Puedes seguir trabajando en local. Si se han revocado los permisos o ha cambiado la vinculación, revisa la cuenta y la vinculación antes de volver a conectar.",
+    "needsAuthorization": "Se requiere autorización",
+    "connected": "Conectado",
+    "connecting": "Conectando",
+    "retrying": "Reconectando automáticamente",
+    "restoring": "Restableciendo la conexión",
+    "waiting": "Esperando para restablecer la conexión",
+    "attention": "La conexión requiere atención",
+    "disabled": "Acceso a Cloud desactivado",
+    "unknown": "Conexión sin verificar",
+    "expired": "Credenciales caducadas",
+    "requested": "Se ha solicitado la conexión de {label}. El estado de Redeven Cloud se actualizará automáticamente."
   }
 }

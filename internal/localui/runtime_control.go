@@ -269,6 +269,7 @@ func (s *runtimeControlServer) handleProviderLink(w http.ResponseWriter, r *http
 }
 
 type runtimeControlProviderLinkRequest struct {
+	RenewCurrentBinding    bool   `json:"renew_current_binding"`
 	ProviderOrigin         string `json:"provider_origin"`
 	ProviderID             string `json:"provider_id"`
 	EnvPublicID            string `json:"env_public_id"`
@@ -300,6 +301,7 @@ func (s *runtimeControlServer) handleProviderLinkConnect(w http.ResponseWriter, 
 		return
 	}
 	req := agent.ProviderLinkRequest{
+		RenewCurrentBinding: body.RenewCurrentBinding,
 		ProviderOrigin:      body.ProviderOrigin,
 		ProviderID:          body.ProviderID,
 		EnvPublicID:         body.EnvPublicID,

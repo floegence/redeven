@@ -808,7 +808,7 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
     provider_id: providerLinkBinding.provider_id,
     env_public_id: providerLinkBinding.env_public_id,
     access_point_origin: providerLinkBinding.access_point_origin,
-    can_connect_provider: blockedReasonCode === '' && providerConnectionState === 'unlinked',
+    can_connect_provider: blockedReasonCode === '' && ['unlinked', 'authorization_required', 'disabled', 'error'].includes(providerConnectionState),
     can_disconnect_provider: providerLinkBinding.state === 'linked',
     ...(blockedReasonCode !== '' ? { blocked_reason_code: blockedReasonCode } : {}),
     ...(blockedReason !== '' ? { blocked_reason: blockedReason } : {}),

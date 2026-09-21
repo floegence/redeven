@@ -104,6 +104,7 @@ const (
 
 type ProviderLinkBinding struct {
 	State                    ProviderLinkState `json:"state"`
+	ConnectionState          string            `json:"connection_state"`
 	ProviderOrigin           string            `json:"provider_origin,omitempty"`
 	ProviderID               string            `json:"provider_id,omitempty"`
 	EnvPublicID              string            `json:"env_public_id,omitempty"`
@@ -290,6 +291,13 @@ func NormalizeProviderLinkBinding(binding ProviderLinkBinding, capability Capabi
 	}
 	if binding.State != ProviderLinkStateLinked {
 		binding.RemoteEnabled = false
+		binding.ConnectionState = "unlinked"
+	} else {
+		switch binding.ConnectionState {
+		case "connected", "connecting", "retrying", "authorization_required", "disabled", "error":
+		default:
+			binding.ConnectionState = "unknown"
+		}
 	}
 	return binding
 }

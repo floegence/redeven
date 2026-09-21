@@ -178,6 +178,7 @@ function linkedRuntimeService(providerOrigin: string) {
       desktop_model_source: { state: 'unsupported' as const },
       provider_link: {
         state: 'linked' as const,
+        connection_state: 'connected' as const,
         provider_origin: providerOrigin,
         provider_id: 'redeven',
         env_public_id: 'env_demo',
@@ -2212,6 +2213,7 @@ describe('desktopWelcomeState', () => {
             desktop_model_source: { state: 'unsupported' },
             provider_link: {
               state: linkState,
+              connection_state: 'connected',
               provider_origin: 'https://provider.example.invalid',
               provider_id: 'example_control_plane',
               env_public_id: 'env_demo',
@@ -2630,6 +2632,7 @@ describe('desktopWelcomeState', () => {
                 desktop_model_source: { state: 'unsupported' },
                 provider_link: {
                   state: 'linked',
+                  connection_state: 'connected',
                   provider_origin: 'https://provider.example.invalid',
                   provider_id: 'example_control_plane',
                   env_public_id: 'env_demo',
@@ -2667,6 +2670,7 @@ describe('desktopWelcomeState', () => {
               desktop_model_source: { state: 'unsupported' },
               provider_link: {
                 state: 'linked',
+                connection_state: 'connected',
                 provider_origin: 'https://provider.example.invalid',
                 provider_id: 'example_control_plane',
                 env_public_id: 'env_demo',
@@ -2689,7 +2693,7 @@ describe('desktopWelcomeState', () => {
         runtime_target_id: 'local:local',
         runtime_kind: 'local_environment',
         label: 'Local Environment',
-        provider_connection_state: 'error',
+        provider_connection_state: 'disabled',
       },
     });
 
@@ -2706,8 +2710,8 @@ describe('desktopWelcomeState', () => {
       provider_origin: 'https://provider.example.invalid',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
-      provider_connection_state: 'error',
-      can_connect_provider: false,
+      provider_connection_state: 'disabled',
+      can_connect_provider: true,
       can_disconnect_provider: true,
     });
   });
@@ -2764,6 +2768,7 @@ describe('desktopWelcomeState', () => {
               desktop_model_source: { state: 'unsupported' },
               provider_link: {
                 state: 'linked',
+                connection_state: 'connected',
                 provider_origin: 'https://provider.example.invalid',
                 provider_id: 'example_control_plane',
                 env_public_id: 'env_demo',

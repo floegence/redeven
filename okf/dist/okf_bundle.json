@@ -16504,7 +16504,7 @@
         "title": "RCPP v3 provider API",
         "type": "Protocol Contract"
       },
-      "body_length": 7321,
+      "body_length": 9921,
       "summary": "RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. `Provider` is the protocol and engineering term; the supported Desktop product surface presents this control plane as `Redeven Cloud`. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management capability, and it issues no Start, Stop, Restart, Update, Reinstall, enrollment, supervisor, or artifact authority. A removed lifecycle request fails as unsupported or not found without a compatibility fallback.",
       "sections": [
         {
@@ -23407,5 +23407,5 @@
       ]
     }
   ],
-  "source_sha256": "e6d8471b9c1051e30453ec3d9af0edcd102b903cd4c0f17629652afc44e01f90"
+  "source_sha256": "1174f829c92fbb8b2a00c7a52366c749eefbe5a7f9c5310fef33abcc9d52d36e"
 }

@@ -85,6 +85,10 @@ export type RuntimeServiceProviderLinkState =
   | 'error';
 
 export type RuntimeServiceProviderConnectionState =
+  | 'unknown'
+  | 'retrying'
+  | 'authorization_required'
+  | 'disabled'
   | 'unlinked'
   | 'connecting'
   | 'connected'
@@ -94,6 +98,7 @@ export type RuntimeServiceProviderConnectionState =
 
 export type RuntimeServiceProviderLinkBinding = Readonly<{
   state: RuntimeServiceProviderLinkState;
+  connection_state?: RuntimeServiceProviderConnectionState;
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
@@ -298,6 +303,16 @@ function normalizeBinding(value: unknown, capability: RuntimeServiceCapability):
   };
 }
 
+function normalizeProviderConnectionState(value: unknown): RuntimeServiceProviderConnectionState {
+  switch (value) {
+    case 'connected': case 'connecting': case 'retrying': case 'authorization_required':
+    case 'disabled': case 'error': case 'unlinked':
+      return value;
+    default:
+      return 'unknown';
+  }
+}
+
 function normalizeProviderLinkBinding(
   value: unknown,
   capability: RuntimeServiceCapability,
@@ -317,6 +332,7 @@ function normalizeProviderLinkBinding(
     : 'unsupported';
   return {
     state,
+    connection_state: normalizeProviderConnectionState(record.connection_state),
     provider_origin: compact(record.provider_origin) || undefined,
     provider_id: compact(record.provider_id) || undefined,
     env_public_id: compact(record.env_public_id) || undefined,
@@ -537,8 +553,8 @@ export function runtimeServiceProviderConnectionState(
       return 'disconnecting';
     case 'linked':
       return binding.remote_enabled === true && snapshot?.remote_enabled === true
-        ? 'connected'
-        : 'error';
+        ? normalizeProviderConnectionState(binding.connection_state)
+        : 'disabled';
     case 'error':
       return 'error';
     case 'unsupported':

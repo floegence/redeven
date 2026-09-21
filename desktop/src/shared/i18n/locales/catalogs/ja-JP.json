@@ -2845,5 +2845,20 @@
     "runtimeDetail": "このランタイムは Desktop Flower と互換性がありません。ランタイムを更新して続行してください。下書きは保持され、環境に付属するアプリは引き続き利用できます。",
     "desktopDetail": "このランタイムには新しい Desktop が必要です。Desktop を更新して続行してください。下書きは保持され、環境に付属するアプリは引き続き利用できます。",
     "connectedBuild": "接続中のランタイム：{version} · {commit}"
+  },
+  "providerRecovery": {
+    "restore": "Redeven Cloud 接続を復元",
+    "required": "保存済みの Redeven Cloud 接続を復元します。ローカルでの作業は引き続き利用できます。権限が取り消された場合や関連付けが変更された場合は、アカウントと関連付けを確認してから再接続してください。",
+    "needsAuthorization": "認証が必要",
+    "connected": "接続済み",
+    "connecting": "接続中",
+    "retrying": "自動再接続中",
+    "restoring": "接続を復元中",
+    "waiting": "接続の復元を待機中",
+    "attention": "接続の確認が必要",
+    "disabled": "Cloud アクセスは無効",
+    "unknown": "接続は未確認",
+    "expired": "接続認証情報の期限切れ",
+    "requested": "{label} の接続を要求しました。Redeven Cloud の状態は自動的に更新されます。"
   }
 }

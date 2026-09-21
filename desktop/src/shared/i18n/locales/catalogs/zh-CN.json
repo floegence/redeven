@@ -2845,5 +2845,20 @@
     "runtimeDetail": "此运行时与 Desktop Flower 不兼容。请更新运行时后继续。草稿已保留，仍可使用环境自带的应用。",
     "desktopDetail": "此运行时需要较新版本的 Desktop。请更新 Desktop 后继续。草稿已保留，仍可使用环境自带的应用。",
     "connectedBuild": "已连接的运行时：{version} · {commit}"
+  },
+  "providerRecovery": {
+    "restore": "恢复 Redeven Cloud 连接",
+    "required": "恢复已保存的 Redeven Cloud 连接，本机工作可继续使用。如果权限已被撤销或关联已变更，请先检查账号和关联，再重新连接。",
+    "needsAuthorization": "需要授权",
+    "connected": "已连接",
+    "connecting": "正在连接",
+    "retrying": "正在自动重连",
+    "restoring": "正在恢复连接",
+    "waiting": "等待恢复连接",
+    "attention": "连接需要处理",
+    "disabled": "Cloud 访问已关闭",
+    "unknown": "连接尚未验证",
+    "expired": "连接凭据已过期",
+    "requested": "已请求连接 {label}，Redeven Cloud 状态将自动更新。"
   }
 }
