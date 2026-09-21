@@ -6205,7 +6205,15 @@
     }
   },
   "hostApplications": {
+    "macControls": "Controles do aplicativo",
     "prepare": {
+      "downloadMethod": "Método de download",
+      "hostDownload": "Baixar no host",
+      "hostDownloadHint": "Baixe os componentes diretamente neste host.",
+      "desktopDownload": "Baixar e transferir pelo Desktop",
+      "desktopDownloadHint": "Baixe neste computador e depois transfira para o host.",
+      "desktopUnavailable": "Abra este ambiente no Redeven Desktop para usar este método.",
+
       "title": "Preparar aplicativos do host",
       "description": "O Redeven preparará os componentes gráficos neste host. Não é necessário configurar nada manualmente.",
       "start": "Preparar",

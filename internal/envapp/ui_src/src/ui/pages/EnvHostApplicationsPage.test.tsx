@@ -26,7 +26,7 @@ beforeEach(() => {
   state.launch.mockResolvedValue({ id: 'session', application: app, state: 'starting', forward });
   state.open.mockResolvedValue(undefined);
   state.setupCancel.mockResolvedValue({ state: "cancelled", received_bytes: 0, expected_bytes: 100 });
-  state.setupStatus.mockResolvedValue({ state: 'available', received_bytes: 0, expected_bytes: 100, can_cancel: false, package: { id: 'fixture', size_bytes: 100, installed_bytes: 200 } });
+  state.setupStatus.mockResolvedValue({ state: 'available', received_bytes: 0, expected_bytes: 100, can_cancel: false, package: { id: 'fixture', architecture: 'arm64', size_bytes: 100, installed_bytes: 200 } });
   state.setupStart.mockResolvedValue({ state: 'downloading', operation_id: 'install', received_bytes: 0, expected_bytes: 100, can_cancel: true });
   state.setupObserve.mockImplementation((_callback, signal: AbortSignal) => new Promise<void>(resolve => signal.addEventListener('abort', () => resolve())));
   state.preparation.mockImplementation(async (request: { action: string }) => ({ ok: true, ...(request.action === 'create' ? { id: 'preparation-window' } : {}) }));
@@ -139,9 +139,14 @@ it('guides remote macOS authorization and prevents launching until the host is r
 
 function preparationButton() { return [...document.querySelectorAll('button')].find(el => el.textContent === 'Prepare and open')!; }
 function requireSetup() { state.catalog.mockResolvedValue({ availability: { supported: true, ready: false }, applications: [app], sessions: [] }); }
-async function selectAndPrepare() {
+function selectDownloadMethod(method: 'host' | 'desktop', root: ParentNode = document) {
+ const radio = root.querySelector<HTMLInputElement>(`input[type="radio"][value="${method}"]`)!;
+ radio.click();
+}
+async function selectAndPrepare(method: 'host' | 'desktop' = 'host') {
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
  button('Open in new window · Text Editor').click(); await settle();
+ selectDownloadMethod(method, document.querySelector('[role=dialog]')!);
  preparationButton().click(); await settle();
 }
 it('reserves one physical window and continues there after verified preparation', async () => {
@@ -213,17 +218,16 @@ it('reuses the exact admission after a lost start response and reconnects observ
  preparationButton().click(); await settle();
  expect(state.setupStart.mock.calls[1][0]).toBe(requestID);
 });
-it('automatically relays a failed host download through Desktop and verifies on the host', async () => {
+it('downloads through Desktop only when selected and verifies on the host', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
  state.components.mockImplementation(async (request: { action: string }) => request.action === 'acquire' ? { ok: true, size: 180 } : { ok: true, data: new Uint8Array([1]) });
  state.setupStart.mockImplementation(async (_id: string, source: string) => source === 'upload'
   ? { state: 'receiving', operation_id: 'relay', received_bytes: 0, expected_bytes: 180, can_cancel: true }
   : { state: 'downloading', operation_id: 'install', received_bytes: 0, expected_bytes: 100, can_cancel: true });
  state.setupUpload.mockResolvedValue({ state: 'validating', operation_id: 'relay', received_bytes: 180, expected_bytes: 180, can_cancel: true });
- await selectAndPrepare();
- state.setupObserve.mock.calls[0][0]({ state: 'failed', operation_id: 'install', error_code: 'download_failed', package: { architecture: 'arm64' }, received_bytes: 10, expected_bytes: 100 }); await settle();
+ await selectAndPrepare('desktop');
  expect(state.components).toHaveBeenCalledWith({ action: 'acquire', architecture: 'arm64' });
- expect(state.setupStart.mock.calls[1]).toEqual([expect.any(String), 'upload', 180]);
+ expect(state.setupStart).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'upload', 180);
  expect(state.setupUpload).toHaveBeenCalledWith('relay', expect.objectContaining({ size: 180, read: expect.any(Function) }), expect.any(AbortSignal));
  expect(state.launch).not.toHaveBeenCalled();
 });
@@ -245,8 +249,7 @@ it('cancels a relay admitted after cancellation without uploading or reopening t
  state.components.mockResolvedValue({ ok: true, size: 180 });
  let receive!: (value: unknown) => void;
  state.setupStart.mockImplementation(async (_id: string, source: string) => source === 'upload' ? new Promise(resolve => { receive = resolve; }) : { state: 'downloading', operation_id: 'install', can_cancel: true });
- await selectAndPrepare();
- state.setupObserve.mock.calls[0][0]({ state: 'failed', operation_id: 'install', error_code: 'download_failed', package: { architecture: 'arm64' }, received_bytes: 0, expected_bytes: 100 }); await settle();
+ await selectAndPrepare('desktop');
  [...host.querySelectorAll('button')].find(el => el.textContent === 'Cancel')!.click(); await settle();
  receive({ state: 'receiving', operation_id: 'relay', received_bytes: 0, expected_bytes: 180, can_cancel: true }); await settle();
  expect(state.setupCancel).toHaveBeenCalledWith('relay');
@@ -259,6 +262,7 @@ it('resumes an interrupted Desktop transfer into the same host operation', async
  state.setupStatus.mockResolvedValue({ state: 'receiving', operation_id: 'existing-transfer', received_bytes: 50, expected_bytes: 180, can_cancel: true, package: { architecture: 'arm64', size_bytes: 100 } });
  state.setupUpload.mockResolvedValue({ state: 'validating', operation_id: 'existing-transfer', received_bytes: 180, expected_bytes: 180, can_cancel: true });
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ selectDownloadMethod('desktop', host);
  [...host.querySelectorAll('button')].find(el => el.textContent === 'Continue preparation')!.click(); await settle();
  expect(state.setupStart).not.toHaveBeenCalled();
  expect(state.setupUpload).toHaveBeenCalledWith('existing-transfer', expect.objectContaining({ size: 180 }), expect.any(AbortSignal));
@@ -294,4 +298,56 @@ it.each([true, false])('uses the correct stop action for existing macOS applicat
  const confirm = [...dialog.querySelectorAll('button')].find(el => el.textContent === label)!;
  confirm.click(); await settle();
  expect(state.stop).toHaveBeenCalledWith('shared');
+});
+
+it('shows both download paths and defaults to host download even inside Desktop', async () => {
+ requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
+ dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ const hostOption = host.querySelector<HTMLInputElement>('input[type=radio][value=host]');
+ const desktopOption = host.querySelector<HTMLInputElement>('input[type=radio][value=desktop]');
+ expect(hostOption).not.toBeNull(); expect(desktopOption).not.toBeNull();
+ expect(hostOption!.checked).toBe(true);
+ expect(hostOption!.closest('label')!.textContent).toContain('Host downloads');
+ expect(desktopOption!.closest('label')!.textContent).toContain('Desktop downloads and uploads');
+ [...host.querySelectorAll('button')].find(el => el.textContent === 'Prepare')!.click(); await settle();
+ expect(state.setupStart).toHaveBeenCalledWith(expect.any(String), 'download', 0);
+ expect(state.components).not.toHaveBeenCalled();
+ state.setupObserve.mock.calls[0][0]({ state: 'failed', operation_id: 'install', error_code: 'download_failed', package: { architecture: 'arm64' } }); await settle();
+ expect(state.components).not.toHaveBeenCalled();
+ expect(host.textContent).toContain('The download could not finish');
+});
+
+it('keeps Desktop visible but unavailable in a browser and shares the selection with the setup dialog', async () => {
+ requireSetup(); dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ expect(host.querySelector<HTMLInputElement>('input[value=desktop]')!.disabled).toBe(true);
+ expect(host.textContent).toContain('Open this environment in Redeven Desktop');
+});
+it('preserves an explicit Desktop choice when opening an application setup dialog', async () => {
+ requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
+ dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ selectDownloadMethod('desktop', host);
+ button('Open in new window · Text Editor').click(); await settle();
+ expect(document.querySelector<HTMLInputElement>('[role=dialog] input[value=desktop]')!.checked).toBe(true);
+ expect(document.querySelector('[role=dialog]')!.textContent).not.toContain('Prepare host applications');
+});
+it('cancels Desktop acquisition before there is a host operation', async () => {
+ requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
+ let finish!: (value: unknown) => void;
+ state.components.mockImplementation((request: { action: string }) => request.action === 'acquire' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ok:true}));
+ await selectAndPrepare('desktop');
+ [...host.querySelectorAll('button')].find(el => el.textContent === 'Cancel')!.click(); await settle();
+ finish({ok:true,size:180}); await settle();
+ expect(state.setupStart).not.toHaveBeenCalled();
+ expect(state.setupUpload).not.toHaveBeenCalled();
+ expect(state.preparation).toHaveBeenCalledWith({action:'close',id:'preparation-window'});
+ expect(host.textContent).toContain('Preparation cancelled');
+});
+it('reuses Desktop upload admission after its response is lost', async () => {
+ requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
+ state.components.mockResolvedValue({ok:true,size:180});
+ state.setupStart.mockRejectedValue(new Error('Response lost'));
+ await selectAndPrepare('desktop');
+ preparationButton().click(); await settle();
+ expect(state.setupStart).toHaveBeenCalledTimes(2);
+ expect(state.setupStart.mock.calls[1]).toEqual(state.setupStart.mock.calls[0]);
 });

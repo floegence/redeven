@@ -6216,7 +6216,15 @@
     }
   },
   "hostApplications": {
+    "macControls": "应用控制",
     "prepare": {
+      "downloadMethod": "下载方式",
+      "hostDownload": "主机自行下载",
+      "hostDownloadHint": "直接在这台主机上下载组件。",
+      "desktopDownload": "Desktop 下载并上传",
+      "desktopDownloadHint": "在当前电脑下载组件，再传输到主机。",
+      "desktopUnavailable": "在 Redeven Desktop 中打开此环境即可使用。",
+
       "title": "准备主机应用",
       "description": "Redeven 将自动准备这台主机所需的图形组件，无需手动配置。",
       "start": "开始准备",

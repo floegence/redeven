@@ -42,6 +42,7 @@ export type HostApplicationCatalog = Readonly<{
 }>;
 
 export type HostApplicationPresentation = Readonly<{
+  controls?: string;
   picturePixels?: string;
   picture?: string;
   pictureAuto?: string;

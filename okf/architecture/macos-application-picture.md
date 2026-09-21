@@ -24,7 +24,14 @@ sampled at one pixel per logical point and then stretched. Dimensions are even
 for video encoding. The macOS 14 ScreenCaptureKit filter reports source density;
 macOS 13 derives it from the screen with the largest window intersection.
 
-The application window exposes a compact picture panel with Automatic, Clarity
+A small control handle at the left edge opens the application controls, collapsed
+by default. The panel overlays the full-size application without a bottom toolbar
+or layout resize. Outside input, focus leaving the panel, or Escape collapses it;
+Escape returns focus to its trigger, and loss of the stream retires open controls.
+The panel stays within narrow and short viewports and contains the host window
+selector, native menu and close action alongside picture settings.
+
+The picture settings offer Automatic, Clarity
 first, Motion first and Save data. Their default limits are respectively 4096/30,
 4096/30, 2560/60 and 1600/15 (longest-edge pixels / frames per second). Clarity uses
 higher JPEG quality on image transport; Automatic adjusts video bitrate under

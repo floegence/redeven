@@ -6216,7 +6216,15 @@
     }
   },
   "hostApplications": {
+    "macControls": "應用程式控制",
     "prepare": {
+      "downloadMethod": "下載方式",
+      "hostDownload": "主機自行下載",
+      "hostDownloadHint": "直接在這台主機上下載元件。",
+      "desktopDownload": "Desktop 下載並上傳",
+      "desktopDownloadHint": "在目前的電腦下載元件，再傳輸到主機。",
+      "desktopUnavailable": "在 Redeven Desktop 中開啟此環境即可使用。",
+
       "title": "準備主機應用程式",
       "description": "Redeven 將自動準備這台主機所需的圖形元件，無須手動設定。",
       "start": "開始準備",

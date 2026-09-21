@@ -6201,7 +6201,15 @@
     }
   },
   "hostApplications": {
+    "macControls": "アプリ操作",
     "prepare": {
+      "downloadMethod": "ダウンロード方法",
+      "hostDownload": "ホストでダウンロード",
+      "hostDownloadHint": "このホストにコンポーネントを直接ダウンロードします。",
+      "desktopDownload": "Desktop でダウンロードして転送",
+      "desktopDownloadHint": "このコンピューターでダウンロードしてからホストに転送します。",
+      "desktopUnavailable": "この方法を使うには、Redeven Desktop でこの環境を開いてください。",
+
       "title": "ホストアプリを準備",
       "description": "Redeven がこのホストに必要なグラフィックコンポーネントを準備します。手動設定は不要です。",
       "start": "準備する",
