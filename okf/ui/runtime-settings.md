@@ -63,7 +63,8 @@ in [Flower setup and settings](flower-setup-and-settings.md).
 
 # Skills operations
 
-Skills load their catalog and source metadata on first entry through
+Skills load their catalog and source metadata on first entry once the runtime
+connection is usable, through
 `/_redeven_proxy/api/ai/skills`. Search and scope filtering affect only the visible
 catalog. Each row retains enablement, effective/shadowed/degraded status, source,
 path, browsing, reinstall, and delete actions. Catalog refresh and mutations are

@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on } from 'solid-js';
 import { Download, Layers, Plus, RefreshIcon, Search } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Select, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog, Dialog } from '../../../primitives/EnvAppModal';
@@ -58,7 +58,9 @@ export function SkillsSection() {
     } catch (error) { setSkillsError(errorMessage(error)); }
     finally { setSkillsReloading(false); setSkillsLoading(false); }
   };
-  onMount(() => { void refreshSkillsCatalog(); });
+  createEffect(on(ctx.canInteract, (available) => {
+    if (available && !skillsData()) void refreshSkillsCatalog();
+  }));
 
   const toggleSkill = async (entry: SkillCatalogEntry, enabled: boolean) => {
     if (!canMutateCatalog()) return;

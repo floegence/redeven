@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-import { Show } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-const state = vi.hoisted(() => ({ api: vi.fn(), canAdmin: true }));
+const state = vi.hoisted(() => ({ api: vi.fn(), canAdmin: true, canInteract: (): boolean => true }));
 vi.mock('../../../services/localApi', () => ({ fetchLocalApiJSON: state.api }));
-vi.mock('../EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canInteract: () => true, canAdmin: () => state.canAdmin }) }));
+vi.mock('../EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canInteract: () => state.canInteract(), canAdmin: () => state.canAdmin }) }));
 vi.mock('../SettingsPrimitives', () => ({ SettingsSection: (props: any) => <section><h1>{props.title}</h1>{props.actions}<Show when={props.error}><p role="alert">{props.error}</p></Show>{props.children}</section>, FieldLabel: (props: any) => <label>{props.children}</label> }));
 vi.mock('../SkillsCatalogList', () => ({ SkillsCatalogList: (props: any) => <div>{props.skills.map((entry: any) => <div>{entry.name}<button disabled={!props.canAdmin} onClick={() => props.onDelete(entry)}>Delete</button><button disabled={!props.canAdmin} onClick={() => props.onToggle(entry, false)}>Disable</button></div>)}</div> }));
 vi.mock('../../../primitives/EnvAppModal', () => ({
@@ -16,9 +16,17 @@ let dispose: (() => void) | undefined;
 function mount() { const host = document.createElement('div'); document.body.append(host); dispose = render(() => <SkillsSection />, host); return host; }
 function click(host: HTMLElement, text: string) { const button = [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === text); expect(button, text).toBeTruthy(); button!.click(); }
 const skill = { id: 'one', name: 'example', description: 'Example skill', path: '/skills/example/SKILL.md', scope: 'user', enabled: true, effective: true };
-beforeEach(() => { state.canAdmin = true; state.api.mockReset().mockImplementation(async (path: string) => path.endsWith('/sources') ? { items: [] } : { skills: [skill], catalog_version: 1 }); });
+beforeEach(() => { state.canAdmin = true; state.canInteract = () => true; state.api.mockReset().mockImplementation(async (path: string) => path.endsWith('/sources') ? { items: [] } : { skills: [skill], catalog_version: 1 }); });
 afterEach(() => { dispose?.(); document.body.innerHTML = ''; });
 describe('Skills settings API integration', () => {
+  it('loads after entering the page while the runtime is still connecting', async () => {
+    const [connected, setConnected] = createSignal(false);
+    state.canInteract = connected;
+    const host = mount();
+    expect(state.api).not.toHaveBeenCalled();
+    setConnected(true);
+    await vi.waitFor(() => expect(host.textContent).toContain('example'));
+  });
   it('loads the catalog on entry and reports failed reloads', async () => {
     const host = mount();
     await vi.waitFor(() => expect(state.api).toHaveBeenCalledWith('/_redeven_proxy/api/ai/skills', { method: 'GET' }));
