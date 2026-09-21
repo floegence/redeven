@@ -160,11 +160,11 @@
 .flower-readiness-art__bloom svg { width: 100%; height: 100%; }
 
 .ai-readiness-surface[data-mode='busy'] .ai-readiness-title {
-  margin-top: 1.25rem;
-  font-size: 1.125rem;
-  font-weight: 550;
-  line-height: 1.5;
-  letter-spacing: -0.015em;
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 0;
   text-wrap: balance;
 }
 
