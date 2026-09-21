@@ -205,7 +205,6 @@ async function verify(page, url, name, suppliedObserver) {
     if (surface === 'Workbench') {
       await observer.bringToFront();
       await observer.getByRole('tab', { name: 'Workbench', exact: true }).click();
-      await openNotesObserver(observer);
       await page.bringToFront();
       await page.getByRole('tab', { name: 'Workbench', exact: true }).click();
       await page.getByTitle('Go to path', { exact: true }).filter({ visible: true }).last().waitFor();
@@ -215,6 +214,12 @@ async function verify(page, url, name, suppliedObserver) {
     await checkMedia(page, 'audio', files[1], output, surface, observer);
     if (option('--local-video')) await checkMedia(page, 'video', path.resolve(option('--local-video')), output, surface, observer);
   }
+  // Workbench owns the observer window while shared widget changes are checked;
+  // return it to Activity before opening Notes because its control is Activity-scoped.
+  await observer.bringToFront();
+  await observer.getByRole('tab', { name: 'Activity', exact: true }).click();
+  await openNotesObserver(observer);
+  await page.bringToFront();
   const topic = `Media acceptance ${name}`;
   const result = await page.evaluate(async (topic) => {
     const response = await fetch('/_redeven_proxy/api/notes/topics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: topic }) });
