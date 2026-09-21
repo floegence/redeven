@@ -2,6 +2,7 @@
 """Verify explicit graceful quit and detachment using only disposable apps."""
 import argparse
 import json
+from itertools import product
 import os
 from pathlib import Path
 import plistlib
@@ -19,8 +20,8 @@ def run(helper_path):
         root = Path(temporary)
         compiled = root / 'Fixture'
         subprocess.run(['swiftc', str(Path(__file__).parent / 'fixtures/nativeHostApplication.swift'), '-o', str(compiled)], check=True)
-        for windowless in (True, False):
-            bundle = root / ('Background.app' if windowless else 'Windowed.app')
+        for windowless, session_quit in product((True, False), repeat=2):
+            bundle = root / (('Background' if windowless else 'Windowed') + ('-Session.app' if session_quit else '-Catalog.app'))
             executable = bundle / 'Contents/MacOS/Fixture'
             executable.parent.mkdir(parents=True)
             executable.write_bytes(compiled.read_bytes())
@@ -73,23 +74,35 @@ def run(helper_path):
                 assert receipt()['quit_requests'] == 0, 'Partially stale selection terminated a live process'
                 helper.send('quit', application_id='macos-foreign', instances=target['instances'])
                 assert helper.wait('error')['code'] == 'APPLICATION_NOT_FOUND'
-                if not windowless:
+                if not windowless or session_quit:
                     sharing = Helper(helper_path)
                     sharing.send('launch', application_id=app['id'], paths=[str(bundle)])
                     assert sharing.wait('launched')['existing_application']
-                    sharing.wait('window'); sharing.wait('frame')
-                helper.send('quit', **target)
-                helper.wait('quit_requested')
+                    window = sharing.wait('waiting' if windowless else 'window')
+                    if not windowless:
+                        sharing.wait('frame')
+                    if session_quit:
+                        sharing.send('quit_application', generation=window['generation'] - 1)
+                        assert sharing.wait('operation_error')['code'] == 'STALE_WINDOW'
+                        assert receipt()['quit_requests'] == 0, 'Stale capture generation quit the application'
+                def request_quit():
+                    if session_quit:
+                        sharing.send('quit_application', generation=window['generation'], application_id='macos-foreign', instances=['f' * 64])
+                        sharing.wait('operation_complete', predicate=lambda event: event.get('action') == 'quit_application')
+                    else:
+                        helper.send('quit', **target)
+                        helper.wait('quit_requested')
+                request_quit()
                 eventually(lambda: receipt().get('quit_requests') == 1, 'First quit did not reach the application')
                 assert running() == target, 'Cancelled quit removed the running application'
                 os.kill(pid, 0)
                 if sharing:
                     assert not any(e['type'] == 'ended' for e in sharing.events)
                     sharing.send('resume')
-                    window = sharing.wait('window')
-                    sharing.wait('frame', predicate=lambda f: f['generation'] == window['generation'])
-                helper.send('quit', **target)
-                helper.wait('quit_requested')
+                    window = sharing.wait('waiting' if windowless else 'window')
+                    if not windowless:
+                        sharing.wait('frame', predicate=lambda f: f['generation'] == window['generation'])
+                request_quit()
                 if sharing:
                     sharing.wait('ended')
                 eventually(lambda: running() is None, 'Confirmed quit did not remove the running application')
@@ -97,7 +110,7 @@ def run(helper_path):
                            'Quit left the application process running')
                 helper.send('quit', **target)
                 assert helper.wait('error')['code'] == 'APPLICATION_NOT_FOUND'
-                results.append(dict(windowless=windowless, pid=pid, cancelled_quit_preserved=True,
+                results.append(dict(windowless=windowless, session_quit=session_quit, pid=pid, cancelled_quit_preserved=True,
                                     stale_selection_rejected=True, quit_confirmed=True))
             finally:
                 if sharing:

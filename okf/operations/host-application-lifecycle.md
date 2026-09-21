@@ -74,6 +74,15 @@ input. This matrix is not a certification of every installed application.
 | Input cannot prove foreground/window ownership | Nonblocking failure; no replay into another app | Native input fixture and viewer operation tests |
 | Video decoder unavailable or fails | Negotiate image transport for the same process | Existing picture/viewer acceptance |
 
+# Toolbar acceptance
+
+The viewer toolbar acceptance also covers content-area resizing below the fixed
+bar, bounded popovers at 320/390/1000 pixels, native-menu keyboard navigation,
+separate window close and confirmed application quit, late menu dismissal, and
+unconfirmed quit without replay. The native quit fixture runs both catalog and
+session-bound controls with visible and windowless apps, verifies cancellation,
+and rejects stale generations before any termination request.
+
 # Limits and environment evidence
 
 Screen recording and accessibility permissions remain explicit macOS grants.

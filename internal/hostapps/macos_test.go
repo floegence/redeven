@@ -177,6 +177,7 @@ while IFS= read -r request; do
  *'"action":"resume"'*) printf '%s\n' '{"type":"window","window":"one","generation":1}' '{"type":"frame","generation":1,"data":"ZnJhbWU="}' ;;
  *'"action":"input"'*) printf '%s\n' '{"type":"operation_error","action":"input","code":"WINDOW_NOT_FOCUSED"}' ;;
  *'"action":"menu"'*) printf '%s\n' '{"type":"menu","items":[]}' ;;
+ *'"action":"quit_application"'*) printf '%s\n' '{"type":"operation_complete","action":"quit_application"}' ;;
  *'"action":"select"'*) printf '%s\n' '{"type":"waiting","generation":2}' '{"type":"frame","generation":1,"data":"c3RhbGU="}' ;;
  *'"action":"resize"'*) printf '%s\n' '{"type":"window","window":"replacement","generation":3}' '{"type":"frame","generation":3,"data":"bmV3"}' ;;
  esac
@@ -225,6 +226,8 @@ done
 		send("input")
 		read(websocket.TextMessage, "operation_error")
 	}
+	send("quit_application")
+	read(websocket.TextMessage, `"action":"quit_application"`)
 	send("menu")
 	read(websocket.TextMessage, `"type":"menu"`)
 	send("select")

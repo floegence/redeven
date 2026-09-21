@@ -11,45 +11,46 @@
   const context = canvas.getContext('2d', { alpha: false });
   const retry = document.getElementById('retry');
   const native = window.redevenHostApplicationWindow;
-  const controls = document.createElement('div');
+  document.body.classList.add('mac-app-viewer');
+  const controls = document.createElement('header');
   controls.className = 'mac-app-controls';
   controls.hidden = true;
-  const close = document.createElement('button');
-  close.textContent = config.copy.closeWindow;
-  close.title = config.copy.closeWindow;
-  const menu = document.createElement('button');
-  menu.textContent = config.copy.menu;
-  menu.setAttribute('aria-expanded', 'false');
+  const toolbar = document.createElement('div');
+  toolbar.className = 'mac-app-toolbar';
+  toolbar.setAttribute('role', 'toolbar');
+  toolbar.setAttribute('aria-label', config.copy.controls);
+  function toolbarButton(className, label, path) {
+    const button = document.createElement('button');
+    button.className = className;
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.innerHTML = `<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">${path}</svg>`;
+    const text = document.createElement('span');
+    text.className = 'mac-app-toolbar-label';
+    text.textContent = label;
+    button.append(text);
+    return button;
+  }
+  const close = toolbarButton('mac-app-close', config.copy.closeWindow, '<rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M3 7h14m-9 3 4 4m0-4-4 4"/>');
+  const quit = toolbarButton('mac-app-quit', config.copy.quit, '<path d="M10 2v8m-4-6a7 7 0 1 0 8 0"/>');
+  const menu = toolbarButton('mac-app-menu-toggle', config.copy.menu, '<path d="M4 5h12M4 10h12M4 15h12"/>');
+  menu.querySelector('span').textContent = document.title;
+  const controlsButton = toolbarButton('mac-app-controls-toggle', config.copy.picture, '<path d="M4 3v4m0 4v6m6-14v8m0 4v2m6-14v2m0 4v8M2 7h4m2 8h4m2-10h4"/>');
+  const windowToggle = toolbarButton('mac-app-windows-toggle', config.copy.windows, '<rect x="3" y="7" width="11" height="10" rx="2"/><path d="M7 4V3h10v10h-1"/>');
+  const windowCount = document.createElement('span');
+  windowCount.className = 'mac-app-window-count';
+  windowCount.setAttribute('aria-hidden', 'true');
+  windowToggle.append(windowCount);
+  windowToggle.insertAdjacentHTML('beforeend', '<svg class="mac-app-dropdown-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg>');
+  const popover = document.createElement('div');
+  popover.id = 'application-controls';
+  popover.className = 'mac-app-popover';
+  popover.hidden = true;
   const menuPanel = document.createElement('div');
   menuPanel.className = 'mac-app-menu';
   menuPanel.hidden = true;
-  const drawer = document.createElement('div');
-  drawer.id = 'application-controls';
-  drawer.className = 'mac-app-drawer';
-  drawer.hidden = true;
-  drawer.setAttribute('role', 'region');
-  drawer.setAttribute('aria-label', config.copy.controls);
-  const actions = document.createElement('div');
-  actions.className = 'mac-app-actions';
-  actions.append(menu, close, menuPanel);
-  document.body.append(controls);
-  const controlsButton = document.createElement('button');
-  controlsButton.className = 'mac-app-controls-toggle';
-  controlsButton.title = config.copy.controls;
-  controlsButton.setAttribute('aria-label', config.copy.controls);
-  controlsButton.innerHTML = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 3v4m0 4v6m6-14v8m0 4v2m6-14v2m0 4v8M2 7h4m2 8h4m2-10h4"/></svg>';
-  controlsButton.setAttribute('aria-expanded', 'false');
-  controlsButton.setAttribute('aria-controls', drawer.id);
-  const windowToggle = document.createElement('button');
-  windowToggle.className = 'mac-app-windows-toggle';
-  windowToggle.hidden = true;
-  windowToggle.title = config.copy.windows;
-  windowToggle.setAttribute('aria-expanded', 'false');
-  windowToggle.setAttribute('aria-controls', drawer.id);
-  windowToggle.innerHTML = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="7" width="11" height="10" rx="2"/><path d="M7 4V3h10v10h-1"/></svg>';
-  const windowCount = document.createElement('span');
-  windowCount.setAttribute('aria-hidden', 'true');
-  windowToggle.append(windowCount);
+  menuPanel.setAttribute('role', 'menu');
+  menuPanel.setAttribute('aria-label', config.copy.menu);
   const windowPanel = document.createElement('section');
   windowPanel.className = 'mac-app-window-picker';
   windowPanel.hidden = true;
@@ -59,10 +60,44 @@
   const windowList = document.createElement('div');
   windowList.className = 'mac-app-window-list';
   windowPanel.append(windowTitle, windowList);
+  const quitPanel = document.createElement('section');
+  quitPanel.className = 'mac-app-quit-confirmation';
+  quitPanel.hidden = true;
+  quitPanel.setAttribute('role', 'dialog');
+  quitPanel.setAttribute('aria-labelledby', 'quit-title');
+  quitPanel.setAttribute('aria-describedby', 'quit-description');
+  const quitTitle = document.createElement('strong');
+  quitTitle.id = 'quit-title';
+  quitTitle.textContent = config.copy.quitTitle;
+  const quitDescription = document.createElement('p');
+  quitDescription.id = 'quit-description';
+  quitDescription.textContent = config.copy.quitDescription;
+  const quitActions = document.createElement('div');
+  quitActions.className = 'mac-app-confirm-actions';
+  const cancelQuit = document.createElement('button');
+  cancelQuit.textContent = config.copy.cancel;
+  const confirmQuit = document.createElement('button');
+  confirmQuit.textContent = config.copy.quit;
+  confirmQuit.className = 'mac-app-confirm-quit';
+  quitActions.append(cancelQuit, confirmQuit);
+  quitPanel.append(quitTitle, quitDescription, quitActions);
+  const separator = document.createElement('span');
+  separator.className = 'mac-app-toolbar-separator';
+  separator.setAttribute('aria-hidden', 'true');
+  toolbar.append(menu, windowToggle, controlsButton, separator, close, quit);
+  controls.append(toolbar, popover);
+  document.body.append(controls);
   const windowEntries = new Map();
-  let drawerSection = 'picture';
+  let panelSection = null;
+  let quitTimer;
+  let quitPending = false;
+  let quitRequested = false;
   function syncWindowPicker() {
-    windowToggle.hidden = windowEntries.size === 0;
+    const available = ['active', 'waiting', 'captureUnavailable'].includes(document.body.dataset.state);
+    windowToggle.disabled = !available || windowEntries.size === 0;
+    menu.disabled = !available;
+    quit.disabled = !available || quitPending;
+    controlsButton.disabled = document.body.dataset.state !== 'active';
     windowCount.textContent = String(windowEntries.size);
     windowToggle.setAttribute('aria-label', `${config.copy.windows} · ${windowEntries.size}`);
     for (const [id, entry] of windowEntries) {
@@ -70,7 +105,14 @@
       entry.button.setAttribute('aria-pressed', String(selected));
       entry.button.setAttribute('aria-busy', String(selected && renderedGeneration !== current?.generation));
     }
-    close.disabled = !current?.window || renderedGeneration !== current.generation;
+    const title = windowEntries.get(current?.window)?.title.textContent || config.copy.windows;
+    windowToggle.querySelector('.mac-app-toolbar-label').textContent = title;
+    windowToggle.title = `${config.copy.windows} · ${windowEntries.size} — ${title}`;
+    close.disabled = !available || !current?.window || renderedGeneration !== current.generation;
+    if (![...toolbar.querySelectorAll('button')].some(button => !button.disabled && button.tabIndex === 0)) {
+      const first = toolbar.querySelector('button:not(:disabled)');
+      for (const button of toolbar.querySelectorAll('button')) button.tabIndex = button === first ? 0 : -1;
+    }
   }
   function renderWindows(items) {
     const focused = document.activeElement;
@@ -94,8 +136,8 @@
       if (windowList.children[index] !== entry.button) windowList.insertBefore(entry.button, windowList.children[index] || null);
     });
     syncWindowPicker();
-    if (hadFocus) (focused.isConnected ? focused : windowToggle.hidden ? controlsButton : windowToggle).focus({preventScroll:true});
-    if (!items.length && drawerSection === 'windows') collapseControls();
+    if (hadFocus) (focused.isConnected ? focused : windowToggle.disabled ? menu : windowToggle).focus({preventScroll:true});
+    if (!items.length && panelSection === 'windows') collapseControls();
   }
   const picturePanel = document.createElement('section');
   picturePanel.id = 'picture-settings';
@@ -170,8 +212,7 @@
     statisticValues[key] = value; row.append(label, value); statistics.append(row);
   }
   picturePanel.append(statistics);
-  drawer.append(windowPanel, picturePanel, actions);
-  controls.append(windowToggle, controlsButton, drawer);
+  popover.append(windowPanel, picturePanel, menuPanel, quitPanel);
   let receivedBytes = 0, paintedFrames = 0, measuredAt = performance.now();
   const statisticsTimer = setInterval(() => {
     const now = performance.now(), elapsed = (now - measuredAt) / 1000;
@@ -185,29 +226,144 @@
   function configurePicture() {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({action: 'configure', ...picture, pixel_ratio: Math.min(4, Math.max(0.5, devicePixelRatio || 1)), video: videoSupported}));
   }
-  function collapseControls() {
-    drawer.hidden = true;
-    controlsButton.setAttribute('aria-expanded', 'false');
-    windowToggle.setAttribute('aria-expanded', 'false');
-    menuPanel.hidden = true;
-    menu.setAttribute('aria-expanded', 'false');
+  const panels = { windows: windowPanel, picture: picturePanel, menu: menuPanel, quit: quitPanel };
+  const toggles = { windows: windowToggle, picture: controlsButton, menu, quit };
+  let menuTimer;
+  let menuPath = [];
+  for (const [section, toggle] of Object.entries(toggles)) {
+    toggle.setAttribute('aria-controls', popover.id);
+    toggle.setAttribute('aria-expanded', 'false');
+    if (section === 'menu' || section === 'quit') toggle.setAttribute('aria-haspopup', section === 'menu' ? 'menu' : 'dialog');
+    toggle.onclick = () => toggleControls(section);
+  }
+  for (const button of toolbar.querySelectorAll('button')) button.tabIndex = button === menu ? 0 : -1;
+  toolbar.addEventListener('focusin', event => {
+    if (event.target.tagName !== 'BUTTON') return;
+    for (const button of toolbar.querySelectorAll('button')) button.tabIndex = button === event.target ? 0 : -1;
+  });
+  toolbar.addEventListener('keydown', event => {
+    const buttons = [...toolbar.querySelectorAll('button:not(:disabled)')];
+    const index = buttons.indexOf(document.activeElement);
+    let next;
+    if (event.key === 'ArrowRight') next = buttons[(index + 1) % buttons.length];
+    if (event.key === 'ArrowLeft') next = buttons[(index - 1 + buttons.length) % buttons.length];
+    if (event.key === 'Home') next = buttons[0];
+    if (event.key === 'End') next = buttons.at(-1);
+    if (next) { event.preventDefault(); collapseControls(); next.focus(); }
+    if (event.key === 'ArrowDown') {
+      const section = Object.keys(toggles).find(key => toggles[key] === document.activeElement);
+      if (section) { event.preventDefault(); if (panelSection !== section) toggleControls(section); }
+    }
+  });
+  function positionPopover() {
+    if (popover.hidden || !panelSection) return;
+    const anchor = toggles[panelSection].getBoundingClientRect();
+    popover.style.left = `${Math.max(8, Math.min(anchor.left, innerWidth - popover.offsetWidth - 8))}px`;
+  }
+  function collapseControls(restoreFocus = false) {
+    const toggle = toggles[panelSection];
+    panelSection = null;
+    clearTimeout(menuTimer);
+    popover.hidden = true;
+    for (const panel of Object.values(panels)) panel.hidden = true;
+    for (const button of Object.values(toggles)) button.setAttribute('aria-expanded', 'false');
+    menuPanel.removeAttribute('aria-busy');
+    if (restoreFocus && toggle && !toggle.disabled) toggle.focus({preventScroll:true});
   }
   function toggleControls(section) {
-    const opening = drawer.hidden || drawerSection !== section;
+    const opening = panelSection !== section;
     collapseControls();
-    drawerSection = section;
-    windowPanel.hidden = section !== 'windows';
-    picturePanel.hidden = section !== 'picture' || document.body.dataset.state !== 'active';
-    drawer.hidden = !opening;
-    if (opening) {
-      const toggle = section === 'windows' ? windowToggle : controlsButton;
-      toggle.setAttribute('aria-expanded', 'true');
+    if (!opening || toggles[section].disabled) return;
+    panelSection = section;
+    popover.hidden = false;
+    panels[section].hidden = false;
+    toggles[section].setAttribute('aria-expanded', 'true');
+    positionPopover();
+    if (section === 'menu') {
+      menuPath = [];
+      menuPanel.replaceChildren();
+      menuPanel.setAttribute('aria-busy', 'true');
+      menuTimer = setTimeout(() => {
+        if (panelSection === 'menu') { collapseControls(true); showFeedback(config.copy.operationFailed); }
+      }, 6000);
+      send({action:'menu'});
+    } else {
       const selected = windowEntries.get(current?.window)?.button;
-      (section === 'windows' ? selected || windowList.querySelector('button') : picturePanel.hidden ? menu : modeButtons.get(picture.mode))?.focus();
+      (section === 'windows' ? selected || windowList.querySelector('button') : section === 'quit' ? cancelQuit : modeButtons.get(picture.mode))?.focus();
     }
   }
-  controlsButton.onclick = () => toggleControls('picture');
-  windowToggle.onclick = () => toggleControls('windows');
+  function parentMenu() {
+    const child = menuPath.pop();
+    renderMenu(child.id);
+  }
+  function renderMenu(focusedID) {
+    const level = menuPath.at(-1);
+    menuPanel.replaceChildren();
+    let focused;
+    if (menuPath.length > 1) {
+      const back = document.createElement('button');
+      back.className = 'mac-app-menu-back';
+      back.setAttribute('role', 'menuitem');
+      back.tabIndex = -1;
+      back.textContent = '‹ ' + level.title;
+      back.onclick = parentMenu;
+      menuPanel.append(back);
+    }
+    for (const item of level.items) {
+      const button = document.createElement('button');
+      button.setAttribute('role', 'menuitem');
+      button.tabIndex = -1;
+      button.textContent = item.title;
+      button.disabled = !item.enabled;
+      if (item.children.length) {
+        button.setAttribute('aria-haspopup', 'menu');
+        button.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5"/></svg>');
+      }
+      button.onclick = () => {
+        if (item.children.length) { menuPath.push({id:item.id, title:item.title, items:item.children}); renderMenu(); }
+        else { send({action:'menu_action', item:item.id}); collapseControls(true); }
+      };
+      menuPanel.append(button);
+      if (item.id === focusedID) focused = button;
+    }
+    const first = focused || menuPanel.querySelector('button:not(:disabled):not(.mac-app-menu-back)') || menuPanel.querySelector('button:not(:disabled)');
+    if (first) { first.tabIndex = 0; first.focus(); }
+  }
+  // Menu and window lists use native-style arrow navigation without leaking keys
+  // into the remotely controlled application.
+  for (const list of [menuPanel, windowList]) list.addEventListener('keydown', event => {
+    const buttons = [...list.querySelectorAll('button:not(:disabled)')];
+    const index = buttons.indexOf(document.activeElement);
+    let next;
+    if (event.key === 'ArrowDown') next = buttons[(index + 1) % buttons.length];
+    if (event.key === 'ArrowUp') next = buttons[(index - 1 + buttons.length) % buttons.length];
+    if (event.key === 'Home') next = buttons[0];
+    if (event.key === 'End') next = buttons.at(-1);
+    if (next) {
+      event.preventDefault();
+      if (list === menuPanel) for (const button of buttons) button.tabIndex = button === next ? 0 : -1;
+      next.focus();
+    }
+    if (list === menuPanel && event.key === 'Tab') collapseControls(true);
+    if (list === menuPanel && event.key === 'ArrowRight' && document.activeElement?.getAttribute('aria-haspopup') === 'menu') {
+      event.preventDefault(); document.activeElement.click();
+    }
+    if (list === menuPanel && event.key === 'ArrowLeft' && menuPath.length > 1) {
+      event.preventDefault(); parentMenu();
+    }
+  });
+  cancelQuit.onclick = () => collapseControls(true);
+  confirmQuit.onclick = () => {
+    collapseControls(true);
+    quitPending = true;
+    quitRequested = true;
+    syncWindowPicker();
+    if (!input.disabled) input.focus({preventScroll:true});
+    send({action:'quit_application'});
+    quitTimer = setTimeout(() => {
+      quitPending = false; syncWindowPicker(); showFeedback(config.copy.quitFailed);
+    }, 6000);
+  };
   const input = document.createElement('textarea');
   input.className = 'mac-app-input';
   input.setAttribute('aria-label', config.copy.input);
@@ -218,6 +374,7 @@
   feedback.setAttribute('role', 'status');
   feedback.hidden = true;
   document.body.append(feedback);
+  function showFeedback(message) { feedback.textContent = message; feedback.hidden = false; }
   let socket,
     attempt = 0,
     active = false,
@@ -240,15 +397,12 @@
     canvas.setAttribute('aria-hidden', String(state !== 'active'));
     canvas.tabIndex = state === 'active' ? 0 : -1;
     controls.hidden = !['active', 'waiting', 'captureUnavailable'].includes(state);
-    picturePanel.hidden = state !== 'active' || drawerSection !== 'picture';
-    close.hidden = state !== 'active';
+    picturePanel.hidden = state !== 'active' || panelSection !== 'picture';
     syncWindowPicker();
     input.disabled = state !== 'active' || !renderedGeneration;
     if (state !== 'active') {
       feedback.hidden = true;
       collapseControls();
-      menuPanel.hidden = true;
-      menu.setAttribute('aria-expanded', 'false');
     }
   }
   function send(value) {
@@ -256,7 +410,7 @@
       socket?.readyState === WebSocket.OPEN &&
       current &&
       (current.window && renderedGeneration === current.generation ||
-        ['resize', 'select', 'release', 'menu', 'menu_action'].includes(value.action))
+        ['resize', 'select', 'release', 'menu', 'menu_action', 'quit_application'].includes(value.action))
     )
       socket.send(
         JSON.stringify({
@@ -274,31 +428,34 @@
     input.value = '';
     if (move) cancelAnimationFrame(move);
     move = null;
-    menuPanel.hidden = true;
+    if (panelSection === 'menu') collapseControls();
     menuPanel.replaceChildren();
-    menu.setAttribute('aria-expanded', 'false');
   }
   function disconnect(state) {
     clearTimeout(deadline);
+    clearTimeout(quitTimer);
+    quitPending = false;
     abort?.abort();
     socket?.close();
     socket = null;
     current = null;
     invalidateCapture();
     present(state);
-    if (hostApplicationConnection.ended(state) && active) {
+    if (hostApplicationConnection.ended(state) && (active || quitRequested)) {
       if (native) native.request('close');
       else window.close();
     }
   }
   let configuredRatio;
   function resize() {
+    positionPopover();
     if (configuredRatio !== devicePixelRatio) { configuredRatio = devicePixelRatio; configurePicture(); }
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       if (current?.window) {
-        const width = Math.max(320, innerWidth),
-          height = Math.max(200, innerHeight),
+        const rect = canvas.getBoundingClientRect();
+        const width = Math.max(320, Math.round(rect.width)),
+          height = Math.max(200, Math.round(rect.height)),
           key = `${width}:${height}`;
         if (sizes.get(current.window) !== key) {
           sizes.set(current.window, key);
@@ -431,12 +588,14 @@
           current = { generation: message.generation };
           present(message.type === 'waiting' ? 'waiting' : 'captureUnavailable');
         } else if (message.type === 'operation_error') {
-          if (message.code !== 'STALE_WINDOW') {
-            feedback.textContent = config.copy.operationFailed;
-            feedback.hidden = false;
-          }
+          if (message.action === 'quit_application') {
+            clearTimeout(quitTimer); quitPending = false; syncWindowPicker(); showFeedback(config.copy.quitFailed);
+          } else if (message.code !== 'STALE_WINDOW') showFeedback(config.copy.operationFailed);
+          if (message.action === 'menu' && panelSection === 'menu') collapseControls(true);
         } else if (message.type === 'operation_complete') {
-          feedback.hidden = true;
+          if (message.action === 'quit_application') {
+            clearTimeout(quitTimer); quitPending = false; syncWindowPicker(); showFeedback(config.copy.quitPending);
+          } else feedback.hidden = true;
         } else if (message.type === 'window') {
           clearTimeout(deadline);
           deadline = setTimeout(() => {
@@ -458,29 +617,12 @@
         } else if (message.type === 'windows') {
           renderWindows(message.windows);
         } else if (message.type === 'menu') {
-          if (!current || message.generation !== current.generation) return;
-          const build = (items) =>
-            items.map((item) => {
-              if (item.children.length) {
-                const group = document.createElement('details');
-                const title = document.createElement('summary');
-                title.textContent = item.title;
-                group.append(title, ...build(item.children));
-                return group;
-              }
-              const button = document.createElement('button');
-              button.textContent = item.title;
-              button.disabled = !item.enabled;
-              button.onclick = () => {
-                send({ action: 'menu_action', item: item.id });
-                menuPanel.hidden = true;
-                menu.setAttribute('aria-expanded', 'false');
-              };
-              return button;
-            });
-          menuPanel.replaceChildren(...build(message.items));
-          menuPanel.hidden = false;
-          menu.setAttribute('aria-expanded', 'true');
+          if (!current || message.generation !== current.generation || panelSection !== 'menu') return;
+          clearTimeout(menuTimer);
+          menuPanel.removeAttribute('aria-busy');
+          if (!message.items.length) { collapseControls(true); showFeedback(config.copy.operationFailed); return; }
+          menuPath = [{title:config.copy.menu, items:message.items}];
+          renderMenu();
         } else if (message.type === 'error' && message.code !== 'STALE_WINDOW')
           disconnect('failed');
         else if (message.type === 'ended') void reconcile();
@@ -648,42 +790,24 @@
     clearTimeout(deadline);
     clearTimeout(resizeTimer);
     clearInterval(statisticsTimer);
+    clearTimeout(menuTimer);
+    clearTimeout(quitTimer);
     resetDecoder();
   });
-  close.onclick = () => send({ action: 'close' });
-  menu.onclick = () => {
-    if (!menuPanel.hidden) {
-      menuPanel.hidden = true;
-      menu.setAttribute('aria-expanded', 'false');
-    } else send({ action: 'menu' });
-  };
-  document.addEventListener('pointerdown', (event) => {
-    if (!controls.contains(event.target)) {
-      collapseControls();
-      menuPanel.hidden = true;
-      menu.setAttribute('aria-expanded', 'false');
-    }
+  close.onclick = () => { collapseControls(); send({ action: 'close' }); };
+  document.addEventListener('pointerdown', event => {
+    if (!controls.contains(event.target)) collapseControls();
   });
-  controls.addEventListener('focusout', (event) => {
-    // WebKit may blur a button to the document before clicking another control.
-    // Only a concrete focus destination outside the panel dismisses it.
+  controls.addEventListener('focusout', event => {
+    // WebKit may blur to the document before clicking another control.
     if (event.relatedTarget && !controls.contains(event.relatedTarget)) collapseControls();
   });
-  document.addEventListener(
-    'keydown',
-    (event) => {
-      if (event.key === 'Escape' && !menuPanel.hidden) {
-        event.stopImmediatePropagation();
-        event.preventDefault();
-        menuPanel.hidden = true;
-        menu.setAttribute('aria-expanded', 'false');
-        menu.focus();
-      } else if (event.key === 'Escape' && !drawer.hidden) {
-        event.stopImmediatePropagation(); event.preventDefault(); collapseControls(); (drawerSection === 'windows' && !windowToggle.hidden ? windowToggle : controlsButton).focus();
-      }
-    },
-    true,
-  );
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !panelSection) return;
+    event.stopImmediatePropagation(); event.preventDefault();
+    if (panelSection === 'menu' && menuPath.length > 1) { parentMenu(); }
+    else collapseControls(true);
+  }, true);
   retry.onclick = () => void connect();
   if (hostApplicationConnection.initial) present(hostApplicationConnection.initial);
   else void connect();

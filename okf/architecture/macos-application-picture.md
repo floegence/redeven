@@ -24,12 +24,14 @@ sampled at one pixel per logical point and then stretched. Dimensions are even
 for video encoding. The macOS 14 ScreenCaptureKit filter reports source density;
 macOS 13 derives it from the screen with the largest window intersection.
 
-A small control handle at the left edge opens the application controls, collapsed
-by default. The panel overlays the full-size application without a bottom toolbar
-or layout resize. Outside input, focus leaving the panel, or Escape collapses it;
-Escape returns focus to its trigger, and loss of the stream retires open controls.
-The panel stays within narrow and short viewports and contains the host window
-selector, native menu and close action alongside picture settings.
+The fixed top application toolbar opens picture settings in an anchored popover,
+collapsed by default. The toolbar reserves 46 logical pixels; the canvas and native
+AX resize requests use the remaining content area, and pointer coordinates are
+mapped against those same canvas bounds. Opening settings never resizes the app.
+Outside input, focus leaving the controls, or Escape closes the popover; Escape
+returns focus to its trigger. Popovers fit narrow and short viewports, and loss of
+the stream retires them. Window selection, native menus, closing the current window
+and confirmed application quit are independent toolbar actions.
 
 The picture settings offer Automatic, Clarity
 first, Motion first and Save data. Their default limits are respectively 4096/30,
