@@ -1,6 +1,7 @@
 package localui
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -157,6 +159,55 @@ func TestServer_E2E_HTTPSLocalhostConnectsDirectSessionOverWSS(t *testing.T) {
 	}
 	if _, err := current.ProbeLiveness(connectCtx); err != nil {
 		t.Fatal(err)
+	}
+
+	// File transfer must remain usable at the event admission limit. A normal
+	// handler return sends FIN; resetting it can discard unread response bytes.
+	file, err := os.CreateTemp(homePath, ".redeven-event-download-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(file.Name()) })
+	payload := bytes.Repeat([]byte("event-admission-file-integrity\n"), 8192)
+	if _, err := file.Write(payload); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stream, err := current.OpenStream(connectCtx, "fs/read_file", flowersec.EmptyStreamMetadata())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	if err := json.NewEncoder(stream).Encode(map[string]any{"path": file.Name()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(stream)
+	metadata, err := reader.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("file metadata: %v", err)
+	}
+	var fileMeta struct {
+		OK         bool `json:"ok"`
+		ContentLen int  `json:"content_len"`
+	}
+	if err := json.Unmarshal(metadata, &fileMeta); err != nil {
+		t.Fatal(err)
+	}
+	if !fileMeta.OK || fileMeta.ContentLen != len(payload) {
+		t.Fatalf("file metadata = %s", metadata)
+	}
+	got, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("file transfer ended without graceful EOF after %d bytes: %v", len(got), err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("file body length = %d, want %d with identical bytes", len(got), len(payload))
 	}
 }
 
