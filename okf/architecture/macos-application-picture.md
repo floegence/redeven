@@ -3,7 +3,7 @@ type: Runtime Contract
 title: macOS application picture quality and delivery
 description: Retina window pixels, live picture controls, hardware video and bounded authenticated frame delivery.
 tags: [runtime, desktop, applications, macos]
-timestamp: 2026-09-21T04:00:00Z
+timestamp: 2026-09-21T17:00:00Z
 ---
 # Summary
 
@@ -41,6 +41,15 @@ sustained delivery pressure. Explicit resolution and frame-rate limits override
 profile defaults. Local browser preferences persist across applications and
 reloads; unavailable browser storage does not block operation.
 
+The viewer negotiates picture settings, decoding support and content-area size in
+one initial `resume` request. Native capture waits for this request; it does not
+start a default stream and immediately replace it. The helper applies the requested
+size before resolving the capture source. An unchanged effective native size does
+not restart capture, including when the app constrains the requested dimensions.
+A newly selected window uses the most recent viewport. Subsequent viewport, density
+and picture changes use one generation-independent configuration request, so a
+size update cannot be lost to a simultaneous picture-generation change.
+
 Changes apply to the existing application and start a new capture generation.
 Input remains disabled for new coordinates until that generation has decoded
 pixels. Browser scaling and display-density changes renegotiate the capture.
@@ -49,8 +58,12 @@ configuration. Limits are bounded and validated by the native helper.
 
 # Encoders and delivery
 
-A browser advertising H.264 WebCodecs decoding can receive VideoToolbox hardware
-video. The encoder is real time, has no frame reordering, and emits AVCC chunks
+A browser advertising H.264 WebCodecs software decoding can receive VideoToolbox
+hardware video. The viewer requests software decoding with latency optimization:
+hardware browser decoders can buffer the first chunk until more input arrives,
+which deadlocks a static stream with one unacknowledged frame. Capability negotiation
+and actual decoder configuration use the same options; unsupported browsers select
+image transport immediately. The encoder is real time, has no frame reordering, and emits AVCC chunks
 with decoder configuration on key frames. Hardware encoder unavailability uses
 JPEG images; a browser decoder failure explicitly renegotiates image transport.
 Identical BGRA rows are not encoded again, including when ScreenCaptureKit emits
@@ -75,7 +88,18 @@ the successor's only frame notification. The native JSON reader allows up to
 128 MiB per message to accommodate bounded 4096-pixel lossless frames and their
 base64 envelope.
 
+Capture transitions have one native owner. Source discovery, start and stop are
+serialized, and a replacement waits for the preceding `startCapture` and
+`stopCapture` completions. Requests arriving during a transition supersede its
+desired generation; obsolete callbacks and intentional stop errors cannot publish
+failure for the successor. Unchanged resize requests retain frame credit.
+
 # Observable statistics and limits
+
+Runtime diagnostics record connection-to-first-frame duration and generation;
+the browser debug log measures connection-to-first-decoded-frame duration. These
+local diagnostics carry no image bytes, window titles or credentials. Native window
+messages also report source-discovery duration to distinguish OS lookup delay.
 
 The panel reports decoded frame dimensions, frames painted per second, received
 stream bandwidth and actual transport. Frame rate is measured rather than copied
@@ -91,3 +115,5 @@ a 60 FPS limit is not a guarantee of 60 FPS delivery.
 - `internal/codeapp/appserver/host_application_viewer/macos.js` and `internal/envapp/ui_src/src/ui/services/macHostApplicationViewer.test.ts`: live controls, decode acknowledgements, statistics and stale-frame rejection.
 - `scripts/check_macos_host_applications.py`: real native window Retina, hardware video, lossless refresh, backpressure, measured animation frame rates
   and live reconfiguration acceptance.
+- `internal/envapp/ui_src/src/styles/hostApplicationSurfaces.browser.test.tsx`: real browser decoding and acknowledgement of a single synthetic VideoToolbox H.264 frame without a second frame or decoder timeout.
+- `scripts/check_macos_host_application_startup.py`: disposable native startup during reconfiguration, negotiated attachment, unchanged-size capture continuity, repeated reconnect timing and superseded capture requests.

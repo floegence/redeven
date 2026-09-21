@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Native macOS host applications
 description: Real application discovery, direct local launch, owned remote window capture and human input on macOS.
 tags: [runtime, desktop, applications, macos, security]
-timestamp: 2026-09-21T15:05:00Z
+timestamp: 2026-09-21T17:00:00Z
 ---
 # Summary
 
@@ -26,7 +26,10 @@ Canonical bundle paths define identity; localized bundle metadata and system ico
 define presentation. Unknown descriptions and categories remain empty. Arbitrary
 executable arguments, invented product categories and renamed custom entries are
 not part of this macOS catalog. Explicit custom paths are stored privately by
-Redeven and do not change the system application menu.
+Redeven and do not change the system application menu. Launch resolution validates
+current installed bundles and describes only the requested application, avoiding
+full-catalog icon rendering. The streaming helper receives the validated application
+ID and private custom-path inventory directly; it does not repeat a catalog export.
 
 Only a trusted Desktop session marked `local_environment` / `local_host` selects
 direct native launch automatically. `NSWorkspace` opens or activates the actual
@@ -80,7 +83,10 @@ An ephemeral loopback listener requires an unpredictable per-session credential
 via WebSocket subprotocol, independently of the existing owner/full-permission
 forward guard. Credentials never enter URLs. One connection owns input; replacement
 revokes the old connection and releases held buttons before the new connection can
-send input. Heartbeats detect lost peers. Reconnect refreshes capture without
+send input. The viewer first sends one `resume` request carrying its initial
+picture/viewport settings. The adapter orders it after helper launch and rejects
+control before negotiation or repeated negotiation on the same connection.
+Heartbeats detect lost peers. Reconnect refreshes capture without
 launching another process. Capture/permission failure exposes explicit recovery;
 old frames and callback generations cannot reactivate a disconnected view.
 Retired image decoders cannot delay a new connection, and pending pointer movement,

@@ -153,7 +153,9 @@ final class HostApplicationSession {
     private var delivery: HostApplicationDelivery?
     private var timer: Timer?
     private var generation = 0
-    private var selectionInFlight: Int?
+    private var selectionInFlight = false
+    private var viewerReady = false
+    private var viewport: CGSize?
     private var starting = false
     private var captureFailed = false
     private var lastInventory = ""
@@ -168,7 +170,9 @@ final class HostApplicationSession {
             switch action {
             case "catalog":
                 extra = (request["paths"] as? [String] ?? []).filter { $0.hasPrefix("/") && $0.hasSuffix(".app") }.map { URL(fileURLWithPath: $0) }
-                emit(["type": "catalog", "availability": HostApplicationCatalog.availability(), "applications": HostApplicationCatalog.applications(extra: extra).map(HostApplicationCatalog.describe), "running": HostApplicationCatalog.running()])
+                let id = request["application_id"] as? String
+                let applications = HostApplicationCatalog.applications(extra: extra).filter { id == nil || HostApplicationCatalog.identifier($0) == id }
+                emit(["type": "catalog", "availability": HostApplicationCatalog.availability(), "applications": applications.map(HostApplicationCatalog.describe), "running": id == nil ? HostApplicationCatalog.running() : []])
             case "running": emit(["type": "running", "running": HostApplicationCatalog.running()])
             case "quit":
                 try HostApplicationCatalog.quit(request)
@@ -187,14 +191,23 @@ final class HostApplicationSession {
             case "launch", "native": try launch(request, native: action == "native")
             case "configure":
                 let settings = try HostApplicationCaptureSettings(request: request)
-                if settings != picture {
-                    picture = settings
-                    if let selected { try select(selected) }
+                let size = try requestedViewport(request)
+                let pictureChanged = settings != picture
+                picture = settings
+                if let size { viewport = size }
+                if let selected {
+                    let sizeChanged = resizeWindow(selected)
+                    if pictureChanged || sizeChanged { try select(selected) }
                 }
             case "frame_ack":
                 guard request["generation"] as? Int == generation, let id = request["frame_id"] as? Int else { return }
                 capture?.acknowledge(id)
             case "resume":
+                let settings = try HostApplicationCaptureSettings(request: request)
+                let size = try requestedViewport(request)
+                if request["mode"] != nil { picture = settings }
+                if let size { viewport = size }
+                viewerReady = true
                 blockedReason = nil
                 guard checkAccess() else { return }
                 releaseButtons()
@@ -205,19 +218,17 @@ final class HostApplicationSession {
                 // Restore through AX, then resolve a fresh owned capture source.
                 if let selected { AXUIElementSetAttributeValue(selected.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse) }
                 generation += 1
-                selectionInFlight = nil
                 menuItems.removeAll()
                 selected = nil
                 waiting = false
-                refresh()
+                if app != nil { refresh() }
             case "select":
                 guard let id = request["window"] as? String, let window = try currentWindows().windows.first(where: { $0.id == id }) else { throw NativeInput.invalid("Unknown application window.") }
                 try select(window)
             case "resize":
                 let window = try target(request)
-                var size = CGSize(width: try number(request, "width", 320...8192), height: try number(request, "height", 200...8192))
-                guard let value = AXValueCreate(.cgSize, &size), AXUIElementSetAttributeValue(window.element, kAXSizeAttribute as CFString, value) == .success else { return }
-                try select(window)
+                viewport = CGSize(width: try number(request, "width", 320...8192), height: try number(request, "height", 200...8192))
+                if resizeWindow(window) { try select(window) }
             case "close":
                 let window = try target(request)
                 guard let button = axValue(window.element, kAXCloseButtonAttribute), CFGetTypeID(button) == AXUIElementGetTypeID(),
@@ -286,6 +297,7 @@ final class HostApplicationSession {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         configuration.createsNewApplicationInstance = false
+        if request["defer_capture"] as? Bool != true { viewerReady = true }
         starting = true
         NSWorkspace.shared.openApplication(at: url, configuration: configuration) { application, error in
             DispatchQueue.main.async {
@@ -314,10 +326,10 @@ final class HostApplicationSession {
         if blockedReason != reason {
             blockedReason = reason
             generation += 1
-            selectionInFlight = nil
             menuItems.removeAll()
             releaseButtons()
-            capture?.stop(); capture = nil
+            selected = nil
+            updateCapture()
             captureFailed = false
             waiting = false
             _ = presence.observe(windowCount: nil, at: Date())
@@ -333,11 +345,10 @@ final class HostApplicationSession {
         guard !waiting else { return }
         waiting = true
         generation += 1
-        selectionInFlight = nil
         menuItems.removeAll()
         releaseButtons()
-        capture?.stop(); capture = nil
         selected = nil
+        updateCapture()
         lastInventory = ""
         emit(["type": "windows", "windows": [[String: String]]()])
         emit(["type": "waiting", "generation": generation])
@@ -360,57 +371,80 @@ final class HostApplicationSession {
         if signature != lastInventory { lastInventory = signature; emit(["type": "windows", "windows": list]) }
         // Follow a newly opened focused dialog/window without overriding an
         // explicit choice among windows that were already available.
-        guard selectionInFlight == nil else { return }
         let newlyFocused = windows.first { $0.id == snapshot.focusedID && !knownWindowIDs.contains($0.id) }
         knownWindowIDs = Set(windows.map(\.id))
         if let next = newlyFocused ?? (selected == nil || !windows.contains(where: { $0.id == selected?.id }) ? windows.first : nil) {
             captureFailed = false
             try? select(next)
-        } else if let selected, !captureFailed && capture == nil { try? select(selected) }
+        } else if let selected, !selectionInFlight && !captureFailed && capture == nil { try? select(selected) }
+    }
+    private func requestedViewport(_ request: [String: Any]) throws -> CGSize? {
+        guard request["width"] != nil || request["height"] != nil else { return nil }
+        return CGSize(width: try number(request, "width", 320...8192), height: try number(request, "height", 200...8192))
+    }
+    private func resizeWindow(_ window: NativeWindow) -> Bool {
+        guard var size = viewport, let before = axRect(window.element)?.size,
+              abs(before.width - size.width) >= 1 || abs(before.height - size.height) >= 1,
+              let value = AXValueCreate(.cgSize, &size),
+              AXUIElementSetAttributeValue(window.element, kAXSizeAttribute as CFString, value) == .success,
+              let after = axRect(window.element)?.size else { return false }
+        return abs(before.width - after.width) >= 1 || abs(before.height - after.height) >= 1
     }
     private func select(_ window: NativeWindow) throws {
-        guard checkAccess() else { return }
+        guard viewerReady, checkAccess() else { return }
         try window.validate()
         AXUIElementSetAttributeValue(window.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+        _ = resizeWindow(window)
         selected = window
-        capture?.stop(); capture = nil
         generation += 1
-        selectionInFlight = nil
         menuItems.removeAll()
-        let selectionGeneration = generation
-        selectionInFlight = selectionGeneration
         releaseButtons()
-        SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
-            DispatchQueue.main.async {
-                if self.selectionInFlight == selectionGeneration { self.selectionInFlight = nil }
-                guard self.app != nil, self.generation == selectionGeneration else { return }
-                guard let candidate = content?.windows.first(where: { $0.windowID == window.windowID && $0.owningApplication?.processID == self.app?.processIdentifier }), error == nil else {
-                    self.captureFailed = true
-                    emit(["type": "capture_error", "code": "CAPTURE_SOURCE_UNAVAILABLE", "generation": selectionGeneration]); return
-                }
-                self.capture?.stop()
-                self.selected = window
-                self.waiting = false
-                let currentGeneration = self.generation
-                let stream = HostApplicationStream(generation: currentGeneration, settings: self.picture) { [weak self] error in
-                    guard let self, self.app != nil, self.generation == currentGeneration else { return }
-                    let failure = error as NSError
-                    if failure.domain == SCStreamErrorDomain && failure.code == SCStreamError.Code.noCaptureSource.rawValue {
-                        // Closing or replacing a window ends its capture source.
-                        // Only the native inventory/process can end the session.
-                        self.suspendWindow()
-                        self.refresh()
-                        return
+        updateCapture()
+    }
+    // One transition owns source discovery, start and stop. Requests arriving
+    // during it replace the desired generation; they never overlap OS streams.
+    private func updateCapture() {
+        guard !selectionInFlight else { return }
+        selectionInFlight = true
+        let previous = capture
+        func begin() {
+            capture = nil
+            guard let window = selected, app != nil, viewerReady, blockedReason == nil else {
+                selectionInFlight = false; return
+            }
+            let selectionGeneration = generation
+            let started = ProcessInfo.processInfo.systemUptime
+            func finish() {
+                self.selectionInFlight = false
+                if self.generation != selectionGeneration { self.updateCapture() }
+            }
+            SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
+                DispatchQueue.main.async {
+                    guard self.app != nil, self.generation == selectionGeneration else { finish(); return }
+                    guard let candidate = content?.windows.first(where: { $0.windowID == window.windowID && $0.owningApplication?.processID == self.app?.processIdentifier }), error == nil else {
+                        self.captureFailed = true
+                        emit(["type": "capture_error", "code": "CAPTURE_SOURCE_UNAVAILABLE", "generation": selectionGeneration])
+                        finish(); return
                     }
-                    self.captureFailed = true
-                    self.capture?.stop(); self.capture = nil
-                    emit(["type": "capture_error", "code": "SC_\(failure.code)", "generation": currentGeneration])
+                    self.waiting = false
+                    let stream = HostApplicationStream(generation: selectionGeneration, settings: self.picture) { [weak self] error in
+                        guard let self, self.app != nil, self.generation == selectionGeneration else { return }
+                        let failure = error as NSError
+                        if failure.domain == SCStreamErrorDomain && failure.code == SCStreamError.Code.noCaptureSource.rawValue {
+                            self.suspendWindow(); self.refresh(); return
+                        }
+                        self.captureFailed = true
+                        self.capture?.stop()
+                        emit(["type": "capture_error", "code": "SC_\(failure.code)", "generation": selectionGeneration])
+                    }
+                    self.capture = stream
+                    emit(["type": "window", "window": window.id, "width": candidate.frame.width, "height": candidate.frame.height, "generation": selectionGeneration,
+                          "source_duration_ms": Int((ProcessInfo.processInfo.systemUptime - started) * 1000)])
+                    stream.start(candidate, completion: finish)
                 }
-                self.capture = stream
-                emit(["type": "window", "window": window.id, "width": candidate.frame.width, "height": candidate.frame.height, "generation": self.generation])
-                stream.start(candidate)
             }
         }
+        if let previous { previous.stop(completion: begin) } else { begin() }
     }
     private func applicationTarget(_ request: [String: Any]) throws -> NSRunningApplication {
         // Application controls remain bound even when the app has no window.

@@ -62,6 +62,11 @@ func hostApplicationPixelsEqual(_ lhs: CVPixelBuffer, _ rhs: CVPixelBuffer) -> B
 // replace the pending pixel buffer, never an already encoded reference frame.
 final class HostApplicationStream: NSObject, SCStreamOutput, SCStreamDelegate {
     private var stream: SCStream?
+    // Main-thread lifecycle: ScreenCaptureKit stop must wait for start to finish.
+    private var starting = false
+    private var retiring = false
+    private var stopping = false
+    private var stopCallbacks: [() -> Void] = []
     private let context = CIContext()
     private let queue = DispatchQueue(label: "redeven.host-application.frames", qos: .userInteractive)
     private var stopped = false
@@ -89,9 +94,10 @@ final class HostApplicationStream: NSObject, SCStreamOutput, SCStreamDelegate {
     }
     private func failure(_ error: Error) {
         guard !stopped else { return }
-        DispatchQueue.main.async { self.failed(error) }
+        DispatchQueue.main.async { if !self.retiring { self.failed(error) } }
     }
-    func start(_ window: SCWindow) {
+    func start(_ window: SCWindow, completion: @escaping () -> Void) {
+        starting = true
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let sourceScale: Double
         if #available(macOS 14.0, *) { sourceScale = Double(filter.pointPixelScale) }
@@ -126,8 +132,20 @@ final class HostApplicationStream: NSObject, SCStreamOutput, SCStreamDelegate {
         }
         do {
             try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
-            stream.startCapture { error in if let error { self.queue.async { self.failure(error) } } }
-        } catch { queue.async { self.failure(error) } }
+            stream.startCapture { error in
+                DispatchQueue.main.async {
+                    self.starting = false
+                    if let error, !self.retiring { self.failed(error) }
+                    self.finishStop()
+                    completion()
+                }
+            }
+        } catch {
+            starting = false
+            if !retiring { failed(error) }
+            finishStop()
+            completion()
+        }
     }
     private func prepareEncoder() {
         guard settings.video else { return }
@@ -149,12 +167,29 @@ final class HostApplicationStream: NSObject, SCStreamOutput, SCStreamDelegate {
               VTCompressionSessionPrepareToEncodeFrames(session) == noErr else { VTCompressionSessionInvalidate(session); return }
         encoder = session; videoActive = true
     }
-    func stop() {
-        stream?.stopCapture(); stream = nil
+    func stop(completion: @escaping () -> Void = {}) {
+        retiring = true
+        stopCallbacks.append(completion)
         queue.async {
             self.stopped = true; self.timer?.cancel(); self.timer = nil
             if let encoder = self.encoder { VTCompressionSessionInvalidate(encoder) }
             self.encoder = nil; self.latest = nil
+        }
+        finishStop()
+    }
+    private func finishStop() {
+        guard retiring, !starting, !stopping else { return }
+        guard let stream else {
+            let callbacks = stopCallbacks; stopCallbacks.removeAll()
+            for callback in callbacks { callback() }
+            return
+        }
+        stopping = true
+        stream.stopCapture { _ in
+            DispatchQueue.main.async {
+                self.stream = nil; self.stopping = false
+                self.finishStop()
+            }
         }
     }
     func acknowledge(_ id: Int) {
