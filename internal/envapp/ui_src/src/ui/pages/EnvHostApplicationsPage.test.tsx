@@ -3,12 +3,12 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ full: true, setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
+const state = vi.hoisted(() => ({ full: true, running: vi.fn(), quit: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
   env_id: () => 'host', localRuntime: () => ({}),
 }) }));
-vi.mock('../services/hostApplicationsApi', async importOriginal => ({ ...await importOriginal<object>(), cancelHostApplicationSetup: state.setupCancel, uploadHostApplicationSetup: state.setupUpload, getHostApplicationSetup: state.setupStatus, startHostApplicationSetup: state.setupStart, observeHostApplicationSetup: state.setupObserve, listHostApplications: state.catalog, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, stopHostApplication: state.stop, addHostApplication: state.add, requestHostApplicationPermission: state.permission }));
+vi.mock('../services/hostApplicationsApi', async importOriginal => ({ ...await importOriginal<object>(), cancelHostApplicationSetup: state.setupCancel, uploadHostApplicationSetup: state.setupUpload, getHostApplicationSetup: state.setupStatus, startHostApplicationSetup: state.setupStart, observeHostApplicationSetup: state.setupObserve, listHostApplications: state.catalog, listRunningHostApplications: state.running, quitHostApplication: state.quit, detachHostApplication: state.detach, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, stopHostApplication: state.stop, addHostApplication: state.add, requestHostApplicationPermission: state.permission }));
 vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => true }));
 vi.mock('../services/desktopSessionContext', () => ({ readDesktopSessionContextSnapshot: () => state.localMac ? {target_kind: 'local_environment',target_route:'local_host'} : null }));
 vi.mock('../services/webServiceWindows', () => ({ resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
@@ -25,6 +25,7 @@ beforeEach(() => {
   state.sessions.mockResolvedValue([{ id: 'session', application: app, state: 'running', forward }]);
   state.launch.mockResolvedValue({ id: 'session', application: app, state: 'starting', forward });
   state.open.mockResolvedValue(undefined);
+  state.running.mockResolvedValue([]); state.quit.mockResolvedValue(undefined); state.detach.mockResolvedValue(undefined);
   state.setupCancel.mockResolvedValue({ state: "cancelled", received_bytes: 0, expected_bytes: 100 });
   state.setupStatus.mockResolvedValue({ state: 'available', received_bytes: 0, expected_bytes: 100, can_cancel: false, package: { id: 'fixture', architecture: 'arm64', size_bytes: 100, installed_bytes: 200 } });
   state.setupStart.mockResolvedValue({ state: 'downloading', operation_id: 'install', received_bytes: 0, expected_bytes: 100, can_cancel: true });
@@ -285,19 +286,21 @@ it('refreshes the real application library after preparation without a pending a
  expect(state.launch).not.toHaveBeenCalled();
 });
 
-it.each([true, false])('uses the correct stop action for existing macOS application: %s', async existing => {
+it.each([true, false])('detaches sharing without quitting an existing or newly launched macOS application: %s', async existing => {
  const session = { id: 'shared', application: app, state: 'running', backend: 'macos', existing_application: existing, forward };
- state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: true }, applications: [app], sessions: [session] });
+ state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [session], running: [{ application_id: app.id, instances: ['instance'] }] });
  state.sessions.mockResolvedValue([session]);
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
- const label = existing ? 'Stop sharing' : 'End session';
+ const label = 'Stop sharing';
  button(`${label} · Text Editor`).click(); await settle();
  const dialog = document.querySelector('[role="dialog"]')!;
- expect(dialog.textContent).toContain(existing ? 'Stop sharing' : 'End this application session?');
- if (existing) expect(dialog.textContent).toContain('Its windows and unsaved work will remain open on the Mac.');
+ expect(dialog.textContent).toContain('Stop sharing');
+ expect(dialog.textContent).toContain('Its windows and unsaved work will remain open on the Mac.');
  const confirm = [...dialog.querySelectorAll('button')].find(el => el.textContent === label)!;
  confirm.click(); await settle();
- expect(state.stop).toHaveBeenCalledWith('shared');
+ expect(state.detach).toHaveBeenCalledWith('shared');
+ expect(state.stop).not.toHaveBeenCalled();
+ expect(state.quit).not.toHaveBeenCalled();
 });
 
 it('shows both download paths and defaults to host download even inside Desktop', async () => {
@@ -362,4 +365,67 @@ it('reserves an application selected during Desktop acquisition without reopenin
  expect(state.preparation).toHaveBeenCalledWith(expect.objectContaining({action:'create',application_id:app.id}));
  expect(document.querySelector('[role=dialog]')).toBeNull();
  expect(state.setupStart).not.toHaveBeenCalled();
+});
+
+
+describe('macOS running application management', () => {
+  const instance = { instances: ['process-generation'], application_id: app.id };
+  function runningCatalog() {
+    state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [], running: [instance] });
+    state.running.mockResolvedValue([instance]);
+    state.sessions.mockResolvedValue([]);
+  }
+  it('exposes quit for applications with no sharing session and keeps cancelled quits visible', async () => {
+    runningCatalog();
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(host.textContent).toContain('Running on this Mac');
+    button('Quit application · Text Editor').click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain('Text Editor');
+    expect(dialog.textContent).toContain('all of its windows');
+    [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Quit application')!.click(); await settle();
+    expect(state.quit).toHaveBeenCalledWith(app.id, instance.instances);
+    expect(state.stop).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('Open the application to respond to any save dialog.');
+    expect(button('Quit application · Text Editor')).toBeDefined();
+    state.running.mockResolvedValue([]);
+    window.dispatchEvent(new Event('focus')); await settle();
+    expect(button('Quit application · Text Editor')).toBeUndefined();
+  });
+  it('lists a local native launch from system inventory even without a viewer', async () => {
+    state.localMac = true;
+    state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: false, native_ready: true }, applications: [app], sessions: [], running: [] });
+    state.running.mockResolvedValue([instance]);
+    state.launch.mockResolvedValue({ id: 'native', application: app, state: 'opened', mode: 'native' });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    button('Open in new window · Text Editor').click(); await settle();
+    expect(button('Quit application · Text Editor')).toBeDefined();
+    expect(state.open).not.toHaveBeenCalled();
+  });
+  it('preserves keyboard focus during unchanged inventory refreshes', async () => {
+    runningCatalog();
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    const quit = button('Quit application · Text Editor'); quit.focus();
+    state.running.mockResolvedValue([{ ...instance, instances: [...instance.instances] }]);
+    window.dispatchEvent(new Event('focus')); await settle();
+    expect(document.activeElement).toBe(quit);
+  });
+  it('does not retarget an open confirmation after a process restarts', async () => {
+    runningCatalog();
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    button('Quit application · Text Editor').click(); await settle();
+    state.running.mockResolvedValue([{ ...instance, instances: ['replacement'] }]);
+    window.dispatchEvent(new Event('focus')); await settle();
+    state.quit.mockRejectedValue(new Error('Connection lost after dispatch'));
+    const dialog = document.querySelector('[role="dialog"]')!;
+    [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Quit application')!.click(); await settle();
+    expect(state.quit).toHaveBeenCalledWith(app.id, instance.instances);
+    expect(dialog.textContent).toContain('The quit request could not be confirmed.');
+    expect(host.querySelector('.host-app-quit-notice')).toBeNull();
+  });
+  it('disables quit for read-only users', async () => {
+    runningCatalog(); state.full = false;
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(button('Quit application · Text Editor').disabled).toBe(true);
+  });
 });

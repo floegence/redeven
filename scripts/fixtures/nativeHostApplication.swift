@@ -17,6 +17,7 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var secondary: NSWindow?
     var cancelNextClose = false
     var cancelledCloses = 0
+    var quitRequests = 0
     var menuClicks = 0
     var clicks = 0
     var animation: Timer?
@@ -81,6 +82,11 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func minimizeMain() { window.miniaturize(nil); save() }
     @objc func hideFixture() { NSApp.hide(nil); save() }
     @objc func cancelClose() { cancelNextClose = true; save() }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        quitRequests += 1; save()
+        if Bundle.main.object(forInfoDictionaryKey: "RedevenFixtureCancelFirstQuit") as? Bool == true && quitRequests == 1 { return .terminateCancel }
+        return .terminateNow
+    }
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if cancelNextClose { cancelNextClose = false; cancelledCloses += 1; save(); return false }
         return true
@@ -112,7 +118,7 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func recordMenu() { menuClicks += 1; save() }
     @objc func click() { clicks += 1; save() }
     @objc func save() {
-        let value: [String: Any] = ["menu_clicks": menuClicks, "events": events, "pid": ProcessInfo.processInfo.processIdentifier, "clicks": clicks, "text": field?.stringValue ?? "", "window": window?.windowNumber ?? 0, "width": window?.frame.width ?? 0, "height": window?.frame.height ?? 0, "reopens": reopens, "secondary": secondary?.windowNumber ?? 0, "minimized": window?.isMiniaturized ?? false, "hidden": NSApp.isHidden, "cancelled_closes": cancelledCloses]
+        let value: [String: Any] = ["menu_clicks": menuClicks, "events": events, "pid": ProcessInfo.processInfo.processIdentifier, "clicks": clicks, "text": field?.stringValue ?? "", "window": window?.windowNumber ?? 0, "width": window?.frame.width ?? 0, "height": window?.frame.height ?? 0, "reopens": reopens, "secondary": secondary?.windowNumber ?? 0, "minimized": window?.isMiniaturized ?? false, "hidden": NSApp.isHidden, "cancelled_closes": cancelledCloses, "quit_requests": quitRequests]
         try! JSONSerialization.data(withJSONObject: value).write(to: URL(fileURLWithPath: receipt), options: .atomic)
     }
     func windowDidResize(_ notification: Notification) { if field != nil { save() } }

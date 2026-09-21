@@ -29,10 +29,19 @@ type Availability struct {
 	Requirements []string        `json:"requirements,omitempty"`
 }
 
+type RunningApplication struct {
+	ApplicationID string   `json:"application_id"`
+	Instances     []string `json:"instances"`
+}
+
+// QuitRequest binds an explicit quit to the exact process generations displayed.
+type QuitRequest = RunningApplication
+
 type Catalog struct {
-	Availability Availability  `json:"availability"`
-	Applications []Application `json:"applications"`
-	Sessions     []Session     `json:"sessions"`
+	Running      []RunningApplication `json:"running,omitempty"`
+	Availability Availability         `json:"availability"`
+	Applications []Application        `json:"applications"`
+	Sessions     []Session            `json:"sessions"`
 }
 
 type Session struct {
@@ -120,6 +129,9 @@ type Backend interface {
 	Catalog(context.Context, string, string) (Catalog, error)
 	Sessions(string) []Session
 	Launch(context.Context, string, LaunchRequest) (Session, error)
+	Running(context.Context) ([]RunningApplication, error)
+	Quit(context.Context, string, QuitRequest) error
+	Detach(context.Context, string, string) error
 	Stop(context.Context, string, string) error
 	Add(context.Context, AddRequest) error
 	ForTarget(string) (Session, string, bool)
@@ -129,8 +141,9 @@ type Backend interface {
 }
 
 var (
-	ErrUnavailable = errors.New("host applications are unavailable")
-	ErrNotFound    = errors.New("application or session not found")
-	ErrInvalid     = errors.New("invalid application request")
-	ErrLimit       = errors.New("host application session limit reached")
+	ErrUnavailable  = errors.New("host applications are unavailable")
+	ErrNotFound     = errors.New("application or session not found")
+	ErrInvalid      = errors.New("invalid application request")
+	ErrQuitRejected = errors.New("application declined the quit request")
+	ErrLimit        = errors.New("host application session limit reached")
 )

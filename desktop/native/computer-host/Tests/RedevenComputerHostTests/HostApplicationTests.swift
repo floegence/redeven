@@ -3,6 +3,15 @@ import AppKit
 @testable import RedevenComputerHost
 
 final class HostApplicationTests: XCTestCase {
+    func testInstanceIdentityChangesWhenProcessOrLaunchGenerationChanges() {
+        let url = URL(fileURLWithPath: "/Applications/Fixture.app")
+        let date = Date(timeIntervalSince1970: 1234)
+        let original = HostApplicationCatalog.instanceIdentifier(url: url, pid: 123, launched: date)
+        XCTAssertEqual(original, HostApplicationCatalog.instanceIdentifier(url: url, pid: 123, launched: date))
+        XCTAssertNotEqual(original, HostApplicationCatalog.instanceIdentifier(url: url, pid: 124, launched: date))
+        XCTAssertNotEqual(original, HostApplicationCatalog.instanceIdentifier(url: url, pid: 123, launched: date.addingTimeInterval(0.001)))
+        XCTAssertNotEqual(original, HostApplicationCatalog.instanceIdentifier(url: URL(fileURLWithPath: "/Applications/Other.app"), pid: 123, launched: date))
+    }
     func testAccessBoundaryDistinguishesLockedSessionAndRevokedPermissions() {
         XCTAssertNil(HostApplicationCatalog.blockReason(console: true, screen: true, accessibility: true))
         for screen in [false, true] {

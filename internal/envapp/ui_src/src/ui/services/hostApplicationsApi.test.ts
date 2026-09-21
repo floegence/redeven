@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { observeHostApplicationSetup, uploadHostApplicationSetup } from './hostApplicationsApi';
+import { observeHostApplicationSetup, uploadHostApplicationSetup, quitHostApplication, detachHostApplication, listRunningHostApplications } from './hostApplicationsApi';
 const api = vi.hoisted(() => ({ raw: vi.fn(), json: vi.fn() }));
 vi.mock('./localApi', () => ({ fetchLocalApi: api.raw, fetchLocalApiJSON: api.json }));
 
@@ -27,4 +27,15 @@ describe('host component transfer', () => {
   await expect(observeHostApplicationSetup(receive, new AbortController().signal)).rejects.toThrow('stream ended');
   expect(receive).toHaveBeenCalledWith({ state: 'validating' });
  });
+});
+
+
+it('separates process-generation quit from owner-scoped sharing detach', async () => {
+ api.json.mockReset().mockResolvedValue([]);
+ await listRunningHostApplications();
+ expect(api.json).toHaveBeenLastCalledWith('/_redeven_proxy/api/host-applications/running', expect.objectContaining({ method: 'GET' }));
+ await quitHostApplication('catalog-app', ['first-generation', 'second-generation']);
+ expect(api.json).toHaveBeenLastCalledWith('/_redeven_proxy/api/host-applications/quit', { method: 'POST', body: JSON.stringify({ application_id: 'catalog-app', instances: ['first-generation', 'second-generation'] }) });
+ await detachHostApplication('owned/id');
+ expect(api.json).toHaveBeenLastCalledWith('/_redeven_proxy/api/host-applications/sessions/owned%2Fid/detach', { method: 'POST' });
 });

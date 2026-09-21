@@ -113,6 +113,10 @@ reconnection before any window exists, standard reopening of a background app,
 opening its first window through its native menu, stopping before its first frame,
 and multiple-window, cancelled-close, minimized and hidden application recovery. These cases must preserve
 the same process and still end correctly when its real window closes.
+The explicit-quit fixture verifies native/windowless inventory after helper
+restart, stale and partially stale process selections, graceful quit cancellation,
+continued sharing after cancellation, and final process exit. Detachment preserves
+a newly launched multiple-window application.
 Desktop acceptance verifies local launch without a viewer. Browser acceptance
 exercises the authenticated native stream, input, explicit reconnection and
 script-opened viewer closure. This does not certify every third-party app or all
@@ -122,6 +126,7 @@ Repeat on an authorized Mac with Xcode command-line tools:
 
 ```sh
 swift test --package-path desktop/native/computer-host
+python3 scripts/check_macos_host_application_quit.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host
 python3 scripts/check_macos_host_applications.py desktop/native/computer-host/.build/debug/redeven-computer-host --output /tmp/redeven-native-app-evidence
 python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario delayed
 python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario reopen
