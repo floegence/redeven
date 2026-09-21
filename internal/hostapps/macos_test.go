@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -443,5 +444,98 @@ func TestMacSnapshotDeliversWindowBeforeGenerationBoundMenu(t *testing.T) {
 		if message.Type != want {
 			t.Fatalf("expected %s before dependent events, got %s", want, message.Type)
 		}
+	}
+}
+
+func TestMacQuitUsesExactInstancesAndDoesNotEndSharingOptimistically(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("native process control is macOS-only")
+	}
+	m := macFixtureScript(t, `#!/bin/sh
+while IFS= read -r request; do
+ case "$request" in
+ *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"ready":true},"applications":[{"id":"macos-fixture","name":"Host App"}]}' ;;
+ *'"action":"launch"'*) printf '%s\n' '{"type":"launched","existing_application":true}' '{"type":"window","generation":1}' '{"type":"frame","generation":1,"data":"ZnJhbWU="}' ;;
+ *'"action":"quit"'*) case "$request" in
+  *'"application_id":"macos-fixture"'*'"instances":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]'*) printf '%s\n' '{"type":"quit_requested"}' ;;
+  *) printf '%s\n' '{"type":"error","code":"APPLICATION_NOT_FOUND"}' ;;
+  esac ;;
+ *'"action":"detach"'*) printf '%s\n' '{"type":"ended"}'; exit 0 ;;
+ esac
+done
+`)
+	view, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, view.ID, "running")
+	req := QuitRequest{ApplicationID: "macos-fixture", Instances: []string{strings.Repeat("a", 64)}}
+	if err = m.Quit(context.Background(), "", req); err != ErrUnavailable {
+		t.Fatal("anonymous quit was admitted")
+	}
+	for _, ids := range [][]string{nil, {"pid:123"}, {strings.Repeat("a", 64), strings.Repeat("a", 64)}} {
+		if err = m.Quit(context.Background(), "alice", QuitRequest{ApplicationID: req.ApplicationID, Instances: ids}); err != ErrInvalid {
+			t.Fatalf("invalid selection accepted: %v", err)
+		}
+	}
+	stale := req
+	stale.Instances = []string{strings.Repeat("b", 64)}
+	if err = m.Quit(context.Background(), "alice", stale); err != ErrNotFound {
+		t.Fatalf("stale selection: %v", err)
+	}
+	if err = m.Quit(context.Background(), "alice", req); err != nil {
+		t.Fatal(err)
+	}
+	if m.Sessions("alice")[0].State != "running" {
+		t.Fatal("quit request falsely confirmed termination")
+	}
+	if err = m.Detach(context.Background(), "bob", view.ID); err != ErrNotFound {
+		t.Fatal("foreign owner detached session")
+	}
+	if err = m.Detach(context.Background(), "alice", view.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, view.ID, "ended")
+}
+
+func TestMacExplicitQuitBeforeFirstWindowEndsSharingNormally(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("native process control is macOS-only")
+	}
+	marker := filepath.Join(t.TempDir(), "quit")
+	m := macFixtureScript(t, `#!/bin/sh
+while IFS= read -r request; do
+ case "$request" in
+ *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"ready":true},"applications":[{"id":"macos-fixture","name":"Background App"}]}' ;;
+ *'"action":"launch"'*) printf '%s\n' '{"type":"launched","instance":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' '{"type":"waiting","generation":1}'
+ while [ ! -f '`+marker+`' ]; do sleep 0.02; done
+ printf '%s\n' '{"type":"error","code":"APPLICATION_EXITED"}' '{"type":"ended"}'; exit 0 ;;
+ *'"action":"quit"'*) touch '`+marker+`'; printf '%s\n' '{"type":"quit_requested"}' ;;
+ esac
+done
+`)
+	view, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		m.mu.Lock()
+		attached := m.sessions[view.ID].native.instance != ""
+		m.mu.Unlock()
+		if attached {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("fixture did not attach")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err = m.Quit(context.Background(), "alice", QuitRequest{ApplicationID: "macos-fixture", Instances: []string{strings.Repeat("a", 64)}}); err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, view.ID, "ended")
+	if m.Sessions("alice")[0].ErrorCode != "" {
+		t.Fatal("explicit quit was classified as a failed launch")
 	}
 }

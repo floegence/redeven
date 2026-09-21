@@ -99,3 +99,14 @@
 .host-apps-preparation-details p { margin: 12px 0; }
 @keyframes host-app-preparation-progress { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
 @media (prefers-reduced-motion: reduce) { .host-apps-preparation-track span { animation: none !important; transition: none; } }
+
+.host-apps-process-grid { grid-template-columns:repeat(auto-fill,minmax(min(100%,310px),1fr)); }
+.host-app-process { flex-direction:column; align-items:stretch; }
+.host-app-process-row { display:flex; align-items:center; min-width:0; }
+.host-app-process .host-app-session-open { padding:12px; gap:10px; }
+.host-app-process .host-app-stop { margin-right:2px; flex-shrink:0; }
+.host-app-quit { margin-right:10px; padding:6px 8px; border-radius:6px; font-size:11px; line-height:1.4; color:var(--muted-foreground); cursor:pointer; flex-shrink:0; max-width:42%; }
+.host-app-quit:hover:not(:disabled) { color:var(--destructive); background:color-mix(in srgb,var(--destructive) 8%,transparent); }
+.host-app-quit:focus-visible, .host-app-session-open:focus-visible, .host-app-stop:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
+.host-app-quit-notice { padding:0 12px 12px; font-size:11px; line-height:1.6; color:var(--muted-foreground); }
+.host-app-quit-description { font-size:13px; line-height:1.8; color:var(--muted-foreground); }

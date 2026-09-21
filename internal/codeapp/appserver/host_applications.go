@@ -42,6 +42,39 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 		return true
 	}
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == hostApplicationsAPI+"/running":
+		running, err := g.hostApps.Running(r.Context())
+		if err != nil {
+			writeHostAppError(w, err)
+		} else {
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: running})
+		}
+	case r.Method == http.MethodPost && r.URL.Path == hostApplicationsAPI+"/quit":
+		var req hostapps.QuitRequest
+		if decodeManagedJSON(r, &req) != nil {
+			writeHostAppError(w, hostapps.ErrInvalid)
+			return true
+		}
+		err := g.hostApps.Quit(r.Context(), meta.UserPublicID, req)
+		if err != nil {
+			g.appendAudit(meta, "host_application_quit", "failure", map[string]any{"application_id": truncateString(req.ApplicationID, 160)}, err)
+			writeHostAppError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "host_application_quit", "requested", map[string]any{"application_id": req.ApplicationID}, nil)
+		writeJSON(w, http.StatusAccepted, apiResp{OK: true})
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, hostApplicationsAPI+"/sessions/") && strings.HasSuffix(r.URL.Path, "/detach"):
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, hostApplicationsAPI+"/sessions/"), "/detach")
+		if id == "" || strings.Contains(id, "/") {
+			writeHostAppError(w, hostapps.ErrNotFound)
+			return true
+		}
+		if err := g.hostApps.Detach(r.Context(), meta.UserPublicID, id); err != nil {
+			writeHostAppError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "host_application_detach", "success", map[string]any{"session_id": id}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true})
 	case r.Method == http.MethodGet && r.URL.Path == hostApplicationsAPI+"/sessions":
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.hostApps.Sessions(meta.UserPublicID)})
 	case r.Method == http.MethodGet && r.URL.Path == hostApplicationsAPI:
@@ -124,6 +157,8 @@ func writeHostAppError(w http.ResponseWriter, err error) {
 		status, code = http.StatusNotFound, "HOST_APP_NOT_FOUND"
 	case errors.Is(err, hostapps.ErrInvalid), errors.Is(err, nativeapps.ErrInvalid):
 		status, code = http.StatusBadRequest, "HOST_APP_INVALID"
+	case errors.Is(err, hostapps.ErrQuitRejected):
+		status, code = http.StatusConflict, "HOST_APP_QUIT_REJECTED"
 	case errors.Is(err, hostapps.ErrLimit):
 		status, code = http.StatusConflict, "HOST_APP_LIMIT"
 	}

@@ -34,6 +34,20 @@ func (s *hostAppsStub) Stop(_ context.Context, owner, _ string) error {
 	s.owner = owner
 	return nil
 }
+func (s *hostAppsStub) Running(context.Context) ([]hostapps.RunningApplication, error) {
+	s.calls++
+	return []hostapps.RunningApplication{}, nil
+}
+func (s *hostAppsStub) Quit(_ context.Context, owner string, _ hostapps.QuitRequest) error {
+	s.calls++
+	s.owner = owner
+	return nil
+}
+func (s *hostAppsStub) Detach(_ context.Context, owner, _ string) error {
+	s.calls++
+	s.owner = owner
+	return nil
+}
 func (s *hostAppsStub) Add(context.Context, hostapps.AddRequest) error { s.calls++; return nil }
 func (s *hostAppsStub) ForTarget(target string) (hostapps.Session, string, bool) {
 	return hostapps.Session{ID: "one", State: "running"}, "alice", target == "http://127.0.0.1:40000"
@@ -100,7 +114,7 @@ func TestHostApplicationPermissionsAndAuthoritativeOwner(t *testing.T) {
 	for _, full := range []bool{false, true} {
 		backend := &hostAppsStub{}
 		server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: full, CanExecute: full})}
-		for _, path := range []string{hostApplicationsAPI, hostApplicationsAPI + "/sessions"} {
+		for _, path := range []string{hostApplicationsAPI, hostApplicationsAPI + "/sessions", hostApplicationsAPI + "/running"} {
 			r := httptest.NewRequest(http.MethodGet, path, nil)
 			r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
 			w := httptest.NewRecorder()
@@ -110,7 +124,7 @@ func TestHostApplicationPermissionsAndAuthoritativeOwner(t *testing.T) {
 			}
 		}
 		backend.calls = 0
-		for _, test := range []struct{ method, path string }{{"POST", hostApplicationsAPI}, {"POST", hostApplicationsAPI + "/sessions"}, {"POST", hostApplicationsAPI + "/permissions"}, {"DELETE", hostApplicationsAPI + "/sessions/one"}} {
+		for _, test := range []struct{ method, path string }{{"POST", hostApplicationsAPI}, {"POST", hostApplicationsAPI + "/sessions"}, {"POST", hostApplicationsAPI + "/permissions"}, {"DELETE", hostApplicationsAPI + "/sessions/one"}, {"POST", hostApplicationsAPI + "/quit"}, {"POST", hostApplicationsAPI + "/sessions/one/detach"}} {
 			r := httptest.NewRequest(test.method, test.path, strings.NewReader(`{}`))
 			r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
 			w := httptest.NewRecorder()

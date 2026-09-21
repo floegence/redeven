@@ -15,7 +15,8 @@ single-instance app. Apps run as the Runtime user,
 without containers, virtual machines, X11 or an independent desktop. The existing
 [host application authorization](host-applications.md) applies to every operation
 and stream. Missing permissions or graphical login block streaming explicitly.
-Network loss preserves the app; reconnection attaches to the same process.
+Network loss preserves the app; reconnection attaches to the same process. Explicit
+quit is independent of sharing and binds to the selected OS process generations.
 
 # Catalog and local launch
 
@@ -32,6 +33,10 @@ direct native launch automatically. `NSWorkspace` opens or activates the actual
 installed application. No streaming session, viewer, or forward is created. Local
 launch requires a graphical login but no capture/input permission. Browser and
 remote Desktop targets use the streaming route.
+
+The [application management contract](macos-application-management.md) owns live
+OS inventory, explicit quit confirmation, process-generation validation and the
+distinction between quitting an app and stopping its sharing session.
 
 # Remote window ownership and transport
 
@@ -85,11 +90,10 @@ and current generation, independently of whether a window exists. Waiting viewer
 keep the collapsed left controls available for opening a window through the app's
 own menu. Redeven does not guess a menu title or automatically invoke an app-specific
 action. Capture/wait transitions invalidate old menu handles. Closing a window presses its
-real close action, preserving ordinary save/cancel dialogs. Ending from the library
-requests graceful application termination only for a process newly launched by
-that session and never force-kills it. For a previously running process, the
-library presents **Stop sharing**: it disconnects without quitting the app or
-closing its windows. Confirmed loss of the final window closes the physical
+real close action, preserving ordinary save/cancel dialogs. **Stop sharing**
+disconnects either a newly launched or previously running app without quitting it
+or closing its windows. **Quit application** is a separate explicit action
+with the process-generation boundary below. Confirmed loss of the final window closes the physical
 Redeven viewer; a network failure or close request by itself does not. Closing only the viewer preserves the app.
 A running process without its first shareable window remains attached indefinitely;
 there is no first-window termination deadline. Explicitly stopping sharing during
@@ -129,7 +133,8 @@ The [lifecycle validation matrix](../operations/host-application-lifecycle.md)
 separates automated recovery evidence from OS/application compatibility limits.
 
 Runtime shutdown releases capture, route and input ownership but preserves native
-applications and unsaved data; the next Runtime does not silently reclaim them.
+applications and unsaved data. A new Runtime lists them from the OS, but sharing
+requires another explicit open action.
 
 The integration does not provide a separate logged-out/headless AppKit session,
 audio, remote file transfer, clipboard synchronization or secure desktop control.
@@ -144,5 +149,5 @@ Intel host or third-party application.
 - `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplicationWindows.swift` and `desktop/native/computer-host/Tests/RedevenComputerHostTests/HostApplicationTests.swift`: authoritative inventory and transient window lifecycle.
 - `internal/hostapps/macos.go` and `macos_test.go`: helper resolution, stream credentials, connection ownership, native launch and cleanup.
 - `internal/codeapp/appserver/host_application_viewer/macos.js` and `internal/envapp/ui_src/src/ui/services/macHostApplicationViewer.test.ts`: first frame, generation, IME, recovery and physical viewer closure.
-- `scripts/check_macos_host_applications.py`, `scripts/check_macos_host_application_waiting.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable real-app pixel/input/menu/lifecycle acceptance.
+- `scripts/check_macos_host_applications.py`, `scripts/check_macos_host_application_waiting.py`, `scripts/check_macos_host_application_quit.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable real-app pixel/input/menu/lifecycle acceptance.
 - `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx`: trusted local launch and remote permission presentation.

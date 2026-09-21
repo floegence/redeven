@@ -35,10 +35,13 @@ export type HostApplicationSession = Readonly<{
   forward?: { forward: { forward_id: string; target_url: string }; app_path: string; ephemeral: boolean };
 }>;
 
+export type RunningHostApplication = Readonly<{ application_id: string; instances: string[] }>;
+
 export type HostApplicationCatalog = Readonly<{
   availability: { backend?: 'macos'; native_ready?: boolean; permissions?: {screen_recording: boolean; accessibility: boolean}; supported: boolean; ready: boolean; reason?: string; version?: string; requirements?: string[] };
   applications: HostApplication[];
   sessions: HostApplicationSession[];
+  running?: RunningHostApplication[];
 }>;
 
 export type HostApplicationPresentation = Readonly<{
@@ -101,6 +104,18 @@ export function launchHostApplication(applicationID: string, locale: string, pre
 
 export function stopHostApplication(sessionID: string) {
   return fetchLocalApiJSON(`${base}/sessions/${encodeURIComponent(sessionID)}`, { method: 'DELETE' });
+}
+
+export function listRunningHostApplications(signal?: AbortSignal) {
+  return fetchLocalApiJSON<RunningHostApplication[]>(`${base}/running`, { method: 'GET', signal });
+}
+
+export function quitHostApplication(applicationID: string, instances: string[]) {
+  return fetchLocalApiJSON(`${base}/quit`, { method: 'POST', body: JSON.stringify({ application_id: applicationID, instances }) });
+}
+
+export function detachHostApplication(sessionID: string) {
+  return fetchLocalApiJSON(`${base}/sessions/${encodeURIComponent(sessionID)}/detach`, { method: 'POST' });
 }
 
 export function addHostApplication(request: { name: string; executable: string; arguments: string }) {

@@ -34,6 +34,21 @@ input. This matrix is not a certification of every installed application.
 | Linux application opens only a dialog | Reveal decoded dialog; retain its native dimensions | Xpra adapter test |
 | Final window actually closes | Close established physical viewer | Native fixture and viewer tests |
 
+# Explicit application quit
+
+| Scenario | Expected outcome | Evidence |
+| --- | --- | --- |
+| Direct native launch or no remaining window | Remain in the live OS list independently of sharing sessions | Real quit fixture, Env App interaction test |
+| Sharing stopped for a newly launched app | End only sharing; keep all native windows and process alive | Real multiple-window quit fixture |
+| Quit confirmation while process restarts | Preserve the original selected generation; never silently retarget | Swift identity, native stale-selection and Env App tests |
+| One selected instance is stale | Reject the entire selection before any termination request | Real quit fixture |
+| App cancels quit | Preserve process, pixels and active sharing; allow another explicit request | Real cancellation and reconnect fixture |
+| Quit accepted | Keep row until OS confirms process exit; close established viewer when sharing ends | Real quit fixture and existing viewer closure tests |
+| Quit before first window | Confirmed exit ends sharing normally, without a launch failure | Go exact-instance lifecycle test |
+| Request outcome unknown | Keep an error in the confirmation; never infer exit or retry automatically | Env App interaction test |
+| Read-only caller | Running list is readable; quit and detach are forbidden | API permission and Env App tests |
+| Routine OS list refresh | Keep keyboard focus on unchanged application controls | Env App interaction test |
+
 # Transport, access and input
 
 | Scenario | Expected outcome | Evidence |
@@ -72,6 +87,7 @@ constraints require separate validation. See the
 # Evidence
 
 - `scripts/check_macos_host_application_waiting.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable lifecycle scenarios.
+- `scripts/check_macos_host_application_quit.py`: exact-process quit, cancellation, fresh-helper inventory and detachment.
 - `scripts/check_macos_host_applications.py`: real capture, input, quality and process ownership acceptance.
 - `desktop/native/computer-host/Tests/RedevenComputerHostTests/HostApplicationTests.swift`: unreadable inventory and access classification.
 - `internal/hostapps/macos_test.go`: startup, authenticated connection ownership, termination and delivery ordering.

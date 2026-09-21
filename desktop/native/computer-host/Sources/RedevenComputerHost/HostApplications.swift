@@ -7,7 +7,8 @@ import UniformTypeIdentifiers
 
 // Human-operated host application sessions are separate from Flower's versioned
 // automation protocol. A session binds the catalog application returned by
-// AppKit; it cannot select arbitrary process IDs or terminate an existing app.
+// AppKit. Explicit quit uses a fresh system inventory and exact process generations;
+// detaching or runtime shutdown never grants permission to terminate an app.
 enum HostApplicationCatalog {
     static func identifier(_ url: URL) -> String {
         "macos-" + SHA256.hash(data: Data(url.resolvingSymlinksInPath().path.utf8)).map { String(format: "%02x", $0) }.joined()
@@ -45,6 +46,41 @@ enum HostApplicationCatalog {
         // macOS does not provide a localized description/category for every
         // bundle. Missing metadata stays empty instead of inventing product copy.
         return ["id": identifier(url), "name": name, "description": "", "categories": [String](), "icon": icon, "custom": false]
+    }
+    static func instanceIdentifier(url: URL, pid: pid_t, launched: Date) -> String {
+        let identity = "\(identifier(url)):\(pid):\(launched.timeIntervalSinceReferenceDate)"
+        return SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+    static func instanceIdentifier(_ app: NSRunningApplication) -> String? {
+        guard !app.isTerminated, app.activationPolicy == .regular, let url = app.bundleURL, let date = app.launchDate else { return nil }
+        return instanceIdentifier(url: url, pid: app.processIdentifier, launched: date)
+    }
+    static func running() -> [[String: Any]] {
+        var groups: [String: [String]] = [:]
+        for app in NSWorkspace.shared.runningApplications {
+            guard let instance = instanceIdentifier(app), let url = app.bundleURL else { continue }
+            groups[identifier(url), default: []].append(instance)
+        }
+        return groups.keys.sorted().map { ["application_id": $0, "instances": groups[$0]!.sorted()] }
+    }
+    static func quit(_ request: [String: Any]) throws {
+        guard consoleAvailable else { throw NativeInput.unavailable() }
+        guard let id = request["application_id"] as? String, let instances = request["instances"] as? [String],
+              !instances.isEmpty, instances.count <= 64, Set(instances).count == instances.count else { throw NativeInput.invalid("An application instance is required.") }
+        let targets = NSWorkspace.shared.runningApplications.filter { app in
+            guard let url = app.bundleURL, identifier(url) == id, let instance = instanceIdentifier(app) else { return false }
+            return instances.contains(instance)
+        }
+        // Validate the complete selection before making any quit request. A stale
+        // snapshot must not quit a replacement process, even when its PID is reused.
+        guard targets.count == instances.count else { throw HostFailure(code: "APPLICATION_NOT_FOUND", message: "The application instance is no longer running.") }
+        var accepted = true
+        for app in targets {
+            app.unhide()
+            _ = app.activate(options: [])
+            if !app.terminate() { accepted = false }
+        }
+        guard accepted else { throw HostFailure(code: "QUIT_REJECTED", message: "The application did not accept the quit request.") }
     }
     static var consoleAvailable: Bool {
         guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
@@ -133,7 +169,12 @@ final class HostApplicationSession {
             switch action {
             case "catalog":
                 extra = (request["paths"] as? [String] ?? []).filter { $0.hasPrefix("/") && $0.hasSuffix(".app") }.map { URL(fileURLWithPath: $0) }
-                emit(["type": "catalog", "availability": HostApplicationCatalog.availability(), "applications": HostApplicationCatalog.applications(extra: extra).map(HostApplicationCatalog.describe)])
+                emit(["type": "catalog", "availability": HostApplicationCatalog.availability(), "applications": HostApplicationCatalog.applications(extra: extra).map(HostApplicationCatalog.describe), "running": HostApplicationCatalog.running()])
+            case "running": emit(["type": "running", "running": HostApplicationCatalog.running()])
+            case "quit":
+                try HostApplicationCatalog.quit(request)
+                emit(["type": "quit_requested"])
+            case "detach": end()
             case "validate":
                 guard let path = request["path"] as? String, path.hasPrefix("/"), path.hasSuffix(".app") else { throw NativeInput.invalid("An absolute application bundle path is required.") }
                 let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
@@ -250,7 +291,7 @@ final class HostApplicationSession {
                 self.ownsApplication = !existing.contains(application.processIdentifier)
                 self.app = application
                 self.delivery = HostApplicationDelivery(pid: application.processIdentifier)
-                emit(["type": "launched", "pid": application.processIdentifier, "existing_application": !self.ownsApplication])
+                emit(["type": "launched", "instance": HostApplicationCatalog.instanceIdentifier(application) ?? "", "pid": application.processIdentifier, "existing_application": !self.ownsApplication])
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
                     guard let self else { return }
                     if application.isTerminated {

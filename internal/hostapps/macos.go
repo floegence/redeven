@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -52,14 +53,16 @@ func (m *Manager) macHelper() string {
 }
 
 type macMessage struct {
-	ExistingApplication bool          `json:"existing_application,omitempty"`
-	Action              string        `json:"action,omitempty"`
-	Type                string        `json:"type"`
-	Code                string        `json:"code,omitempty"`
-	Availability        Availability  `json:"availability,omitempty"`
-	Applications        []Application `json:"applications,omitempty"`
-	Data                string        `json:"data,omitempty"`
-	Generation          int           `json:"generation,omitempty"`
+	Instance            string               `json:"instance,omitempty"`
+	Running             []RunningApplication `json:"running,omitempty"`
+	ExistingApplication bool                 `json:"existing_application,omitempty"`
+	Action              string               `json:"action,omitempty"`
+	Type                string               `json:"type"`
+	Code                string               `json:"code,omitempty"`
+	Availability        Availability         `json:"availability,omitempty"`
+	Applications        []Application        `json:"applications,omitempty"`
+	Data                string               `json:"data,omitempty"`
+	Generation          int                  `json:"generation,omitempty"`
 }
 
 func macCommand(helper string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, error) {
@@ -150,8 +153,92 @@ func (m *Manager) macCatalog(ctx context.Context, owner string) (Catalog, error)
 	}
 	result.Availability = msg.Availability
 	result.Applications = msg.Applications
+	result.Running = msg.Running
 	return result, nil
 }
+
+// Running is a lightweight OS snapshot, independent of viewer/session lifetime.
+func (m *Manager) Running(ctx context.Context) ([]RunningApplication, error) {
+	if runtime.GOOS != "darwin" {
+		return nil, ErrUnavailable
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	msg, err := macOnce(ctx, m.macHelper(), map[string]any{"action": "running"})
+	if err != nil {
+		return nil, err
+	}
+	if msg.Type != "running" {
+		return nil, ErrUnavailable
+	}
+	return msg.Running, nil
+}
+
+func (m *Manager) Quit(ctx context.Context, owner string, req QuitRequest) error {
+	m.mu.Lock()
+	closed := m.closed
+	m.mu.Unlock()
+	if closed || owner == "" || runtime.GOOS != "darwin" {
+		return ErrUnavailable
+	}
+	if req.ApplicationID == "" || len(req.ApplicationID) > 160 || len(req.Instances) == 0 || len(req.Instances) > 64 {
+		return ErrInvalid
+	}
+	seen := make(map[string]bool)
+	for _, id := range req.Instances {
+		if len(id) != 64 || seen[id] {
+			return ErrInvalid
+		}
+		seen[id] = true
+	}
+	// Record explicit intent before dispatch so a fast, windowless exit is not
+	// misclassified as a failed launch. This does not change any session state.
+	m.mu.Lock()
+	for _, s := range m.sessions {
+		if s.native != nil && s.view.Application.ID == req.ApplicationID && seen[s.native.instance] {
+			s.native.quitRequested = true
+		}
+	}
+	m.mu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	msg, err := macOnce(ctx, m.macHelper(), map[string]any{"action": "quit", "application_id": req.ApplicationID, "instances": req.Instances})
+	switch msg.Code {
+	case "APPLICATION_NOT_FOUND":
+		return ErrNotFound
+	case "QUIT_REJECTED":
+		return ErrQuitRejected
+	}
+	if err != nil {
+		return err
+	}
+	if msg.Type != "quit_requested" {
+		return ErrUnavailable
+	}
+	// Acceptance is not termination. System inventory and live sessions observe
+	// the outcome; a save dialog or cancelled quit must keep the application open.
+	return nil
+}
+
+func (m *Manager) Detach(_ context.Context, owner, id string) error {
+	m.mu.Lock()
+	s := m.sessions[id]
+	if s == nil || s.owner != owner {
+		m.mu.Unlock()
+		return ErrNotFound
+	}
+	if s.native == nil {
+		m.mu.Unlock()
+		return ErrInvalid
+	}
+	ended := s.view.State == "ended" || s.view.State == "failed"
+	m.mu.Unlock()
+	if ended {
+		return nil
+	}
+	return s.native.send(map[string]any{"action": "detach"})
+}
+
 func (m *Manager) macAdd(ctx context.Context, req AddRequest) error {
 	path := strings.TrimSpace(req.Executable)
 	if !filepath.IsAbs(path) || !strings.HasSuffix(path, ".app") || req.Arguments != "" {
@@ -189,6 +276,9 @@ func (m *Manager) Permissions(ctx context.Context, permission string) error {
 // Latest-frame delivery bounds memory when a viewer is slow or disconnected.
 // One WebSocket owns input at a time; replacement revokes the previous viewer.
 type macSession struct {
+	// Process identity and explicit quit intent are guarded by Manager.mu.
+	instance       string
+	quitRequested  bool
 	mu             sync.Mutex
 	controlMu      sync.Mutex
 	writeMu        sync.Mutex
@@ -354,6 +444,7 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			startup.Stop()
 			m.mu.Lock()
 			s.view.ExistingApplication = msg.ExistingApplication
+			n.instance = msg.Instance
 			m.mu.Unlock()
 			slog.Info("native application attached", "session", s.view.ID, "existing_application", msg.ExistingApplication)
 		case "frame":
@@ -407,6 +498,12 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			n.noticeRevision++
 			n.mu.Unlock()
 		case "error":
+			m.mu.Lock()
+			intentionalExit := msg.Code == "APPLICATION_EXITED" && n.quitRequested
+			m.mu.Unlock()
+			if intentionalExit {
+				continue
+			}
 			slog.Warn("native application error", "session", s.view.ID, "code", msg.Code)
 			n.mu.Lock()
 			n.notice = raw
