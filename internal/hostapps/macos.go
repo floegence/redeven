@@ -398,9 +398,8 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			n.windows = raw
 			n.mu.Unlock()
 		case "ended":
-			if !started {
-				code = "application_exited"
-			}
+			// Explicit sharing termination is normal even before the first frame.
+			// A failed application launch arrives as a separate native error.
 			return
 		case "menu", "operation_error", "operation_complete":
 			n.mu.Lock()
