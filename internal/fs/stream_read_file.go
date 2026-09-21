@@ -17,18 +17,20 @@ import (
 // ServeReadFileStream implements the `fs/read_file` stream.
 //
 // Protocol (after StreamHello):
-//  1. Client -> Agent: fs_read_file_meta (length-prefixed JSON frame)
-//  2. Agent -> Client: fs_read_file_resp_meta (length-prefixed JSON frame)
-//  3. Agent -> Client: raw file bytes (length = content_len), then close
-func (s *Service) ServeReadFileStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta) {
+//  1. Client -> Agent: fs_read_file_meta (newline-terminated JSON)
+//  2. Agent -> Client: fs_read_file_resp_meta (newline-terminated JSON)
+//  3. Agent -> Client: raw file bytes (length = content_len)
+//
+// The session handler owns normal FIN and error/reset teardown. This service
+// borrows the stream; closing it here would reset unread response bytes.
+func (s *Service) ServeReadFileStream(ctx context.Context, stream io.ReadWriter, meta *session.Meta) {
 	s.ServeReadFileStreamWithAccessGate(ctx, stream, meta, nil)
 }
 
-func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta, gate *accessgate.Gate) {
+func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream io.ReadWriter, meta *session.Meta, gate *accessgate.Gate) {
 	if stream == nil {
 		return
 	}
-	defer func() { _ = stream.Close() }()
 
 	if err := accessgate.RequireRPC(gate, meta, accessgate.RPCAccessProtected); err != nil {
 		rpcErr, _ := err.(*sessionrpc.Error)

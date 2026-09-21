@@ -82,7 +82,7 @@ async function openFile(page, file) {
   const item = scope.getByText(path.basename(file), { exact: true }).filter({ visible: true }).last().locator('xpath=ancestor::*[@data-file-browser-item-path][1]');
   await item.dblclick({ position: { x: 12, y: 12 } });
 }
-async function checkMedia(page, kind, file, output, surface) {
+async function checkMedia(page, kind, file, output, surface, observer) {
   const startTime = Date.now();
   await openFile(page, file);
   const media = page.locator(`${kind}:visible`).last();
@@ -105,7 +105,7 @@ async function checkMedia(page, kind, file, output, surface) {
     await page.evaluate(async () => {
       const directory = await globalThis.navigator.storage.getDirectory();
       const handle = await directory.getFileHandle('event-transport-download', { create: true });
-      globalThis.showSaveFilePicker = async () => handle;
+      globalThis.showSaveFilePicker = async () => { globalThis.__downloadPickerCalled = true; return handle; };
     });
     const download = page.getByRole('button', { name: 'Download file', exact: true }).filter({ visible: true }).last();
     if (await download.count()) await download.click();
@@ -113,16 +113,23 @@ async function checkMedia(page, kind, file, output, surface) {
       await page.getByRole('button', { name: 'More actions', exact: true }).filter({ visible: true }).last().click();
       await page.getByRole('menuitem', { name: 'Download file', exact: true }).click();
     }
+    await page.getByRole('banner', { name: 'Redeven environment toolbar' }).getByRole('button', { name: 'Downloads', exact: true }).click();
+    await page.screenshot({ path: `${reportPath}.download-start.png` });
     const saved = await until(async () => page.evaluate(async (expectedSize) => {
+      const failed = document.querySelector('[data-download-task-status="failed"]');
+      if (failed) throw new Error(failed.textContent);
       const directory = await globalThis.navigator.storage.getDirectory();
       const file = await (await directory.getFileHandle('event-transport-download')).getFile();
       if (file.size !== expectedSize) return null;
       const bytes = await file.arrayBuffer();
       const hash = await globalThis.crypto.subtle.digest('SHA-256', bytes);
       return { bytes: file.size, sha256: Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('') };
-    }, expectedBytes.length));
+    }, expectedBytes.length)).catch(async (error) => {
+      throw new Error(`File download failed: ${JSON.stringify({ pickerCalled: await page.evaluate(() => globalThis.__downloadPickerCalled === true), task: await page.getByRole('dialog', { name: 'Downloads', exact: true }).innerText() })}`, { cause: error });
+    });
     assert.equal(saved.sha256, createHash('sha256').update(expectedBytes).digest('hex'));
     output.download = saved;
+    await page.getByRole('banner', { name: 'Redeven environment toolbar' }).getByRole('button', { name: 'Downloads', exact: true }).click();
   }
   if (reportPath) await page.screenshot({ path: `${reportPath}.${output.name}.${surface}.${kind}.png` });
   const preview = media.locator('xpath=ancestor::*[@data-floe-geometry-surface="floating-window"][1]');
@@ -132,6 +139,8 @@ async function checkMedia(page, kind, file, output, surface) {
   } else {
     const widget = media.locator('xpath=ancestor::article[contains(@class,"workbench-widget")][1]');
     const widgetID = await widget.getAttribute('data-floe-workbench-widget-id');
+    const observedWidget = observer.locator(`[data-floe-workbench-widget-id="${widgetID}"]`);
+    await observedWidget.waitFor({ state: 'attached' });
     // Finish the persisted close before opening a new preview lifetime.
     const saved = page.waitForResponse((response) => response.url().endsWith('/api/workbench/layout')
       && response.request().method() === 'PUT' && response.ok()
@@ -139,10 +148,12 @@ async function checkMedia(page, kind, file, output, surface) {
     await widget.locator('.workbench-widget__window-control--close').click();
     await widget.waitFor({ state: 'detached' });
     await saved;
+    await observedWidget.waitFor({ state: 'detached' });
+    output.workbenchSharedUpdates = (output.workbenchSharedUpdates ?? 0) + 1;
   }
   await media.waitFor({ state: 'hidden' });
 }
-async function verify(page, url, name) {
+async function verify(page, url, name, suppliedObserver) {
   page.setDefaultTimeout(10000);
   const output = { name, media: [], streams: [], sessionConnections: 0 };
   report.carriers.push(output);
@@ -165,8 +176,9 @@ async function verify(page, url, name) {
   output.effectiveType = await page.evaluate(() => navigator.connection.effectiveType);
   assert.equal(output.effectiveType, '3g');
   await page.getByRole('tab', { name: 'Activity', exact: true }).click();
-  const observer = await page.context().newPage();
+  const observer = suppliedObserver ?? await page.context().newPage();
   await observer.goto(url);
+  await observer.getByRole('tab', { name: 'Workbench', exact: true }).click();
   await observer.getByRole('button', { name: 'Notes overlay', exact: true }).waitFor();
   await Promise.all([
     observer.waitForResponse((response) => response.url().includes('/api/notes/snapshot') && response.ok()),
@@ -180,10 +192,10 @@ async function verify(page, url, name) {
       await page.getByRole('tab', { name: 'Workbench', exact: true }).click();
       await page.getByTitle('Go to path', { exact: true }).filter({ visible: true }).last().waitFor();
     }
-    await checkMedia(page, 'video', files[0], output, surface);
-    await checkMedia(page, 'video', files[0], output, surface);
-    await checkMedia(page, 'audio', files[1], output, surface);
-    if (option('--local-video')) await checkMedia(page, 'video', path.resolve(option('--local-video')), output, surface);
+    await checkMedia(page, 'video', files[0], output, surface, observer);
+    await checkMedia(page, 'video', files[0], output, surface, observer);
+    await checkMedia(page, 'audio', files[1], output, surface, observer);
+    if (option('--local-video')) await checkMedia(page, 'video', path.resolve(option('--local-video')), output, surface, observer);
   }
   const topic = `Media acceptance ${name}`;
   const result = await page.evaluate(async (topic) => {
@@ -217,7 +229,8 @@ try {
   report.runtime = { pid: runtime.child.pid, url: startup.local_ui_url, bridgeURL: startup.local_ui_bridge_url };
   console.log('Owned media acceptance runtime:', JSON.stringify(report));
   browser = await chromium.launch({ channel: 'chromium', headless: true, args: ['--force-effective-connection-type=3G'] });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, locale: 'en-US' });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, locale: 'en-US' });
+  const page = await context.newPage();
   await verify(page, startup.local_ui_url, 'chromium');
   await browser.close(); browser = null;
   execFileSync(path.join(root, 'scripts/check_desktop_electron_test_runtime.sh'), { cwd: root, stdio: 'inherit' });
@@ -240,8 +253,10 @@ app.commandLine.appendSwitch('force-effective-connection-type', '3G');
 app.commandLine.appendSwitch('lang', 'en-US');
 app.whenReady().then(() => {
  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => callback({requestHeaders: desktopPrivateBridgeRequestHeaders({kind: 'native_local_bridge', allowedBaseURL: startup.local_ui_bridge_url}, startup, details.url, details.requestHeaders)}));
- const window = new BrowserWindow({width: 1440, height: 960, webPreferences: {sandbox: true, contextIsolation: true, nodeIntegration: false, preload: ${JSON.stringify(preload)}}});
- window.loadURL('about:blank');
+ for (let index = 0; index < 2; index += 1) {
+  const window = new BrowserWindow({width: 1440, height: 960, webPreferences: {sandbox: true, contextIsolation: true, nodeIntegration: false, preload: ${JSON.stringify(preload)}}});
+  window.loadURL('about:blank');
+ }
 });
 app.on('window-all-closed', () => app.quit());
 `);
@@ -249,15 +264,15 @@ app.on('window-all-closed', () => app.quit());
   report.electronPID = electron.child.pid;
   const endpoint = await until(() => electron.output.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1]);
   browser = await chromium.connectOverCDP(endpoint);
-  const electronPage = await until(() => browser.contexts()[0]?.pages()[0]);
-  await verify(electronPage, new URL('/_redeven_proxy/env/', startup.local_ui_bridge_url).href, 'electron');
+  const electronPages = await until(() => { const pages = browser.contexts()[0]?.pages(); return pages?.length === 2 ? pages : null; });
+  await verify(electronPages[0], new URL('/_redeven_proxy/env/', startup.local_ui_bridge_url).href, 'electron', electronPages[1]);
   await browser.close(); browser = null;
   await stop(electron);
   report.status = 'passed';
 } catch (error) {
   report.status = 'failed';
   report.error = error.stack ?? String(error);
-  for (const page of browser?.contexts()[0]?.pages() ?? []) await page.screenshot({ path: `${reportPath}.failure.png` }).catch(() => {});
+  for (const [index, page] of (browser?.contexts()[0]?.pages() ?? []).entries()) await page.screenshot({ path: `${reportPath}.failure-${index}.png` }).catch(() => {});
   throw error;
 } finally {
   try { if (browser) await browser.close(); } catch (error) { cleanupErrors.push(error); }

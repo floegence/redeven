@@ -25,7 +25,7 @@ Local session issuance declares only Env App API and plugin API paths plus the p
 
 The acquisition lifecycle cancels active requests on waiting, failure, replacement, and disposal, and fences already-parsed old events. Request cancellation, early iterator return, and page closure release the logical stream. The access proxy serializes explicit and context-driven shutdown and closes active observers immediately. Session cleanup releases the proxy; persistent operations remain owned by their services.
 
-Flowersec owns request establishment deadlines, SSE activity timeouts, chunk bounds, backpressure, and admission. SSE is persistent only when both request Accept and response Content-Type identify it. Persistent responses do not inherit ordinary response total-duration or cumulative-body limits. Client and server default HTTP admission is 24 concurrent requests, with at most 16 event streams and 8 positions reserved for ordinary traffic. Excess event subscriptions fail explicitly without an unbounded queue. These limits are subordinate to existing session resources and do not create a new terminal or RPC owner.
+Flowersec owns request establishment deadlines, SSE activity timeouts, chunk bounds, backpressure, and admission. SSE is persistent only when both request Accept and response Content-Type identify it. Persistent responses do not inherit ordinary response total-duration or cumulative-body limits. Client and server default HTTP admission is 24 concurrent requests, with at most 16 event streams and 8 positions reserved for ordinary traffic. Excess event subscriptions fail explicitly without an unbounded queue. These limits are subordinate to existing session resources and do not create a new terminal or RPC owner. File downloads keep their existing logical file stream: the file service borrows the stream, and the published session handler sends normal FIN after return. Product code must not reset a successful response while its bytes are still being consumed.
 
 ## Observation and recovery
 
@@ -44,6 +44,7 @@ Desktop Welcome's main-process Node HTTP reader is an independent maintained con
 - `redeven:internal/agent/agent.go` - Shared local and remote Env session proxy registration against the fixed AppServer.
 - `redeven:internal/localui/authorization_store.go` - Current-session HTTP scope and persisted app-origin binding.
 - `redeven:internal/codeapp/appserver/server_test.go` - Session identity, permission, and revoked/wrong-surface rejection.
+- `redeven:internal/localui/localui_e2e_test.go` - Real TLS admission saturation preserves ordinary requests and byte-exact file transfer through graceful EOF.
 - `redeven:internal/accessproxy/server_e2e_test.go` - Active observation cancellation during overlapping close paths.
 - `redeven:internal/envapp/ui_src/src/ui/services/eventStreamRequestPolicy.test.ts` - Domain payload/cursor mapping and cancellation without native event requests.
 - `redeven:internal/envapp/ui_src/scripts/checkEnvSessionRefresh.mjs` - Eight documents, twenty bounded refreshes, cross-document event delivery, one session per document, and socket-pool evidence.
