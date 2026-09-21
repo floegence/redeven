@@ -21,6 +21,7 @@ import (
 
 type liveAutomaticTitleOpenAIMock struct {
 	failTitle    bool
+	titleRequest []byte
 	titleStarted chan struct{}
 	releaseTitle chan struct{}
 	startOnce    sync.Once
@@ -46,7 +47,10 @@ func (mock *liveAutomaticTitleOpenAIMock) handle(w http.ResponseWriter, r *http.
 	_ = r.Body.Close()
 	isTitle := bytes.Contains(body, []byte("You generate concise thread titles"))
 	if isTitle {
-		mock.startOnce.Do(func() { close(mock.titleStarted) })
+		mock.startOnce.Do(func() {
+			mock.titleRequest = body
+			close(mock.titleStarted)
+		})
 		select {
 		case <-r.Context().Done():
 			return
@@ -144,6 +148,14 @@ func TestAutomaticTitleSettlementPublishesCanonicalWorkspaceSummary(t *testing.T
 			case <-mock.titleStarted:
 			case <-time.After(3 * time.Second):
 				t.Fatal("automatic title provider request did not start")
+			}
+			for _, instruction := range []string{
+				"Always use the same language as the user's request.",
+				"For English requests, write the title in English.",
+			} {
+				if !bytes.Contains(mock.titleRequest, []byte(instruction)) {
+					t.Errorf("title wire request is missing language instruction %q", instruction)
+				}
 			}
 			pending := nextFlowerTitleSummary(t, subscription, thread.ThreadID, flruntime.ThreadTitleStatusPending)
 			if pending.Title != "First user request" || pending.TitleGeneration != 2 {
