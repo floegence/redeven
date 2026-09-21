@@ -165,7 +165,7 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 		}
 	}
 	if runtime.GOOS == "darwin" {
-		for _, value := range []string{req.Presentation.Controls, req.Presentation.Menu, req.Presentation.Input, req.Presentation.Windows, req.Presentation.CloseWindow, req.Presentation.SharedControl, req.Presentation.OperationFailed, req.Presentation.Waiting, req.Presentation.CaptureUnavailable, req.Presentation.Picture, req.Presentation.PictureAuto, req.Presentation.PictureClarity, req.Presentation.PictureSmooth, req.Presentation.PictureData, req.Presentation.PictureHint, req.Presentation.PictureAdvanced, req.Presentation.PicturePixels, req.Presentation.PictureResolution, req.Presentation.PictureFrameRate, req.Presentation.PictureActualRate, req.Presentation.PictureBandwidth, req.Presentation.PictureTransport, req.Presentation.PictureVideo, req.Presentation.PictureImages} {
+		for _, value := range []string{req.Presentation.Controls, req.Presentation.Menu, req.Presentation.Input, req.Presentation.Windows, req.Presentation.CloseWindow, req.Presentation.SharedControl, req.Presentation.OperationFailed, req.Presentation.Waiting, req.Presentation.WaitingHint, req.Presentation.CaptureUnavailable, req.Presentation.Picture, req.Presentation.PictureAuto, req.Presentation.PictureClarity, req.Presentation.PictureSmooth, req.Presentation.PictureData, req.Presentation.PictureHint, req.Presentation.PictureAdvanced, req.Presentation.PicturePixels, req.Presentation.PictureResolution, req.Presentation.PictureFrameRate, req.Presentation.PictureActualRate, req.Presentation.PictureBandwidth, req.Presentation.PictureTransport, req.Presentation.PictureVideo, req.Presentation.PictureImages} {
 			if strings.TrimSpace(value) == "" || len(value) > 1024 {
 				return Session{}, ErrInvalid
 			}
@@ -408,9 +408,9 @@ func (m *Manager) finish(s *ownedSession, code string) {
 		s.view.ErrorCode = code
 	}
 	s.view.State = "ended"
-	// A server cleanup error does not mean an already running application failed
-	// to open. Preserve the exit diagnostic while reporting its ended lifecycle.
-	if s.view.ErrorCode != "" && !wasRunning {
+	// Xpra cleanup errors retain its ended lifecycle. A native helper failure
+	// cannot prove the host application closed and must retain viewer recovery.
+	if s.view.ErrorCode != "" && (!wasRunning || s.native != nil) {
 		s.view.State = "failed"
 	}
 	s.password = ""
@@ -478,6 +478,19 @@ func (m *Manager) ForTarget(target string) (Session, string, bool) {
 	defer m.mu.Unlock()
 	for _, s := range m.sessions {
 		if (s.view.State == "starting" || s.view.State == "running") && s.view.Forward != nil && s.view.Forward.Forward.TargetURL == target {
+			return cloneSession(s.view), s.owner, true
+		}
+	}
+	return Session{}, "", false
+}
+
+// ForForward keeps terminal presentation addressable after the network forward
+// is released. Exact forward identity cannot reclaim a reused loopback address.
+func (m *Manager) ForForward(id string) (Session, string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, s := range m.sessions {
+		if s.view.Forward != nil && s.view.Forward.Forward.ForwardID == id {
 			return cloneSession(s.view), s.owner, true
 		}
 	}

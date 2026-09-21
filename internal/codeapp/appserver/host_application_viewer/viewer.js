@@ -79,7 +79,6 @@
     fetch(config.base + '/_redeven_host_app/state', {cache:'no-store', signal:request.signal})
       .then(async response => {
         if (current !== generation) return;
-        if (response.status === 404 || response.status === 410) { finish('ended'); return; }
         if (response.ok) {
           const data = await response.json();
           if (current === generation && (data.state === 'ended' || data.state === 'failed')) finish(data.state);
@@ -227,7 +226,7 @@
       const response = await fetch(config.base + '/_redeven_host_app/state', {cache:'no-store', signal:request.signal});
       if (attempt !== generation) return;
       if (!response.ok) {
-        finish(response.status === 404 || response.status === 410 ? 'ended' : 'disconnected');
+        finish('disconnected');
         return;
       }
       const data = await response.json();

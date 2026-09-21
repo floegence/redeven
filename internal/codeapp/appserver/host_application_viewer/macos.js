@@ -143,7 +143,7 @@
   controlsButton.onclick = () => {
     drawer.hidden = !drawer.hidden;
     controlsButton.setAttribute('aria-expanded', String(!drawer.hidden));
-    if (!drawer.hidden) modeButtons.get(picture.mode).focus();
+    if (!drawer.hidden) (picturePanel.hidden ? menu : modeButtons.get(picture.mode)).focus();
     menuPanel.hidden = true; menu.setAttribute('aria-expanded', 'false');
   };
   const input = document.createElement('textarea');
@@ -183,12 +183,15 @@
     hint.textContent =
       state === 'disconnected'
         ? config.copy.connectionHint
-        : config.copy.sharedControl;
+        : state === 'waiting' ? config.copy.waitingHint : config.copy.sharedControl;
     hint.hidden = !hint.textContent;
-    retry.hidden = !['disconnected', 'failed', 'captureUnavailable'].includes(state);
+    retry.hidden = !['waiting', 'disconnected', 'failed', 'captureUnavailable'].includes(state);
     retry.querySelector('span').textContent =
-      state === 'disconnected' ? config.copy.reconnect : config.copy.retry;
-    controls.hidden = state !== 'active';
+      ['waiting', 'disconnected'].includes(state) ? config.copy.reconnect : config.copy.retry;
+    controls.hidden = !['active', 'waiting'].includes(state);
+    picturePanel.hidden = state !== 'active';
+    close.hidden = state !== 'active';
+    windows.disabled = state !== 'active';
     input.disabled = state !== 'active';
     if (state !== 'active') {
       feedback.hidden = true;
@@ -202,7 +205,7 @@
       socket?.readyState === WebSocket.OPEN &&
       current &&
       (renderedGeneration === current.generation ||
-        ['resize', 'select', 'release'].includes(value.action))
+        ['resize', 'select', 'release', 'menu', 'menu_action'].includes(value.action))
     )
       socket.send(
         JSON.stringify({
@@ -232,7 +235,7 @@
     if (configuredRatio !== devicePixelRatio) { configuredRatio = devicePixelRatio; configurePicture(); }
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      if (current) {
+      if (current?.window) {
         const width = Math.max(320, innerWidth),
           height = Math.max(200, innerHeight),
           key = `${width}:${height}`;
@@ -316,10 +319,6 @@
         signal: abort.signal,
       });
       if (mine !== attempt || abort.signal.aborted) return;
-      if ([404, 410].includes(response.status)) {
-        disconnect('ended');
-        return;
-      }
       if (!response.ok) throw Error('Session unavailable');
       const state = await response.json();
       if (mine !== attempt || abort.signal.aborted) return;
@@ -369,9 +368,10 @@
           return;
         }
         if (message.type === 'waiting') {
+          clearTimeout(deadline);
           resetDecoder();
           pending = null;
-          current = null;
+          current = { generation: message.generation };
           renderedGeneration = 0;
           present('waiting');
         } else if (message.type === 'operation_error') {
@@ -382,6 +382,10 @@
         } else if (message.type === 'operation_complete') {
           feedback.hidden = true;
         } else if (message.type === 'window') {
+          clearTimeout(deadline);
+          deadline = setTimeout(() => {
+            if (mine === attempt && socket === connection) disconnect('captureUnavailable');
+          }, 45000);
           resetDecoder();
           pending = null;
           current = message;
@@ -437,10 +441,9 @@
             { cache: 'no-store' },
           );
           if (mine !== attempt) return;
-          if ([404, 410].includes(response.status)) disconnect('ended');
-          else if (response.ok) {
+          if (response.ok) {
             const data = await response.json();
-            if (data.state === 'ended' || data.state === 'failed')
+            if (mine === attempt && (data.state === 'ended' || data.state === 'failed'))
               disconnect(data.state);
           }
         } catch {

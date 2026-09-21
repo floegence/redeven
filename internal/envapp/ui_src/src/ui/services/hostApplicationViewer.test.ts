@@ -119,18 +119,30 @@ describe('host application viewer', () => {
 
   it('distinguishes an ended session from a recoverable disconnection', async () => {
     const v = await viewer();
-    v.fetch.mockResolvedValue({ok:false, status:404});
+    v.fetch.mockResolvedValue({ok:true, json:async () => ({state:'ended'})});
     v.doc.dispatchEvent(new dom.window.Event('connection-lost'));
     await drain();
     expect(v.state()).toBe('ended');
     expect(dom.window.document.querySelector('button')!.hidden).toBe(true);
   });
 
+  it.each([404, 410])('retains the viewer when its status route returns HTTP %s', async status => {
+    const v = await viewer(false, true);
+    v.appWindow(1); v.client._new_window(1);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    v.fetch.mockResolvedValue({ok:false, status});
+    v.doc.dispatchEvent(new dom.window.Event('connection-lost')); await drain();
+    expect(v.state()).toBe('disconnected');
+    expect(v.nativeWindow.request).not.toHaveBeenCalled();
+    dom.window.document.querySelector('button')!.click(); await drain();
+    expect(v.state()).toBe('disconnected');
+  });
+
   it('closes the native viewer only after the active application session has ended', async () => {
     const v = await viewer(false, true);
     v.appWindow(1); v.client._new_window(1);
     v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
-    v.fetch.mockResolvedValue({ok:false, status:404});
+    v.fetch.mockResolvedValue({ok:true, json:async () => ({state:'ended'})});
     v.doc.dispatchEvent(new dom.window.Event('connection-lost'));
     await drain();
     expect(v.nativeWindow.request).toHaveBeenCalledWith('close');
@@ -153,7 +165,7 @@ describe('host application viewer', () => {
     try {
       v.appWindow(1); v.client._new_window(1);
       v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
-      v.fetch.mockResolvedValue({ok:false, status:410});
+      v.fetch.mockResolvedValue({ok:true, json:async () => ({state:'ended'})});
       v.doc.dispatchEvent(new dom.window.Event('connection-lost')); await drain();
       expect(close).toHaveBeenCalledOnce();
     } finally { close.mockRestore(); }

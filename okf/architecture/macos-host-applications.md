@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Native macOS host applications
 description: Real application discovery, direct local launch, owned remote window capture and human input on macOS.
 tags: [runtime, desktop, applications, macos, security]
-timestamp: 2026-09-21T03:00:00Z
+timestamp: 2026-09-21T06:00:00Z
 ---
 # Summary
 
@@ -75,13 +75,25 @@ not a Flower automation or model-observation path. Password/privileged system
 dialogs and OS-reserved shortcuts remain subject to macOS policy.
 
 Application menus come from that app's actual accessibility menu tree; returned
-opaque handles invoke the same enabled menu item. Closing a window presses its
+opaque handles invoke the same enabled menu item. Menus bind to the live application
+and current generation, independently of whether a window exists. Waiting viewers
+keep the collapsed left controls available for opening a window through the app's
+own menu. Redeven does not guess a menu title or automatically invoke an app-specific
+action. Capture/wait transitions invalidate old menu handles. Closing a window presses its
 real close action, preserving ordinary save/cancel dialogs. Ending from the library
 requests graceful application termination only for a process newly launched by
 that session and never force-kills it. For a previously running process, the
 library presents **Stop sharing**: it disconnects without quitting the app or
 closing its windows. Confirmed loss of the final window closes the physical
 Redeven viewer; a network failure or close request by itself does not. Closing only the viewer preserves the app.
+A running process without its first shareable window remains attached indefinitely;
+there is no first-window termination deadline. The helper-launch deadline ends when
+the bound process is reported, independently of pixel readiness. The viewer cancels
+its connection deadline on a waiting event, shows explicit waiting guidance and
+reconnect, and starts a separate bounded pixel deadline when a window appears.
+Every new viewer receives the current waiting state. An unexpected helper exit
+is a failed sharing session, not evidence that the host application ended.
+
 An unreadable accessibility inventory cannot confirm closure. The helper checks
 both accessibility and visible WindowServer inventories and allows a one-second window
 replacement interval before ending a previously visible session. A disappearing
@@ -92,6 +104,14 @@ refreshes and resize; input generations change only when capture is rebound.
 Single-operation failures retain the connection and current pixels with a localized
 nonblocking notice. Genuine capture failure offers an explicit reconnect action;
 reconnection captures the same bound process and invalidates stale input.
+
+Terminal session presentation remains owner/full-permission protected and is
+resolved by exact forward ID even after its network forward is released. Active
+loopback-target guards continue to protect alternate routes, but a terminal
+session cannot claim a reused loopback address. The viewer uses explicit session
+state to distinguish failure from closure; HTTP 404/410, network errors and late
+responses from an old connection never prove application termination. Only a
+confirmed ended state closes an established physical viewer.
 
 Runtime shutdown releases capture, route and input ownership but preserves native
 applications and unsaved data; the next Runtime does not silently reclaim them.
@@ -109,5 +129,5 @@ Intel host or third-party application.
 - `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplicationWindows.swift` and `desktop/native/computer-host/Tests/RedevenComputerHostTests/HostApplicationTests.swift`: authoritative inventory and transient window lifecycle.
 - `internal/hostapps/macos.go` and `macos_test.go`: helper resolution, stream credentials, connection ownership, native launch and cleanup.
 - `internal/codeapp/appserver/host_application_viewer/macos.js` and `internal/envapp/ui_src/src/ui/services/macHostApplicationViewer.test.ts`: first frame, generation, IME, recovery and physical viewer closure.
-- `scripts/check_macos_host_applications.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable real-app pixel/input/menu/lifecycle acceptance.
+- `scripts/check_macos_host_applications.py`, `scripts/check_macos_host_application_waiting.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable real-app pixel/input/menu/lifecycle acceptance.
 - `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx`: trusted local launch and remote permission presentation.

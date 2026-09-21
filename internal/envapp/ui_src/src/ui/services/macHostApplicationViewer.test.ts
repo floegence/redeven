@@ -10,7 +10,7 @@ const source = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '');
 let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
-afterEach(() => { dom?.window.dispatchEvent(new dom.window.Event('beforeunload')); dom?.window.close(); });
+afterEach(() => { dom?.window.dispatchEvent(new dom.window.Event('beforeunload')); dom?.window.close(); vi.useRealTimers(); });
 
 async function viewer(video = false, icon = '') {
   dom = new JSDOM(html, { url: 'http://localhost/pf/test/_redeven_host_app/', runScripts: 'dangerously', pretendToBeVisual: true });
@@ -125,9 +125,74 @@ describe('macOS application viewer', () => {
     v.socket().message({ type: 'blocked' }); expect(v.state()).toBe('disconnected');
     expect(v.native.request).not.toHaveBeenCalled();
     await v.retry(); await v.activate();
-    v.fetch.mockResolvedValue({ ok: false, status: 410 });
+    v.fetch.mockResolvedValue({ ok: true, json: async () => ({ state: 'ended' }) });
     v.socket().onclose?.(); await drain();
     expect(v.native.request).toHaveBeenCalledWith('close');
+  });
+
+  it.each([404, 410])('does not infer application termination from HTTP %s', async status => {
+    const v = await viewer(); await v.activate();
+    v.fetch.mockResolvedValue({ ok: false, status });
+    v.socket().onclose?.(); await drain();
+    expect(v.state()).toBe('disconnected');
+    expect(v.native.request).not.toHaveBeenCalled();
+    await v.retry();
+    expect(v.state()).toBe('disconnected');
+    expect(v.native.request).not.toHaveBeenCalled();
+  });
+
+  it('exposes the native application menu while waiting for its first window', async () => {
+    const v = await viewer();
+    v.socket().message({type:'waiting',generation:3});
+    const controls = dom.window.document.querySelector<HTMLElement>('.mac-app-controls')!;
+    expect(controls.hidden).toBe(false);
+    controls.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!.click();
+    const menu = [...controls.querySelectorAll('button')].find(b => b.textContent === 'Menu')!;
+    expect(dom.window.document.activeElement).toBe(menu);
+    menu.click();
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toEqual({action:'menu',generation:3});
+    v.socket().message({type:'menu',items:[{id:'open-main',title:'Open main window',enabled:true,children:[]}]});
+    dom.window.document.querySelector<HTMLButtonElement>('.mac-app-menu button')!.click();
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toEqual({action:'menu_action',item:'open-main',generation:3});
+    expect(dom.window.document.querySelector<HTMLElement>('#picture-settings')!.hidden).toBe(true);
+    expect(dom.window.document.querySelector('textarea')!.disabled).toBe(true);
+    v.window(4); v.socket().frame(); await drain();
+    expect(v.state()).toBe('active');
+  });
+
+  it('keeps waiting beyond the connection deadline and starts capture when a window appears', async () => {
+    vi.useFakeTimers();
+    const v = await viewer();
+    v.socket().message({ type: 'waiting' });
+    await vi.advanceTimersByTimeAsync(90000);
+    expect(v.state()).toBe('waiting');
+    expect(v.socket().close).not.toHaveBeenCalled();
+    expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(false);
+    v.window(); v.socket().frame(); await drain();
+    expect(v.state()).toBe('active');
+    expect(v.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('offers capture recovery if a discovered window never supplies pixels', async () => {
+    vi.useFakeTimers();
+    const v = await viewer();
+    v.socket().message({ type: 'waiting' });
+    await vi.advanceTimersByTimeAsync(60000);
+    v.window();
+    await vi.advanceTimersByTimeAsync(45000);
+    expect(v.state()).toBe('captureUnavailable');
+    expect(v.native.request).not.toHaveBeenCalled();
+  });
+
+  it('ignores a terminal status body received after a new connection starts', async () => {
+    const v = await viewer(); await v.activate();
+    let resolve!: (value: unknown) => void;
+    v.fetch.mockResolvedValueOnce({ ok: true, json: () => new Promise(done => { resolve = done; }) });
+    v.socket().onclose?.(); await drain();
+    await v.retry(); await v.activate();
+    resolve({ state: 'ended' }); await drain();
+    expect(v.state()).toBe('active');
+    expect(v.native.request).not.toHaveBeenCalled();
   });
 
   it('ignores a decode failure from the replaced connection and paints its successor', async () => {

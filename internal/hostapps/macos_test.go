@@ -147,6 +147,16 @@ func TestMacStreamAuthenticatesAndResumesWithoutRelaunch(t *testing.T) {
 	if m.Password(view.ID) != "" {
 		t.Fatal("ended application retained credentials")
 	}
+	retained, owner, found := m.ForForward(view.Forward.Forward.ForwardID)
+	if !found || retained.State != "ended" || retained.ID != view.ID || owner != "alice" {
+		t.Fatal("ended session lost its authoritative forward identity")
+	}
+	if _, _, found := m.ForTarget(view.Forward.Forward.TargetURL); found {
+		t.Fatal("ended session claimed a reusable loopback address")
+	}
+	if forward, err := m.forwards.GetForward(context.Background(), view.Forward.Forward.ForwardID); err != nil || forward != nil {
+		t.Fatal("terminal presentation retained the network forward")
+	}
 }
 func TestMacClosedManagerCannotStartAnApplication(t *testing.T) {
 	m := macFixture(t)
@@ -295,4 +305,52 @@ done
 			t.Fatalf("helper request changed: got %s, want %s", got, want)
 		}
 	}
+}
+
+func TestMacLiveApplicationCanWaitForItsFirstWindowBeyondStartupDeadline(t *testing.T) {
+	m := macFixtureScript(t, `#!/bin/sh
+while IFS= read -r request; do
+ case "$request" in
+ *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"ready":true},"applications":[{"id":"macos-fixture","name":"Delayed App"}]}' ;;
+ *'"action":"launch"'*) printf '%s\n' '{"type":"launched","existing_application":true}' '{"type":"waiting","generation":1}' ;;
+ *'"action":"resume"'*) printf '%s\n' '{"type":"window","window":"one","generation":2}' '{"type":"frame","generation":2,"data":"ZnJhbWU="}' ;;
+ esac
+done
+`)
+	view, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	s := m.sessions[view.ID]
+	m.mu.Unlock()
+	select {
+	case <-s.done:
+		t.Fatal("a live application was ended by the first-frame deadline")
+	case <-time.After(41 * time.Second):
+	}
+	if err := s.native.send(map[string]any{"action": "resume"}); err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, view.ID, "running")
+	resumed, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture"})
+	if err != nil || resumed.ID != view.ID {
+		t.Fatal("waiting recovery relaunched the app")
+	}
+}
+
+func TestMacUnexpectedHelperExitDoesNotConfirmApplicationClosure(t *testing.T) {
+	m := macFixture(t)
+	view, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, view.ID, "running")
+	m.mu.Lock()
+	s := m.sessions[view.ID]
+	m.mu.Unlock()
+	s.native.writeMu.Lock()
+	_ = s.native.input.Close()
+	s.native.writeMu.Unlock()
+	waitMac(t, m, view.ID, "failed")
 }

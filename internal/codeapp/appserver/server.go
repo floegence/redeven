@@ -6706,6 +6706,14 @@ func (g *Server) handlePortForwardProxy(w http.ResponseWriter, r *http.Request) 
 	}
 	localPrefix := localPortForwardBasePath(r)
 
+	// Session status and the viewer document outlive the released network route.
+	// The owner/full-permission guard still runs before any presentation is sent.
+	if g.hostApps != nil {
+		if s, owner, found := g.hostApps.ForForward(forwardID); found && g.guardHostApplicationSession(w, r, s, owner, localPrefix) {
+			return
+		}
+	}
+
 	fw, err := g.pf.GetForward(r.Context(), forwardID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
