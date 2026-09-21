@@ -126,14 +126,18 @@ stream. When a Runtime restart invalidates local access, the password gate
 replaces the recovery presentation; a successful regrant begins one fresh
 readiness and Flower initialization sequence.
 
-Transient inspection delays use a neutral Flower illustration and an indeterminate
-progress track, never an invented percentage, remaining time, or polling countdown.
+Loading, backup, and restore share one compact Flower mark, one phase title, and
+a thin indeterminate progress track. The default view has no decorative documents,
+repeated brand label, or explanatory paragraphs; it never invents a percentage,
+remaining time, or polling countdown. The announcement-focused heading has no
+visual focus frame; interactive controls retain visible keyboard focus.
 The initial 150 ms delay applies once per busy period; phase changes update the
 same visible surface, retaining open details, keyboard focus, and animation nodes.
-Short copy explains conversation preservation and the continued availability of
-files and terminals. Startup details can be expanded throughout preparation.
+Startup details can be expanded throughout preparation to read the phase
+explanation, data-preservation statement, workspace availability, and diagnostics.
 After ten seconds the UI shows real elapsed time without live-region announcements;
-after thirty seconds it adds one calm explanation. Normal processing never exposes
+after thirty seconds it adds one short reminder that files and terminals remain
+available. Longer startup guidance stays inside details. Normal processing never exposes
 retry or cancel actions. Companion layout adapts to its own container, and reduced
 motion disables decorative movement without hiding progress or status. Text stays
 fully opaque during entry so contrast does not depend on animation completion.

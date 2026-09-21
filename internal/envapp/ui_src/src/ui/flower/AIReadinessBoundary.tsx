@@ -50,7 +50,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
       ? i18n.t('aiReadiness.diagnostics.elapsedSeconds', { seconds })
       : i18n.t('aiReadiness.diagnostics.elapsedMinutes', { minutes: Math.floor(seconds / 60) });
   });
-  const slowBusy = createMemo(() => elapsedMs() >= 10_000 && elapsedMs() < 30_000);
+  const showElapsed = createMemo(() => elapsedMs() >= 10_000);
   const longBusy = createMemo(() => elapsedMs() >= 30_000);
   const projection = createMemo(() => createAIReadinessPresentation(
     props.controller.snapshot(),
@@ -265,56 +265,52 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
             }>
               <FlowerReadinessIllustration />
             </Show>
-            <p class="ai-readiness-eyebrow">{busy() ? i18n.t('flower.notificationTitle') : i18n.t('aiReadiness.eyebrow')}</p>
+            <Show when={!busy()}>
+              <p class="ai-readiness-eyebrow">{i18n.t('aiReadiness.eyebrow')}</p>
+            </Show>
             <h1
               ref={maintenanceHeading}
-              class="ai-readiness-title outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              class="ai-readiness-title"
               tabindex={-1}
               aria-live="polite"
             >
               {projection().title}
             </h1>
-            <p class="ai-readiness-description">{projection().description}</p>
+            <Show when={!busy()}>
+              <p class="ai-readiness-description">{projection().description}</p>
+            </Show>
             <Show when={busy()}>
               <div class="ai-readiness-progress">
-                <div class="ai-readiness-progress__caption">
-                  <span class="ai-readiness-progress__status"><span aria-hidden="true" />{i18n.t('aiReadiness.diagnostics.statusChecking')}</span>
-                  <Show when={slowBusy() || longBusy()}>
-                    <span class="ai-readiness-elapsed" data-ai-readiness-elapsed>
-                      {i18n.t('aiReadiness.slow.elapsed', { duration: elapsedText() })}
-                    </span>
-                  </Show>
-                </div>
                 <div class="ai-readiness-progress__track" role="progressbar" aria-label={projection().title}>
                   <span />
                 </div>
               </div>
             </Show>
-            <Show when={projection().dataStatement !== projection().description}>
+            <Show when={!busy() && projection().dataStatement !== projection().description}>
               <div class="ai-readiness-data-statement">
                 <ShieldCheck class="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span>{projection().dataStatement}</span>
               </div>
             </Show>
-            <Show when={!busy() && (slowBusy() || longBusy())}>
+            <Show when={!busy() && showElapsed()}>
               <p class="ai-readiness-elapsed" data-ai-readiness-elapsed>
                 {i18n.t('aiReadiness.slow.elapsed', { duration: elapsedText() })}
               </p>
             </Show>
-            <Show when={busy()}>
-              <p class="ai-readiness-workspace-hint">{i18n.t('aiReadiness.workspaceAvailable')}</p>
-            </Show>
             <Show when={longBusy() && busy()}>
-              <div class="ai-readiness-long-task" data-ai-readiness-long-task>
-                <p>{i18n.t('aiReadiness.slow.longDescription')}</p>
-              </div>
+              <p class="ai-readiness-workspace-hint" data-ai-readiness-long-task>{i18n.t('aiReadiness.workspaceAvailable')}</p>
             </Show>
             <Show when={busy()}>
               <div class="ai-readiness-details-entry">
+                <Show when={showElapsed()}>
+                  <span class="ai-readiness-elapsed" data-ai-readiness-elapsed>
+                    {i18n.t('aiReadiness.slow.elapsed', { duration: elapsedText() })}
+                  </span>
+                </Show>
                 <button
                   ref={diagnosticsButton}
                   type="button"
-                  class="ai-readiness-long-task__details"
+                  class="ai-readiness-details-toggle"
                   aria-expanded={diagnosticsOpen()}
                   aria-controls={diagnosticContentID}
                   onClick={toggleDiagnostics}
@@ -341,8 +337,24 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
                 <div id={diagnosticContentID} class="ai-readiness-diagnostics__content">
                   <div>
                     <h2 class="text-sm font-semibold text-foreground">{i18n.t('aiReadiness.diagnostics.title')}</h2>
-                    <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{i18n.t('aiReadiness.diagnostics.description')}</p>
+                    <Show when={!busy()}>
+                      <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{i18n.t('aiReadiness.diagnostics.description')}</p>
+                    </Show>
                   </div>
+                  <Show when={busy()}>
+                    <div class="ai-readiness-diagnostics__context">
+                      <p>{projection().description}</p>
+                      <Show when={projection().dataStatement !== projection().description}>
+                        <p>{projection().dataStatement}</p>
+                      </Show>
+                      <Show when={!longBusy()}>
+                        <p>{i18n.t('aiReadiness.workspaceAvailable')}</p>
+                      </Show>
+                      <Show when={longBusy()}>
+                        <p>{i18n.t('aiReadiness.slow.longDescription')}</p>
+                      </Show>
+                    </div>
+                  </Show>
                   <dl class="ai-readiness-diagnostics__rows">
                     <For each={projection().diagnosticRows}>{(row) => (
                       <div class="ai-readiness-diagnostics__row">

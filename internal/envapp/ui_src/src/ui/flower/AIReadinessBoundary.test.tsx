@@ -261,12 +261,14 @@ describe('AIReadinessBoundary', () => {
       );
       await vi.advanceTimersByTimeAsync(30_000);
       const longTask = fixture.host.querySelector<HTMLElement>('[data-ai-readiness-long-task]');
-      expect(longTask?.textContent).toContain('The first update can take longer when there is more history.');
-      expect(fixture.host.textContent).toContain('Closing the app will not damage data');
+      expect(longTask?.textContent).toBe('Files and terminals remain available while you wait.');
+      expect(fixture.host.textContent).not.toContain('Closing the app will not damage data');
       expect(fixture.host.textContent).not.toContain('Check again');
       expect(fixture.host.textContent).not.toContain('Cancel');
       expect(fixture.host.querySelector('.ai-readiness-status-icon--danger')).toBeNull();
       buttonWithText(fixture.host, 'Startup details').click();
+      expect(fixture.host.textContent).toContain('The first update can take longer when there is more history.');
+      expect(fixture.host.textContent).toContain('Closing the app will not damage data');
       expect(fixture.host.querySelectorAll('.ai-readiness-diagnostics__row')).toHaveLength(4);
       fixture.dispose();
     } finally {
