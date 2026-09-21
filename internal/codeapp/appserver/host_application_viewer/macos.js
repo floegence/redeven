@@ -33,15 +33,18 @@
   }
   const close = toolbarButton('mac-app-close', config.copy.closeWindow, '<rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M3 7h14m-9 3 4 4m0-4-4 4"/>');
   const quit = toolbarButton('mac-app-quit', config.copy.quit, '<path d="M10 2v8m-4-6a7 7 0 1 0 8 0"/>');
-  const menu = toolbarButton('mac-app-menu-toggle', config.copy.menu, '<path d="M4 5h12M4 10h12M4 15h12"/>');
+  const menu = toolbarButton('mac-app-menu-toggle', `${document.title} — ${config.copy.menu}`, '<rect x="3" y="3" width="14" height="14" rx="3"/><path d="M3 7h14M7 7v10"/>');
   menu.querySelector('span').textContent = document.title;
+  const chevron = '<svg class="mac-app-dropdown-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg>';
+  menu.insertAdjacentHTML('beforeend', chevron);
   const controlsButton = toolbarButton('mac-app-controls-toggle', config.copy.picture, '<path d="M4 3v4m0 4v6m6-14v8m0 4v2m6-14v2m0 4v8M2 7h4m2 8h4m2-10h4"/>');
+  controlsButton.insertAdjacentHTML('beforeend', chevron);
   const windowToggle = toolbarButton('mac-app-windows-toggle', config.copy.windows, '<rect x="3" y="7" width="11" height="10" rx="2"/><path d="M7 4V3h10v10h-1"/>');
   const windowCount = document.createElement('span');
   windowCount.className = 'mac-app-window-count';
   windowCount.setAttribute('aria-hidden', 'true');
   windowToggle.append(windowCount);
-  windowToggle.insertAdjacentHTML('beforeend', '<svg class="mac-app-dropdown-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg>');
+  windowToggle.insertAdjacentHTML('beforeend', chevron);
   const popover = document.createElement('div');
   popover.id = 'application-controls';
   popover.className = 'mac-app-popover';
@@ -84,7 +87,12 @@
   const separator = document.createElement('span');
   separator.className = 'mac-app-toolbar-separator';
   separator.setAttribute('aria-hidden', 'true');
-  toolbar.append(menu, windowToggle, controlsButton, separator, close, quit);
+  const identitySeparator = separator.cloneNode();
+  identitySeparator.classList.add('mac-app-identity-separator');
+  const spacer = document.createElement('span');
+  spacer.className = 'mac-app-toolbar-spacer';
+  spacer.setAttribute('aria-hidden', 'true');
+  toolbar.append(menu, identitySeparator, windowToggle, spacer, controlsButton, separator, close, quit);
   controls.append(toolbar, popover);
   document.body.append(controls);
   const windowEntries = new Map();
@@ -99,15 +107,17 @@
     quit.disabled = !available || quitPending;
     controlsButton.disabled = document.body.dataset.state !== 'active';
     windowCount.textContent = String(windowEntries.size);
-    windowToggle.setAttribute('aria-label', `${config.copy.windows} · ${windowEntries.size}`);
+    windowCount.hidden = windowEntries.size < 2;
     for (const [id, entry] of windowEntries) {
       const selected = id === current?.window;
       entry.button.setAttribute('aria-pressed', String(selected));
       entry.button.setAttribute('aria-busy', String(selected && renderedGeneration !== current?.generation));
     }
-    const title = windowEntries.get(current?.window)?.title.textContent || config.copy.windows;
+    const hostTitle = windowEntries.get(current?.window)?.hostTitle;
+    const title = hostTitle && hostTitle !== document.title ? hostTitle : config.copy.windows;
     windowToggle.querySelector('.mac-app-toolbar-label').textContent = title;
-    windowToggle.title = `${config.copy.windows} · ${windowEntries.size} — ${title}`;
+    windowToggle.title = `${config.copy.windows} · ${windowEntries.size}${title === config.copy.windows ? '' : ` — ${title}`}`;
+    windowToggle.setAttribute('aria-label', windowToggle.title);
     close.disabled = !available || !current?.window || renderedGeneration !== current.generation;
     if (![...toolbar.querySelectorAll('button')].some(button => !button.disabled && button.tabIndex === 0)) {
       const first = toolbar.querySelector('button:not(:disabled)');
@@ -132,6 +142,7 @@
         entry = {button, title}; windowEntries.set(item.id, entry);
       }
       const title = item.title || `${document.title} · ${index + 1}`;
+      entry.hostTitle = item.title;
       entry.title.textContent = title; entry.button.title = title;
       if (windowList.children[index] !== entry.button) windowList.insertBefore(entry.button, windowList.children[index] || null);
     });
@@ -168,6 +179,7 @@
   for (const mode of ['auto', 'clarity', 'smooth', 'data']) {
     const button = document.createElement('button');
     button.textContent = config.copy['picture' + mode[0].toUpperCase() + mode.slice(1)];
+    button.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8"/></svg>');
     button.setAttribute('aria-pressed', String(picture.mode === mode));
     button.onclick = () => {
       picture.mode = mode;
@@ -176,6 +188,14 @@
     };
     modeButtons.set(mode, button); modes.append(button);
   }
+  modes.addEventListener('keydown', event => {
+    const buttons = [...modeButtons.values()];
+    const index = buttons.indexOf(document.activeElement);
+    const offset = {ArrowRight:1, ArrowLeft:-1, ArrowDown:2, ArrowUp:-2}[event.key];
+    const next = event.key === 'Home' ? buttons[0] : event.key === 'End' ? buttons.at(-1)
+      : offset && index >= 0 ? buttons[(index + offset + buttons.length) % buttons.length] : null;
+    if (next) { event.preventDefault(); next.focus(); }
+  });
   picturePanel.append(modes);
   const pictureHint = document.createElement('p');
   pictureHint.textContent = config.copy.pictureHint;
@@ -183,6 +203,7 @@
   const advanced = document.createElement('details');
   const advancedTitle = document.createElement('summary');
   advancedTitle.textContent = config.copy.pictureAdvanced;
+  advancedTitle.insertAdjacentHTML('beforeend', chevron);
   advanced.append(advancedTitle);
   for (const [field, title, values, unit] of [
     ['max_dimension', config.copy.pictureResolution, [0, 1600, 1920, 2560, 3840, 4096], 'px'],
@@ -279,6 +300,7 @@
     collapseControls();
     if (!opening || toggles[section].disabled) return;
     panelSection = section;
+    popover.dataset.section = section;
     popover.hidden = false;
     panels[section].hidden = false;
     toggles[section].setAttribute('aria-expanded', 'true');
@@ -396,6 +418,12 @@
     icon.src = config.icon;
     icon.hidden = false;
     document.getElementById('fallback-icon').setAttribute('hidden', '');
+    const toolbarIcon = document.createElement('img');
+    toolbarIcon.src = config.icon;
+    toolbarIcon.alt = '';
+    toolbarIcon.className = 'mac-app-toolbar-icon';
+    toolbarIcon.setAttribute('aria-hidden', 'true');
+    menu.querySelector('svg').replaceWith(toolbarIcon);
   }
   function present(state) {
     hostApplicationConnection.present(state);

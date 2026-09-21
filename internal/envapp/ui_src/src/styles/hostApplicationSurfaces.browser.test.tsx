@@ -47,7 +47,7 @@ it('keeps download choices and actions together on wide pages and inside compact
   expect(modal.scrollWidth).toBeLessThanOrEqual(modal.clientWidth);
 });
 
-it.each([320, 390, 1000])('separates connection identity and keeps toolbar popovers within a %s px viewer', async width => {
+it.each([320, 390, 1000].flatMap(width => ['light', 'dark'].map(scheme => ({width,scheme}))))('keeps toolbar settings usable at $width px in $scheme appearance', async ({width,scheme}) => {
   const frame = document.createElement('iframe');
   frame.style.cssText = `width:${width}px;height:660px;border:0`;
   const copy: Record<string, unknown> = {};
@@ -62,6 +62,7 @@ it.each([320, 390, 1000])('separates connection identity and keeps toolbar popov
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.querySelector('.mac-app-controls-toggle')).toBeTruthy();
   const doc = frame.contentDocument!, view = frame.contentWindow!;
+  doc.documentElement.style.colorScheme = scheme;
   expect(view.getComputedStyle(doc.querySelector('#fallback-icon')!).display).toBe('none');
   const identity = doc.querySelector('.app-identity')!.getBoundingClientRect();
   const title = doc.querySelector('h1')!.getBoundingClientRect();
@@ -88,6 +89,18 @@ it.each([320, 390, 1000])('separates connection identity and keeps toolbar popov
   expect(bounds.top).toBeGreaterThanOrEqual(46);
   expect(bounds.bottom).toBeLessThanOrEqual(650);
   expect(drawer.scrollWidth).toBeLessThanOrEqual(drawer.clientWidth);
+  const advanced = doc.querySelector<HTMLDetailsElement>('.mac-app-picture details')!;
+  advanced.open = true;
+  expect(drawer.scrollWidth).toBeLessThanOrEqual(drawer.clientWidth);
+  for (const select of advanced.querySelectorAll('select')) {
+    expect(select.getBoundingClientRect().right).toBeLessThan(bounds.right);
+    expect(view.getComputedStyle(select).cursor).toBe('pointer');
+  }
+  // A short viewport scrolls the settings, never the host application surface.
+  frame.style.height = '300px';
+  expect(drawer.getBoundingClientRect().bottom).toBeLessThanOrEqual(292);
+  expect(drawer.scrollHeight).toBeGreaterThan(drawer.clientHeight);
+  frame.style.height = '660px';
   const canvas = doc.querySelector('#application')!.getBoundingClientRect();
   expect(canvas.width).toBe(width);
   expect(canvas.top).toBe(46);
@@ -173,7 +186,12 @@ it.each([320, 390, 1000])('keeps the counted window picker usable at %s px while
     const bounds = button.getBoundingClientRect();
     expect(bounds.left).toBeGreaterThanOrEqual(0);
     expect(bounds.right).toBeLessThanOrEqual(width);
+    expect(bounds.width).toBeGreaterThanOrEqual(32);
+    expect(bounds.height).toBeGreaterThanOrEqual(32);
   }
+  const menu = doc.querySelector<HTMLButtonElement>('.mac-app-menu-toggle')!;
+  expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(toggle.getBoundingClientRect().left);
+  expect(toggle.getBoundingClientRect().right).toBeLessThanOrEqual(doc.querySelector('.mac-app-controls-toggle')!.getBoundingClientRect().left);
   expect(toggle.textContent).toContain('2');
   toggle.click();
   const drawer = doc.querySelector<HTMLElement>('.mac-app-popover')!;
