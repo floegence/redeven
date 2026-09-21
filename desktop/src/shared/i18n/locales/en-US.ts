@@ -8,6 +8,7 @@ export const enUS = {
     "restore": "Restore Redeven Cloud connection",
     "required": "Restore the saved Redeven Cloud connection. Local work stays available. If access has been revoked or the connection changed, review the account and association before reconnecting.",
     "needsAuthorization": "Authorization required",
+    "permissionRevoked": "Cloud permission revoked",
     "connected": "Connected",
     "connecting": "Connecting",
     "retrying": "Reconnecting automatically",

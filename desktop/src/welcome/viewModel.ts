@@ -765,6 +765,7 @@ export function buildEnvironmentCardFactsModel(environment: DesktopEnvironmentEn
   const state = target.credential_recovery ?? target.provider_connection_state;
   const valueKey: DesktopTranslationKey = state === 'authorization_required'
     ? target.provider_link_binding?.last_error_code === 'CONTROL_CREDENTIALS_EXPIRED' ? 'providerRecovery.expired' : 'providerRecovery.needsAuthorization'
+    : target.provider_link_binding?.last_error_code === 'PROVIDER_LINK_PERMISSION_REVOKED' ? 'providerRecovery.permissionRevoked'
     : state === 'connected' ? 'providerRecovery.connected'
     : state === 'connecting' ? 'providerRecovery.connecting'
     : state === 'retrying' ? 'providerRecovery.retrying'
@@ -1470,6 +1471,31 @@ function runtimeOperationIntent(operation: DesktopRuntimeOperation): Environment
   }
 }
 
+function runtimeProviderLinkDisconnectMenuAction(
+  environment: DesktopEnvironmentEntry,
+): EnvironmentActionMenuItemModel | null {
+  const target = environment.provider_runtime_link_target;
+  if (!target || runtimeHasUnsupportedLegacyControlPlaneLink(environment)
+    || target.provider_link_state !== 'linked' || !target.can_disconnect_provider) {
+    return null;
+  }
+  if (!['authorization_required', 'disabled', 'error', 'retrying', 'unknown'].includes(target.provider_connection_state)) {
+    return null;
+  }
+  return {
+    id: 'disconnect_provider_runtime',
+    label: 'Disconnect from Redeven Cloud',
+    label_key: 'environmentAction.disconnectFromProvider',
+    action: {
+      intent: 'disconnect_provider_runtime',
+      label: 'Disconnect from Redeven Cloud',
+      label_key: 'environmentAction.disconnectFromProvider',
+      enabled: true,
+      variant: 'outline',
+    },
+  };
+}
+
 function runtimeOperationLabelKey(operation: DesktopRuntimeOperation): DesktopTranslationKey | undefined {
   switch (operation) {
     case 'start': return 'environmentAction.startRuntime';
@@ -1580,6 +1606,10 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   const runtimeProviderLinkAction = runtimeProviderLinkMenuAction(environment);
   if (runtimeProviderLinkAction) {
     items.push(runtimeProviderLinkAction);
+  }
+  const runtimeProviderLinkDisconnectAction = runtimeProviderLinkDisconnectMenuAction(environment);
+  if (runtimeProviderLinkDisconnectAction) {
+    items.push(runtimeProviderLinkDisconnectAction);
   }
   if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind)) {
     const refreshPlan = environment.runtime_operations.refresh;

@@ -2859,6 +2859,7 @@
     "disabled": "Cloud 存取已關閉",
     "unknown": "連線尚未驗證",
     "expired": "連線憑證已過期",
-    "requested": "已要求連線至 {label}，Redeven Cloud 狀態將自動更新。"
+    "requested": "已要求連線至 {label}，Redeven Cloud 狀態將自動更新。",
+    "permissionRevoked": "Cloud 權限已撤銷"
   }
 }

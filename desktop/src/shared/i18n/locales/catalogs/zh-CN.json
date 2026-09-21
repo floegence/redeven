@@ -2859,6 +2859,7 @@
     "disabled": "Cloud 访问已关闭",
     "unknown": "连接尚未验证",
     "expired": "连接凭据已过期",
-    "requested": "已请求连接 {label}，Redeven Cloud 状态将自动更新。"
+    "requested": "已请求连接 {label}，Redeven Cloud 状态将自动更新。",
+    "permissionRevoked": "Cloud 权限已撤销"
   }
 }

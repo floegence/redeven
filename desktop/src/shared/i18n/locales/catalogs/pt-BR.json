@@ -2865,6 +2865,7 @@
     "disabled": "Acesso ao Cloud desativado",
     "unknown": "Conexão não verificada",
     "expired": "Credenciais expiradas",
-    "requested": "Conexão solicitada para {label}. O status do Redeven Cloud será atualizado automaticamente."
+    "requested": "Conexão solicitada para {label}. O status do Redeven Cloud será atualizado automaticamente.",
+    "permissionRevoked": "Permissão do Cloud revogada"
   }
 }

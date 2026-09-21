@@ -2859,6 +2859,7 @@
     "disabled": "Cloud 접근 비활성화됨",
     "unknown": "연결 확인 안 됨",
     "expired": "연결 자격 증명 만료",
-    "requested": "{label}의 연결을 요청했습니다. Redeven Cloud 상태가 자동으로 업데이트됩니다."
+    "requested": "{label}의 연결을 요청했습니다. Redeven Cloud 상태가 자동으로 업데이트됩니다.",
+    "permissionRevoked": "Cloud 권한이 취소됨"
   }
 }

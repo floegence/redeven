@@ -24,6 +24,10 @@ const (
 	ProviderLinkErrorDisconnectFailed   = "PROVIDER_LINK_DISCONNECT_FAILED"
 	ProviderLinkErrorDisconnectRejected = "PROVIDER_LINK_DISCONNECT_REJECTED"
 	ProviderLinkErrorBindingNotCurrent  = "PROVIDER_LINK_NOT_CURRENT"
+	ProviderLinkErrorAuthorization      = "PROVIDER_LINK_AUTHORIZATION_REQUIRED"
+	ProviderLinkErrorPermissionRevoked  = "PROVIDER_LINK_PERMISSION_REVOKED"
+	ProviderLinkErrorUnavailable        = "PROVIDER_LINK_UNAVAILABLE"
+	ProviderLinkErrorBindingChanged     = "PROVIDER_LINK_BINDING_CHANGED"
 )
 
 const providerDisconnectReasonUser = "user_disconnect"
@@ -356,14 +360,20 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 		if errors.As(err, &exchangeErr) {
 			switch {
 			case exchangeErr.Code == "RUNTIME_LINK_BINDING_STALE":
-				code = "PROVIDER_LINK_BINDING_CHANGED"
-			case exchangeErr.StatusCode == 401 || exchangeErr.StatusCode == 403:
-				code = "PROVIDER_LINK_AUTHORIZATION_REQUIRED"
+				code = ProviderLinkErrorBindingChanged
+			case exchangeErr.Code == "NOT_AUTHORIZED" || exchangeErr.StatusCode == http.StatusForbidden:
+				// A valid Cloud account can lose namespace administration without
+				// losing its sign-in session. Keep this distinct from expired
+				// credentials so recovery asks for permission review instead of
+				// sending the user through a needless sign-in loop.
+				code = ProviderLinkErrorPermissionRevoked
+			case exchangeErr.StatusCode == http.StatusUnauthorized:
+				code = ProviderLinkErrorAuthorization
 			case exchangeErr.StatusCode == 429 || exchangeErr.StatusCode >= 500:
-				code = "PROVIDER_LINK_UNAVAILABLE"
+				code = ProviderLinkErrorUnavailable
 			}
 		} else if errors.As(err, &networkErr) && networkErr.Timeout() {
-			code = "PROVIDER_LINK_UNAVAILABLE"
+			code = ProviderLinkErrorUnavailable
 		}
 		return nil, &ProviderLinkError{Code: code, Message: fmt.Sprintf("Provider link exchange failed: %v", err), Err: err}
 	}

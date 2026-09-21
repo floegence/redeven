@@ -1873,6 +1873,21 @@ describe('main routing', () => {
     expect(mainSrc).toContain('stateDirOverride: desktopDiagnosticsStateDirForTarget(target, startup)');
   });
 
+  it('starts provider credential recovery once at app readiness for every transport', () => {
+    const mainSrc = readMainSource();
+    const prepareStart = mainSrc.indexOf('async function prepareDesktopSessionTransport(');
+    const prepareEnd = mainSrc.indexOf('async function releaseDesktopSessionTransport(', prepareStart);
+    const readyStart = mainSrc.indexOf('app.whenReady().then(async () => {');
+    expect(prepareStart).toBeGreaterThanOrEqual(0);
+    expect(prepareEnd).toBeGreaterThan(prepareStart);
+    expect(readyStart).toBeGreaterThan(prepareEnd);
+    expect(mainSrc.slice(prepareStart, prepareEnd)).not.toContain('credentialRecoveryTimer');
+    const readySource = mainSrc.slice(readyStart, readyStart + 1_500);
+    expect(readySource).toContain('const credentialRecoveryTimer = setInterval(');
+    expect(readySource).toContain('recoverAttachedProviderCredentials()');
+    expect(readySource).toContain("app.once('before-quit', () => clearInterval(credentialRecoveryTimer));");
+  });
+
   it('opens Local UI sessions at the canonical Env App entry while keeping the origin root as the navigation boundary', () => {
     const mainSrc = readMainSource();
 

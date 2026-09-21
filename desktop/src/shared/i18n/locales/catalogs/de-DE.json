@@ -2864,6 +2864,7 @@
     "disabled": "Cloud-Zugriff deaktiviert",
     "unknown": "Verbindung nicht überprüft",
     "expired": "Zugangsdaten abgelaufen",
-    "requested": "Verbindung für {label} angefordert. Der Redeven Cloud-Status wird automatisch aktualisiert."
+    "requested": "Verbindung für {label} angefordert. Der Redeven Cloud-Status wird automatisch aktualisiert.",
+    "permissionRevoked": "Cloud-Berechtigung widerrufen"
   }
 }
