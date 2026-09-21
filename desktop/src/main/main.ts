@@ -12464,7 +12464,10 @@ async function recoverAttachedProviderCredentials(): Promise<void> {
               });
               return result.ok ? 'restored' : 'attention';
             } catch (error) {
-              if (controlPlaneAuthorizationNeedsReconnect(error)) {
+              // A sign-out, account switch, disconnect, or target replacement
+              // may win while the exchange is in flight. Never let that stale
+              // completion overwrite the current account's sync state.
+              if (isCurrent() && controlPlaneAuthorizationNeedsReconnect(error)) {
                 setControlPlaneSyncRecord(binding.provider_origin!, binding.provider_id!, controlPlaneSyncRecordFromError(error, Date.now()));
               }
               return (error instanceof RuntimeControlError && error.code === 'PROVIDER_LINK_UNAVAILABLE')
