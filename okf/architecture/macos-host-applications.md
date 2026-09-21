@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Native macOS host applications
 description: Real application discovery, direct local launch, owned remote window capture and human input on macOS.
 tags: [runtime, desktop, applications, macos, security]
-timestamp: 2026-09-21T06:00:00Z
+timestamp: 2026-09-21T07:00:00Z
 ---
 # Summary
 
@@ -45,7 +45,10 @@ supply an arbitrary PID, application path or capture source.
 
 ScreenCaptureKit captures a selected application window on macOS 13 or newer.
 Child-window inclusion uses the macOS 14.2 API when available. A native window list
-allows selection among the bound process's windows. The [picture and transport contract](macos-application-picture.md) defines Retina
+allows selection among the bound process's windows. A newly opened focused window
+is selected automatically; inventory refresh does not override an explicit choice
+among existing windows. Rapid explicit selections supersede in-flight capture
+requests; retired callbacks cannot restore an earlier choice. Closing that window returns to a remaining owned window. The [picture and transport contract](macos-application-picture.md) defines Retina
 sampling, live quality controls, hardware video, lossless still refresh and bounded
 delivery. A new capture generation invalidates previous pixels and input coordinates.
 The viewer reveals only decoded pixels, preserves aspect ratio, and requests real
@@ -59,6 +62,8 @@ revokes the old connection and releases held buttons before the new connection c
 send input. Heartbeats detect lost peers. Reconnect refreshes capture without
 launching another process. Capture/permission failure exposes explicit recovery;
 old frames and callback generations cannot reactivate a disconnected view.
+Retired image decoders cannot delay a new connection, and pending pointer movement,
+composition text and menus are discarded when their capture binding changes.
 
 # Human control and lifecycle
 
@@ -103,9 +108,14 @@ ScreenCaptureKit source enters window-waiting state; it is not a capture fault.
 Window matching prefers a unique visible surface over retired offscreen surfaces
 with identical bounds. A proven window retains its opaque identity across inventory
 refreshes and resize; input generations change only when capture is rebound.
-Single-operation failures retain the connection and current pixels with a localized
-nonblocking notice. Genuine capture failure offers an explicit reconnect action;
-reconnection captures the same bound process and invalidates stale input.
+Explicit reconnect restores a hidden or minimized application through AppKit/AX,
+then resolves its current WindowServer source rather than validating a retired
+pre-minimization surface. Single-operation failures retain the connection and current pixels with a localized
+nonblocking notice. A capture failure preserves the control connection so another owned window or
+native menu can still be selected; reconnect rebuilds capture and input delivery
+for the same process. Locked/non-console sessions and revoked permissions invalidate
+input, menus and capture once per transition and present distinct recovery guidance.
+Explicit termination of a newly launched windowless app is a normal stop.
 
 Terminal session presentation remains owner/full-permission protected and is
 resolved by exact forward ID even after its network forward is released. Active
@@ -113,7 +123,10 @@ loopback-target guards continue to protect alternate routes, but a terminal
 session cannot claim a reused loopback address. The viewer uses explicit session
 state to distinguish failure from closure; HTTP 404/410, network errors and late
 responses from an old connection never prove application termination. Only a
-confirmed ended state closes an established physical viewer.
+confirmed ended state closes an established physical viewer. An explicitly failed
+sharing session directs the user back to Host Applications to open a new session.
+The [lifecycle validation matrix](../operations/host-application-lifecycle.md)
+separates automated recovery evidence from OS/application compatibility limits.
 
 Runtime shutdown releases capture, route and input ownership but preserves native
 applications and unsaved data; the next Runtime does not silently reclaim them.

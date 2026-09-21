@@ -20,6 +20,7 @@ final class HostApplicationWindows {
     private var known: [CGWindowID: NativeWindow] = [:]
     struct Snapshot {
         let windows: [NativeWindow]
+        let focusedID: String?
         // nil means the two native sources do not establish an empty inventory.
         let count: Int?
     }
@@ -70,6 +71,11 @@ final class HostApplicationWindows {
             let b = focused.map { CFEqual($0, right.element) } ?? false
             return a != b ? a : left.windowID < right.windowID
         }
-        return Snapshot(windows: ordered, count: elements.isEmpty && !candidates.contains(where: { ($0[kCGWindowIsOnscreen as String] as? Bool) == true }) ? 0 : (ordered.isEmpty ? nil : ordered.count))
+        let focusedID = ordered.first.flatMap { window in
+            focused.map { CFEqual($0, window.element) } == true ? window.id : nil
+        }
+        let visiblyEmpty = !candidates.contains { ($0[kCGWindowIsOnscreen as String] as? Bool) == true }
+        let count = elements.isEmpty && visiblyEmpty ? 0 : (ordered.isEmpty ? nil : ordered.count)
+        return Snapshot(windows: ordered, focusedID: focusedID, count: count)
     }
 }

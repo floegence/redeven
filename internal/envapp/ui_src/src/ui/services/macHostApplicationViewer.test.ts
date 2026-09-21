@@ -50,7 +50,7 @@ async function viewer(video = false, icon = '') {
   Object.assign(dom.window, { TextDecoder, TextEncoder, VideoDecoder: video ? Decoder : undefined, EncodedVideoChunk: class { constructor(public value: unknown) {} }, fetch, WebSocket: Socket, createImageBitmap: bitmap, redevenHostApplicationWindow: native });
   const statisticsTicks: (() => void)[] = [];
   vi.spyOn(dom.window, 'setInterval').mockImplementation(((callback: () => void) => { statisticsTicks.push(callback); return 1; }) as typeof dom.window.setInterval);
-  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon, copy: { controls: 'Application controls', "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
+  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon, copy: { permissionRequired: 'Host permission is required', permissionHint: 'Allow screen recording and accessibility, then reconnect.', sessionUnavailable: 'The graphical session is unavailable', sessionHint: 'Unlock the Mac and sign in, then reconnect.', sessionFailed: 'Application sharing has stopped', reopenHint: 'Return to Host Applications and open the app again.', captureHint: 'Reconnect or choose another window.', controls: 'Application controls', "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
   await drain();
   const socket = () => Socket.instances.at(-1)!;
   const state = () => dom.window.document.body.dataset.state;
@@ -61,6 +61,80 @@ async function viewer(video = false, icon = '') {
 }
 
 describe('macOS application viewer', () => {
+  it('discards unfinished composition when the displayed window changes', async () => {
+    const v = await viewer(); await v.activate();
+    const input = dom.window.document.querySelector('textarea')!;
+    input.value = 'unfinished';
+    input.dispatchEvent(new dom.window.CompositionEvent('compositionstart'));
+    input.dispatchEvent(new dom.window.InputEvent('input', {isComposing: true}));
+    v.window(2); v.socket().frame(); await drain();
+    // The IME may commit its pending text after the replacement frame arrives.
+    input.value = 'unfinished';
+    input.dispatchEvent(new dom.window.CompositionEvent('compositionend'));
+    expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input')).toEqual([]);
+    expect(input.value).toBe('');
+  });
+
+  it('does not deliver queued pointer coordinates to a replacement window', async () => {
+    const v = await viewer(); await v.activate();
+    let move!: FrameRequestCallback;
+    vi.spyOn(dom.window, 'requestAnimationFrame').mockImplementation(callback => { move = callback; return 1; });
+    dom.window.document.querySelector('canvas')!.dispatchEvent(new dom.window.MouseEvent('pointermove', {clientX: 20, clientY: 30}));
+    v.window(2); v.socket().frame(); await drain();
+    move(0);
+    expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input')).toEqual([]);
+  });
+
+  it('rejects stale native menu responses after a capture generation changes', async () => {
+    const v = await viewer(); await v.activate();
+    const menu = {type:'menu', generation:1, items:[{id:'old',title:'Old action',enabled:true,children:[]}]};
+    v.socket().message(menu);
+    v.window(2); v.socket().frame(); await drain();
+    const panel = dom.window.document.querySelector<HTMLElement>('.mac-app-menu')!;
+    expect(panel.hidden).toBe(true);
+    v.socket().message(menu);
+    expect(panel.hidden).toBe(true);
+  });
+
+  it('keeps other application windows selectable when one capture source fails', async () => {
+    const v = await viewer(); await v.activate();
+    v.socket().message({type:'windows',windows:[{id:'owned',title:'Main'},{id:'other',title:'Other'}]});
+    v.socket().message({type:'capture_error',generation:2,code:'CAPTURE_SOURCE_UNAVAILABLE'});
+    expect(v.state()).toBe('captureUnavailable');
+    expect(v.socket().close).not.toHaveBeenCalled();
+    const controls = dom.window.document.querySelector<HTMLElement>('.mac-app-controls')!;
+    expect(controls.hidden).toBe(false);
+    const select = controls.querySelector<HTMLSelectElement>('.mac-app-actions select')!;
+    expect(select.disabled).toBe(false);
+    select.value = 'other'; select.dispatchEvent(new dom.window.Event('change'));
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'select',window:'other',generation:2});
+    v.socket().frame({generation:1}); await drain();
+    expect(v.state()).toBe('captureUnavailable');
+    v.window(3); v.socket().frame(); await drain();
+    expect(v.state()).toBe('active');
+  });
+
+  it.each([['PERMISSION_REQUIRED','permissionRequired'],['GRAPHICAL_SESSION_REQUIRED','sessionUnavailable']])(
+    'explains %s independently of network failure and preserves explicit recovery', async (code, state) => {
+      const v = await viewer(); await v.activate();
+      v.socket().message({type:'blocked',code,generation:2});
+      expect(v.state()).toBe(state);
+      expect(v.native.request).not.toHaveBeenCalled();
+      expect(dom.window.document.getElementById('hint')!.textContent).toContain(code === 'PERMISSION_REQUIRED' ? 'screen recording' : 'Unlock the Mac');
+      expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(false);
+      await v.retry(); await v.activate(); expect(v.state()).toBe('active');
+    });
+
+  it('does not offer a futile reconnect for an explicitly failed sharing session', async () => {
+    const v = await viewer(); await v.activate();
+    v.fetch.mockResolvedValue({ok:true,json:async () => ({state:'failed',error_code:'native_helper_unavailable'})});
+    v.socket().onclose?.(); await drain();
+    expect(v.state()).toBe('sessionFailed');
+    expect(dom.window.document.getElementById('hint')!.textContent).toContain('Return to Host Applications');
+    expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(true);
+    expect(v.native.request).not.toHaveBeenCalled();
+  });
+
   it('keeps the stream and pixels after an operation fails and allows the next action', async () => {
     const v = await viewer(); await v.activate();
     for (const code of ['WINDOW_NOT_FOCUSED', 'INPUT_UNCONFIRMED', 'TARGET_NOT_READY']) {
@@ -114,15 +188,17 @@ describe('macOS application viewer', () => {
     v.fetch.mockResolvedValue({ ok: true, json: async () => ({ state: 'running', password: 'renewed' }) });
     await v.retry();
     expect(v.socket().protocols[1]).toBe('renewed');
+    await v.activate(); expect(v.state()).toBe('active');
+    expect(v.drawImage).toHaveBeenCalledTimes(2);
     resolve({ width: 640, height: 480, close: vi.fn() }); await drain();
-    expect(v.state()).toBe('reconnecting'); expect(v.drawImage).toHaveBeenCalledOnce();
+    expect(v.drawImage).toHaveBeenCalledTimes(2);
     old.message({ type: 'ended' }); expect(v.native.request).not.toHaveBeenCalled();
     await v.activate(); expect(v.state()).toBe('active');
   });
 
   it('retains the viewer on permission loss and closes the physical window after confirmed termination', async () => {
     const v = await viewer(); await v.activate();
-    v.socket().message({ type: 'blocked' }); expect(v.state()).toBe('disconnected');
+    v.socket().message({ type: 'blocked' }); expect(v.state()).toBe('permissionRequired');
     expect(v.native.request).not.toHaveBeenCalled();
     await v.retry(); await v.activate();
     v.fetch.mockResolvedValue({ ok: true, json: async () => ({ state: 'ended' }) });
@@ -151,7 +227,7 @@ describe('macOS application viewer', () => {
     expect(dom.window.document.activeElement).toBe(menu);
     menu.click();
     expect(JSON.parse(v.socket().send.mock.lastCall![0])).toEqual({action:'menu',generation:3});
-    v.socket().message({type:'menu',items:[{id:'open-main',title:'Open main window',enabled:true,children:[]}]});
+    v.socket().message({type:'menu',generation:3,items:[{id:'open-main',title:'Open main window',enabled:true,children:[]}]});
     dom.window.document.querySelector<HTMLButtonElement>('.mac-app-menu button')!.click();
     expect(JSON.parse(v.socket().send.mock.lastCall![0])).toEqual({action:'menu_action',item:'open-main',generation:3});
     expect(dom.window.document.querySelector<HTMLElement>('#picture-settings')!.hidden).toBe(true);
@@ -182,6 +258,9 @@ describe('macOS application viewer', () => {
     await vi.advanceTimersByTimeAsync(45000);
     expect(v.state()).toBe('captureUnavailable');
     expect(v.native.request).not.toHaveBeenCalled();
+    expect(v.socket().close).not.toHaveBeenCalled();
+    v.socket().frame(); await drain();
+    expect(v.state()).toBe('active');
   });
 
   it('ignores a terminal status body received after a new connection starts', async () => {
@@ -229,7 +308,7 @@ describe('macOS application viewer', () => {
   it('renders literal system menu titles and routes only returned item IDs', async () => {
     const v = await viewer(); await v.activate();
     dom.window.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!.click();
-    v.socket().message({ type: 'menu', items: [{ id: 'system-item', title: '<b>Host action</b>', enabled: true, children: [] }] });
+    v.socket().message({ type: 'menu', generation:1, items: [{ id: 'system-item', title: '<b>Host action</b>', enabled: true, children: [] }] });
     const panel = dom.window.document.querySelector('.mac-app-menu')!;
     expect(dom.window.document.querySelector<HTMLElement>('.mac-app-drawer')!.hidden).toBe(false);
     expect(panel.querySelector('b')).toBeNull();

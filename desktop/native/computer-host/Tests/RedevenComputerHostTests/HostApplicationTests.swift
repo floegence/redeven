@@ -3,6 +3,17 @@ import AppKit
 @testable import RedevenComputerHost
 
 final class HostApplicationTests: XCTestCase {
+    func testAccessBoundaryDistinguishesLockedSessionAndRevokedPermissions() {
+        XCTAssertNil(HostApplicationCatalog.blockReason(console: true, screen: true, accessibility: true))
+        for screen in [false, true] {
+            for accessibility in [false, true] {
+                XCTAssertEqual(HostApplicationCatalog.blockReason(console: false, screen: screen, accessibility: accessibility), "GRAPHICAL_SESSION_REQUIRED")
+            }
+        }
+        XCTAssertEqual(HostApplicationCatalog.blockReason(console: true, screen: false, accessibility: true), "PERMISSION_REQUIRED")
+        XCTAssertEqual(HostApplicationCatalog.blockReason(console: true, screen: true, accessibility: false), "PERMISSION_REQUIRED")
+    }
+
     func testWindowBindingPrefersUniqueVisibleWindowOverRetiredSurfaces() {
         let bounds = CGRect(x: 63, y: 703, width: 971, height: 712)
         func candidate(_ id: Int, visible: Bool) -> [String: Any] {

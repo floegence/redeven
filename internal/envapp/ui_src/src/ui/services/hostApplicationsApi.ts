@@ -42,6 +42,14 @@ export type HostApplicationCatalog = Readonly<{
 }>;
 
 export type HostApplicationPresentation = Readonly<{
+  permissionRequired?: string;
+  permissionHint?: string;
+  sessionUnavailable?: string;
+  sessionHint?: string;
+  sessionFailed?: string;
+  reopenHint?: string;
+  captureHint?: string;
+
   controls?: string;
   picturePixels?: string;
   picture?: string;

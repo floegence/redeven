@@ -50,6 +50,14 @@ enum HostApplicationCatalog {
         guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
         return session[kCGSessionOnConsoleKey as String] as? Bool == true && session["CGSSessionScreenIsLocked"] as? Bool != true
     }
+    static func blockReason(console: Bool, screen: Bool, accessibility: Bool) -> String? {
+        if !console { return "GRAPHICAL_SESSION_REQUIRED" }
+        if !screen || !accessibility { return "PERMISSION_REQUIRED" }
+        return nil
+    }
+    static var blockReason: String? {
+        blockReason(console: consoleAvailable, screen: CGPreflightScreenCaptureAccess(), accessibility: AXIsProcessTrusted())
+    }
     static func availability() -> [String: Any] {
         let console = consoleAvailable, screen = CGPreflightScreenCaptureAccess(), accessibility = AXIsProcessTrusted()
         return ["supported": true, "ready": console && screen && accessibility, "native_ready": console,
@@ -101,13 +109,16 @@ final class HostApplicationSession {
     private let inventory = HostApplicationWindows()
     private var presence = HostApplicationWindowPresence()
     private var ownsApplication = false
+    private var stopRequested = false
+    private var blockedReason: String?
+    private var knownWindowIDs = Set<String>()
     private var waiting = false
     private var selected: NativeWindow?
     private var capture: HostApplicationStream?
     private var delivery: HostApplicationDelivery?
     private var timer: Timer?
     private var generation = 0
-    private var refreshing = false
+    private var selectionInFlight: Int?
     private var starting = false
     private var captureFailed = false
     private var lastInventory = ""
@@ -144,8 +155,21 @@ final class HostApplicationSession {
                 guard request["generation"] as? Int == generation, let id = request["frame_id"] as? Int else { return }
                 capture?.acknowledge(id)
             case "resume":
+                blockedReason = nil
+                guard checkAccess() else { return }
+                releaseButtons()
+                if let app { delivery = HostApplicationDelivery(pid: app.processIdentifier) }
+                app?.unhide()
                 captureFailed = false
-                if let selected { try select(selected) } else { waiting = false; refresh() }
+                // Minimized windows can lose their old WindowServer surface.
+                // Restore through AX, then resolve a fresh owned capture source.
+                if let selected { AXUIElementSetAttributeValue(selected.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse) }
+                generation += 1
+                selectionInFlight = nil
+                menuItems.removeAll()
+                selected = nil
+                waiting = false
+                refresh()
             case "select":
                 guard let id = request["window"] as? String, let window = try currentWindows().windows.first(where: { $0.id == id }) else { throw NativeInput.invalid("Unknown application window.") }
                 try select(window)
@@ -161,7 +185,7 @@ final class HostApplicationSession {
                 // Save dialogs remain part of the live session; never force quit.
             case "stop":
                 guard let app, !app.isTerminated else { end(); return }
-                if ownsApplication { _ = app.terminate() } else { end() }
+                if ownsApplication { stopRequested = app.terminate() } else { end() }
             case "menu":
                 let application = try menuTarget(request)
                 menuItems.removeAll()
@@ -183,7 +207,7 @@ final class HostApplicationSession {
                     }
                     return result
                 }
-                emit(["type": "menu", "items": items(root, depth: 0)])
+                emit(["type": "menu", "generation": generation, "items": items(root, depth: 0)])
             case "menu_action":
                 _ = try menuTarget(request)
                 guard let id = request["item"] as? String, let item = menuItems[id], (axValue(item, kAXEnabledAttribute) as? Bool) != false else { throw NativeInput.invalid("The menu item is unavailable.") }
@@ -230,19 +254,31 @@ final class HostApplicationSession {
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
                     guard let self else { return }
                     if application.isTerminated {
-                        if !self.presence.hadWindows { emit(["type": "error", "code": "APPLICATION_EXITED"]) }
+                        if !self.presence.hadWindows && !self.stopRequested { emit(["type": "error", "code": "APPLICATION_EXITED"]) }
                         self.end(); return
                     }
-                    if !HostApplicationCatalog.consoleAvailable || !CGPreflightScreenCaptureAccess() || !AXIsProcessTrusted() {
-                        self.capture?.stop(); self.capture = nil
-                        emit(["type": "blocked", "code": "PERMISSION_REQUIRED"])
-                        return
-                    }
+                    guard self.checkAccess() else { return }
                     self.refresh()
                 }
                 self.refresh()
             }
         }
+    }
+    private func checkAccess() -> Bool {
+        guard let reason = HostApplicationCatalog.blockReason else { blockedReason = nil; return true }
+        if blockedReason != reason {
+            blockedReason = reason
+            generation += 1
+            selectionInFlight = nil
+            menuItems.removeAll()
+            releaseButtons()
+            capture?.stop(); capture = nil
+            captureFailed = false
+            waiting = false
+            _ = presence.observe(windowCount: nil, at: Date())
+            emit(["type": "blocked", "code": reason, "generation": generation])
+        }
+        return false
     }
     private func currentWindows() throws -> HostApplicationWindows.Snapshot {
         guard let app, !app.isTerminated else { throw NativeInput.unavailable() }
@@ -252,10 +288,13 @@ final class HostApplicationSession {
         guard !waiting else { return }
         waiting = true
         generation += 1
+        selectionInFlight = nil
         menuItems.removeAll()
         releaseButtons()
         capture?.stop(); capture = nil
         selected = nil
+        lastInventory = ""
+        emit(["type": "windows", "windows": [[String: String]]()])
         emit(["type": "waiting", "generation": generation])
     }
     private func refresh() {
@@ -274,34 +313,37 @@ final class HostApplicationSession {
         let list = windows.map { ["id": $0.id, "title": axString($0.element, kAXTitleAttribute)] }
         let signature = String(data: (try? JSONSerialization.data(withJSONObject: list, options: .sortedKeys)) ?? Data(), encoding: .utf8) ?? ""
         if signature != lastInventory { lastInventory = signature; emit(["type": "windows", "windows": list]) }
-        if selected == nil || !windows.contains(where: { $0.id == selected?.id }) {
+        // Follow a newly opened focused dialog/window without overriding an
+        // explicit choice among windows that were already available.
+        guard selectionInFlight == nil else { return }
+        let newlyFocused = windows.first { $0.id == snapshot.focusedID && !knownWindowIDs.contains($0.id) }
+        knownWindowIDs = Set(windows.map(\.id))
+        if let next = newlyFocused ?? (selected == nil || !windows.contains(where: { $0.id == selected?.id }) ? windows.first : nil) {
             captureFailed = false
-            try? select(windows[0])
+            try? select(next)
         } else if let selected, !captureFailed && capture == nil { try? select(selected) }
     }
     private func select(_ window: NativeWindow) throws {
-        guard !refreshing else { return }
-        guard HostApplicationCatalog.consoleAvailable, CGPreflightScreenCaptureAccess(), AXIsProcessTrusted() else {
-            emit(["type": "blocked", "code": "PERMISSION_REQUIRED"]); return
-        }
+        guard checkAccess() else { return }
         try window.validate()
-        refreshing = true
+        AXUIElementSetAttributeValue(window.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
         selected = window
         capture?.stop(); capture = nil
         generation += 1
+        selectionInFlight = nil
         menuItems.removeAll()
         let selectionGeneration = generation
+        selectionInFlight = selectionGeneration
         releaseButtons()
         SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
             DispatchQueue.main.async {
-                self.refreshing = false
+                if self.selectionInFlight == selectionGeneration { self.selectionInFlight = nil }
                 guard self.app != nil, self.generation == selectionGeneration else { return }
                 guard let candidate = content?.windows.first(where: { $0.windowID == window.windowID && $0.owningApplication?.processID == self.app?.processIdentifier }), error == nil else {
                     self.captureFailed = true
-                    emit(["type": "capture_error", "code": "CAPTURE_SOURCE_UNAVAILABLE"]); return
+                    emit(["type": "capture_error", "code": "CAPTURE_SOURCE_UNAVAILABLE", "generation": selectionGeneration]); return
                 }
                 self.capture?.stop()
-                AXUIElementSetAttributeValue(window.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
                 self.selected = window
                 self.waiting = false
                 let currentGeneration = self.generation
@@ -328,14 +370,14 @@ final class HostApplicationSession {
     private func menuTarget(_ request: [String: Any]) throws -> AXUIElement {
         // Menus belong to the bound application, including when it has no window.
         // Every capture/wait transition revokes old menu handles and generations.
-        guard HostApplicationCatalog.consoleAvailable, AXIsProcessTrusted(),
+        guard checkAccess(),
               let app, !app.isTerminated, request["generation"] as? Int == generation else {
             throw HostFailure(code: "STALE_WINDOW", message: "Wait for the current application.")
         }
         return AXUIElementCreateApplication(app.processIdentifier)
     }
     private func target(_ request: [String: Any]) throws -> NativeWindow {
-        guard HostApplicationCatalog.consoleAvailable, AXIsProcessTrusted(),
+        guard checkAccess(),
               let selected, request["window"] as? String == selected.id,
               request["generation"] as? Int == generation else { throw HostFailure(code: "STALE_WINDOW", message: "Wait for the current window.") }
         try selected.validate()

@@ -110,7 +110,8 @@ Unicode text, native shortcuts, actual menu invocation, real AX resize, reconnec
 without a new process, stale input rejection, and application-window closure.
 The window-waiting fixture separately covers a first window delayed by 48 seconds,
 reconnection before any window exists, standard reopening of a background app,
-and opening its first window through its native menu. These cases must preserve
+opening its first window through its native menu, stopping before its first frame,
+and multiple-window, cancelled-close, minimized and hidden application recovery. These cases must preserve
 the same process and still end correctly when its real window closes.
 Desktop acceptance verifies local launch without a viewer. Browser acceptance
 exercises the authenticated native stream, input, explicit reconnection and
@@ -125,6 +126,8 @@ python3 scripts/check_macos_host_applications.py desktop/native/computer-host/.b
 python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario delayed
 python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario reopen
 python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario menu
+python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario stop
+python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario windows
 ```
 
 The harness creates a unique temporary bundle and manipulates only that fixture.
