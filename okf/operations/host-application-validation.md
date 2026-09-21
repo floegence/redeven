@@ -3,7 +3,7 @@ type: Validation Guide
 title: Host application distribution validation
 description: Installed-stack evidence, architecture limits and repeatable native application acceptance.
 tags: [runtime, applications, linux, validation]
-timestamp: 2026-09-20T10:00:00Z
+timestamp: 2026-09-21T06:00:00Z
 ---
 # Summary
 
@@ -108,6 +108,10 @@ session with capture and accessibility permission. The disposable AppKit fixture
 verifies real bundle metadata/icons, direct launch, captured pixels, pointer input,
 Unicode text, native shortcuts, actual menu invocation, real AX resize, reconnect
 without a new process, stale input rejection, and application-window closure.
+The window-waiting fixture separately covers a first window delayed by 48 seconds,
+reconnection before any window exists, standard reopening of a background app,
+and opening its first window through its native menu. These cases must preserve
+the same process and still end correctly when its real window closes.
 Desktop acceptance verifies local launch without a viewer. Browser acceptance
 exercises the authenticated native stream, input, explicit reconnection and
 script-opened viewer closure. This does not certify every third-party app or all
@@ -118,6 +122,9 @@ Repeat on an authorized Mac with Xcode command-line tools:
 ```sh
 swift test --package-path desktop/native/computer-host
 python3 scripts/check_macos_host_applications.py desktop/native/computer-host/.build/debug/redeven-computer-host --output /tmp/redeven-native-app-evidence
+python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario delayed
+python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario reopen
+python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario menu
 ```
 
 The harness creates a unique temporary bundle and manipulates only that fixture.

@@ -126,6 +126,7 @@ export const enUS = defineDictionary({
     "macStopSharing": "Stop sharing",
     "macStopSharingDescription": "Disconnect this application from Redeven. Its windows and unsaved work will remain open on the Mac.",
     "macOperationFailed": "The application could not complete this action. Try again when its window is ready.",
+    "macWaitingHint": "The app is running, but no window is available to share yet. Open a window from Application controls → Application menu, or reconnect.",
     "macWaiting": "Waiting for the application window…",
     "macCaptureUnavailable": "Window capture is unavailable. Reconnect to try again.",
     "macStopDescription": "Request this application to quit. If it has unsaved work, respond to its save dialog in the application window.",

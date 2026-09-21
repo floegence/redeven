@@ -9690,7 +9690,7 @@
         "runtime",
         "security"
       ],
-      "timestamp": "2026-09-21T03:00:00Z",
+      "timestamp": "2026-09-21T06:00:00Z",
       "frontmatter": {
         "description": "Real application discovery, direct local launch, owned remote window capture and human input on macOS.",
         "tags": [
@@ -9700,11 +9700,11 @@
           "runtime",
           "security"
         ],
-        "timestamp": "2026-09-21T03:00:00Z",
+        "timestamp": "2026-09-21T06:00:00Z",
         "title": "Native macOS host applications",
         "type": "Runtime Contract"
       },
-      "body_length": 7440,
+      "body_length": 8938,
       "summary": "Redeven's macOS adapter owns native host application discovery and human-operated\nwindow sessions. Application identity comes from installed bundles. A trusted\nDesktop local-environment route launches the real app directly; remote access\ncaptures the selected application's actual window, including an already running\nsingle-instance app. Apps run as the Runtime user,\nwithout containers, virtual machines, X11 or an independent desktop. The existing\n[host application authorization](host-applications.md) applies to every operation\nand stream. Missing permissions or graphical login block streaming explicitly.\nNetwork loss preserves the app; reconnection attaches to the same process.",
       "sections": [
         {
@@ -9725,8 +9725,8 @@
           "id": "human-control-and-lifecycle",
           "title": "Human control and lifecycle",
           "level": 1,
-          "body": "Remote input shares the host's real graphical session and foreground. Screen\nrecording and accessibility grants are required. Explicit input activates and\nraises the bound window; foreground identity, focused AX window and pointer hit\nownership must be verified before injection. A covered window fails the operation\ninstead of sending pointer input into another application. A process-scoped event\ntap acknowledges only Redeven-marked input; the next event waits for that receipt,\nwithout inspecting unmarked key contents or monitoring other applications. A\nmissing receipt fails without replaying the action. The viewer supports\nmouse, wheel, native key chords and composed Unicode text. This is human control,\nnot a Flower automation or model-observation path. Password/privileged system\ndialogs and OS-reserved shortcuts remain subject to macOS policy.\n\nApplication menus come from that app's actual accessibility menu tree; returned\nopaque handles invoke the same enabled menu item. Closing a window presses its\nreal close action, preserving ordinary save/cancel dialogs. Ending from the library\nrequests graceful application termination only for a process newly launched by\nthat session and never force-kills it. For a previously running process, the\nlibrary presents **Stop sharing**: it disconnects without quitting the app or\nclosing its windows. Confirmed loss of the final window closes the physical\nRedeven viewer; a network failure or close request by itself does not. Closing only the viewer preserves the app.\nAn unreadable accessibility inventory cannot confirm closure. The helper checks\nboth accessibility and visible WindowServer inventories and allows a one-second window\nreplacement interval before ending a previously visible session. A disappearing\nScreenCaptureKit source enters window-waiting state; it is not a capture fault.\nWindow matching prefers a unique visible surface over retired offscreen surfaces\nwith identical bounds. A proven window retains its opaque identity across inventory\nrefreshes and resize; input generations change only when capture is rebound.\nSingle-operation failures retain the connection and current pixels with a localized\nnonblocking notice. Genuine capture failure offers an explicit reconnect action;\nreconnection captures the same bound process and invalidates stale input.\n\nRuntime shutdown releases capture, route and input ownership but preserves native\napplications and unsaved data; the next Runtime does not silently reclaim them.\n\nThe integration does not provide a separate logged-out/headless AppKit session,\naudio, remote file transfer, clipboard synchronization or secure desktop control.\nProtected content, inaccessible custom controls, separate-process dialogs, and apps\nwith unusual window ownership require application-specific validation. macOS\n13 API compatibility is a build contract, not a claim of testing every OS version,\nIntel host or third-party application.",
-          "char_count": 2941
+          "body": "Remote input shares the host's real graphical session and foreground. Screen\nrecording and accessibility grants are required. Explicit input activates and\nraises the bound window; foreground identity, focused AX window and pointer hit\nownership must be verified before injection. A covered window fails the operation\ninstead of sending pointer input into another application. A process-scoped event\ntap acknowledges only Redeven-marked input; the next event waits for that receipt,\nwithout inspecting unmarked key contents or monitoring other applications. A\nmissing receipt fails without replaying the action. The viewer supports\nmouse, wheel, native key chords and composed Unicode text. This is human control,\nnot a Flower automation or model-observation path. Password/privileged system\ndialogs and OS-reserved shortcuts remain subject to macOS policy.\n\nApplication menus come from that app's actual accessibility menu tree; returned\nopaque handles invoke the same enabled menu item. Menus bind to the live application\nand current generation, independently of whether a window exists. Waiting viewers\nkeep the collapsed left controls available for opening a window through the app's\nown menu. Redeven does not guess a menu title or automatically invoke an app-specific\naction. Capture/wait transitions invalidate old menu handles. Closing a window presses its\nreal close action, preserving ordinary save/cancel dialogs. Ending from the library\nrequests graceful application termination only for a process newly launched by\nthat session and never force-kills it. For a previously running process, the\nlibrary presents **Stop sharing**: it disconnects without quitting the app or\nclosing its windows. Confirmed loss of the final window closes the physical\nRedeven viewer; a network failure or close request by itself does not. Closing only the viewer preserves the app.\nA running process without its first shareable window remains attached indefinitely;\nthere is no first-window termination deadline. The helper-launch deadline ends when\nthe bound process is reported, independently of pixel readiness. The viewer cancels\nits connection deadline on a waiting event, shows explicit waiting guidance and\nreconnect, and starts a separate bounded pixel deadline when a window appears.\nEvery new viewer receives the current waiting state. An unexpected helper exit\nis a failed sharing session, not evidence that the host application ended.\n\nAn unreadable accessibility inventory cannot confirm closure. The helper checks\nboth accessibility and visible WindowServer inventories and allows a one-second window\nreplacement interval before ending a previously visible session. A disappearing\nScreenCaptureKit source enters window-waiting state; it is not a capture fault.\nWindow matching prefers a unique visible surface over retired offscreen surfaces\nwith identical bounds. A proven window retains its opaque identity across inventory\nrefreshes and resize; input generations change only when capture is rebound.\nSingle-operation failures retain the connection and current pixels with a localized\nnonblocking notice. Genuine capture failure offers an explicit reconnect action;\nreconnection captures the same bound process and invalidates stale input.\n\nTerminal session presentation remains owner/full-permission protected and is\nresolved by exact forward ID even after its network forward is released. Active\nloopback-target guards continue to protect alternate routes, but a terminal\nsession cannot claim a reused loopback address. The viewer uses explicit session\nstate to distinguish failure from closure; HTTP 404/410, network errors and late\nresponses from an old connection never prove application termination. Only a\nconfirmed ended state closes an established physical viewer.\n\nRuntime shutdown releases capture, route and input ownership but preserves native\napplications and unsaved data; the next Runtime does not silently reclaim them.\n\nThe integration does not provide a separate logged-out/headless AppKit session,\naudio, remote file transfer, clipboard synchronization or secure desktop control.\nProtected content, inaccessible custom controls, separate-process dialogs, and apps\nwith unusual window ownership require application-specific validation. macOS\n13 API compatibility is a build contract, not a claim of testing every OS version,\nIntel host or third-party application.",
+          "char_count": 4388
         }
       ],
       "snippet": "Redeven's macOS adapter owns native host application discovery and human-operated window sessions. Application identity comes from installed bundles. A trusted Desktop local-environment route launches the real app directly; remote access",
@@ -15859,7 +15859,7 @@
         "runtime",
         "validation"
       ],
-      "timestamp": "2026-09-20T10:00:00Z",
+      "timestamp": "2026-09-21T06:00:00Z",
       "frontmatter": {
         "description": "Installed-stack evidence, architecture limits and repeatable native application acceptance.",
         "tags": [
@@ -15868,11 +15868,11 @@
           "runtime",
           "validation"
         ],
-        "timestamp": "2026-09-20T10:00:00Z",
+        "timestamp": "2026-09-21T06:00:00Z",
         "title": "Host application distribution validation",
         "type": "Validation Guide"
       },
-      "body_length": 8040,
+      "body_length": 8792,
       "summary": "This record distinguishes installed-stack evidence from host policy certification.\nThe Runtime capability and isolation contract is owned by\n[host application platforms](../architecture/host-application-platforms.md).\nA passing userspace check proves the tested Xpra/GIO/runtime combination only;\nmissing subscriptions, CPU translation and untested host policy remain explicit.\nAdministrators retain the [setup route](host-application-setup.md) for their host.",
       "sections": [
         {
@@ -15893,8 +15893,8 @@
           "id": "macos-validation",
           "title": "macOS validation",
           "level": 1,
-          "body": "The native adapter was exercised on macOS 26.5.2 ARM64 in a logged-in graphical\nsession with capture and accessibility permission. The disposable AppKit fixture\nverifies real bundle metadata/icons, direct launch, captured pixels, pointer input,\nUnicode text, native shortcuts, actual menu invocation, real AX resize, reconnect\nwithout a new process, stale input rejection, and application-window closure.\nDesktop acceptance verifies local launch without a viewer. Browser acceptance\nexercises the authenticated native stream, input, explicit reconnection and\nscript-opened viewer closure. This does not certify every third-party app or all\nmacOS versions/architectures; the minimum build target is macOS 13.\n\nRepeat on an authorized Mac with Xcode command-line tools:\n\n```sh\nswift test --package-path desktop/native/computer-host\npython3 scripts/check_macos_host_applications.py desktop/native/computer-host/.build/debug/redeven-computer-host --output /tmp/redeven-native-app-evidence\n```\n\nThe harness creates a unique temporary bundle and manipulates only that fixture.\nIt records real input receipts and pixels; teardown verifies the exact executable\npath before stopping a fixture process. Missing graphical login or permissions is\nan explicit failure, not a skipped or simulated acceptance run.",
-          "char_count": 1298
+          "body": "The native adapter was exercised on macOS 26.5.2 ARM64 in a logged-in graphical\nsession with capture and accessibility permission. The disposable AppKit fixture\nverifies real bundle metadata/icons, direct launch, captured pixels, pointer input,\nUnicode text, native shortcuts, actual menu invocation, real AX resize, reconnect\nwithout a new process, stale input rejection, and application-window closure.\nThe window-waiting fixture separately covers a first window delayed by 48 seconds,\nreconnection before any window exists, standard reopening of a background app,\nand opening its first window through its native menu. These cases must preserve\nthe same process and still end correctly when its real window closes.\nDesktop acceptance verifies local launch without a viewer. Browser acceptance\nexercises the authenticated native stream, input, explicit reconnection and\nscript-opened viewer closure. This does not certify every third-party app or all\nmacOS versions/architectures; the minimum build target is macOS 13.\n\nRepeat on an authorized Mac with Xcode command-line tools:\n\n```sh\nswift test --package-path desktop/native/computer-host\npython3 scripts/check_macos_host_applications.py desktop/native/computer-host/.build/debug/redeven-computer-host --output /tmp/redeven-native-app-evidence\npython3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario delayed\npython3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario reopen\npython3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario menu\n```\n\nThe harness creates a unique temporary bundle and manipulates only that fixture.\nIt records real input receipts and pixels; teardown verifies the exact executable\npath before stopping a fixture process. Missing graphical login or permissions is\nan explicit failure, not a skipped or simulated acceptance run.",
+          "char_count": 2050
         }
       ],
       "snippet": "This record distinguishes installed-stack evidence from host policy certification. The Runtime capability and isolation contract is owned by A passing userspace check proves the tested Xpra/GIO/runtime combination only; missing subscription",
@@ -22751,5 +22751,5 @@
       ]
     }
   ],
-  "source_sha256": "9f65a843ba2d758f784e06a1b0a99e638c4bbb448638e414ae1f3167a0cd4f40"
+  "source_sha256": "a71505d907533ef7f8106052c18af016451c400f439644363ff93b73fc953403"
 }

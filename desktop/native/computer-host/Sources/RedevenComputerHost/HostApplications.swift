@@ -145,7 +145,7 @@ final class HostApplicationSession {
                 capture?.acknowledge(id)
             case "resume":
                 captureFailed = false
-                if let selected { try select(selected) } else { refresh() }
+                if let selected { try select(selected) } else { waiting = false; refresh() }
             case "select":
                 guard let id = request["window"] as? String, let window = try currentWindows().windows.first(where: { $0.id == id }) else { throw NativeInput.invalid("Unknown application window.") }
                 try select(window)
@@ -163,9 +163,9 @@ final class HostApplicationSession {
                 guard let app, !app.isTerminated else { end(); return }
                 if ownsApplication { _ = app.terminate() } else { end() }
             case "menu":
-                let window = try target(request)
+                let application = try menuTarget(request)
                 menuItems.removeAll()
-                guard let value = axValue(window.application, kAXMenuBarAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() else { throw NativeInput.unavailable() }
+                guard let value = axValue(application, kAXMenuBarAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() else { throw NativeInput.unavailable() }
                 let root = unsafeBitCast(value, to: AXUIElement.self)
                 var count = 0
                 func items(_ node: AXUIElement, depth: Int) -> [[String: Any]] {
@@ -185,9 +185,9 @@ final class HostApplicationSession {
                 }
                 emit(["type": "menu", "items": items(root, depth: 0)])
             case "menu_action":
-                let window = try target(request)
+                _ = try menuTarget(request)
                 guard let id = request["item"] as? String, let item = menuItems[id], (axValue(item, kAXEnabledAttribute) as? Bool) != false else { throw NativeInput.invalid("The menu item is unavailable.") }
-                _ = window.app.activate(options: [])
+                _ = app?.activate(options: [])
                 guard AXUIElementPerformAction(item, kAXPressAction as CFString) == .success else { throw NativeInput.unavailable() }
                 menuItems.removeAll()
             case "input": try input(request)
@@ -227,7 +227,6 @@ final class HostApplicationSession {
                 self.app = application
                 self.delivery = HostApplicationDelivery(pid: application.processIdentifier)
                 emit(["type": "launched", "pid": application.processIdentifier, "existing_application": !self.ownsApplication])
-                let deadline = Date().addingTimeInterval(25)
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
                     guard let self else { return }
                     if application.isTerminated {
@@ -239,7 +238,6 @@ final class HostApplicationSession {
                         emit(["type": "blocked", "code": "PERMISSION_REQUIRED"])
                         return
                     }
-                    if Date() > deadline && !self.presence.hadWindows { emit(["type": "error", "code": "WINDOW_UNAVAILABLE"]); self.end(); return }
                     self.refresh()
                 }
                 self.refresh()
@@ -254,6 +252,7 @@ final class HostApplicationSession {
         guard !waiting else { return }
         waiting = true
         generation += 1
+        menuItems.removeAll()
         releaseButtons()
         capture?.stop(); capture = nil
         selected = nil
@@ -264,6 +263,7 @@ final class HostApplicationSession {
         do { snapshot = try currentWindows() }
         catch {
             _ = presence.observe(windowCount: nil, at: Date())
+            if selected == nil { suspendWindow() }
             // A failed AX read is not proof of closure. Keep the capture and
             // binding until an authoritative inventory or process exit arrives.
             return
@@ -289,6 +289,7 @@ final class HostApplicationSession {
         selected = window
         capture?.stop(); capture = nil
         generation += 1
+        menuItems.removeAll()
         let selectionGeneration = generation
         releaseButtons()
         SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
@@ -323,6 +324,15 @@ final class HostApplicationSession {
                 stream.start(candidate)
             }
         }
+    }
+    private func menuTarget(_ request: [String: Any]) throws -> AXUIElement {
+        // Menus belong to the bound application, including when it has no window.
+        // Every capture/wait transition revokes old menu handles and generations.
+        guard HostApplicationCatalog.consoleAvailable, AXIsProcessTrusted(),
+              let app, !app.isTerminated, request["generation"] as? Int == generation else {
+            throw HostFailure(code: "STALE_WINDOW", message: "Wait for the current application.")
+        }
+        return AXUIElementCreateApplication(app.processIdentifier)
     }
     private func target(_ request: [String: Any]) throws -> NativeWindow {
         guard HostApplicationCatalog.consoleAvailable, AXIsProcessTrusted(),

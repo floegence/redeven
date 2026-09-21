@@ -31,6 +31,7 @@ body:is([data-state="disconnected"],[data-state="failed"],[data-state="captureUn
 .mac-app-controls-toggle:is(:hover,:focus-visible,[aria-expanded="true"]) { opacity:1; }
 .mac-app-drawer { position:absolute; left:42px; top:50%; transform:translateY(-50%); width:320px; max-width:calc(100vw - 62px); max-height:calc(100dvh - 24px); overflow:auto; overscroll-behavior:contain; padding:20px; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:0 12px 40px #0002; text-align:left; animation:unfold .16s ease-out; }
 .mac-app-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
+body[data-state="waiting"] .mac-app-actions { margin-top:0; padding-top:0; border-top:0; }
 .mac-app-actions>select { width:100%; min-width:0; margin-bottom:6px; }
 .mac-app-actions>button { flex:1; min-height:32px; font-size:11px; padding:4px 8px; }
 .mac-app-controls select { font:inherit; font-size:12px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--surface); color:var(--foreground); cursor:pointer; }

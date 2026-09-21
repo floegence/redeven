@@ -6324,6 +6324,7 @@
     "macStopSharing": "Freigabe beenden",
     "macStopSharingDescription": "Trenne diese App von Redeven. Ihre Fenster und ungespeicherten Arbeiten bleiben auf dem Mac geöffnet.",
     "macOperationFailed": "Die App konnte diese Aktion nicht ausführen. Versuche es erneut, sobald ihr Fenster bereit ist.",
+    "macWaitingHint": "Die App läuft, aber noch ist kein Fenster zum Teilen verfügbar. Öffnen Sie über Anwendungssteuerung → App-Menü ein Fenster oder verbinden Sie sich erneut.",
     "macWaiting": "Warten auf das App-Fenster…",
     "macCaptureUnavailable": "Das Fenster kann nicht erfasst werden. Verbinde dich erneut und versuche es noch einmal.",
     "macStopDescription": "Fordere diese App zum Beenden auf. Falls ungespeicherte Arbeit vorhanden ist, beantworte den Speicherdialog im App-Fenster.",

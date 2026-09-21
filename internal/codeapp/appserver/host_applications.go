@@ -141,6 +141,10 @@ func (g *Server) guardHostApplicationForward(w http.ResponseWriter, r *http.Requ
 	if !found {
 		return false
 	}
+	return g.guardHostApplicationSession(w, r, s, owner, base)
+}
+
+func (g *Server) guardHostApplicationSession(w http.ResponseWriter, r *http.Request, s hostapps.Session, owner, base string) bool {
 	meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
 	if !ok {
 		return true
@@ -152,7 +156,11 @@ func (g *Server) guardHostApplicationForward(w http.ResponseWriter, r *http.Requ
 	path := strings.TrimPrefix(r.URL.Path, base)
 	if path == hostApplicationBoot+"state" {
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, map[string]any{"state": s.State, "password": g.hostApps.Password(s.ID)})
+		password := ""
+		if s.State == "running" || s.State == "starting" {
+			password = g.hostApps.Password(s.ID)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"state": s.State, "error_code": s.ErrorCode, "password": password})
 		return true
 	}
 	if path == hostApplicationBoot {

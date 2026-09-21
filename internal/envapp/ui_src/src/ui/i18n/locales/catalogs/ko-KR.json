@@ -6320,6 +6320,7 @@
     "macStopSharing": "공유 중지",
     "macStopSharingDescription": "이 앱과 Redeven의 연결을 끊습니다. 창과 저장하지 않은 작업은 Mac에 그대로 유지됩니다.",
     "macOperationFailed": "앱이 이 작업을 완료하지 못했습니다. 창이 준비되면 다시 시도하세요.",
+    "macWaitingHint": "앱이 실행 중이지만 아직 공유할 수 있는 창이 없습니다. 앱 제어 → 앱 메뉴에서 창을 열거나 다시 연결하세요.",
     "macWaiting": "앱 창을 기다리는 중…",
     "macCaptureUnavailable": "창을 캡처할 수 없습니다. 다시 연결한 후 시도하세요.",
     "macStopDescription": "이 앱에 종료를 요청합니다. 저장하지 않은 작업이 있으면 앱 창의 저장 대화상자에서 처리하세요.",

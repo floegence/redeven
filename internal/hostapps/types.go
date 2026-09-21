@@ -69,6 +69,7 @@ type Presentation struct {
 	PictureImages     string `json:"pictureImages,omitempty"`
 
 	OperationFailed    string `json:"operationFailed,omitempty"`
+	WaitingHint        string `json:"waitingHint,omitempty"`
 	Waiting            string `json:"waiting,omitempty"`
 	CaptureUnavailable string `json:"captureUnavailable,omitempty"`
 	Menu               string `json:"menu,omitempty"`
@@ -114,6 +115,7 @@ type Backend interface {
 	Stop(context.Context, string, string) error
 	Add(context.Context, AddRequest) error
 	ForTarget(string) (Session, string, bool)
+	ForForward(string) (Session, string, bool)
 	Password(string) string
 	Permissions(context.Context, string) error
 }

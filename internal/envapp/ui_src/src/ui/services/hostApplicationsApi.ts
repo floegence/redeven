@@ -60,6 +60,7 @@ export type HostApplicationPresentation = Readonly<{
   pictureImages?: string;
   operationFailed?: string;
   waiting?: string;
+  waitingHint?: string;
   captureUnavailable?: string;
   menu?: string;
   windows?: string;

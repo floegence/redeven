@@ -18,6 +18,7 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var clicks = 0
     var animation: Timer?
     var replacing = false
+    var reopens = 0
     var events: [[String: Any]] = []
     let receipt = Bundle.main.bundleURL.appendingPathComponent("receipt.json").path
     func makeWindow() {
@@ -36,10 +37,16 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
-        makeWindow()
+        let delay = Bundle.main.object(forInfoDictionaryKey: "RedevenFixtureInitialWindowDelay") as? Double ?? 0
+        if Bundle.main.object(forInfoDictionaryKey: "RedevenFixtureWindowOnReopen") as? Bool != true && Bundle.main.object(forInfoDictionaryKey: "RedevenFixtureWindowOnMenu") as? Bool != true {
+            if delay > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self.makeWindow(); self.save() } }
+            else { makeWindow() }
+        }
         let menu = NSMenu()
         let root = NSMenuItem(title: "Fixture", action: nil, keyEquivalent: "")
         let actions = NSMenu(title: "Fixture")
+        let open = NSMenuItem(title: "Open fixture window", action: #selector(openWindow), keyEquivalent: "")
+        open.target = self; actions.addItem(open)
         let action = NSMenuItem(title: "Record menu action", action: #selector(recordMenu), keyEquivalent: "")
         action.target = self; actions.addItem(action)
         let replace = NSMenuItem(title: "Replace window", action: #selector(replaceWindow), keyEquivalent: "")
@@ -53,6 +60,13 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(edit); NSApp.mainMenu = menu
         save()
     }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        reopens += 1
+        if !flag && Bundle.main.object(forInfoDictionaryKey: "RedevenFixtureWindowOnReopen") as? Bool == true { makeWindow() }
+        save()
+        return true
+    }
+    @objc func openWindow() { if window == nil { makeWindow(); save() } }
     @objc func replaceWindow() {
         let text = field.stringValue
         replacing = true
@@ -75,7 +89,7 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func recordMenu() { menuClicks += 1; save() }
     @objc func click() { clicks += 1; save() }
     @objc func save() {
-        let value: [String: Any] = ["menu_clicks": menuClicks, "events": events, "pid": ProcessInfo.processInfo.processIdentifier, "clicks": clicks, "text": field.stringValue, "window": window.windowNumber, "width": window.frame.width, "height": window.frame.height]
+        let value: [String: Any] = ["menu_clicks": menuClicks, "events": events, "pid": ProcessInfo.processInfo.processIdentifier, "clicks": clicks, "text": field?.stringValue ?? "", "window": window?.windowNumber ?? 0, "width": window?.frame.width ?? 0, "height": window?.frame.height ?? 0, "reopens": reopens]
         try! JSONSerialization.data(withJSONObject: value).write(to: URL(fileURLWithPath: receipt), options: .atomic)
     }
     func windowDidResize(_ notification: Notification) { if field != nil { save() } }

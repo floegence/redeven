@@ -6335,6 +6335,7 @@
     "macStopSharing": "停止共享",
     "macStopSharingDescription": "断开此应用与 Redeven 的连接。应用窗口和未保存的工作会保留在 Mac 上。",
     "macOperationFailed": "应用暂时无法完成此操作。请在窗口就绪后重试。",
+    "macWaitingHint": "应用正在运行，暂时没有可共享的窗口。可通过“应用控制 → 应用菜单”打开窗口，或重新连接。",
     "macWaiting": "正在等待应用窗口…",
     "macCaptureUnavailable": "暂时无法采集应用画面，请重新连接后重试。",
     "macStopDescription": "请求退出此应用。如果有尚未保存的工作，请在应用窗口中处理保存对话框。",

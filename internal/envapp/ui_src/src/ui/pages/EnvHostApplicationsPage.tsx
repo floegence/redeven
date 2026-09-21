@@ -429,7 +429,7 @@ export function EnvHostApplicationsPage() {
         pictureTransport: i18n.t('hostApplications.macPictureTransport'),
         pictureVideo: i18n.t('hostApplications.macPictureVideo'),
         pictureImages: i18n.t('hostApplications.macPictureImages'),
-        operationFailed: i18n.t('hostApplications.macOperationFailed'), waiting: i18n.t('hostApplications.macWaiting'), captureUnavailable: i18n.t('hostApplications.macCaptureUnavailable'),
+        operationFailed: i18n.t('hostApplications.macOperationFailed'), waiting: i18n.t('hostApplications.macWaiting'), waitingHint: i18n.t('hostApplications.macWaitingHint'), captureUnavailable: i18n.t('hostApplications.macCaptureUnavailable'),
         sharedControl: i18n.t('hostApplications.macSharedControl'), input: i18n.t('hostApplications.macInput'),
         connecting: i18n.t('hostApplications.connecting'), reconnecting: i18n.t('hostApplications.reconnecting'),
         disconnected: i18n.t('hostApplications.disconnected'), connectionHint: i18n.t('hostApplications.connectionHint'), reconnect: i18n.t('hostApplications.reconnect'),

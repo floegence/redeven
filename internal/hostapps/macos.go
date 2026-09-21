@@ -350,6 +350,8 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 				return
 			}
 		case "launched":
+			// Launch readiness is independent of the first shareable window.
+			startup.Stop()
 			m.mu.Lock()
 			s.view.ExistingApplication = msg.ExistingApplication
 			m.mu.Unlock()
@@ -438,6 +440,8 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 	}
 	if !started {
 		code = "launch_failed"
+	} else {
+		code = "native_helper_unavailable"
 	}
 }
 func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *ownedSession) {

@@ -2,11 +2,13 @@ package appserver
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/hostapps"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -14,6 +16,7 @@ import (
 type hostAppsStub struct {
 	owner string
 	calls int
+	state string
 }
 
 func (s *hostAppsStub) Catalog(context.Context, string, string) (hostapps.Catalog, error) {
@@ -35,6 +38,61 @@ func (s *hostAppsStub) Add(context.Context, hostapps.AddRequest) error { s.calls
 func (s *hostAppsStub) ForTarget(target string) (hostapps.Session, string, bool) {
 	return hostapps.Session{ID: "one", State: "running"}, "alice", target == "http://127.0.0.1:40000"
 }
+func (s *hostAppsStub) ForForward(id string) (hostapps.Session, string, bool) {
+	owner := s.owner
+	if owner == "" {
+		owner = "alice"
+	}
+	return hostapps.Session{ID: "one", State: s.state, ErrorCode: "window_unavailable"}, owner, id == "owned"
+}
+
+func TestHostApplicationStatusSurvivesReleasedForward(t *testing.T) {
+	for _, state := range []string{"failed", "ended"} {
+		for _, owner := range []string{"alice", "bob"} {
+			for _, full := range []bool{false, true} {
+				server := &Server{pf: &stubPortForwardBackend{}, hostApps: &hostAppsStub{state: state}, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: owner, CanRead: true, CanWrite: full, CanExecute: full})}
+				for _, path := range []string{"", "state", "stream"} {
+					r := httptest.NewRequest(http.MethodGet, "http://localhost/_redeven_host_app/"+path, nil)
+					r.Header.Set("Origin", strings.Replace(envOriginWithChannel("ch_hostapps"), "env-123.", "pf-owned.", 1))
+					w := httptest.NewRecorder()
+					server.handlePortForwardProxy(w, r)
+					if owner != "alice" || !full {
+						if w.Code != http.StatusForbidden || strings.Contains(w.Body.String(), "window_unavailable") {
+							t.Fatalf("terminal session leaked: %d %s", w.Code, w.Body.String())
+						}
+					} else if path == "stream" {
+						if w.Code != http.StatusGone {
+							t.Fatalf("terminal stream: %d", w.Code)
+						}
+					} else {
+						if w.Code != http.StatusOK {
+							t.Fatalf("retained session %s: %d %s", path, w.Code, w.Body.String())
+						}
+						if path == "state" {
+							var result map[string]string
+							if json.Unmarshal(w.Body.Bytes(), &result) != nil || result["state"] != state || result["password"] != "" || result["error_code"] != "window_unavailable" {
+								t.Fatalf("incorrect authoritative status: %s", w.Body.String())
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestHostApplicationTerminalLocalRouteRetainsItsPrefix(t *testing.T) {
+	server := &Server{localPermissionCap: &config.PermissionSet{Read: true, Write: true, Execute: true}, pf: &stubPortForwardBackend{}, hostApps: &hostAppsStub{state: "failed", owner: localUserPublicID}}
+	for _, path := range []string{"", "state"} {
+		r := WithLocalUIPortForwardRoute(httptest.NewRequest(http.MethodGet, "http://localhost/pf/owned/_redeven_host_app/"+path, nil), "owned")
+		w := httptest.NewRecorder()
+		server.handlePortForwardProxy(w, r)
+		if w.Code != http.StatusOK || (path == "" && !strings.Contains(w.Body.String(), `"base":"/pf/owned"`)) {
+			t.Fatalf("local terminal route: %d %s", w.Code, w.Body.String())
+		}
+	}
+}
+
 func (s *hostAppsStub) Permissions(context.Context, string) error { s.calls++; return nil }
 func (s *hostAppsStub) Password(string) string                    { return "private-password" }
 
