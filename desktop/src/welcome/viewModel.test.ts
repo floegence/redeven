@@ -130,6 +130,19 @@ describe('provider credential recovery actions', () => {
     ]));
     expect(actions.find((item) => item.id === 'connect_provider_runtime')?.action.enabled).toBe(true);
     expect(actions.find((item) => item.id === 'disconnect_provider_runtime')?.action.enabled).toBe(true);
+    expect(buildEnvironmentCardFactsModel(local!).find(fact => fact.id === 'cloud-connection')?.value_key).toBe('providerRecovery.expired');
+    for (const [state, key] of [
+      ['sign_in_required', 'environmentCenter.cloudSignInRequired'],
+      ['permission_required', 'providerRecovery.permissionRevoked'],
+      ['binding_changed', 'providerRecovery.attention'],
+    ] as const) {
+      const recovering = { ...local!, provider_runtime_link_target: {
+        ...local!.provider_runtime_link_target!, credential_recovery: state,
+      } };
+      expect(buildEnvironmentCardFactsModel(recovering).find(fact => fact.id === 'cloud-connection')?.value_key).toBe(key);
+      expect(buildProviderBackedEnvironmentActionModel(recovering).action_presentation.menu_actions
+        .find(item => item.id === 'disconnect_provider_runtime')?.action.enabled).toBe(true);
+    }
   });
 });
 import type { DesktopSavedRuntimeTarget } from '../main/desktopPreferences';
