@@ -3,7 +3,7 @@ type: UI Contract
 title: Runtime settings
 description: Navigate and edit runtime configuration through consistent, responsive settings surfaces while preserving API and permission ownership.
 tags: [ui, runtime, settings, skills]
-timestamp: 2026-09-21T07:00:00Z
+timestamp: 2026-09-21T14:22:26Z
 ---
 # Summary
 
@@ -81,6 +81,16 @@ as text, and exposes encoding and truncation. Failed reads can retry the same
 request. Closing the dialog or selecting another skill invalidates pending reads
 so stale content cannot replace the new selection.
 
+The runtime resolves browsing against the current catalog. A bundled
+`system:<name>/SKILL.md` entry is a virtual identifier: its root lists the single
+`SKILL.md` document and its preview reads the same embedded content used by the
+skill manager. It must never be interpreted as a host filesystem path. Unknown
+catalog entries and missing bundled children fail explicitly; relative path
+validation, encoding, size limits, and truncation apply to both bundled and
+filesystem skills. Local and GitHub-installed skills retain filesystem and
+symlink containment checks. Browsing requires read permission, not administrator
+permission, and does not install or materialize bundled files on disk.
+
 # Evidence
 
 - `internal/envapp/ui_src/src/ui/pages/EnvSettingsPage.tsx` owns destinations,
@@ -92,6 +102,10 @@ so stale content cannot replace the new selection.
 - `internal/envapp/ui_src/src/ui/pages/settings/sections/SkillsSection.tsx` and
   `internal/envapp/ui_src/src/ui/pages/settings/SkillFilesDialog.tsx` own skill UI
   requests; `internal/codeapp/appserver/server.go` owns the API boundary.
+- `internal/ai/skill_manager_remote.go` resolves browse sources and enforces
+  file boundaries; `internal/ai/skill_manager_browse_test.go` and
+  `internal/codeapp/appserver/server_ai_skills_test.go` verify embedded previews,
+  filesystem containment, and read permission.
 - `internal/envapp/ui_src/src/ui/pages/RuntimeSettingsDesign.browser.test.tsx`
   checks page geometry, retained drafts, navigation, dialogs, and API adapters.
 - `internal/envapp/ui_src/src/ui/pages/EnvSettingsPage.test.tsx` and

@@ -636,13 +636,29 @@ func (m *skillManager) BrowseTree(skillPath string, dir string) (SkillBrowseTree
 	defer m.mu.Unlock()
 	m.discoverLocked()
 
-	root, err := m.resolveSkillRootLocked(skillPath)
+	skill, err := m.resolveBrowseSkillLocked(skillPath)
 	if err != nil {
 		return SkillBrowseTreeResult{}, err
 	}
+	root := filepath.Dir(skill.Path)
 	relDir, err := normalizeSkillRelativePath(dir, true)
 	if err != nil {
 		return SkillBrowseTreeResult{}, err
+	}
+	// System skill paths identify catalog content, not directories on disk.
+	if content, ok := m.embedded[skill.Path]; ok {
+		if relDir != "." {
+			return SkillBrowseTreeResult{}, newSkillError(ErrCodeAISkillsSkillNotFound, http.StatusNotFound, "directory not found", nil)
+		}
+		return SkillBrowseTreeResult{
+			Root: root,
+			Dir:  relDir,
+			Entries: []SkillBrowseTreeEntry{{
+				Name: "SKILL.md",
+				Path: "SKILL.md",
+				Size: int64(len(content)),
+			}},
+		}, nil
 	}
 	targetDir := root
 	if relDir != "." {
@@ -710,10 +726,11 @@ func (m *skillManager) BrowseFile(skillPath string, file string, encoding string
 	defer m.mu.Unlock()
 	m.discoverLocked()
 
-	root, err := m.resolveSkillRootLocked(skillPath)
+	skill, err := m.resolveBrowseSkillLocked(skillPath)
 	if err != nil {
 		return SkillBrowseFileResult{}, err
 	}
+	root := filepath.Dir(skill.Path)
 	relFile, err := normalizeSkillRelativePath(file, false)
 	if err != nil {
 		return SkillBrowseFileResult{}, err
@@ -731,31 +748,43 @@ func (m *skillManager) BrowseFile(skillPath string, file string, encoding string
 	if maxBytes > 10*1024*1024 {
 		return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsFileTooLarge, http.StatusUnprocessableEntity, "max_bytes exceeds allowed limit", nil)
 	}
-	abs := filepath.Join(root, filepath.FromSlash(relFile))
-	if err := ensurePathWithinRoot(root, abs); err != nil {
-		return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsPathEscape, http.StatusUnprocessableEntity, "path escapes skill root", err)
-	}
-	info, err := os.Stat(abs)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsSkillNotFound, http.StatusNotFound, "file not found", err)
+	var reader io.Reader
+	var size int64
+	if content, ok := m.embedded[skill.Path]; ok {
+		if relFile != "SKILL.md" {
+			return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsSkillNotFound, http.StatusNotFound, "file not found", nil)
 		}
-		return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsInternal, http.StatusInternalServerError, "failed to read file metadata", err)
+		reader = strings.NewReader(content)
+		size = int64(len(content))
+	} else {
+		abs := filepath.Join(root, filepath.FromSlash(relFile))
+		if err := ensurePathWithinRoot(root, abs); err != nil {
+			return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsPathEscape, http.StatusUnprocessableEntity, "path escapes skill root", err)
+		}
+		info, err := os.Stat(abs)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsSkillNotFound, http.StatusNotFound, "file not found", err)
+			}
+			return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsInternal, http.StatusInternalServerError, "failed to read file metadata", err)
+		}
+		if info.IsDir() {
+			return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsInvalidPath, http.StatusBadRequest, "target is a directory", nil)
+		}
+		f, err := os.Open(abs)
+		if err != nil {
+			return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsInternal, http.StatusInternalServerError, "failed to open file", err)
+		}
+		defer f.Close()
+		reader = f
+		size = info.Size()
 	}
-	if info.IsDir() {
-		return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsInvalidPath, http.StatusBadRequest, "target is a directory", nil)
-	}
-	if info.Size() > int64(10*1024*1024) {
+	if size > int64(10*1024*1024) {
 		return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsFileTooLarge, http.StatusUnprocessableEntity, "file exceeds maximum allowed size", nil)
 	}
-	f, err := os.Open(abs)
-	if err != nil {
-		return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsInternal, http.StatusInternalServerError, "failed to open file", err)
-	}
-	defer f.Close()
 
 	buf := make([]byte, maxBytes+1)
-	n, readErr := io.ReadFull(f, buf)
+	n, readErr := io.ReadFull(reader, buf)
 	if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) {
 		return SkillBrowseFileResult{}, newSkillError(ErrCodeAISkillsInternal, http.StatusInternalServerError, "failed to read file", readErr)
 	}
@@ -778,23 +807,24 @@ func (m *skillManager) BrowseFile(skillPath string, file string, encoding string
 		File:      relFile,
 		Encoding:  encoding,
 		Truncated: truncated,
-		Size:      info.Size(),
+		Size:      size,
 		Content:   content,
 	}, nil
 }
 
-func (m *skillManager) resolveSkillRootLocked(skillPath string) (string, error) {
-	skillPath = filepath.Clean(strings.TrimSpace(skillPath))
+func (m *skillManager) resolveBrowseSkillLocked(skillPath string) (SkillCatalogEntry, error) {
+	skillPath = strings.TrimSpace(skillPath)
 	if skillPath == "" {
-		return "", newSkillError(ErrCodeAISkillsInvalidPath, http.StatusBadRequest, "missing skill_path", nil)
+		return SkillCatalogEntry{}, newSkillError(ErrCodeAISkillsInvalidPath, http.StatusBadRequest, "missing skill_path", nil)
 	}
+	skillPath = filepath.Clean(skillPath)
 	for i := range m.catalogEntries {
 		entry := m.catalogEntries[i]
 		if filepath.Clean(strings.TrimSpace(entry.Path)) == skillPath {
-			return filepath.Dir(skillPath), nil
+			return entry, nil
 		}
 	}
-	return "", newSkillError(ErrCodeAISkillsBrowseForbidden, http.StatusNotFound, "skill not found in catalog", nil)
+	return SkillCatalogEntry{}, newSkillError(ErrCodeAISkillsBrowseForbidden, http.StatusNotFound, "skill not found in catalog", nil)
 }
 
 func (m *skillManager) scopeForSkillPathLocked(skillPath string) string {
