@@ -351,3 +351,15 @@ it('reuses Desktop upload admission after its response is lost', async () => {
  expect(state.setupStart).toHaveBeenCalledTimes(2);
  expect(state.setupStart.mock.calls[1]).toEqual(state.setupStart.mock.calls[0]);
 });
+
+it('reserves an application selected during Desktop acquisition without reopening setup', async () => {
+ requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
+ state.components.mockReturnValue(new Promise(() => {}));
+ dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ selectDownloadMethod('desktop',host);
+ [...host.querySelectorAll('button')].find(el => el.textContent === 'Prepare')!.click(); await settle();
+ button('Open in new window · Text Editor').click(); await settle();
+ expect(state.preparation).toHaveBeenCalledWith(expect.objectContaining({action:'create',application_id:app.id}));
+ expect(document.querySelector('[role=dialog]')).toBeNull();
+ expect(state.setupStart).not.toHaveBeenCalled();
+});

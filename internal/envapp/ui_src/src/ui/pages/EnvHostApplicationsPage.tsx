@@ -388,7 +388,7 @@ export function EnvHostApplicationsPage() {
     if (!canLaunch() || busy()[app.id]) return;
     if (!ready()) {
       setSelectedApplication(app);
-      if (hostApplicationSetupActive(setup())) {
+      if (hostApplicationSetupActive(displayedSetup())) {
         try { await reserveApplication(app); observeSetup(); if (setup()?.state === 'ready') void continuePreparedApplications(); }
         catch (e) { if (!disposed) setAppErrors(v => ({ ...v, [app.id]: translateError(e) })); }
       } else setSetupDialog(true);

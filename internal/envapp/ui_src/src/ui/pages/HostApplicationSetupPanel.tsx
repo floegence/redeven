@@ -52,7 +52,7 @@ export function HostApplicationSetupPanel(props: {
   let fileInput: HTMLInputElement | undefined;
   return <section class="host-apps-preparation" classList={{ "host-apps-preparation-dialog": props.inDialog }} aria-label={i18n.t('hostApplications.prepare.title')}>
     <div class="host-apps-preparation-copy">
-      <Show when={!props.inDialog || active() || props.disconnected || ['failed', 'interrupted', 'cancelled'].includes(props.setup?.state ?? '')}><h2 aria-live="polite">{i18n.t(props.disconnected ? 'hostApplications.disconnected' : hostApplicationSetupHeading(props.setup))}</h2></Show>
+      <Show when={!props.inDialog || active() || props.disconnected || ['failed', 'interrupted', 'cancelled', 'unsupported'].includes(props.setup?.state ?? '')}><h2 aria-live="polite">{i18n.t(props.disconnected ? 'hostApplications.disconnected' : hostApplicationSetupHeading(props.setup))}</h2></Show>
       <p>{i18n.t(props.disconnected ? 'hostApplications.prepare.connectionHint' : props.setup?.state === 'failed' ? hostApplicationSetupError(props.setup.error_code) : 'hostApplications.prepare.description')}</p>
       <Show when={props.applicationName}><p class="host-apps-preparation-target">{i18n.t('hostApplications.prepare.openAfter', { name: props.applicationName ?? '' })}</p></Show>
     </div>
