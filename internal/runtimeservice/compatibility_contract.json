@@ -2,7 +2,7 @@
   "schema_version": 1,
   "release_review": {
     "release_version": "v0.13.0",
-    "previous_release": "v0.12.0",
+    "previous_release": "v0.11.0",
     "reviewed_at": "2026-09-22",
     "review_id": "provider-credential-recovery-v1",
     "summary": "Epoch 31 adds explicit Runtime provider connection state and generation-fenced renewal for expired control credentials. Older peers remain upgrade-only; Desktop and Runtime must agree before automatic recovery can issue a new credential generation.",
