@@ -6201,7 +6201,15 @@
     }
   },
   "hostApplications": {
+    "macControls": "앱 제어",
     "prepare": {
+      "downloadMethod": "다운로드 방식",
+      "hostDownload": "호스트에서 다운로드",
+      "hostDownloadHint": "이 호스트에서 구성 요소를 직접 다운로드합니다.",
+      "desktopDownload": "Desktop에서 다운로드 후 업로드",
+      "desktopDownloadHint": "이 컴퓨터에서 다운로드한 다음 호스트로 전송합니다.",
+      "desktopUnavailable": "이 방식을 사용하려면 Redeven Desktop에서 이 환경을 여세요.",
+
       "title": "호스트 앱 준비",
       "description": "Redeven이 이 호스트에 필요한 그래픽 구성 요소를 준비합니다. 수동 설정은 필요하지 않습니다.",
       "start": "준비 시작",

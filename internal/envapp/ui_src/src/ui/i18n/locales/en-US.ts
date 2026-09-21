@@ -7,7 +7,15 @@ import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
   hostApplications: {
+    "macControls": "Application controls",
     prepare: {
+      "downloadMethod": "Download method",
+      "hostDownload": "Host downloads",
+      "hostDownloadHint": "Download the components directly on this host.",
+      "desktopDownload": "Desktop downloads and uploads",
+      "desktopDownloadHint": "Download on this computer, then transfer to the host.",
+      "desktopUnavailable": "Open this environment in Redeven Desktop to use this method.",
+
       "title": "Prepare host applications",
       "description": "Redeven will prepare the graphical components on this host. No manual configuration is needed.",
       "start": "Prepare",

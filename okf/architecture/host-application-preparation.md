@@ -60,12 +60,21 @@ requires explicit continuation, reusing verified archives. Invalid archives, dis
 space, filesystem permission, network and graphical self-check failures have
 localized recovery copy. No failure changes SELinux, AppArmor or host privileges.
 
-If a user-initiated host download fails and Desktop's component bridge is available,
+The preparation page and application dialog visibly offer host download (selected
+by default) and Desktop download-and-transfer. Desktop is disabled with an
+explanation outside its component bridge. The selected method is shared between
+the page and dialog; failures never switch methods automatically. The compact
+preparation surface keeps method descriptions, package size and actions together.
+Users can select Desktop initially or explicitly after a host download fails.
 Desktop acquires the same architecture catalog through its bundled Runtime. It
 transfers original verified archives as a bounded ZIP through the authorized host
 API. The host independently verifies and qualifies them. The initiating Desktop
 document owns this local acquisition; navigation or cancellation retires its exact
-subprocess and temporary transfer. No renderer-supplied URL or filesystem path can
+subprocess and temporary transfer, including cancellation before host admission.
+Acquisition byte progress is temporary presentation state; host operation status
+remains authoritative. Uncertain upload admissions reuse the same request ID.
+An existing receiving operation can resume through an explicitly selected Desktop
+transfer or a matching offline package. No renderer-supplied URL or filesystem path can
 reach the acquisition command. Browser users and offline deployments may explicitly
 select an upstream-generated ZIP in the preparation panel. Uploaded chunks have a
 256 KiB bound and the complete archive has the pinned package's bounded ZIP overhead.

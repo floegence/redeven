@@ -12,7 +12,7 @@ let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.dispatchEvent(new dom.window.Event('beforeunload')); dom?.window.close(); });
 
-async function viewer(video = false) {
+async function viewer(video = false, icon = '') {
   dom = new JSDOM(html, { url: 'http://localhost/pf/test/_redeven_host_app/', runScripts: 'dangerously', pretendToBeVisual: true });
   const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ state: 'running', password: 'private' }) });
   const drawImage = vi.fn();
@@ -50,7 +50,7 @@ async function viewer(video = false) {
   Object.assign(dom.window, { TextDecoder, TextEncoder, VideoDecoder: video ? Decoder : undefined, EncodedVideoChunk: class { constructor(public value: unknown) {} }, fetch, WebSocket: Socket, createImageBitmap: bitmap, redevenHostApplicationWindow: native });
   const statisticsTicks: (() => void)[] = [];
   vi.spyOn(dom.window, 'setInterval').mockImplementation(((callback: () => void) => { statisticsTicks.push(callback); return 1; }) as typeof dom.window.setInterval);
-  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon: '', copy: { "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
+  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon, copy: { controls: 'Application controls', "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
   await drain();
   const socket = () => Socket.instances.at(-1)!;
   const state = () => dom.window.document.body.dataset.state;
@@ -163,8 +163,10 @@ describe('macOS application viewer', () => {
 
   it('renders literal system menu titles and routes only returned item IDs', async () => {
     const v = await viewer(); await v.activate();
+    dom.window.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!.click();
     v.socket().message({ type: 'menu', items: [{ id: 'system-item', title: '<b>Host action</b>', enabled: true, children: [] }] });
     const panel = dom.window.document.querySelector('.mac-app-menu')!;
+    expect(dom.window.document.querySelector<HTMLElement>('.mac-app-drawer')!.hidden).toBe(false);
     expect(panel.querySelector('b')).toBeNull();
     expect(panel.textContent).toBe('<b>Host action</b>');
     panel.querySelector('button')!.click();
@@ -180,7 +182,7 @@ describe('macOS picture controls and stream delivery', () => {
     await v.socket().onopen?.();
     expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure', mode:'auto', pixel_ratio:2, video:true});
     await v.activate();
-    const picture = [...dom.window.document.querySelectorAll('button')].find(el=>el.textContent==='Picture quality')!;
+    const picture = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
     picture.click();
     const panel = dom.window.document.querySelector('#picture-settings')!;
     [...panel.querySelectorAll('button')].find(el=>el.textContent==='Motion first')!.click();
@@ -192,7 +194,7 @@ describe('macOS picture controls and stream delivery', () => {
     expect(v.fetch).toHaveBeenCalledOnce();
     expect(v.socket().close).not.toHaveBeenCalled();
     select.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
-    expect((panel as HTMLElement).hidden).toBe(true);
+    expect(dom.window.document.querySelector<HTMLElement>('.mac-app-drawer')!.hidden).toBe(true);
     expect(dom.window.document.activeElement).toBe(picture);
   });
   it('acknowledges only decoded current frames and preserves video references across lossless refresh', async () => {
@@ -239,4 +241,42 @@ describe('macOS picture recovery and measurement', () => {
     expect(rate.textContent).toBe('0.0 FPS');
     expect(dom.window.document.querySelector('output[aria-label="Bandwidth"]')?.textContent).toBe('0.00 Mb/s');
   });
+});
+
+it('renders only the supplied application icon in loading and error states', async () => {
+  const v = await viewer(false, 'data:image/png;base64,AAAA');
+  expect(dom.window.document.getElementById('fallback-icon')!.hasAttribute('hidden')).toBe(true);
+  expect((dom.window.document.getElementById('icon') as HTMLImageElement).hidden).toBe(false);
+  v.socket().onclose?.(); await drain();
+  expect(v.state()).toBe('disconnected');
+  expect(dom.window.document.getElementById('fallback-icon')!.hasAttribute('hidden')).toBe(true);
+});
+it('starts with only the left control handle and collapses on outside input or disconnect', async () => {
+  const v = await viewer(); await v.activate();
+  const toggle = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
+  const drawer = dom.window.document.querySelector<HTMLElement>('.mac-app-drawer')!;
+  expect(toggle).not.toBeNull();
+  expect(drawer.hidden).toBe(true);
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  toggle.click();
+  expect(drawer.hidden).toBe(false);
+  expect(drawer.contains(dom.window.document.activeElement)).toBe(true);
+  dom.window.document.body.dispatchEvent(new dom.window.Event('pointerdown', { bubbles: true }));
+  expect(drawer.hidden).toBe(true);
+  toggle.click();
+  v.socket().onclose?.(); await drain();
+  expect(drawer.hidden).toBe(true);
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+});
+
+it('keeps controls open during WebKit button blur and closes for a concrete outside focus target', async () => {
+ const v = await viewer(); await v.activate();
+ const toggle = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
+ const drawer = dom.window.document.querySelector<HTMLElement>('.mac-app-drawer')!;
+ toggle.click();
+ const mode = drawer.querySelector('button')!;
+ mode.dispatchEvent(new dom.window.FocusEvent('focusout', {bubbles:true,relatedTarget:null}));
+ expect(drawer.hidden).toBe(false);
+ mode.dispatchEvent(new dom.window.FocusEvent('focusout', {bubbles:true,relatedTarget:dom.window.document.querySelector('textarea')}));
+ expect(drawer.hidden).toBe(true);
 });

@@ -29,17 +29,28 @@
   const menuPanel = document.createElement('div');
   menuPanel.className = 'mac-app-menu';
   menuPanel.hidden = true;
-  controls.append(windows, menu, close, menuPanel);
+  const drawer = document.createElement('div');
+  drawer.id = 'application-controls';
+  drawer.className = 'mac-app-drawer';
+  drawer.hidden = true;
+  drawer.setAttribute('role', 'region');
+  drawer.setAttribute('aria-label', config.copy.controls);
+  const actions = document.createElement('div');
+  actions.className = 'mac-app-actions';
+  actions.append(windows, menu, close, menuPanel);
   document.body.append(controls);
-  const pictureButton = document.createElement('button');
-  pictureButton.textContent = config.copy.picture;
-  pictureButton.setAttribute('aria-expanded', 'false');
-  pictureButton.setAttribute('aria-controls', 'picture-settings');
+  const controlsButton = document.createElement('button');
+  controlsButton.className = 'mac-app-controls-toggle';
+  controlsButton.title = config.copy.controls;
+  controlsButton.setAttribute('aria-label', config.copy.controls);
+  controlsButton.innerHTML = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 3v4m0 4v6m6-14v8m0 4v2m6-14v2m0 4v8M2 7h4m2 8h4m2-10h4"/></svg>';
+  controlsButton.setAttribute('aria-expanded', 'false');
+  controlsButton.setAttribute('aria-controls', drawer.id);
   const picturePanel = document.createElement('section');
   picturePanel.id = 'picture-settings';
   picturePanel.className = 'mac-app-picture';
   picturePanel.setAttribute('aria-label', config.copy.picture);
-  picturePanel.hidden = true;
+
   const pictureTitle = document.createElement('strong');
   pictureTitle.textContent = config.copy.picture;
   picturePanel.append(pictureTitle);
@@ -108,7 +119,8 @@
     statisticValues[key] = value; row.append(label, value); statistics.append(row);
   }
   picturePanel.append(statistics);
-  controls.append(pictureButton, picturePanel);
+  drawer.append(picturePanel, actions);
+  controls.append(controlsButton, drawer);
   let receivedBytes = 0, paintedFrames = 0, measuredAt = performance.now();
   const statisticsTimer = setInterval(() => {
     const now = performance.now(), elapsed = (now - measuredAt) / 1000;
@@ -122,10 +134,16 @@
   function configurePicture() {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({action: 'configure', ...picture, pixel_ratio: Math.min(4, Math.max(0.5, devicePixelRatio || 1)), video: videoSupported}));
   }
-  function hidePicture() { picturePanel.hidden = true; pictureButton.setAttribute('aria-expanded', 'false'); }
-  pictureButton.onclick = () => {
-    picturePanel.hidden = !picturePanel.hidden;
-    pictureButton.setAttribute('aria-expanded', String(!picturePanel.hidden));
+  function collapseControls() {
+    drawer.hidden = true;
+    controlsButton.setAttribute('aria-expanded', 'false');
+    menuPanel.hidden = true;
+    menu.setAttribute('aria-expanded', 'false');
+  }
+  controlsButton.onclick = () => {
+    drawer.hidden = !drawer.hidden;
+    controlsButton.setAttribute('aria-expanded', String(!drawer.hidden));
+    if (!drawer.hidden) modeButtons.get(picture.mode).focus();
     menuPanel.hidden = true; menu.setAttribute('aria-expanded', 'false');
   };
   const input = document.createElement('textarea');
@@ -153,7 +171,7 @@
   if (/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(config.icon)) {
     icon.src = config.icon;
     icon.hidden = false;
-    document.getElementById('fallback-icon').hidden = true;
+    document.getElementById('fallback-icon').setAttribute('hidden', '');
   }
   function present(state) {
     document.body.dataset.state = state;
@@ -174,7 +192,7 @@
     input.disabled = state !== 'active';
     if (state !== 'active') {
       feedback.hidden = true;
-      hidePicture();
+      collapseControls();
       menuPanel.hidden = true;
       menu.setAttribute('aria-expanded', 'false');
     }
@@ -382,7 +400,6 @@
           windows.hidden = message.windows.length < 2;
           if (current) windows.value = current.window;
         } else if (message.type === 'menu') {
-          hidePicture();
           const build = (items) =>
             items.map((item) => {
               if (item.children.length) {
@@ -577,22 +594,27 @@
   };
   document.addEventListener('pointerdown', (event) => {
     if (!controls.contains(event.target)) {
-      hidePicture();
+      collapseControls();
       menuPanel.hidden = true;
       menu.setAttribute('aria-expanded', 'false');
     }
   });
+  controls.addEventListener('focusout', (event) => {
+    // WebKit may blur a button to the document before clicking another control.
+    // Only a concrete focus destination outside the panel dismisses it.
+    if (event.relatedTarget && !controls.contains(event.relatedTarget)) collapseControls();
+  });
   document.addEventListener(
     'keydown',
     (event) => {
-      if (event.key === 'Escape' && !picturePanel.hidden) {
-        event.stopImmediatePropagation(); event.preventDefault(); hidePicture(); pictureButton.focus();
-      } else if (event.key === 'Escape' && !menuPanel.hidden) {
+      if (event.key === 'Escape' && !menuPanel.hidden) {
         event.stopImmediatePropagation();
         event.preventDefault();
         menuPanel.hidden = true;
         menu.setAttribute('aria-expanded', 'false');
         menu.focus();
+      } else if (event.key === 'Escape' && !drawer.hidden) {
+        event.stopImmediatePropagation(); event.preventDefault(); collapseControls(); controlsButton.focus();
       }
     },
     true,
