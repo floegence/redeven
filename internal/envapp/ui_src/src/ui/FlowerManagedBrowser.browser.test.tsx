@@ -101,7 +101,7 @@ it('explains the web upload limitation and supports keyboard toggling', async ()
   await userEvent.keyboard(' '); await wait(() => vi.mocked(management.saveBrowserEnabled!).mock.calls.length === 1);
   expect(management.installBrowser).not.toHaveBeenCalled();
 });
-for (const [locale, labels, width, dark] of [['zh-CN', zhCN.flowerSurface.computer, 1280, false], ['zh-CN-dark', zhCN.flowerSurface.computer, 1280, true], ['de-DE-mobile', deDE.flowerSurface.computer, 390, false]] as const) {
+for (const [locale, labels, width, dark] of [['en-US-mobile', copy, 390, false], ['zh-CN-mobile', zhCN.flowerSurface.computer, 390, false], ['zh-CN', zhCN.flowerSurface.computer, 1280, false], ['zh-CN-dark', zhCN.flowerSurface.computer, 1280, true], ['de-DE-mobile', deDE.flowerSurface.computer, 390, false]] as const) {
   it(`keeps installation choices readable in ${locale}`, async () => {
     await page.viewport(width, 850); document.documentElement.classList.toggle('dark', dark);
     mount({ copy: labels }); await ready();
