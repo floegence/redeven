@@ -7,6 +7,8 @@ const bootMocks = vi.hoisted(() => {
   const createLifecycle = (onDispose?: () => void) => {
     let disposed = false;
     const lifecycle = Object.freeze({
+      fetch: vi.fn(async () => new Response('session')),
+      events: vi.fn(async function* () { yield { data: 'session' }; }),
       synchronize: vi.fn(),
       dispose: vi.fn(() => {
         if (disposed) return;
@@ -58,6 +60,7 @@ vi.mock('@floegence/floe-webapp-boot', () => ({
   createProxyRuntimeTunnelConnectionConfig: bootMocks.createProxyRuntimeTunnelConnectionConfig,
 }));
 
+import { fetchSessionHTTP, readSessionEvents } from './sessionHTTP';
 import { createEnvAppConnectionRuntime } from './connectionRuntime';
 
 describe('createEnvAppConnectionRuntime', () => {
@@ -92,7 +95,7 @@ describe('createEnvAppConnectionRuntime', () => {
 
     first.dispose();
     first.dispose();
-    expect(first.config.lifecycle?.dispose).toHaveBeenCalledTimes(1);
+    expect(bootMocks.lifecycles[0]?.dispose).toHaveBeenCalledTimes(1);
     second.dispose();
   });
 
@@ -145,9 +148,9 @@ describe('createEnvAppConnectionRuntime', () => {
       reconnected.config.lifecycle,
       replacement.config.lifecycle,
     ]).size).toBe(3);
-    expect(connected.config.lifecycle?.dispose).toHaveBeenCalledTimes(1);
-    expect(reconnected.config.lifecycle?.dispose).toHaveBeenCalledTimes(1);
-    expect(replacement.config.lifecycle?.dispose).not.toHaveBeenCalled();
+    expect(bootMocks.lifecycles[0]?.dispose).toHaveBeenCalledTimes(1);
+    expect(bootMocks.lifecycles[1]?.dispose).toHaveBeenCalledTimes(1);
+    expect(bootMocks.lifecycles[2]?.dispose).not.toHaveBeenCalled();
 
     replacement.dispose();
   });
@@ -208,4 +211,19 @@ describe('createEnvAppConnectionRuntime', () => {
     expect(bootMocks.createArtifactDirectConnectionConfig).not.toHaveBeenCalled();
     lease.dispose();
   });
+});
+
+it('routes requests through the current lifecycle and ignores stale lease disposal', async () => {
+  const runtime = createEnvAppConnectionRuntime({
+    local: { kind: 'public_http', origin: 'http://localhost:3210', source: () => ({ acquire: vi.fn() }) as never },
+    remoteSource: () => ({ acquire: vi.fn() }) as never, proxyBootstrap: () => ({}),
+  });
+  const first = await runtime.createConfig('local');
+  const second = await runtime.createConfig('local');
+  first.dispose();
+  expect(await (await fetchSessionHTTP('/api')).text()).toBe('session');
+  expect(await readSessionEvents('/events').next()).toMatchObject({ value: { data: 'session' } });
+  second.config.lifecycle?.dispose();
+  await expect(fetchSessionHTTP('/api')).rejects.toThrow('unavailable');
+  await expect(readSessionEvents('/events').next()).rejects.toThrow('unavailable');
 });

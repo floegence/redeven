@@ -562,6 +562,17 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	localRoute, localUI := localUIRouteFromRequest(r)
 	originRole := originRoleFromRequest(r)
+	if !localUI && originRole == originRoleUnknown && g.resolveSessionMeta != nil {
+		// Only the trusted internal hop may bind a local Env session. Public Local
+		// UI routes strip this header before forwarding browser requests.
+		channelID := strings.TrimSpace(r.Header.Get(sessionhop.HeaderChannelID))
+		if channelID != "" {
+			meta, ok := g.resolveSessionMeta(channelID)
+			if ok && meta != nil && meta.EndpointID == localEnvPublicID && meta.CodeSpaceID == "env-ui" && meta.FloeApp == localFloeAppAgent {
+				originRole = originRoleEnv
+			}
+		}
+	}
 	if localUI {
 		switch localRoute.kind {
 		case localUIRouteEnv:
@@ -922,7 +933,7 @@ func (g *Server) pluginManagementChannelID(r *http.Request) (string, bool) {
 		channelID := strings.TrimSpace(meta.ChannelID)
 		return channelID, channelID != ""
 	}
-	channelID, err := channelIDFromEnvOriginRequest(r)
+	channelID, err := channelIDFromRequest(r)
 	if err != nil {
 		return "", false
 	}

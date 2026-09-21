@@ -206,5 +206,5 @@ does not grant permissions or enable runtime access.
 - `redeven:internal/codeapp/appserver/server.go` - Separates read-only catalog GET and explicit refresh POST behind Env App authorization.
 - `redeven:internal/codeapp/appserver/plugin_market_events.go` - Projects bounded process-local refresh state over authenticated SSE.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current official discovery from the validated snapshot.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Separates cached reads, explicit refresh, and SSE parsing while preserving installed inventory.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Separates cached reads, explicit refresh, and session event mapping while preserving installed inventory.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Subscribes per authenticated plugin owner and deduplicates inventory refreshes by generation.

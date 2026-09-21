@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -83,6 +84,7 @@ describe('diagnosticsApi', () => {
     ));
     vi.stubGlobal('fetch', fetchMock);
 
+    const release = await bindTestSessionHTTP(fetchMock);
     const mod = await import('./diagnosticsApi');
     const events: any[] = [];
     await mod.connectDiagnosticsStream({
@@ -90,6 +92,7 @@ describe('diagnosticsApi', () => {
       onEvent: (event) => events.push(event),
     });
 
+    release();
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       key: 'evt-1',

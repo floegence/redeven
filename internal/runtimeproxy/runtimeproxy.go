@@ -4,12 +4,20 @@ import (
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
+	"github.com/floegence/redevplugin/v3/pkg/externalsource"
 )
 
 const (
 	PresetID        = "redeven-runtime"
 	MaxWSFrameBytes = 32 * 1024 * 1024
+	// EnvAppMaxBodyBytes preserves the published plugin package upload contract.
+	EnvAppMaxBodyBytes = externalsource.MaxArtifactBytes
 )
+
+// EnvAppRequestHeaders is shared by the issuer scope and the session server.
+func EnvAppRequestHeaders() []string {
+	return []string{"X-ReDevPlugin-CSRF", "X-ReDevPlugin-Expected-Management-Revision"}
+}
 
 // Options is the Redeven-owned policy subset applied to Flowersec's public
 // carrier-neutral ProxyServer.

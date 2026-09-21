@@ -22,6 +22,7 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/v5/controlplane"
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
+	"github.com/floegence/redeven/internal/runtimeproxy"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -906,10 +907,10 @@ func (store *localAuthorizationStore) bindingByQuery(predicate string, arg strin
 	defer store.mu.Unlock()
 	var ciphertext []byte
 	var keyVersion int
-	var lookup, accessSessionID, state, storedChannel, leaseID string
+	var lookup, accessSessionID, state, storedChannel, leaseID, externalOrigin string
 	var generation, expiresAt int64
-	query := `SELECT lookup_key, record_ciphertext, key_version, channel_id, access_session_id, generation, expires_at_unix_s, state, lease_id FROM local_authorization_records WHERE ` + predicate
-	if err := store.db.QueryRow(query, arg).Scan(&lookup, &ciphertext, &keyVersion, &storedChannel, &accessSessionID, &generation, &expiresAt, &state, &leaseID); err != nil || state != "leased" || generation != store.generation {
+	query := `SELECT lookup_key, record_ciphertext, key_version, channel_id, access_session_id, generation, expires_at_unix_s, state, lease_id, (SELECT app_origin FROM local_browser_spends WHERE local_browser_spends.lookup_key = local_authorization_records.lookup_key) FROM local_authorization_records WHERE ` + predicate
+	if err := store.db.QueryRow(query, arg).Scan(&lookup, &ciphertext, &keyVersion, &storedChannel, &accessSessionID, &generation, &expiresAt, &state, &leaseID, &externalOrigin); err != nil || state != "leased" || generation != store.generation {
 		return pendingDirect{}, "", false
 	}
 	plain, err := store.decrypt(lookup, generation, storedChannel, accessSessionID, expiresAt, keyVersion, ciphertext)
@@ -930,7 +931,7 @@ func (store *localAuthorizationStore) bindingByQuery(predicate string, arg strin
 	}
 	var hash [sha256.Size]byte
 	copy(hash[:], hashBytes)
-	return pendingDirect{pluginCredentialHash: hash, accessSessionID: secret.Binding.AccessSessionID, initExpireAtUnixS: secret.Binding.InitExpireAtUnixS, meta: secret.Binding.Meta, traceID: secret.Binding.TraceID, connectArtifactIssuedAtMs: secret.Binding.ConnectArtifactIssuedAtMs}, storedChannel, true
+	return pendingDirect{externalOrigin: externalOrigin, pluginCredentialHash: hash, accessSessionID: secret.Binding.AccessSessionID, initExpireAtUnixS: secret.Binding.InitExpireAtUnixS, meta: secret.Binding.Meta, traceID: secret.Binding.TraceID, connectArtifactIssuedAtMs: secret.Binding.ConnectArtifactIssuedAtMs}, storedChannel, true
 }
 
 func (store *localAuthorizationStore) spend(request localSpendRequest) error {
@@ -1698,7 +1699,8 @@ func localProjectionJSON() string {
 }
 
 func localProxyRuntimePayloadJSON() string {
-	return `{"appBasePath":"/_redeven_proxy/env/","mode":"service_worker","serviceWorker":{"scope":"/_redeven_proxy/env/","scriptUrl":"/_redeven_proxy/env/_redeven_sw.js"},"version":2}`
+	headers, _ := json.Marshal(runtimeproxy.EnvAppRequestHeaders())
+	return fmt.Sprintf(`{"appBasePath":"/_redeven_proxy/env/","http":{"additionalPathPrefixes":["/_redeven_proxy/api/","/_redevplugin/api/plugins"],"extraRequestHeaders":%s},"limits":{"maxBodyBytes":%d},"mode":"service_worker","serviceWorker":{"scope":"/_redeven_proxy/env/","scriptUrl":"/_redeven_proxy/env/_redeven_sw.js"},"version":2}`, headers, runtimeproxy.EnvAppMaxBodyBytes)
 }
 
 func localTargetBindingJSON() []byte {

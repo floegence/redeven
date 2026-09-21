@@ -263,3 +263,41 @@ func TestServer_E2E_ProjectsAuthorizedExternalOriginWhenCarrierOmitsBrowserHeade
 		t.Fatalf("upstream channel_id = %q, want %q", got.ChannelID, meta.ChannelID)
 	}
 }
+
+func TestServer_CloseCancelsActiveEventStream(t *testing.T) {
+	canceled := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, ": ready\n\n")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+		close(canceled)
+	}))
+	defer upstream.Close()
+	srv, err := New(Options{Upstream: upstream.URL, Meta: session.Meta{ChannelID: "event-session"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := srv.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.Get(srv.URL() + "/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	closed := make(chan struct{})
+	go func() { _ = srv.Close(); close(closed) }()
+	cancel()
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("session close did not cancel the event observer")
+	}
+	<-closed
+	if srv.URL() != "" {
+		t.Fatal("closed proxy retained its URL")
+	}
+}

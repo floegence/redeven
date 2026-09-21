@@ -38,24 +38,13 @@ protect endpoint reads, so overlapping shutdown cannot dereference cleared
 servers or advertise a retired control listener. This uses bounded in-process
 locks and does not introduce durable lifecycle state.
 
-## Background event stream scheduling
+## Session event observation
 
-Published Floe Webapp Boot owns browser SSE request initialization. Its
-`createServerSentEventRequestInit` defaults persistent streams to low fetch
-priority, preserves explicit priorities and request options, and does not mutate
-caller input. Its `fetchServerSentEvents` reader applies the same policy. Redeven
-uses these released APIs for Notes, Workbench layout, plugin market, diagnostics,
-container and managed-service operation streams, and Flower in Env App and
-Desktop Welcome. Product adapters retain authentication, cursors, cancellation,
-event parsing, and existing reconnect ownership. Env App adapters load Boot
-lazily to preserve the initial bundle boundary.
-
-Under Chromium's 3G network-quality classification, three default-priority
-persistent requests can hold the scheduler budget and prevent native media from
-reaching the file endpoint. Background streams must leave that budget available
-while continuing to deliver events. This contract does not change HTTP connection
-limits, file permissions, or media decoding. Video and audio use native elements
-and the authorized file resource endpoint with Range support.
+All built-in Env App event subscriptions use the current authenticated Flowersec
+session's HTTP proxy. Handler output and product permissions remain unchanged.
+[Env App session event transport](env-event-transport.md) owns transport, parser,
+resource, cancellation, and recovery boundaries. Short bootstrap requests and
+native file/media requests stay independent of session acquisition.
 
 # Boundaries
 

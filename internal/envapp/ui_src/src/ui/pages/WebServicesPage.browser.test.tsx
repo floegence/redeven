@@ -1,3 +1,4 @@
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 import '../../index.css';
 import { render } from 'solid-js/web';
 import { FloeConfigProvider, builtInShellThemePresets, ThemeProvider, useTheme } from '@floegence/floe-webapp-core';
@@ -364,3 +365,9 @@ describe('Web Services product interaction', () => {
     expect((await page.screenshot({ element: host, save: false })).length).toBeGreaterThan(1_000);
   });
 });
+
+let releaseTestTransport: (() => void) | undefined;
+beforeEach(async () => {
+  releaseTestTransport = await bindTestSessionHTTP(api.stream);
+});
+afterEach(() => releaseTestTransport?.());

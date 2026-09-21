@@ -22,11 +22,11 @@ import (
 
 const (
 	flowersecGoModule       = "github.com/floegence/flowersec/flowersec-go/v5"
-	flowersecGoVersion      = "v5.2.2"
+	flowersecGoVersion      = "v5.3.1"
 	flowersecCorePackage    = "@floegence/flowersec-core"
-	flowersecCoreVersion    = "5.2.3"
+	flowersecCoreVersion    = "5.3.1"
 	flowersecCodeAppVersion = "5.2.2"
-	floeWebappVersion       = "0.59.0"
+	floeWebappVersion       = "0.63.0"
 )
 
 var flowersecNPMPackages = []string{
@@ -331,7 +331,8 @@ func TestFlowersecTransportPoliciesAreExplicit(t *testing.T) {
 		"boot.createHTTPDirectConnectionConfig({",
 		"boot.createProxyBootstrapOwner(",
 		"boot.createProxyRuntimeTunnelConnectionConfig({",
-		"config.lifecycle?.dispose()",
+		"bindSessionHTTP(config.lifecycle)",
+		"config.lifecycle.dispose()",
 	} {
 		if !strings.Contains(connectionRuntimeSource, marker) {
 			t.Fatalf("connectionRuntime.ts must contain explicit browser transport lifecycle %q", marker)
@@ -416,21 +417,21 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"\"@floegence/floe-webapp-core\": \"" + floeWebappVersion + "\"",
 			"\"@floegence/floe-webapp-protocol\": \"" + floeWebappVersion + "\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.19.2\"",
-			"\"@floegence/flowersec-core\": \"5.2.3\"",
+			"\"@floegence/flowersec-core\": \"5.3.1\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
 			"floe-webapp-boot-" + floeWebappVersion + ".tgz",
 			"floe-webapp-core-" + floeWebappVersion + ".tgz",
 			"floe-webapp-protocol-" + floeWebappVersion + ".tgz",
 			"floeterm-terminal-web-0.19.2.tgz",
-			"flowersec-core-5.2.3.tgz",
+			"flowersec-core-5.3.1.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
 			"@floegence/floe-webapp-boot@" + floeWebappVersion,
 			"@floegence/floe-webapp-core@" + floeWebappVersion,
 			"@floegence/floe-webapp-protocol@" + floeWebappVersion,
 			"@floegence/floeterm-terminal-web@0.19.2",
-			"@floegence/flowersec-core@5.2.3",
+			"@floegence/flowersec-core@5.3.1",
 		},
 		"internal/codeapp/ui_src/package.json": {
 			"\"@floegence/flowersec-core\": \"5.2.2\"",
@@ -449,14 +450,14 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		},
 		"okf/architecture/runtime-transport-dependencies.md": {
 			"terminal-go v0.19.2",
-			"Flowersec Go v5.2.2",
-			"Env App and Desktop consume Flowersec TypeScript v5.2.3",
+			"Flowersec Go v5.3.1",
+			"Env App and Desktop consume Flowersec TypeScript v5.3.1",
 		},
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.19.2",
 			"semantic Presentation",
 			"Floe Webapp Boot, Core, and Protocol v" + floeWebappVersion,
-			"Flowersec Core v5.2.3",
+			"Flowersec Core v5.3.1",
 		},
 	}
 	for file, expectedMarkers := range expectedPackages {
@@ -662,7 +663,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"Published Floret v7.18.0",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
-			"published Flowersec Go v5.2.2, Core v5.2.3 for Env App and Desktop, and Floe Webapp v" + floeWebappVersion,
+			"published Flowersec Go v5.3.1, Core v5.3.1 for Env App and Desktop, and Floe Webapp v" + floeWebappVersion,
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",

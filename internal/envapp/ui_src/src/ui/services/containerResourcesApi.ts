@@ -1,3 +1,4 @@
+import { readSessionEvents } from './sessionHTTP';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { fetchLocalApi, fetchLocalApiJSON } from './localApi';
 
@@ -426,30 +427,9 @@ async function subscribeContainerSSE<T>(
 	onEvent: (event: T) => void,
 	signal: AbortSignal,
 ): Promise<void> {
-	const { createServerSentEventRequestInit } = await import('@floegence/floe-webapp-boot');
-	const response = await fetchLocalApi(url, createServerSentEventRequestInit({ method: 'GET', headers: { Accept: 'text/event-stream' }, signal }));
-	if (!response.ok || !response.body) throw new Error('The container stream is unavailable.');
-	const reader = response.body.getReader();
-	const decoder = new TextDecoder();
-	let buffer = '';
-	try {
-		for (;;) {
-			const result = await reader.read();
-			if (result.done) break;
-			buffer += decoder.decode(result.value, { stream: true });
-			const events = buffer.split(/\r?\n\r?\n/u);
-			buffer = events.pop() ?? '';
-			for (const event of events) {
-				const lines = event.split(/\r?\n/u);
-				const kind = lines.find((line) => line.startsWith('event:'))?.slice(6).trim();
-				if (kind !== eventType) continue;
-				const data = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
-				if (data) onEvent(JSON.parse(data) as T);
-			}
-		}
-	} finally {
-		await reader.cancel().catch(() => undefined);
-	}
+  for await (const frame of readSessionEvents(url, { method: 'GET', signal })) {
+    if (frame.event === eventType && frame.data) onEvent(JSON.parse(frame.data) as T);
+  }
 }
 
 export function subscribeContainerLogs(
@@ -588,40 +568,19 @@ export async function subscribeContainerOperation(
   onEvent: (operation: ContainerOperation) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const { createServerSentEventRequestInit } = await import('@floegence/floe-webapp-boot');
-  const response = await fetchLocalApi(
+  for await (const frame of readSessionEvents(
     `/_redeven_proxy/api/container-resource-operations/${encodeURIComponent(operationID)}/events`,
-    createServerSentEventRequestInit({ method: 'GET', headers: { Accept: 'text/event-stream' }, signal }),
-  );
-  if (!response.ok || !response.body) throw new Error('Container operation stream is unavailable.');
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  try {
-    for (;;) {
-      const result = await reader.read();
-      if (result.done) break;
-      buffer += decoder.decode(result.value, { stream: true });
-      const events = buffer.split(/\r?\n\r?\n/u);
-      buffer = events.pop() ?? '';
-      for (const event of events) {
-        const data = event.split(/\r?\n/u)
-          .filter((line) => line.startsWith('data:'))
-          .map((line) => line.slice(5).trim())
-          .join('\n');
-        if (!data) continue;
-        const parsed = JSON.parse(data) as { operation_id?: string };
-        if (!parsed.operation_id) continue;
-        const latest = await fetchLocalApiJSON<ContainerOperation>(
-          `/_redeven_proxy/api/container-resource-operations/${encodeURIComponent(operationID)}`,
-          { method: 'GET', signal },
-        );
-        onEvent(latest);
-        if (['succeeded', 'failed', 'canceled', 'interrupted'].includes(latest.state)) return;
-      }
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined);
+    { method: 'GET', signal },
+  )) {
+    if (!frame.data) continue;
+    const parsed = JSON.parse(frame.data) as { operation_id?: string };
+    if (!parsed.operation_id) continue;
+    const latest = await fetchLocalApiJSON<ContainerOperation>(
+      `/_redeven_proxy/api/container-resource-operations/${encodeURIComponent(operationID)}`,
+      { method: 'GET', signal },
+    );
+    onEvent(latest);
+    if (['succeeded', 'failed', 'canceled', 'interrupted'].includes(latest.state)) return;
   }
 }
 

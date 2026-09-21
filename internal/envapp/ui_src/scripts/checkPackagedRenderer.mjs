@@ -51,6 +51,8 @@ const builtDistProxyRuntimeProjection = JSON.stringify({
   critical: true,
   payload: {
     appBasePath: entryPath,
+    http: { additionalPathPrefixes: ['/_redeven_proxy/api/', '/_redevplugin/api/plugins'], extraRequestHeaders: ['X-ReDevPlugin-CSRF', 'X-ReDevPlugin-Expected-Management-Revision'] },
+    limits: { maxBodyBytes: 256 * 1024 * 1024 },
     mode: 'service_worker',
     serviceWorker: {
       scope: entryPath,
@@ -117,7 +119,7 @@ async function createBuiltDistTLS() {
   };
 }
 
-async function startFlowersecSmokePeer({ tls, allowedOrigin, onEvent, gitReady = false }) {
+async function startFlowersecSmokePeer({ tls, allowedOrigin, httpUpstream, onEvent, gitReady = false }) {
   if (!tls?.certificatePath || !tls?.privateKeyPath) {
     throw new Error('Flowersec smoke peer requires an explicit TLS identity');
   }
@@ -126,6 +128,7 @@ async function startFlowersecSmokePeer({ tls, allowedOrigin, onEvent, gitReady =
     '--certificate', tls.certificatePath,
     '--private-key', tls.privateKeyPath,
     '--allowed-origin', allowedOrigin,
+    ...(httpUpstream ? ['--http-upstream', httpUpstream] : []),
     ...(gitReady ? ['--visual-git'] : []),
   ], {
     cwd: flowersecSmokePeerDir,
@@ -258,15 +261,6 @@ async function readJSONRequest(request) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-function browserRequestPayload(request) {
-  const data = request.postData();
-  if (data == null) return null;
-  try {
-    return request.postDataJSON();
-  } catch {
-    return data;
-  }
-}
 
 function builtPluginMarketSnapshot() {
   return {
@@ -425,11 +419,18 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   let directArtifactJSON = '';
   let directArtifactExpiresAt = '';
   let flowersecPeer = null;
+  let proxyUpstream = null;
   const lifecycleEvents = [];
   const artifactSpendRequests = [];
+  const pluginRequests = [];
+  let recovered;
+  const runtimeRecovery = new Promise((resolve) => { recovered = resolve; });
   const requestHandler = async (request, response) => {
     try {
       const requestURL = new URL(request.url ?? '/', baseURL || 'http://127.0.0.1');
+      const pluginRequest = requestURL.pathname.startsWith('/_redevplugin/api/plugins');
+      const pluginPayload = pluginRequest && request.method === 'POST' ? await readJSONRequest(request) : null;
+      if (pluginRequest) pluginRequests.push({ method: request.method, path: requestURL.pathname, payload: pluginPayload });
       if (requestURL.pathname === '/api/local/access/status') {
         jsonResponse(response, { password_required: !accessReady, unlocked: accessReady });
         return;
@@ -586,7 +587,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         return;
       }
       if (requestURL.pathname === '/_redevplugin/api/plugins/permissions/query') {
-        const body = await readJSONRequest(request);
+        const body = pluginPayload;
         const expected = { active_only: true };
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
           throw new Error(`unexpected active permissions request: ${JSON.stringify({ expected, actual: body })}`);
@@ -605,7 +606,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         return;
       }
       if (requestURL.pathname === '/_redevplugin/api/plugins/security-policies/query') {
-        const body = await readJSONRequest(request);
+        const body = pluginPayload;
         if (JSON.stringify(body) !== '{}') {
           throw new Error(`unexpected security policies request: ${JSON.stringify(body)}`);
         }
@@ -613,7 +614,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         return;
       }
       if (requestURL.pathname === '/_redevplugin/api/plugins/permissions/requirements/query') {
-        const body = await readJSONRequest(request);
+        const body = pluginPayload;
         const expected = { plugin_instance_id: builtPluginInstanceID };
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
           throw new Error(`unexpected permission requirements request: ${JSON.stringify({ expected, actual: body })}`);
@@ -633,15 +634,16 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       }
       if (requestURL.pathname === '/_redevplugin/api/plugins/runtime/recover-enabled') {
         lifecycleEvents.push('recover_enabled');
-        const body = await readJSONRequest(request);
+        const body = pluginPayload;
         if (JSON.stringify(body) !== '{}') {
           throw new Error(`unexpected plugin recovery request: ${JSON.stringify(body)}`);
         }
         jsonResponse(response, { ok: true, data: { revision: 1, complete: true, results: [] } });
+        recovered();
         return;
       }
       if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/executions/query') {
-        const body = await readJSONRequest(request);
+        const body = pluginPayload;
         const expected = { limit: 500, operation_scope: 'release_install' };
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
           throw new Error(`unexpected plugin executions request: ${JSON.stringify({ expected, actual: body })}`);
@@ -650,7 +652,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         return;
       }
       if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/executions/release-installs') {
-        const body = await readJSONRequest(request);
+        const body = pluginPayload;
         const expected = {
           request_id: body.request_id,
           plugin_instance_id: builtPluginInstanceID,
@@ -679,7 +681,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       }
       if (pluginInstallFlow
         && requestURL.pathname === '/_redevplugin/api/plugins/executions/release_install_built_renderer/events/query') {
-        const body = await readJSONRequest(request);
+        const body = pluginPayload;
         const expected = { after_cursor: 0, limit: 1_000 };
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
           throw new Error(`unexpected plugin execution events request: ${JSON.stringify({ expected, actual: body })}`);
@@ -701,7 +703,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       }
       if (pluginInstallFlow
         && requestURL.pathname === '/_redevplugin/api/plugins/executions/release_install_built_renderer/query') {
-        const body = await readJSONRequest(request);
+        const body = pluginPayload;
         if (JSON.stringify(body) !== '{}') {
           throw new Error(`unexpected plugin execution query: ${JSON.stringify(body)}`);
         }
@@ -767,7 +769,14 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   if (!address || typeof address === 'string') throw new Error('built Env App dist server did not bind a TCP port');
   baseURL = `${accessReady ? 'https' : 'http'}://127.0.0.1:${address.port}/`;
   if (accessReady) {
+    // The browser and session proxy exercise the same fixture handlers.
+    proxyUpstream = createHTTPServer(requestHandler);
+    await new Promise((resolve, reject) => {
+      proxyUpstream.once('error', reject);
+      proxyUpstream.listen(0, '127.0.0.1', resolve);
+    });
     flowersecPeer = await flowersecPeerFactory({
+      httpUpstream: `http://127.0.0.1:${proxyUpstream.address().port}`,
       tls,
       gitReady,
       allowedOrigin: new URL(baseURL).origin,
@@ -780,8 +789,14 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   return {
     baseURL,
     artifactSpendRequests: () => [...artifactSpendRequests],
+    pluginRequests,
+    runtimeRecovery,
     close: async () => {
       await flowersecPeer?.close();
+      if (proxyUpstream) {
+        proxyUpstream.closeAllConnections();
+        await new Promise((resolve, reject) => proxyUpstream.close((error) => (error ? reject(error) : resolve())));
+      }
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     },
     lifecycleEvents: () => [...lifecycleEvents],
@@ -1003,7 +1018,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
   });
   await trustBuiltDistWebTransport(page, tls);
-  const pluginRequests = [];
+  const pluginRequests = server.pluginRequests;
   const pageErrors = [];
   const consoleMessages = [];
   const webSockets = [];
@@ -1016,27 +1031,22 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     socket.on('close', () => trace.events.push('closed'));
   });
   page.on('request', (request) => {
-    const requestPath = new URL(request.url()).pathname;
-    if (requestPath.startsWith('/_redevplugin/api/plugins')) {
-      pluginRequests.push({
-        method: request.method(),
-        path: requestPath,
-        payload: browserRequestPayload(request),
-      });
+    if (new URL(request.url()).pathname.startsWith('/_redevplugin/api/plugins')) {
+      pageErrors.push('Plugin request bypassed the current session');
     }
   });
 
   try {
     const entryURL = new URL(entryPath.slice(1), server.baseURL).toString();
-    const runtimeRecoveryResponse = page.waitForResponse((response) => {
-      const request = response.request();
-      return request.method() === 'POST'
-        && new URL(request.url()).pathname === '/_redevplugin/api/plugins/runtime/recover-enabled';
-    }, { timeout: 30_000 });
     await page.goto(entryURL, { waitUntil: 'load', timeout: 30_000 });
     await page.locator('#root > *').first().waitFor({ state: 'visible', timeout: 10_000 });
     try {
-      await runtimeRecoveryResponse;
+      let timeout;
+      try {
+        await Promise.race([server.runtimeRecovery, new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(new Error('Session plugin recovery timed out')), 30_000);
+        })]);
+      } finally { clearTimeout(timeout); }
     } catch (error) {
       throw new Error(`built plugin runtime recovery did not complete: ${JSON.stringify({
         bodyText: (await page.locator('body').innerText()).slice(0, 2_000),

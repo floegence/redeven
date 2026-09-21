@@ -8,7 +8,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { withFlowerWebSearchAvailability } from '../../../../../flower_ui/src/webSearchCapability';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
-import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
+import { readSessionEvents } from '../services/sessionHTTP';
 import {
   fetchLocalApiJSON,
   fetchLocalApiJSONResponse,
@@ -748,29 +748,10 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<unknown> {
         // Workspace SSE owns observation for every thread. Selection and
         // recovery are client cache concerns; never send replay cursors.
-        const params = new URLSearchParams();
-        const streamController = new AbortController();
-        const abort = () => streamController.abort(input.signal.reason);
-        input.signal.addEventListener('abort', abort, { once: true });
-        let activityTimer: ReturnType<typeof setTimeout> | undefined;
-        const resetActivityTimer = () => {
-          if (activityTimer !== undefined) clearTimeout(activityTimer);
-          activityTimer = setTimeout(() => streamController.abort('Flower live stream timed out.'), 45_000);
-        };
-        try {
-          resetActivityTimer();
-          const init = await prepareLocalApiRequestInit({ method: 'GET', signal: streamController.signal });
-          for await (const frame of fetchServerSentEvents(`/_redeven_proxy/api/ai/flower/stream?${params.toString()}`, {
-            ...init,
-            signal: streamController.signal,
-            onActivity: resetActivityTimer,
-          })) {
-            yield JSON.parse(frame.data) as unknown;
-          }
-        } finally {
-          input.signal.removeEventListener('abort', abort);
-          if (activityTimer !== undefined) clearTimeout(activityTimer);
-          streamController.abort();
+        for await (const frame of readSessionEvents('/_redeven_proxy/api/ai/flower/stream', {
+          method: 'GET', signal: input.signal,
+        })) {
+          yield JSON.parse(frame.data) as unknown;
         }
       },
       loadSubagentDetail: (parentThreadID, childThreadID) => fetchLocalApiJSON(

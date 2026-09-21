@@ -43,3 +43,16 @@ describe('LiveTransport', () => {
     vi.useRealTimers();
   });
 });
+
+it.each([401, 403, 423])('terminates observation after authorization status %s without retry', async (status) => {
+  vi.useFakeTimers();
+  const failure = Object.assign(new Error('not authorized'), { code: 'unexpected_status', status });
+  const connect = vi.fn(() => ({ [Symbol.asyncIterator]: () => ({ next: async () => { throw failure; } }) }));
+  const onTerminalError = vi.fn();
+  const stop = createLiveTransport().start({ connect, onCurrent: vi.fn(), onTerminalError });
+  try {
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(connect).toHaveBeenCalledOnce();
+    expect(onTerminalError).toHaveBeenCalledExactlyOnceWith(failure);
+  } finally { stop(); vi.useRealTimers(); }
+});

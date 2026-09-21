@@ -323,11 +323,17 @@ vi.mock('@floegence/floe-webapp-core/icons', async () => {
   };
 });
 
-vi.mock('@floegence/floe-webapp-boot', () => ({
-  createArtifactDirectConnectionConfig: (config: unknown) => config,
-  createPrivateLoopbackDirectConnectionConfig: (config: unknown) => config,
-  createProxyRuntimeTunnelConnectionConfig: (config: unknown) => config,
-}));
+vi.mock('@floegence/floe-webapp-boot', () => {
+  const createConfig = (config: object) => ({
+    ...config,
+    lifecycle: { synchronize: vi.fn(), dispose: vi.fn(), fetch: vi.fn(), events: vi.fn() },
+  });
+  return {
+    createArtifactDirectConnectionConfig: createConfig,
+    createPrivateLoopbackDirectConnectionConfig: createConfig,
+    createProxyRuntimeTunnelConnectionConfig: createConfig,
+  };
+});
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
   useProtocol: () => ({

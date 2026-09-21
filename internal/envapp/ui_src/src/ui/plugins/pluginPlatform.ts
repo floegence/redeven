@@ -1,3 +1,4 @@
+import { fetchSessionHTTP } from '../services/sessionHTTP';
 import {
   PluginPlatformClient,
   PluginSurfaceSlot,
@@ -12,9 +13,6 @@ import {
   type PluginSurfaceInteractionEvent,
 } from '@floegence/redevplugin-ui';
 import { PluginLocalImportClient } from '@floegence/redevplugin-ui/local-import';
-
-import { prepareLocalApiRequestInit } from '../services/localApi';
-import { applyPluginSessionCredential } from '../services/pluginSessionCredential';
 
 export const redevPluginCSRFHeader = 'X-ReDevPlugin-CSRF';
 export const redevPluginCSRFProof = 'redeven-env-v1';
@@ -319,18 +317,5 @@ export async function fetchAuthenticatedReDevPlugin(
     }
     const headers = new Headers(init.headers);
     headers.set(redevPluginCSRFHeader, redevPluginCSRFProof);
-    applyPluginSessionCredential(headers);
-    const prepared = await prepareLocalApiRequestInit({
-      method: init.method,
-      headers,
-      body: init.body,
-      credentials: init.credentials,
-      signal: init.signal,
-      keepalive: init.keepalive,
-      cache: init.cache,
-    });
-    return fetch(input, {
-      ...prepared,
-      cache: init.cache ?? prepared.cache,
-    });
+    return fetchSessionHTTP(input, { ...init, headers });
 }

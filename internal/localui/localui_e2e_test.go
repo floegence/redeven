@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -136,6 +137,26 @@ func TestServer_E2E_HTTPSLocalhostConnectsDirectSessionOverWSS(t *testing.T) {
 	}
 	if _, ok := listResponse["entries"]; !ok {
 		t.Fatalf("filesystem list response is missing entries: %#v", listResponse)
+	}
+
+	// The real TLS session admits 16 persistent observers while preserving
+	// ordinary HTTP and RPC capacity. The next observer fails without queuing.
+	for range 16 {
+		response := localSessionProxyRequest(t, connectCtx, current, "/_redeven_proxy/api/notes/events", true)
+		if response.Status != http.StatusOK {
+			t.Fatalf("event response = %+v", response)
+		}
+	}
+	excess := localSessionProxyRequest(t, connectCtx, current, "/_redeven_proxy/api/notes/events", true)
+	if excess.OK || excess.Error.Code != "resource_exhausted" {
+		t.Fatalf("excess observer = %+v", excess)
+	}
+	ordinary := localSessionProxyRequest(t, connectCtx, current, "/_redeven_proxy/api/spaces", false)
+	if ordinary.Status != http.StatusOK {
+		t.Fatalf("reserved ordinary response = %+v", ordinary)
+	}
+	if _, err := current.ProbeLiveness(connectCtx); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1263,4 +1284,53 @@ func TestServer_E2E_CodespaceBrowserBootstrapFromResumeToken(t *testing.T) {
 	if assetResp.StatusCode != http.StatusOK {
 		t.Fatalf("asset status = %d, want %d", assetResp.StatusCode, http.StatusOK)
 	}
+}
+
+// This test-only wire fixture exercises the released proxy handler through the
+// authenticated production session. No product code implements proxy framing.
+type localProxyResponse struct {
+	OK     bool `json:"ok"`
+	Status int  `json:"status"`
+	Error  struct {
+		Code string `json:"code"`
+	} `json:"error"`
+}
+
+func localSessionProxyRequest(t *testing.T, ctx context.Context, current flowersec.Session, path string, events bool) localProxyResponse {
+	t.Helper()
+	stream, err := current.OpenStream(ctx, "flowersec-proxy/http1", flowersec.EmptyStreamMetadata())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := context.AfterFunc(ctx, func() { _ = stream.Reset() })
+	t.Cleanup(func() { stop(); _ = stream.Reset() })
+	accept := "application/json"
+	if events {
+		accept = "text/event-stream"
+	}
+	meta, err := json.Marshal(map[string]any{"v": 1, "request_id": "session-probe", "method": "GET", "path": path, "headers": []map[string]string{{"name": "accept", "value": accept}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var prefix [4]byte
+	binary.BigEndian.PutUint32(prefix[:], uint32(len(meta)))
+	if _, err := stream.Write(append(append(prefix[:], meta...), 0, 0, 0, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadFull(stream, prefix[:]); err != nil {
+		t.Fatal(err)
+	}
+	length := binary.BigEndian.Uint32(prefix[:])
+	if length == 0 || length > 64*1024 {
+		t.Fatalf("invalid response frame length %d", length)
+	}
+	frame := make([]byte, int(length))
+	if _, err := io.ReadFull(stream, frame); err != nil {
+		t.Fatal(err)
+	}
+	var response localProxyResponse
+	if err := json.Unmarshal(frame, &response); err != nil {
+		t.Fatal(err)
+	}
+	return response
 }

@@ -1,3 +1,4 @@
+import { isSessionEventAuthorizationError } from '../services/sessionHTTP';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import {
@@ -1530,7 +1531,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
           if (signal.aborted) return;
           connectedOnce = true;
         } catch (error) {
-          if (signal.aborted) return;
+          if (signal.aborted || isSessionEventAuthorizationError(error)) return;
           if (connectedOnce || runtimeLayoutReady()) {
             console.warn('Workbench layout event stream disconnected:', error);
           }
