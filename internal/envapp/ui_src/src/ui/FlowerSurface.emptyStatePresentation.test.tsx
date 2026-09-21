@@ -160,7 +160,7 @@ describe('Flower empty-state presentation', () => {
     expect(emptyState.dataset.flowerEmptySuggestions).toBe('visible');
     expect(suggestionButtons).toHaveLength(4);
     expect(Array.from(suggestionButtons, (button) => button.querySelector('.font-medium')?.textContent)).toEqual([
-      'Map this project', 'Review local changes', 'Fix a failing test', 'Analyze disk usage',
+      'Explore this folder', 'Understand this computer', 'Discover available apps', 'Organize this folder',
     ]);
 
     const composer = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -172,9 +172,9 @@ describe('Flower empty-state presentation', () => {
       await waitFor(() => document.activeElement === composer);
       expect(composer.selectionStart).toBe(composer.value.length);
       expect(composer.selectionEnd).toBe(composer.value.length);
-      composer.value += '\nFocus on the current package.';
+      composer.value += '\nKeep the report concise.';
       composer.dispatchEvent(new Event('input', { bubbles: true }));
-      expect(composer.value).toContain('Focus on the current package.');
+      expect(composer.value).toContain('Keep the report concise.');
       expect(surfaceAdapter.launchTurn).not.toHaveBeenCalled();
     }
   });
