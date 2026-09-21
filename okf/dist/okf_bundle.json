@@ -21738,7 +21738,7 @@
         "title": "Runtime settings",
         "type": "UI Contract"
       },
-      "body_length": 5736,
+      "body_length": 5775,
       "summary": "Env App owns the runtime settings destinations, localized copy, drafts, and API\nadapters. Published Floe settings components own reusable layout, navigation,\nsection hierarchy, and responsive setting rows. Every destination stays usable\non a narrow viewport and preserves its draft and scroll position when revisited.\nConfiguration writes use the existing authenticated runtime APIs; readers can\ninspect settings but cannot edit administrator fields. Failed operations retain\ntheir input and show an actionable error. Runtime maintenance remains delegated\nto the shared maintenance controller after explicit user confirmation.",
       "sections": [
         {
@@ -21759,8 +21759,8 @@
           "id": "skills-operations",
           "title": "Skills operations",
           "level": 1,
-          "body": "Skills load their catalog and source metadata on first entry through\n`/_redeven_proxy/api/ai/skills`. Search and scope filtering affect only the visible\ncatalog. Each row retains enablement, effective/shadowed/degraded status, source,\npath, browsing, reinstall, and delete actions. Catalog refresh and mutations are\nserialized within the page so an older refresh cannot replace a mutation result.\n\nGitHub installation requires validation of the current form. Changing any input\ninvalidates that validation. Create and import failures keep the form open;\ndelete and overwrite reinstall require confirmation. A source-metadata refresh\nfailure is reported separately from an already successful mutation. The runtime\ncontinues to enforce permissions and filesystem boundaries for every request.\n\nSkill browsing uses the existing tree and file endpoints, renders file content\nas text, and exposes encoding and truncation. Failed reads can retry the same\nrequest. Closing the dialog or selecting another skill invalidates pending reads\nso stale content cannot replace the new selection.",
-          "char_count": 1080
+          "body": "Skills load their catalog and source metadata on first entry once the runtime\nconnection is usable, through\n`/_redeven_proxy/api/ai/skills`. Search and scope filtering affect only the visible\ncatalog. Each row retains enablement, effective/shadowed/degraded status, source,\npath, browsing, reinstall, and delete actions. Catalog refresh and mutations are\nserialized within the page so an older refresh cannot replace a mutation result.\n\nGitHub installation requires validation of the current form. Changing any input\ninvalidates that validation. Create and import failures keep the form open;\ndelete and overwrite reinstall require confirmation. A source-metadata refresh\nfailure is reported separately from an already successful mutation. The runtime\ncontinues to enforce permissions and filesystem boundaries for every request.\n\nSkill browsing uses the existing tree and file endpoints, renders file content\nas text, and exposes encoding and truncation. Failed reads can retry the same\nrequest. Closing the dialog or selecting another skill invalidates pending reads\nso stale content cannot replace the new selection.",
+          "char_count": 1119
         }
       ],
       "snippet": "Env App owns the runtime settings destinations, localized copy, drafts, and API adapters. Published Floe settings components own reusable layout, navigation, section hierarchy, and responsive setting rows. Every destination stays usable",
@@ -23125,5 +23125,5 @@
       ]
     }
   ],
-  "source_sha256": "51ac45e0b44f7e2c8e8e1c259933a78d52fbd5fabde8333dc5c459e2b240c690"
+  "source_sha256": "0d5a5f4eb15e6f39ccce87bd82415f0dca98d6a995e824fec93b7603f669fba2"
 }
