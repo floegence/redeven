@@ -81,6 +81,57 @@ describe('environment card Cloud affiliation', () => {
     expect(buildEnvironmentCardFactsModel(remote).some(fact => fact.label === 'REDEVEN CLOUD')).toBe(false);
   });
 });
+
+describe('provider credential recovery actions', () => {
+  it('keeps restore and explicit disconnect available after credentials expire', () => {
+    const controlPlane = buildControlPlaneSummary({ providerOrigin: 'https://redeven.test' });
+    const runtimeService = providerRuntimeService({ state: 'openable' }, {
+      state: 'linked',
+      connection_state: 'authorization_required',
+      provider_origin: 'https://redeven.test',
+      provider_id: 'example_control_plane',
+      env_public_id: 'env_demo',
+      local_environment_public_id: 'le_demo',
+      binding_generation: 4,
+      last_error_code: 'CONTROL_CREDENTIALS_EXPIRED',
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://127.0.0.1:24001/',
+            effective_run_mode: 'desktop',
+            controlplane_base_url: 'https://dev.redeven.test',
+            controlplane_provider_id: 'example_control_plane',
+            env_public_id: 'env_demo',
+            runtime_control: {
+              protocol_version: 'redeven-runtime-control-v2',
+              base_url: 'http://127.0.0.1:25000/',
+              token: 'runtime-control-token',
+            },
+            runtime_service: runtimeService,
+          },
+        }),
+        provider_environments: [testProviderEnvironment('https://redeven.test', 'env_demo')],
+        control_planes: [controlPlane],
+      }),
+      controlPlanes: [controlPlane],
+      redevenCloudOriginPolicy: { allow_development: true },
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(runtimeService),
+      },
+    });
+    const local = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(local).toBeTruthy();
+    const actions = buildProviderBackedEnvironmentActionModel(local!).action_presentation.menu_actions;
+    expect(actions.map((item) => item.id)).toEqual(expect.arrayContaining([
+      'connect_provider_runtime',
+      'disconnect_provider_runtime',
+    ]));
+    expect(actions.find((item) => item.id === 'connect_provider_runtime')?.action.enabled).toBe(true);
+    expect(actions.find((item) => item.id === 'disconnect_provider_runtime')?.action.enabled).toBe(true);
+  });
+});
 import type { DesktopSavedRuntimeTarget } from '../main/desktopPreferences';
 
 // These card fixtures include a native local environment on every test host.

@@ -9423,9 +9423,6 @@ function desktopDiagnosticsStateDirForTarget(target: DesktopSessionTarget, start
 
 async function prepareDesktopSessionTransport(transport: DesktopSessionTransport): Promise<void> {
   if (transport.proxyPolicy !== 'direct') {
-    const credentialRecoveryTimer = setInterval(() => { void recoverAttachedProviderCredentials().catch(() => undefined); }, 5_000);
-    credentialRecoveryTimer.unref();
-    app.once('before-quit', () => clearInterval(credentialRecoveryTimer));
     installDesktopDiagnosticsHooks(session.defaultSession);
     return;
   }
@@ -18783,6 +18780,14 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     installDesktopDiagnosticsHooks(session.defaultSession);
+    // Keep attached provider links healthy for every Desktop session, including
+    // direct and local transports. The recovery coordinator coalesces wakeups
+    // and fences stale completions, so this timer is intentionally process-wide.
+    const credentialRecoveryTimer = setInterval(() => {
+      void recoverAttachedProviderCredentials().catch(() => undefined);
+    }, 5_000);
+    credentialRecoveryTimer.unref();
+    app.once('before-quit', () => clearInterval(credentialRecoveryTimer));
     registerDesktopProtocolClient();
     void pruneDesktopRuntimePackageCacheForCurrentRelease().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);

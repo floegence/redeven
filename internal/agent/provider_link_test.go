@@ -308,6 +308,33 @@ func TestConnectProviderPersistsConfigOnlyAfterRuntimeLinkExchangeSucceeds(t *te
 	}
 }
 
+func TestConnectProviderDistinguishesRevokedPermissionFromExpiredAuthorization(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	a := newProviderLinkTestAgent(t, cfgPath, nil)
+	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"error":{"code":"NOT_AUTHORIZED","message":"permission revoked"}}`)
+	})
+	defer server.Close()
+
+	_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
+		ProviderOrigin:        "https://redeven.test",
+		ProviderID:            "example_control_plane",
+		EnvPublicID:           "env_demo",
+		AccessPointOrigin:     server.URL,
+		RuntimeLinkTicket:     "ticket-123",
+		runtimeLinkHTTPClient: server.Client(),
+	})
+	if err == nil {
+		t.Fatal("ConnectProvider() error = nil, want permission rejection")
+	}
+	var linkErr *ProviderLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorPermissionRevoked {
+		t.Fatalf("ConnectProvider() error = %v, want %s", err, ProviderLinkErrorPermissionRevoked)
+	}
+}
+
 func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	initial := &config.Config{

@@ -2859,6 +2859,7 @@
     "disabled": "Cloud アクセスは無効",
     "unknown": "接続は未確認",
     "expired": "接続認証情報の期限切れ",
-    "requested": "{label} の接続を要求しました。Redeven Cloud の状態は自動的に更新されます。"
+    "requested": "{label} の接続を要求しました。Redeven Cloud の状態は自動的に更新されます。",
+    "permissionRevoked": "Cloud 権限が取り消されました"
   }
 }
