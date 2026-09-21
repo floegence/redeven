@@ -19,6 +19,8 @@ const requireDesktop = createRequire(path.join(root, 'desktop/package.json'));
 const args = process.argv.slice(2);
 const option = (name) => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
 const reportPath = option('--report');
+const carrier = option('--carrier') ?? 'all';
+assert.ok(['all', 'chromium', 'electron'].includes(carrier), 'Invalid --carrier');
 if (!reportPath || !option('--binary')) throw new Error('Required: --binary <built runtime> --report <output.json>');
 const temp = await mkdtemp(path.join(os.homedir(), '.redeven-preview-media-'));
 const marker = randomUUID();
@@ -153,6 +155,14 @@ async function checkMedia(page, kind, file, output, surface, observer) {
   }
   await media.waitFor({ state: 'hidden' });
 }
+async function openNotesObserver(page) {
+  if (await page.locator('.notes-overlay').isVisible()) return;
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes('/api/notes/snapshot') && response.ok()),
+    page.getByRole('button', { name: 'Notes overlay', exact: true }).click(),
+  ]);
+  await page.locator('.notes-overlay').waitFor({ state: 'visible' });
+}
 async function verify(page, url, name, suppliedObserver) {
   page.setDefaultTimeout(10000);
   const output = { name, media: [], streams: [], sessionConnections: 0 };
@@ -171,24 +181,27 @@ async function verify(page, url, name, suppliedObserver) {
   cdp.on('Network.dataReceived', ({ requestId }) => { const stream = streams.get(requestId); if (stream) stream.chunks += 1; });
   cdp.on('Network.loadingFinished', ({ requestId }) => { const stream = streams.get(requestId); if (stream) stream.active = false; });
   cdp.on('Network.loadingFailed', ({ requestId }) => { const stream = streams.get(requestId); if (stream) stream.active = false; });
+  await page.bringToFront();
   await page.goto(url);
   await page.getByRole('tab', { name: 'Activity', exact: true }).waitFor();
   output.effectiveType = await page.evaluate(() => navigator.connection.effectiveType);
   assert.equal(output.effectiveType, '3g');
   await page.getByRole('tab', { name: 'Activity', exact: true }).click();
   const observer = suppliedObserver ?? await page.context().newPage();
+  await observer.bringToFront();
   await observer.goto(url);
-  await observer.getByRole('tab', { name: 'Workbench', exact: true }).click();
-  await observer.getByRole('button', { name: 'Notes overlay', exact: true }).waitFor();
-  await Promise.all([
-    observer.waitForResponse((response) => response.url().includes('/api/notes/snapshot') && response.ok()),
-    observer.getByRole('button', { name: 'Notes overlay', exact: true }).click(),
-  ]);
+  await observer.getByRole('tab', { name: 'Activity', exact: true }).click();
+  await openNotesObserver(observer);
+  await page.bringToFront();
   await page.getByRole('tab', { name: 'Activity', exact: true }).click();
   await page.getByRole('button', { name: 'File Browser', exact: true }).filter({ visible: true }).last().click();
   const files = [path.join(temp, 'media/preview.mp4'), path.join(temp, 'media/preview.m4a')];
   for (const surface of ['Activity', 'Workbench']) {
     if (surface === 'Workbench') {
+      await observer.bringToFront();
+      await observer.getByRole('tab', { name: 'Workbench', exact: true }).click();
+      await openNotesObserver(observer);
+      await page.bringToFront();
       await page.getByRole('tab', { name: 'Workbench', exact: true }).click();
       await page.getByTitle('Go to path', { exact: true }).filter({ visible: true }).last().waitFor();
     }
@@ -228,21 +241,24 @@ try {
   });
   report.runtime = { pid: runtime.child.pid, url: startup.local_ui_url, bridgeURL: startup.local_ui_bridge_url };
   console.log('Owned media acceptance runtime:', JSON.stringify(report));
-  browser = await chromium.launch({ channel: 'chromium', headless: true, args: ['--force-effective-connection-type=3G'] });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, locale: 'en-US' });
-  const page = await context.newPage();
-  await verify(page, startup.local_ui_url, 'chromium');
-  await browser.close(); browser = null;
-  execFileSync(path.join(root, 'scripts/check_desktop_electron_test_runtime.sh'), { cwd: root, stdio: 'inherit' });
-  const config = path.join(temp, 'electron.json');
-  await writeFile(config, JSON.stringify(startup), { mode: 0o600 });
-  const preload = path.join(temp, 'preload.cjs');
-  await requireDesktop('esbuild').build({
-    stdin: { contents: "import { bootstrapDesktopSessionContextBridge } from './src/preload/desktopSessionContext'; bootstrapDesktopSessionContextBridge();", resolveDir: path.join(root, 'desktop') },
-    bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: preload,
-  });
-  const entry = path.join(temp, 'electron.cjs');
-  await writeFile(entry, `const { app, BrowserWindow, session, ipcMain } = require('electron');
+  if (carrier !== 'electron') {
+    browser = await chromium.launch({ channel: 'chromium', headless: true, args: ['--force-effective-connection-type=3G'] });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, locale: 'en-US' });
+    const page = await context.newPage();
+    await verify(page, startup.local_ui_url, 'chromium');
+    await browser.close(); browser = null;
+  }
+  if (carrier !== 'chromium') {
+    execFileSync(path.join(root, 'scripts/check_desktop_electron_test_runtime.sh'), { cwd: root, stdio: 'inherit' });
+    const config = path.join(temp, 'electron.json');
+    await writeFile(config, JSON.stringify(startup), { mode: 0o600 });
+    const preload = path.join(temp, 'preload.cjs');
+    await requireDesktop('esbuild').build({
+      stdin: { contents: "import { bootstrapDesktopSessionContextBridge } from './src/preload/desktopSessionContext'; bootstrapDesktopSessionContextBridge();", resolveDir: path.join(root, 'desktop') },
+      bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: preload,
+    });
+    const entry = path.join(temp, 'electron.cjs');
+    await writeFile(entry, `const { app, BrowserWindow, session, ipcMain } = require('electron');
 const startup = require(${JSON.stringify(config)});
 const { desktopPrivateBridgeRequestHeaders } = require(${JSON.stringify(path.join(root, 'desktop/dist/main/desktopSessionTransport.js'))});
 const { desktopSessionContextSnapshotFromTarget } = require(${JSON.stringify(path.join(root, 'desktop/dist/main/desktopSessionContext.js'))});
@@ -259,15 +275,16 @@ app.whenReady().then(() => {
  }
 });
 app.on('window-all-closed', () => app.quit());
-`);
-  const electron = start(requireDesktop('electron'), [entry, '--remote-debugging-port=0', `--user-data-dir=${temp}/profile`, `--redeven-media-test=${marker}`]);
-  report.electronPID = electron.child.pid;
-  const endpoint = await until(() => electron.output.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1]);
-  browser = await chromium.connectOverCDP(endpoint);
-  const electronPages = await until(() => { const pages = browser.contexts()[0]?.pages(); return pages?.length === 2 ? pages : null; });
-  await verify(electronPages[0], new URL('/_redeven_proxy/env/', startup.local_ui_bridge_url).href, 'electron', electronPages[1]);
-  await browser.close(); browser = null;
-  await stop(electron);
+  `);
+    const electron = start(requireDesktop('electron'), [entry, '--remote-debugging-port=0', `--user-data-dir=${temp}/profile`, `--redeven-media-test=${marker}`]);
+    report.electronPID = electron.child.pid;
+    const endpoint = await until(() => electron.output.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1]);
+    browser = await chromium.connectOverCDP(endpoint);
+    const electronPages = await until(() => { const pages = browser.contexts()[0]?.pages(); return pages?.length === 2 ? pages : null; });
+    await verify(electronPages[0], new URL('/_redeven_proxy/env/', startup.local_ui_bridge_url).href, 'electron', electronPages[1]);
+    await browser.close(); browser = null;
+    await stop(electron);
+  }
   report.status = 'passed';
 } catch (error) {
   report.status = 'failed';
