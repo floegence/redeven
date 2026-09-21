@@ -125,6 +125,18 @@ export type SettingsUpdateResponse = Readonly<{
   ai_update?: SettingsAIUpdateMeta | null;
 }>;
 
+/** Flat request fields accepted by PUT /_redeven_proxy/api/settings. */
+export type SettingsUpdateRequest = Readonly<{
+  agent_home_dir?: string;
+  shell?: string;
+  filesystem_scope?: FilesystemScope;
+  log_format?: string;
+  log_level?: string;
+  code_server_port_min?: number;
+  code_server_port_max?: number;
+  permission_policy?: PermissionPolicy | null;
+}>;
+
 export type SkillCatalogNotice = Readonly<{
   name?: string;
   path?: string;

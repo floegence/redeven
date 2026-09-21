@@ -122,6 +122,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   BugIcon: icon('BugIcon'),
   ChevronDown: icon('ChevronDown'),
   ChevronLeft: icon('ChevronLeft'),
+  ChevronRight: icon('ChevronRight'),
   Code: icon('Code'),
   Cloud: icon('Cloud'),
   Copy: icon('Copy'),
@@ -179,7 +180,8 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   ),
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -201,7 +203,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.label}
     </label>
   ),
-  ConfirmDialog: () => null,
+  ConfirmDialog: (props: any) => <Show when={props.open}><div role="dialog"><h2>{props.title}</h2>{props.children}<button onClick={props.onConfirm} disabled={props.loading}>{props.confirmText}</button></div></Show>,
   Dialog: () => null,
   Input: (props: any) => <input value={props.value} onInput={props.onInput} placeholder={props.placeholder} disabled={props.disabled} />,
   Select: (props: any) => (
@@ -233,10 +235,6 @@ vi.mock('../maintenance/agentUpgradeState', () => ({
     actionLabel: 'Update Redeven',
     actionMethod: 'manual',
   }),
-}));
-
-vi.mock('../maintenance/agentVersion', () => ({
-  isReleaseVersion: () => true,
 }));
 
 vi.mock('../maintenance/shared', () => ({
@@ -390,8 +388,8 @@ vi.mock('./settings/PermissionPolicyTables', () => ({
   PermissionRuleTable: () => <div>Permission Rules</div>,
 }));
 
-vi.mock('./settings/SkillsCatalogTable', () => ({
-  SkillsCatalogTable: () => <div>Skills Catalog</div>,
+vi.mock('./settings/SkillsCatalogList', () => ({
+  SkillsCatalogList: () => <div>Skills Catalog</div>,
 }));
 
 vi.mock('./settings/SettingsPrimitives', () => ({
@@ -525,6 +523,40 @@ describe('EnvSettingsPage', () => {
     host.remove();
   });
 
+  it('confirms runtime restart before delegating to the shared maintenance controller', async () => {
+    protocolMocks.status.mockReturnValue('connected');
+    settingsResponse = { config_path: '/tmp/config.json', connection: {}, runtime: {} };
+    render(() => <EnvSettingsPage initialSection="agent" />, host);
+    await flushPage();
+    const restart = [...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Restart');
+    restart?.click();
+    expect(runtimeUpdateMocks.maintenance.startRestart).not.toHaveBeenCalled();
+    const confirm = host.querySelector('[role="dialog"] button') as HTMLButtonElement | null;
+    expect(confirm).not.toBeNull();
+    confirm?.click();
+    await flushPage();
+    expect(runtimeUpdateMocks.maintenance.startRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires a valid upgrade target and confirms before delegating the selected version', async () => {
+    protocolMocks.status.mockReturnValue('connected');
+    settingsResponse = { config_path: '/tmp/config.json', connection: {}, runtime: {} };
+    render(() => <EnvSettingsPage initialSection="agent" />, host);
+    await flushPage();
+    const upgrade = [...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Update Redeven')!;
+    expect(upgrade.disabled).toBe(true);
+    const target = host.querySelector('input[placeholder="v1.2.3"]') as HTMLInputElement;
+    target.value = 'latest'; target.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(upgrade.disabled).toBe(true);
+    target.value = 'v1.2.4'; target.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(upgrade.disabled).toBe(false);
+    upgrade.click();
+    expect(runtimeUpdateMocks.maintenance.startUpgrade).not.toHaveBeenCalled();
+    (host.querySelector('[role="dialog"] button') as HTMLButtonElement).click();
+    await flushPage();
+    expect(runtimeUpdateMocks.maintenance.startUpgrade).toHaveBeenCalledWith('v1.2.4');
+  });
+
   it('renders the settings information architecture metadata and navigable sidebar', async () => {
     render(() => <EnvSettingsPage />, host);
     await flushPage();
@@ -552,19 +584,15 @@ describe('EnvSettingsPage', () => {
       'Debug Console',
     ]);
 
-    const renderedNavLabels = Array.from(host.querySelectorAll('button'))
+    const renderedNavLabels = Array.from(host.querySelectorAll('[data-settings-nav-item]'))
       .map((node) => node.textContent?.trim() ?? '')
       .filter((label) => navLabels.includes(label));
     expect(renderedNavLabels).toEqual(navLabels);
     expect(host.querySelector('[data-settings-nav-item="config"]')?.getAttribute('aria-current')).toBe('page');
     expect(host.querySelector('[data-settings-nav-item="connection"]')?.hasAttribute('aria-current')).toBe(false);
-    expect(host.querySelector('[data-settings-nav-item="config"]')?.classList.contains('redeven-settings-nav-item--active')).toBe(true);
-    expect(host.querySelector('[data-settings-nav-item="config"]')?.classList.contains('border-r-2')).toBe(false);
-
-    const settingsSidebar = host.querySelector('.redeven-settings-sidebar');
-    expect(settingsSidebar?.querySelector('[data-icon="Search"]')?.classList.contains('redeven-settings-sidebar-note')).toBe(true);
-    expect(settingsSidebar?.querySelector('[data-settings-group="overview"] span')?.classList.contains('redeven-settings-sidebar-group-label')).toBe(true);
-    expect(settingsSidebar?.querySelector('[data-settings-nav-item="connection"]')?.classList.contains('redeven-settings-sidebar-note')).toBe(true);
+    const settingsSidebar = host.querySelector('.floe-settings-layout__sidebar');
+    expect(settingsSidebar?.querySelector('nav')?.getAttribute('aria-label')).toBe('Runtime Settings');
+    expect(settingsSidebar?.querySelector('input')?.getAttribute('aria-label')).toBe('Search settings');
 
     expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
     expect(host.textContent).not.toContain('Language preference');
@@ -579,8 +607,8 @@ describe('EnvSettingsPage', () => {
     expect(runtimeGroup?.querySelector('[data-settings-nav-item="codespaces"]')).not.toBeNull();
 
     const responsiveBody = host.querySelector('.redeven-settings-body');
-    expect(responsiveBody?.classList.contains('flex-col')).toBe(true);
-    expect(responsiveBody?.classList.contains('md:flex-row')).toBe(true);
+    expect(responsiveBody?.classList.contains('floe-settings-layout')).toBe(true);
+    expect(responsiveBody?.querySelector('.floe-settings-layout__mobile')).not.toBeNull();
     expect(runtimeGroup?.querySelector('[data-settings-nav-item="logging"]')).not.toBeNull();
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');

@@ -103,6 +103,7 @@ export function ConnectionSection() {
 
   return (
     <SettingsSection
+      variant="page"
       icon={Globe}
       title={i18n.t('settings.connection.title')}
       description={i18n.t('settings.connection.description')}

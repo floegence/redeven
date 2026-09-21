@@ -1,10 +1,11 @@
-import { Show } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import { Activity, Cpu, RefreshIcon, ShieldCheck } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, DotIndicator } from '../SettingsPrimitives';
 import { useI18n, type I18nHelpers } from '../../../i18n';
+import { ConfirmDialog } from '../../../primitives/EnvAppModal';
 import { runtimeServiceCompatibilityTone } from './helpers';
 
 function formatDesktopModelSourceBindingState(value: unknown, i18n: I18nHelpers): string {
@@ -24,6 +25,7 @@ function desktopModelSourceActive(value: unknown): boolean {
 
 export function RuntimeStatusSection() {
   const ctx = useEnvSettingsPage();
+  const [maintenanceAction, setMaintenanceAction] = createSignal<'restart' | 'upgrade' | null>(null);
   const i18n = useI18n();
 
   const statusLabel = () => {
@@ -81,7 +83,9 @@ export function RuntimeStatusSection() {
   };
 
   return (
+    <>
     <SettingsSection
+      variant="page"
       icon={Activity}
       title={i18n.t('runtimeStatus.title')}
       description={i18n.t('runtimeStatus.description')}
@@ -90,12 +94,12 @@ export function RuntimeStatusSection() {
       error={ctx.maintenanceError()}
       actions={
         <>
-          <Button size="sm" variant="outline" class="gap-1.5" onClick={() => void ctx.startRestart()}
+          <Button size="sm" variant="outline" class="gap-1.5" onClick={() => setMaintenanceAction('restart')}
             loading={ctx.isRestarting()} disabled={!ctx.canStartRestart()}>
             <RefreshIcon class="w-3.5 h-3.5" />{i18n.t('runtimeStatus.restartAction')}
           </Button>
           <Show when={ctx.upgradeState().allowsUpgradeAction}>
-            <Button size="sm" variant="default" onClick={() => void ctx.startUpgrade()}
+            <Button size="sm" variant="default" onClick={() => setMaintenanceAction('upgrade')}
               loading={ctx.isUpgrading()} disabled={!ctx.canStartUpgrade()}>
               {upgradeActionLabel()}
             </Button>
@@ -112,7 +116,7 @@ export function RuntimeStatusSection() {
             </span>
             <span class="text-sm font-semibold text-foreground">{statusLabel()}</span>
           </div>
-          <div class="text-[11px] text-muted-foreground">运行状态</div>
+          <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.statusLabel')}</div>
         </div>
         <div class="redeven-settings-inset rounded-xl border p-4">
           <div class="mb-1 flex items-center gap-2.5">
@@ -160,7 +164,7 @@ export function RuntimeStatusSection() {
         <div class="redeven-settings-inset rounded-xl border px-4 py-3">
           <div class="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             <Activity class="h-3.5 w-3.5" />
-            <span>负载与兼容性</span>
+            <span>{i18n.t('runtimeStatus.activeWork')}</span>
           </div>
           <div class="space-y-2.5">
             <div class="flex items-center justify-between text-xs">
@@ -219,5 +223,14 @@ export function RuntimeStatusSection() {
         </Show>
       </div>
     </SettingsSection>
+    <ConfirmDialog open={Boolean(maintenanceAction())} onOpenChange={(open) => { if (!open) setMaintenanceAction(null); }}
+      title={maintenanceAction() === 'restart' ? i18n.t('runtimeStatus.restartAction') : upgradeActionLabel()}
+      confirmText={maintenanceAction() === 'restart' ? i18n.t('runtimeStatus.restartAction') : upgradeActionLabel()}
+      onConfirm={async () => { const action = maintenanceAction(); setMaintenanceAction(null); if (action === 'restart') await ctx.startRestart(); else if (action === 'upgrade') await ctx.startUpgrade(); }}>
+      <p class="text-sm">{i18n.t('settingsDesign.maintenanceWarning')}</p>
+      <p class="mt-3 text-xs text-muted-foreground">{activeWorkSummary()}</p>
+      <Show when={maintenanceAction() === 'upgrade' && ctx.targetUpgradeVersion()}><code class="mt-3 block text-sm">{ctx.targetUpgradeVersion()}</code></Show>
+    </ConfirmDialog>
+    </>
   );
 }

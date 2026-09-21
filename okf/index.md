@@ -93,6 +93,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## UI
 
+- [Runtime settings](ui/runtime-settings.md) - Navigate all runtime settings with retained drafts, responsive controls, confirmed maintenance, and real Skills operations.
+
 - [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.
 - [Env App floating layer order](ui/env-app-floating-layer-order.md) - Order movable windows, Flower, plugin surfaces, blocking modals, and command UI through one product contract.
 - [File preview window actions](ui/file-preview-window-actions.md) - Read files with compact title-bar actions while preserving selection, editing, and dismissal behavior.

@@ -1,7 +1,7 @@
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Tag, Button, type TagProps } from '@floegence/floe-webapp-core/ui';
+import { Tag, Button, SettingsSection as FloeSettingsSection, SettingsList as FloeSettingsList, SettingRow as FloeSettingRow, type SettingRowProps, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { Copy, Check } from '@floegence/floe-webapp-core/icons';
 import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
 import { useI18n } from '../../i18n';
@@ -76,14 +76,17 @@ export function AutoSaveIndicator(props: { dirty: boolean; saving: boolean; erro
   });
 
   return (
-    <span class="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground whitespace-nowrap">
-      <span class={cn('inline-block h-1.5 w-1.5 rounded-full', dotColor())} />
-      {label()}
-    </span>
+    <Show when={label()}>
+      <span role="status" class="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground whitespace-nowrap">
+        <span aria-hidden="true" class={cn('inline-block h-1.5 w-1.5 rounded-full bg-current', dotColor())} />
+        {label()}
+      </span>
+    </Show>
   );
 }
 
-export interface SettingsCardProps {
+export interface SettingsSectionProps {
+  variant?: 'page' | 'section';
   icon: (props: { class?: string }) => JSX.Element;
   title: string;
   description: string;
@@ -94,46 +97,24 @@ export interface SettingsCardProps {
   children: JSX.Element;
 }
 
-export function SettingsSection(props: SettingsCardProps) {
+export function SettingsSection(props: SettingsSectionProps) {
   return (
-    <section class="redeven-settings-section" data-settings-card={props.title}>
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div class="flex min-w-0 items-start gap-3">
-          <span class="redeven-settings-section__icon mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md">
-            <props.icon class="h-4 w-4" />
-          </span>
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-              <h3 class="text-sm font-semibold tracking-tight text-foreground">{props.title}</h3>
-              <Show when={props.badge}>
-                <Tag variant={settingsTagVariant(props.badgeVariant ?? 'default')} tone="soft" size="sm">
-                  {props.badge}
-                </Tag>
-              </Show>
-            </div>
-            <p class="redeven-settings-note mt-0.5 break-words text-xs leading-relaxed">{props.description}</p>
-          </div>
-        </div>
-        <Show when={props.actions}>
-          <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">{props.actions}</div>
-        </Show>
-      </div>
-
-      <div class="mt-4 space-y-4">
-        <Show when={props.error}>
-          <div class="redeven-settings-alert redeven-settings-alert--danger flex items-start gap-2.5 rounded-lg border p-3">
-            <div class="min-h-4 h-full w-1 flex-shrink-0 rounded-full bg-destructive/60" />
-            <div class="break-words text-xs text-destructive">{props.error}</div>
-          </div>
-        </Show>
-        {props.children}
-      </div>
-    </section>
+    <FloeSettingsSection
+      class="redeven-settings-section"
+      data-settings-card={props.title}
+      variant={props.variant}
+      title={props.title}
+      description={props.description}
+      actions={props.actions}
+      badge={<Show when={props.badge}><Tag variant={settingsTagVariant(props.badgeVariant ?? 'default')} tone="soft" size="sm">{props.badge}</Tag></Show>}
+    >
+      <Show when={props.error}>
+        <div role="alert" class="redeven-settings-alert redeven-settings-alert--danger rounded-lg border p-3 text-xs">{props.error}</div>
+      </Show>
+      {props.children}
+    </FloeSettingsSection>
   );
 }
-
-/** @deprecated Use SettingsSection instead. */
-export const SettingsCard = SettingsSection;
 
 export function FieldLabel(props: { children: string; hint?: string }) {
   return (
@@ -202,57 +183,11 @@ export function SettingsPill(props: { tone?: 'default' | 'success' | 'warning' |
 }
 
 export function SettingsList(props: { children: JSX.Element; class?: string }) {
-  return <div class={cn('redeven-settings-list overflow-hidden rounded-lg border', props.class)}>{props.children}</div>;
+  return <FloeSettingsList class={cn('redeven-settings-list', props.class)}>{props.children}</FloeSettingsList>;
 }
 
-export function SettingRow(props: {
-  icon?: (props: { class?: string }) => JSX.Element;
-  title: string;
-  description?: string;
-  control?: JSX.Element;
-  children?: JSX.Element;
-  tone?: 'default' | 'info' | 'success' | 'warning' | 'danger';
-}) {
-  const toneClass = () => {
-    switch (props.tone) {
-      case 'info': return 'redeven-setting-row--info';
-      case 'success': return 'redeven-setting-row--success';
-      case 'warning': return 'redeven-setting-row--warning';
-      case 'danger': return 'redeven-setting-row--danger';
-      default: return '';
-    }
-  };
-
-  return (
-    <div class={cn('redeven-setting-row rounded-lg border px-4 py-3', toneClass())}>
-      <div class="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex min-w-0 items-start gap-3">
-          <Show when={props.icon}>
-            {(Icon) => {
-              const RowIcon = Icon();
-              return (
-                <span class="redeven-setting-row__icon mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
-                  <RowIcon class="h-3.5 w-3.5" />
-                </span>
-              );
-            }}
-          </Show>
-          <div class="min-w-0">
-            <div class="text-sm font-semibold tracking-tight text-foreground">{props.title}</div>
-            <Show when={props.description}>
-              <p class="redeven-settings-note mt-0.5 text-xs leading-relaxed">{props.description}</p>
-            </Show>
-          </div>
-        </div>
-        <Show when={props.control}>
-          <div class="flex min-w-0 flex-shrink-0 items-center justify-end gap-2">{props.control}</div>
-        </Show>
-      </div>
-      <Show when={props.children}>
-        <div class="mt-3 min-w-0">{props.children}</div>
-      </Show>
-    </div>
-  );
+export function SettingRow(props: SettingRowProps) {
+  return <FloeSettingRow {...props} class={cn('redeven-setting-row', props.class)} />;
 }
 
 export function CapabilityTag(props: { active?: boolean; children: JSX.Element }) {
@@ -588,7 +523,7 @@ export function PropertyRow(props: {
       <div class="flex items-center gap-2">
         <div class={cn('min-w-0 flex-1 text-sm', props.mono && 'font-mono text-xs')}>{props.children}</div>
         <Show when={props.copyValue}>
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <div class="flex-shrink-0">
             <CopyButton value={props.copyValue!} />
           </div>
         </Show>

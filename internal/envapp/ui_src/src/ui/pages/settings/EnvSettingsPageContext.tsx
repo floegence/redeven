@@ -33,7 +33,7 @@ import {
   type BrowserEditorSetupProgress,
 } from '../../services/browserEditorSetupProgress';
 import { useEnvContext, type EnvSettingsSection } from '../EnvContext';
-import type { AIPermissionType, AgentSettingsResponse, SettingsUpdateResponse } from './types';
+import type { AIPermissionType, AgentSettingsResponse, SettingsUpdateResponse, SettingsUpdateRequest } from './types';
 import { useI18n } from '../../i18n';
 import { updateDefaultAIPermission } from '../../services/aiDefaultPermission';
 
@@ -77,7 +77,7 @@ export interface EnvSettingsPageContextValue {
   settings: Resource<AgentSettingsResponse | null>;
   refreshSettings: () => Promise<void>;
   mutateSettings: (v: AgentSettingsResponse | null) => void;
-  saveSettings: (body: any) => Promise<SettingsUpdateResponse>;
+  saveSettings: (body: SettingsUpdateRequest) => Promise<SettingsUpdateResponse>;
   saveDefaultAIPermission: (permissionType: AIPermissionType) => Promise<SettingsUpdateResponse>;
 
   codeRuntimeStatus: Resource<CodeRuntimeStatus | null>;
@@ -265,7 +265,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   const showLoadingCurtain = (opts: { surface: string; eyebrow?: string; message?: string }) => setLoadingCurtain({ visible: true, ...opts });
   const hideLoadingCurtain = () => setLoadingCurtain({ visible: false, surface: '' });
 
-  const saveSettings = async (body: any): Promise<SettingsUpdateResponse> => {
+  const saveSettings = async (body: SettingsUpdateRequest): Promise<SettingsUpdateResponse> => {
     const json = await fetchLocalApiJSON<any>('/_redeven_proxy/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -292,11 +292,11 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
     ]);
   };
 
-  // Maintenance actions (stubs — real implementations moved to sections)
-  const canStartRestart = createMemo(() => canAdmin() && !maintaining());
-  const canStartUpgrade = createMemo(() => canAdmin() && !maintaining() && upgradeState().allowsUpgradeAction);
-  const startRestart = async () => {};
-  const startUpgrade = async () => {};
+  // The shared maintenance controller owns execution and recovery.
+  const canStartRestart = createMemo(() => canAdmin() && canInteract() && !maintaining());
+  const canStartUpgrade = createMemo(() => canAdmin() && canInteract() && !maintaining() && upgradeState().allowsUpgradeAction && (!upgradeState().requiresTargetVersion || targetUpgradeVersionValid()));
+  const startRestart = async () => { if (canStartRestart()) await runtimeUpdate.maintenance.startRestart(); };
+  const startUpgrade = async () => { if (canStartUpgrade()) await runtimeUpdate.maintenance.startUpgrade(targetUpgradeVersion()); };
   const prepareManagedCodeRuntime = async () => {
     const operationID = createBrowserEditorSetupOperationID();
     const installMethod = codeRuntimeInstallMethod();

@@ -125,7 +125,8 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={props.title}
-      class="w-[min(74rem,96vw)] max-w-[96vw]"
+      class="redeven-provider-dialog w-[min(68rem,96vw)] max-w-[96vw]"
+      contentClass="min-h-0"
       footer={
         <div class="flex items-center justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
@@ -184,9 +185,9 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
           ]);
 
           return (
-            <div class="redeven-settings-dialog grid max-h-[72vh] min-h-[34rem] grid-cols-1 gap-5 overflow-hidden lg:grid-cols-[15rem_minmax(0,1fr)]">
+            <div class="redeven-settings-dialog grid min-h-0 grid-cols-1 gap-5 lg:h-[min(34rem,65dvh)] lg:grid-cols-[13rem_minmax(0,1fr)] lg:overflow-hidden">
               <aside class="redeven-settings-inset rounded-lg border p-2">
-                <div class="redeven-settings-choice mb-2 rounded-md border p-3">
+                <div class="redeven-settings-choice mb-2 hidden rounded-md border p-3 lg:block">
                   <div class="flex items-center gap-2">
                     <span class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-muted">
                       <ProviderBrandIcon type={provider().type} class="h-5 w-5" />
@@ -203,7 +204,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                     <SettingsPill tone={flowerProviderSearchSummary(models(), catalogCopy()).enabled ? 'success' : 'default'}>{flowerProviderSearchSummary(models(), catalogCopy()).label}</SettingsPill>
                   </div>
                 </div>
-                <nav class="space-y-1" aria-label={props.title}>
+                <nav class="grid grid-cols-2 gap-1 lg:block lg:space-y-1" aria-label={props.title}>
                   <For each={stepItems()}>
                     {(step) => {
                       const active = () => activeStep() === step.id;
@@ -219,6 +220,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                           )}
                           onClick={() => setActiveStep(step.id)}
                           disabled={!props.canInteract && step.id !== activeStep()}
+                          aria-current={active() ? 'step' : undefined}
                           data-provider-dialog-step={step.id}
                         >
                           <span class={cn('mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md', active() ? 'bg-[var(--redeven-settings-selection-indicator)] text-[var(--redeven-settings-header-bg)]' : 'bg-muted text-muted-foreground')}>
@@ -226,7 +228,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                           </span>
                           <span class="min-w-0">
                             <span class="block text-xs font-semibold">{step.label}</span>
-                            <span class="mt-0.5 block truncate text-[11px] opacity-75">{step.description}</span>
+                            <span class="mt-0.5 hidden truncate text-[11px] opacity-75 lg:block">{step.description}</span>
                           </span>
                         </button>
                       );
@@ -235,7 +237,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                 </nav>
               </aside>
 
-              <div class="min-w-0 overflow-y-auto pr-1">
+              <div class="min-w-0 lg:overflow-y-auto lg:pr-2">
                 <Show when={activeStep() === 'type'}>
                   <section class="space-y-3">
                     <SubSectionHeader

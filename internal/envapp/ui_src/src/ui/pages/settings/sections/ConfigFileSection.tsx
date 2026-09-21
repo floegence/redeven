@@ -12,6 +12,7 @@ export function ConfigFileSection() {
 
   return (
     <SettingsSection
+      variant="page"
       icon={FileCode}
       title={i18n.t('settings.configFile.title')}
       description={i18n.t('settings.configFile.description')}
@@ -19,7 +20,7 @@ export function ConfigFileSection() {
       <SettingsList>
         <SettingRow
           icon={FileText}
-          title={i18n.t('settings.configFile.title')}
+          title={i18n.t('settingsDesign.fileLocation')}
           description={i18n.t('settings.configFile.readOnlyRuntimeManaged')}
           control={<CopyButton value={configPath() || ''} />}
         >

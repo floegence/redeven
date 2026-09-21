@@ -52,7 +52,7 @@ describe('settings surface primitives', () => {
     expect(section?.classList.contains('border')).toBe(false);
     expect(section?.classList.contains('p-5')).toBe(false);
     expect(section?.classList.contains('shadow-sm')).toBe(false);
-    expect(list?.classList.contains('border')).toBe(true);
+    expect(list?.classList.contains('floe-settings-list')).toBe(true);
     expect(section?.querySelector('.redeven-surface-panel')).toBeNull();
   });
 

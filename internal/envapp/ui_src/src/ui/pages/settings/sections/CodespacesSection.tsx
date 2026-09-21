@@ -23,6 +23,7 @@ function normalizePortRange(min: number, max: number) {
 
 export function CodespacesSection() {
   const ctx = useEnvSettingsPage();
+  const canEdit = () => ctx.canInteract() && ctx.canAdmin();
   const i18n = useI18n();
 
   const [useDefaults, setUseDefaults] = createSignal(true);
@@ -54,18 +55,16 @@ export function CodespacesSection() {
   const clearTimer = (t: number | undefined) => { if (t != null) { window.clearTimeout(t); return undefined; } return undefined; };
 
   createEffect(() => {
-    if (!dirty() || saving() || !ctx.canInteract()) { autoSaveTimer = clearTimer(autoSaveTimer); return; }
+    if (!dirty() || saving() || error() || !canEdit()) { autoSaveTimer = clearTimer(autoSaveTimer); return; }
     autoSaveTimer = clearTimer(autoSaveTimer);
     autoSaveTimer = window.setTimeout(async () => {
       autoSaveTimer = undefined;
-      if (!dirty() || saving() || !ctx.canInteract()) return;
+      if (!dirty() || saving() || error() || !canEdit()) return;
       setSaving(true);
       try {
         await ctx.saveSettings({
-          codespaces: {
-            code_server_port_min: useDefaults() ? null : (portMin() === '' ? null : Number(portMin())),
-            code_server_port_max: useDefaults() ? null : (portMax() === '' ? null : Number(portMax())),
-          },
+          code_server_port_min: useDefaults() ? 0 : Number(portMin()),
+          code_server_port_max: useDefaults() ? 0 : Number(portMax()),
         });
         setSaving(false); setSavedAt(Date.now()); setDirty(false); setError(null);
       } catch (e) {
@@ -77,7 +76,7 @@ export function CodespacesSection() {
   onCleanup(() => { autoSaveTimer = clearTimer(autoSaveTimer); });
 
   return (
-    <div class="space-y-4">
+    <SettingsSection variant="page" icon={Code} title={i18n.t('settings.nav.codespaces')} description={i18n.t('settingsDesign.toolingDescription')}>
       <CodeRuntimeSettingsCard
         status={ctx.codeRuntimeStatus()} loading={ctx.codeRuntimeStatus.loading} error={null}
         localPrepareFailure={ctx.codeRuntimeLocalPrepareFailure()}
@@ -98,7 +97,7 @@ export function CodespacesSection() {
       <SettingsSection
         icon={Code} title={i18n.t('codespacesSettings.title')} description={i18n.t('codespacesSettings.description')}
         error={error()}
-        actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />}
+        actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={canEdit()} />}
       >
         {/* Port range card */}
         <SettingsList>
@@ -107,8 +106,8 @@ export function CodespacesSection() {
             title={i18n.t('codespacesSettings.portRange')}
             description={`${i18n.t('codespacesSettings.effectiveRange')}: ${effective().effective_min} - ${effective().effective_max}`}
             control={
-              <label class={`flex items-center gap-2 ${ctx.canInteract() ? 'cursor-pointer' : ''}`}>
-                <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setDirty(true); }} disabled={!ctx.canInteract()} />
+              <label class={`flex items-center gap-2 ${canEdit() ? 'cursor-pointer' : ''}`}>
+                <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setError(null); setDirty(true); }} disabled={!canEdit()} />
                 <span class="text-sm text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
               </label>
             }
@@ -117,24 +116,24 @@ export function CodespacesSection() {
               {effective().effective_min} - {effective().effective_max}
             </code>
             <Show when={!useDefaults()}>
-              <div class="flex items-center gap-4 border-t border-[var(--redeven-settings-divider)] pt-3">
-                <div class="flex items-center gap-2">
-                  <label class="redeven-settings-note text-xs">code_server_port_min</label>
-                  <Input value={portMin() === '' ? '' : String(portMin())}
-                    onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMin(v ? Number(v) : ''); setDirty(true); }}
-                    placeholder="20000" size="sm" class="w-24" disabled={!ctx.canInteract()} />
+              <div class="grid grid-cols-1 gap-4 border-t border-[var(--redeven-settings-divider)] pt-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <label for="settings-port-min" class="redeven-settings-note text-xs">{i18n.t('settingsDesign.startPort')}</label>
+                  <Input id="settings-port-min" value={portMin() === '' ? '' : String(portMin())}
+                    onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMin(v ? Number(v) : ''); setError(null); setDirty(true); }}
+                    placeholder="20000" size="sm" class="w-24" disabled={!canEdit()} />
                 </div>
-                <div class="flex items-center gap-2">
-                  <label class="redeven-settings-note text-xs">code_server_port_max</label>
-                  <Input value={portMax() === '' ? '' : String(portMax())}
-                    onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMax(v ? Number(v) : ''); setDirty(true); }}
-                    placeholder="21000" size="sm" class="w-24" disabled={!ctx.canInteract()} />
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <label for="settings-port-max" class="redeven-settings-note text-xs">{i18n.t('settingsDesign.endPort')}</label>
+                  <Input id="settings-port-max" value={portMax() === '' ? '' : String(portMax())}
+                    onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMax(v ? Number(v) : ''); setError(null); setDirty(true); }}
+                    placeholder="21000" size="sm" class="w-24" disabled={!canEdit()} />
                 </div>
               </div>
             </Show>
           </SettingRow>
         </SettingsList>
       </SettingsSection>
-    </div>
+    </SettingsSection>
   );
 }

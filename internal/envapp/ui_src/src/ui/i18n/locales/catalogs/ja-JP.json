@@ -6345,5 +6345,29 @@
     "macCaptureUnavailable": "ウインドウをキャプチャできません。再接続してお試しください。",
     "macAddDescription": "インストール済みの .app バンドルの絶対パスを入力してください。名前とアイコンは macOS から取得します。",
     "macBundlePath": "アプリバンドルのパス"
+  },
+  "settingsDesign": {
+    "startPort": "開始ポート",
+    "endPort": "終了ポート",
+    "relatedSettings": "関連設定",
+    "clearSearch": "設定の検索をクリア",
+    "homeDirectory": "ホームディレクトリ",
+    "defaultShell": "既定のシェル",
+    "permissionCeiling": "権限の上限",
+    "userOverrides": "ユーザー別の設定",
+    "appOverrides": "アプリ別の設定",
+    "fileLocation": "ファイルの場所",
+    "toolingDescription": "ブラウザーエディターとワークスペースで使用するポートを管理します。",
+    "modelsAndProviders": "モデルとプロバイダー",
+    "flowerPermissions": "権限",
+    "healthAndStorage": "稼働状況とストレージ",
+    "skillRequestFailed": "スキルの操作に失敗しました。詳細を確認して再試行してください。",
+    "skillDeleteDescription": "{name} とそのローカルファイルを完全に削除しますか？",
+    "skillReinstallDescription": "記録されたソースから {name} を再インストールしますか？ローカルの変更は上書きされます。",
+    "validatedSkills": "検証済みのスキル",
+    "skillFiles": "スキルのファイル",
+    "truncatedFile": "このファイルのプレビューは一部省略されています。",
+    "parentFolder": "親フォルダー",
+    "maintenanceWarning": "この操作により、使用中のターミナルやセッションが中断される場合があります。続行しますか？"
   }
 }

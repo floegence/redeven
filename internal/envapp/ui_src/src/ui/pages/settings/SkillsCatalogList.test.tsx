@@ -3,9 +3,10 @@
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { SkillsCatalogTable } from './SkillsCatalogTable';
+import { SkillsCatalogList } from './SkillsCatalogList';
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -16,7 +17,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.children}
     </button>
   ),
-  Checkbox: (props: any) => (
+  Switch: (props: any) => (
     <label>
       <input
         type="checkbox"
@@ -34,7 +35,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-describe('SkillsCatalogTable', () => {
+describe('SkillsCatalogList', () => {
   it('renders source metadata and routes skill actions', () => {
     const onToggle = vi.fn();
     const onBrowse = vi.fn();
@@ -70,7 +71,7 @@ describe('SkillsCatalogTable', () => {
 
     render(
       () => (
-        <SkillsCatalogTable
+        <SkillsCatalogList
           skills={skills}
           sources={{
             '/skills/skill-installer': {
@@ -129,7 +130,7 @@ describe('SkillsCatalogTable', () => {
 
     render(
       () => (
-        <SkillsCatalogTable
+        <SkillsCatalogList
           skills={[]}
           sources={{}}
           loading={false}
