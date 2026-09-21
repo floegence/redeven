@@ -223,8 +223,12 @@
   function savePicture() {
     try { localStorage.setItem(preferenceKey, JSON.stringify(picture)); } catch { /* Preferences are optional. */ }
   }
-  function configurePicture() {
-    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({action: 'configure', ...picture, pixel_ratio: Math.min(4, Math.max(0.5, devicePixelRatio || 1)), video: videoSupported}));
+  function configurePicture(action = 'configure') {
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    const size = viewportSize();
+    configuredGeometry = `${size.width}:${size.height}:${devicePixelRatio}`;
+    socket.send(JSON.stringify({action, ...picture, ...size,
+      pixel_ratio: Math.min(4, Math.max(0.5, devicePixelRatio || 1)), video: videoSupported}));
   }
   const panels = { windows: windowPanel, picture: picturePanel, menu: menuPanel, quit: quitPanel };
   const toggles = { windows: windowToggle, picture: controlsButton, menu, quit };
@@ -379,13 +383,14 @@
     attempt = 0,
     active = false,
     renderedGeneration = 0,
+    connectedAt = 0,
+    firstFrame = false,
     current,
     pending,
     drawing = null,
     deadline,
     resizeTimer;
   let abort;
-  const sizes = new Map();
   const icon = document.getElementById('icon');
   if (/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(config.icon)) {
     icon.src = config.icon;
@@ -433,6 +438,8 @@
   }
   function disconnect(state) {
     clearTimeout(deadline);
+    clearTimeout(resizeTimer);
+    configuredGeometry = null;
     clearTimeout(quitTimer);
     quitPending = false;
     abort?.abort();
@@ -446,24 +453,22 @@
       else window.close();
     }
   }
-  let configuredRatio;
+  let configuredGeometry;
+  function viewportSize() {
+    const rect = canvas.getBoundingClientRect();
+    return {width: Math.min(8192, Math.max(320, Math.round(rect.width))), height: Math.min(8192, Math.max(200, Math.round(rect.height)))};
+  }
   function resize() {
     positionPopover();
-    if (configuredRatio !== devicePixelRatio) { configuredRatio = devicePixelRatio; configurePicture(); }
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      if (current?.window) {
-        const rect = canvas.getBoundingClientRect();
-        const width = Math.max(320, Math.round(rect.width)),
-          height = Math.max(200, Math.round(rect.height)),
-          key = `${width}:${height}`;
-        if (sizes.get(current.window) !== key) {
-          sizes.set(current.window, key);
-          send({ action: 'resize', width, height });
-        }
-      }
+      const size = viewportSize();
+      if (current && configuredGeometry !== `${size.width}:${size.height}:${devicePixelRatio}`) configurePicture();
     }, 180);
   }
+  // Hardware decoders may retain the first chunk until more frames arrive.
+  // Our one-frame credit requires immediate output, including a static window.
+  const decoderOptions = {optimizeForLatency: true, hardwareAcceleration: 'prefer-software'};
   let decoder, decoderGeneration, videoPending, decodeDeadline;
   function resetDecoder() {
     clearTimeout(decodeDeadline);
@@ -484,7 +489,7 @@
         },
         error: (error) => { videoPending?.reject(error); videoPending = null; },
       });
-      decoder.configure({ codec: next.meta.profile, description: Uint8Array.from(atob(next.meta.description), ch => ch.charCodeAt(0)), optimizeForLatency: true });
+      decoder.configure({ codec: next.meta.profile, description: Uint8Array.from(atob(next.meta.description), ch => ch.charCodeAt(0)), ...decoderOptions });
       decoderGeneration = next.generation;
     }
     return new Promise((resolve, reject) => {
@@ -513,6 +518,10 @@
           statisticValues.transport.textContent = config.copy[next.meta.transport === 'video' ? 'pictureVideo' : 'pictureImages'];
           paintedFrames++;
           socket.send(JSON.stringify({ action: 'frame_ack', generation: next.generation, frame_id: next.meta.frame_id }));
+          if (!firstFrame) {
+            firstFrame = true;
+            console.debug(`Host application first frame: ${Math.round(performance.now() - connectedAt)} ms`);
+          }
           clearTimeout(deadline); active = true; present('active');
         }
         image.close();
@@ -527,6 +536,7 @@
   }
   async function connect() {
     const mine = ++attempt;
+    connectedAt = performance.now(); firstFrame = false;
     disconnect(active ? 'reconnecting' : 'connecting');
     abort = new AbortController();
     deadline = setTimeout(() => {
@@ -553,9 +563,11 @@
       socket = connection;
       connection.binaryType = 'arraybuffer';
       connection.onopen = async () => {
-        try { videoSupported = typeof VideoDecoder !== 'undefined' && (await VideoDecoder.isConfigSupported({codec:'avc1.4D0033', optimizeForLatency:true})).supported; }
+        try { videoSupported = typeof VideoDecoder !== 'undefined' && (await VideoDecoder.isConfigSupported({codec:'avc1.4D0033', ...decoderOptions})).supported; }
         catch { videoSupported = false; }
-        if (mine === attempt && socket === connection) configurePicture();
+        if (mine === attempt && socket === connection) {
+          configurePicture('resume');
+        }
       };
       connection.onmessage = (event) => {
         if (mine !== attempt || socket !== connection) return;

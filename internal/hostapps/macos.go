@@ -270,6 +270,7 @@ type macSession struct {
 	mu             sync.Mutex
 	controlMu      sync.Mutex
 	writeMu        sync.Mutex
+	ready          chan struct{}
 	input          io.WriteCloser
 	cancel         context.CancelFunc
 	server         *http.Server
@@ -282,6 +283,7 @@ type macSession struct {
 	revision       uint64
 	connection     *websocket.Conn
 	changed        chan struct{}
+	connectedAt    time.Time
 }
 
 func (s *macSession) send(request map[string]any) error {
@@ -302,7 +304,9 @@ func (m *Manager) macLaunch(ctx context.Context, owner string, req LaunchRequest
 	if req.Mode != "" && req.Mode != "native" && req.Mode != "stream" {
 		return Session{}, ErrInvalid
 	}
-	catalog, err := m.macCatalog(ctx, owner)
+	resolveCtx, cancelResolve := context.WithTimeout(ctx, 15*time.Second)
+	defer cancelResolve()
+	catalog, err := macOnce(resolveCtx, m.macHelper(), map[string]any{"action": "catalog", "application_id": req.ApplicationID, "paths": m.macPaths()})
 	if err != nil {
 		return Session{}, err
 	}
@@ -354,7 +358,7 @@ func (m *Manager) macLaunch(ctx context.Context, owner string, req LaunchRequest
 		return Session{}, err
 	}
 	life, cancel := context.WithCancel(context.Background())
-	native := &macSession{cancel: cancel}
+	native := &macSession{cancel: cancel, ready: make(chan struct{})}
 	s := &ownedSession{view: Session{ID: randomID(), Application: app, State: "starting", Backend: "macos", Mode: "stream", StartedAt: time.Now().UnixMilli(), Forward: forward, Presentation: req.Presentation}, owner: owner, password: randomID() + randomID(), done: make(chan struct{}), native: native}
 	native.server = &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { m.serveMacSession(w, r, s) })}
 	m.sessions[s.view.ID] = s
@@ -377,8 +381,10 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 		return
 	}
 	n.writeMu.Lock()
+	err = macSend(input, map[string]any{"action": "launch", "application_id": s.view.Application.ID, "paths": m.macPaths(), "defer_capture": true})
 	n.input = input
 	n.writeMu.Unlock()
+	close(n.ready)
 	defer func() {
 		_ = input.Close()
 		_ = cmd.Process.Kill()
@@ -408,7 +414,7 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 		case <-s.done:
 		}
 	}()
-	if err = n.send(map[string]any{"action": "catalog", "paths": m.macPaths()}); err != nil {
+	if err != nil {
 		code = "launch_failed"
 		return
 	}
@@ -422,11 +428,6 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			return
 		}
 		switch msg.Type {
-		case "catalog":
-			if err = n.send(map[string]any{"action": "launch", "application_id": s.view.Application.ID}); err != nil {
-				code = "launch_failed"
-				return
-			}
 		case "launched":
 			// Launch readiness is independent of the first shareable window.
 			startup.Stop()
@@ -453,6 +454,9 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			header, _ := json.Marshal(metadata)
 			packet := binary.BigEndian.AppendUint32(nil, uint32(len(header)))
 			packet = append(packet, header...)
+			if n.latest == nil && !n.connectedAt.IsZero() {
+				slog.Info("native application first frame", "session", s.view.ID, "generation", msg.Generation, "duration_ms", time.Since(n.connectedAt).Milliseconds())
+			}
 			n.latest = append(packet, frame...)
 			n.revision++
 			n.mu.Unlock()
@@ -560,11 +564,11 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 	n.connection = connection
 	n.mu.Lock()
 	n.changed = changed
+	n.connectedAt = time.Now()
 	n.notice, n.window, n.latest = nil, nil, nil
 	n.generation = 0
 	n.mu.Unlock()
 	_ = n.send(map[string]any{"action": "release"})
-	_ = n.send(map[string]any{"action": "resume"})
 	n.controlMu.Unlock()
 	if previous != nil {
 		_ = previous.Close()
@@ -581,14 +585,32 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		resumed := false
 		for {
 			var request map[string]any
 			if connection.ReadJSON(&request) != nil {
 				return
 			}
 			action, _ := request["action"].(string)
-			if action != "input" && action != "resize" && action != "close" && action != "quit_application" && action != "select" && action != "release" && action != "menu" && action != "menu_action" && action != "configure" && action != "frame_ack" {
+			if action == "resume" {
+				if resumed {
+					return
+				}
+				resumed = true
+			} else if !resumed {
 				return
+			}
+			if action != "resume" && action != "input" && action != "resize" && action != "close" && action != "quit_application" && action != "select" && action != "release" && action != "menu" && action != "menu_action" && action != "configure" && action != "frame_ack" {
+				return
+			}
+			if n.ready != nil {
+				select {
+				case <-n.ready:
+				case <-s.done:
+					return
+				case <-r.Context().Done():
+					return
+				}
 			}
 			n.controlMu.Lock()
 			current := n.connection == connection

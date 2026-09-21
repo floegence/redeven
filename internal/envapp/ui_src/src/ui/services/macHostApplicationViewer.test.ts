@@ -427,7 +427,7 @@ describe('macOS picture controls and stream delivery', () => {
     const v = await viewer(true);
     Object.defineProperty(dom.window, 'devicePixelRatio', {value: 2, configurable: true});
     await v.socket().onopen?.();
-    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure', mode:'auto', pixel_ratio:2, video:true});
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'resume', mode:'auto', pixel_ratio:2, video:true, width:320, height:200});
     await v.activate();
     const picture = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
     picture.click();
@@ -631,7 +631,35 @@ it('sizes the host window to the content area and maps input below the toolbar',
   Object.assign(canvas,{setPointerCapture:vi.fn()});
   dom.window.dispatchEvent(new dom.window.Event('resize'));
   await vi.advanceTimersByTimeAsync(180);
-  expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'resize',width:640,height:480});
+  expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure',width:640,height:480});
   canvas.dispatchEvent(new dom.window.MouseEvent('pointerdown',{clientX:320,clientY:286}));
   expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'input',kind:'down',x:0.5,y:0.5});
+});
+
+it('negotiates initial capture once and does not resize again for its first window', async () => {
+  vi.useFakeTimers();
+  const v = await viewer(true);
+  const canvas = dom.window.document.querySelector('canvas')!;
+  vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({width:800,height:550} as DOMRect);
+  await v.socket().onopen?.();
+  v.window(); v.socket().frame(); await drain();
+  await vi.advanceTimersByTimeAsync(200);
+  const requests = v.socket().send.mock.calls.map(([raw]) => JSON.parse(raw));
+  expect(requests.filter(r => ['resume', 'configure', 'resize'].includes(r.action))).toEqual([
+    expect.objectContaining({action:'resume',width:800,height:550,video:true}),
+  ]);
+});
+
+it('coalesces viewport and density changes into one generation-independent configuration', async () => {
+  vi.useFakeTimers();
+  const v = await viewer(true); await v.socket().onopen?.(); await v.activate();
+  const canvas = dom.window.document.querySelector('canvas')!;
+  vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({width:900,height:600} as DOMRect);
+  Object.defineProperty(dom.window, 'devicePixelRatio', {value:2,configurable:true});
+  dom.window.dispatchEvent(new dom.window.Event('resize'));
+  v.window(2);
+  await vi.advanceTimersByTimeAsync(180);
+  const requests = v.socket().send.mock.calls.map(([raw]) => JSON.parse(raw));
+  expect(requests).toEqual([expect.objectContaining({action:'configure',width:900,height:600,pixel_ratio:2})]);
+  expect(requests[0].generation).toBeUndefined();
 });

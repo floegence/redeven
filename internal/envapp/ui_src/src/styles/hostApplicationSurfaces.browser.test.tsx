@@ -202,3 +202,50 @@ it.each([320, 390, 1000])('keeps the counted window picker usable at %s px while
   expect(drawer.scrollWidth).toBe(drawer.clientWidth);
   expect(doc.activeElement).toBe(confirmation.querySelector('button'));
 });
+
+it('decodes and acknowledges a single static native video frame without waiting for another frame', async () => {
+  // A synthetic 64 x 64 gray BGRA buffer encoded by VideoToolbox with the
+  // production Main profile. This contains no application or screen content.
+  const encoded = {
+  "data" : "AAAAOgYFMkdWStxcTEM/lO/FETzRQ6gBAAADAAEDAAADAAECAAHmAAsAAAMAAAMAAE5IDAOJJAEN/////4AAAAA6JbggH7gVW9P/EJ/VBnkzaLpABEAeFp4akvq+1cKpsULmIwv1FMlK2qWN574AABXUMqW8AWe7fMTZbA==",
+  "description" : "AU0AC//hAAsnTQALq0GG8CDCKAEABCjuPIA=",
+  "profile" : "avc1.4D000B"
+};
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'width:640px;height:480px;border:0';
+  const fixture = `
+    const encoded = ${JSON.stringify(encoded)};
+    window.fetch = async () => ({ok:true,json:async () => ({state:'running',password:'fixture'})});
+    window.WebSocket = class {
+      static OPEN = 1; readyState = 1;
+      constructor() { queueMicrotask(() => this.onopen()); }
+      send(raw) {
+        const message = JSON.parse(raw);
+        if (message.action === 'frame_ack') document.body.dataset.ack = String(message.frame_id);
+        if (message.action !== 'resume') return;
+        document.body.dataset.video = String(message.video);
+        this.onmessage({data:JSON.stringify({type:'window',window:'one',generation:1,width:64,height:64})});
+        const header = new TextEncoder().encode(JSON.stringify({codec:'h264',key:true,transport:'video',generation:1,frame_id:1,timestamp:0,profile:encoded.profile,description:encoded.description}));
+        const bytes = Uint8Array.from(atob(encoded.data), ch => ch.charCodeAt(0));
+        const packet = new Uint8Array(4 + header.length + bytes.length);
+        new DataView(packet.buffer).setUint32(0,header.length); packet.set(header,4); packet.set(bytes,4+header.length);
+        this.onmessage({data:packet.buffer});
+      }
+      close() { this.readyState = 3; }
+    };
+  `;
+  frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Decoder Fixture')
+    .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS)
+    .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',copy:{}}))
+    .replace('{{.Script}}', `${fixture}\n${connectionJS}\n${viewerJS}`);
+  document.body.append(frame);
+  await expect.poll(() => frame.contentDocument?.body.dataset.video).toBe('true');
+  await expect.poll(() => frame.contentDocument?.body.dataset.ack, {timeout:2000}).toBe('1');
+  const doc = frame.contentDocument!;
+  expect(doc.body.dataset.state).toBe('active');
+  const canvas = doc.querySelector('canvas')!;
+  expect(canvas.width).toBe(64);
+  const pixel = canvas.getContext('2d')!.getImageData(32,32,1,1).data;
+  expect(pixel[0]).toBeGreaterThan(60);
+  expect(pixel[0]).toBeLessThan(100);
+});

@@ -105,6 +105,9 @@ func TestMacStreamAuthenticatesAndResumesWithoutRelaunch(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if err := c.WriteJSON(map[string]any{"action": "resume", "mode": "auto", "width": 800, "height": 550, "video": true}); err != nil {
+			t.Fatal(err)
+		}
 		if previous != nil {
 			_ = previous.SetReadDeadline(time.Now().Add(time.Second))
 			if _, _, err := previous.ReadMessage(); err == nil {
@@ -202,6 +205,9 @@ done
 		t.Fatal(err)
 	}
 	defer c.Close()
+	if err := c.WriteJSON(map[string]any{"action": "resume", "mode": "auto", "width": 800, "height": 550, "video": true}); err != nil {
+		t.Fatal(err)
+	}
 	read := func(kind int, expected string) {
 		t.Helper()
 		_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -284,6 +290,9 @@ done
 		t.Fatal(err)
 	}
 	defer c.Close()
+	if err := c.WriteJSON(map[string]any{"action": "resume", "mode": "auto", "width": 800, "height": 550, "video": true}); err != nil {
+		t.Fatal(err)
+	}
 	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
 	for range 2 {
 		if _, _, err := c.ReadMessage(); err != nil {
@@ -439,6 +448,9 @@ func TestMacSnapshotDeliversWindowBeforeGenerationBoundMenu(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close()
+	if err := c.WriteJSON(map[string]any{"action": "resume", "mode": "auto", "width": 800, "height": 550, "video": true}); err != nil {
+		t.Fatal(err)
+	}
 	_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
 	for _, want := range []string{"window", "menu"} {
 		var message macMessage
@@ -593,5 +605,71 @@ done
 				}
 			})
 		}
+	}
+}
+
+func TestMacViewerNegotiatesOnceBeforeControlAndWaitsForHelper(t *testing.T) {
+	m := &Manager{}
+	requests := make(chan map[string]any, 16)
+	n := &macSession{ready: make(chan struct{})}
+	s := &ownedSession{password: "credential", native: n, done: make(chan struct{})}
+	n.input = macPlaybackInput{write: func(data []byte) {
+		var request map[string]any
+		if err := json.Unmarshal(data, &request); err != nil {
+			t.Error(err)
+			return
+		}
+		if request["action"] != "release" {
+			requests <- request
+		}
+	}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { m.serveMacSession(w, r, s) }))
+	defer server.Close()
+	dialer := websocket.Dialer{Subprotocols: []string{"redeven-host-application-v1", "credential"}}
+	connect := func() *websocket.Conn {
+		c, _, err := dialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/_redeven_host_app/stream", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = c.Close() })
+		return c
+	}
+	c := connect()
+	if err := c.WriteJSON(map[string]any{"action": "input", "kind": "key", "key": "Enter"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = c.SetReadDeadline(time.Now().Add(time.Second))
+	if _, _, err := c.ReadMessage(); err == nil {
+		t.Fatal("control before negotiation was accepted")
+	}
+	select {
+	case request := <-requests:
+		t.Fatalf("capture started before viewer configuration: %v", request)
+	default:
+	}
+	c = connect()
+	if err := c.WriteJSON(map[string]any{"action": "resume", "mode": "clarity", "pixel_ratio": 2, "width": 900, "height": 600, "video": true}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case request := <-requests:
+		t.Fatalf("command raced helper launch: %v", request)
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(n.ready)
+	select {
+	case request := <-requests:
+		if request["action"] != "resume" || request["mode"] != "clarity" || request["width"] != float64(900) || request["height"] != float64(600) || request["video"] != true {
+			t.Fatalf("initial capture lost viewer settings: %v", request)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("viewer configuration did not reach ready helper")
+	}
+	if err := c.WriteJSON(map[string]any{"action": "resume"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = c.SetReadDeadline(time.Now().Add(time.Second))
+	if _, _, err := c.ReadMessage(); err == nil {
+		t.Fatal("duplicate negotiation retained control")
 	}
 }
