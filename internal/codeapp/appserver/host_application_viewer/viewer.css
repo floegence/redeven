@@ -26,10 +26,10 @@ body:is([data-state="disconnected"],[data-state="failed"],[data-state="captureUn
 @keyframes travel { 0% { transform:translateX(-110%); } 100% { transform:translateX(360%); } }
 @keyframes arrive { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; } .progress span { width:100%; opacity:.5; } }
-.mac-app-controls { position:fixed; z-index:2; left:50%; bottom:12px; transform:translateX(-50%); display:flex; align-items:center; gap:8px; padding:5px 8px; background:var(--surface); border:1px solid var(--line); border-radius:8px; opacity:.35; transition:opacity .15s; }
+.mac-app-controls { position:fixed; z-index:2; left:50%; bottom:12px; transform:translateX(-50%); display:flex; align-items:center; gap:4px; max-width:calc(100vw - 24px); padding:5px 8px; background:var(--surface); border:1px solid var(--line); border-radius:8px; opacity:.35; transition:opacity .15s; }
 .mac-app-controls:hover,.mac-app-controls:focus-within { opacity:1; }
-.mac-app-controls button { margin:0; border:0; min-height:28px; }
-.mac-app-controls select { max-width:260px; font:inherit; background:var(--surface); color:var(--foreground); cursor:pointer; }
+.mac-app-controls button { flex-shrink:0; margin:0; border:0; min-height:28px; }
+.mac-app-controls>select { min-width:0; flex:1 1 auto; max-width:200px; font:inherit; background:var(--surface); color:var(--foreground); cursor:pointer; }
 .mac-app-input { position:fixed; left:0; bottom:0; width:1px; height:1px; padding:0; border:0; opacity:0; resize:none; }
 .mac-app-menu { position:absolute; bottom:100%; margin-bottom:6px; left:0; width:300px; max-height:min(480px,70vh); overflow:auto; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--surface); box-shadow:0 8px 28px #0002; text-align:left; }
 .mac-app-menu summary { padding:7px 8px; cursor:pointer; }
@@ -43,3 +43,18 @@ body:is([data-state="disconnected"],[data-state="failed"],[data-state="captureUn
 body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; }
 
 .mac-app-feedback { position:fixed; z-index:3; top:16px; left:50%; transform:translateX(-50%); max-width:calc(100% - 32px); padding:10px 14px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--foreground); font-size:12px; pointer-events:none; }
+.mac-app-picture { position:absolute; bottom:calc(100% + 8px); right:0; width:320px; max-width:calc(100vw - 24px); max-height:calc(100vh - 80px); overflow:auto; padding:18px; background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 28px #0002; text-align:left; }
+.mac-app-picture>strong { font-size:14px; font-weight:600; }
+.mac-app-picture-modes { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:12px; }
+.mac-app-picture-modes button { padding:9px; min-height:36px; border:1px solid transparent; border-radius:6px; }
+.mac-app-picture-modes button[aria-pressed="true"] { background:var(--background); border-color:var(--accent); }
+.mac-app-picture p { color:var(--muted); font-size:11px; line-height:1.6; margin:12px 0; }
+.mac-app-picture summary { cursor:pointer; font-size:12px; padding:8px 0; }
+.mac-app-picture label { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12px; margin:8px 0; }
+.mac-app-picture select { padding:5px; border:1px solid var(--line); border-radius:5px; min-width:110px; }
+.mac-app-picture-statistics { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; font-size:11px; color:var(--muted); }
+.mac-app-picture-statistics>div { display:flex; justify-content:space-between; gap:12px; padding:3px 0; }
+.mac-app-picture-statistics output { color:var(--foreground); font-variant-numeric:tabular-nums; }
+.mac-app-controls:has(.mac-app-picture:not([hidden])) { opacity:1; }
+
+@media(max-width:480px) { .mac-app-controls { flex-wrap:wrap; justify-content:center; width:max-content; } .mac-app-controls>button { padding:0 9px; } .mac-app-controls>select { flex-basis:100%; max-width:100%; } .mac-app-picture { right:50%; transform:translateX(50%); } }

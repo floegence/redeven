@@ -58,62 +58,6 @@ enum HostApplicationCatalog {
     }
 }
 
-final class HostApplicationStream: NSObject, SCStreamOutput, SCStreamDelegate {
-    private var stream: SCStream?
-    private let context = CIContext()
-    private let queue = DispatchQueue(label: "redeven.host-application.frames", qos: .userInteractive)
-    private let lock = NSLock()
-    private var stopped = false
-    let generation: Int
-    let failed: (Error) -> Void
-    init(generation: Int, failed: @escaping (Error) -> Void) { self.generation = generation; self.failed = failed }
-    private func failure(_ error: Error) {
-        lock.lock(); let inactive = stopped; lock.unlock()
-        if !inactive {
-            DispatchQueue.main.async { self.failed(error) }
-        }
-    }
-    func start(_ window: SCWindow) {
-        let configuration = SCStreamConfiguration()
-        let scale = min(1, 2560 / max(window.frame.width, window.frame.height))
-        configuration.width = max(1, Int(window.frame.width * scale))
-        configuration.height = max(1, Int(window.frame.height * scale))
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 20)
-        configuration.queueDepth = 3
-        configuration.showsCursor = false
-        configuration.pixelFormat = kCVPixelFormatType_32BGRA
-        let filter = SCContentFilter(desktopIndependentWindow: window)
-        if #available(macOS 14.2, *) { configuration.includeChildWindows = true }
-        let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
-        self.stream = stream
-        do {
-            try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
-            stream.startCapture { error in
-                if let error { self.failure(error) }
-            }
-        } catch { failure(error) }
-    }
-    func stop() { lock.lock(); stopped = true; lock.unlock(); stream?.stopCapture(); stream = nil }
-    func stream(_ stream: SCStream, didStopWithError error: Error) {
-        failure(error)
-    }
-    func stream(_ stream: SCStream, didOutputSampleBuffer sample: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard type == .screen, sample.isValid,
-              let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
-              let status = attachments.first?[.status] as? Int, status == SCFrameStatus.complete.rawValue,
-              let buffer = sample.imageBuffer else { return }
-        autoreleasepool {
-            let image = CIImage(cvPixelBuffer: buffer)
-            guard let cg = context.createCGImage(image, from: image.extent) else { return }
-            let data = NSMutableData()
-            guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return }
-            CGImageDestinationAddImage(destination, cg, [kCGImageDestinationLossyCompressionQuality: 0.82] as CFDictionary)
-            guard CGImageDestinationFinalize(destination) else { return }
-            emit(["type": "frame", "generation": generation, "data": (data as Data).base64EncodedString()])
-        }
-    }
-}
-
 // A process-scoped receipt preserves pointer/key ordering without sleeps or
 // observing other applications. Unmarked input contents are never inspected.
 private final class HostApplicationDelivery {
@@ -152,6 +96,7 @@ private final class HostApplicationDelivery {
 }
 
 final class HostApplicationSession {
+    private var picture = try! HostApplicationCaptureSettings()
     private var app: NSRunningApplication?
     private let inventory = HostApplicationWindows()
     private var presence = HostApplicationWindowPresence()
@@ -189,6 +134,15 @@ final class HostApplicationSession {
                 else { throw NativeInput.invalid("Unknown permission.") }
                 emit(["type": "result"])
             case "launch", "native": try launch(request, native: action == "native")
+            case "configure":
+                let settings = try HostApplicationCaptureSettings(request: request)
+                if settings != picture {
+                    picture = settings
+                    if let selected { try select(selected) }
+                }
+            case "frame_ack":
+                guard request["generation"] as? Int == generation, let id = request["frame_id"] as? Int else { return }
+                capture?.acknowledge(id)
             case "resume":
                 captureFailed = false
                 if let selected { try select(selected) } else { refresh() }
@@ -246,7 +200,7 @@ final class HostApplicationSession {
         } catch {
             let failure = error as? HostFailure
             let action = request["action"] as? String ?? ""
-            let operation = ["input", "close", "menu", "menu_action", "resize", "select", "release", "resume"].contains(action)
+            let operation = ["input", "close", "menu", "menu_action", "resize", "select", "release", "resume", "configure", "frame_ack"].contains(action)
             if operation { releaseButtons() }
             emit(["type": operation ? "operation_error" : "error", "action": action, "code": failure?.code ?? "APPLICATION_FAILED"])
         }
@@ -350,7 +304,7 @@ final class HostApplicationSession {
                 self.selected = window
                 self.waiting = false
                 let currentGeneration = self.generation
-                let stream = HostApplicationStream(generation: currentGeneration) { [weak self] error in
+                let stream = HostApplicationStream(generation: currentGeneration, settings: self.picture) { [weak self] error in
                     guard let self, self.app != nil, self.generation == currentGeneration else { return }
                     let failure = error as NSError
                     if failure.domain == SCStreamErrorDomain && failure.code == SCStreamError.Code.noCaptureSource.rawValue {

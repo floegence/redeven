@@ -2,6 +2,7 @@
 """Exercise real native windows in a disposable bundle; never open personal apps."""
 import argparse
 import base64
+from collections import deque
 import json
 import os
 from pathlib import Path
@@ -30,29 +31,47 @@ class Helper:
         self.process = subprocess.Popen([str(executable), '--host-applications'], stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.messages = queue.Queue()
+        self.write_lock = threading.Lock()
+        self.frames = deque(maxlen=600)
+        self.events = deque(maxlen=600)
+        self.closing = False
+        self.auto_ack = True
         def read():
             for line in self.process.stdout:
-                self.messages.put(json.loads(line))
+                value = json.loads(line)
+                if value['type'] == 'frame':
+                    self.frames.append(dict(received_at=time.monotonic(), **{k:v for k,v in value.items() if k != 'data'}))
+                    if self.auto_ack:
+                        self.send('frame_ack', generation=value['generation'], frame_id=value['frame_id'])
+                self.events.append({k:v for k,v in value.items() if k != 'data'})
+                self.messages.put(value)
         self.reader = threading.Thread(target=read, daemon=True)
         self.reader.start()
 
     def send(self, action, **values):
-        self.process.stdin.write(json.dumps(dict(protocol_version=1, action=action, **values)) + '\n')
-        self.process.stdin.flush()
+        with self.write_lock:
+            if self.closing:
+                return
+            self.process.stdin.write(json.dumps(dict(protocol_version=1, action=action, **values)) + '\n')
+            self.process.stdin.flush()
 
-    def wait(self, kind, timeout=30):
+    def wait(self, kind, timeout=30, predicate=lambda value: True):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             value = self.messages.get(timeout=max(0.01, deadline - time.monotonic()))
-            if value['type'] == kind:
+            if value['type'] == kind and predicate(value):
                 return value
             if value['type'] in ('error', 'operation_error', 'blocked', 'capture_error', 'ended'):
                 raise AssertionError(value)
         raise AssertionError('Timed out waiting for ' + kind)
 
     def close(self):
-        if self.process.poll() is None:
+        with self.write_lock:
+            if self.closing:
+                return
+            self.closing = True
             self.process.stdin.close()
+        if self.process.poll() is None:
             try:
                 self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
@@ -161,16 +180,60 @@ def run(helper_path, output):
             replacement = helper.wait('window'); helper.wait('frame')
             assert replacement['window'] != resized['window'] and replacement['generation'] > resized['generation']
             assert receipt()['pid'] == pid and receipt()['text'] == 'Replaced'
+            # Retina capture and live profile changes must retain the same app.
+            helper.send('configure', mode='clarity', pixel_ratio=2, max_dimension=3840, frame_rate=30, video=True)
+            quality_window = helper.wait('window')
+            video = helper.wait('frame')
+            assert video['codec'] == 'h264' and video['key'] and video['description'], video.keys()
+            assert video['width'] == int(quality_window['width']) * 2 and video['height'] == int(quality_window['height']) * 2, video.keys()
+            lossless = helper.wait('frame', timeout=10, predicate=lambda value: value.get('codec') == 'png')
+            assert lossless['codec'] == 'png', lossless.keys()
+            (output / 'retina-frame.png').write_bytes(base64.b64decode(lossless['data']))
+            def animate(target):
+                helper.send('menu', window=target['window'], generation=target['generation'])
+                action = next(i for i in items(helper.wait('menu')['items']) if i['title'] == 'Toggle animation')
+                helper.send('menu_action', item=action['id'], window=target['window'], generation=target['generation'])
+                helper.wait('operation_complete', predicate=lambda value: value.get('action') == 'menu_action')
+            def measure_frames(target, seconds=3):
+                started = time.monotonic()
+                time.sleep(seconds)
+                frames = [f for f in helper.frames if f['generation'] == target['generation'] and f['received_at'] >= started]
+                return len(frames) / seconds
+            helper.send('configure', mode='smooth', pixel_ratio=2, max_dimension=1600, frame_rate=60, video=True)
+            motion_window = helper.wait('window'); helper.wait('frame')
+            animate(motion_window)
+            motion_fps = measure_frames(motion_window)
+            assert 20 < motion_fps <= 61, motion_fps
+            # Withhold credit: only one encoded frame may be outstanding.
+            helper.auto_ack = False
+            helper.wait('frame', predicate=lambda value: value['generation'] == motion_window['generation'])
+            time.sleep(0.25)
+            last = helper.frames[-1]
+            count = len(helper.frames)
+            time.sleep(0.25)
+            assert len(helper.frames) == count, 'Capture ignored viewer backpressure'
+            helper.auto_ack = True
+            helper.send('frame_ack', generation=last['generation'], frame_id=last['frame_id'])
+            helper.send('configure', mode='data' , pixel_ratio=2, max_dimension=1600, frame_rate=15, video=False)
+            capped = helper.wait('window'); image = helper.wait('frame')
+            assert image['codec'] == 'jpeg' and image['frame_rate'] == 15 and max(image['width'], image['height']) <= 1600
+            capped_fps = measure_frames(capped)
+            assert 3 < capped_fps <= 16, capped_fps
+            animate(capped)
+            assert receipt()['pid'] == pid
+            replacement = capped
             before_close = receipt()
             helper.send('close', window=replacement['window'], generation=replacement['generation'])
             helper.wait('ended')
             evidence = dict(existing_application_shared=True, detach_preserves_existing=True, native_launch=True, catalog=True, capture=True, input=before_close,
                             system_menu=True, reconnect_same_process=True, stale_input_rejected=True,
-                            resize=resized, window_replacement_preserves_session=True, actual_window_closed=True)
+                            resize=resized, window_replacement_preserves_session=True, retina_capture=True, hardware_h264=True, lossless_refresh=True, motion_fps=motion_fps, capped_fps=capped_fps, backpressure=True, live_quality_controls=True, actual_window_closed=True)
             (output / 'native-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
             print('PASS: native launch, catalog, pixels, click, Unicode, shortcut, menu, reconnect, stale input, resize, window replacement, close')
         except Exception:
             output.mkdir(parents=True, exist_ok=True)
+            (output / 'failed-frames.json').write_text(json.dumps(list(helper.frames)[-120:], indent=2))
+            (output / 'failed-events.json').write_text(json.dumps(list(helper.events), indent=2))
             (output / 'failed-receipt.json').write_text(json.dumps(receipt(), indent=2))
             raise
         finally:

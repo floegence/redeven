@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -88,7 +89,7 @@ func macSend(input io.Writer, value map[string]any) error {
 }
 func macScanner(output io.Reader) *bufio.Scanner {
 	scanner := bufio.NewScanner(output)
-	scanner.Buffer(make([]byte, 65536), 16<<20)
+	scanner.Buffer(make([]byte, 65536), 128<<20)
 	return scanner
 }
 func macOnce(ctx context.Context, helper string, request map[string]any) (macMessage, error) {
@@ -202,6 +203,7 @@ type macSession struct {
 	generation     int
 	revision       uint64
 	connection     *websocket.Conn
+	changed        chan struct{}
 }
 
 func (s *macSession) send(request map[string]any) error {
@@ -362,7 +364,16 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 				n.mu.Unlock()
 				continue
 			}
-			n.latest = frame
+			var metadata map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &metadata); err != nil {
+				n.mu.Unlock()
+				continue
+			}
+			delete(metadata, "data")
+			header, _ := json.Marshal(metadata)
+			packet := binary.BigEndian.AppendUint32(nil, uint32(len(header)))
+			packet = append(packet, header...)
+			n.latest = append(packet, frame...)
 			n.revision++
 			n.mu.Unlock()
 			m.mu.Lock()
@@ -415,6 +426,12 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			n.revision++
 			n.mu.Unlock()
 		}
+		n.mu.Lock()
+		select {
+		case n.changed <- struct{}{}:
+		default:
+		}
+		n.mu.Unlock()
 	}
 	if err := scanner.Err(); err != nil {
 		slog.Warn("native application helper stream ended", "session", s.view.ID, "error", err)
@@ -448,10 +465,14 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 	_ = connection.SetReadDeadline(time.Now().Add(45 * time.Second))
 	connection.SetPongHandler(func(string) error { return connection.SetReadDeadline(time.Now().Add(45 * time.Second)) })
 	n := s.native
+	// Each viewer owns its wakeup channel: a closing predecessor must never
+	// consume the successor's only notification for an unchanged window.
+	changed := make(chan struct{}, 1)
 	n.controlMu.Lock()
 	previous := n.connection
 	n.connection = connection
 	n.mu.Lock()
+	n.changed = changed
 	n.notice, n.window, n.latest = nil, nil, nil
 	n.generation = 0
 	n.mu.Unlock()
@@ -479,7 +500,7 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 				return
 			}
 			action, _ := request["action"].(string)
-			if action != "input" && action != "resize" && action != "close" && action != "select" && action != "release" && action != "menu" && action != "menu_action" {
+			if action != "input" && action != "resize" && action != "close" && action != "select" && action != "release" && action != "menu" && action != "menu_action" && action != "configure" && action != "frame_ack" {
 				return
 			}
 			n.controlMu.Lock()
@@ -495,8 +516,6 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 			}
 		}
 	}()
-	tick := time.NewTicker(50 * time.Millisecond)
-	defer tick.Stop()
 	ping := time.NewTicker(15 * time.Second)
 	defer ping.Stop()
 	var revision uint64
@@ -512,7 +531,7 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 			if connection.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)) != nil {
 				return
 			}
-		case <-tick.C:
+		case <-changed:
 			n.mu.Lock()
 			frame := n.latest
 			nextRevision := n.revision

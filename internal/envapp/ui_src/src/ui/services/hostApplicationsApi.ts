@@ -41,7 +41,41 @@ export type HostApplicationCatalog = Readonly<{
   sessions: HostApplicationSession[];
 }>;
 
-export type HostApplicationPresentation = Readonly<{ operationFailed?: string; waiting?: string; captureUnavailable?: string; menu?: string; windows?: string; closeWindow?: string; sharedControl?: string; input?: string; locale: string; connecting: string; reconnecting: string; disconnected: string; connectionHint: string; reconnect: string; starting: string; failed: string; ended: string; retry: string }>;
+export type HostApplicationPresentation = Readonly<{
+  picturePixels?: string;
+  picture?: string;
+  pictureAuto?: string;
+  pictureClarity?: string;
+  pictureSmooth?: string;
+  pictureData?: string;
+  pictureHint?: string;
+  pictureAdvanced?: string;
+  pictureResolution?: string;
+  pictureFrameRate?: string;
+  pictureActualRate?: string;
+  pictureBandwidth?: string;
+  pictureTransport?: string;
+  pictureVideo?: string;
+  pictureImages?: string;
+  operationFailed?: string;
+  waiting?: string;
+  captureUnavailable?: string;
+  menu?: string;
+  windows?: string;
+  closeWindow?: string;
+  sharedControl?: string;
+  input?: string;
+  locale: string;
+  connecting: string;
+  reconnecting: string;
+  disconnected: string;
+  connectionHint: string;
+  reconnect: string;
+  starting: string;
+  failed: string;
+  ended: string;
+  retry: string;
+}>;
 
 const base = '/_redeven_proxy/api/host-applications';
 

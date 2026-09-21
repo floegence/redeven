@@ -12,7 +12,7 @@ let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.dispatchEvent(new dom.window.Event('beforeunload')); dom?.window.close(); });
 
-async function viewer() {
+async function viewer(video = false) {
   dom = new JSDOM(html, { url: 'http://localhost/pf/test/_redeven_host_app/', runScripts: 'dangerously', pretendToBeVisual: true });
   const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ state: 'running', password: 'private' }) });
   const drawImage = vi.fn();
@@ -24,22 +24,40 @@ async function viewer() {
     readyState = 1;
     onmessage?: (event: { data: unknown }) => void;
     onclose?: () => void;
+    onopen?: () => Promise<void>;
+    generation = 1; frameID = 0;
     send = vi.fn();
     close = vi.fn(() => { this.readyState = 3; });
     constructor(readonly url: URL, readonly protocols: string[]) { Socket.instances.push(this); }
-    message(value: unknown) { this.onmessage?.({ data: JSON.stringify(value) }); }
-    frame() { this.onmessage?.({ data: new dom.window.Blob(['frame']) }); }
+    message(value: unknown) { const msg = value as {type: string; generation: number}; if (msg.type === 'window') this.generation = msg.generation; this.onmessage?.({ data: JSON.stringify(value) }); }
+    frame(metadata: Record<string, unknown> = {}) {
+      const header = new TextEncoder().encode(JSON.stringify({codec: 'jpeg', generation: this.generation, frame_id: ++this.frameID, transport: 'images', ...metadata}));
+      const packet = new dom.window.Uint8Array(4 + header.length + 5);
+      new dom.window.DataView(packet.buffer).setUint32(0, header.length); packet.set(header, 4);
+      this.onmessage?.({data: packet.buffer});
+    }
   }
   vi.spyOn(dom.window.HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
-  Object.assign(dom.window, { fetch, WebSocket: Socket, createImageBitmap: bitmap, redevenHostApplicationWindow: native });
-  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon: '', copy: { operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
+  const decoders: Decoder[] = [];
+  class Decoder {
+    static isConfigSupported = vi.fn().mockResolvedValue({supported: video});
+    state = 'unconfigured';
+    constructor(readonly callbacks: { output: (frame: unknown) => void; error: (error: Error) => void }) { decoders.push(this); }
+    configure = vi.fn(() => { this.state = 'configured'; });
+    decode = vi.fn(() => { this.callbacks.output({displayWidth: 1280, displayHeight: 960, close: vi.fn()}); });
+    close() { this.state = 'closed'; }
+  }
+  Object.assign(dom.window, { TextDecoder, TextEncoder, VideoDecoder: video ? Decoder : undefined, EncodedVideoChunk: class { constructor(public value: unknown) {} }, fetch, WebSocket: Socket, createImageBitmap: bitmap, redevenHostApplicationWindow: native });
+  const statisticsTicks: (() => void)[] = [];
+  vi.spyOn(dom.window, 'setInterval').mockImplementation(((callback: () => void) => { statisticsTicks.push(callback); return 1; }) as typeof dom.window.setInterval);
+  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon: '', copy: { "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
   await drain();
   const socket = () => Socket.instances.at(-1)!;
   const state = () => dom.window.document.body.dataset.state;
   const window = (generation = 1) => socket().message({ type: 'window', window: 'owned', generation, width: 640, height: 480 });
-  const activate = async () => { window(); socket().frame(); await drain(); };
+  const activate = async () => { window(); socket().frame(); await drain(); socket().send.mockClear(); };
   const retry = async () => { (dom.window.document.getElementById('retry') as HTMLButtonElement).click(); await drain(); };
-  return { socket, state, window, activate, retry, fetch, bitmap, drawImage, native };
+  return { socket, state, window, activate, retry, fetch, bitmap, drawImage, native, decoders, statisticsTicks };
 }
 
 describe('macOS application viewer', () => {
@@ -152,5 +170,73 @@ describe('macOS application viewer', () => {
     panel.querySelector('button')!.click();
     expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({ action: 'menu_action', item: 'system-item' });
     expect((panel as HTMLElement).hidden).toBe(true);
+  });
+});
+
+describe('macOS picture controls and stream delivery', () => {
+  it('negotiates device pixels and applies quality changes without reopening the app', async () => {
+    const v = await viewer(true);
+    Object.defineProperty(dom.window, 'devicePixelRatio', {value: 2, configurable: true});
+    await v.socket().onopen?.();
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure', mode:'auto', pixel_ratio:2, video:true});
+    await v.activate();
+    const picture = [...dom.window.document.querySelectorAll('button')].find(el=>el.textContent==='Picture quality')!;
+    picture.click();
+    const panel = dom.window.document.querySelector('#picture-settings')!;
+    [...panel.querySelectorAll('button')].find(el=>el.textContent==='Motion first')!.click();
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure', mode:'smooth', pixel_ratio:2});
+    const select = panel.querySelector<HTMLSelectElement>('select[aria-label="Frame rate limit"]')!;
+    select.value='60';select.dispatchEvent(new dom.window.Event('change'));
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure', frame_rate:60});
+    expect(JSON.parse(dom.window.localStorage.getItem('redeven.mac-app.picture.v1')!)).toMatchObject({mode:'smooth',frame_rate:60});
+    expect(v.fetch).toHaveBeenCalledOnce();
+    expect(v.socket().close).not.toHaveBeenCalled();
+    select.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+    expect((panel as HTMLElement).hidden).toBe(true);
+    expect(dom.window.document.activeElement).toBe(picture);
+  });
+  it('acknowledges only decoded current frames and preserves video references across lossless refresh', async () => {
+    const v = await viewer(true); await v.socket().onopen?.(); v.window(4);
+    v.socket().frame({codec:'h264',key:true,description:'AU0AMw==',profile:'avc1.4D0033',timestamp:1,transport:'video'}); await drain();
+    expect(v.state()).toBe('active');
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'frame_ack',generation:4,frame_id:1});
+    expect(dom.window.document.querySelector('output[aria-label="Actual resolution"]')?.textContent).toBe('1280 × 960');
+    v.socket().frame({codec:'png'});await drain();
+    v.socket().frame({codec:'h264',key:false,timestamp:2,transport:'video'});await drain();
+    expect(v.drawImage).toHaveBeenCalledTimes(3);
+    const before=v.socket().send.mock.calls.length;
+    v.socket().frame({generation:3});await drain();
+    expect(v.drawImage).toHaveBeenCalledTimes(3);
+    expect(v.socket().send).toHaveBeenCalledTimes(before);
+  });
+  it('rejects malformed packets without acknowledging or painting them', async () => {
+    const v = await viewer();v.window();
+    v.socket().onmessage?.({data:new dom.window.ArrayBuffer(3)});await drain();
+    expect(v.state()).toBe('failed');expect(v.drawImage).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('macOS picture recovery and measurement', () => {
+  it('renegotiates image transport when a video decoder fails without restarting the app', async () => {
+    const v = await viewer(true); await v.socket().onopen?.(); v.window();
+    v.socket().frame({codec:'h264',key:true,description:'AU0AMw==',profile:'avc1.4D0033',timestamp:1,transport:'video'}); await drain();
+    v.decoders[0].decode.mockImplementation(() => { v.decoders[0].callbacks.error(new Error('Decoder unavailable')); });
+    v.socket().frame({codec:'h264',key:false,timestamp:2,transport:'video'}); await drain();
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure',video:false});
+    expect(v.socket().close).not.toHaveBeenCalled();
+    v.window(2); v.socket().frame(); await drain();
+    expect(v.state()).toBe('active');
+    expect(dom.window.document.querySelector('output[aria-label="Transport"]')?.textContent).toBe('Image stream');
+    expect(v.fetch).toHaveBeenCalledOnce();
+  });
+  it('measures painted frames and received bytes then reports zero for an idle window', async () => {
+    const v = await viewer(); await v.activate();
+    v.statisticsTicks[0]();
+    const rate = dom.window.document.querySelector('output[aria-label="Actual frame rate"]')!;
+    expect(parseFloat(rate.textContent!)).toBeGreaterThan(0);
+    v.statisticsTicks[0]();
+    expect(rate.textContent).toBe('0.0 FPS');
+    expect(dom.window.document.querySelector('output[aria-label="Bandwidth"]')?.textContent).toBe('0.00 Mb/s');
   });
 });

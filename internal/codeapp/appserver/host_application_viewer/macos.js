@@ -31,6 +31,103 @@
   menuPanel.hidden = true;
   controls.append(windows, menu, close, menuPanel);
   document.body.append(controls);
+  const pictureButton = document.createElement('button');
+  pictureButton.textContent = config.copy.picture;
+  pictureButton.setAttribute('aria-expanded', 'false');
+  pictureButton.setAttribute('aria-controls', 'picture-settings');
+  const picturePanel = document.createElement('section');
+  picturePanel.id = 'picture-settings';
+  picturePanel.className = 'mac-app-picture';
+  picturePanel.setAttribute('aria-label', config.copy.picture);
+  picturePanel.hidden = true;
+  const pictureTitle = document.createElement('strong');
+  pictureTitle.textContent = config.copy.picture;
+  picturePanel.append(pictureTitle);
+  const picture = { mode: 'auto', max_dimension: 0, frame_rate: 0 };
+  const preferenceKey = 'redeven.mac-app.picture.v1';
+  try {
+    const saved = JSON.parse(localStorage.getItem(preferenceKey));
+    if (saved && ['auto', 'clarity', 'smooth', 'data'].includes(saved.mode)
+      && [0, 1600, 1920, 2560, 3840, 4096].includes(saved.max_dimension)
+      && [0, 15, 24, 30, 60].includes(saved.frame_rate)) {
+      picture.mode = saved.mode;
+      picture.max_dimension = saved.max_dimension;
+      picture.frame_rate = saved.frame_rate;
+    }
+  } catch { /* Private browsing may disable preference storage. */ }
+  let videoSupported = false;
+  const modeButtons = new Map();
+  const modes = document.createElement('div');
+  modes.className = 'mac-app-picture-modes';
+  modes.setAttribute('role', 'group');
+  modes.setAttribute('aria-label', config.copy.picture);
+  for (const mode of ['auto', 'clarity', 'smooth', 'data']) {
+    const button = document.createElement('button');
+    button.textContent = config.copy['picture' + mode[0].toUpperCase() + mode.slice(1)];
+    button.setAttribute('aria-pressed', String(picture.mode === mode));
+    button.onclick = () => {
+      picture.mode = mode;
+      for (const [value, control] of modeButtons) control.setAttribute('aria-pressed', String(value === mode));
+      savePicture(); configurePicture();
+    };
+    modeButtons.set(mode, button); modes.append(button);
+  }
+  picturePanel.append(modes);
+  const pictureHint = document.createElement('p');
+  pictureHint.textContent = config.copy.pictureHint;
+  picturePanel.append(pictureHint);
+  const advanced = document.createElement('details');
+  const advancedTitle = document.createElement('summary');
+  advancedTitle.textContent = config.copy.pictureAdvanced;
+  advanced.append(advancedTitle);
+  for (const [field, title, values, unit] of [
+    ['max_dimension', config.copy.pictureResolution, [0, 1600, 1920, 2560, 3840, 4096], 'px'],
+    ['frame_rate', config.copy.pictureFrameRate, [0, 15, 24, 30, 60], 'FPS'],
+  ]) {
+    const label = document.createElement('label');
+    const text = document.createElement('span'); text.textContent = title;
+    const select = document.createElement('select');
+    select.setAttribute('aria-label', title);
+    for (const value of values) {
+      const option = document.createElement('option'); option.value = String(value);
+      option.textContent = value === 0 ? config.copy.pictureAuto : `${value} ${unit}`;
+      select.append(option);
+    }
+    select.value = String(picture[field]);
+    select.onchange = () => { picture[field] = Number(select.value); savePicture(); configurePicture(); };
+    label.append(text, select); advanced.append(label);
+  }
+  picturePanel.append(advanced);
+  const statistics = document.createElement('div');
+  statistics.className = 'mac-app-picture-statistics';
+  const statisticValues = {};
+  for (const [key, title] of [['resolution', config.copy.picturePixels], ['rate', config.copy.pictureActualRate], ['bandwidth', config.copy.pictureBandwidth], ['transport', config.copy.pictureTransport]]) {
+    const row = document.createElement('div');
+    const label = document.createElement('span'); label.textContent = title;
+    const value = document.createElement('output'); value.textContent = '—'; value.setAttribute('aria-label', title);
+    statisticValues[key] = value; row.append(label, value); statistics.append(row);
+  }
+  picturePanel.append(statistics);
+  controls.append(pictureButton, picturePanel);
+  let receivedBytes = 0, paintedFrames = 0, measuredAt = performance.now();
+  const statisticsTimer = setInterval(() => {
+    const now = performance.now(), elapsed = (now - measuredAt) / 1000;
+    statisticValues.rate.textContent = `${(paintedFrames / elapsed).toFixed(1)} FPS`;
+    statisticValues.bandwidth.textContent = `${(receivedBytes * 8 / elapsed / 1e6).toFixed(2)} Mb/s`;
+    receivedBytes = 0; paintedFrames = 0; measuredAt = now;
+  }, 1000);
+  function savePicture() {
+    try { localStorage.setItem(preferenceKey, JSON.stringify(picture)); } catch { /* Preferences are optional. */ }
+  }
+  function configurePicture() {
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({action: 'configure', ...picture, pixel_ratio: Math.min(4, Math.max(0.5, devicePixelRatio || 1)), video: videoSupported}));
+  }
+  function hidePicture() { picturePanel.hidden = true; pictureButton.setAttribute('aria-expanded', 'false'); }
+  pictureButton.onclick = () => {
+    picturePanel.hidden = !picturePanel.hidden;
+    pictureButton.setAttribute('aria-expanded', String(!picturePanel.hidden));
+    menuPanel.hidden = true; menu.setAttribute('aria-expanded', 'false');
+  };
   const input = document.createElement('textarea');
   input.className = 'mac-app-input';
   input.setAttribute('aria-label', config.copy.input);
@@ -77,6 +174,7 @@
     input.disabled = state !== 'active';
     if (state !== 'active') {
       feedback.hidden = true;
+      hidePicture();
       menuPanel.hidden = true;
       menu.setAttribute('aria-expanded', 'false');
     }
@@ -104,13 +202,16 @@
     current = null;
     renderedGeneration = 0;
     pending = null;
+    resetDecoder();
     present(state);
     if (state === 'ended' && active) {
       if (native) native.request('close');
       else window.close();
     }
   }
+  let configuredRatio;
   function resize() {
+    if (configuredRatio !== devicePixelRatio) { configuredRatio = devicePixelRatio; configurePicture(); }
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       if (current) {
@@ -124,44 +225,65 @@
       }
     }, 180);
   }
+  let decoder, decoderGeneration, videoPending, decodeDeadline;
+  function resetDecoder() {
+    clearTimeout(decodeDeadline);
+    videoPending?.reject(Error('Capture changed'));
+    videoPending = null;
+    if (decoder && decoder.state !== 'closed') decoder.close();
+    decoder = null; decoderGeneration = null;
+  }
+  function decodeVideo(next) {
+    if (!videoSupported) throw Error('Video decoding unavailable');
+    if (decoderGeneration !== next.generation) {
+      resetDecoder();
+      if (!next.meta.key || !next.meta.description) throw Error('Missing video key frame');
+      decoder = new VideoDecoder({
+        output: (frame) => {
+          const receiver = videoPending; videoPending = null; clearTimeout(decodeDeadline);
+          if (receiver) receiver.resolve(frame); else frame.close();
+        },
+        error: (error) => { videoPending?.reject(error); videoPending = null; },
+      });
+      decoder.configure({ codec: next.meta.profile, description: Uint8Array.from(atob(next.meta.description), ch => ch.charCodeAt(0)), optimizeForLatency: true });
+      decoderGeneration = next.generation;
+    }
+    return new Promise((resolve, reject) => {
+      videoPending = { resolve, reject };
+      decodeDeadline = setTimeout(() => { videoPending?.reject(Error('Video decode timed out')); videoPending = null; }, 5000);
+      decoder.decode(new EncodedVideoChunk({ type: next.meta.key ? 'key' : 'delta', timestamp: next.meta.timestamp, data: next.bytes }));
+    });
+  }
   async function draw() {
     if (drawing) return;
     drawing = true;
     let decoding;
     try {
       while (pending) {
-        const next = pending;
-        decoding = next;
-        pending = null;
-        const image = await createImageBitmap(next.blob);
-        if (
-          next.attempt === attempt &&
-          current &&
-          next.generation === current.generation &&
-          socket?.readyState === WebSocket.OPEN
-        ) {
-          canvas.width = image.width;
-          canvas.height = image.height;
+        const next = pending; decoding = next; pending = null;
+        const image = next.meta.codec === 'h264' ? await decodeVideo(next)
+          : await createImageBitmap(new Blob([next.bytes], {type: next.meta.codec === 'png' ? 'image/png' : 'image/jpeg'}));
+        if (next.attempt === attempt && current && next.generation === current.generation && socket?.readyState === WebSocket.OPEN) {
+          const width = image.displayWidth || image.width, height = image.displayHeight || image.height;
+          if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
           context.drawImage(image, 0, 0);
           renderedGeneration = current.generation;
           canvas.setAttribute('aria-busy', 'false');
-          clearTimeout(deadline);
-          active = true;
-          present('active');
+          statisticValues.resolution.textContent = `${width} × ${height}`;
+          statisticValues.transport.textContent = config.copy[next.meta.transport === 'video' ? 'pictureVideo' : 'pictureImages'];
+          paintedFrames++;
+          socket.send(JSON.stringify({ action: 'frame_ack', generation: next.generation, frame_id: next.meta.frame_id }));
+          clearTimeout(deadline); active = true; present('active');
         }
         image.close();
       }
     } catch {
-      if (
-        socket &&
-        decoding?.attempt === attempt &&
-        decoding?.generation === current?.generation
-      )
-        disconnect('failed');
-    } finally {
-      drawing = false;
-      if (pending) void draw();
-    }
+      if (socket && decoding?.attempt === attempt && decoding?.generation === current?.generation) {
+        if (decoding.meta.codec === 'h264' && videoSupported) {
+          videoSupported = false; resetDecoder(); configurePicture();
+        } else disconnect('failed');
+      }
+    } finally { drawing = false; if (pending) void draw(); }
   }
   async function connect() {
     const mine = ++attempt;
@@ -197,17 +319,28 @@
         state.password,
       ]);
       socket = connection;
+      connection.binaryType = 'arraybuffer';
+      connection.onopen = async () => {
+        try { videoSupported = typeof VideoDecoder !== 'undefined' && (await VideoDecoder.isConfigSupported({codec:'avc1.4D0033', optimizeForLatency:true})).supported; }
+        catch { videoSupported = false; }
+        if (mine === attempt && socket === connection) configurePicture();
+      };
       connection.onmessage = (event) => {
         if (mine !== attempt || socket !== connection) return;
-        if (event.data instanceof Blob) {
-          if (current) {
-            pending = {
-              blob: event.data,
-              attempt: mine,
-              generation: current.generation,
-            };
-            void draw();
-          }
+        if (event.data instanceof ArrayBuffer) {
+          try {
+            const packet = new Uint8Array(event.data);
+            if (packet.length < 4) throw Error('Missing frame header');
+            const length = new DataView(event.data).getUint32(0);
+            if (length > 65536 || length > packet.length - 4) throw Error('Invalid frame header');
+            const meta = JSON.parse(new TextDecoder().decode(packet.subarray(4, 4 + length)));
+            if (!['jpeg', 'png', 'h264'].includes(meta.codec)) throw Error('Unsupported frame');
+            receivedBytes += packet.length;
+            if (current && meta.generation === current.generation) {
+              pending = { bytes: packet.subarray(4 + length), meta, attempt: mine, generation: meta.generation };
+              void draw();
+            }
+          } catch { disconnect('failed'); }
           return;
         }
         let message;
@@ -218,6 +351,7 @@
           return;
         }
         if (message.type === 'waiting') {
+          resetDecoder();
           pending = null;
           current = null;
           renderedGeneration = 0;
@@ -230,6 +364,7 @@
         } else if (message.type === 'operation_complete') {
           feedback.hidden = true;
         } else if (message.type === 'window') {
+          resetDecoder();
           pending = null;
           current = message;
           canvas.setAttribute('aria-busy', 'true');
@@ -247,6 +382,7 @@
           windows.hidden = message.windows.length < 2;
           if (current) windows.value = current.window;
         } else if (message.type === 'menu') {
+          hidePicture();
           const build = (items) =>
             items.map((item) => {
               if (item.children.length) {
@@ -428,6 +564,8 @@
     abort?.abort();
     clearTimeout(deadline);
     clearTimeout(resizeTimer);
+    clearInterval(statisticsTimer);
+    resetDecoder();
   });
   windows.onchange = () => send({ action: 'select', window: windows.value });
   close.onclick = () => send({ action: 'close' });
@@ -439,6 +577,7 @@
   };
   document.addEventListener('pointerdown', (event) => {
     if (!controls.contains(event.target)) {
+      hidePicture();
       menuPanel.hidden = true;
       menu.setAttribute('aria-expanded', 'false');
     }
@@ -446,7 +585,9 @@
   document.addEventListener(
     'keydown',
     (event) => {
-      if (event.key === 'Escape' && !menuPanel.hidden) {
+      if (event.key === 'Escape' && !picturePanel.hidden) {
+        event.stopImmediatePropagation(); event.preventDefault(); hidePicture(); pictureButton.focus();
+      } else if (event.key === 'Escape' && !menuPanel.hidden) {
         event.stopImmediatePropagation();
         event.preventDefault();
         menuPanel.hidden = true;

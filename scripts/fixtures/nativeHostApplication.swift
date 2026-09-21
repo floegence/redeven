@@ -16,6 +16,7 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var field: NSTextField!
     var menuClicks = 0
     var clicks = 0
+    var animation: Timer?
     var replacing = false
     var events: [[String: Any]] = []
     let receipt = Bundle.main.bundleURL.appendingPathComponent("receipt.json").path
@@ -43,6 +44,8 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
         action.target = self; actions.addItem(action)
         let replace = NSMenuItem(title: "Replace window", action: #selector(replaceWindow), keyEquivalent: "")
         replace.target = self; actions.addItem(replace); root.submenu = actions
+        let animate = NSMenuItem(title: "Toggle animation", action: #selector(toggleAnimation), keyEquivalent: "")
+        animate.target = self; actions.addItem(animate)
         menu.addItem(root)
         let edit = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         edit.submenu = NSMenu(title: "Edit")
@@ -59,6 +62,14 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.field.stringValue = text
             self.replacing = false
             self.save()
+        }
+    }
+    @objc func toggleAnimation() {
+        if let animation { animation.invalidate(); self.animation = nil; return }
+        window.makeFirstResponder(nil)
+        animation = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { _ in
+            let hue = ProcessInfo.processInfo.systemUptime.truncatingRemainder(dividingBy: 3) / 3
+            self.window.backgroundColor = NSColor(hue: hue, saturation: 0.6, brightness: 0.7, alpha: 1)
         }
     }
     @objc func recordMenu() { menuClicks += 1; save() }
