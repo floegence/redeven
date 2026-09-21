@@ -217,6 +217,44 @@ func TestServer_AISkills_PermissionModel(t *testing.T) {
 			t.Fatalf("skills list should allow read permission, got=%d body=%s", rr.Code, rr.Body.String())
 		}
 	}
+	for _, kind := range []string{"tree", "file"} {
+		t.Run("browse-system-"+kind, func(t *testing.T) {
+			query := url.Values{"skill_path": {"system:redeven-environment/SKILL.md"}}
+			if kind == "tree" {
+				query.Set("dir", "")
+			} else {
+				query.Set("file", "SKILL.md")
+			}
+			req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/skills/browse/"+kind+"?"+query.Encode(), nil)
+			req.Header.Set("Origin", envOrigin)
+			rr := httptest.NewRecorder()
+			srv.serveHTTP(rr, req)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("system skill browsing should allow read permission, got=%d body=%s", rr.Code, rr.Body.String())
+			}
+			if kind == "tree" {
+				var payload struct {
+					Data ai.SkillBrowseTreeResult `json:"data"`
+				}
+				if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+					t.Fatal(err)
+				}
+				if payload.Data.Dir != "." || len(payload.Data.Entries) != 1 || payload.Data.Entries[0].Path != "SKILL.md" {
+					t.Fatalf("unexpected system skill tree: %+v", payload.Data)
+				}
+			} else {
+				var payload struct {
+					Data ai.SkillBrowseFileResult `json:"data"`
+				}
+				if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+					t.Fatal(err)
+				}
+				if payload.Data.File != "SKILL.md" || payload.Data.Encoding != "utf8" || payload.Data.Truncated || !strings.Contains(payload.Data.Content, "name: redeven-environment") {
+					t.Fatalf("unexpected system skill file: %+v", payload.Data)
+				}
+			}
+		})
+	}
 	{
 		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/skills/toggles", bytes.NewBufferString(`{"patches":[{"path":"/tmp/not-used","enabled":false}]}`))
 		req.Header.Set("Origin", envOrigin)

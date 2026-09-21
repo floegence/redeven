@@ -21840,7 +21840,7 @@
         "skills",
         "ui"
       ],
-      "timestamp": "2026-09-21T07:00:00Z",
+      "timestamp": "2026-09-21T14:22:26Z",
       "frontmatter": {
         "description": "Navigate and edit runtime configuration through consistent, responsive settings surfaces while preserving API and permission ownership.",
         "tags": [
@@ -21849,11 +21849,11 @@
           "skills",
           "ui"
         ],
-        "timestamp": "2026-09-21T07:00:00Z",
+        "timestamp": "2026-09-21T14:22:26Z",
         "title": "Runtime settings",
         "type": "UI Contract"
       },
-      "body_length": 5775,
+      "body_length": 6737,
       "summary": "Env App owns the runtime settings destinations, localized copy, drafts, and API\nadapters. Published Floe settings components own reusable layout, navigation,\nsection hierarchy, and responsive setting rows. Every destination stays usable\non a narrow viewport and preserves its draft and scroll position when revisited.\nConfiguration writes use the existing authenticated runtime APIs; readers can\ninspect settings but cannot edit administrator fields. Failed operations retain\ntheir input and show an actionable error. Runtime maintenance remains delegated\nto the shared maintenance controller after explicit user confirmation.",
       "sections": [
         {
@@ -21874,8 +21874,8 @@
           "id": "skills-operations",
           "title": "Skills operations",
           "level": 1,
-          "body": "Skills load their catalog and source metadata on first entry once the runtime\nconnection is usable, through\n`/_redeven_proxy/api/ai/skills`. Search and scope filtering affect only the visible\ncatalog. Each row retains enablement, effective/shadowed/degraded status, source,\npath, browsing, reinstall, and delete actions. Catalog refresh and mutations are\nserialized within the page so an older refresh cannot replace a mutation result.\n\nGitHub installation requires validation of the current form. Changing any input\ninvalidates that validation. Create and import failures keep the form open;\ndelete and overwrite reinstall require confirmation. A source-metadata refresh\nfailure is reported separately from an already successful mutation. The runtime\ncontinues to enforce permissions and filesystem boundaries for every request.\n\nSkill browsing uses the existing tree and file endpoints, renders file content\nas text, and exposes encoding and truncation. Failed reads can retry the same\nrequest. Closing the dialog or selecting another skill invalidates pending reads\nso stale content cannot replace the new selection.",
-          "char_count": 1119
+          "body": "Skills load their catalog and source metadata on first entry once the runtime\nconnection is usable, through\n`/_redeven_proxy/api/ai/skills`. Search and scope filtering affect only the visible\ncatalog. Each row retains enablement, effective/shadowed/degraded status, source,\npath, browsing, reinstall, and delete actions. Catalog refresh and mutations are\nserialized within the page so an older refresh cannot replace a mutation result.\n\nGitHub installation requires validation of the current form. Changing any input\ninvalidates that validation. Create and import failures keep the form open;\ndelete and overwrite reinstall require confirmation. A source-metadata refresh\nfailure is reported separately from an already successful mutation. The runtime\ncontinues to enforce permissions and filesystem boundaries for every request.\n\nSkill browsing uses the existing tree and file endpoints, renders file content\nas text, and exposes encoding and truncation. Failed reads can retry the same\nrequest. Closing the dialog or selecting another skill invalidates pending reads\nso stale content cannot replace the new selection.\n\nThe runtime resolves browsing against the current catalog. A bundled\n`system:\u003cname\u003e/SKILL.md` entry is a virtual identifier: its root lists the single\n`SKILL.md` document and its preview reads the same embedded content used by the\nskill manager. It must never be interpreted as a host filesystem path. Unknown\ncatalog entries and missing bundled children fail explicitly; relative path\nvalidation, encoding, size limits, and truncation apply to both bundled and\nfilesystem skills. Local and GitHub-installed skills retain filesystem and\nsymlink containment checks. Browsing requires read permission, not administrator\npermission, and does not install or materialize bundled files on disk.",
+          "char_count": 1809
         }
       ],
       "snippet": "Env App owns the runtime settings destinations, localized copy, drafts, and API adapters. Published Floe settings components own reusable layout, navigation, section hierarchy, and responsive setting rows. Every destination stays usable",
@@ -23240,5 +23240,5 @@
       ]
     }
   ],
-  "source_sha256": "2461846534789f2eebb96042a7855586ba1723c86986b615c75228398e5483eb"
+  "source_sha256": "dac45c24c518e5bed729b95ea20da996804f4558a69cbf31157be54e496696bf"
 }
