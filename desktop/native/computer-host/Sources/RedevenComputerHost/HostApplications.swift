@@ -223,11 +223,17 @@ final class HostApplicationSession {
                 guard let button = axValue(window.element, kAXCloseButtonAttribute), CFGetTypeID(button) == AXUIElementGetTypeID(),
                       AXUIElementPerformAction(unsafeBitCast(button, to: AXUIElement.self), kAXPressAction as CFString) == .success else { throw NativeInput.unavailable() }
                 // Save dialogs remain part of the live session; never force quit.
+            case "quit_application":
+                let application = try applicationTarget(request)
+                guard let url = application.bundleURL, let instance = HostApplicationCatalog.instanceIdentifier(application) else { throw NativeInput.unavailable() }
+                // The viewer may quit only this session's exact process. A window
+                // change cannot grant it a renderer-selected application target.
+                try HostApplicationCatalog.quit(["application_id": HostApplicationCatalog.identifier(url), "instances": [instance]])
             case "stop":
                 guard let app, !app.isTerminated else { end(reason: "application_exited"); return }
                 if ownsApplication { _ = app.terminate() } else { end(reason: "sharing_stopped") }
             case "menu":
-                let application = try menuTarget(request)
+                let application = AXUIElementCreateApplication(try applicationTarget(request).processIdentifier)
                 menuItems.removeAll()
                 guard let value = axValue(application, kAXMenuBarAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() else { throw NativeInput.unavailable() }
                 let root = unsafeBitCast(value, to: AXUIElement.self)
@@ -249,7 +255,7 @@ final class HostApplicationSession {
                 }
                 emit(["type": "menu", "generation": generation, "items": items(root, depth: 0)])
             case "menu_action":
-                _ = try menuTarget(request)
+                _ = try applicationTarget(request)
                 guard let id = request["item"] as? String, let item = menuItems[id], (axValue(item, kAXEnabledAttribute) as? Bool) != false else { throw NativeInput.invalid("The menu item is unavailable.") }
                 _ = app?.activate(options: [])
                 guard AXUIElementPerformAction(item, kAXPressAction as CFString) == .success else { throw NativeInput.unavailable() }
@@ -258,13 +264,13 @@ final class HostApplicationSession {
             case "release": releaseButtons()
             default: throw NativeInput.invalid("Unknown host application action.")
             }
-            if ["input", "close", "menu_action", "resize"].contains(action) && request["kind"] as? String != "move" {
+            if ["input", "close", "quit_application", "menu_action", "resize"].contains(action) && request["kind"] as? String != "move" {
                 emit(["type": "operation_complete", "action": action])
             }
         } catch {
             let failure = error as? HostFailure
             let action = request["action"] as? String ?? ""
-            let operation = ["input", "close", "menu", "menu_action", "resize", "select", "release", "resume", "configure", "frame_ack"].contains(action)
+            let operation = ["input", "close", "quit_application", "menu", "menu_action", "resize", "select", "release", "resume", "configure", "frame_ack"].contains(action)
             if operation { releaseButtons() }
             emit(["type": operation ? "operation_error" : "error", "action": action, "code": failure?.code ?? "APPLICATION_FAILED"])
         }
@@ -406,14 +412,14 @@ final class HostApplicationSession {
             }
         }
     }
-    private func menuTarget(_ request: [String: Any]) throws -> AXUIElement {
-        // Menus belong to the bound application, including when it has no window.
+    private func applicationTarget(_ request: [String: Any]) throws -> NSRunningApplication {
+        // Application controls remain bound even when the app has no window.
         // Every capture/wait transition revokes old menu handles and generations.
         guard checkAccess(),
               let app, !app.isTerminated, request["generation"] as? Int == generation else {
             throw HostFailure(code: "STALE_WINDOW", message: "Wait for the current application.")
         }
-        return AXUIElementCreateApplication(app.processIdentifier)
+        return app
     }
     private func target(_ request: [String: Any]) throws -> NativeWindow {
         guard checkAccess(),

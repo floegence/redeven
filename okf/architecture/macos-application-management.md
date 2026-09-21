@@ -36,6 +36,19 @@ fresh OS inventory before requesting termination. A stale selection fails withou
 retargeting another generation; renderer-supplied PIDs and executable paths are
 never quit targets.
 
+The remote viewer also provides **Quit application** in its fixed top toolbar,
+separate from **Close application window**. An anchored confirmation names the
+application, explains the effect on host windows, and initially focuses Cancel.
+The authenticated stream accepts only `quit_application`, not the catalog's
+arbitrary selection action. The bundled helper derives the target from the bound
+`NSRunningApplication` and requires the current capture/wait generation, then uses
+the same fresh instance validation as catalog quit. Renderer-supplied bundle IDs,
+instance IDs or PIDs cannot change that target. A windowless session retains this
+action. An acknowledgement reports only request acceptance; an unconfirmed request
+gets explicit feedback after six seconds and is never retried automatically.
+A confirmed end after explicit viewer quit closes that viewer even if no first
+frame arrived; simply reloading an already ended session still shows its result.
+
 `NSRunningApplication.terminate()` requests ordinary application termination.
 Acceptance does not prove exit: save confirmation or cancellation keeps the app
 and its viewer alive. The library offers opening the app to finish the native

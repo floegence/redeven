@@ -68,6 +68,12 @@ export type HostApplicationPresentation = Readonly<{
   reopenHint?: string;
   captureHint?: string;
 
+  quit?: string;
+  quitTitle?: string;
+  quitDescription?: string;
+  quitPending?: string;
+  quitFailed?: string;
+  cancel?: string;
   controls?: string;
   picturePixels?: string;
   picture?: string;

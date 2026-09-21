@@ -47,7 +47,7 @@ it('keeps download choices and actions together on wide pages and inside compact
   expect(modal.scrollWidth).toBeLessThanOrEqual(modal.clientWidth);
 });
 
-it.each([390, 1000])('separates connection identity and keeps the left drawer within a %s px viewer', async width => {
+it.each([320, 390, 1000])('separates connection identity and keeps toolbar popovers within a %s px viewer', async width => {
   const frame = document.createElement('iframe');
   frame.style.cssText = `width:${width}px;height:660px;border:0`;
   const copy: Record<string, unknown> = {};
@@ -75,18 +75,24 @@ it.each([390, 1000])('separates connection identity and keeps the left drawer wi
   doc.body.dataset.state = 'active';
   doc.querySelector<HTMLElement>('.mac-app-controls')!.hidden = false;
   const toggle = doc.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
-  const drawer = doc.querySelector<HTMLElement>('.mac-app-drawer')!;
+  const drawer = doc.querySelector<HTMLElement>('.mac-app-popover')!;
   expect(drawer.hidden).toBe(true);
-  expect(toggle.getBoundingClientRect().left).toBeLessThan(16);
+  expect(toggle.getBoundingClientRect().top).toBeLessThan(16);
+  expect(doc.querySelector('.mac-app-toolbar')!.getBoundingClientRect().bottom).toBeLessThanOrEqual(46);
+  toggle.disabled = false;
   toggle.click();
   await Promise.all(drawer.getAnimations().map(animation => animation.finished));
   const bounds = drawer.getBoundingClientRect();
-  expect(bounds.left).toBeLessThan(60);
+  expect(bounds.left).toBeGreaterThanOrEqual(8);
   expect(bounds.right).toBeLessThan(width);
-  expect(bounds.top).toBeGreaterThanOrEqual(10);
+  expect(bounds.top).toBeGreaterThanOrEqual(46);
   expect(bounds.bottom).toBeLessThanOrEqual(650);
   expect(drawer.scrollWidth).toBeLessThanOrEqual(drawer.clientWidth);
-  expect(doc.querySelector('#application')!.getBoundingClientRect().width).toBe(width);
+  const canvas = doc.querySelector('#application')!.getBoundingClientRect();
+  expect(canvas.width).toBe(width);
+  expect(canvas.top).toBe(46);
+  expect(canvas.height).toBe(614);
+  expect(doc.querySelector('.mac-app-toolbar')!.scrollWidth).toBeLessThanOrEqual(width);
   toggle.click();
   expect(drawer.hidden).toBe(true);
 });
@@ -123,7 +129,7 @@ it.each([
   expect(doc.body.scrollWidth).toBe(390);
 });
 
-it.each([390, 1000])('keeps the counted window picker usable at %s px while switching real viewer bindings', async width => {
+it.each([320, 390, 1000])('keeps the counted window picker usable at %s px while switching real viewer bindings', async width => {
   const frame = document.createElement('iframe');
   frame.style.cssText = `width:${width}px;height:500px;border:0`;
   const copy: Record<string, unknown> = {};
@@ -161,9 +167,16 @@ it.each([390, 1000])('keeps the counted window picker usable at %s px while swit
   const doc = frame.contentDocument!, view = frame.contentWindow!;
   const toggle = doc.querySelector<HTMLButtonElement>('.mac-app-windows-toggle')!;
   expect(toggle.hidden).toBe(false);
-  expect(toggle.textContent).toBe('2');
+  const toolbar = doc.querySelector<HTMLElement>('.mac-app-toolbar')!;
+  expect(toolbar.scrollWidth).toBeLessThanOrEqual(width);
+  for (const button of toolbar.querySelectorAll('button')) {
+    const bounds = button.getBoundingClientRect();
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(width);
+  }
+  expect(toggle.textContent).toContain('2');
   toggle.click();
-  const drawer = doc.querySelector<HTMLElement>('.mac-app-drawer')!;
+  const drawer = doc.querySelector<HTMLElement>('.mac-app-popover')!;
   await Promise.all(drawer.getAnimations().map(animation => animation.finished));
   const list = doc.querySelector<HTMLElement>('.mac-app-window-list')!;
   expect(doc.querySelector<HTMLElement>('.mac-app-picture')!.hidden).toBe(true);
@@ -179,4 +192,13 @@ it.each([390, 1000])('keeps the counted window picker usable at %s px while swit
   second.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape',bubbles:true}));
   expect(drawer.hidden).toBe(true);
   expect(doc.activeElement).toBe(toggle);
+  const quit = doc.querySelector<HTMLButtonElement>('.mac-app-quit')!;
+  quit.click();
+  await Promise.all(drawer.getAnimations().map(animation => animation.finished));
+  const confirmation = doc.querySelector<HTMLElement>('.mac-app-quit-confirmation')!;
+  expect(confirmation.hidden).toBe(false);
+  expect(drawer.getBoundingClientRect().left).toBeGreaterThanOrEqual(8);
+  expect(drawer.getBoundingClientRect().right).toBeLessThan(width);
+  expect(drawer.scrollWidth).toBe(drawer.clientWidth);
+  expect(doc.activeElement).toBe(confirmation.querySelector('button'));
 });

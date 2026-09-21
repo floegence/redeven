@@ -51,7 +51,7 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
   Object.assign(dom.window, { TextDecoder, TextEncoder, VideoDecoder: video ? Decoder : undefined, EncodedVideoChunk: class { constructor(public value: unknown) {} }, fetch, WebSocket: Socket, createImageBitmap: bitmap, redevenHostApplicationWindow: native });
   const statisticsTicks: (() => void)[] = [];
   vi.spyOn(dom.window, 'setInterval').mockImplementation(((callback: () => void) => { statisticsTicks.push(callback); return 1; }) as typeof dom.window.setInterval);
-  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon, initial, copy: { permissionRequired: 'Host permission is required', permissionHint: 'Allow screen recording and accessibility, then reconnect.', sessionUnavailable: 'The graphical session is unavailable', sessionHint: 'Unlock the Mac and sign in, then reconnect.', sessionFailed: 'Application sharing has stopped', reopenHint: 'Return to Host Applications and open the app again.', captureHint: 'Reconnect or choose another window.', controls: 'Application controls', "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
+  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon, initial, copy: { permissionRequired: 'Host permission is required', permissionHint: 'Allow screen recording and accessibility, then reconnect.', sessionUnavailable: 'The graphical session is unavailable', sessionHint: 'Unlock the Mac and sign in, then reconnect.', sessionFailed: 'Application sharing has stopped', reopenHint: 'Return to Host Applications and open the app again.', captureHint: 'Reconnect or choose another window.', controls: 'Application controls', "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', quit: 'Quit application', quitTitle: 'Quit this application?', quitDescription: 'All application windows will close. You can cancel in a save dialog.', quitPending: 'Respond to any save dialog in the application.', quitFailed: 'Quit could not be confirmed.', cancel: 'Cancel', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
   await drain();
   const socket = () => Socket.instances.at(-1)!;
   const state = () => dom.window.document.body.dataset.state;
@@ -326,9 +326,8 @@ describe('macOS application viewer', () => {
     v.socket().message({type:'waiting',generation:3});
     const controls = dom.window.document.querySelector<HTMLElement>('.mac-app-controls')!;
     expect(controls.hidden).toBe(false);
-    controls.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!.click();
-    const menu = [...controls.querySelectorAll('button')].find(b => b.textContent === 'Menu')!;
-    expect(dom.window.document.activeElement).toBe(menu);
+    expect(controls.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!.disabled).toBe(true);
+    const menu = controls.querySelector<HTMLButtonElement>('.mac-app-menu-toggle')!;
     menu.click();
     expect(JSON.parse(v.socket().send.mock.lastCall![0])).toEqual({action:'menu',generation:3});
     v.socket().message({type:'menu',generation:3,items:[{id:'open-main',title:'Open main window',enabled:true,children:[]}]});
@@ -411,10 +410,10 @@ describe('macOS application viewer', () => {
 
   it('renders literal system menu titles and routes only returned item IDs', async () => {
     const v = await viewer(); await v.activate();
-    dom.window.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!.click();
+    dom.window.document.querySelector<HTMLButtonElement>('.mac-app-menu-toggle')!.click();
     v.socket().message({ type: 'menu', generation:1, items: [{ id: 'system-item', title: '<b>Host action</b>', enabled: true, children: [] }] });
     const panel = dom.window.document.querySelector('.mac-app-menu')!;
-    expect(dom.window.document.querySelector<HTMLElement>('.mac-app-drawer')!.hidden).toBe(false);
+    expect(dom.window.document.querySelector<HTMLElement>('.mac-app-popover')!.hidden).toBe(false);
     expect(panel.querySelector('b')).toBeNull();
     expect(panel.textContent).toBe('<b>Host action</b>');
     panel.querySelector('button')!.click();
@@ -442,7 +441,7 @@ describe('macOS picture controls and stream delivery', () => {
     expect(v.fetch).toHaveBeenCalledOnce();
     expect(v.socket().close).not.toHaveBeenCalled();
     select.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
-    expect(dom.window.document.querySelector<HTMLElement>('.mac-app-drawer')!.hidden).toBe(true);
+    expect(dom.window.document.querySelector<HTMLElement>('.mac-app-popover')!.hidden).toBe(true);
     expect(dom.window.document.activeElement).toBe(picture);
   });
   it('acknowledges only decoded current frames and preserves video references across lossless refresh', async () => {
@@ -499,10 +498,10 @@ it('renders only the supplied application icon in loading and error states', asy
   expect(v.state()).toBe('disconnected');
   expect(dom.window.document.getElementById('fallback-icon')!.hasAttribute('hidden')).toBe(true);
 });
-it('starts with only the left control handle and collapses on outside input or disconnect', async () => {
+it('starts with collapsed toolbar popovers and collapses on outside input or disconnect', async () => {
   const v = await viewer(); await v.activate();
   const toggle = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
-  const drawer = dom.window.document.querySelector<HTMLElement>('.mac-app-drawer')!;
+  const drawer = dom.window.document.querySelector<HTMLElement>('.mac-app-popover')!;
   expect(toggle).not.toBeNull();
   expect(drawer.hidden).toBe(true);
   expect(toggle.getAttribute('aria-expanded')).toBe('false');
@@ -520,11 +519,119 @@ it('starts with only the left control handle and collapses on outside input or d
 it('keeps controls open during WebKit button blur and closes for a concrete outside focus target', async () => {
  const v = await viewer(); await v.activate();
  const toggle = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
- const drawer = dom.window.document.querySelector<HTMLElement>('.mac-app-drawer')!;
+ const drawer = dom.window.document.querySelector<HTMLElement>('.mac-app-popover')!;
  toggle.click();
  const mode = drawer.querySelector('button')!;
  mode.dispatchEvent(new dom.window.FocusEvent('focusout', {bubbles:true,relatedTarget:null}));
  expect(drawer.hidden).toBe(false);
  mode.dispatchEvent(new dom.window.FocusEvent('focusout', {bubbles:true,relatedTarget:dom.window.document.querySelector('textarea')}));
  expect(drawer.hidden).toBe(true);
+});
+
+
+describe('fixed application toolbar', () => {
+  it('offers window, picture, close and quit as direct toolbar actions', async () => {
+    const v = await viewer(); await v.activate();
+    const toolbar = dom.window.document.querySelector('[role="toolbar"]')!;
+    expect(toolbar).not.toBeNull();
+    for (const name of ['.mac-app-windows-toggle', '.mac-app-controls-toggle', '.mac-app-close', '.mac-app-quit']) {
+      expect(toolbar.querySelector(name)).not.toBeNull();
+    }
+    expect(dom.window.document.querySelector('.mac-app-drawer')).toBeNull();
+    toolbar.querySelector<HTMLButtonElement>('.mac-app-close')!.click();
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toEqual({action:'close',window:'owned',generation:1});
+  });
+
+  it('confirms quit separately and keeps the viewer alive for native cancellation', async () => {
+    const v = await viewer(); await v.activate();
+    const doc = dom.window.document;
+    const quit = doc.querySelector<HTMLButtonElement>('.mac-app-quit')!;
+    expect(quit).not.toBeNull();
+    quit.click();
+    const panel = doc.querySelector<HTMLElement>('.mac-app-quit-confirmation')!;
+    expect(panel.hidden).toBe(false);
+    expect(v.socket().send).not.toHaveBeenCalled();
+    const [cancel, confirm] = panel.querySelectorAll<HTMLButtonElement>('button');
+    expect(doc.activeElement).toBe(cancel);
+    cancel.click();
+    expect(panel.hidden).toBe(true);
+    expect(doc.activeElement).toBe(quit);
+    quit.click(); confirm.click();
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toEqual({action:'quit_application',window:'owned',generation:1});
+    expect(v.native.request).not.toHaveBeenCalled();
+    v.socket().message({type:'operation_complete',action:'quit_application'});
+    expect(v.state()).toBe('active');
+    expect(quit.disabled).toBe(false);
+    expect(doc.querySelector('.mac-app-feedback')!.textContent).toContain('save dialog');
+    expect(v.socket().close).not.toHaveBeenCalled();
+  });
+
+  it('never reopens a dismissed menu when its asynchronous response arrives', async () => {
+    const v = await viewer(); await v.activate();
+    const menu = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-menu-toggle')!;
+    expect(menu).not.toBeNull();
+    menu.click();
+    dom.window.document.body.dispatchEvent(new dom.window.Event('pointerdown',{bubbles:true}));
+    v.socket().message({type:'menu',generation:1,items:[{id:'late',title:'Late action',enabled:true,children:[]}]});
+    expect(dom.window.document.querySelector<HTMLElement>('.mac-app-menu')!.hidden).toBe(true);
+  });
+});
+
+
+it('navigates toolbar and nested native menus with arrow keys and restores focus', async () => {
+  const v = await viewer(); await v.activate();
+  const doc = dom.window.document;
+  const menu = doc.querySelector<HTMLButtonElement>('.mac-app-menu-toggle')!;
+  const key = (value: string) => doc.activeElement!.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:value,bubbles:true}));
+  menu.focus(); key('ArrowRight');
+  expect(doc.activeElement).toBe(doc.querySelector('.mac-app-controls-toggle'));
+  key('ArrowLeft'); key('ArrowDown');
+  expect(JSON.parse(v.socket().send.mock.lastCall![0]).action).toBe('menu');
+  v.socket().message({type:'menu',generation:1,items:[
+    {id:'file',title:'File',enabled:true,children:[{id:'save',title:'Save',enabled:true,children:[]}]},
+    {id:'disabled',title:'Unavailable',enabled:false,children:[]},
+    {id:'help',title:'Help',enabled:true,children:[]},
+  ]});
+  expect(doc.activeElement?.textContent).toBe('File');
+  key('ArrowDown'); expect(doc.activeElement?.textContent).toBe('Help');
+  key('Home'); key('ArrowRight'); expect(doc.activeElement?.textContent).toBe('Save');
+  key('Escape'); expect(doc.activeElement?.textContent).toBe('File');
+  key('ArrowRight'); (doc.activeElement as HTMLButtonElement).click();
+  expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'menu_action',item:'save',generation:1});
+  expect(doc.activeElement).toBe(menu);
+  expect(v.socket().send.mock.calls.map(([raw]) => JSON.parse(raw)).some(value => value.action === 'input')).toBe(false);
+});
+
+it('keeps quit available without a window and never retries an unconfirmed quit', async () => {
+  vi.useFakeTimers();
+  const v = await viewer();
+  v.socket().message({type:'waiting',generation:4});
+  const doc = dom.window.document, quit = doc.querySelector<HTMLButtonElement>('.mac-app-quit')!;
+  expect(doc.querySelector<HTMLButtonElement>('.mac-app-close')!.disabled).toBe(true);
+  expect(quit.disabled).toBe(false);
+  quit.click(); doc.querySelector<HTMLButtonElement>('.mac-app-confirm-quit')!.click();
+  expect(JSON.parse(v.socket().send.mock.lastCall![0])).toEqual({action:'quit_application',generation:4});
+  expect(quit.disabled).toBe(true);
+  await vi.advanceTimersByTimeAsync(6100);
+  expect(quit.disabled).toBe(false);
+  expect(doc.querySelector('.mac-app-feedback')!.textContent).toBe('Quit could not be confirmed.');
+  expect(v.socket().send.mock.calls.filter(([raw]) => JSON.parse(raw).action === 'quit_application')).toHaveLength(1);
+  expect(v.state()).toBe('waiting');
+  expect(v.native.request).not.toHaveBeenCalled();
+  v.fetch.mockResolvedValue({ok:true,json:async () => ({state:'ended',end_reason:'application_exited'})});
+  v.socket().onclose?.(); await drain();
+  expect(v.native.request).toHaveBeenCalledExactlyOnceWith('close');
+});
+
+it('sizes the host window to the content area and maps input below the toolbar', async () => {
+  vi.useFakeTimers();
+  const v = await viewer(); await v.activate();
+  const canvas = dom.window.document.querySelector('canvas')!;
+  vi.spyOn(canvas,'getBoundingClientRect').mockReturnValue({left:0,top:46,width:640,height:480,right:640,bottom:526,x:0,y:46,toJSON(){}});
+  Object.assign(canvas,{setPointerCapture:vi.fn()});
+  dom.window.dispatchEvent(new dom.window.Event('resize'));
+  await vi.advanceTimersByTimeAsync(180);
+  expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'resize',width:640,height:480});
+  canvas.dispatchEvent(new dom.window.MouseEvent('pointerdown',{clientX:320,clientY:286}));
+  expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'input',kind:'down',x:0.5,y:0.5});
 });

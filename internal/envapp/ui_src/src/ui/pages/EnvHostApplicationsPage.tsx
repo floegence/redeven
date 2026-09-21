@@ -447,6 +447,12 @@ export function EnvHostApplicationsPage() {
       const result = await launchHostApplication(app.id, i18n.locale(), {
         locale: i18n.locale(),
         menu: i18n.t('hostApplications.macMenu'), windows: i18n.t('hostApplications.macWindows'), closeWindow: i18n.t('hostApplications.macCloseWindow'),
+        quit: i18n.t('hostApplications.macQuit'),
+        quitTitle: i18n.t('hostApplications.macQuitTitle', { name: app.name }),
+        quitDescription: i18n.t('hostApplications.macQuitDescription'),
+        quitPending: i18n.t('hostApplications.macQuitViewerPending'),
+        quitFailed: i18n.t('hostApplications.macQuitFailed'),
+        cancel: i18n.t('hostApplications.cancel'),
         picture: i18n.t('hostApplications.macPicture'),
         pictureAuto: i18n.t('hostApplications.macPictureAuto'),
         pictureClarity: i18n.t('hostApplications.macPictureClarity'),

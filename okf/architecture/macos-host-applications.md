@@ -49,8 +49,8 @@ Window IDs and menu handles must belong to this bound process. The browser canno
 supply an arbitrary PID, application path or capture source.
 
 ScreenCaptureKit captures a selected application window on macOS 13 or newer.
-Child-window inclusion uses the macOS 14.2 API when available. A separate counted window button stays visible at the viewer's left edge whenever
-shareable windows are available. It opens a scrollable list of literal host window
+Child-window inclusion uses the macOS 14.2 API when available. A counted window selector in the fixed top toolbar shows the current host window
+title and is enabled whenever shareable windows are available. It opens a scrollable list of literal host window
 titles with the current selection marked, independently of picture settings.
 Untitled windows use the app name and inventory position; the viewer never invents
 application-specific names. Selecting a window keeps the list open, dims retained
@@ -103,9 +103,13 @@ dialogs and OS-reserved shortcuts remain subject to macOS policy.
 Application menus come from that app's actual accessibility menu tree; returned
 opaque handles invoke the same enabled menu item. Menus bind to the live application
 and current generation, independently of whether a window exists. Waiting viewers
-keep the collapsed left controls available for opening a window through the app's
-own menu. Redeven does not guess a menu title or automatically invoke an app-specific
-action. Capture/wait transitions invalidate old menu handles. Closing a window presses its
+keep the toolbar's native menu and quit actions available even without a window. Redeven does not guess a menu title or automatically invoke an app-specific
+action. Native menu titles open anchored dropdown lists with nested navigation,
+disabled actions, arrow-key navigation and Escape returning through the hierarchy.
+Only the currently open menu consumes its generation-bound response; dismissing
+or changing panels cannot be undone by a late response. The toolbar supports
+horizontal keyboard navigation and keeps a single tab entry. Capture/wait
+transitions invalidate old menu handles. Closing a window presses its
 real close action, preserving ordinary save/cancel dialogs. **Stop sharing**
 disconnects either a newly launched or previously running app without quitting it
 or closing its windows. **Quit application** is a separate explicit action

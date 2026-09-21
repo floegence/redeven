@@ -587,7 +587,7 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 				return
 			}
 			action, _ := request["action"].(string)
-			if action != "input" && action != "resize" && action != "close" && action != "select" && action != "release" && action != "menu" && action != "menu_action" && action != "configure" && action != "frame_ack" {
+			if action != "input" && action != "resize" && action != "close" && action != "quit_application" && action != "select" && action != "release" && action != "menu" && action != "menu_action" && action != "configure" && action != "frame_ack" {
 				return
 			}
 			n.controlMu.Lock()
