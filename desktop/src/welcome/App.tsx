@@ -1582,7 +1582,7 @@ function localizedEnvironmentFact(
   return {
     ...fact,
     label: localizedFactLabel(i18n, fact.label),
-    value: fact.value_tone === 'placeholder'
+    value: fact.value_key ? i18n.t(fact.value_key) : fact.value_tone === 'placeholder'
       ? localizedPlaceholderFactValue(i18n, fact.value)
       : localizedFactValue(i18n, fact.label, fact.value),
     action: fact.action
@@ -4563,7 +4563,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setErrorMessage('connect', i18n().t('environmentCenter.noProviderEnvironmentsToConnect'));
       return;
     }
-    setProviderRuntimeLinkProviderEnvironmentID(action === 'disconnect'
+    setProviderRuntimeLinkProviderEnvironmentID(action === 'disconnect' || target.provider_link_state === 'linked'
       ? providerEnvironmentIDForRuntimeTarget(environment)
       : '');
     setProviderRuntimeLinkConfirmation({
@@ -4642,7 +4642,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const connected = result?.outcome === 'connected_provider_runtime';
     if (connected) {
       showActionToast(
-        i18n().t('environmentCenter.connectedToProviderToast', {
+        i18n().t('providerRecovery.requested', {
           label: environment.label,
         }),
         'success',
@@ -9940,6 +9940,8 @@ function localizedProviderRuntimeLinkPlanMessage(
       return i18n.t('providerRuntimeLink.providerLinkUnsupported', {
         runtime: runtimeLabel,
       });
+    case 'renewal_required':
+      return i18n.t('providerRecovery.required');
     case 'already_linked':
       return i18n.t('providerRuntimeLink.alreadyLinked', { runtime: runtimeLabel, environment: providerEnvironment.label });
     case 'provider_environment_occupied':

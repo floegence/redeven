@@ -87,6 +87,7 @@ export type wire_sys_ping_resp = {
       };
       provider_link?: {
         state?: string;
+        connection_state?: string;
         provider_origin?: string;
         provider_id?: string;
         env_public_id?: string;

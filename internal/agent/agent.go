@@ -229,6 +229,8 @@ type Options struct {
 	// OnControlRetry is called after a failed control-channel attempt with a
 	// redacted Flowersec diagnostic and the retry delay.
 	OnControlRetry func(flowersec.ConnectionDiagnostic, time.Duration)
+	// OnControlFailed reports terminal recovery guidance without changing local availability.
+	OnControlFailed func(runtimeservice.ProviderLinkBinding)
 	// OnControlDisabled is called when the runtime starts without a control channel.
 	OnControlDisabled func()
 
@@ -279,20 +281,25 @@ type Agent struct {
 	pluginClosing   bool
 	pluginCloseWG   sync.WaitGroup
 
-	controlConnectedOnce sync.Once
-	controlLifecycleMu   sync.Mutex
-	onControlConnected   func()
-	onControlConnecting  func()
-	onControlRetry       func(flowersec.ConnectionDiagnostic, time.Duration)
-	onControlDisabled    func()
-	runCtx               context.Context
-	controlCancel        context.CancelFunc
-	controlLoopDone      chan struct{}
-	controlController    *flowersec.ConnectionController
-	controlRPC           rpcutil.Caller
-	controlRPCSerial     uint64
-	controlRPCCallMu     sync.Mutex
-	controlArtifact      controlArtifactSessionBinding
+	controlConnectedOnce          sync.Once
+	controlRegistered             bool
+	controlCredentialsUnavailable bool
+	controlBusinessRejected       bool
+	controlFailure                *flowersec.ConnectionDiagnostic
+	controlLifecycleMu            sync.Mutex
+	onControlConnected            func()
+	onControlConnecting           func()
+	onControlRetry                func(flowersec.ConnectionDiagnostic, time.Duration)
+	onControlFailed               func(runtimeservice.ProviderLinkBinding)
+	onControlDisabled             func()
+	runCtx                        context.Context
+	controlCancel                 context.CancelFunc
+	controlLoopDone               chan struct{}
+	controlController             *flowersec.ConnectionController
+	controlRPC                    rpcutil.Caller
+	controlRPCSerial              uint64
+	controlRPCCallMu              sync.Mutex
+	controlArtifact               controlArtifactSessionBinding
 
 	localUIEnabled          bool
 	controlChannelEnabled   bool
@@ -409,6 +416,7 @@ func New(opts Options) (*Agent, error) {
 		onControlConnected:      opts.OnControlConnected,
 		onControlConnecting:     opts.OnControlConnecting,
 		onControlRetry:          opts.OnControlRetry,
+		onControlFailed:         opts.OnControlFailed,
 		onControlDisabled:       opts.OnControlDisabled,
 		localUIEnabled:          opts.LocalUIEnabled,
 		controlChannelEnabled:   opts.ControlChannelEnabled,
@@ -653,6 +661,10 @@ func (a *Agent) startControlChannel(ctx context.Context) {
 	}
 	a.mu.Lock()
 	a.controlController = nil
+	a.controlFailure = nil
+	a.controlCredentialsUnavailable = false
+	a.controlBusinessRejected = false
+	a.controlRegistered = false
 	a.controlRPCSerial++
 	a.controlRPC = nil
 	controlCtx, cancel := context.WithCancel(ctx)
@@ -678,6 +690,7 @@ func (a *Agent) stopControlChannel() {
 	a.controlCancel = nil
 	a.controlLoopDone = nil
 	a.controlController = nil
+	a.controlRegistered = false
 	a.controlRPCSerial++
 	a.controlRPC = nil
 	a.mu.Unlock()
@@ -750,7 +763,14 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		if waitErr != nil {
 			var controllerErr *flowersec.ConnectionControllerError
 			if errors.As(waitErr, &controllerErr) && controllerErr.Code() == flowersec.ConnectionControllerFailed {
+				diagnostic := controllerErr.Diagnostic()
+				a.mu.Lock()
+				a.controlFailure = &diagnostic
+				a.mu.Unlock()
 				a.log.Error("control channel failed", "diagnostic", controllerErr.Diagnostic())
+				if a.onControlFailed != nil {
+					a.onControlFailed(a.ProviderLinkBinding())
+				}
 			}
 			break
 		}
@@ -818,10 +838,24 @@ func controlRetryDelay(diagnostic flowersec.ConnectionDiagnostic) time.Duration 
 	return delay
 }
 
-func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session) error {
+func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session) (sessionErr error) {
 	if current == nil {
 		return errors.New("missing control session")
 	}
+	defer func() {
+		if sessionErr == nil || errors.Is(sessionErr, context.Canceled) {
+			return
+		}
+		var rpcErr *flowersec.RPCError
+		if errors.As(sessionErr, &rpcErr) && (rpcErr.Code == 401 || rpcErr.Code == 403 || rpcErr.Code == 409) {
+			a.mu.Lock()
+			a.controlBusinessRejected = true
+			a.mu.Unlock()
+		}
+		// A failed registration/heartbeat must retire the transport too; otherwise
+		// the controller would wait forever on a connected but unusable session.
+		_ = current.Close()
+	}()
 	cfg := a.remoteConfigSnapshot()
 	if cfg == nil {
 		return errors.New("missing config")
@@ -858,6 +892,12 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 	if err := a.maintainControlArtifactPool(ctx, rpcC); err != nil {
 		a.log.Warn("control recovery reserve is degraded", "error", err)
 	}
+	a.mu.Lock()
+	if a.controlRPCSerial == controlRPCSerial {
+		a.controlRegistered = true
+		a.controlFailure = nil
+	}
+	a.mu.Unlock()
 	cfg = a.remoteConfigSnapshot()
 	if cfg == nil {
 		return errors.New("control config unavailable after pool maintenance")
@@ -938,6 +978,7 @@ func (a *Agent) setCurrentControlRPC(caller rpcutil.Caller) uint64 {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.controlRPCSerial++
+	a.controlRegistered = false
 	a.controlRPC = caller
 	return a.controlRPCSerial
 }
@@ -950,6 +991,7 @@ func (a *Agent) clearCurrentControlRPC(serial uint64) {
 	defer a.mu.Unlock()
 	if a.controlRPCSerial == serial {
 		a.controlRPC = nil
+		a.controlRegistered = false
 	}
 }
 

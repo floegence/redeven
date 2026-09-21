@@ -451,6 +451,7 @@ function providerRuntimeService(
 ): RuntimeServiceSnapshot {
   const providerLinkBinding: RuntimeServiceProviderLinkBinding = {
     state: providerLink?.state ?? 'unbound',
+    connection_state: providerLink?.connection_state,
     provider_origin: providerLink?.provider_origin,
     provider_id: providerLink?.provider_id,
     env_public_id: providerLink?.env_public_id,
@@ -1083,6 +1084,7 @@ describe('buildEnvironmentCardModel', () => {
               desktop_model_source: { state: 'unsupported' },
               provider_link: {
                 state: 'linked',
+                connection_state: 'connected',
                 provider_origin: 'https://redeven.test',
                 provider_id: 'example_control_plane',
                 env_public_id: 'env_demo',
@@ -2580,6 +2582,7 @@ describe('buildEnvironmentCardModel', () => {
             ...providerRuntimeState('env_demo'),
             runtime_service: providerRuntimeService({ state: 'openable' }, {
               state: 'linked',
+              connection_state: 'connected',
               provider_origin: 'https://redeven.test',
               provider_id: 'example_control_plane',
               env_public_id: 'env_demo',
@@ -2639,6 +2642,7 @@ describe('buildEnvironmentCardModel', () => {
 
     const localOnlyRuntimeService = providerRuntimeService({ state: 'openable' }, {
       state: 'linked',
+      connection_state: 'connected',
       provider_origin: 'https://redeven.test',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
@@ -2799,6 +2803,7 @@ describe('buildEnvironmentCardModel', () => {
     const busyRuntimeService = {
       ...providerRuntimeService({ state: 'openable' }, {
         state: 'linked',
+        connection_state: 'connected',
         provider_origin: 'https://other.example.invalid',
         provider_id: 'other_control_plane',
         env_public_id: 'other_env',
@@ -2962,6 +2967,7 @@ describe('buildEnvironmentCardModel', () => {
       ...providerRuntimeState('env_demo'),
       runtime_service: providerRuntimeService({ state: 'openable' }, {
         state: 'linked',
+        connection_state: 'connected',
         provider_origin: 'https://redeven.test',
         provider_id: 'example_control_plane',
         env_public_id: 'env_demo',
@@ -3032,6 +3038,7 @@ describe('buildEnvironmentCardModel', () => {
         ...providerRuntimeState('env_demo'),
         runtime_service: providerRuntimeService({ state: 'openable' }, {
           state: 'linked',
+          connection_state: 'connected',
           provider_origin: 'https://redeven.test',
           provider_id: 'example_control_plane',
           env_public_id: 'env_demo',

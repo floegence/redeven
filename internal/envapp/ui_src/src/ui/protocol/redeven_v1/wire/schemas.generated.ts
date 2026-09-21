@@ -4039,6 +4039,9 @@ export const redevenWireSchemas = {
                   "state": {
                     "kind": "string"
                   },
+                  "connection_state": {
+                    "kind": "string"
+                  },
                   "provider_origin": {
                     "kind": "string"
                   },

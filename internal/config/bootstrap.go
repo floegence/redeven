@@ -72,7 +72,8 @@ type ProviderLinkBootstrapArgs struct {
 // Desktop-managed linking. It is intentionally separate from the frozen v2
 // bootstrap contract.
 type ProviderRuntimeLinkArgs struct {
-	ConfigPath string
+	ExpectedBindingGeneration int64
+	ConfigPath                string
 
 	ProviderOrigin         string
 	ControlplaneBaseURL    string
@@ -95,7 +96,8 @@ type ProviderRuntimeLinkArgs struct {
 }
 
 type providerLinkResolveArgs struct {
-	ConfigPath string
+	ExpectedBindingGeneration int64
+	ConfigPath                string
 
 	ProviderOrigin         string
 	ControlplaneBaseURL    string
@@ -171,16 +173,17 @@ type bootstrapTicketExchangeRequest struct {
 }
 
 type runtimeLinkExchangeRequest struct {
-	ProtocolVersion          string `json:"protocol_version"`
-	EnvPublicID              string `json:"env_public_id"`
-	ProviderOrigin           string `json:"provider_origin"`
-	LocalEnvironmentPublicID string `json:"local_environment_public_id"`
-	AgentInstanceID          string `json:"agent_instance_id"`
-	DeliveryRequestIDB64u    string `json:"delivery_request_id_b64u"`
-	Hostname                 string `json:"hostname,omitempty"`
-	OS                       string `json:"os,omitempty"`
-	Arch                     string `json:"arch,omitempty"`
-	RuntimeVersion           string `json:"runtime_version,omitempty"`
+	ExpectedBindingGeneration int64  `json:"expected_binding_generation,omitempty"`
+	ProtocolVersion           string `json:"protocol_version"`
+	EnvPublicID               string `json:"env_public_id"`
+	ProviderOrigin            string `json:"provider_origin"`
+	LocalEnvironmentPublicID  string `json:"local_environment_public_id"`
+	AgentInstanceID           string `json:"agent_instance_id"`
+	DeliveryRequestIDB64u     string `json:"delivery_request_id_b64u"`
+	Hostname                  string `json:"hostname,omitempty"`
+	OS                        string `json:"os,omitempty"`
+	Arch                      string `json:"arch,omitempty"`
+	RuntimeVersion            string `json:"runtime_version,omitempty"`
 }
 
 type runtimeLinkExchangeResponse struct {
@@ -290,7 +293,8 @@ func ResolveProviderRuntimeLinkConfig(ctx context.Context, args ProviderRuntimeL
 		return nil, errors.New("missing Runtime link ticket")
 	}
 	return resolveProviderLinkConfig(ctx, providerLinkResolveArgs{
-		ConfigPath: args.ConfigPath, ProviderOrigin: args.ProviderOrigin, ControlplaneBaseURL: args.ControlplaneBaseURL,
+		ExpectedBindingGeneration: args.ExpectedBindingGeneration,
+		ConfigPath:                args.ConfigPath, ProviderOrigin: args.ProviderOrigin, ControlplaneBaseURL: args.ControlplaneBaseURL,
 		ControlplaneProviderID: args.ControlplaneProviderID, EnvironmentID: args.EnvironmentID,
 		Credential: args.RuntimeLinkTicket, RuntimeVersion: args.RuntimeVersion, PermissionPolicyPreset: args.PermissionPolicyPreset,
 		AgentHomeDir: args.AgentHomeDir, Shell: args.Shell, LogFormat: args.LogFormat, LogLevel: args.LogLevel,
@@ -358,6 +362,9 @@ func resolveProviderLinkConfig(ctx context.Context, args providerLinkResolveArgs
 	}
 	if strings.TrimSpace(binding.EnvPublicID) != envID {
 		return nil, errors.New("invalid bootstrap exchange response: env_public_id mismatch")
+	}
+	if args.ExpectedBindingGeneration > 0 && binding.Generation != args.ExpectedBindingGeneration+1 {
+		return nil, errors.New("runtime link renewal returned an unexpected binding generation")
 	}
 	if binding.Generation <= 0 {
 		return nil, errors.New("invalid bootstrap exchange response: missing binding generation")
@@ -465,6 +472,16 @@ func exchangeProviderBootstrapCredential(ctx context.Context, args providerLinkR
 	})
 }
 
+// RuntimeLinkExchangeError preserves HTTP policy without parsing display text.
+type RuntimeLinkExchangeError struct {
+	StatusCode int
+	Code       string
+}
+
+func (e *RuntimeLinkExchangeError) Error() string {
+	return fmt.Sprintf("runtime link exchange failed with HTTP %d/%s", e.StatusCode, e.Code)
+}
+
 func exchangeRuntimeLinkTicket(ctx context.Context, args providerLinkResolveArgs, baseURL string, envID string, runtimeLinkTicket string, delivery bootstrapDeliveryAttempt) (*bootstrapResponse, error) {
 	u, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil {
@@ -479,7 +496,8 @@ func exchangeRuntimeLinkTicket(ctx context.Context, args providerLinkResolveArgs
 		return nil, errors.New("invalid Runtime link delivery request id")
 	}
 	payload, err := json.Marshal(runtimeLinkExchangeRequest{
-		ProtocolVersion: "rcpp-v3", EnvPublicID: strings.TrimSpace(envID), ProviderOrigin: delivery.ProviderOrigin,
+		ExpectedBindingGeneration: args.ExpectedBindingGeneration,
+		ProtocolVersion:           "rcpp-v3", EnvPublicID: strings.TrimSpace(envID), ProviderOrigin: delivery.ProviderOrigin,
 		LocalEnvironmentPublicID: delivery.LocalEnvironmentPublicID, AgentInstanceID: delivery.AgentInstanceID,
 		DeliveryRequestIDB64u: delivery.BootstrapDeliveryRequestIDB64u,
 		Hostname:              firstNonEmpty(args.RuntimeHostname, hostnameBestEffort()), OS: firstNonEmpty(args.RuntimeGOOS, runtime.GOOS),
@@ -514,9 +532,9 @@ func exchangeRuntimeLinkTicket(ctx context.Context, args providerLinkResolveArgs
 			if resp.StatusCode == http.StatusConflict && failure.Error.Code == "RUNTIME_LINK_DELIVERY_EXPIRED" {
 				return nil, errBootstrapDeliveryExpired
 			}
-			return nil, fmt.Errorf("runtime link exchange failed with HTTP %d/%s", resp.StatusCode, failure.Error.Code)
+			return nil, &RuntimeLinkExchangeError{StatusCode: resp.StatusCode, Code: failure.Error.Code}
 		}
-		return nil, fmt.Errorf("runtime link exchange failed with HTTP %d", resp.StatusCode)
+		return nil, &RuntimeLinkExchangeError{StatusCode: resp.StatusCode}
 	}
 	var out runtimeLinkExchangeResponse
 	if err := decodeExactRuntimeLinkResponse(body, &out); err != nil {

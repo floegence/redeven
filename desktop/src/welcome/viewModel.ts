@@ -87,6 +87,7 @@ export type EnvironmentCardFactModel = Readonly<{
   id: string;
   label: string;
   value: string;
+  value_key?: DesktopTranslationKey;
   value_tone: 'default' | 'placeholder';
   action?: EnvironmentCardFactActionModel;
   label_icon?: string;
@@ -757,7 +758,24 @@ function legacyControlPlaneFact(environment: DesktopEnvironmentEntry): Environme
   return null;
 }
 
-export function buildEnvironmentCardFactsModel(
+export function buildEnvironmentCardFactsModel(environment: DesktopEnvironmentEntry): readonly EnvironmentCardFactModel[] {
+  const facts = baseEnvironmentCardFactsModel(environment);
+  const target = environment.provider_runtime_link_target;
+  if (target?.provider_link_state !== 'linked') return facts;
+  const state = target.credential_recovery ?? target.provider_connection_state;
+  const valueKey: DesktopTranslationKey = state === 'authorization_required'
+    ? target.provider_link_binding?.last_error_code === 'CONTROL_CREDENTIALS_EXPIRED' ? 'providerRecovery.expired' : 'providerRecovery.needsAuthorization'
+    : state === 'connected' ? 'providerRecovery.connected'
+    : state === 'connecting' ? 'providerRecovery.connecting'
+    : state === 'retrying' ? 'providerRecovery.retrying'
+    : state === 'restoring' ? 'providerRecovery.restoring'
+    : state === 'waiting' ? 'providerRecovery.waiting'
+    : state === 'disabled' ? 'providerRecovery.disabled'
+    : state === 'unknown' ? 'providerRecovery.unknown' : 'providerRecovery.attention';
+  return [...facts, { id: 'cloud-connection', label: 'Redeven Cloud', value: state, value_key: valueKey, value_tone: 'default' }];
+}
+
+function baseEnvironmentCardFactsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardFactModel[] {
   const endpoints = buildEnvironmentCardEndpointsModel(environment);
@@ -1320,6 +1338,28 @@ function runtimeProviderLinkMenuAction(
     };
   }
   switch (target.provider_connection_state) {
+    case 'authorization_required':
+    case 'disabled':
+    case 'error':
+      return {
+        id: 'connect_provider_runtime', label: 'Restore Redeven Cloud connection', label_key: 'providerRecovery.restore',
+        action: { intent: 'connect_provider_runtime', label: 'Restore Redeven Cloud connection',
+          label_key: 'providerRecovery.restore', enabled: target.can_connect_provider, variant: 'outline' },
+      };
+    case 'retrying':
+      return {
+        id: 'connect_provider_runtime', label: 'Reconnecting to Redeven Cloud', label_key: 'providerRecovery.retrying',
+        action: { intent: 'connect_provider_runtime', label: 'Reconnecting to Redeven Cloud',
+          label_key: 'providerRecovery.retrying', enabled: false, variant: 'outline',
+          disabled_reason: 'Redeven Cloud is reconnecting automatically.' },
+      };
+    case 'unknown':
+      return {
+        id: 'connect_provider_runtime', label: 'Review Redeven Cloud connection', label_key: 'providerRecovery.restore',
+        action: { intent: 'connect_provider_runtime', label: 'Review Redeven Cloud connection',
+          label_key: 'providerRecovery.restore', enabled: false, variant: 'outline',
+          disabled_reason: 'The Runtime has not confirmed its Redeven Cloud connection.' },
+      };
     case 'connected':
       return {
         id: 'disconnect_provider_runtime',
@@ -1358,34 +1398,6 @@ function runtimeProviderLinkMenuAction(
           label_key: 'environmentAction.disconnectFromProvider',
           enabled: true,
           variant: 'outline',
-        },
-      };
-    case 'error':
-      if (target.can_disconnect_provider) {
-        return {
-          id: 'disconnect_provider_runtime',
-          label: 'Disconnect from Redeven Cloud',
-          label_key: 'environmentAction.disconnectFromProvider',
-          action: {
-            intent: 'disconnect_provider_runtime',
-            label: 'Disconnect from Redeven Cloud',
-            label_key: 'environmentAction.disconnectFromProvider',
-            enabled: true,
-            variant: 'outline',
-          },
-        };
-      }
-      return {
-        id: 'connect_provider_runtime',
-        label: 'Connect...',
-        label_key: 'environmentAction.connectToProviderEllipsis',
-        action: {
-          intent: 'connect_provider_runtime',
-          label: 'Connect...',
-          label_key: 'environmentAction.connectToProviderEllipsis',
-          enabled: false,
-          variant: 'outline',
-          disabled_reason: 'Redeven Cloud link needs attention.',
         },
       };
     case 'unsupported':

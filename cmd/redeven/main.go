@@ -23,6 +23,7 @@ import (
 	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimepresentation"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 var (
@@ -755,6 +756,13 @@ func (c *cli) runCmd(args []string) int {
 				Detail:      "Redeven will keep retrying; Local UI remains available.",
 				Severity:    runtimepresentation.SeverityWarning,
 				Remediation: fmt.Sprintf("Next retry in %s.", delay.Round(time.Second)),
+			})
+		},
+		OnControlFailed: func(binding runtimeservice.ProviderLinkBinding) {
+			_ = startupReporter.Emit(runtimepresentation.Event{
+				Kind: runtimepresentation.EventWarning, Phase: runtimepresentation.PhaseConnectControl,
+				Title: "Redeven Cloud connection needs attention.", Severity: runtimepresentation.SeverityWarning,
+				Detail: binding.LastErrorCode, Remediation: binding.LastErrorMessage,
 			})
 		},
 		OnControlDisabled: func() {

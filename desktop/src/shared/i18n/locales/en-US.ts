@@ -2,6 +2,21 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
+  providerRecovery: {
+    expired: "Credentials expired",
+    requested: "Connection requested for {label}. Redeven Cloud status will update automatically.",
+    "restore": "Restore Redeven Cloud connection",
+    "required": "Restore the saved Redeven Cloud connection. Local work stays available. If access has been revoked or the connection changed, review the account and association before reconnecting.",
+    "needsAuthorization": "Authorization required",
+    "connected": "Connected",
+    "connecting": "Connecting",
+    "retrying": "Reconnecting automatically",
+    "restoring": "Restoring connection",
+    "waiting": "Waiting to restore connection",
+    "attention": "Connection needs attention",
+    "disabled": "Cloud access disabled",
+    "unknown": "Connection not verified"
+},
   flowerRuntime: {
     "preparingDetail": "Flower is preparing its AI service. Conversations will appear automatically when it is ready. You can return to Environments at any time.",
     "unavailableTitle": "Flower is unavailable",

@@ -84,6 +84,7 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
   it('reports already linked for the same provider environment', () => {
     const binding = {
       state: 'linked' as const,
+      connection_state: 'connected' as const,
       provider_origin: 'https://redeven.test',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
@@ -102,9 +103,10 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
     });
   });
 
-  it('treats a matching saved link without an active provider connection as a runtime inconsistency', () => {
+  it('offers restoration for a saved disabled connection without requiring unlink', () => {
     const binding = {
       state: 'linked' as const,
+      connection_state: 'connected' as const,
       provider_origin: 'https://redeven.test',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
@@ -118,16 +120,17 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
       can_connect_provider: true,
       can_disconnect_provider: true,
     }), provider())).toMatchObject({
-      state: 'blocked_runtime',
-      can_connect: false,
-      can_disconnect: false,
+      state: 'renewal_required',
+      can_connect: true,
+      can_disconnect: true,
       runtime_matches_provider: true,
     });
   });
 
-  it('does not ask a local-only linked runtime to reconnect when the provider environment is occupied here', () => {
+  it('allows restoring the exact saved association when the environment is linked here', () => {
     const binding = {
       state: 'linked' as const,
+      connection_state: 'connected' as const,
       provider_origin: 'https://redeven.test',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
@@ -150,9 +153,9 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
         provider_connection_state: 'error',
       },
     })).toMatchObject({
-      state: 'blocked_runtime',
-      can_connect: false,
-      can_disconnect: false,
+      state: 'renewal_required',
+      can_connect: true,
+      can_disconnect: true,
       runtime_matches_provider: true,
     });
   });
@@ -160,6 +163,7 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
   it('requires disconnecting before linking another provider', () => {
     const binding = {
       state: 'linked' as const,
+      connection_state: 'connected' as const,
       provider_origin: 'https://other.example.invalid',
       provider_id: 'other',
       env_public_id: 'env_other',

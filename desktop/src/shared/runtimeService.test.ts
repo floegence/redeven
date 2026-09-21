@@ -424,7 +424,7 @@ describe('runtimeService', () => {
           remote_enabled: true,
         },
       },
-    }))).toBe('connected');
+    }))).toBe('unknown');
 
     expect(runtimeServiceProviderConnectionState(normalizeRuntimeServiceSnapshot({
       compatibility: 'compatible',
@@ -441,7 +441,7 @@ describe('runtimeService', () => {
           remote_enabled: false,
         },
       },
-    }))).toBe('error');
+    }))).toBe('disabled');
 
     expect(runtimeServiceProviderConnectionState(normalizeRuntimeServiceSnapshot({
       compatibility: 'compatible',
@@ -455,4 +455,10 @@ it.each(['inspecting', 'optimizing', 'migrating', 'verifying', 'recovering', 'ba
   const snapshot = normalizeRuntimeServiceSnapshot({ runtime_version: 'dev', compatibility: 'compatible', open_readiness: { state: 'openable' }, ai_readiness: { state }, active_workload: {} });
   expect(snapshot.ai_readiness?.state).toBe(state);
   expect(runtimeServiceIsOpenable(snapshot)).toBe(true);
+});
+
+it.each(['connected', 'connecting', 'retrying', 'authorization_required', 'error'])('uses the actual reported Cloud state: %s', connection_state => {
+  const snapshot = normalizeRuntimeServiceSnapshot({ remote_enabled: true, capabilities: { provider_link: { supported: true } },
+    bindings: { provider_link: { state: 'linked', remote_enabled: true, connection_state } } });
+  expect(runtimeServiceProviderConnectionState(snapshot)).toBe(connection_state);
 });

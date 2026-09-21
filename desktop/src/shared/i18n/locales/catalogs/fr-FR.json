@@ -2851,5 +2851,20 @@
     "runtimeDetail": "Ce moteur d’exécution est incompatible avec Desktop Flower. Mettez-le à jour pour continuer. Votre brouillon est conservé ; l’application propre à l’environnement reste disponible.",
     "desktopDetail": "Ce moteur d’exécution nécessite une version plus récente de Desktop. Mettez à jour Desktop pour continuer. Votre brouillon est conservé ; l’application propre à l’environnement reste disponible.",
     "connectedBuild": "Moteur d’exécution connecté : {version} · {commit}"
+  },
+  "providerRecovery": {
+    "restore": "Rétablir la connexion à Redeven Cloud",
+    "required": "Rétablissez la connexion enregistrée à Redeven Cloud. Le travail local reste disponible. Si les droits ont été révoqués ou si l’association a changé, vérifiez le compte et l’association avant de vous reconnecter.",
+    "needsAuthorization": "Autorisation requise",
+    "connected": "Connecté",
+    "connecting": "Connexion en cours",
+    "retrying": "Reconnexion automatique",
+    "restoring": "Rétablissement de la connexion",
+    "waiting": "En attente du rétablissement",
+    "attention": "Connexion à vérifier",
+    "disabled": "Accès Cloud désactivé",
+    "unknown": "Connexion non vérifiée",
+    "expired": "Identifiants de connexion expirés",
+    "requested": "Connexion demandée pour {label}. L’état de Redeven Cloud sera mis à jour automatiquement."
   }
 }

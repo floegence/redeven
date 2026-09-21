@@ -2850,5 +2850,20 @@
     "runtimeDetail": "Diese Laufzeit ist mit Desktop Flower nicht kompatibel. Aktualisieren Sie sie, um fortzufahren. Ihr Entwurf bleibt erhalten; die eigene App der Umgebung ist weiterhin verfügbar.",
     "desktopDetail": "Diese Laufzeit benötigt eine neuere Desktop-Version. Aktualisieren Sie Desktop, um fortzufahren. Ihr Entwurf bleibt erhalten; die eigene App der Umgebung ist weiterhin verfügbar.",
     "connectedBuild": "Verbundene Laufzeit: {version} · {commit}"
+  },
+  "providerRecovery": {
+    "restore": "Redeven Cloud-Verbindung wiederherstellen",
+    "required": "Die gespeicherte Redeven Cloud-Verbindung wiederherstellen. Lokales Arbeiten bleibt möglich. Wurden Berechtigungen entzogen oder die Zuordnung geändert, prüfe vor dem erneuten Verbinden das Konto und die Zuordnung.",
+    "needsAuthorization": "Autorisierung erforderlich",
+    "connected": "Verbunden",
+    "connecting": "Verbindung wird hergestellt",
+    "retrying": "Automatische Wiederverbindung",
+    "restoring": "Verbindung wird wiederhergestellt",
+    "waiting": "Warten auf Wiederherstellung",
+    "attention": "Verbindung erfordert Aufmerksamkeit",
+    "disabled": "Cloud-Zugriff deaktiviert",
+    "unknown": "Verbindung nicht überprüft",
+    "expired": "Zugangsdaten abgelaufen",
+    "requested": "Verbindung für {label} angefordert. Der Redeven Cloud-Status wird automatisch aktualisiert."
   }
 }
