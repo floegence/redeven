@@ -1,5 +1,7 @@
 /// <reference lib="dom" />
 
+import { bootstrapBrowserPackageBridge } from './browserPackage';
+
 import { bootstrapDesktopLauncherBridge } from './desktopLauncher';
 import { bootstrapDesktopDownloadsBridge } from './desktopDownloads';
 import { bootstrapDesktopSettingsBridge } from './desktopSettingsBridge';
@@ -17,3 +19,5 @@ bootstrapDesktopShellBridge();
 bootstrapDesktopStateStorageBridge();
 bootstrapDesktopThemeBridge();
 bootstrapDesktopUpdateBridge();
+
+bootstrapBrowserPackageBridge();

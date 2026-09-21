@@ -400,7 +400,7 @@ describe('main routing', () => {
     expect(helperSrc).toContain('const webSession = session.fromPartition(partition);');
     expect(helperSrc).toContain('await webSession.setProxy({ mode: sessionRecord.transport.proxyPolicy });');
     expect(helperSrc.indexOf('await prepareWebServiceWindowPartition(sessionRecord, partition, request.forward_id, loopbackGateway);')).toBeLessThan(
-      helperSrc.indexOf('const controller = createWebServiceBrowserController(sessionRecord, request, partition, loopbackGateway);'),
+      helperSrc.indexOf('const controller = createWebServiceBrowserController('),
     );
     expect(helperSrc).toContain("role: 'web_service_child'");
     expect(helperSrc).toContain("preload: applicationWindow ? 'none' : 'web_service_browser'");

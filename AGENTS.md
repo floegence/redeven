@@ -528,6 +528,10 @@ Rules:
   and launch continuation. Production applications execute directly on the host;
   preparation must not install system packages, change security policy, or require
   a container or virtual machine.
+- Published `floe-native-apps/artifactcache` owns reusable pinned archive
+  acquisition, integrity checks and cache publication. Redeven may supply its
+  reviewed Playwright-bound browser catalog, consent and private placement; do
+  not duplicate the downloader or verifier in Desktop or the browser installer.
 - Desktop may acquire original pinned archives through its bundled Runtime and
   transfer them to the host. The receiving host independently verifies and
   qualifies them. Renderer input must never select artifact URLs or local paths.

@@ -1,7 +1,7 @@
-import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
+import { createEffect, createSignal, on, onCleanup, Show } from 'solid-js';
 import { Button, Switch } from '@floegence/floe-webapp-core/ui';
 import { Check, Download, Upload, Sparkles } from '@floegence/floe-webapp-core/icons';
-import type { FlowerBrowserInstallation, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
+import type { FlowerBrowserInstallationSnapshot, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
 import type { FlowerComputerCopy } from './computerUseCopy';
 
 const activeStates = new Set(['downloading', 'uploading', 'verifying', 'installing']);
@@ -12,27 +12,33 @@ export function FlowerManagedBrowser(props: {
   canMutate: boolean;
   onChange?: () => void;
   onContinue?: (enabled: boolean) => Promise<void>;
+  continuationKey?: string;
 }) {
   const management = props.management;
-  const [status, setStatus] = createSignal<FlowerBrowserInstallation>();
-  const [source, setSource] = createSignal<'download' | 'upload'>('download');
-  const [file, setFile] = createSignal<File>();
+  const [status, setStatus] = createSignal<FlowerBrowserInstallationSnapshot>();
+  const [source, setSource] = createSignal<'download' | 'upload'>(management.browserDesktopAvailable ? 'upload' : 'download');
   const [busy, setBusy] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [failed, setFailed] = createSignal(false);
   let disposed = false;
   let observation = 0;
   let resumeAfterInstall = false;
-  let uploadOperation = '';
-  let stopUpload = false;
-  let picker: HTMLInputElement | undefined;
-  const accept = (value: FlowerBrowserInstallation) => { observation++; setStatus(value); };
-  const cancelOperation = (id: string) => management.installBrowser!({ action: 'cancel', operation_id: id });
-  onCleanup(() => {
-    disposed = true; stopUpload = true;
-    if (uploadOperation) void cancelOperation(uploadOperation).catch(() => undefined);
-  });
-  const active = () => activeStates.has(status()?.state ?? '');
+  let continuationKey: string | undefined;
+  createEffect(on(() => props.continuationKey, () => { resumeAfterInstall = false; }, { defer: true }));
+  const accept = (value: FlowerBrowserInstallationSnapshot) => {
+    if (disposed) return;
+    observation++; setStatus(value);
+    if (!props.onContinue || continuationKey !== props.continuationKey || value.desktop_error
+      || (!value.transfer_active && (value.state === 'failed' || value.state === 'cancelled'))) resumeAfterInstall = false;
+    if (value.state === 'installed' && value.enabled && !value.transfer_active && resumeAfterInstall) {
+      resumeAfterInstall = false;
+      props.onChange?.();
+      void props.onContinue?.(true).catch(() => { if (!disposed) setFailed(true); });
+    }
+  };
+  const unsubscribe = management.subscribeBrowserInstallation?.(accept);
+  onCleanup(() => { disposed = true; resumeAfterInstall = false; unsubscribe?.(); });
+  const active = () => Boolean(status()?.transfer_active) || activeStates.has(status()?.state ?? '');
   const editable = () => props.canMutate && !busy() && !saving();
   const size = (bytes: number) => String(Math.ceil(bytes / 1_000_000));
   const load = async () => {
@@ -40,25 +46,13 @@ export function FlowerManagedBrowser(props: {
     try {
       const value = await management.loadBrowserInstallation!();
       if (disposed || version !== observation) return;
-      setStatus(value); setFailed(false);
-      if (value.state === 'installed' && value.enabled && resumeAfterInstall) {
-        resumeAfterInstall = false;
-        props.onChange?.();
-        await props.onContinue?.(true);
-      }
+      accept(value); setFailed(false);
     } catch { if (!disposed && version === observation) setFailed(true); }
   };
   void load();
-  // Observe only an active installation. Thread continuation stays in Floret.
-  createEffect(() => {
-    if (!active() || busy() || saving() || failed()) return;
-    const timer = setTimeout(() => void load(), 800);
-    onCleanup(() => clearTimeout(timer));
-  });
   const setEnabled = async (enabled: boolean) => {
     if (!props.canMutate || saving()) return;
     observation++; setSaving(true); setFailed(false); resumeAfterInstall = false;
-    if (!enabled) stopUpload = true;
     try {
       const value = await management.saveBrowserEnabled!(enabled);
       if (!disposed) { accept(value); props.onChange?.(); }
@@ -66,53 +60,23 @@ export function FlowerManagedBrowser(props: {
     finally { if (!disposed) setSaving(false); }
   };
   const cancel = async () => {
-    const id = status()?.operation_id;
-    if (!id || !props.canMutate || saving()) return;
-    stopUpload = true; resumeAfterInstall = false; observation++; setSaving(true);
-    try { const value = await cancelOperation(id); if (!disposed) accept(value); }
+    if (!props.canMutate || saving()) return;
+    resumeAfterInstall = false; observation++; setSaving(true);
+    try { const value = await management.installBrowser!({ action: 'cancel', operation_id: status()?.operation_id }); if (!disposed) accept(value); }
     catch { if (!disposed) setFailed(true); }
     finally { if (!disposed) setSaving(false); }
   };
   const install = async () => {
     const current = status();
     if (!current?.enabled || !editable() || active()) return;
-    const selectedSource = source(), selectedFile = file();
-    if (selectedSource === 'upload' && (!management.browserUploadSupported || !selectedFile || selectedFile.size !== current.package.size_bytes)) {
-      setFailed(true); return;
-    }
-    observation++; setBusy(true); setFailed(false); stopUpload = false;
+    observation++; setBusy(true); setFailed(false);
+    continuationKey = props.continuationKey;
     resumeAfterInstall = Boolean(props.onContinue);
-    let operation = '';
     try {
-      let value = await management.installBrowser!({ action: 'start', package_id: current.package.id, source: selectedSource });
-      operation = value.operation_id ?? '';
-      if (selectedSource === 'upload' && value.state === 'uploading') uploadOperation = operation;
-      if (disposed || stopUpload) {
-        if (uploadOperation) await cancelOperation(uploadOperation);
-        return;
-      }
-      accept(value);
-      if (value.state === 'installed' && resumeAfterInstall) {
-        resumeAfterInstall = false; await props.onContinue?.(true);
-      }
-      if (selectedSource === 'upload' && selectedFile && value.state === 'uploading') {
-        for (let offset = 0; offset < selectedFile.size; offset += 256 * 1024) {
-          const bytes = new Uint8Array(await selectedFile.slice(offset, offset + 256 * 1024).arrayBuffer());
-          if (disposed || stopUpload) return;
-          let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
-          value = await management.installBrowser!({ action: 'chunk', operation_id: operation, offset, data: btoa(binary) });
-          if (disposed || stopUpload) return;
-          accept(value);
-        }
-        value = await management.installBrowser!({ action: 'complete', operation_id: operation });
-        uploadOperation = '';
-        if (!disposed && !stopUpload) accept(value);
-      }
-    } catch {
-      resumeAfterInstall = false;
-      if (operation) await cancelOperation(operation).catch(() => undefined);
-      if (!disposed && !stopUpload) { await load(); setFailed(true); }
-    } finally { uploadOperation = ''; if (!disposed) setBusy(false); }
+      const value = await management.installBrowser!({ action: 'start', package_id: current.package.id, source: source() });
+      if (!disposed) accept(value);
+    } catch { resumeAfterInstall = false; if (!disposed) setFailed(true); }
+    finally { if (!disposed) setBusy(false); }
   };
   const continueTask = async () => {
     if (!editable()) return;
@@ -121,7 +85,9 @@ export function FlowerManagedBrowser(props: {
     catch { if (!disposed) setFailed(true); }
     finally { if (!disposed) setBusy(false); }
   };
-  const stateLabel = () => ({ installed: props.copy.browserInstalled, not_installed: props.copy.browserNotInstalled,
+  const stateLabel = () => status()?.desktop_progress
+    ? ({ checking: props.copy.browserCheckingCache, downloading: props.copy.browserDesktopDownloading, verifying: props.copy.browserVerifying }[status()!.desktop_progress!.phase])
+    : ({ installed: props.copy.browserInstalled, not_installed: props.copy.browserNotInstalled,
     downloading: props.copy.browserDownloading, uploading: props.copy.browserUploading, verifying: props.copy.browserVerifying,
     installing: props.copy.browserInstalling, failed: props.copy.browserInstallFailed, cancelled: props.copy.browserCancelled,
   } as Record<string, string>)[status()?.state ?? ''] ?? props.copy.checking;
@@ -143,29 +109,27 @@ export function FlowerManagedBrowser(props: {
           <div><strong>{props.copy.browserDiskSize.replace('{size}', size(current().package.installed_bytes))}</strong><span>{props.copy.browserInEnvironment}</span></div>
         </div>
         <Show when={!active()} fallback={<div class="flower-browser-progress" role="status" aria-live="polite">
-          <div><span>{stateLabel()}</span><span>{props.copy.browserTransferProgress.replace('{received}', size(current().received_bytes)).replace('{total}', size(current().package.size_bytes))}</span></div>
-          <progress aria-label={stateLabel()} max={current().package.size_bytes} value={['verifying', 'installing'].includes(current().state) ? undefined : current().received_bytes} />
-          <Button variant="outline" disabled={!props.canMutate || saving()} onClick={() => void cancel()}>{props.copy.cancel}</Button>
+          <div><span>{stateLabel()}</span><span>{props.copy.browserTransferProgress.replace('{received}', size(current().desktop_progress?.received_bytes ?? current().received_bytes)).replace('{total}', size(current().package.size_bytes))}</span></div>
+          <Show when={current().desktop_progress?.phase === 'checking' || current().desktop_progress?.phase === 'verifying' || ['verifying', 'installing'].includes(current().state)}
+            fallback={<progress aria-label={stateLabel()} max={current().package.size_bytes} value={current().desktop_progress?.received_bytes ?? current().received_bytes} />}>
+            <progress aria-label={stateLabel()} max={current().package.size_bytes} />
+          </Show>
+          <Button variant="outline" disabled={!props.canMutate || saving()} onClick={() => void cancel()}>{props.copy.browserCancelInstallation}</Button>
+          <p>{props.copy.browserBackgroundHint}</p>
         </div>}>
           <div class="flower-browser-source-grid" role="radiogroup" aria-label={props.copy.browserSource}>
             <label data-selected={source() === 'download'} data-disabled={!editable()}><input type="radio" name="browser-install-source" checked={source() === 'download'} disabled={!editable()} onChange={() => setSource('download')} /><Download aria-hidden="true" /><strong>{props.copy.browserDownloadHere}</strong><span>{props.copy.browserDownloadHereHint}</span></label>
-            <label data-selected={source() === 'upload'} data-disabled={!editable() || !management.browserUploadSupported}><input type="radio" name="browser-install-source" checked={source() === 'upload'} disabled={!editable() || !management.browserUploadSupported} onChange={() => setSource('upload')} /><Upload aria-hidden="true" /><strong>{props.copy.browserUploadDesktop}</strong><span>{management.browserUploadSupported ? props.copy.browserUploadHint : props.copy.browserDesktopRequired}</span></label>
+            <label data-selected={source() === 'upload'} data-disabled={!editable() || !management.browserDesktopAvailable}><input type="radio" name="browser-install-source" checked={source() === 'upload'} disabled={!editable() || !management.browserDesktopAvailable} onChange={() => setSource('upload')} /><Upload aria-hidden="true" /><strong>{props.copy.browserUploadDesktop}</strong><span>{management.browserDesktopAvailable ? props.copy.browserUploadHint : props.copy.browserDesktopRequired}</span></label>
           </div>
-          <Show when={source() === 'upload'}><div class="flower-browser-file">
-            <input ref={picker} type="file" accept=".zip" aria-label={props.copy.browserChooseFile} class="sr-only" disabled={!editable()} onChange={event => { setFile(event.currentTarget.files?.[0]); setFailed(false); }} />
-            <Button variant="outline" disabled={!editable()} onClick={() => picker?.click()}>{props.copy.browserChooseFile}</Button>
-            <span>{file()?.name ?? props.copy.browserFileHint}</span>
-            <a href={current().package.url} target="_blank" rel="noopener noreferrer">{props.copy.browserGetPackage}</a>
-          </div></Show>
-          <div class="flower-browser-consent"><p>{props.copy.browserConsentHint}</p><Button variant="primary" disabled={!editable() || (source() === 'upload' && !file())} onClick={() => void install()}>{source() === 'upload' ? props.copy.browserConfirmUpload : props.copy.browserConfirmDownload}</Button></div>
+          <div class="flower-browser-consent"><p>{props.copy.browserConsentHint}</p><Button variant="primary" disabled={!editable()} onClick={() => void install()}>{source() === 'upload' ? props.copy.browserConfirmUpload : props.copy.browserConfirmDownload}</Button></div>
         </Show>
       </Show>
       <Show when={current().enabled && current().state === 'installed'}><div class="flower-browser-ready"><Check aria-hidden="true" /><p>{props.copy.browserReadyHint}</p></div></Show>
       <Show when={props.onContinue && !active() && (!current().enabled || current().state === 'installed')}><Button variant="primary" disabled={!editable()} onClick={() => void continueTask()}>{current().enabled ? props.copy.browserContinue : props.copy.browserContinueWithout}</Button></Show>
       <Show when={current().state === 'installed'}><details class="flower-computer-detail-card"><summary>{props.copy.browserInstallLocation}</summary><code>{current().directory}</code></details></Show>
     </>}</Show>
-    <Show when={failed() || status()?.state === 'failed'}>
-      <Show when={status()}><p role="alert" class="text-xs text-destructive">{status()?.error === 'invalid_archive' || (source() === 'upload' && file() && file()?.size !== status()?.package.size_bytes) ? props.copy.browserWrongPackage : props.copy.browserInstallFailed}</p></Show>
+    <Show when={failed() || (!status()?.transfer_active && status()?.state === 'failed') || status()?.desktop_error}>
+      <Show when={status()}><p role="alert" class="text-xs text-destructive">{status()?.desktop_error === 'package_mismatch' ? props.copy.browserWrongPackage : status()?.desktop_error === 'desktop_download_failed' ? props.copy.browserDesktopDownloadFailed : status()?.desktop_error === 'desktop_upload_failed' ? props.copy.browserDesktopUploadFailed : props.copy.browserInstallFailed}</p></Show>
       <Button variant="outline" disabled={busy()} onClick={() => void load()}>{props.copy.refresh}</Button>
     </Show>
   </section>;

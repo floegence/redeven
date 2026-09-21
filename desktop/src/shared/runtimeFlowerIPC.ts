@@ -13,6 +13,7 @@ export type RuntimeFlowerRequest = Readonly<{
   method: RuntimeFlowerRequestMethod;
   path: string;
   body?: unknown;
+  environment_id?: string;
   staging_scope_id?: string;
   staging_capability?: string;
 }>;

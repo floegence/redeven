@@ -3,14 +3,14 @@ type: Runtime and Product Contract
 title: Optional built-in browser installation
 description: Confirm browser acquisition, persist the environment capability switch, and resume through the canonical Flower input request.
 tags: [ai, computer-use, browser, installation, desktop]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-21T00:00:00Z
 ---
 # Summary
 
 Redeven owns one optional Chromium installation per Runtime state directory.
 The capability is enabled by default, but discovery, opening settings, enabling,
 and agent tool execution never download bytes. Only an authenticated user's
-explicit confirmation starts environment download or local Desktop ZIP upload.
+explicit confirmation starts environment download or automatic Desktop acquisition and upload.
 Disabling persists, cancels installation, closes managed browser processes and
 blocks further use and installation prompts. Installed bytes and website data
 remain. Floret owns the input wait and continuation; installer status never
@@ -27,18 +27,20 @@ shows download and installed sizes, and presents two mutually exclusive sources:
 
 - Environment download fetches the pinned official archive directly on the
   Runtime host after Download and install is pressed.
-- Desktop upload selects a matching local ZIP, then transfers it only after
-  Upload and install is pressed. A link retrieves the exact archive for the
-  Runtime's platform, even when Desktop uses a different OS or architecture.
-  Both local and remote Desktop environment carriers support this route;
-  ordinary web carriers explain that local upload requires Desktop.
+- Install via Desktop is selected by default when its acquisition bridge exists.
+  After confirmation, Desktop automatically obtains the exact Runtime package,
+  reuses a verified cache, and transfers the archive. Users never choose a file
+  or follow an archive download link. Ordinary web carriers default to environment
+  download and explain how to enable Desktop acquisition.
 
-Source selection and file selection do not start installation. Progress names
-transfer, verification and installation, with cancellation available. A disabled
-browser hides installation choices and states that data is retained. Re-enabling
-reuses a valid installed package without downloading. Installation paths are
-secondary details. Optional website-account groups are separate from installation
-and are loaded only when expanded.
+Source selection does not start installation. Progress identifies Desktop cache
+checking, Desktop download, upload, host verification and installation. A cache
+hit skips network download. The explicit Cancel installation action stops active
+acquisition or installation. Closing the panel only unsubscribes: its environment
+session continues the operation, and a reopened panel observes the same state.
+The disabled browser hides installation choices and retains installed bytes and
+website data. Re-enabling reuses a valid installation without downloading.
+Installation paths remain secondary details; website-account groups stay separate.
 
 A first managed-browser use without a package returns a canonical `browser_install`
 InputRequest with a provenance-bound Activity target reference. The task's setup
@@ -87,20 +89,51 @@ as Node and Playwright. Historical released packages without helpers remain
 installable and report their unavailable browser capability through
 [Chrome diagnostics](computer-use-chrome-diagnostics.md).
 
+## Archive acquisition ownership
+
+Released `floe-native-apps` v0.2.0 owns the reusable `artifactcache.Acquire` and
+`Verify` implementations. Redeven owns the Playwright-bound browser catalog,
+consent and placement. Desktop invokes its bundled Runtime's `browser-package`
+command with the target package ID, expected SHA-256 and size; the compiled
+catalog must match before any cache or network access. Renderer input cannot
+select URLs, paths or digests outside that catalog. A mismatch explicitly requires
+an update or environment download; it never selects a substitute package.
+
+Original archives are cached by digest in Desktop's private browser-package-cache
+directory. Cache reuse rechecks size and digest. Host downloads use the same
+upstream acquisition code with temporary cache placement; host upload verification
+also uses the upstream verifier before bounded extraction and atomic publication.
+Package cache state is independent of Floret conversation and continuation state.
+Transport failures do not replay installation requests automatically. A known
+unfinished upload is cancelled; uncertain responses require a current host status
+read and an explicit retry or cancel action.
+
+The Runtime HTTP installation contract and compatibility epoch remain unchanged.
+The new acquisition command belongs to the matching bundled Runtime, and the new
+Desktop preload capability is detected directly by both product carriers.
+
 `state/computer/browser/settings.json` owns the versioned enabled preference.
 Writes are atomic. Malformed or unknown settings fail closed without rewriting
 user state. The installer owns one operation at a time; uploads have opaque IDs,
 exact offsets and chunks no larger than 256 KiB. Cancelled or failed operations
 remove temporary transfer files; startup clears abandoned transfer staging without
-restarting a download. Closing an uploading Desktop panel cancels its
-transfer; an explicitly confirmed environment download may finish after closing.
+restarting a download. The shared environment-session controller owns active transfer work; panels are
+observers. Desktop acquisition jobs are bound to their initiating main frame and
+window and environment, with opaque operation IDs and bounded reads. Launcher
+browser requests require the original running environment and never start a
+stopped Runtime. Environment replacement retires its acquisition jobs. Closing the environment
+session or Desktop cancels unfinished acquisition/upload, retaining verified
+cache entries. Runtime remains authoritative after upload completion.
 No installation automatically restarts following a Runtime restart.
 
 # Evidence
 
 - `redeven:desktop/src/main/runtimePackageCache.ts` - complete source suites and cache admission.
 - `redeven:scripts/stage_computer_resources.mjs` - verified native and cross-platform helper staging.
-- `redeven:internal/browserinstall/manager.go` - preference, explicit acquisition and atomic package publication.
+- `redeven:internal/browserinstall/manager.go` - preference, upstream acquisition and atomic package publication.
+- `redeven:cmd/redeven/browser_package.go` - fixed catalog acquisition for Desktop.
+- `redeven:desktop/src/main/browserPackage.ts` - document-owned process and cached-byte access.
+- `redeven:internal/flower_ui/host/browserInstallationController.ts` - environment-owned transfer and panel observation.
 - `redeven:internal/browserinstall/catalog.json` - official pinned package identities.
 - `redeven:internal/browserinstall/helpers.go` - release-suite helper preparation.
 - `redeven:internal/browserinstall/manager_test.go` - consent, cancellation, verification, repair and real browser launch.

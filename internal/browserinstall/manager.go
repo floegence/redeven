@@ -3,17 +3,16 @@ package browserinstall
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/floegence/floe-native-apps/artifactcache"
 )
 
 var ErrDisabled = errors.New("built-in browser is disabled; do not request installation")
@@ -62,7 +61,7 @@ func New(root string, pkg Package) (*Manager, error) {
 	}
 	// The product Runtime holds the state-directory lease before creating this
 	// owner. Interrupted transfers have no consent to restart and can be removed.
-	for _, pattern := range []string{".browser-*.zip", ".extract-*", ".settings-*"} {
+	for _, pattern := range []string{".browser-*.zip", ".extract-*", ".settings-*", ".acquire-*"} {
 		paths, globErr := filepath.Glob(filepath.Join(root, pattern))
 		if globErr != nil {
 			return nil, globErr
@@ -247,45 +246,43 @@ func (m *Manager) CompleteUpload(id string) (Status, error) {
 	go m.install(m.ctx, f)
 	return m.status, nil
 }
+
+// ArchiveSpec maps the product's compiled browser catalog to the released
+// acquisition contract. Callers must resolve Package through the catalog.
+func ArchiveSpec(pkg Package) artifactcache.Spec {
+	return artifactcache.Spec{URL: pkg.URL, SHA256: pkg.SHA256, SizeBytes: pkg.SizeBytes}
+}
 func (m *Manager) download(ctx context.Context, file *os.File) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, m.status.Package.URL, nil)
-	if err == nil {
-		var response *http.Response
-		response, err = m.client.Do(request)
-		if err == nil {
-			defer response.Body.Close()
-			if response.StatusCode != http.StatusOK || (response.ContentLength >= 0 && response.ContentLength != m.status.Package.SizeBytes) {
-				err = errors.New("unexpected browser download response")
-			} else {
-				buffer := make([]byte, 128*1024)
-				for err == nil {
-					var n int
-					n, err = response.Body.Read(buffer)
-					if n > 0 {
-						m.mu.Lock()
-						m.status.ReceivedBytes += int64(n)
-						tooLarge := m.status.ReceivedBytes > m.status.Package.SizeBytes
-						m.mu.Unlock()
-						if tooLarge {
-							err = errors.New("browser archive exceeds expected size")
-							break
-						}
-						if _, writeErr := file.Write(buffer[:n]); writeErr != nil {
-							err = writeErr
-						}
-					}
-				}
-				if errors.Is(err, io.EOF) {
-					err = nil
-				}
-			}
-		}
-	}
+	cache, err := os.MkdirTemp(m.root, ".acquire-")
 	if err != nil {
 		m.fail(ctx, file, "download_failed")
 		return
 	}
-	m.install(ctx, file)
+	defer os.RemoveAll(cache)
+	result, err := artifactcache.Acquire(ctx, cache, ArchiveSpec(m.status.Package), artifactcache.Options{
+		Client: m.client,
+		OnProgress: func(p artifactcache.Progress) error {
+			m.mu.Lock()
+			m.status.ReceivedBytes = p.ReceivedBytes
+			if p.Phase == "verifying" {
+				m.status.State = "verifying"
+			}
+			m.mu.Unlock()
+			return ctx.Err()
+		},
+	})
+	if err != nil {
+		m.fail(ctx, file, "download_failed")
+		return
+	}
+	_ = file.Close()
+	_ = os.Remove(file.Name())
+	verified, err := os.Open(result.Path)
+	if err != nil {
+		m.fail(ctx, file, "download_failed")
+		return
+	}
+	m.install(ctx, verified)
 }
 func (m *Manager) fail(ctx context.Context, file *os.File, reason string) {
 	_ = file.Close()
@@ -310,12 +307,7 @@ func (m *Manager) install(ctx context.Context, file *os.File) {
 		m.fail(ctx, file, "invalid_archive")
 		return
 	}
-	if _, err = file.Seek(0, io.SeekStart); err != nil {
-		m.fail(ctx, file, "invalid_archive")
-		return
-	}
-	hash := sha256.New()
-	if _, err = io.Copy(hash, file); err != nil || fmt.Sprintf("%x", hash.Sum(nil)) != m.status.Package.SHA256 {
+	if err = artifactcache.Verify(ctx, file.Name(), ArchiveSpec(m.status.Package)); err != nil {
 		m.fail(ctx, file, "invalid_archive")
 		return
 	}

@@ -32,7 +32,7 @@ func fixture(t *testing.T, name string) ([]byte, Package) {
 		t.Fatal(err)
 	}
 	data := buffer.Bytes()
-	return data, Package{ID: "fixture", SHA256: fmt.Sprintf("%x", sha256.Sum256(data)), SizeBytes: int64(len(data)), InstalledBytes: 1024, Executable: "browser/chrome"}
+	return data, Package{ID: "fixture", URL: "https://example.invalid/browser.zip", SHA256: fmt.Sprintf("%x", sha256.Sum256(data)), SizeBytes: int64(len(data)), InstalledBytes: 1024, Executable: "browser/chrome"}
 }
 func settle(t *testing.T, m *Manager) Status {
 	t.Helper()
@@ -51,7 +51,7 @@ func settle(t *testing.T, m *Manager) Status {
 func TestDownloadRequiresConfirmationAndDisablePersists(t *testing.T) {
 	data, pkg := fixture(t, "browser/chrome")
 	var reads atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reads.Add(1); _, _ = w.Write(data) }))
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reads.Add(1); _, _ = w.Write(data) }))
 	defer server.Close()
 	pkg.URL = server.URL
 	root := t.TempDir()
@@ -59,6 +59,7 @@ func TestDownloadRequiresConfirmationAndDisablePersists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.client = server.Client()
 	defer m.Close()
 	for range 3 {
 		if m.Snapshot().State != "not_installed" {
@@ -184,7 +185,7 @@ func TestUploadChecksIdentityOrderIntegrityAndArchivePaths(t *testing.T) {
 func TestDisableCancelsActiveDownloadWithoutPublishing(t *testing.T) {
 	data, pkg := fixture(t, "browser/chrome")
 	started := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", fmt.Sprint(len(data)))
 		w.WriteHeader(200)
 		w.(http.Flusher).Flush()
@@ -197,6 +198,7 @@ func TestDisableCancelsActiveDownloadWithoutPublishing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.client = server.Client()
 	defer m.Close()
 	if _, err = m.Start(pkg.ID, "download"); err != nil {
 		t.Fatal(err)

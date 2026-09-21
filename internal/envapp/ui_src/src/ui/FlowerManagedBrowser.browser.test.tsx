@@ -2,12 +2,13 @@ import '../index.css';
 import './flower-feature.css';
 import { afterEach, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { page, userEvent } from 'vitest/browser';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { FlowerManagedBrowser } from '../../../../flower_ui/src/FlowerManagedBrowser';
 import { computerUseEnUS as copy, type FlowerComputerCopy } from '../../../../flower_ui/src/computerUseCopy';
-import type { FlowerBrowserInstallation, FlowerComputerManagement } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerBrowserInstallation, FlowerBrowserInstallationSnapshot, FlowerComputerManagement } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import zhCN from './i18n/locales/catalogs/zh-CN.json';
 import deDE from './i18n/locales/catalogs/de-DE.json';
 
@@ -16,11 +17,13 @@ afterEach(async () => { dispose?.(); dispose = undefined; document.documentEleme
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === label)!;
 const wait = (predicate: () => boolean) => vi.waitFor(() => expect(predicate()).toBe(true), { timeout: 4000 });
 function mount(options: { pending?: boolean; upload?: boolean; state?: FlowerBrowserInstallation['state']; copy?: FlowerComputerCopy; size?: number } = {}) {
-  let state: FlowerBrowserInstallation = { enabled: true, state: options.state ?? 'not_installed', directory: '/environment/state/computer/browser', received_bytes: 0,
-    package: { name: 'Chrome for Testing', id: 'chromium-1223-linux-amd64', platform: 'linux', architecture: 'amd64', version: '148.0.7778.96', url: 'https://cdn.playwright.dev/example.zip', size_bytes: options.size ?? 183945705, installed_bytes: 393407709 } };
+  let state: FlowerBrowserInstallationSnapshot = { enabled: true, state: options.state ?? 'not_installed', directory: '/environment/state/computer/browser', received_bytes: 0,
+    package: { name: 'Chrome for Testing', id: 'chromium-1223-linux-amd64', platform: 'linux', architecture: 'amd64', version: '148.0.7778.96', url: 'https://cdn.playwright.dev/example.zip', sha256: 'a'.repeat(64), size_bytes: options.size ?? 183945705, installed_bytes: 393407709 } };
+  const observers = new Set<(value: FlowerBrowserInstallationSnapshot) => void>();
   const management: FlowerComputerManagement = {
+    subscribeBrowserInstallation: listener => { observers.add(listener); return () => { observers.delete(listener); }; },
     listCandidates: vi.fn(), selectCandidate: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(),
-    browserUploadSupported: options.upload ?? true,
+    browserDesktopAvailable: options.upload ?? true,
     loadBrowserInstallation: vi.fn(async () => ({ ...state })),
     saveBrowserEnabled: vi.fn(async enabled => { state = { ...state, enabled, state: state.state === 'uploading' ? 'cancelled' : state.state }; return state; }),
     installBrowser: vi.fn(async request => {
@@ -31,23 +34,19 @@ function mount(options: { pending?: boolean; upload?: boolean; state?: FlowerBro
       return { ...state };
     }),
   };
+  const [continuationKey, setContinuationKey] = createSignal('interaction-1');
   const onContinue = vi.fn().mockResolvedValue(undefined), labels = options.copy ?? copy;
   const host = document.createElement('div'); document.body.append(host);
   const stop = render(() => <FloeConfigProvider><LayoutProvider><Dialog open onOpenChange={() => undefined} title={labels.managed} closeLabel={labels.close}
     class="flower-computer-dialog w-[min(42rem,94vw)] max-w-[42rem]" contentClass="flower-computer-content">
     <div class="flower-computer-panel"><div class="flower-computer-environment"><span>{labels.environmentTitle}</span><span>Build Server</span></div>
-      <FlowerManagedBrowser management={management} copy={labels} canMutate onContinue={options.pending ? onContinue : undefined} />
+      <FlowerManagedBrowser continuationKey={continuationKey()} management={management} copy={labels} canMutate onContinue={options.pending ? onContinue : undefined} />
     </div>
   </Dialog></LayoutProvider></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
-  return { management, onContinue, update: (value: Partial<FlowerBrowserInstallation>) => { state = { ...state, ...value }; } };
+  return { management, onContinue, setContinuationKey, update: (value: Partial<FlowerBrowserInstallationSnapshot>) => { state = { ...state, ...value }; for (const observer of observers) observer(state); } };
 }
 const ready = () => wait(() => Boolean(document.querySelector('[role="switch"]:not(:disabled)')));
-const setFile = (size: number) => {
-  const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
-  const transfer = new DataTransfer(); transfer.items.add(new File([new Uint8Array(size)], 'browser.zip', { type: 'application/zip' }));
-  input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }));
-};
 it('keeps default-on, status reads and source selection free of downloads', async () => {
   const { management } = mount(); await ready();
   const toggle = document.querySelector<HTMLInputElement>('[role="switch"]')!;
@@ -60,8 +59,8 @@ it('keeps default-on, status reads and source selection free of downloads', asyn
   expect(management.saveBrowserEnabled).toHaveBeenNthCalledWith(1, false); expect(management.saveBrowserEnabled).toHaveBeenNthCalledWith(2, true);
 });
 it('requires explicit confirmation and resumes only after confirmed installation', async () => {
-  const { management, onContinue, update } = mount({ pending: true }); await ready();
-  button(copy.browserConfirmDownload).click(); await wait(() => !!button(copy.cancel));
+  const { management, onContinue, update } = mount({ pending: true, upload: false }); await ready();
+  button(copy.browserConfirmDownload).click(); await wait(() => !!button(copy.browserCancelInstallation));
   expect(management.installBrowser).toHaveBeenCalledExactlyOnceWith({ action: 'start', package_id: 'chromium-1223-linux-amd64', source: 'download' });
   expect(onContinue).not.toHaveBeenCalled(); update({ state: 'installed' });
   await wait(() => onContinue.mock.calls.length === 1); expect(onContinue).toHaveBeenCalledWith(true);
@@ -78,27 +77,22 @@ it('does not auto-resume merely by opening an installed browser', async () => {
   expect(document.querySelector('input[type="radio"]')).toBeNull(); expect(management.installBrowser).not.toHaveBeenCalled();
   expect(onContinue).not.toHaveBeenCalled(); button(copy.browserContinue).click(); await wait(() => onContinue.mock.calls.length === 1);
 });
-it('rejects mismatched files and uploads matching bytes in ordered bounded chunks', async () => {
-  const { management } = mount({ size: 300000 }); await ready();
-  document.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1].click(); setFile(3);
-  button(copy.browserConfirmUpload).click(); await wait(() => !!document.querySelector('[role="alert"]'));
-  expect(management.installBrowser).not.toHaveBeenCalled();
-  setFile(300000); button(copy.browserConfirmUpload).click(); await wait(() => document.body.textContent?.includes(copy.browserReadyHint) === true);
-  const calls = vi.mocked(management.installBrowser!).mock.calls.map(([request]) => request);
-  expect(calls.map(request => request.action)).toEqual(['start', 'chunk', 'chunk', 'complete']);
-  expect(calls[1].offset).toBe(0); expect(calls[2].offset).toBe(262144);
-  expect(atob(calls[1].data!).length).toBe(262144); expect(atob(calls[2].data!).length).toBe(37856);
+it('starts Desktop installation without a file and keeps it alive after closing', async () => {
+  const { management, onContinue, update } = mount({ pending: true }); await ready();
+  button(copy.browserConfirmUpload).click(); await wait(() => !!button(copy.browserCancelInstallation));
+  expect(management.installBrowser).toHaveBeenCalledExactlyOnceWith({ action: 'start', source: 'upload', package_id: 'chromium-1223-linux-amd64' });
+  expect(document.querySelector('input[type="file"]')).toBeNull();
+  dispose?.(); dispose = undefined; update({ state: 'installed' });
+  expect(management.installBrowser).toHaveBeenCalledTimes(1); expect(onContinue).not.toHaveBeenCalled();
 });
-it('cancels an upload whose start completes after the dialog closes', async () => {
-  const { management } = mount({ size: 32 }); await ready();
+it('does not cancel a start response arriving after the panel closes', async () => {
+  const { management, onContinue } = mount({ pending: true }); await ready();
   let finish!: (value: FlowerBrowserInstallation) => void;
   const current = await management.loadBrowserInstallation!();
   vi.mocked(management.installBrowser!).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-  document.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1].click(); setFile(32);
   button(copy.browserConfirmUpload).click(); await wait(() => !!finish); dispose?.(); dispose = undefined;
   finish({ ...current, state: 'uploading', operation_id: 'late' });
-  await wait(() => vi.mocked(management.installBrowser!).mock.calls.length === 2);
-  expect(management.installBrowser).toHaveBeenLastCalledWith({ action: 'cancel', operation_id: 'late' });
+  await Promise.resolve(); expect(management.installBrowser).toHaveBeenCalledTimes(1); expect(onContinue).not.toHaveBeenCalled();
 });
 it('explains the web upload limitation and supports keyboard toggling', async () => {
   const { management } = mount({ upload: false }); await ready();
@@ -117,7 +111,49 @@ for (const [locale, labels, width, dark] of [['zh-CN', zhCN.flowerSurface.comput
     for (const card of dialog.querySelectorAll<HTMLElement>('.flower-browser-source-grid label')) {
       expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1); expect(getComputedStyle(card).cursor).toBe('pointer');
     }
-    expect(button(labels.browserConfirmDownload).getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
+    expect(button(labels.browserConfirmUpload).getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
     if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/browser-install-${locale}.png` });
   });
 }
+
+it('offers automatic Desktop installation without selecting a local file', async () => {
+  mount(); await ready();
+  expect(document.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1].checked).toBe(true);
+  expect(document.querySelector('input[type="file"]')).toBeNull();
+  expect(button(copy.browserConfirmUpload).disabled).toBe(false);
+});
+
+it('keeps retry consent through the previous failed snapshot and resumes once', async () => {
+  const { management, update, onContinue } = mount({ pending: true, state: 'failed' }); await ready();
+  const current = await management.loadBrowserInstallation!();
+  vi.mocked(management.installBrowser!).mockResolvedValueOnce({ ...current, transfer_active: true });
+  button(copy.browserConfirmUpload).click(); await wait(() => !!button(copy.browserCancelInstallation));
+  update({ state: 'installed', transfer_active: false });
+  await wait(() => onContinue.mock.calls.length === 1);
+  update({ state: 'installed', transfer_active: false }); expect(onContinue).toHaveBeenCalledTimes(1);
+});
+it('revokes continuation when the interaction changes while installation continues', async () => {
+  const { update, onContinue, setContinuationKey } = mount({ pending: true }); await ready();
+  button(copy.browserConfirmUpload).click(); await wait(() => !!button(copy.browserCancelInstallation));
+  setContinuationKey('interaction-2'); update({ state: 'installed', transfer_active: false });
+  expect(onContinue).not.toHaveBeenCalled();
+});
+for (const outcome of ['failed', 'cancelled'] as const) {
+  it(`does not continue after ${outcome} even if a later snapshot is installed`, async () => {
+    const { update, onContinue } = mount({ pending: true }); await ready();
+    button(copy.browserConfirmUpload).click(); await wait(() => !!button(copy.browserCancelInstallation));
+    update({ state: outcome, transfer_active: false }); update({ state: 'installed' });
+    expect(onContinue).not.toHaveBeenCalled();
+  });
+}
+
+it('renders indeterminate cache checking and verification without assigning a non-finite progress value', async () => {
+  const { update } = mount(); await ready();
+  update({ transfer_active: true, desktop_progress: { phase: 'checking', received_bytes: 0, total_bytes: 183945705 } });
+  await wait(() => !!button(copy.browserCancelInstallation));
+  expect(document.querySelector('progress')?.hasAttribute('value')).toBe(false);
+  update({ transfer_active: true, desktop_progress: { phase: 'downloading', received_bytes: 1234, total_bytes: 183945705 } });
+  expect(document.querySelector('progress')?.value).toBe(1234);
+  update({ transfer_active: true, desktop_progress: { phase: 'verifying', received_bytes: 183945705, total_bytes: 183945705 } });
+  expect(document.querySelector('progress')?.hasAttribute('value')).toBe(false);
+});

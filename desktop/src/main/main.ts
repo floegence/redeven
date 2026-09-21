@@ -1,3 +1,5 @@
+import { BrowserPackages, browserPackageOwner } from './browserPackage';
+import { BROWSER_PACKAGE_CHANNEL, BROWSER_PACKAGE_PROGRESS_CHANNEL, parseBrowserPackageRequest } from '../shared/browserPackageIPC';
 import { HostApplicationComponents } from './hostApplicationComponents';
 import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRESS, type HostApplicationComponentsRequest } from '../shared/hostApplicationComponents';
 import { desktopEnvironmentID } from './desktopPreferences';
@@ -969,6 +971,8 @@ const hostApplicationPreparations = new HostApplicationPreparationWindows<Deskto
   record => Boolean(liveTrackedBrowserWindow(record)),
   record => liveTrackedBrowserWindow(record)?.close(),
 );
+const browserPackages = new BrowserPackages(bundledRuntimeExecutablePath, () => path.join(app.getPath('userData'), 'browser-package-cache'));
+const browserPackageOwners = new Set<number>();
 const hostApplicationComponents = new HostApplicationComponents(bundledRuntimeExecutablePath, () => path.join(app.getPath('userData'), 'native-application-components'));
 const hostApplicationComponentOwners = new Set<number>();
 const observedPreparationWindows = new WeakSet<BrowserWindow>();
@@ -10395,18 +10399,37 @@ async function withRuntimeFlowerTimeout<T>(promise: Promise<T>, timeoutMs: numbe
   }
 }
 
+// Browser installation belongs to the currently running environment session.
+// Background status/cancel calls must never start a stopped Runtime.
+async function runningBrowserFlowerTarget(): Promise<RuntimeFlowerTarget | null> {
+  const preferences = await loadDesktopPreferencesCached();
+  if (desktopPlatformCapabilities.wsl_environment) {
+    const record = runtimePlacementBridgeRegistry.get(preferences.default_flower_runtime_target_id!);
+    return record ? { record, local_environment: null } : null;
+  }
+  const environment = preferences.local_environment;
+  const record = currentLocalEnvironmentRuntimeRecord(environment);
+  const lifecycle = runtimeLifecycleCoordinator.active(localHostRuntimeLifecycleTargetKey(environment));
+  return record && (!lifecycle || lifecycle.intent === 'open' || lifecycle.intent === 'refresh')
+    ? { record, local_environment: environment } : null;
+}
+
 async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> {
   const method = runtimeFlowerMethod(request.method);
   const path = runtimeFlowerPath(request.path);
   if (!runtimeFlowerMethodAllowed(path, method)) {
     throw new Error('Flower runtime request method is not allowed for this path.');
   }
-  const flowerTarget = await withRuntimeFlowerTimeout(
+  const browserInstallation = path === '/_redeven_proxy/api/ai/computer/managed/browser';
+  const flowerTarget = browserInstallation ? await runningBrowserFlowerTarget() : await withRuntimeFlowerTimeout(
     ensureRuntimeFlowerRecord(),
     RUNTIME_FLOWER_READINESS_TIMEOUT_MS,
     'runtime_flower_readiness_timeout',
     'Desktop could not prepare the Runtime for Flower in time.',
   );
+  if (!flowerTarget || (request.environment_id && request.environment_id !== flowerTarget.record.environment_id)) {
+    throw new Error('The browser installation environment session has ended.');
+  }
   const record = flowerTarget.record;
   const url = new URL(path, runtimeFlowerBaseURL(record));
   const environment = flowerTarget.local_environment;
@@ -15754,6 +15777,7 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
     options.openRecovery?.operationKey ?? (compact(request.operation_key) || `${environmentID}:${requestedOperation}`);
   const targetID = desktopRuntimeTargetID(hostAccess, placement, environmentID);
   const executeAcceptedOperation = async (lifecycleSignal: AbortSignal): Promise<DesktopLauncherActionResult> => {
+    if (requestedOperation !== 'start') await browserPackages.cancelEnvironment(environmentID);
     launcherOperations.create({
       operation_key: operationKey,
       action: request.kind,
@@ -17010,6 +17034,7 @@ async function registerDesktopWSLDistribution(distributionName: string): Promise
 }
 
 async function setDefaultDesktopWSLTarget(runtimeTargetID: unknown): Promise<DesktopWSLActionResponse> {
+  const previousTargetID = (await loadDesktopPreferencesCached()).default_flower_runtime_target_id;
   const targetID = runtimeTargetID === null ? null : compact(runtimeTargetID) as DesktopRuntimeTargetID;
   try {
     await mutateDesktopPreferences((current) => {
@@ -17021,6 +17046,7 @@ async function setDefaultDesktopWSLTarget(runtimeTargetID: unknown): Promise<Des
       }
       return setDefaultFlowerRuntimeTarget(current, targetID);
     });
+    if (previousTargetID && previousTargetID !== targetID) await browserPackages.cancelEnvironment(previousTargetID);
     broadcastDesktopWelcomeSnapshots();
     return {
       ok: true,
@@ -17620,6 +17646,7 @@ async function shutdownDesktopWindowsAndSessions(): Promise<void> {
     }
   }
   await runtimeLifecycleCoordinator.waitForAll();
+  await browserPackages.close();
   const sessionClosePromises = [...sessionsByKey.keys()].map((sessionKey) => finalizeSessionClosure(sessionKey));
   sshRuntimeMaintenanceByKey.clear();
   runtimePlacementMaintenanceByTargetID.clear();
@@ -18393,6 +18420,26 @@ if (!app.requestSingleInstanceLock()) {
     const record = sessionRecordForWebContentsID(event.sender.id);
     if (normalized.preparation_id && (!record || event.senderFrame !== event.sender.mainFrame)) return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
     return openWebServiceWindowFromShell(record, normalized, record ? `${record.session_key}:${event.sender.id}` : undefined);
+  });
+  ipcMain.handle(BROWSER_PACKAGE_CHANNEL, async (event, value: unknown) => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    const launcherTarget = utilityWindowKindByWebContentsID.get(event.sender.id) === 'launcher' ? await runningBrowserFlowerTarget() : null;
+    const ownership = browserPackageOwner(event, record, launcherTarget?.record.environment_id);
+    const request = parseBrowserPackageRequest(value);
+    if (!ownership || !request) return { ok: false, error: 'unavailable' };
+    const owner = ownership.id;
+    if (!browserPackageOwners.has(owner)) {
+      browserPackageOwners.add(owner);
+      event.sender.on('did-start-navigation', (_navigation, _url, inPlace, mainFrame) => {
+        if (mainFrame && !inPlace) void browserPackages.cancel(owner);
+      });
+      event.sender.once('destroyed', () => { void browserPackages.cancel(owner); browserPackageOwners.delete(owner); });
+    }
+    try {
+      return await browserPackages.request(owner, ownership.environmentID, request, progress => {
+        if (!event.sender.isDestroyed()) event.sender.send(BROWSER_PACKAGE_PROGRESS_CHANNEL, progress);
+      });
+    } catch { return { ok: false, error: 'acquisition_failed' }; }
   });
   ipcMain.handle(HOST_APPLICATION_COMPONENTS_CHANNEL, async (event, value: unknown) => {
     const record = sessionRecordForWebContentsID(event.sender.id);
