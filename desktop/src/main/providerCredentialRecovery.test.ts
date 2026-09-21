@@ -64,4 +64,17 @@ describe('provider credential recovery', () => {
     await recovery.renew({ ...args(), identity: 'new-authorization', now: 600_000, exchange });
     expect(exchange).toHaveBeenCalledTimes(2);
   });
+
+  it.each(['sign_in_required', 'permission_required', 'binding_changed'] as const)(
+    'preserves %s without retrying until the authorization identity changes', async outcome => {
+      const recovery = new ProviderCredentialRecovery();
+      const exchange = vi.fn(async () => outcome);
+      await recovery.renew({ ...args(), exchange });
+      expect(recovery.state('local:one', 7)).toBe(outcome);
+      await recovery.renew({ ...args(), now: 500_000, exchange });
+      expect(exchange).toHaveBeenCalledTimes(1);
+      await recovery.renew({ ...args(), identity: 'new-authorization', now: 600_000, exchange });
+      expect(exchange).toHaveBeenCalledTimes(2);
+    },
+  );
 });

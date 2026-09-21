@@ -1,7 +1,8 @@
+import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
 import type { RuntimeServiceProviderLinkBinding } from '../shared/runtimeService';
 
-export type ProviderCredentialRecoveryState = 'restoring' | 'waiting' | 'attention';
-export type ProviderCredentialRecoveryOutcome = 'restored' | 'retry' | 'attention';
+export type ProviderCredentialRecoveryState = NonNullable<DesktopProviderRuntimeLinkTarget['credential_recovery']>;
+export type ProviderCredentialRecoveryOutcome = 'restored' | 'retry' | Exclude<ProviderCredentialRecoveryState, 'restoring' | 'waiting'>;
 
 export function providerCredentialsNeedRenewal(binding: RuntimeServiceProviderLinkBinding): boolean {
   return binding.state === 'linked' && binding.connection_state === 'authorization_required'
@@ -45,7 +46,7 @@ export class ProviderCredentialRecovery {
       attempt.done = false;
       attempt.state = 'attention';
     }
-    if (attempt.done || attempt.state === 'attention' || args.now < attempt.next) return;
+    if (attempt.done || attempt.state !== 'waiting' || args.now < attempt.next) return;
     this.running.add(args.targetID);
     attempt.state = 'restoring';
     attempt.count++;
@@ -54,10 +55,11 @@ export class ProviderCredentialRecovery {
       const outcome = await args.exchange();
       if (this.attempts.get(args.targetID) !== attempt || !args.isCurrent()) return;
       attempt.done = outcome === 'restored';
-      attempt.state = outcome === 'retry' && attempt.count < 3 ? 'waiting' : 'attention';
+      attempt.state = outcome === 'retry' ? (attempt.count < 3 ? 'waiting' : 'attention')
+        : outcome === 'restored' ? 'attention' : outcome;
       attempt.next = args.now + (attempt.count === 1 ? 30_000 : 120_000);
     } catch {
-      if (this.attempts.get(args.targetID) === attempt) attempt.state = 'attention';
+      if (this.attempts.get(args.targetID) === attempt && args.isCurrent()) attempt.state = 'attention';
     } finally {
       this.running.delete(args.targetID);
       args.changed();

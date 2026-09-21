@@ -577,6 +577,11 @@ components:
       additionalProperties: false
       required: [protocol_version, env_public_id, provider_origin, local_environment_public_id, agent_instance_id, delivery_request_id_b64u]
       properties:
+        expected_binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Renew only the current matching association at this generation; never create or replace one.
         protocol_version:
           type: string
           const: rcpp-v3

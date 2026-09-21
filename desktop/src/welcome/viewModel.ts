@@ -765,7 +765,9 @@ export function buildEnvironmentCardFactsModel(environment: DesktopEnvironmentEn
   const state = target.credential_recovery ?? target.provider_connection_state;
   const valueKey: DesktopTranslationKey = state === 'authorization_required'
     ? target.provider_link_binding?.last_error_code === 'CONTROL_CREDENTIALS_EXPIRED' ? 'providerRecovery.expired' : 'providerRecovery.needsAuthorization'
-    : target.provider_link_binding?.last_error_code === 'PROVIDER_LINK_PERMISSION_REVOKED' ? 'providerRecovery.permissionRevoked'
+    : state === 'permission_required' ? 'providerRecovery.permissionRevoked'
+    : state === 'sign_in_required' ? 'environmentCenter.cloudSignInRequired'
+    : state === 'binding_changed' ? 'providerRecovery.attention'
     : state === 'connected' ? 'providerRecovery.connected'
     : state === 'connecting' ? 'providerRecovery.connecting'
     : state === 'retrying' ? 'providerRecovery.retrying'
@@ -1475,7 +1477,7 @@ function runtimeProviderLinkDisconnectMenuAction(
   environment: DesktopEnvironmentEntry,
 ): EnvironmentActionMenuItemModel | null {
   const target = environment.provider_runtime_link_target;
-  if (!target || runtimeHasUnsupportedLegacyControlPlaneLink(environment)
+  if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind) || !target || runtimeHasUnsupportedLegacyControlPlaneLink(environment)
     || target.provider_link_state !== 'linked' || !target.can_disconnect_provider) {
     return null;
   }
