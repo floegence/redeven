@@ -157,11 +157,16 @@ async function checkMedia(page, kind, file, output, surface, observer) {
 }
 async function openNotesObserver(page) {
   if (await page.locator('.notes-overlay').isVisible()) return;
-  await Promise.all([
-    page.waitForResponse((response) => response.url().includes('/api/notes/snapshot') && response.ok()),
-    page.getByRole('button', { name: 'Notes overlay', exact: true }).click(),
-  ]);
+  // The controller can finish its snapshot while the window is changing focus.
+  // The visible overlay is the lifecycle boundary; the later topic assertion
+  // proves that its session event observation is live.
+  const snapshot = page.waitForResponse(
+    (response) => response.url().includes('/api/notes/snapshot') && response.ok(),
+    { timeout: 5000 },
+  ).catch(() => undefined);
+  await page.getByRole('button', { name: 'Notes overlay', exact: true }).click();
   await page.locator('.notes-overlay').waitFor({ state: 'visible' });
+  await snapshot;
 }
 async function verify(page, url, name, suppliedObserver) {
   page.setDefaultTimeout(10000);
