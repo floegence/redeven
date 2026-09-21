@@ -152,6 +152,8 @@ export type TerminalSessionRuntimeProps = Readonly<{
   connected: () => boolean;
   protocolClient: () => unknown;
   viewActive: () => boolean;
+  /** Paint retained content when its container is shown, before activation effects. */
+  viewVisible: () => boolean;
   autoFocus: () => boolean;
   themeColors: () => Record<string, string>;
   fontSize: () => number;
@@ -1124,7 +1126,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         runtimeRoot.dataset.terminalLastProjectionRendered = metrics.projected ? 'true' : 'false';
       },
     );
-    renderer.setVisible(props.active() && props.viewActive());
+    renderer.setVisible(props.active() && props.viewVisible());
     renderer.setPalette(resolvedPalette());
     applyTypography(props.fontSize(), props.fontFamily());
     historyController = new HistoryViewportController({
@@ -1260,9 +1262,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   });
 
   createEffect(() => {
-    const visible = props.active() && props.viewActive();
+    const visible = props.active() && props.viewVisible();
     if (!renderer) return;
-    historyController?.setVisible(visible);
     if (!visible) {
       renderer.setVisible(false);
       if (canvas) canvas.dataset.terminalVisibilityCommit = 'hidden';
@@ -1271,7 +1272,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     renderer.resize();
     renderer.setVisible(true);
     if (canvas) canvas.dataset.terminalVisibilityCommit = 'visible';
-    inputBridge?.syncGeometry();
+  });
+
+  createEffect(() => {
+    const active = props.active() && props.viewActive();
+    historyController?.setVisible(active);
+    if (active) inputBridge?.syncGeometry();
   });
 
   createEffect(() => {

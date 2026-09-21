@@ -371,6 +371,7 @@
     "fileUnavailable": "Este arquivo não está mais disponível no stash selecionado."
   },
   "shell": {
+    "loadingPage": "Carregando a página…",
     "accessibility": {
       "skipLinkLabel": "Ir para o conteúdo do ambiente Redeven",
       "topBarLabel": "Barra de ferramentas do ambiente Redeven",

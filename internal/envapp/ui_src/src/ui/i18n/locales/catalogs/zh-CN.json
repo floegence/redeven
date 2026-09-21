@@ -371,6 +371,7 @@
     "fileUnavailable": "所选储藏中已不存在此文件。"
   },
   "shell": {
+    "loadingPage": "正在加载页面…",
     "accessibility": {
       "skipLinkLabel": "跳到 Redeven 环境内容",
       "topBarLabel": "Redeven 环境工具栏",

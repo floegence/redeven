@@ -197,6 +197,10 @@ function buildDeepFolderTree(): FileItem[] {
 }
 
 function defineElementWidth(element: Element, width: number) {
+  Object.defineProperty(element, 'clientWidth', {
+    configurable: true,
+    get: () => width,
+  });
   Object.defineProperty(element, 'offsetWidth', {
     configurable: true,
     get: () => width,
@@ -277,6 +281,14 @@ function triggerResizeObservers() {
 }
 
 beforeEach(() => {
+  // JSDOM has no layout; distinguish rendered boxes from display:none ancestors.
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(function (this: HTMLElement) {
+    if (this.style.display === 'none') return [] as unknown as DOMRectList;
+    for (let element = this.parentElement; element; element = element.parentElement) {
+      if (element.style.display === 'none') return [] as unknown as DOMRectList;
+    }
+    return (this.isConnected ? [this.getBoundingClientRect()] : []) as unknown as DOMRectList;
+  });
   const measure = HTMLElement.prototype.getBoundingClientRect;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     if (this.hasAttribute('data-browser-workspace')) {

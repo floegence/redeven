@@ -371,6 +371,7 @@
     "fileUnavailable": "Este archivo ya no está disponible en el guardado provisional seleccionado."
   },
   "shell": {
+    "loadingPage": "Cargando la página…",
     "accessibility": {
       "skipLinkLabel": "Saltar al contenido del entorno Redeven",
       "topBarLabel": "Barra de herramientas del entorno Redeven",

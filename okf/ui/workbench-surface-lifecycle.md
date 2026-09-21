@@ -3,7 +3,7 @@ type: UI Contract
 title: Workbench surface lifecycle
 description: Selection presentation, recovery ownership, lazy widgets, and shared floating surfaces.
 tags: [ui, workbench, lifecycle, keep-alive]
-timestamp: 2026-08-26T00:00:00Z
+timestamp: 2026-09-21T00:00:00Z
 ---
 # Summary
 
@@ -13,7 +13,7 @@ Workbench keeps widget identity and state stable while Dock navigation, visual s
 
 ## Mechanism
 
-Workbench widget selection follows the same presentation ordering without changing canvas ownership. The selected boundary and pointer ownership update immediately; committed activation, z-order persistence, viewport reveal or centering, fit, focus, and geometry measurement occur after the intent paint. Activity and Workbench page roots also remain mounted after first visit. Switching page mode changes visibility and activation sequence after paint, then restores Workbench geometry and focus; it does not rebuild the Workbench page or destroy the Activity Shell.
+Workbench widget selection follows the same presentation ordering without changing canvas ownership. The selected boundary and pointer ownership update immediately; committed activation, z-order persistence, viewport reveal or centering, fit, focus, and geometry measurement occur after the intent paint. Activity and Workbench page roots also remain mounted after first visit. Switching page mode commits visibility after the navigation intent paint, then publishes activation after the content paint opportunity and restores Workbench geometry and focus; it does not rebuild the Workbench page or destroy the Activity Shell. Nested visibility and retained canvas restoration follow [UI presentation transactions](ui-presentation-transactions.md); restoring pixels cannot claim focus or terminal controller ownership.
 
 Redeven enables Floe Webapp's published `focus-cycle` Dock activation mode. For built-in Widgets, sticky notes, text, and background regions, Floe resolves candidates in stable spatial order, owns the cycle session, creates the first component at the viewport center when none exists, selects and centers the target without changing scale, and transfers focus. Repeated activation wraps; manual selection, another Dock item, or a candidate-set or order change starts a new cycle. Waiting and panning alone do not. Pointer and keyboard activation share that path, while drag completion cannot also click. Cycle position and empty-type creation remain available in the accessible name and tooltip, but Dock icons render no numeric or `+` corner badge.
 

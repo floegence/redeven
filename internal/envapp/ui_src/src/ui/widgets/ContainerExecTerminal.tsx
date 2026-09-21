@@ -62,6 +62,7 @@ export function ContainerExecTerminal(props: ContainerExecTerminalProps) {
         connected={connected}
         protocolClient={() => protocol.session?.()}
         viewActive={props.active}
+        viewVisible={props.active}
         autoFocus={props.active}
         themeColors={terminalTheme}
         fontSize={preferences.fontSize}

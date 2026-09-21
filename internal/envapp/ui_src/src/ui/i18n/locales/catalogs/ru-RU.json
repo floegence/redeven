@@ -371,6 +371,7 @@
     "fileUnavailable": "Этот файл больше недоступен в выбранном отложенном изменении."
   },
   "shell": {
+    "loadingPage": "Загрузка страницы…",
     "accessibility": {
       "skipLinkLabel": "Перейти к содержимому среды Redeven",
       "topBarLabel": "Панель инструментов среды Redeven",
