@@ -4,7 +4,7 @@ import '../flower-feature.css';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
-import { commands, page } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 
 import { I18nProvider } from '../i18n';
 import { writeStoredLanguagePreference } from '../i18n/storage';
@@ -160,6 +160,43 @@ afterEach(async () => {
 });
 
 describe('AIReadinessBoundary browser layout', () => {
+  it.each(['inspecting', 'backing_up', 'verifying'] as const)('keeps %s compact and reveals explanations only on request', async (state) => {
+    const { host } = mountHarness(blockedReason('', { state }));
+    await sizeReadinessSurface(1280, 720);
+    await expect.element(page.getByRole('button', { name: 'Startup details', exact: true })).toBeVisible();
+    const inner = host.querySelector<HTMLElement>('.ai-readiness-surface__inner')!;
+    const illustration = host.querySelector<HTMLElement>('.flower-readiness-art')!;
+    expect(inner.querySelectorAll('p')).toHaveLength(0);
+    expect(illustration.getBoundingClientRect().width).toBeLessThanOrEqual(80);
+    expect(illustration.getBoundingClientRect().height).toBeLessThanOrEqual(80);
+    expect(host.querySelector('.ai-readiness-data-statement')).toBeNull();
+
+    await page.getByRole('button', { name: 'Startup details', exact: true }).click();
+    const details = host.querySelector<HTMLElement>('.ai-readiness-diagnostics')!;
+    expect(details.textContent).toContain('Your conversations stay intact.');
+    expect(details.textContent).toContain('Files and terminals remain available');
+    expect(details.querySelectorAll('.ai-readiness-diagnostics__row')).toHaveLength(4);
+    await userEvent.keyboard('{Escape}');
+    expect(host.querySelector('.ai-readiness-diagnostics')).toBeNull();
+    expect(document.activeElement?.textContent).toBe('Startup details');
+  });
+
+  it('announces the focused status without a title frame and retains keyboard focus on controls', async () => {
+    const { host } = mountHarness(blockedReason('', { state: 'verifying' }));
+    await sizeReadinessSurface(1280, 720);
+    await expect.element(page.getByRole('heading', { name: 'Checking the final details' })).toBeVisible();
+    const heading = host.querySelector<HTMLElement>('h1')!;
+    expect(document.activeElement).toBe(heading);
+    expect(heading.getAttribute('aria-live')).toBe('polite');
+    expect(getComputedStyle(heading).boxShadow).toBe('none');
+    expect(getComputedStyle(heading).outlineStyle).toBe('none');
+    await userEvent.tab();
+    const detailsButton = host.querySelector<HTMLButtonElement>('button[aria-controls]')!;
+    expect(document.activeElement).toBe(detailsButton);
+    expect(detailsButton.matches(':focus-visible')).toBe(true);
+    expect(getComputedStyle(detailsButton).outlineStyle).toBe('solid');
+  });
+
   it('remains usable at 320px with 200% text and no horizontal overflow', async () => {
     await page.viewport(320, 720);
     document.documentElement.style.fontSize = '200%';
