@@ -18,11 +18,32 @@ struct HostApplicationWindowPresence {
 
 final class HostApplicationWindows {
     private var known: [CGWindowID: NativeWindow] = [:]
+    private var observedWindowIDs = Set<CGWindowID>()
     struct Snapshot {
         let windows: [NativeWindow]
         let focusedID: String?
         // nil means the two native sources do not establish an empty inventory.
         let count: Int?
+    }
+    static func isPassiveSurface(bounds: CGRect, activationPoint: CGPoint?, mainSettable: Bool?, focused: Bool?, modal: Bool?, hasControls: Bool) -> Bool {
+        // AppKit can include capture indicators in AXWindows. They have no
+        // independent activation target. Missing metadata is not exclusion proof.
+        guard let activationPoint, mainSettable == false, focused == false,
+              modal == false, !hasControls else { return false }
+        return !bounds.contains(activationPoint)
+    }
+    private func isPassiveSurface(_ element: AXUIElement, bounds: CGRect) -> Bool {
+        guard let value = axValue(element, NSAccessibility.Attribute.activationPoint.rawValue), CFGetTypeID(value) == AXValueGetTypeID() else { return false }
+        var point = CGPoint.zero
+        guard AXValueGetValue(unsafeBitCast(value, to: AXValue.self), .cgPoint, &point), !bounds.contains(point) else { return false }
+        var mainSettable = DarwinBoolean(false)
+        let mainResult = AXUIElementIsAttributeSettable(element, kAXMainAttribute as CFString, &mainSettable)
+        let controls = [kAXCloseButtonAttribute, kAXTitleUIElementAttribute, kAXDefaultButtonAttribute, kAXCancelButtonAttribute]
+        return Self.isPassiveSurface(bounds: bounds, activationPoint: point,
+            mainSettable: mainResult == .success ? mainSettable.boolValue : nil,
+            focused: axValue(element, kAXFocusedAttribute) as? Bool,
+            modal: axValue(element, kAXModalAttribute) as? Bool,
+            hasControls: controls.contains { axValue(element, $0) != nil })
     }
     static func matchingWindowID(_ bounds: CGRect, candidates: [[String: Any]]) -> CGWindowID? {
         let matches = candidates.filter {
@@ -47,11 +68,19 @@ final class HostApplicationWindows {
               let list = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] else {
             throw HostFailure(code: "WINDOW_INVENTORY_UNAVAILABLE", message: "The application window list is temporarily unavailable.")
         }
-        let candidates = list.filter { ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == app.processIdentifier && ($0[kCGWindowLayer as String] as? NSNumber)?.intValue == 0 }
+        // AXWindows also contains real floating panels. WindowServer layer zero
+        // alone is not the application's interactive window inventory.
+        let candidates = list.filter { ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == app.processIdentifier }
         var current: [CGWindowID: NativeWindow] = [:]
+        var passiveIDs = Set<CGWindowID>()
+        var applicationElementCount = elements.count
         for element in elements.prefix(64) {
             if let bounds = axRect(element), !bounds.isEmpty,
                let id = Self.matchingWindowID(bounds, candidates: candidates) {
+                if !app.isHidden, (axValue(element, kAXMinimizedAttribute) as? Bool) != true,
+                   isPassiveSurface(element, bounds: bounds) {
+                    passiveIDs.insert(id); applicationElementCount -= 1; continue
+                }
                 if let old = known[id], CFEqual(old.element, element) {
                     current[id] = old
                 } else {
@@ -64,6 +93,9 @@ final class HostApplicationWindows {
                 current[old.windowID] = old
             }
         }
+        observedWindowIDs.formIntersection(candidates.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value })
+        observedWindowIDs.formUnion(current.keys)
+        observedWindowIDs.subtract(passiveIDs)
         known = current
         let focused = axValue(application, kAXFocusedWindowAttribute)
         let ordered = current.values.sorted { left, right in
@@ -74,8 +106,14 @@ final class HostApplicationWindows {
         let focusedID = ordered.first.flatMap { window in
             focused.map { CFEqual($0, window.element) } == true ? window.id : nil
         }
-        let visiblyEmpty = !candidates.contains { ($0[kCGWindowIsOnscreen as String] as? Bool) == true }
-        let count = elements.isEmpty && visiblyEmpty ? 0 : (ordered.isEmpty ? nil : ordered.count)
+        let visiblyEmpty = !candidates.contains {
+            let id = ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value ?? 0
+            // A known floating window remains lifecycle evidence if an AX read
+            // temporarily omits it. Unrelated menu/status-bar surfaces do not.
+            return ($0[kCGWindowIsOnscreen as String] as? Bool) == true && !passiveIDs.contains(id) &&
+                (($0[kCGWindowLayer as String] as? NSNumber)?.intValue == 0 || observedWindowIDs.contains(id))
+        }
+        let count = applicationElementCount == 0 && visiblyEmpty ? 0 : (ordered.isEmpty ? nil : ordered.count)
         return Snapshot(windows: ordered, focusedID: focusedID, count: count)
     }
 }

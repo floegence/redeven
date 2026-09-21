@@ -20,19 +20,18 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 button svg { width:16px; height:16px; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
 body[data-state="active"] #application { opacity:1; pointer-events:auto; }
 body[data-state="active"] main { display:none; }
-body:is([data-state="disconnected"],[data-state="failed"],[data-state="captureUnavailable"],[data-state="ended"],[data-state="waiting"],[data-state="permissionRequired"],[data-state="sessionUnavailable"],[data-state="sessionFailed"]) .progress { display:none; }
+main[aria-busy="false"] .progress { display:none; }
 @keyframes travel { 0% { transform:translateX(-110%); } 100% { transform:translateX(360%); } }
 @keyframes arrive { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; } .progress span { width:100%; opacity:.5; } }
 /* The viewer always owns the full viewport; controls float at its left edge. */
-.mac-app-controls { position:fixed; z-index:2; left:8px; top:50%; transform:translateY(-50%); }
+.mac-app-controls { display:flex; flex-direction:column; gap:6px; position:fixed; z-index:2; left:8px; top:50%; transform:translateY(-50%); }
 .mac-app-controls button { margin:0; }
-.mac-app-controls-toggle { width:34px; min-height:42px; padding:0; border-radius:10px; box-shadow:0 2px 10px #0001; opacity:.65; }
-.mac-app-controls-toggle:is(:hover,:focus-visible,[aria-expanded="true"]) { opacity:1; }
+.mac-app-controls-toggle,.mac-app-windows-toggle { width:34px; min-height:42px; padding:0; border-radius:10px; box-shadow:0 2px 10px #0001; opacity:.65; }
+:is(.mac-app-controls-toggle,.mac-app-windows-toggle):is(:hover,:focus-visible,[aria-expanded="true"]) { opacity:1; }
 .mac-app-drawer { position:absolute; left:42px; top:50%; transform:translateY(-50%); width:320px; max-width:calc(100vw - 62px); max-height:calc(100dvh - 24px); overflow:auto; overscroll-behavior:contain; padding:20px; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:0 12px 40px #0002; text-align:left; animation:unfold .16s ease-out; }
 .mac-app-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
 body:is([data-state="waiting"],[data-state="captureUnavailable"]) .mac-app-actions { margin-top:0; padding-top:0; border-top:0; }
-.mac-app-actions>select { width:100%; min-width:0; margin-bottom:6px; }
 .mac-app-actions>button { flex:1; min-height:32px; font-size:11px; padding:4px 8px; }
 .mac-app-controls select { font:inherit; font-size:12px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--surface); color:var(--foreground); cursor:pointer; }
 @keyframes unfold { from { opacity:0; translate:-5px 0; } to { opacity:1; translate:0 0; } }
@@ -44,8 +43,8 @@ body:is([data-state="waiting"],[data-state="captureUnavailable"]) .mac-app-actio
 .mac-app-menu button:disabled { opacity:.45; cursor:default; }
 .mac-app-canvas { object-fit:contain; }
 
-@media(hover:none) { .mac-app-controls-toggle { opacity:1; } }
-body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; }
+@media(hover:none) { .mac-app-controls-toggle,.mac-app-windows-toggle { opacity:1; } }
+body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; opacity:.45; }
 
 .mac-app-feedback { position:fixed; z-index:3; top:16px; left:50%; transform:translateX(-50%); max-width:calc(100% - 32px); padding:10px 14px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--foreground); font-size:12px; pointer-events:none; }
 .mac-app-picture { text-align:left; }
@@ -63,3 +62,16 @@ body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; 
 
 
 @media(max-height:420px) { main { padding:16px 28px; } .app-identity { width:48px; height:48px; margin-bottom:12px; } .app-identity>img { width:48px; height:48px; } #hint { margin-top:10px; } #retry { margin-top:14px; } }
+
+.mac-app-windows-toggle { min-height:50px; flex-direction:column; gap:0; }
+.mac-app-windows-toggle span { font-size:10px; line-height:14px; font-variant-numeric:tabular-nums; }
+.mac-app-window-picker>strong { display:block; margin-bottom:12px; font-size:14px; }
+.mac-app-window-list { max-height:min(320px,calc(100dvh - 150px)); overflow:auto; overscroll-behavior:contain; display:grid; gap:4px; }
+.mac-app-window-list button { margin:0; width:100%; min-height:42px; padding:10px; border:1px solid transparent; text-align:left; justify-content:space-between; }
+.mac-app-window-list button span { overflow-wrap:anywhere; min-width:0; }
+.mac-app-window-list button svg { flex:none; opacity:0; }
+.mac-app-window-list button[aria-pressed="true"] { background:var(--background); border-color:var(--line); }
+.mac-app-window-list button[aria-pressed="true"] svg { opacity:1; }
+.mac-app-window-list button[aria-busy="true"] svg { opacity:.35; }
+.mac-app-window-list button:hover { background:var(--background); }
+.mac-app-actions button:disabled { cursor:default; opacity:.45; }

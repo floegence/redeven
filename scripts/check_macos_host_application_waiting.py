@@ -84,6 +84,12 @@ def run(helper_path, scenario):
             window = helper.wait('window', timeout=60)
             helper.wait('frame')
             if scenario == 'windows':
+                def inventory(expected):
+                    # Allow the native inventory to observe capture's own system
+                    # chrome; it must not become an application window.
+                    time.sleep(0.8)
+                    latest = next(e for e in reversed(helper.events) if e['type'] == 'windows')
+                    assert {w['id'] for w in latest['windows']} == expected, latest
                 def items(values):
                     for item in values:
                         yield item
@@ -93,10 +99,12 @@ def run(helper_path, scenario):
                     item = next(i for i in items(helper.wait('menu')['items']) if i['title'] == title)
                     helper.send('menu_action', generation=current['generation'], item=item['id'])
                 main = window
+                inventory({main['window']})
                 menu_action('Open second window', window)
                 window = helper.wait('window', timeout=5, predicate=lambda w: w['window'] != main['window'])
                 helper.wait('frame')
                 secondary = window
+                inventory({main['window'], secondary['window']})
                 helper.send('select', window=main['window'])
                 window = helper.wait('window', predicate=lambda w: w['window'] == main['window'])
                 helper.wait('frame', predicate=lambda f: f['generation'] == window['generation'])
@@ -109,6 +117,18 @@ def run(helper_path, scenario):
                 helper.send('close', window=window['window'], generation=window['generation'])
                 window = helper.wait('window', predicate=lambda w: w['window'] == main['window'])
                 helper.wait('frame')
+                inventory({main['window']})
+                menu_action('Open utility panel', window)
+                listed = helper.wait('windows', predicate=lambda e: any(w['title'] == 'Fixture utility panel' for w in e['windows']))
+                panel = next(w for w in listed['windows'] if w['title'] == 'Fixture utility panel')
+                helper.send('select', window=panel['id'])
+                window = helper.wait('window', predicate=lambda w: w['window'] == panel['id'])
+                helper.wait('frame', predicate=lambda f: f['generation'] == window['generation'])
+                inventory({main['window'], window['window']})
+                helper.send('close', window=window['window'], generation=window['generation'])
+                window = helper.wait('window', predicate=lambda w: w['window'] == main['window'])
+                helper.wait('frame', predicate=lambda f: f['generation'] == window['generation'])
+                inventory({main['window']})
                 menu_action('Cancel next close', window)
                 helper.wait('operation_complete', predicate=lambda m: m.get('action') == 'menu_action')
                 helper.send('close', window=window['window'], generation=window['generation'])

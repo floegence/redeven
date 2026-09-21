@@ -164,6 +164,11 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 			return Session{}, ErrInvalid
 		}
 	}
+	for _, value := range []string{req.Presentation.Checking, req.Presentation.ApplicationExited, req.Presentation.ApplicationExitedHint, req.Presentation.WindowsClosed, req.Presentation.WindowsClosedHint, req.Presentation.SharingStopped, req.Presentation.SharingStoppedHint, req.Presentation.EndedHint, req.Presentation.SessionMissing, req.Presentation.SessionMissingHint, req.Presentation.AccessRequired, req.Presentation.AccessHint, req.Presentation.Dismiss, req.Presentation.SessionFailed, req.Presentation.ReopenHint, req.Presentation.PermissionRequired, req.Presentation.PermissionHint, req.Presentation.SessionUnavailable, req.Presentation.SessionHint, req.Presentation.CaptureHint} {
+		if len(value) > 1024 {
+			return Session{}, ErrInvalid
+		}
+	}
 	if runtime.GOOS == "darwin" {
 		for _, value := range []string{req.Presentation.Controls, req.Presentation.Menu, req.Presentation.Input, req.Presentation.Windows, req.Presentation.CloseWindow, req.Presentation.SharedControl, req.Presentation.OperationFailed, req.Presentation.Waiting, req.Presentation.WaitingHint, req.Presentation.CaptureUnavailable, req.Presentation.Picture, req.Presentation.PictureAuto, req.Presentation.PictureClarity, req.Presentation.PictureSmooth, req.Presentation.PictureData, req.Presentation.PictureHint, req.Presentation.PictureAdvanced, req.Presentation.PicturePixels, req.Presentation.PictureResolution, req.Presentation.PictureFrameRate, req.Presentation.PictureActualRate, req.Presentation.PictureBandwidth, req.Presentation.PictureTransport, req.Presentation.PictureVideo, req.Presentation.PictureImages} {
 			if strings.TrimSpace(value) == "" || len(value) > 1024 {

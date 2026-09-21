@@ -6212,6 +6212,19 @@
     }
   },
   "hostApplications": {
+    "checking": "Vérification de l’état de l’application…",
+    "applicationExited": "L’application a quitté",
+    "applicationExitedHint": "L’hôte a confirmé la fermeture de l’application. Rouvrez-la depuis les applications de l’hôte si nécessaire.",
+    "windowsClosed": "Les fenêtres de l’application sont fermées",
+    "windowsClosedHint": "Toutes les fenêtres partagées ont été fermées sur l’hôte. L’application est peut-être toujours en cours d’exécution. Rouvrez-la depuis les applications de l’hôte pour partager une fenêtre.",
+    "sharingStopped": "Le partage est arrêté",
+    "sharingStoppedHint": "Cette session de partage a été arrêtée. L’application est peut-être toujours en cours d’exécution sur l’hôte.",
+    "endedHint": "Cette session est terminée. Rouvrez l’application depuis les applications de l’hôte pour démarrer une nouvelle session.",
+    "sessionMissing": "La session de partage n’est plus disponible",
+    "sessionMissingHint": "L’hôte ne conserve plus cette session. L’état de l’application ne peut pas être confirmé ici. Consultez les applications de l’hôte pour la vérifier et la rouvrir.",
+    "accessRequired": "L’accès à cette session est indisponible",
+    "accessHint": "Vérifiez votre connexion et vos droits d’accès dans Redeven, puis réessayez.",
+    "dismiss": "Fermer la fenêtre",
     "macControls": "Commandes de l’application",
     "prepare": {
       "downloadMethod": "Mode de téléchargement",
@@ -6254,7 +6267,7 @@
     "connecting": "Connexion à l’application…",
     "reconnecting": "Reconnexion en cours…",
     "disconnected": "Connexion interrompue",
-    "connectionHint": "Reconnectez-vous pour continuer à utiliser l’application. Fermer cette fenêtre ne met pas fin à la session.",
+    "connectionHint": "L’état actuel de l’application n’a pas pu être confirmé. Vérifiez la connexion, puis reconnectez-vous.",
     "reconnect": "Se reconnecter",
     "add": "Ajouter une application",
     "addDescription": "Indiquez le chemin absolu de l’exécutable d’une application graphique installée. Les arguments sont transmis directement, sans shell.",

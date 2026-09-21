@@ -53,7 +53,7 @@ func (m *Manager) macHelper() string {
 }
 
 type macMessage struct {
-	Instance            string               `json:"instance,omitempty"`
+	EndReason           string               `json:"end_reason,omitempty"`
 	Running             []RunningApplication `json:"running,omitempty"`
 	ExistingApplication bool                 `json:"existing_application,omitempty"`
 	Action              string               `json:"action,omitempty"`
@@ -191,15 +191,6 @@ func (m *Manager) Quit(ctx context.Context, owner string, req QuitRequest) error
 		}
 		seen[id] = true
 	}
-	// Record explicit intent before dispatch so a fast, windowless exit is not
-	// misclassified as a failed launch. This does not change any session state.
-	m.mu.Lock()
-	for _, s := range m.sessions {
-		if s.native != nil && s.view.Application.ID == req.ApplicationID && seen[s.native.instance] {
-			s.native.quitRequested = true
-		}
-	}
-	m.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	msg, err := macOnce(ctx, m.macHelper(), map[string]any{"action": "quit", "application_id": req.ApplicationID, "instances": req.Instances})
@@ -276,9 +267,6 @@ func (m *Manager) Permissions(ctx context.Context, permission string) error {
 // Latest-frame delivery bounds memory when a viewer is slow or disconnected.
 // One WebSocket owns input at a time; replacement revokes the previous viewer.
 type macSession struct {
-	// Process identity and explicit quit intent are guarded by Manager.mu.
-	instance       string
-	quitRequested  bool
 	mu             sync.Mutex
 	controlMu      sync.Mutex
 	writeMu        sync.Mutex
@@ -444,7 +432,6 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			startup.Stop()
 			m.mu.Lock()
 			s.view.ExistingApplication = msg.ExistingApplication
-			n.instance = msg.Instance
 			m.mu.Unlock()
 			slog.Info("native application attached", "session", s.view.ID, "existing_application", msg.ExistingApplication)
 		case "frame":
@@ -489,6 +476,12 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			n.windows = raw
 			n.mu.Unlock()
 		case "ended":
+			m.mu.Lock()
+			switch msg.EndReason {
+			case "application_exited", "windows_closed", "sharing_stopped":
+				s.view.EndReason = msg.EndReason
+			}
+			m.mu.Unlock()
 			// Explicit sharing termination is normal even before the first frame.
 			// A failed application launch arrives as a separate native error.
 			return
@@ -498,12 +491,6 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			n.noticeRevision++
 			n.mu.Unlock()
 		case "error":
-			m.mu.Lock()
-			intentionalExit := msg.Code == "APPLICATION_EXITED" && n.quitRequested
-			m.mu.Unlock()
-			if intentionalExit {
-				continue
-			}
 			slog.Warn("native application error", "session", s.view.ID, "code", msg.Code)
 			n.mu.Lock()
 			n.notice = raw

@@ -145,7 +145,6 @@ final class HostApplicationSession {
     private let inventory = HostApplicationWindows()
     private var presence = HostApplicationWindowPresence()
     private var ownsApplication = false
-    private var stopRequested = false
     private var blockedReason: String?
     private var knownWindowIDs = Set<String>()
     private var waiting = false
@@ -174,7 +173,7 @@ final class HostApplicationSession {
             case "quit":
                 try HostApplicationCatalog.quit(request)
                 emit(["type": "quit_requested"])
-            case "detach": end()
+            case "detach": end(reason: "sharing_stopped")
             case "validate":
                 guard let path = request["path"] as? String, path.hasPrefix("/"), path.hasSuffix(".app") else { throw NativeInput.invalid("An absolute application bundle path is required.") }
                 let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
@@ -225,8 +224,8 @@ final class HostApplicationSession {
                       AXUIElementPerformAction(unsafeBitCast(button, to: AXUIElement.self), kAXPressAction as CFString) == .success else { throw NativeInput.unavailable() }
                 // Save dialogs remain part of the live session; never force quit.
             case "stop":
-                guard let app, !app.isTerminated else { end(); return }
-                if ownsApplication { stopRequested = app.terminate() } else { end() }
+                guard let app, !app.isTerminated else { end(reason: "application_exited"); return }
+                if ownsApplication { _ = app.terminate() } else { end(reason: "sharing_stopped") }
             case "menu":
                 let application = try menuTarget(request)
                 menuItems.removeAll()
@@ -295,8 +294,7 @@ final class HostApplicationSession {
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
                     guard let self else { return }
                     if application.isTerminated {
-                        if !self.presence.hadWindows && !self.stopRequested { emit(["type": "error", "code": "APPLICATION_EXITED"]) }
-                        self.end(); return
+                        self.end(reason: "application_exited"); return
                     }
                     guard self.checkAccess() else { return }
                     self.refresh()
@@ -348,7 +346,7 @@ final class HostApplicationSession {
             // binding until an authoritative inventory or process exit arrives.
             return
         }
-        if presence.observe(windowCount: snapshot.count, at: Date()) { end(); return }
+        if presence.observe(windowCount: snapshot.count, at: Date()) { end(reason: "windows_closed"); return }
         let windows = snapshot.windows
         guard !windows.isEmpty else { suspendWindow(); return }
         let list = windows.map { ["id": $0.id, "title": axString($0.element, kAXTitleAttribute)] }
@@ -516,7 +514,7 @@ final class HostApplicationSession {
         }
         heldButtons.removeAll()
     }
-    func end() { generation += 1; releaseButtons(); app = nil; selected = nil; delivery = nil; capture?.stop(); capture = nil; timer?.invalidate(); timer = nil; emit(["type": "ended"]) }
+    func end(reason: String = "sharing_stopped") { generation += 1; releaseButtons(); app = nil; selected = nil; delivery = nil; capture?.stop(); capture = nil; timer?.invalidate(); timer = nil; emit(["type": "ended", "end_reason": reason]) }
 }
 
 enum HostApplications {

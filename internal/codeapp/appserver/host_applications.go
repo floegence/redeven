@@ -195,7 +195,7 @@ func (g *Server) guardHostApplicationSession(w http.ResponseWriter, r *http.Requ
 		if s.State == "running" || s.State == "starting" {
 			password = g.hostApps.Password(s.ID)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"state": s.State, "error_code": s.ErrorCode, "password": password})
+		writeJSON(w, http.StatusOK, map[string]any{"state": s.State, "error_code": s.ErrorCode, "end_reason": s.EndReason, "password": password})
 		return true
 	}
 	if path == hostApplicationBoot {
@@ -213,7 +213,7 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, _ *http.Request
 	var random [18]byte
 	_, _ = rand.Read(random[:])
 	nonce := base64.RawStdEncoding.EncodeToString(random[:])
-	config, _ := json.Marshal(map[string]any{"base": base, "copy": s.Presentation, "icon": s.Application.Icon, "backend": s.Backend})
+	config, _ := json.Marshal(map[string]any{"base": base, "copy": s.Presentation, "icon": s.Application.Icon, "backend": s.Backend, "initial": map[string]string{"state": s.State, "end_reason": s.EndReason}})
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -226,7 +226,7 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, _ *http.Request
 		Name, Nonce, Locale string
 		Config, Script      template.JS
 		Style               template.CSS
-	}{s.Application.Name, nonce, s.Presentation.Locale, template.JS(config), template.JS(script), template.CSS(hostApplicationCSS)})
+	}{s.Application.Name, nonce, s.Presentation.Locale, template.JS(config), template.JS(hostApplicationConnectionJS + "\n" + script), template.CSS(hostApplicationCSS)})
 }
 
 //go:embed host_application_viewer/viewer.html
@@ -234,6 +234,9 @@ var hostApplicationHTML string
 
 //go:embed host_application_viewer/viewer.css
 var hostApplicationCSS string
+
+//go:embed host_application_viewer/connection.js
+var hostApplicationConnectionJS string
 
 //go:embed host_application_viewer/viewer.js
 var hostApplicationJS string

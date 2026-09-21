@@ -6223,6 +6223,19 @@
     }
   },
   "hostApplications": {
+    "checking": "正在確認應用程式狀態…",
+    "applicationExited": "應用程式已結束",
+    "applicationExitedHint": "主機已確認應用程式結束。需要時，請從「主機應用程式」重新開啟。",
+    "windowsClosed": "應用程式視窗已關閉",
+    "windowsClosedHint": "主機上的共用視窗已全部關閉，應用程式可能仍在執行。請從「主機應用程式」重新開啟視窗並共用。",
+    "sharingStopped": "共用已停止",
+    "sharingStoppedHint": "本次共用已停止，應用程式可能仍在主機上執行。",
+    "endedHint": "本次工作階段已結束。請從「主機應用程式」重新開啟應用程式，開始新的工作階段。",
+    "sessionMissing": "共用工作階段已無法使用",
+    "sessionMissingHint": "主機已不再保留此工作階段，無法在這裡確認應用程式狀態。請返回「主機應用程式」查看並重新開啟。",
+    "accessRequired": "無法存取此工作階段",
+    "accessHint": "請在 Redeven 中檢查登入狀態與存取權限，然後重試。",
+    "dismiss": "關閉視窗",
     "macControls": "應用程式控制",
     "prepare": {
       "downloadMethod": "下載方式",
@@ -6265,7 +6278,7 @@
     "connecting": "正在連線至應用程式…",
     "reconnecting": "正在重新連線…",
     "disconnected": "連線已中斷",
-    "connectionHint": "重新連線即可繼續使用應用程式。關閉此視窗不會結束工作階段。",
+    "connectionHint": "暫時無法確認應用程式目前的狀態。請檢查連線，然後重新連線。",
     "reconnect": "重新連線",
     "add": "新增應用程式",
     "addDescription": "輸入已安裝圖形應用程式的執行檔絕對路徑。參數將直接傳遞，不經過 shell。",

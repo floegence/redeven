@@ -6212,6 +6212,19 @@
     }
   },
   "hostApplications": {
+    "checking": "Anwendungsstatus wird geprüft…",
+    "applicationExited": "Anwendung wurde beendet",
+    "applicationExitedHint": "Der Host hat bestätigt, dass die Anwendung beendet wurde. Öffnen Sie sie bei Bedarf erneut unter Host-Anwendungen.",
+    "windowsClosed": "Anwendungsfenster wurden geschlossen",
+    "windowsClosedHint": "Alle freigegebenen Fenster wurden auf dem Host geschlossen. Die Anwendung läuft möglicherweise noch. Öffnen Sie sie unter Host-Anwendungen, um wieder ein Fenster freizugeben.",
+    "sharingStopped": "Freigabe wurde beendet",
+    "sharingStoppedHint": "Diese Freigabesitzung wurde beendet. Die Anwendung läuft möglicherweise noch auf dem Host.",
+    "endedHint": "Diese Sitzung ist beendet. Öffnen Sie die Anwendung unter Host-Anwendungen erneut, um eine neue Sitzung zu starten.",
+    "sessionMissing": "Freigabesitzung ist nicht mehr verfügbar",
+    "sessionMissingHint": "Der Host hat diese Sitzung nicht mehr. Der Anwendungsstatus lässt sich hier nicht bestätigen. Prüfen Sie die Anwendung unter Host-Anwendungen und öffnen Sie sie erneut.",
+    "accessRequired": "Zugriff auf diese Sitzung nicht möglich",
+    "accessHint": "Prüfen Sie Ihre Anmeldung und Zugriffsrechte in Redeven und versuchen Sie es erneut.",
+    "dismiss": "Fenster schließen",
     "macControls": "Anwendungssteuerung",
     "prepare": {
       "downloadMethod": "Download-Methode",
@@ -6254,7 +6267,7 @@
     "connecting": "Verbindung zur Anwendung wird hergestellt…",
     "reconnecting": "Verbindung wird wiederhergestellt…",
     "disconnected": "Verbindung unterbrochen",
-    "connectionHint": "Stellen Sie die Verbindung wieder her, um die Anwendung weiter zu nutzen. Das Schließen dieses Fensters beendet die Sitzung nicht.",
+    "connectionHint": "Der aktuelle Anwendungsstatus konnte nicht bestätigt werden. Prüfen Sie die Verbindung und verbinden Sie sich erneut.",
     "reconnect": "Erneut verbinden",
     "add": "Anwendung hinzufügen",
     "addDescription": "Geben Sie den absoluten Pfad einer installierten grafischen Anwendung an. Argumente werden direkt und ohne Shell übergeben.",

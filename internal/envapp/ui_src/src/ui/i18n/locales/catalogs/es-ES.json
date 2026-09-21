@@ -6212,6 +6212,19 @@
     }
   },
   "hostApplications": {
+    "checking": "Comprobando el estado de la aplicación…",
+    "applicationExited": "La aplicación se ha cerrado",
+    "applicationExitedHint": "El host ha confirmado que la aplicación ha finalizado. Puede volver a abrirla desde las aplicaciones del host cuando la necesite.",
+    "windowsClosed": "Las ventanas de la aplicación están cerradas",
+    "windowsClosedHint": "Todas las ventanas compartidas se han cerrado en el host. La aplicación podría seguir ejecutándose. Ábrala desde las aplicaciones del host para volver a compartir una ventana.",
+    "sharingStopped": "Se ha detenido el uso compartido",
+    "sharingStoppedHint": "Esta sesión compartida se ha detenido. La aplicación podría seguir ejecutándose en el host.",
+    "endedHint": "Esta sesión ha finalizado. Vuelva a abrir la aplicación desde las aplicaciones del host para iniciar otra sesión.",
+    "sessionMissing": "La sesión compartida ya no está disponible",
+    "sessionMissingHint": "El host ya no conserva esta sesión. No es posible confirmar aquí el estado de la aplicación. Vuelva a las aplicaciones del host para comprobarla y abrirla de nuevo.",
+    "accessRequired": "No se puede acceder a esta sesión",
+    "accessHint": "Compruebe su inicio de sesión y sus permisos de acceso en Redeven y vuelva a intentarlo.",
+    "dismiss": "Cerrar ventana",
     "macControls": "Controles de la aplicación",
     "prepare": {
       "downloadMethod": "Método de descarga",
@@ -6254,7 +6267,7 @@
     "connecting": "Conectando con la aplicación…",
     "reconnecting": "Volviendo a conectar…",
     "disconnected": "Conexión interrumpida",
-    "connectionHint": "Vuelve a conectar para continuar usando la aplicación. Cerrar esta ventana no finaliza la sesión.",
+    "connectionHint": "No se ha podido confirmar el estado actual de la aplicación. Compruebe la conexión y vuelva a conectar.",
     "reconnect": "Volver a conectar",
     "add": "Añadir aplicación",
     "addDescription": "Indica la ruta absoluta del ejecutable de una aplicación gráfica instalada. Los argumentos se pasan directamente, sin usar un shell.",

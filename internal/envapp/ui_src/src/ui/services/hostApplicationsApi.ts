@@ -30,6 +30,7 @@ export type HostApplicationSession = Readonly<{
   backend?: 'macos';
   existing_application?: boolean;
   mode?: 'native' | 'stream';
+  end_reason?: 'application_exited' | 'windows_closed' | 'sharing_stopped';
   error_code?: string;
   started_at_unix_ms: number;
   forward?: { forward: { forward_id: string; target_url: string }; app_path: string; ephemeral: boolean };
@@ -45,6 +46,20 @@ export type HostApplicationCatalog = Readonly<{
 }>;
 
 export type HostApplicationPresentation = Readonly<{
+  checking?: string;
+  applicationExited?: string;
+  applicationExitedHint?: string;
+  windowsClosed?: string;
+  windowsClosedHint?: string;
+  sharingStopped?: string;
+  sharingStoppedHint?: string;
+  endedHint?: string;
+  sessionMissing?: string;
+  sessionMissingHint?: string;
+  accessRequired?: string;
+  accessHint?: string;
+  dismiss?: string;
+
   permissionRequired?: string;
   permissionHint?: string;
   sessionUnavailable?: string;
