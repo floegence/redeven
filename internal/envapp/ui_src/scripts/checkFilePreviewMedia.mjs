@@ -164,7 +164,7 @@ async function openNotesObserver(page) {
     (response) => response.url().includes('/api/notes/snapshot') && response.ok(),
     { timeout: 5000 },
   ).catch(() => undefined);
-  await page.getByRole('button', { name: 'Notes overlay', exact: true }).click();
+  await page.getByRole('button', { name: 'Notes overlay', exact: true }).filter({ visible: true }).last().click();
   await page.locator('.notes-overlay').waitFor({ state: 'visible' });
   await snapshot;
 }
