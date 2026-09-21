@@ -25,18 +25,38 @@ type Package struct {
 }
 
 func NativePackage() (Package, error) { return ForPlatform(runtime.GOOS, runtime.GOARCH) }
-func ForPlatform(platform, architecture string) (Package, error) {
+func catalogPackages() ([]Package, error) {
 	var catalog struct {
 		Packages []Package `json:"packages"`
 	}
 	data, err := catalogFS.ReadFile("catalog.json")
 	if err != nil {
-		return Package{}, err
+		return nil, err
 	}
 	if err = json.Unmarshal(data, &catalog); err != nil {
+		return nil, err
+	}
+	return catalog.Packages, nil
+}
+func ForID(id string) (Package, error) {
+	packages, err := catalogPackages()
+	if err != nil {
 		return Package{}, err
 	}
-	for _, item := range catalog.Packages {
+	for _, item := range packages {
+		if item.ID == id {
+			return item, nil
+		}
+	}
+	return Package{}, fmt.Errorf("unknown built-in browser package")
+}
+func ForPlatform(platform, architecture string) (Package, error) {
+	packages, err := catalogPackages()
+	if err != nil {
+		return Package{}, err
+	}
+
+	for _, item := range packages {
 		if item.Platform == platform && item.Architecture == architecture {
 			return item, nil
 		}

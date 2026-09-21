@@ -11163,6 +11163,7 @@ webSearch: model.web_search,
       </div>
       <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
       <FlowerComputerConnections open={computerDialog() !== null} onOpenChange={open => { if (!open) setComputerDialog(null); }}
+        continuationKey={`${selectedThreadID()}:${selectedInputRequest()?.prompt_id ?? ''}`}
         connectionOnly={computerDialog() === 'connection'} installationOnly={computerDialog() === 'installation'} onContinue={async (enabled) => {
           const request = selectedInputRequest();
           if ((!isBrowserConnectionInput(request) && !isBrowserInstallInput(request)) || !request) return;

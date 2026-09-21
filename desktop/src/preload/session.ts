@@ -1,6 +1,8 @@
 import { bootstrapDesktopTemplateSources } from './desktopTemplateSources';
 /// <reference lib="dom" />
 
+import { bootstrapBrowserPackageBridge } from './browserPackage';
+
 import { bootstrapDesktopEmbeddedDragHostBridge } from './desktopEmbeddedDragHost';
 import { bootstrapDesktopCodeWorkspaceBridge } from './desktopCodeWorkspace';
 import { bootstrapDesktopDownloadsBridge } from './desktopDownloads';
@@ -22,3 +24,5 @@ bootstrapDesktopThemeBridge();
 bootstrapDesktopUpdateBridge();
 
 bootstrapDesktopTemplateSources();
+
+bootstrapBrowserPackageBridge();

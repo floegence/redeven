@@ -1218,15 +1218,21 @@ export type FlowerChromeStatus = Readonly<{ profiles: readonly Readonly<{ id: st
 export type FlowerComputerExtensionSetup = Readonly<{ native_host: string; extension_id: string; extension_path: string; extension_home_path: readonly string[]; platform: 'darwin' | 'linux' }>;
 export type FlowerBrowserInstallation = Readonly<{
   enabled: boolean; state: 'not_installed' | 'installed' | 'downloading' | 'uploading' | 'verifying' | 'installing' | 'failed' | 'cancelled';
-  package: Readonly<{ id: string; name: string; platform: string; architecture: string; version: string; url: string; size_bytes: number; installed_bytes: number }>;
+  package: Readonly<{ id: string; name: string; platform: string; architecture: string; version: string; url: string; sha256: string; size_bytes: number; installed_bytes: number }>;
   directory: string; operation_id?: string; received_bytes: number; error?: string;
+}>;
+export type FlowerBrowserInstallationSnapshot = FlowerBrowserInstallation & Readonly<{
+  transfer_active?: boolean;
+  desktop_progress?: Readonly<{ phase: 'checking' | 'downloading' | 'verifying'; received_bytes: number; total_bytes: number }>;
+  desktop_error?: 'package_mismatch' | 'desktop_download_failed' | 'desktop_upload_failed' | 'status_failed';
 }>;
 export type FlowerBrowserInstallRequest = Readonly<{ action: 'start' | 'chunk' | 'complete' | 'cancel'; package_id?: string; source?: 'download' | 'upload'; operation_id?: string; offset?: number; data?: string }>;
 export type FlowerComputerManagement = Readonly<{
-  loadBrowserInstallation?: () => Promise<FlowerBrowserInstallation>;
-  saveBrowserEnabled?: (enabled: boolean) => Promise<FlowerBrowserInstallation>;
-  installBrowser?: (request: FlowerBrowserInstallRequest) => Promise<FlowerBrowserInstallation>;
-  browserUploadSupported?: boolean;
+  loadBrowserInstallation?: () => Promise<FlowerBrowserInstallationSnapshot>;
+  saveBrowserEnabled?: (enabled: boolean) => Promise<FlowerBrowserInstallationSnapshot>;
+  installBrowser?: (request: FlowerBrowserInstallRequest) => Promise<FlowerBrowserInstallationSnapshot>;
+  browserDesktopAvailable?: boolean;
+  subscribeBrowserInstallation?: (listener: (status: FlowerBrowserInstallationSnapshot) => void) => () => void;
 
   loadEnvironment?: () => Promise<FlowerComputerEnvironment>;
   discoverBrowser?: (threadID: string, endpoint: string) => Promise<FlowerComputerInventory>;

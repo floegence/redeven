@@ -1,12 +1,18 @@
+import { BrowserInstallationController, browserInstallationForSession } from './browserInstallationController';
+import { browserPackageBridge } from './browserPackageBridge';
 import type { FlowerComputerManagement } from '../src/contracts/flowerSurfaceContracts';
 
 // Both product carriers use the same authenticated Runtime boundary.
-export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown) => Promise<T>): FlowerComputerManagement {
+export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown) => Promise<T>, sessionKey?: string): FlowerComputerManagement {
   const path = '/_redeven_proxy/api/ai/computer';
+  const desktop = browserPackageBridge();
+  const browser = sessionKey ? browserInstallationForSession(sessionKey, request, desktop) : new BrowserInstallationController(request, desktop);
   return {
-    loadBrowserInstallation: () => request('GET', `${path}/managed/browser`),
-    saveBrowserEnabled: enabled => request('PUT', `${path}/managed/browser`, { enabled }),
-    installBrowser: body => request('POST', `${path}/managed/browser`, body),
+    browserDesktopAvailable: Boolean(desktop),
+    subscribeBrowserInstallation: listener => browser.subscribe(listener),
+    loadBrowserInstallation: () => browser.load(),
+    saveBrowserEnabled: enabled => browser.setEnabled(enabled),
+    installBrowser: body => browser.install(body),
     loadEnvironment: () => request('GET', `${path}/environment`),
     discoverBrowser: (threadID, cdpURL) => request('POST', `${path}/candidates`, { thread_id: threadID, cdp_url: cdpURL }),
     revealTarget: async (threadID, targetID) => { await request('POST', `${path}/reveal`, { thread_id: threadID, target_id: targetID }); },

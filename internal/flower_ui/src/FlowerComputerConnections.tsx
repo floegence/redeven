@@ -15,7 +15,7 @@ export function FlowerComputerConnections(props: {
   threadID: string; adapter: Pick<FlowerSurfaceAdapter, 'runtime' | 'canMutate' | 'computerManagement'>; copy: FlowerComputerCopy;
   requested?: FlowerRequestedComputerAccess; fullAccess?: boolean; connectionOnly?: boolean;
   permissionLabel?: string; onEditPermissionMode?: () => void;
-  onContinue?: (enabled?: boolean) => Promise<void>; installationOnly?: boolean;
+  onContinue?: (enabled?: boolean) => Promise<void>; installationOnly?: boolean; continuationKey?: string;
 }) {
   const [page, setPage] = createSignal<Page>('overview');
   const [inventory, setInventory] = createSignal<FlowerComputerInventory>();
@@ -252,7 +252,7 @@ export function FlowerComputerConnections(props: {
           <p class="flower-computer-picker-hint">{props.copy.selectionScope}</p>
         </Show>
         <Show when={page() === 'managed'}>
-          <Show when={management()?.loadBrowserInstallation}><FlowerManagedBrowser management={management()!} copy={props.copy} canMutate={props.adapter.canMutate !== false} onChange={() => void load()} onContinue={props.installationOnly ? props.onContinue : undefined} /></Show>
+          <Show when={management()?.loadBrowserInstallation}><FlowerManagedBrowser continuationKey={props.continuationKey} management={management()!} copy={props.copy} canMutate={props.adapter.canMutate !== false} onChange={() => void load()} onContinue={props.installationOnly ? props.onContinue : undefined} /></Show>
           <p class="flower-computer-description">{props.copy.managedModeValue}</p>
           <Show when={!props.installationOnly}><details class="flower-computer-detail-card" onToggle={event => { if (event.currentTarget.open) loadProfiles(); }}><summary class="cursor-pointer text-xs font-medium">{props.copy.createProfileHint}</summary>
             <p class="mt-3 flower-computer-description">{props.copy.profileHint} {props.copy.profileIsolationHint}</p>

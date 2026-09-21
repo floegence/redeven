@@ -1242,3 +1242,11 @@ find, source-link, and missing-details presentation across Flower surfaces.
 ## 2026-09-18
 
 Document published Floret v7.15.1 canonical calibration, tokenizer estimates, and Flower confirmation/estimate presentation with shared live and reconnect mapping.
+
+## 2026-09-21 — Automatic Desktop browser installation
+
+- Updated [optional browser installation](ai/computer-use-browser-installation.md):
+  Desktop obtains and caches the target package automatically after confirmation;
+  environment-session transfer survives panel dismissal without retaining chat
+  continuation. Shared archive acquisition consumes released Floe Native Apps
+  v0.2.0 and exact catalog identities.

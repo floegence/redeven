@@ -6385,6 +6385,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   draftCoordinator={flowerDraftCoordinator}
                   filesystemScopeKey={flowerFilesystemScopeKey()}
                   adapter={createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                    runtimeEnvironmentID: flowerRuntimeEnvironment()?.id,
                     runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment'),
                     runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
                     onSettingsChanged: refreshSnapshot,

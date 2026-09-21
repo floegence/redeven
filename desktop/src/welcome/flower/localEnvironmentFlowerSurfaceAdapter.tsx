@@ -100,6 +100,7 @@ export type DesktopSettingsBridge = Readonly<{
 }>;
 
 export type LocalEnvironmentFlowerSurfaceAdapterOptions = Readonly<{
+  runtimeEnvironmentID?: string;
   runtimeDisplayName?: string;
   runtimeSubtitle?: string;
   onSettingsChanged?: () => void | Promise<unknown>;
@@ -252,11 +253,13 @@ async function runtimeJSON<T>(
   path: string,
   body?: unknown,
   stagingScope?: FlowerAttachmentStagingScope,
+  environmentID?: string,
 ): Promise<T> {
   const result = await bridge.requestRuntimeFlower({
     method,
     path,
     ...(body === undefined ? {} : { body }),
+    ...(environmentID ? { environment_id: environmentID } : {}),
     ...(stagingScope ? {
       staging_scope_id: stagingScope.staging_scope_id,
       staging_capability: stagingScope.capability,
@@ -857,7 +860,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       await runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/computer/input', input);
     },
     setComputerViewer: async (input) => { await runtimeJSON(bridge, 'PUT', '/_redeven_proxy/api/ai/computer/view', input); },
-    computerManagement: { ...computerManagementAdapter((method, path, body) => runtimeJSON(bridge, method, path, body)), browserUploadSupported: true },
+    computerManagement: { ...computerManagementAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), `desktop:${options.runtimeEnvironmentID ?? 'default'}`) },
     saveModelProfile: async (draft) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
       return loadSettingsSnapshot(bridge);

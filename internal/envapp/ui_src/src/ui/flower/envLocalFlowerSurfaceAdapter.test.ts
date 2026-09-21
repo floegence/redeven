@@ -2067,10 +2067,15 @@ it('fetches the current restore generation only when explicitly requested', asyn
   await expect(adapter.resolveStorageGeneration?.()).rejects.toThrow();
 });
 
-it('offers local browser ZIP upload in both Desktop environment routes without starting installation', () => {
-  for (const desktopSessionTargetRoute of [undefined, 'local_host', 'remote_desktop'] as const) {
-    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_browser', envLabel: 'Browser', rpc: { ai: {} } as any, desktopSessionTargetRoute });
-    expect(adapter.computerManagement?.browserUploadSupported).toBe(desktopSessionTargetRoute !== undefined);
+it('offers automatic installation only when the Desktop acquisition bridge exists', () => {
+  const bridge = { request: vi.fn(), subscribe: vi.fn(() => () => undefined) };
+  for (const available of [false, true]) {
+    Object.defineProperty(window, 'redevenBrowserPackage', { configurable: true, value: available ? bridge : undefined });
+    for (const desktopSessionTargetRoute of [undefined, 'local_host', 'remote_desktop'] as const) {
+      const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: `browser-${available}-${desktopSessionTargetRoute}`, envLabel: 'Browser', rpc: { ai: {} } as any, desktopSessionTargetRoute });
+      expect(adapter.computerManagement?.browserDesktopAvailable).toBe(available);
+    }
   }
-  expect(fetchMock).not.toHaveBeenCalled();
+  Reflect.deleteProperty(window, 'redevenBrowserPackage');
+  expect(fetchMock).not.toHaveBeenCalled(); expect(bridge.request).not.toHaveBeenCalled();
 });

@@ -836,7 +836,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
-    computerManagement: { ...computerManagementAdapter((method, path, body) => fetchLocalApiJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })), browserUploadSupported: options.desktopSessionTargetRoute !== undefined },
+    computerManagement: { ...computerManagementAdapter((method, path, body) => fetchLocalApiJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), `environment:${options.envPublicID}`) },
     saveComputerUseEnabled: async (enabled) => {
       await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/computer_use', {
         method: 'PUT',

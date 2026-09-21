@@ -680,12 +680,14 @@
 .flower-browser-source-grid span { font-size: .75rem; line-height: 1.6; color: var(--muted-foreground); }
 .flower-browser-consent { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .875rem; padding-top: .25rem; }
 .flower-browser-consent p { flex: 1; min-width: 10rem; font-size: .75rem; color: var(--muted-foreground); line-height: 1.6; }
-.flower-browser-file { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: .875rem; border: 1px dashed var(--border); border-radius: .75rem; }
-.flower-browser-file span { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: .75rem; }
-.flower-browser-file a { width: 100%; font-size: .75rem; color: var(--primary); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .flower-browser-progress { display: grid; gap: .75rem; padding: 1rem; border-radius: .75rem; background: var(--muted); }
 .flower-browser-progress > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; font-size: .75rem; }
 .flower-browser-progress progress { width: 100%; height: .375rem; accent-color: var(--primary); }
+.flower-browser-progress progress[value] { appearance: none; border: none; border-radius: 999px; overflow: hidden; background: var(--border); }
+.flower-browser-progress progress[value]::-webkit-progress-bar { background: var(--border); }
+.flower-browser-progress progress[value]::-webkit-progress-value { background: var(--primary); border-radius: 999px; }
+.flower-browser-progress progress[value]::-moz-progress-bar { background: var(--primary); border-radius: 999px; }
+.flower-browser-progress p { font-size: .75rem; line-height: 1.6; color: var(--muted-foreground); }
 .flower-browser-progress button { justify-self: start; }
 .flower-browser-ready { display: flex; align-items: center; gap: .75rem; font-size: .8125rem; }
 .flower-browser-ready svg { width: 1.125rem; height: 1.125rem; color: var(--primary); }
