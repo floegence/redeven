@@ -985,6 +985,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const fallbackId = String(widgetId ?? '').trim();
       return {
         id: fallbackId ? `embedded:${fallbackId}` : 'terminal_page',
+        visible: () => true,
         active: () => true,
         activationSeq: () => 0,
       };
@@ -5067,6 +5068,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               connected={connected}
                               protocolClient={() => protocol.session?.()}
                               viewActive={() => viewActive() && displayModeSelected()}
+                              viewVisible={() => view.visible() && displayModeSelected()}
                               autoFocus={shouldAutoFocus}
                               themeColors={terminalThemeColors}
                               fontSize={fontSize}

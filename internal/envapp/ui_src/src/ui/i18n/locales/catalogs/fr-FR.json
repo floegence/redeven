@@ -371,6 +371,7 @@
     "fileUnavailable": "Ce fichier n’est plus disponible dans le remisage sélectionné."
   },
   "shell": {
+    "loadingPage": "Chargement de la page…",
     "accessibility": {
       "skipLinkLabel": "Aller au contenu de l'environnement Redeven",
       "topBarLabel": "Barre d'outils de l'environnement Redeven",

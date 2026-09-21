@@ -31,7 +31,7 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
     persist: { load: (_key: string, fallback: unknown) => fallback, debouncedSave: vi.fn() },
   }),
   useTheme: () => ({ resolvedTheme: () => 'dark', shellPresetForMode: () => null }),
-  useViewActivation: () => ({ id: 'terminal-test', active: () => true, activationSeq: () => 0 }),
+  useViewActivation: () => ({ id: 'terminal-test', visible: () => true, active: () => true, activationSeq: () => 0 }),
 }));
 
 vi.mock('../pages/EnvContext', () => ({

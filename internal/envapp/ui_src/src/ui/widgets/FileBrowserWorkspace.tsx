@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
-import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
+import { cn, useFileBrowserDrag, useResizeObserver } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core/icons';
 import {
   FileBrowserDragPreview,
@@ -107,33 +107,16 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
   const browser = useFileBrowser();
   const i18n = useI18n();
   let toolbarLayoutRef: HTMLDivElement | undefined;
-  const [toolbarWidth, setToolbarWidth] = createSignal(0);
+  const toolbarSize = useResizeObserver(() => toolbarLayoutRef, { preserveWhenHidden: true });
   const canNavigateUp = () => {
     const path = browser.currentPath();
     return path !== '/' && path !== '';
   };
-  const toolbarLayout = createMemo(() => resolveFileBrowserToolbarLayout(toolbarWidth()));
+  const toolbarLayout = createMemo(() => resolveFileBrowserToolbarLayout(toolbarSize()?.width ?? 0));
   const hasHeaderStatus = () => (
     Boolean(browser.filterQueryApplied().trim())
     || Boolean(props.pathStatusText?.trim())
   );
-
-  onMount(() => {
-    const syncToolbarWidth = () => {
-      setToolbarWidth(toolbarLayoutRef?.offsetWidth ?? 0);
-    };
-
-    syncToolbarWidth();
-
-    if (typeof ResizeObserver === 'undefined' || !toolbarLayoutRef) return;
-
-    const observer = new ResizeObserver(() => {
-      syncToolbarWidth();
-    });
-    observer.observe(toolbarLayoutRef);
-
-    onCleanup(() => observer.disconnect());
-  });
 
   return (
     <div class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>

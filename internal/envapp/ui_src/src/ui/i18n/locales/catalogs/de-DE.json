@@ -371,6 +371,7 @@
     "fileUnavailable": "Diese Datei ist im ausgewählten Stash nicht mehr verfügbar."
   },
   "shell": {
+    "loadingPage": "Seite wird geladen…",
     "accessibility": {
       "skipLinkLabel": "Zum Inhalt der Redeven-Umgebung springen",
       "topBarLabel": "Symbolleiste der Redeven-Umgebung",

@@ -1321,6 +1321,7 @@ export const enUS = defineDictionary({
     },
   },
   shell: {
+    loadingPage: 'Loading page…',
     accessibility: {
       skipLinkLabel: 'Skip to Redeven environment content',
       topBarLabel: 'Redeven environment toolbar',

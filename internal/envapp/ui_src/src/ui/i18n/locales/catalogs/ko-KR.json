@@ -371,6 +371,7 @@
     "fileUnavailable": "선택한 스태시에 이 파일이 더 이상 없습니다."
   },
   "shell": {
+    "loadingPage": "페이지를 불러오는 중…",
     "accessibility": {
       "skipLinkLabel": "Redeven 환경 콘텐츠로 건너뛰기",
       "topBarLabel": "Redeven 환경 도구 모음",

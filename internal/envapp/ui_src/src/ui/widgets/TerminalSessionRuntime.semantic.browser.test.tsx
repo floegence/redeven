@@ -1,4 +1,6 @@
 import { createSignal } from 'solid-js';
+import { useViewActivation } from '@floegence/floe-webapp-core';
+import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -128,6 +130,7 @@ function harness(options: Readonly<{
   controller?: boolean;
   autoFocus?: boolean;
   attachSettlement?: Promise<void>;
+  activityStack?: boolean;
 }> = {}) {
   let presentationHandler: ((value: unknown) => void) | null = null;
   let lifecycleHandler: ((event: Parameters<Parameters<RedevenTerminalEventSource['onTerminalLiveAttachmentLifecycle']>[1]>[0]) => void) | null = null;
@@ -142,6 +145,9 @@ function harness(options: Readonly<{
     foreground: '#eeeeee',
   });
   const [viewActive, setViewActive] = createSignal(true);
+  const [viewVisible, setViewVisible] = createSignal<boolean>();
+  const [activityPage, setActivityPage] = createSignal('terminal');
+  const [displayMode, setDisplayMode] = createSignal('activity');
   const [active, setActive] = createSignal(true);
   let geometryGeneration = 1;
   let controllerEpoch = 1;
@@ -272,30 +278,45 @@ function harness(options: Readonly<{
   const root = document.createElement('div');
   Object.assign(root.style, { position: 'fixed', inset: '0', width: '900px', height: '540px' });
   document.body.appendChild(root);
-  const dispose = render(() => (
-    <TerminalSessionRuntime
-      session={SESSION}
-      variant="panel"
-      active={active}
-      connected={() => true}
-      protocolClient={() => transport}
-      viewActive={viewActive}
-      autoFocus={() => options.autoFocus ?? false}
-      themeColors={themeColors}
-      fontSize={fontSize}
-      fontFamily={fontFamily}
-      agentHomePathAbs={() => '/workspace'}
-      canOpenFilePreview={() => false}
-      bottomInsetPx={() => 0}
-      connId="semantic-view"
-      transport={transport}
-      eventSource={eventSource}
-      registerViewport={(_sessionId, next) => { viewport = next; }}
-      registerSurfaceElement={() => undefined}
-      registerActions={() => undefined}
-      onRuntimeStatus={(_sessionId, status) => statuses.push(status)}
-    />
-  ), root);
+  const RuntimeView = () => {
+    const activation = options.activityStack ? useViewActivation() : null;
+    return (
+      <TerminalSessionRuntime
+        session={SESSION}
+        variant="panel"
+        active={active}
+        connected={() => true}
+        protocolClient={() => transport}
+        viewActive={() => viewActive() && (activation?.active() ?? true) && displayMode() === 'activity'}
+        viewVisible={() => (viewVisible() ?? viewActive()) && (activation?.visible() ?? true)}
+        autoFocus={() => options.autoFocus ?? false}
+        themeColors={themeColors}
+        fontSize={fontSize}
+        fontFamily={fontFamily}
+        agentHomePathAbs={() => '/workspace'}
+        canOpenFilePreview={() => false}
+        bottomInsetPx={() => 0}
+        connId="semantic-view"
+        transport={transport}
+        eventSource={eventSource}
+        registerViewport={(_sessionId, next) => { viewport = next; }}
+        registerSurfaceElement={() => undefined}
+        registerActions={() => undefined}
+        onRuntimeStatus={(_sessionId, status) => statuses.push(status)}
+      />
+    );
+  };
+  root.dataset.testTerminalNavigation = '';
+  const dispose = render(() => options.activityStack ? <>
+    <style>{'[data-test-terminal-navigation] .h-full { height: 100%; } [data-test-terminal-navigation] .relative { position: relative; } [data-test-terminal-navigation] [data-floe-keep-alive-view] { position: absolute; inset: 0; }'}</style>
+    <KeepAliveStack activeId={displayMode()} activationMode="after-paint" views={[
+      { id: 'activity', render: () => <KeepAliveStack activeId={activityPage()} activationMode="after-paint" views={[
+        { id: 'terminal', render: RuntimeView },
+        { id: 'files', render: () => <div>Files</div> },
+      ]} /> },
+      { id: 'workbench', render: () => <div>Workbench</div> },
+    ]} />
+  </> : <RuntimeView />, root);
   const runtimeElement = root.querySelector<HTMLElement>('[data-terminal-runtime-session]')!;
   const semanticSurface = root.querySelector<HTMLElement>('[data-terminal-semantic-surface="true"]')!;
   const semanticCanvas = root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
@@ -344,6 +365,9 @@ function harness(options: Readonly<{
     interactInputIntent,
     interactPaste,
     setViewActive,
+    setViewVisible,
+    setActivityPage,
+    setDisplayMode,
     setActive,
     setFontSize,
     setFontFamily,
@@ -1086,6 +1110,65 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(canvas.width).toBe(Math.round(bounds.width * window.devicePixelRatio));
     expect(canvas.height).toBe(Math.round(bounds.height * window.devicePixelRatio));
     expect(runtime.root.querySelectorAll('[data-terminal-semantic-canvas="true"]')).toHaveLength(1);
+  });
+
+  it('paints a returning view before deferred activation without claiming focus or control', async () => {
+    const runtime = harness({ controller: false, autoFocus: true });
+    mounted.push(runtime);
+    runtime.setViewActive(false);
+    runtime.setViewVisible(false);
+    runtime.emitPresentation(presentation(1, 'retained-activity-content'));
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForPaint();
+    const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+    const input = runtime.root.querySelector('textarea')!;
+    input.blur();
+    runtime.activate.mockClear();
+
+    runtime.setViewVisible(true);
+    await Promise.resolve();
+    expect(canvas.style.visibility).toBe('visible');
+    expect(canvas.getContext('2d')!.getImageData(1, 1, 1, 1).data[3]).toBe(255);
+    expect(runtime.root.querySelector('[data-terminal-semantic-canvas="true"]')).toBe(canvas);
+    expect(document.activeElement).not.toBe(input);
+    expect(runtime.activate).not.toHaveBeenCalled();
+
+    runtime.setViewActive(true);
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    expect(runtime.activate).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the real nested Activity and display-mode stacks painted without reattaching', async () => {
+    const runtime = harness({ activityStack: true });
+    mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'nested-activity-content'));
+    await waitForHistoryAttachment(runtime);
+    await waitForPaint();
+    const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+    const surface = runtime.root.querySelector<HTMLElement>('[data-terminal-runtime-session]')!;
+    const attachmentCount = runtime.attachWithPresentation.mock.calls.length;
+    expect(canvas.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(canvas.style.visibility).toBe('visible');
+
+    for (let index = 0; index < 10; index += 1) {
+      runtime.setActivityPage('files');
+      await waitForPaint();
+      expect(canvas.style.visibility).toBe('hidden');
+      runtime.setActivityPage('terminal');
+      await Promise.resolve();
+      expect(surface.dataset.terminalViewActive).toBe('false');
+      expect(canvas.style.visibility, `Activity switch ${index}`).toBe('visible');
+      expect(canvas.getContext('2d')!.getImageData(1, 1, 1, 1).data[3]).toBe(255);
+      await waitForPaint();
+    }
+    runtime.setDisplayMode('workbench');
+    await waitForPaint();
+    expect(canvas.style.visibility).toBe('hidden');
+    runtime.setDisplayMode('activity');
+    await Promise.resolve();
+    expect(canvas.style.visibility).toBe('visible');
+    expect(runtime.root.querySelector('[data-terminal-semantic-canvas="true"]')).toBe(canvas);
+    expect(runtime.attachWithPresentation).toHaveBeenCalledTimes(attachmentCount);
   });
 
   it('keeps three zero-sized keep-mounted tabs paint-safe across fifty DPR-aware switches', async () => {

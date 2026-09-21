@@ -537,7 +537,7 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
                 data-testid={`activity-view-${match.id}`}
                 style={{ display: activeId() === match.id ? 'block' : 'none' }}
               >
-                <Suspense fallback={null}>
+                <Suspense fallback={props.renderFallback?.(match.id) ?? null}>
                   <Component />
                 </Suspense>
               </div>
@@ -3402,6 +3402,7 @@ describe('EnvAppShell environment entry affordances', () => {
         'files',
         'codespaces',
         'ports',
+        'applications',
         'containers',
         'ai',
         ...pinnedIDs,
@@ -4036,6 +4037,7 @@ describe('EnvAppShell environment entry affordances', () => {
         'files',
         'codespaces',
         'ports',
+        'applications',
         'containers',
         'plugins',
         'ai',

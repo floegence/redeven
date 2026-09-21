@@ -1,4 +1,5 @@
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
+import { ActivityPageLoading } from './primitives/ActivityPageLoading';
 import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
 import { writeTextToClipboard } from './utils/clipboard';
 import { For, Show, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js';
@@ -4932,7 +4933,11 @@ export function EnvAppShell() {
             aria-hidden={recoveryVisible() ? 'true' : undefined}
           >
             <Show when={!accessGateVisible() || recoveryVisible()}>
-              <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} activationMode="after-paint" />
+              <ActivityAppsMain
+                activeId={() => layout.sidebarActiveTab()}
+                activationMode="after-paint"
+                renderFallback={() => <ActivityPageLoading />}
+              />
             </Show>
             <Show when={viewMode() === 'activity' && accessGateVisible() && !recoveryVisible()}>
               {accessGatePanel()}
