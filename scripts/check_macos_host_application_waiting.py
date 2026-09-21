@@ -62,7 +62,10 @@ def run(helper_path, scenario):
             if scenario == 'stop':
                 helper.wait('waiting')
                 helper.send('stop')
-                helper.wait('ended')
+                assert helper.wait('ended')['end_reason'] == 'sharing_stopped'
+                eventually(lambda: receipt().get('pid') == pid, 'Stopped sharing lost its launched application')
+                assert receipt()['quit_requests'] == 0, receipt()
+                os.kill(pid, 0)
                 print(json.dumps(dict(scenario=scenario, passed=True, pid=pid)))
                 return
             if scenario == 'menu':

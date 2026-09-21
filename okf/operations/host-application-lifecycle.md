@@ -55,12 +55,12 @@ input. This matrix is not a certification of every installed application.
 
 | Scenario | Expected outcome | Evidence |
 | --- | --- | --- |
-| Network loss or viewer reload | Preserve app; reconnect same session with current credential | Go WebSocket and viewer tests, native reconnect fixture |
-| Second viewer attaches | Revoke previous input connection; release held input | Go WebSocket replacement test |
+| Network loss or viewer reload | Preserve app; suspend native capture/input, reclaim frame buffers, then reconnect the same session with current credential | Go WebSocket, native startup fixture and viewer tests |
+| Second viewer attaches | Revoke previous input connection, release held input, suspend the old capture and let the new viewer resume it | Go WebSocket replacement and native startup fixture |
 | Capture source fails | Retain application menu and alternate-window selection; offer reconnect | macOS viewer test |
 | Permission revoked or console locked/unavailable | Invalidate capture/input; give distinct permission or unlock guidance | Swift access classification and viewer event tests |
 | Permission restored | Explicit reconnect rebuilds capture and input receipt listener | Native reconnect path; actual OS permission toggling is not part of automated acceptance |
-| Helper unexpectedly exits | Sharing failure, not proof of application exit; reopen from library | Go helper and viewer tests |
+| Helper unexpectedly exits | Sharing failure, not proof of application exit; reclaim route, credential, frame buffers and helper process before terminal state | Go helper and viewer tests |
 | Terminal sharing status | Keep owner-protected state route and native end reason; clear stream credential | Go route/ownership tests |
 | Reload after app quit / final window close / detach | Immediate distinct terminal page, no stream, no spinner, no relaunch; dismiss when the window permits it | Real native terminal fixture, both viewer suites and browser layout tests |
 | Disconnect races host exit | Check host state before presenting an outcome | Viewer reconciliation tests |

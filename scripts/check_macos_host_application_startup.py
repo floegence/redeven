@@ -65,6 +65,20 @@ def run(helper_path, output):
                 helper.wait('frame', predicate=lambda m: m['generation'] == window['generation'])
                 latencies.append(round((time.monotonic() - started) * 1000))
             evidence['reconnect_ms'] = latencies
+            # Disconnect suspends capture/encoder/input ownership, while the
+            # same native process and its windows remain available for resume.
+            helper.send('suspend')
+            helper.wait('suspended')
+            frames = len(helper.frames)
+            time.sleep(0.7)
+            assert len(helper.frames) == frames, 'Suspended capture kept producing frames'
+            helper.send('menu', generation=window['generation'])
+            assert helper.wait('operation_error')['code'] == 'STALE_WINDOW'
+            assert json.loads((bundle / 'receipt.json').read_text())['pid'] == pid
+            helper.send('resume', mode='auto', pixel_ratio=2, video=True, width=800, height=550)
+            window = helper.wait('window', predicate=lambda m: m['generation'] > window['generation'])
+            helper.wait('frame', predicate=lambda m: m['generation'] == window['generation'])
+            evidence['suspend_releases_capture_and_revokes_controls'] = True
             # New requests supersede unresolved selection without overlapping OS streams.
             for index in range(8):
                 helper.send('configure', mode='smooth' if index % 2 == 0 else 'clarity', pixel_ratio=2, video=True)
@@ -79,7 +93,7 @@ def run(helper_path, output):
             assert helper.wait('menu')['generation'] == window['generation']
             evidence['combined_configuration_and_unchanged_generation'] = True
             assert json.loads((bundle / 'receipt.json').read_text())['pid'] == pid
-            assert not [e for e in helper.events if e['type'] in ('capture_error', 'error', 'operation_error')], list(helper.events)
+            assert not [e for e in helper.events if e['type'] in ('capture_error', 'error') or (e['type'] == 'operation_error' and e.get('code') != 'STALE_WINDOW')], list(helper.events)
             evidence['burst_reconfiguration'] = True
             evidence['same_process'] = True
             output.write_text(json.dumps(evidence, indent=2) + '\n')

@@ -166,7 +166,7 @@ it('does not launch after the reserved window is closed during preparation', asy
  state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 }); await settle();
  expect(state.launch).not.toHaveBeenCalled();
 });
-it('stops a newly launched application if its reserved window closes before the launch response', async () => {
+it('preserves the server session if its reserved window closes after launch was dispatched', async () => {
  requireSetup(); await selectAndPrepare();
  let resolveLaunch!: (value: unknown) => void;
  state.launch.mockImplementation(() => new Promise(resolve => { resolveLaunch = resolve; }));
@@ -174,7 +174,7 @@ it('stops a newly launched application if its reserved window closes before the 
  state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 }); await settle();
  state.preparation.mockResolvedValue({ ok: false });
  resolveLaunch({ id: 'fresh-session', application: app, state: 'starting', forward }); await settle();
- expect(state.stop).toHaveBeenCalledWith('fresh-session');
+ expect(state.stop).not.toHaveBeenCalled();
  expect(state.open).not.toHaveBeenCalled();
 });
 it('continues when the start response is already ready without waiting for a second event', async () => {
@@ -428,4 +428,15 @@ describe('macOS running application management', () => {
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
     expect(button('Quit application · Text Editor').disabled).toBe(true);
   });
+});
+
+it('does not stop a server-reused session when opening its viewer fails with a stale catalog', async () => {
+ state.open.mockRejectedValueOnce(new Error('Viewer unavailable'));
+ dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+ button('Open in new window · Text Editor').click(); await settle();
+ expect(state.launch).toHaveBeenCalledTimes(1);
+ expect(state.open).toHaveBeenCalledTimes(1);
+ expect(state.stop).not.toHaveBeenCalled();
+ expect(state.detach).not.toHaveBeenCalled();
+ expect(host.textContent).toContain('The application could not be opened.');
 });

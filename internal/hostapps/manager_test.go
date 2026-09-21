@@ -37,7 +37,7 @@ func TestWindowReadinessAllowsOlderXpraInfoLatency(t *testing.T) {
 	if err := os.WriteFile(probe, []byte("#!/bin/sh\nsleep 3\nprintf 'state.windows=1\\n'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if !sessionHasWindows(probe, dir) {
+	if !sessionHasWindows(context.Background(), probe, dir) {
 		t.Fatal("a mapped window was rejected because server information was slow")
 	}
 }
@@ -108,7 +108,7 @@ func TestStopRejectsAnotherOwnerAndCleansPrivateRoute(t *testing.T) {
 	if len(m.Sessions("bob")) != 0 {
 		t.Fatal("foreign catalog contains private sessions")
 	}
-	m.finish(s, "launch_failed")
+	m.finish(s, "launch_failed", nil)
 	if s.view.State != "failed" || m.Password(s.view.ID) != "" {
 		t.Fatal("failure retained credentials or running state")
 	}
@@ -137,7 +137,7 @@ func TestFinishedSessionDistinguishesStartupFailureFromAnEndedApplication(t *tes
 			}
 			s := &ownedSession{view: Session{ID: "finished", State: initial, Forward: f}, password: "secret", done: make(chan struct{})}
 			m.sessions[s.view.ID] = s
-			m.finish(s, "application_exited")
+			m.finish(s, "application_exited", nil)
 			want := "failed"
 			if initial == "running" {
 				want = "ended"
@@ -239,7 +239,7 @@ func TestInstalledXpraLaunchResumeAndStop(t *testing.T) {
 	if m.Sessions("alice")[0].State != "running" {
 		t.Fatal("application did not start")
 	}
-	if !sessionHasWindows(m.sessions[first.ID].tools.xpra, m.sessions[first.ID].socketDir) {
+	if !sessionHasWindows(context.Background(), m.sessions[first.ID].tools.xpra, m.sessions[first.ID].socketDir) {
 		t.Fatal("running session has no application windows")
 	}
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {

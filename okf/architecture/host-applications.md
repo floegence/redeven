@@ -13,10 +13,12 @@ launch and window streaming. On Linux, GIO owns desktop-entry resolution and lau
 Xpra owns X11 rendering and interactive transport. Applications execute
 as the Runtime's host OS user, without a container or virtual machine. Each live
 application session has one owner and one authorized window route. Closing its
-viewer preserves the application. Linux session termination closes its owned
-process group; macOS requests graceful exit for newly launched applications and
-only stops sharing previously running ones. Runtime shutdown preserves native
-macOS applications to protect unsaved work. Sessions are not durable across Runtime restarts. Missing dependencies,
+viewer preserves the application and releases native capture and input resources.
+Stopping a session is a sharing operation: Linux reclaims its owned Xpra process
+group; macOS stops capture and helper ownership while preserving the host
+application and its windows. Quitting an application is a separate explicit
+operation. Runtime shutdown preserves native macOS applications to protect
+unsaved work. Sessions are not durable across Runtime restarts. Missing dependencies,
 launch failures, and insufficient permissions fail explicitly.
 
 # Host and application boundary
@@ -83,8 +85,9 @@ The [Web Service session owner](web-service-browser-sessions.md) provides an
 owned ephemeral route that is pinned until application termination, is absent
 from saved Web Services, and cannot be saved as a persistent service. It is
 released on termination. The manager's target guard also applies to alternative
-forward openings to the same target. Runtime shutdown prevents new launches and
-terminates its owned streaming sessions; process behavior follows the platform contract. Network loss and viewer closure do not terminate
+forward openings to the same target. Runtime shutdown prevents new launches, releases active viewers and capture
+resources, and terminates its owned Linux process groups; native macOS applications
+remain running. Network loss and viewer closure do not terminate
 applications. Runtime crash recovery and attachment to applications previously
 started on another display are outside this contract.
 

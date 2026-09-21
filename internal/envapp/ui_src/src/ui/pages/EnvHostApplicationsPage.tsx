@@ -441,8 +441,6 @@ export function EnvHostApplicationsPage() {
       popup.document.body.style.cssText = 'font:14px system-ui;margin:0;min-height:100vh;display:grid;place-items:center;color-scheme:light dark';
     }
     setBusy(v => ({ ...v, [app.id]: true })); setAppErrors(v => ({ ...v, [app.id]: '' }));
-    let launched: HostApplicationSession | undefined;
-    const wasRunning = runningByApp().has(app.id);
     try {
       const result = await launchHostApplication(app.id, i18n.locale(), {
         locale: i18n.locale(),
@@ -496,9 +494,10 @@ export function EnvHostApplicationsPage() {
         starting: i18n.t('hostApplications.starting'), failed: i18n.t('hostApplications.errors.failed'),
         ended: i18n.t('hostApplications.ended'), retry: i18n.t('hostApplications.retry'),
       }, localNative ? 'native' : 'stream');
-      launched = result;
       if (disposed || (prepared && !await pendingIsOpen(prepared)) || popup?.closed) {
-        if (!wasRunning && result.mode !== 'native') await stopHostApplication(result.id);
+        // Launch admission belongs to the host. A stale catalog cannot prove
+        // this page owns the session returned by server-side deduplication.
+        if (!disposed) await refresh(true);
         return;
       }
       if (result.mode === 'native') {if (prepared) closePending(prepared); await refresh(true);return;}
@@ -514,7 +513,7 @@ export function EnvHostApplicationsPage() {
       await refresh(true);
     } catch (e) {
       popup?.close(); if (prepared) closePending(prepared);
-      if (launched && !wasRunning && launched.mode !== 'native') await stopHostApplication(launched.id).catch(() => {});
+      if (!disposed) void refresh(true);
       if (!disposed) setAppErrors(v => ({ ...v, [app.id]: translateError(e) }));
     } finally { if (!disposed) setBusy(v => ({ ...v, [app.id]: false })); }
   };
