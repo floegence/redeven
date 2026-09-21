@@ -95,7 +95,7 @@ describe('Flower composer references', () => {
       },
     }));
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@src');
     await waitFor(() => runtime.querySelector('[data-kind="directory"]') !== null);
     const directoryRow = runtime.querySelector('[data-kind="directory"]') as HTMLButtonElement;
@@ -134,7 +134,7 @@ describe('Flower composer references', () => {
         : [{ name: 'main.ts', path: '/workspace/src/main.ts', isDirectory: false, modifiedAt: 1 }],
     }));
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@src');
     await waitFor(() => runtime.querySelector('[role="option"]') !== null);
 
@@ -174,7 +174,7 @@ describe('Flower composer references', () => {
         : [],
     }));
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip')?.textContent?.includes('workspace') === true);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@src');
     await waitFor(() => runtime.querySelector('[role="listbox"] [role="option"]') !== null);
     await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
@@ -220,7 +220,7 @@ describe('Flower composer references', () => {
         : [],
     }));
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@main');
     await waitFor(() => runtime.querySelector('[role="option"]') !== null);
     await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
@@ -247,7 +247,7 @@ describe('Flower composer references', () => {
       ],
     }));
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@');
     await waitFor(() => runtime.querySelectorAll('[role="option"]').length === 2);
     const options = Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="option"]'));
@@ -267,7 +267,7 @@ describe('Flower composer references', () => {
       }],
     }), coordinator);
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@main');
     await waitFor(() => runtime.querySelector('[role="option"]') !== null);
     (runtime.querySelector('[role="option"]') as HTMLButtonElement).click();
@@ -291,7 +291,7 @@ describe('Flower composer references', () => {
       listEntries: () => listing.promise,
     }));
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@');
     await waitFor(() => runtime.querySelector('[role="listbox"]')?.getAttribute('aria-busy') === 'true');
 
@@ -317,7 +317,7 @@ describe('Flower composer references', () => {
       listEntries: () => listing.promise,
     }));
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@');
     await waitFor(() => runtime.querySelector('[role="listbox"]')?.getAttribute('aria-busy') === 'true');
     const attachment = document.createElement('button');
@@ -339,7 +339,7 @@ describe('Flower composer references', () => {
       }],
     }));
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     await typeComposerToken(runtime, '@main');
     await waitFor(() => runtime.querySelector('[role="option"]') !== null);
     const attachment = document.createElement('button');
@@ -361,7 +361,7 @@ describe('Flower composer references', () => {
       },
     }));
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@main');
     await waitFor(() => runtime.querySelector('.flower-composer-reference-retry') !== null);
     const retry = runtime.querySelector('.flower-composer-reference-retry') as HTMLButtonElement;
@@ -383,7 +383,7 @@ describe('Flower composer references', () => {
       }],
     }));
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@main');
     await waitFor(() => runtime.querySelector('[role="option"]') !== null);
     await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
@@ -407,7 +407,7 @@ describe('Flower composer references', () => {
       createFlowerComposerDraftCoordinator(),
     );
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@main');
     await waitFor(() => runtime.querySelector('[role="option"]') !== null);
     placeCaretAtEnd(textarea);
@@ -438,7 +438,7 @@ describe('Flower composer references', () => {
       createFlowerComposerDraftCoordinator(),
     );
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
     const textarea = await typeComposerToken(runtime, '@main');
     await waitFor(() => runtime.querySelector('[role="option"]') !== null);
     placeCaretAtEnd(textarea);

@@ -4450,6 +4450,9 @@
       "modelSupportUnavailable": "Não foi possível verificar a compatibilidade com anexos"
     },
     "chat": {
+      "inputHistoryHint": "↑ Entrada anterior",
+      "inputHistoryPosition": "Entrada anterior {position} de {total}. Use as setas para cima e para baixo para navegar, ou Esc para limpar.",
+      "inputHistoryCleared": "O campo de entrada está vazio novamente.",
       "media": {
         "image": "Imagem",
         "previewImage": "Visualizar imagem",

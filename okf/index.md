@@ -119,6 +119,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.
 - [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.
 - [Flower composer references](ui/flower-composer-references.md) - Working-directory @ discovery, editable draft chips, strict composer wire data, and ordered admission into Floret.
+- [Flower input history](ui/flower-input-history.md) - Recall previous user text with arrow keys while preserving drafts, input methods and completion ownership.
 - [Absolute filesystem directory selection](ui/filesystem-picker-navigation.md) - Select runtime-authorized absolute paths with shared navigation and independent product forms.
 - [Flower working directory navigation](ui/flower-working-directory-navigation.md) - Open a conversation directory in Files or a new Terminal through consistent Activity and Workbench menus.
 - [Flower Activity companion](ui/flower-activity-companion.md) - Expand a compact bottom-bar field into the same retained Flower surface and preserve placement, composer identity, focus, and read ownership.

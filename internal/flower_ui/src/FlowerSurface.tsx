@@ -16,6 +16,8 @@ import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, Link, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { createInputHistoryController, type InputHistoryEntry } from '@floegence/floe-webapp-core/chat';
+import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
 import { FlowerContextMenu } from './FlowerContextMenu';
 import { FlowerDirectoryMenuItems, type FlowerDirectoryMenuAction, type FlowerDirectoryMenuAvailability } from './FlowerDirectoryMenuItems';
@@ -989,6 +991,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let attachmentPickerSessionKey = '';
   let surfaceDisposed = false;
   const [composerFocused, setComposerFocused] = createSignal(false);
+  const [composerHistoryBrowsing, setComposerHistoryBrowsing] = createSignal(false);
+  const [composerHistoryAnnouncement, setComposerHistoryAnnouncement] = createSignal('');
   let composerApprovalCardRef: HTMLElement | undefined;
   let previousComposerApprovalActionID = '';
   const [modelMenuOpen, setModelMenuOpen] = createSignal(false);
@@ -5397,6 +5401,7 @@ webSearch: model.web_search,
   };
 
   const submitChat = async () => {
+    composerHistory.reset();
     const promptInput = composerRef?.value ?? currentComposerSessionDraft().chatDraft;
     const prompt = trimString(promptInput);
     const promptInspection = inspectFlowerText(promptInput);
@@ -5960,6 +5965,7 @@ webSearch: model.web_search,
   };
 
   const handleComposerKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return;
     if (event.isComposing || isComposing() || event.keyCode === 229) return;
     if (composerReferenceMutationActive()) {
       if (event.key === 'Enter') event.preventDefault();
@@ -6016,6 +6022,14 @@ webSearch: model.web_search,
     }
     if (threadLoadError() && selectedThreadID() && shouldSubmitOnEnterKeydown(event)) {
       event.preventDefault();
+      return;
+    }
+    if (
+      event.currentTarget instanceof HTMLTextAreaElement
+      && !composerCommandMenuVisible()
+      && composerHistory.handleKeyDown(event, event.currentTarget)
+    ) {
+      syncComposerSelection(event.currentTarget);
       return;
     }
     const command = composerSlashCommand();
@@ -6636,6 +6650,7 @@ webSearch: model.web_search,
     composerSelectionFrame = 0;
   });
   const handleComposerPaste = (event: ClipboardEvent & { currentTarget: HTMLTextAreaElement }) => {
+    composerHistory.reset();
     if (composerReferenceMutationActive()) {
       event.preventDefault();
       event.currentTarget.value = composerTextValue();
@@ -6760,6 +6775,7 @@ webSearch: model.web_search,
     scheduleComposerSelection(decision.selectionStart, decision.selectionEnd, currentComposerSessionKey(), decision.value);
   };
   const handleComposerTextInput = (event: InputEvent & { currentTarget: HTMLTextAreaElement }) => {
+    composerHistory.reset();
     if (composerReferenceMutationActive()) {
       event.currentTarget.value = composerTextValue();
       return;
@@ -7029,10 +7045,60 @@ webSearch: model.web_search,
     )
   ));
 
+  const composerHistoryEntries = createMemo<readonly InputHistoryEntry[]>((previous) => (
+    retainKeyedItems(previous, flowerInputHistoryEntries(selectedThread()?.messages ?? []), (entry) => entry.id)
+  ));
+  const composerHistoryEnabled = createMemo(() => (
+    Boolean(selectedThreadID())
+    && Boolean(selectedThread())
+    && !selectedThreadDetailPending()
+    && !threadLoadError()
+    && bottomActionMode() === 'chat'
+    && !composerTextareaDisabled()
+    && composerReferenceMutationCount() === 0
+    && reactiveDraftSnapshotFor(currentComposerSessionKey()).value.mode === 'ordinary'
+    && surfaceEngaged() && transcriptVisible() && documentVisible()
+    && !companionCollapsed() && sidePanel() === 'chat'
+  ));
+  const composerHistory = createInputHistoryController({
+    read: () => ({
+      scope: currentComposerSessionKey(),
+      value: currentComposerSessionDraft().chatDraft,
+      revision: reactiveDraftSnapshotFor(currentComposerSessionKey()).revision,
+      entries: composerHistoryEntries(),
+      enabled: composerHistoryEnabled(),
+    }),
+    write: (text) => {
+      // Suppress completion before the shared draft publishes recalled tokens.
+      batch(() => {
+        setComposerHistoryBrowsing(true);
+        updateComposerSessionText(currentComposerSessionKey(), text);
+      });
+      composerAutosizeController?.schedule();
+    },
+    onChange: (state, reason) => {
+      setComposerHistoryBrowsing(state !== null);
+      setComposerHistoryAnnouncement(reason === 'navigate'
+        ? state ? copy().chat.inputHistoryPosition(state.position, state.total) : copy().chat.inputHistoryCleared
+        : '');
+    },
+  });
+  createEffect(on(
+    () => [
+      currentComposerSessionKey(),
+      reactiveDraftSnapshotFor(currentComposerSessionKey()).revision,
+      composerHistoryEntries(),
+      composerHistoryEnabled(),
+    ] as const,
+    () => composerHistory.synchronize(),
+  ));
+
   const composerPlaceholder = createMemo(() => {
     if (selectedThreadReadOnly()) return selectedThreadReadOnlyDisplay();
     if (surfaceWarmupActive() && !selectedInputRequest()) return copy().chat.warmupComposerPlaceholder;
-    if (!selectedInputRequest()) return copy().chat.placeholder;
+    if (!selectedInputRequest()) return composerHistoryEnabled() && composerHistoryEntries().length > 0
+      ? `${copy().chat.placeholder} · ${copy().chat.inputHistoryHint}`
+      : copy().chat.placeholder;
     const question = activeInputQuestion();
     if (!question || !questionAllowsText(question)) {
       return chatCopyValue('inputRequestChoicePlaceholder', 'Choose an option to continue.');
@@ -7075,7 +7141,7 @@ webSearch: model.web_search,
     && composerReferenceIndex !== null
   ));
   const composerReferenceToken = createMemo<FlowerComposerReferenceToken | undefined>(() => {
-    if (!composerReferenceEditingAllowed() || isComposing()) return undefined;
+    if (!composerReferenceEditingAllowed() || isComposing() || composerHistoryBrowsing()) return undefined;
     const selection = composerSelection();
     return findFlowerComposerReferenceToken({
       text: currentComposerSessionDraft().chatDraft,
@@ -7423,7 +7489,7 @@ webSearch: model.web_search,
 
   const composerChatDraftText = createMemo(() => trimString(currentComposerSessionDraft().chatDraft));
   const composerChatDraftHasRawText = createMemo(() => currentComposerSessionDraft().chatDraft.length > 0);
-  const composerSlashCommand = createMemo(() => (selectedInputRequest() || selectedComposerApprovalDisplayAction())
+  const composerSlashCommand = createMemo(() => (selectedInputRequest() || selectedComposerApprovalDisplayAction() || composerHistoryBrowsing())
     ? { kind: 'none' as const }
     : parseFlowerSlashCommand(composerChatDraftText()));
   const composerCommandMenuVisible = createMemo(() => (
@@ -11006,7 +11072,11 @@ webSearch: model.web_search,
             syncComposerSelection(target);
             if (companionCollapsed() && !restoringCompanionFocus) props.onCompanionOpenRequest?.();
           }}
-          onBlur={() => setComposerFocused(false)}
+          onBlur={() => {
+            composerHistory.reset();
+            setComposerFocused(false);
+          }}
+          onPointerDown={() => composerHistory.reset()}
           onClick={() => {
             if (companionCollapsed()) props.onCompanionOpenRequest?.();
           }}
@@ -11015,6 +11085,7 @@ webSearch: model.web_search,
           onKeyUp={(event) => syncComposerSelection(event.currentTarget)}
           onPaste={handleComposerPaste}
           onCompositionStart={() => {
+            composerHistory.reset();
             setIsComposing(true);
             composerReferenceIndex?.softAbort();
             if (companionCollapsed()) props.onCompanionOpenRequest?.();
@@ -11632,6 +11703,9 @@ webSearch: model.web_search,
                 />
                 <span class="flower-visually-hidden" aria-live="polite" aria-atomic="true">
                   {composerReferenceAnnouncement()}
+                </span>
+                <span class="flower-visually-hidden" aria-live="polite" aria-atomic="true" data-flower-input-history-announcement>
+                  {composerHistoryAnnouncement()}
                 </span>
                 <Show when={composerHasReferences()}>
                   <div class="flower-composer-reference-lane" role="list" aria-label={copy().chat.composerReferencesLabel}>

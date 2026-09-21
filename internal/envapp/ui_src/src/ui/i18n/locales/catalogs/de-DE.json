@@ -4450,6 +4450,9 @@
       "modelSupportUnavailable": "Anhangsunterstützung konnte nicht geprüft werden"
     },
     "chat": {
+      "inputHistoryHint": "↑ Vorherige Eingabe",
+      "inputHistoryPosition": "Vorherige Eingabe {position} von {total}. Mit den Pfeiltasten nach oben oder unten blättern, mit Escape leeren.",
+      "inputHistoryCleared": "Das Eingabefeld ist wieder leer.",
       "media": {
         "image": "Bild",
         "previewImage": "Bildvorschau öffnen",

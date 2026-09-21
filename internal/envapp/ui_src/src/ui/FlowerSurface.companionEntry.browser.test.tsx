@@ -100,6 +100,22 @@ function mountCompanion(selected: FlowerThreadSnapshot, summary?: FlowerSurfaceP
 }
 
 type Fixture = ReturnType<typeof mountCompanion>;
+it('clears recalled history before Escape dismisses the companion', async () => {
+  const fixture = mountCompanion(thread());
+  fixture.setOpen(true);
+  await waitFor(() => fixture.mount.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false'
+    && Boolean(fixture.mount.querySelector('.flower-composer textarea')));
+  const editor = fixture.mount.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+  editor.focus();
+  await userEvent.keyboard('{ArrowUp}');
+  expect(editor.value).toBe('Plan deploy');
+  await userEvent.keyboard('{Escape}');
+  expect(editor.value).toBe('');
+  expect(fixture.open()).toBe(true);
+  await userEvent.keyboard('{Escape}');
+  await waitFor(() => !fixture.open());
+});
+
 async function collapsedAction(fixture: Fixture): Promise<HTMLButtonElement> {
   await waitFor(() => fixture.mount.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false'
     && Boolean(fixture.mount.querySelector('.flower-companion-collapsed-action')));

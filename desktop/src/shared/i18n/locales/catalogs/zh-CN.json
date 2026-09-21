@@ -80,6 +80,9 @@
       "modelSupportUnavailable": "无法检查附件支持情况"
     },
     "chat": {
+      "inputHistoryHint": "↑ 调用上一条输入",
+      "inputHistoryPosition": "历史输入第 {position} 条，共 {total} 条。按上下键浏览，按 Esc 清空。",
+      "inputHistoryCleared": "已返回空输入。",
       "media": {
         "image": "图片",
         "previewImage": "预览图片",

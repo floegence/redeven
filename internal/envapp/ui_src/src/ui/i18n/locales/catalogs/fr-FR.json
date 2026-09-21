@@ -4450,6 +4450,9 @@
       "modelSupportUnavailable": "Impossible de vérifier la prise en charge des pièces jointes"
     },
     "chat": {
+      "inputHistoryHint": "↑ Saisie précédente",
+      "inputHistoryPosition": "Saisie précédente {position} sur {total}. Utilisez les flèches haut et bas pour parcourir, ou Échap pour effacer.",
+      "inputHistoryCleared": "Le champ de saisie est à nouveau vide.",
       "media": {
         "image": "Image",
         "previewImage": "Afficher l’image",
