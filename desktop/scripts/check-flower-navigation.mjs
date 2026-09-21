@@ -73,6 +73,11 @@ try {
     }
     await page.locator('[data-flower-selected-thread-id="navigation-thread"][data-flower-selected-thread-loading="false"]').waitFor();
     const composer = page.locator('.flower-composer-content textarea').first();
+    await composer.focus();
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await composer.inputValue(), 'Inspect this workspace', `${locale}: Desktop recalls canonical user text`);
+    await page.keyboard.press('Escape');
+    assert.equal(await composer.inputValue(), '', `${locale}: Escape restores the empty Desktop draft`);
     await composer.fill('Keep this unsent draft');
     await page.evaluate(() => {
       window.navigationNodes = { flower: document.querySelector('[data-flower-engaged]'),

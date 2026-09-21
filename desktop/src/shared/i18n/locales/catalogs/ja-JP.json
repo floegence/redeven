@@ -80,6 +80,9 @@
       "modelSupportUnavailable": "添付ファイルの対応状況を確認できません"
     },
     "chat": {
+      "inputHistoryHint": "↑ 前の入力を呼び出す",
+      "inputHistoryPosition": "入力履歴 {position}/{total}。上下キーで移動、Esc キーでクリアします。",
+      "inputHistoryCleared": "入力欄を空に戻しました。",
       "media": {
         "image": "画像",
         "previewImage": "画像をプレビュー",

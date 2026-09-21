@@ -48,6 +48,9 @@
     "modelSupportUnavailable": "Could not check attachment support"
   },
   "chat": {
+    "inputHistoryHint": "↑ Previous input",
+    "inputHistoryPosition": "Previous input {position} of {total}. Use Up or Down to browse, or Escape to clear.",
+    "inputHistoryCleared": "Returned to empty input.",
     "media": {
       "image": "Image",
       "previewImage": "Preview image",

@@ -65,6 +65,7 @@ main() {
       src/ui/FlowerSurface.orderedPresentation.test.tsx \
       src/ui/FlowerSurface.webSearch.test.tsx \
       src/ui/FlowerSurface.composerReferences.test.tsx \
+      src/ui/FlowerSurface.inputHistory.test.tsx \
       src/ui/FlowerSurface.desktopModelSource.e2e.test.tsx \
       src/ui/FlowerSurface.visibility.shared.test.tsx \
       src/ui/FlowerThreadCard.performance.test.tsx \
@@ -123,6 +124,7 @@ main() {
       internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.test.ts \
       internal/flower_ui/src/composer/createFlowerComposerAutosizeController.test.ts \
       internal/flower_ui/src/composer/flowerComposerReferenceToken.test.ts \
+      internal/flower_ui/src/composer/flowerInputHistory.test.ts \
       internal/flower_ui/src/composer/flowerComposerReferenceIndex.test.ts \
       internal/flower_host_ui/src/flowerAttachmentStaging.test.ts \
       internal/flower_ui/src/contextActionWire.test.ts \
@@ -179,6 +181,8 @@ main() {
         src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
         src/ui/FlowerSurface.composerAttachments.browser.test.tsx \
         src/ui/FlowerSurface.composerReferences.browser.test.tsx \
+        src/ui/FlowerSurface.inputHistory.browser.test.tsx \
+        src/ui/FlowerSurface.companionEntry.browser.test.tsx \
         src/ui/FlowerSurface.decisionSurface.browser.test.tsx \
         src/ui/FlowerSurface.inputSubmission.browser.test.tsx \
         src/ui/FlowerSurface.inputResponse.browser.test.tsx \
