@@ -87,7 +87,9 @@ library presents **Stop sharing**: it disconnects without quitting the app or
 closing its windows. Confirmed loss of the final window closes the physical
 Redeven viewer; a network failure or close request by itself does not. Closing only the viewer preserves the app.
 A running process without its first shareable window remains attached indefinitely;
-there is no first-window termination deadline. The helper-launch deadline ends when
+there is no first-window termination deadline. Explicitly stopping sharing during
+this wait ends normally; missing pixels do not turn a user-requested stop into a
+launch failure. The helper-launch deadline ends when
 the bound process is reported, independently of pixel readiness. The viewer cancels
 its connection deadline on a waiting event, shows explicit waiting guidance and
 reconnect, and starts a separate bounded pixel deadline when a window appears.

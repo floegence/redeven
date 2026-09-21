@@ -354,3 +354,52 @@ func TestMacUnexpectedHelperExitDoesNotConfirmApplicationClosure(t *testing.T) {
 	s.native.writeMu.Unlock()
 	waitMac(t, m, view.ID, "failed")
 }
+
+func TestMacStopSharingBeforeFirstFrameEndsNormally(t *testing.T) {
+	m := macFixtureScript(t, `#!/bin/sh
+while IFS= read -r request; do
+ case "$request" in
+ *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"ready":true},"applications":[{"id":"macos-fixture","name":"Background App"}]}' ;;
+ *'"action":"launch"'*) printf '%s\n' '{"type":"launched","existing_application":true}' '{"type":"waiting","generation":1}' ;;
+ *'"action":"stop"'*) printf '%s\n' '{"type":"ended"}'; exit 0 ;;
+ esac
+done
+`)
+	view, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for !m.Sessions("alice")[0].ExistingApplication {
+		if time.Now().After(deadline) {
+			t.Fatal("fixture did not attach to its background app")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err = m.Stop(context.Background(), "alice", view.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, view.ID, "ended")
+	if got := m.Sessions("alice")[0]; got.ErrorCode != "" {
+		t.Fatalf("explicit stop became a launch failure: %+v", got)
+	}
+}
+
+func TestMacNativeLaunchErrorRemainsFailed(t *testing.T) {
+	m := macFixtureScript(t, `#!/bin/sh
+while IFS= read -r request; do
+ case "$request" in
+ *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"ready":true},"applications":[{"id":"macos-fixture","name":"Exiting App"}]}' ;;
+ *'"action":"launch"'*) printf '%s\n' '{"type":"error","code":"APPLICATION_EXITED"}' '{"type":"ended"}'; exit 0 ;;
+ esac
+done
+`)
+	view, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, view.ID, "failed")
+	if m.Sessions("alice")[0].ErrorCode != "application_exited" {
+		t.Fatal("native launch diagnostic was lost")
+	}
+}
