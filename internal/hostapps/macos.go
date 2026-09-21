@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -50,12 +51,14 @@ func (m *Manager) macHelper() string {
 }
 
 type macMessage struct {
-	Type         string        `json:"type"`
-	Code         string        `json:"code,omitempty"`
-	Availability Availability  `json:"availability,omitempty"`
-	Applications []Application `json:"applications,omitempty"`
-	Data         string        `json:"data,omitempty"`
-	Generation   int           `json:"generation,omitempty"`
+	ExistingApplication bool          `json:"existing_application,omitempty"`
+	Action              string        `json:"action,omitempty"`
+	Type                string        `json:"type"`
+	Code                string        `json:"code,omitempty"`
+	Availability        Availability  `json:"availability,omitempty"`
+	Applications        []Application `json:"applications,omitempty"`
+	Data                string        `json:"data,omitempty"`
+	Generation          int           `json:"generation,omitempty"`
 }
 
 func macCommand(helper string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, error) {
@@ -185,19 +188,20 @@ func (m *Manager) Permissions(ctx context.Context, permission string) error {
 // Latest-frame delivery bounds memory when a viewer is slow or disconnected.
 // One WebSocket owns input at a time; replacement revokes the previous viewer.
 type macSession struct {
-	mu         sync.Mutex
-	controlMu  sync.Mutex
-	writeMu    sync.Mutex
-	input      io.WriteCloser
-	cancel     context.CancelFunc
-	server     *http.Server
-	latest     []byte
-	window     []byte
-	windows    []byte
-	notice     []byte
-	generation int
-	revision   uint64
-	connection *websocket.Conn
+	mu             sync.Mutex
+	controlMu      sync.Mutex
+	writeMu        sync.Mutex
+	input          io.WriteCloser
+	cancel         context.CancelFunc
+	server         *http.Server
+	latest         []byte
+	window         []byte
+	windows        []byte
+	notice         []byte
+	noticeRevision uint64
+	generation     int
+	revision       uint64
+	connection     *websocket.Conn
 }
 
 func (s *macSession) send(request map[string]any) error {
@@ -343,6 +347,11 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 				code = "launch_failed"
 				return
 			}
+		case "launched":
+			m.mu.Lock()
+			s.view.ExistingApplication = msg.ExistingApplication
+			m.mu.Unlock()
+			slog.Info("native application attached", "session", s.view.ID, "existing_application", msg.ExistingApplication)
 		case "frame":
 			frame, err := base64.StdEncoding.DecodeString(msg.Data)
 			if err != nil {
@@ -376,20 +385,29 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			n.windows = raw
 			n.mu.Unlock()
 		case "ended":
+			if !started {
+				code = "application_exited"
+			}
 			return
-		case "menu":
+		case "menu", "operation_error", "operation_complete":
 			n.mu.Lock()
 			n.notice = raw
+			n.noticeRevision++
 			n.mu.Unlock()
 		case "error":
+			slog.Warn("native application error", "session", s.view.ID, "code", msg.Code)
 			n.mu.Lock()
 			n.notice = raw
+			n.noticeRevision++
 			n.mu.Unlock()
 			if !started {
 				code = strings.ToLower(msg.Code)
 				return
 			}
-		case "blocked", "capture_error":
+		case "blocked", "capture_error", "waiting":
+			if msg.Type != "waiting" {
+				slog.Warn("native application capture unavailable", "session", s.view.ID, "type", msg.Type, "code", msg.Code)
+			}
 			n.mu.Lock()
 			n.generation = 0
 			n.latest = nil
@@ -397,6 +415,9 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			n.revision++
 			n.mu.Unlock()
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		slog.Warn("native application helper stream ended", "session", s.view.ID, "error", err)
 	}
 	if !started {
 		code = "launch_failed"
@@ -479,7 +500,8 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 	ping := time.NewTicker(15 * time.Second)
 	defer ping.Stop()
 	var revision uint64
-	var window, windows, notice string
+	var window, windows string
+	var noticeRevision uint64
 	for {
 		select {
 		case <-done:
@@ -497,13 +519,14 @@ func (m *Manager) serveMacSession(w http.ResponseWriter, r *http.Request, s *own
 			nextWindow := string(n.window)
 			nextWindows := string(n.windows)
 			nextNotice := string(n.notice)
+			nextNoticeRevision := n.noticeRevision
 			n.mu.Unlock()
 			_ = connection.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			if nextNotice != "" && nextNotice != notice {
+			if nextNotice != "" && nextNoticeRevision != noticeRevision {
 				if connection.WriteMessage(websocket.TextMessage, []byte(nextNotice)) != nil {
 					return
 				}
-				notice = nextNotice
+				noticeRevision = nextNoticeRevision
 			}
 			if nextWindows != "" && nextWindows != windows {
 				if connection.WriteMessage(websocket.TextMessage, []byte(nextWindows)) != nil {

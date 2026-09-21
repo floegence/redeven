@@ -6294,6 +6294,11 @@
     "macCloseWindow": "アプリのウインドウを閉じる",
     "macInput": "アプリへのキーボード入力",
     "macRetained": "表示ウインドウを閉じても、Mac 上のアプリは開いたままです。ランタイムを停止すると接続が切れますが、未保存の作業は破棄されません。",
+    "macStopSharing": "共有を停止",
+    "macStopSharingDescription": "このアプリと Redeven の接続を切断します。ウインドウと未保存の作業は Mac 上に残ります。",
+    "macOperationFailed": "アプリでこの操作を完了できませんでした。ウインドウの準備ができたら、もう一度お試しください。",
+    "macWaiting": "アプリのウインドウを待機中…",
+    "macCaptureUnavailable": "ウインドウをキャプチャできません。再接続してお試しください。",
     "macStopDescription": "このアプリに終了を要求します。未保存の作業がある場合は、アプリのウインドウで保存ダイアログに応答してください。",
     "macAddDescription": "インストール済みの .app バンドルの絶対パスを入力してください。名前とアイコンは macOS から取得します。",
     "macBundlePath": "アプリバンドルのパス"

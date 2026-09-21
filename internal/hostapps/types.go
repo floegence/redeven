@@ -36,35 +36,39 @@ type Catalog struct {
 }
 
 type Session struct {
-	Backend      string                      `json:"backend,omitempty"`
-	Mode         string                      `json:"mode,omitempty"`
-	ID           string                      `json:"id"`
-	Application  Application                 `json:"application"`
-	State        string                      `json:"state"`
-	ErrorCode    string                      `json:"error_code,omitempty"`
-	StartedAt    int64                       `json:"started_at_unix_ms"`
-	Forward      *portforward.ForwardSession `json:"forward,omitempty"`
-	Presentation Presentation                `json:"presentation"`
+	ExistingApplication bool                        `json:"existing_application,omitempty"`
+	Backend             string                      `json:"backend,omitempty"`
+	Mode                string                      `json:"mode,omitempty"`
+	ID                  string                      `json:"id"`
+	Application         Application                 `json:"application"`
+	State               string                      `json:"state"`
+	ErrorCode           string                      `json:"error_code,omitempty"`
+	StartedAt           int64                       `json:"started_at_unix_ms"`
+	Forward             *portforward.ForwardSession `json:"forward,omitempty"`
+	Presentation        Presentation                `json:"presentation"`
 }
 
 // Presentation comes from the caller's explicit localized catalog. The window
 // document renders these bounded strings as text, never as markup or script.
 type Presentation struct {
-	Menu           string `json:"menu,omitempty"`
-	Input          string `json:"input,omitempty"`
-	Windows        string `json:"windows,omitempty"`
-	CloseWindow    string `json:"closeWindow,omitempty"`
-	SharedControl  string `json:"sharedControl,omitempty"`
-	Locale         string `json:"locale"`
-	Connecting     string `json:"connecting"`
-	Reconnecting   string `json:"reconnecting"`
-	Disconnected   string `json:"disconnected"`
-	ConnectionHint string `json:"connectionHint"`
-	Reconnect      string `json:"reconnect"`
-	Starting       string `json:"starting"`
-	Failed         string `json:"failed"`
-	Ended          string `json:"ended"`
-	Retry          string `json:"retry"`
+	OperationFailed    string `json:"operationFailed,omitempty"`
+	Waiting            string `json:"waiting,omitempty"`
+	CaptureUnavailable string `json:"captureUnavailable,omitempty"`
+	Menu               string `json:"menu,omitempty"`
+	Input              string `json:"input,omitempty"`
+	Windows            string `json:"windows,omitempty"`
+	CloseWindow        string `json:"closeWindow,omitempty"`
+	SharedControl      string `json:"sharedControl,omitempty"`
+	Locale             string `json:"locale"`
+	Connecting         string `json:"connecting"`
+	Reconnecting       string `json:"reconnecting"`
+	Disconnected       string `json:"disconnected"`
+	ConnectionHint     string `json:"connectionHint"`
+	Reconnect          string `json:"reconnect"`
+	Starting           string `json:"starting"`
+	Failed             string `json:"failed"`
+	Ended              string `json:"ended"`
+	Retry              string `json:"retry"`
 }
 
 type LaunchRequest struct {

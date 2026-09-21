@@ -22,7 +22,7 @@ button svg { width:16px; height:16px; stroke:currentColor; stroke-width:1.5; str
 body[data-state="active"] #application { opacity:1; pointer-events:auto; }
 body[data-state="active"] main { display:none; }
 body:is([data-state="disconnected"],[data-state="failed"]) .connection-mark { display:block; }
-body:is([data-state="disconnected"],[data-state="failed"],[data-state="ended"]) .progress { display:none; }
+body:is([data-state="disconnected"],[data-state="failed"],[data-state="captureUnavailable"],[data-state="ended"]) .progress { display:none; }
 @keyframes travel { 0% { transform:translateX(-110%); } 100% { transform:translateX(360%); } }
 @keyframes arrive { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; } .progress span { width:100%; opacity:.5; } }
@@ -41,3 +41,5 @@ body:is([data-state="disconnected"],[data-state="failed"],[data-state="ended"]) 
 
 @media(hover:none) { .mac-app-controls { opacity:1; } }
 body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; }
+
+.mac-app-feedback { position:fixed; z-index:3; top:16px; left:50%; transform:translateX(-50%); max-width:calc(100% - 32px); padding:10px 14px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--foreground); font-size:12px; pointer-events:none; }

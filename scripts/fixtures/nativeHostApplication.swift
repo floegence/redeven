@@ -16,10 +16,12 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var field: NSTextField!
     var menuClicks = 0
     var clicks = 0
+    var replacing = false
     var events: [[String: Any]] = []
     let receipt = Bundle.main.bundleURL.appendingPathComponent("receipt.json").path
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    func makeWindow() {
         window = NSWindow(contentRect: NSRect(x: 120, y: 120, width: 720, height: 480), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
         window.title = "Redeven native application fixture"
         window.delegate = self
         window.backgroundColor = NSColor(srgbRed: 0.15, green: 0.45, blue: 0.7, alpha: 1)
@@ -31,17 +33,33 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
         field.target = self; field.action = #selector(save)
         window.contentView!.addSubview(field)
         window.makeKeyAndOrderFront(nil)
+    }
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        makeWindow()
         let menu = NSMenu()
         let root = NSMenuItem(title: "Fixture", action: nil, keyEquivalent: "")
         let actions = NSMenu(title: "Fixture")
         let action = NSMenuItem(title: "Record menu action", action: #selector(recordMenu), keyEquivalent: "")
-        action.target = self; actions.addItem(action); root.submenu = actions
+        action.target = self; actions.addItem(action)
+        let replace = NSMenuItem(title: "Replace window", action: #selector(replaceWindow), keyEquivalent: "")
+        replace.target = self; actions.addItem(replace); root.submenu = actions
         menu.addItem(root)
         let edit = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         edit.submenu = NSMenu(title: "Edit")
         edit.submenu!.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
         menu.addItem(edit); NSApp.mainMenu = menu
         save()
+    }
+    @objc func replaceWindow() {
+        let text = field.stringValue
+        replacing = true
+        window.close()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            self.makeWindow()
+            self.field.stringValue = text
+            self.replacing = false
+            self.save()
+        }
     }
     @objc func recordMenu() { menuClicks += 1; save() }
     @objc func click() { clicks += 1; save() }
@@ -50,7 +68,7 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
         try! JSONSerialization.data(withJSONObject: value).write(to: URL(fileURLWithPath: receipt), options: .atomic)
     }
     func windowDidResize(_ notification: Notification) { if field != nil { save() } }
-    func windowWillClose(_ notification: Notification) { save(); DispatchQueue.main.async { NSApp.terminate(nil) } }
+    func windowWillClose(_ notification: Notification) { save(); if !replacing { DispatchQueue.main.async { NSApp.terminate(nil) } } }
 }
 let app = FixtureApplication.shared
 app.setActivationPolicy(.regular)

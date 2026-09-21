@@ -6309,6 +6309,11 @@
     "macCloseWindow": "關閉應用程式視窗",
     "macInput": "應用程式鍵盤輸入",
     "macRetained": "關閉檢視視窗後，應用程式仍在 Mac 上執行。停止執行階段會中斷連線，不會捨棄尚未儲存的工作。",
+    "macStopSharing": "停止共享",
+    "macStopSharingDescription": "中斷此應用程式與 Redeven 的連線。應用程式視窗和未儲存的工作會保留在 Mac 上。",
+    "macOperationFailed": "應用程式暫時無法完成此操作。請在視窗就緒後重試。",
+    "macWaiting": "正在等候應用程式視窗…",
+    "macCaptureUnavailable": "暫時無法擷取應用程式畫面，請重新連線後重試。",
     "macStopDescription": "要求結束此應用程式。如果有尚未儲存的工作，請在應用程式視窗中處理儲存對話框。",
     "macAddDescription": "填寫已安裝 .app 應用程式套件的絕對路徑。名稱和圖示將從 macOS 讀取。",
     "macBundlePath": "應用程式套件路徑"

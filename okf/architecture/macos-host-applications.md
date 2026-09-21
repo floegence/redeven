@@ -3,14 +3,15 @@ type: Runtime Contract
 title: Native macOS host applications
 description: Real application discovery, direct local launch, owned remote window capture and human input on macOS.
 tags: [runtime, desktop, applications, macos, security]
-timestamp: 2026-09-20T12:00:00Z
+timestamp: 2026-09-21T03:00:00Z
 ---
 # Summary
 
 Redeven's macOS adapter owns native host application discovery and human-operated
 window sessions. Application identity comes from installed bundles. A trusted
 Desktop local-environment route launches the real app directly; remote access
-captures a newly launched application's window. Apps run as the Runtime user,
+captures the selected application's actual window, including an already running
+single-instance app. Apps run as the Runtime user,
 without containers, virtual machines, X11 or an independent desktop. The existing
 [host application authorization](host-applications.md) applies to every operation
 and stream. Missing permissions or graphical login block streaming explicitly.
@@ -35,16 +36,16 @@ remote Desktop targets use the streaming route.
 # Remote window ownership and transport
 
 The packaged Swift helper exposes explicit host-application protocol version 1,
-separate from its unchanged Computer Use protocol. The Runtime launches a new app
-instance and rejects a returned PID that was already running. Singleton apps that
-redirect internally to another process may consequently fail to provide an owned
-window; Redeven never attaches to or quits an existing personal app as a fallback.
-Window IDs and menu handles must belong to the owned process. The browser cannot
+separate from its unchanged Computer Use protocol. AppKit opens or activates the
+selected catalog bundle. The helper verifies the returned canonical bundle path
+and binds its process, so single-instance applications reuse their existing
+windows. The session records whether that process existed before the request.
+Window IDs and menu handles must belong to this bound process. The browser cannot
 supply an arbitrary PID, application path or capture source.
 
 ScreenCaptureKit captures a selected application window on macOS 13 or newer.
 Child-window inclusion uses the macOS 14.2 API when available. A native window list
-allows selection among the owned process's windows. The current transport sends
+allows selection among the bound process's windows. The current transport sends
 JPEG frames over the authenticated WebSocket, at up to 20 frames/second and a
 maximum 2560-pixel dimension; it is not an audio or hardware video stream. A latest
 frame slot bounds buffering for slow/disconnected clients. A new capture generation
@@ -64,7 +65,7 @@ old frames and callback generations cannot reactivate a disconnected view.
 
 Remote input shares the host's real graphical session and foreground. Screen
 recording and accessibility grants are required. Explicit input activates and
-raises the owned window; foreground identity, focused AX window and pointer hit
+raises the bound window; foreground identity, focused AX window and pointer hit
 ownership must be verified before injection. A covered window fails the operation
 instead of sending pointer input into another application. A process-scoped event
 tap acknowledges only Redeven-marked input; the next event waits for that receipt,
@@ -77,22 +78,36 @@ dialogs and OS-reserved shortcuts remain subject to macOS policy.
 Application menus come from that app's actual accessibility menu tree; returned
 opaque handles invoke the same enabled menu item. Closing a window presses its
 real close action, preserving ordinary save/cancel dialogs. Ending from the library
-requests graceful application termination and never force-kills it. Confirmed loss
-of the final owned window closes the physical Redeven viewer; a network failure or
-close request by itself does not. Closing only the viewer preserves the app.
+requests graceful application termination only for a process newly launched by
+that session and never force-kills it. For a previously running process, the
+library presents **Stop sharing**: it disconnects without quitting the app or
+closing its windows. Confirmed loss of the final window closes the physical
+Redeven viewer; a network failure or close request by itself does not. Closing only the viewer preserves the app.
+An unreadable accessibility inventory cannot confirm closure. The helper checks
+both accessibility and visible WindowServer inventories and allows a one-second window
+replacement interval before ending a previously visible session. A disappearing
+ScreenCaptureKit source enters window-waiting state; it is not a capture fault.
+Window matching prefers a unique visible surface over retired offscreen surfaces
+with identical bounds. A proven window retains its opaque identity across inventory
+refreshes and resize; input generations change only when capture is rebound.
+Single-operation failures retain the connection and current pixels with a localized
+nonblocking notice. Genuine capture failure offers an explicit reconnect action;
+reconnection captures the same bound process and invalidates stale input.
+
 Runtime shutdown releases capture, route and input ownership but preserves native
 applications and unsaved data; the next Runtime does not silently reclaim them.
 
 The integration does not provide a separate logged-out/headless AppKit session,
 audio, remote file transfer, clipboard synchronization or secure desktop control.
 Protected content, inaccessible custom controls, separate-process dialogs, and apps
-that reject additional instances require application-specific validation. macOS
+with unusual window ownership require application-specific validation. macOS
 13 API compatibility is a build contract, not a claim of testing every OS version,
 Intel host or third-party application.
 
 # Evidence
 
 - `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplications.swift`: bundle discovery, owned capture and input, menu and graceful window lifecycle.
+- `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplicationWindows.swift` and `desktop/native/computer-host/Tests/RedevenComputerHostTests/HostApplicationTests.swift`: authoritative inventory and transient window lifecycle.
 - `internal/hostapps/macos.go` and `macos_test.go`: helper resolution, stream credentials, connection ownership, native launch and cleanup.
 - `internal/codeapp/appserver/host_application_viewer/macos.js` and `internal/envapp/ui_src/src/ui/services/macHostApplicationViewer.test.ts`: first frame, generation, IME, recovery and physical viewer closure.
 - `scripts/check_macos_host_applications.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable real-app pixel/input/menu/lifecycle acceptance.

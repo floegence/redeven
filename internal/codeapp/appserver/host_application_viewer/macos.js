@@ -1,5 +1,5 @@
 // Native macOS frames and input share the existing authenticated application
-// forward. A reconnect reattaches to the owned process, never relaunches it.
+// forward. A reconnect reattaches to the bound process, never relaunches it.
 (() => {
   const previous = document.getElementById('application');
   const canvas = document.createElement('canvas');
@@ -36,6 +36,11 @@
   input.setAttribute('aria-label', config.copy.input);
   input.autocomplete = 'off';
   document.body.append(input);
+  const feedback = document.createElement('div');
+  feedback.className = 'mac-app-feedback';
+  feedback.setAttribute('role', 'status');
+  feedback.hidden = true;
+  document.body.append(feedback);
   let socket,
     attempt = 0,
     active = false,
@@ -57,7 +62,7 @@
     document.body.dataset.state = state;
     panel.setAttribute(
       'aria-busy',
-      String(['starting', 'connecting', 'reconnecting'].includes(state)),
+      String(['starting', 'connecting', 'reconnecting', 'waiting'].includes(state)),
     );
     status.textContent = config.copy[state] || config.copy.failed;
     hint.textContent =
@@ -65,12 +70,13 @@
         ? config.copy.connectionHint
         : config.copy.sharedControl;
     hint.hidden = !hint.textContent;
-    retry.hidden = !['disconnected', 'failed'].includes(state);
+    retry.hidden = !['disconnected', 'failed', 'captureUnavailable'].includes(state);
     retry.querySelector('span').textContent =
       state === 'disconnected' ? config.copy.reconnect : config.copy.retry;
     controls.hidden = state !== 'active';
     input.disabled = state !== 'active';
     if (state !== 'active') {
+      feedback.hidden = true;
       menuPanel.hidden = true;
       menu.setAttribute('aria-expanded', 'false');
     }
@@ -211,7 +217,19 @@
           disconnect('failed');
           return;
         }
-        if (message.type === 'window') {
+        if (message.type === 'waiting') {
+          pending = null;
+          current = null;
+          renderedGeneration = 0;
+          present('waiting');
+        } else if (message.type === 'operation_error') {
+          if (message.code !== 'STALE_WINDOW') {
+            feedback.textContent = config.copy.operationFailed;
+            feedback.hidden = false;
+          }
+        } else if (message.type === 'operation_complete') {
+          feedback.hidden = true;
+        } else if (message.type === 'window') {
           pending = null;
           current = message;
           canvas.setAttribute('aria-busy', 'true');
@@ -254,8 +272,8 @@
         } else if (message.type === 'error' && message.code !== 'STALE_WINDOW')
           disconnect('failed');
         else if (message.type === 'ended') disconnect('ended');
-        else if (message.type === 'blocked' || message.type === 'capture_error')
-          disconnect('disconnected');
+        else if (message.type === 'capture_error') disconnect('captureUnavailable');
+        else if (message.type === 'blocked') disconnect('disconnected');
       };
       connection.onclose = async () => {
         if (mine !== attempt || socket !== connection) return;

@@ -46,7 +46,7 @@ class Helper:
             value = self.messages.get(timeout=max(0.01, deadline - time.monotonic()))
             if value['type'] == kind:
                 return value
-            if value['type'] in ('error', 'blocked', 'capture_error'):
+            if value['type'] in ('error', 'operation_error', 'blocked', 'capture_error', 'ended'):
                 raise AssertionError(value)
         raise AssertionError('Timed out waiting for ' + kind)
 
@@ -99,12 +99,23 @@ def run(helper_path, output):
             helper.close()
             # Native launch has no streaming helper lifetime dependency.
             os.kill(direct, 0)
+            # An existing application is shared through the same process. Ending
+            # this session must leave its windows and unsaved state untouched.
+            helper = Helper(helper_path)
+            helper.send('launch', application_id=app['id'], paths=[str(bundle)])
+            attached = helper.wait('launched')
+            assert attached['pid'] == direct and attached['existing_application'] is True, attached
+            helper.wait('window'); helper.wait('frame')
+            helper.send('stop'); helper.wait('ended'); helper.close()
+            os.kill(direct, 0)
+            assert receipt()['pid'] == direct
             stop_fixture(direct)
             (bundle / 'receipt.json').unlink()
             helper = Helper(helper_path)
             helper.send('launch', application_id=app['id'], paths=[str(bundle)])
             launched = helper.wait('launched')
             pid = launched['pid']; owned.add(pid)
+            assert launched['existing_application'] is False, launched
             window = helper.wait('window')
             frame = helper.wait('frame')
             output.mkdir(parents=True, exist_ok=True)
@@ -139,19 +150,25 @@ def run(helper_path, output):
             assert resumed['window'] == window['window'] and resumed['generation'] > window['generation']
             assert receipt()['pid'] == pid, 'Reconnect relaunched the application'
             helper.send('input', kind='text', text='stale', **bound)
-            assert helper.wait('error')['code'] == 'STALE_WINDOW'
+            assert helper.wait('operation_error')['code'] == 'STALE_WINDOW'
             bound['generation'] = resumed['generation']
             helper.send('resize', width=800, height=550, **bound)
             resized = helper.wait('window'); helper.wait('frame')
             assert resized['width'] == 800 and resized['height'] == 550, resized
+            helper.send('menu', window=resized['window'], generation=resized['generation'])
+            replacement_action = next(i for i in items(helper.wait('menu')['items']) if i['title'] == 'Replace window')
+            helper.send('menu_action', item=replacement_action['id'], window=resized['window'], generation=resized['generation'])
+            replacement = helper.wait('window'); helper.wait('frame')
+            assert replacement['window'] != resized['window'] and replacement['generation'] > resized['generation']
+            assert receipt()['pid'] == pid and receipt()['text'] == 'Replaced'
             before_close = receipt()
-            helper.send('close', window=resized['window'], generation=resized['generation'])
+            helper.send('close', window=replacement['window'], generation=replacement['generation'])
             helper.wait('ended')
-            evidence = dict(native_launch=True, catalog=True, capture=True, input=before_close,
+            evidence = dict(existing_application_shared=True, detach_preserves_existing=True, native_launch=True, catalog=True, capture=True, input=before_close,
                             system_menu=True, reconnect_same_process=True, stale_input_rejected=True,
-                            resize=resized, actual_window_closed=True)
+                            resize=resized, window_replacement_preserves_session=True, actual_window_closed=True)
             (output / 'native-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
-            print('PASS: native launch, catalog, pixels, click, Unicode, shortcut, menu, reconnect, stale input, resize, close')
+            print('PASS: native launch, catalog, pixels, click, Unicode, shortcut, menu, reconnect, stale input, resize, window replacement, close')
         except Exception:
             output.mkdir(parents=True, exist_ok=True)
             (output / 'failed-receipt.json').write_text(json.dumps(receipt(), indent=2))

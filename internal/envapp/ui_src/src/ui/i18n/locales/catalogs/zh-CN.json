@@ -6309,6 +6309,11 @@
     "macCloseWindow": "关闭应用窗口",
     "macInput": "应用键盘输入",
     "macRetained": "关闭查看窗口后，应用仍在 Mac 上运行。停止运行时会断开连接，不会丢弃尚未保存的工作。",
+    "macStopSharing": "停止共享",
+    "macStopSharingDescription": "断开此应用与 Redeven 的连接。应用窗口和未保存的工作会保留在 Mac 上。",
+    "macOperationFailed": "应用暂时无法完成此操作。请在窗口就绪后重试。",
+    "macWaiting": "正在等待应用窗口…",
+    "macCaptureUnavailable": "暂时无法采集应用画面，请重新连接后重试。",
     "macStopDescription": "请求退出此应用。如果有尚未保存的工作，请在应用窗口中处理保存对话框。",
     "macAddDescription": "填写已安装 .app 应用包的绝对路径。名称和图标将从 macOS 读取。",
     "macBundlePath": "应用包路径"

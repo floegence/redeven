@@ -32,7 +32,7 @@ async function viewer() {
   }
   vi.spyOn(dom.window.HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
   Object.assign(dom.window, { fetch, WebSocket: Socket, createImageBitmap: bitmap, redevenHostApplicationWindow: native });
-  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon: '', copy: { windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
+  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon: '', copy: { operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
   await drain();
   const socket = () => Socket.instances.at(-1)!;
   const state = () => dom.window.document.body.dataset.state;
@@ -43,6 +43,40 @@ async function viewer() {
 }
 
 describe('macOS application viewer', () => {
+  it('keeps the stream and pixels after an operation fails and allows the next action', async () => {
+    const v = await viewer(); await v.activate();
+    for (const code of ['WINDOW_NOT_FOCUSED', 'INPUT_UNCONFIRMED', 'TARGET_NOT_READY']) {
+      v.socket().message({ type: 'operation_error', action: 'input', code });
+      expect(v.state()).toBe('active');
+      expect(v.socket().close).not.toHaveBeenCalled();
+      expect(dom.window.document.querySelector('.mac-app-feedback')?.textContent).toContain('The action could not be completed');
+    }
+    dom.window.document.querySelector('textarea')!.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({ action: 'input', key: 'ArrowLeft' });
+    v.socket().message({ type: 'operation_complete' });
+    expect((dom.window.document.querySelector('.mac-app-feedback') as HTMLElement).hidden).toBe(true);
+  });
+
+  it('waits through window replacement without closing or reconnecting the session', async () => {
+    const v = await viewer(); await v.activate();
+    v.socket().message({ type: 'waiting' });
+    expect(v.state()).toBe('waiting');
+    expect(v.socket().close).not.toHaveBeenCalled();
+    expect(v.native.request).not.toHaveBeenCalled();
+    v.window(2); v.socket().frame(); await drain();
+    expect(v.state()).toBe('active');
+    expect(v.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('distinguishes capture recovery from a network disconnect', async () => {
+    const v = await viewer(); await v.activate();
+    v.socket().message({ type: 'capture_error', code: 'CAPTURE_FAILED' });
+    expect(v.state()).toBe('captureUnavailable');
+    expect(dom.window.document.getElementById('status')?.textContent).toBe('Window capture is unavailable.');
+    await v.retry(); await v.activate();
+    expect(v.state()).toBe('active');
+  });
+
   it('waits for decoded pixels and authenticates without a URL credential', async () => {
     const v = await viewer();
     expect(v.socket().protocols).toEqual(['redeven-host-application-v1', 'private']);

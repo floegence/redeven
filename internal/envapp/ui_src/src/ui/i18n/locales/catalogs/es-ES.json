@@ -6298,6 +6298,11 @@
     "macCloseWindow": "Cerrar ventana de la aplicación",
     "macInput": "Entrada de teclado de la aplicación",
     "macRetained": "Cerrar el visor mantiene la aplicación abierta en el Mac. Detener el entorno de ejecución desconecta el visor sin descartar el trabajo sin guardar.",
+    "macStopSharing": "Dejar de compartir",
+    "macStopSharingDescription": "Desconecta esta aplicación de Redeven. Sus ventanas y el trabajo sin guardar permanecerán abiertos en el Mac.",
+    "macOperationFailed": "La aplicación no pudo completar esta acción. Inténtalo de nuevo cuando su ventana esté lista.",
+    "macWaiting": "Esperando la ventana de la aplicación…",
+    "macCaptureUnavailable": "No se puede capturar la ventana. Vuelve a conectarte para intentarlo de nuevo.",
     "macStopDescription": "Solicitar que esta aplicación se cierre. Si hay trabajo sin guardar, responde al diálogo de guardado en la ventana de la aplicación.",
     "macAddDescription": "Introduce la ruta absoluta de un paquete .app instalado. El nombre y el icono se obtienen de macOS.",
     "macBundlePath": "Ruta del paquete de aplicación"

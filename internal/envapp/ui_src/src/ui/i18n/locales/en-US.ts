@@ -100,6 +100,11 @@ export const enUS = defineDictionary({
     "macCloseWindow": "Close application window",
     "macInput": "Application keyboard input",
     "macRetained": "Closing the viewer keeps the application open on the Mac. Stopping the runtime disconnects the viewer without discarding unsaved work.",
+    "macStopSharing": "Stop sharing",
+    "macStopSharingDescription": "Disconnect this application from Redeven. Its windows and unsaved work will remain open on the Mac.",
+    "macOperationFailed": "The application could not complete this action. Try again when its window is ready.",
+    "macWaiting": "Waiting for the application window…",
+    "macCaptureUnavailable": "Window capture is unavailable. Reconnect to try again.",
     "macStopDescription": "Request this application to quit. If it has unsaved work, respond to its save dialog in the application window.",
     "macAddDescription": "Choose an installed .app bundle by its absolute path. Its name and icon are read from macOS.",
     "macBundlePath": "Application bundle path"

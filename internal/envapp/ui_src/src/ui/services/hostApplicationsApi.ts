@@ -28,6 +28,7 @@ export type HostApplicationSession = Readonly<{
   application: HostApplication;
   state: 'starting' | 'running' | 'ended' | 'failed' | 'opened';
   backend?: 'macos';
+  existing_application?: boolean;
   mode?: 'native' | 'stream';
   error_code?: string;
   started_at_unix_ms: number;
@@ -40,7 +41,7 @@ export type HostApplicationCatalog = Readonly<{
   sessions: HostApplicationSession[];
 }>;
 
-export type HostApplicationPresentation = Readonly<{ menu?: string; windows?: string; closeWindow?: string; sharedControl?: string; input?: string; locale: string; connecting: string; reconnecting: string; disconnected: string; connectionHint: string; reconnect: string; starting: string; failed: string; ended: string; retry: string }>;
+export type HostApplicationPresentation = Readonly<{ operationFailed?: string; waiting?: string; captureUnavailable?: string; menu?: string; windows?: string; closeWindow?: string; sharedControl?: string; input?: string; locale: string; connecting: string; reconnecting: string; disconnected: string; connectionHint: string; reconnect: string; starting: string; failed: string; ended: string; retry: string }>;
 
 const base = '/_redeven_proxy/api/host-applications';
 

@@ -6294,6 +6294,11 @@
     "macCloseWindow": "앱 창 닫기",
     "macInput": "앱 키보드 입력",
     "macRetained": "뷰어 창을 닫아도 Mac의 앱은 열린 상태로 유지됩니다. 런타임을 중지하면 연결이 끊어지지만 저장하지 않은 작업은 삭제되지 않습니다.",
+    "macStopSharing": "공유 중지",
+    "macStopSharingDescription": "이 앱과 Redeven의 연결을 끊습니다. 창과 저장하지 않은 작업은 Mac에 그대로 유지됩니다.",
+    "macOperationFailed": "앱이 이 작업을 완료하지 못했습니다. 창이 준비되면 다시 시도하세요.",
+    "macWaiting": "앱 창을 기다리는 중…",
+    "macCaptureUnavailable": "창을 캡처할 수 없습니다. 다시 연결한 후 시도하세요.",
     "macStopDescription": "이 앱에 종료를 요청합니다. 저장하지 않은 작업이 있으면 앱 창의 저장 대화상자에서 처리하세요.",
     "macAddDescription": "설치된 .app 번들의 절대 경로를 입력하세요. 이름과 아이콘은 macOS에서 가져옵니다.",
     "macBundlePath": "앱 번들 경로"

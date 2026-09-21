@@ -396,6 +396,7 @@ export function EnvHostApplicationsPage() {
       const result = await launchHostApplication(app.id, i18n.locale(), {
         locale: i18n.locale(),
         menu: i18n.t('hostApplications.macMenu'), windows: i18n.t('hostApplications.macWindows'), closeWindow: i18n.t('hostApplications.macCloseWindow'),
+        operationFailed: i18n.t('hostApplications.macOperationFailed'), waiting: i18n.t('hostApplications.macWaiting'), captureUnavailable: i18n.t('hostApplications.macCaptureUnavailable'),
         sharedControl: i18n.t('hostApplications.macSharedControl'), input: i18n.t('hostApplications.macInput'),
         connecting: i18n.t('hostApplications.connecting'), reconnecting: i18n.t('hostApplications.reconnecting'),
         disconnected: i18n.t('hostApplications.disconnected'), connectionHint: i18n.t('hostApplications.connectionHint'), reconnect: i18n.t('hostApplications.reconnect'),
@@ -475,7 +476,7 @@ export function EnvHostApplicationsPage() {
                   <button class="host-app-session-open" onClick={() => void open(session.application)} disabled={!canLaunch() || busy()[session.application.id]}>
                     <ApplicationIcon app={session.application} /><span class="min-w-0"><strong class="block truncate">{session.application.name}</strong><span class="host-app-status"><span class="host-app-status-dot" />{i18n.t(session.state === 'starting' ? 'hostApplications.starting' : 'hostApplications.resume')}</span></span><ExternalLink class="w-3.5 h-3.5 ml-auto shrink-0 opacity-50" />
                   </button>
-                  <button class="host-app-stop" onClick={() => setEnding(session)} disabled={!canLaunch()} title={i18n.t('hostApplications.stop')} aria-label={`${i18n.t('hostApplications.stop')} · ${session.application.name}`}><Stop class="w-3.5 h-3.5" /></button>
+                  <button class="host-app-stop" onClick={() => setEnding(session)} disabled={!canLaunch()} title={i18n.t(session.existing_application ? 'hostApplications.macStopSharing' : 'hostApplications.stop')} aria-label={`${i18n.t(session.existing_application ? 'hostApplications.macStopSharing' : 'hostApplications.stop')} · ${session.application.name}`}><Stop class="w-3.5 h-3.5" /></button>
                 </div>
               }</For></div>
             </section>
@@ -524,7 +525,7 @@ export function EnvHostApplicationsPage() {
         </Show>
       </div>}>{preparationPanel()}</Show>
     </Dialog>
-    <ConfirmDialog open={Boolean(ending())} onOpenChange={value => { if (!value && !stopBusy()) setEnding(null); }} title={i18n.t('hostApplications.stopTitle')} description={i18n.t(isMac() ? 'hostApplications.macStopDescription' : 'hostApplications.stopDescription')} confirmText={i18n.t('hostApplications.stop')} cancelText={i18n.t('hostApplications.cancel')} variant="destructive" loading={stopBusy()} onConfirm={() => void stop()} />
+    <ConfirmDialog open={Boolean(ending())} onOpenChange={value => { if (!value && !stopBusy()) setEnding(null); }} title={i18n.t(ending()?.existing_application ? 'hostApplications.macStopSharing' : 'hostApplications.stopTitle')} description={i18n.t(ending()?.existing_application ? 'hostApplications.macStopSharingDescription' : isMac() ? 'hostApplications.macStopDescription' : 'hostApplications.stopDescription')} confirmText={i18n.t(ending()?.existing_application ? 'hostApplications.macStopSharing' : 'hostApplications.stop')} cancelText={i18n.t('hostApplications.cancel')} variant={ending()?.existing_application ? 'default' : 'destructive'} loading={stopBusy()} onConfirm={() => void stop()} />
     <Dialog open={addOpen()} onOpenChange={value => { if (!addBusy()) setAddOpen(value); }} title={i18n.t('hostApplications.addTitle')} footer={<><Button variant="ghost" onClick={() => setAddOpen(false)} disabled={addBusy()}>{i18n.t('hostApplications.cancel')}</Button><Button onClick={() => void add()} disabled={addBusy() || (!isMac() && !name().trim()) || !executable().trim()}>{i18n.t('hostApplications.add')}</Button></>}>
       <div class="space-y-4"><p class="text-sm text-muted-foreground">{i18n.t(isMac() ? 'hostApplications.macAddDescription' : 'hostApplications.addDescription')}</p>
         <Show when={!isMac()}><label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t('hostApplications.name')}</span><Input value={name()} onInput={e => setName(e.currentTarget.value)} maxLength={120} /></label></Show>
