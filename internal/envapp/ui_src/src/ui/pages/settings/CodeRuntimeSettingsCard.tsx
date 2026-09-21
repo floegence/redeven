@@ -25,7 +25,7 @@ import type { BrowserEditorSetupProgress } from '../../services/browserEditorSet
 import { Tooltip } from '../../primitives/Tooltip';
 import { BrowserEditorSetupActivityPanel } from '../BrowserEditorSetupActivityPanel';
 import { BrowserEditorInstallMethodSelector } from '../BrowserEditorInstallMethodSelector';
-import { SettingsList, SettingsSection, SettingsKeyValueTable, SettingsPill } from './SettingsPrimitives';
+import { SettingsList, SettingsSection, SettingsPill } from './SettingsPrimitives';
 import { useI18n, type I18nHelpers } from '../../i18n';
 
 type RuntimeDetailRow = Readonly<{
@@ -119,11 +119,17 @@ function operationLabel(status: CodeRuntimeStatus | null | undefined, i18n: I18n
   return i18n.t('codeRuntime.operation.idle');
 }
 
-function RuntimeDetailsTableSection(props: { title: string; rows: readonly RuntimeDetailRow[] }) {
+function RuntimeDetailsSection(props: { title: string; rows: readonly RuntimeDetailRow[] }) {
   return (
     <div class="space-y-2">
       <div class="text-sm font-semibold text-foreground">{props.title}</div>
-      <SettingsKeyValueTable rows={props.rows} minWidthClass="min-w-[40rem]" />
+      <dl class="redeven-settings-inset grid grid-cols-1 overflow-hidden rounded-lg border md:grid-cols-2">
+        <For each={props.rows}>{(row) => <div class="min-w-0 border-b border-[var(--redeven-settings-divider)] px-4 py-4">
+          <dt class="text-xs text-muted-foreground">{row.label}</dt>
+          <dd class={`mt-2 break-all text-sm text-foreground ${row.mono ? 'font-mono text-xs' : 'font-medium'}`}>{row.value}</dd>
+          <Show when={row.note}><p class="mt-2 text-xs leading-relaxed text-muted-foreground">{row.note}</p></Show>
+        </div>}</For>
+      </dl>
     </div>
   );
 }
@@ -343,14 +349,6 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     ];
   });
 
-  const localEnvironmentRows = createMemo<readonly RuntimeDetailRow[]>(() => [
-    {
-      label: i18n.t('codeRuntime.rows.installedVersions'),
-      value: String(installedVersions().length),
-      note: installedVersions().length > 0 ? i18n.t('codeRuntime.notes.installedVersionsAvailable') : i18n.t('codeRuntime.notes.noInstalledVersionsAvailable'),
-    },
-  ]);
-
   const removalOperationSummary = createMemo(() => {
     if (operationRunning()) {
       return i18n.t('codeRuntime.removal.runningSummary');
@@ -509,8 +507,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             </div>
           </Show>
 
-          <RuntimeDetailsTableSection title={i18n.t('codeRuntime.currentEditorSection')} rows={currentRuntimeRows()} />
-          <RuntimeDetailsTableSection title={i18n.t('codeRuntime.installedEditorVersionsSection')} rows={localEnvironmentRows()} />
+          <RuntimeDetailsSection title={i18n.t('codeRuntime.currentEditorSection')} rows={currentRuntimeRows()} />
 
           <Show
             when={installedVersions().length > 0}
@@ -526,7 +523,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             }
           >
             <div class="space-y-3">
-              <div class="text-sm font-semibold text-foreground">{i18n.t('codeRuntime.installedEditorVersionsSection')}</div>
+              <div class="flex items-center gap-2 text-sm font-semibold text-foreground">{i18n.t('codeRuntime.installedEditorVersionsSection')}<span class="text-xs font-normal text-muted-foreground">{installedVersions().length}</span></div>
               <SettingsList>
                 <For each={installedVersions()}>
                   {(version) => (

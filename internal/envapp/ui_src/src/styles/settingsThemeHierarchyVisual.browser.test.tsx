@@ -97,7 +97,7 @@ function mountSettingsFixture(): Readonly<{
   });
 
   const sidebar = document.createElement('aside');
-  sidebar.className = 'redeven-settings-sidebar';
+  sidebar.className = 'floe-settings-layout__sidebar';
   Object.assign(sidebar.style, { padding: '16px', borderRightStyle: 'solid', borderRightWidth: '1px' });
 
   const label = document.createElement('div');
@@ -108,17 +108,17 @@ function mountSettingsFixture(): Readonly<{
 
   const idle = document.createElement('button');
   idle.type = 'button';
-  idle.className = 'redeven-settings-nav-item redeven-settings-sidebar-note';
+  idle.className = 'floe-settings-navigation__item';
   idle.textContent = 'Overview';
 
   const hovered = document.createElement('button');
   hovered.type = 'button';
-  hovered.className = 'redeven-settings-nav-item redeven-settings-sidebar-note';
+  hovered.className = 'floe-settings-navigation__item';
   hovered.textContent = 'Connections';
 
   const selected = document.createElement('button');
   selected.type = 'button';
-  selected.className = 'redeven-settings-nav-item redeven-settings-nav-item--active';
+  selected.className = 'floe-settings-navigation__item';
   selected.textContent = 'Codespaces and tools';
   selected.setAttribute('aria-current', 'page');
 
@@ -139,7 +139,7 @@ function mountSettingsFixture(): Readonly<{
   content.style.padding = '32px';
 
   const section = document.createElement('article');
-  section.className = 'redeven-settings-section';
+  section.className = 'floe-settings-section redeven-settings-section';
 
   const title = document.createElement('h2');
   title.textContent = 'Browser Editor';
@@ -182,7 +182,7 @@ function mountSettingsFixture(): Readonly<{
   section.appendChild(control);
 
   const secondSection = document.createElement('article');
-  secondSection.className = 'redeven-settings-section';
+  secondSection.className = 'floe-settings-section redeven-settings-section';
 
   const secondTitle = document.createElement('h2');
   secondTitle.textContent = 'Codespaces ports';
@@ -212,6 +212,7 @@ afterEach(() => {
 
 describe('Settings theme hierarchy', () => {
   it.each(['standard', 'soft-neumorphic'])('keeps structure quiet and selection clear in every built-in shell theme with %s material', async (material) => {
+    await page.viewport(1280, 960);
     document.documentElement.dataset.floeSurfaceStyle = material;
     expect(builtInShellThemePresets).toHaveLength(26);
 
@@ -260,7 +261,7 @@ describe('Settings theme hierarchy', () => {
         contrastRatio(paintedColor(indicatorStyle.backgroundColor), selectedBackground),
         `${preset.name} selected indicator`,
       ).toBeGreaterThanOrEqual(3);
-      expect(secondSectionStyle.marginTop, `${preset.name} section spacing`).toBe('40px');
+      expect(secondSectionStyle.marginTop, `${preset.name} section spacing`).toBe('32px');
 
       if (preset.name === 'hc-light') {
         expect(sectionStyle.borderTopWidth, `${preset.name} section boundary`).toBe('1px');

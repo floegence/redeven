@@ -13,6 +13,7 @@ export function DebugConsoleSection() {
 
   return (
     <SettingsSection
+      variant="page"
       icon={BugIcon}
       title={i18n.t('debugConsoleSettings.title')}
       description={i18n.t('debugConsoleSettings.description')}

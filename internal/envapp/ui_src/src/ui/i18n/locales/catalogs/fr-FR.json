@@ -6349,5 +6349,29 @@
     "macCaptureUnavailable": "La capture de la fenêtre est indisponible. Reconnectez-vous pour réessayer.",
     "macAddDescription": "Indiquez le chemin absolu d’un paquet .app installé. Son nom et son icône sont lus depuis macOS.",
     "macBundlePath": "Chemin du paquet d’application"
+  },
+  "settingsDesign": {
+    "startPort": "Port de début",
+    "endPort": "Port de fin",
+    "relatedSettings": "Paramètres associés",
+    "clearSearch": "Effacer la recherche de paramètres",
+    "homeDirectory": "Répertoire personnel",
+    "defaultShell": "Shell par défaut",
+    "permissionCeiling": "Autorisations maximales",
+    "userOverrides": "Règles par utilisateur",
+    "appOverrides": "Règles par application",
+    "fileLocation": "Emplacement du fichier",
+    "toolingDescription": "Gérez l’éditeur dans le navigateur et les ports des espaces de travail.",
+    "modelsAndProviders": "Modèles et fournisseurs",
+    "flowerPermissions": "Autorisations",
+    "healthAndStorage": "État et stockage",
+    "skillRequestFailed": "L’opération sur la compétence a échoué. Consultez les détails et réessayez.",
+    "skillDeleteDescription": "Supprimer définitivement {name} et ses fichiers locaux ?",
+    "skillReinstallDescription": "Réinstaller {name} depuis sa source enregistrée ? Les modifications locales seront écrasées.",
+    "validatedSkills": "Compétences validées",
+    "skillFiles": "Fichiers de la compétence",
+    "truncatedFile": "L’aperçu de ce fichier est tronqué.",
+    "parentFolder": "Dossier parent",
+    "maintenanceWarning": "Cette opération peut interrompre les terminaux et les sessions en cours. Continuer ?"
   }
 }

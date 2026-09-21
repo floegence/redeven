@@ -6349,5 +6349,29 @@
     "macCaptureUnavailable": "No se puede capturar la ventana. Vuelve a conectarte para intentarlo de nuevo.",
     "macAddDescription": "Introduce la ruta absoluta de un paquete .app instalado. El nombre y el icono se obtienen de macOS.",
     "macBundlePath": "Ruta del paquete de aplicación"
+  },
+  "settingsDesign": {
+    "startPort": "Puerto inicial",
+    "endPort": "Puerto final",
+    "relatedSettings": "Ajustes relacionados",
+    "clearSearch": "Borrar la búsqueda de ajustes",
+    "homeDirectory": "Directorio personal",
+    "defaultShell": "Shell predeterminada",
+    "permissionCeiling": "Permisos máximos",
+    "userOverrides": "Reglas por usuario",
+    "appOverrides": "Reglas por aplicación",
+    "fileLocation": "Ubicación del archivo",
+    "toolingDescription": "Gestiona el editor del navegador y los puertos de los espacios de trabajo.",
+    "modelsAndProviders": "Modelos y proveedores",
+    "flowerPermissions": "Permisos",
+    "healthAndStorage": "Estado y almacenamiento",
+    "skillRequestFailed": "La operación de la habilidad falló. Revisa los detalles e inténtalo de nuevo.",
+    "skillDeleteDescription": "¿Eliminar permanentemente {name} y sus archivos locales?",
+    "skillReinstallDescription": "¿Reinstalar {name} desde su origen registrado? Se sobrescribirán los cambios locales.",
+    "validatedSkills": "Habilidades validadas",
+    "skillFiles": "Archivos de la habilidad",
+    "truncatedFile": "La vista previa de este archivo está truncada.",
+    "parentFolder": "Carpeta superior",
+    "maintenanceWarning": "Esta operación puede interrumpir los terminales y las sesiones activos. ¿Continuar?"
   }
 }

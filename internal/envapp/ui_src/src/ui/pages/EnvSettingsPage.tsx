@@ -1,7 +1,7 @@
 import { For, Show, createMemo, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
-import { ChevronLeft, Search, X, RefreshIcon } from '@floegence/floe-webapp-core/icons';
-import { Button, Select } from '@floegence/floe-webapp-core/ui';
+import { ChevronLeft, ChevronRight, Search, X, RefreshIcon } from '@floegence/floe-webapp-core/icons';
+import { Button, Select, SettingsLayout, SettingsNavigation } from '@floegence/floe-webapp-core/ui';
 
 import { EnvSettingsPageCtx, EnvSettingsPageProvider, useEnvSettingsPage, type EnvSettingsPageContextValue } from './settings/EnvSettingsPageContext';
 import { SETTINGS_NAV_ITEMS, SETTINGS_GROUPS, type SettingsGroupID, type SettingsNavItem } from './settings/settingsStructure';
@@ -138,96 +138,47 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
               <ChevronLeft class="h-4 w-4" />
             </button>
           </Show>
-          <h1 class="text-sm font-semibold text-foreground tracking-tight truncate">{i18n.t('settings.runtimeTitle')}</h1>
+          <span class="text-xs font-medium text-muted-foreground truncate">{i18n.t('settings.runtimeTitle')}</span>
+          <ChevronRight class="h-3 w-3 shrink-0 text-muted-foreground" />
+          <span class="truncate text-xs text-foreground">{navLabel(sectionSelection.visual(), '', i18n.t)}</span>
         </div>
-        <Button size="sm" variant="outline" onClick={() => void ctx.refreshSettingsPage()} disabled={ctx.settings.loading} class="gap-1.5 shrink-0">
+        <Button size="sm" variant="outline" onClick={() => void ctx.refreshSettingsPage()} disabled={ctx.settings.loading} aria-label={i18n.t('common.actions.refresh')} class="gap-1.5 shrink-0">
           <RefreshIcon class="w-3.5 h-3.5" />
           <span class="hidden sm:inline">{i18n.t('common.actions.refresh')}</span>
         </Button>
       </div>
 
-      <div class="redeven-settings-body flex-1 min-h-0 flex flex-col md:flex-row">
-        <div class="redeven-settings-sidebar hidden md:flex flex-col border-r w-[260px] shrink-0 h-full overflow-hidden">
-          <div class="p-3 border-b border-[color-mix(in_srgb,var(--redeven-settings-sidebar-border)_72%,transparent)]">
-            <div class="relative">
-              <Search class="redeven-settings-sidebar-note absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none" />
-              <input
-                type="text"
-                value={ctx.searchQuery()}
-                onInput={(e) => ctx.setSearchQuery(e.currentTarget.value)}
-                placeholder={i18n.t('settings.searchPlaceholder')}
-                class="redeven-settings-search w-full rounded-md border py-1.5 pl-8 pr-7 text-xs placeholder:text-muted-foreground/60"
-              />
-              <Show when={ctx.searchQuery()}>
-                <button
-                  type="button"
-                  class="redeven-settings-sidebar-note absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded cursor-pointer hover:text-foreground"
-                  onClick={() => ctx.setSearchQuery('')}
-                >
-                  <X class="h-3 w-3" />
-                </button>
-              </Show>
-            </div>
-            <Show when={ctx.searchQuery()}>
-              <p class="redeven-settings-sidebar-note mt-1.5 text-[10px]">
-                {i18n.t('settings.filteredSections', { visible: filteredItems().length, total: SETTINGS_NAV_ITEMS.length })}
-              </p>
-            </Show>
-          </div>
-
-          <div class="flex-1 overflow-y-auto py-1">
-            <For each={SETTINGS_GROUPS}>
-              {(group) => {
-                const groupItems = createMemo(() =>
-                  filteredItems().filter((item) => (group.sections as readonly string[]).includes(item.id)),
-                );
-                return (
-                  <Show when={groupItems().length > 0}>
-                    <div data-settings-group={group.id}>
-                      <div class="px-3 pt-3 pb-1">
-                        <span class="redeven-settings-sidebar-group-label text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">{groupTitle(group.id, group.title, i18n.t)}</span>
-                      </div>
-                      <For each={groupItems()}>
-                        {(item) => {
-                          const Icon = item.icon;
-                          const isActive = () => sectionSelection.visual() === item.id;
-                          return (
-                            <button
-                              type="button"
-                              class={cn(
-                                'redeven-settings-nav-item w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-xs transition-colors cursor-pointer',
-                                isActive()
-                                  ? 'redeven-settings-nav-item--active font-medium'
-                                  : 'redeven-settings-sidebar-note',
-                              )}
-                              onClick={() => sectionSelection.request(item.id)}
-                              aria-current={isActive() ? 'page' : undefined}
-                              data-settings-nav-item={item.id}
-                            >
-                              <Icon class="h-3.5 w-3.5 shrink-0" />
-                              <span class="truncate">{item.label}</span>
-                            </button>
-                          );
-                        }}
-                      </For>
-                    </div>
-                  </Show>
-                );
-              }}
-            </For>
-          </div>
-        </div>
-
-        <div class="redeven-settings-mobile-switch md:hidden border-b px-3 py-2 shrink-0">
-          <Select
-            value={sectionSelection.visual()}
-            onChange={(v) => v && sectionSelection.request(v as EnvSettingsSection)}
-            options={filteredItems().map((it) => ({ value: it.id, label: it.label }))}
-            class="w-full"
-          />
-        </div>
-
-        <div class="redeven-settings-content relative flex-1 min-w-0 overflow-hidden">
+      <SettingsLayout class="redeven-settings-body"
+        sidebar={<SettingsNavigation
+          label={i18n.t('settings.runtimeTitle')}
+          value={sectionSelection.visual()}
+          onChange={(id) => sectionSelection.request(id as EnvSettingsSection)}
+          groups={SETTINGS_GROUPS.map((group) => ({
+            id: group.id,
+            label: groupTitle(group.id, group.title, i18n.t),
+            items: filteredItems().filter((item) => (group.sections as readonly string[]).includes(item.id)).map((item) => ({
+              ...item,
+              attributes: { 'data-settings-nav-item': item.id, title: item.label },
+            })),
+          }))}
+          search={<div class="relative">
+            <Search class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input type="search" value={ctx.searchQuery()} onInput={(e) => ctx.setSearchQuery(e.currentTarget.value)}
+              aria-label={i18n.t('settings.searchPlaceholder')} placeholder={i18n.t('settings.searchPlaceholder')}
+              class="redeven-settings-search w-full rounded-md border py-2 pl-8 pr-7 text-xs" />
+            <Show when={ctx.searchQuery()}><button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground"
+              aria-label={i18n.t('settingsDesign.clearSearch')} onClick={() => ctx.setSearchQuery('')}><X class="h-3 w-3" /></button></Show>
+          </div>}
+          empty={<p role="status" class="px-3 py-5 text-xs text-muted-foreground">{i18n.t('settings.filteredSections', { visible: 0, total: SETTINGS_NAV_ITEMS.length })}</p>}
+        />}
+        mobileNavigation={<Select
+          value={sectionSelection.visual()}
+          onChange={(v) => v && sectionSelection.request(v as EnvSettingsSection)}
+          options={localizedItems().map((it) => ({ value: it.id, label: it.label }))}
+          aria-label={i18n.t('settings.runtimeTitle')} class="w-full"
+        />}
+      >
+        <div class="redeven-settings-content absolute inset-0">
           <For each={SETTINGS_NAV_ITEMS}>
             {(item) => {
               const Section = sectionComponents[item.id];
@@ -237,7 +188,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                   testId={`settings-section-${item.id}`}
                   class="absolute inset-0 overflow-auto"
                   render={() => (
-                    <div class="max-w-[1120px] mx-auto p-4 sm:p-8 pb-16">
+                    <div class="floe-settings-page">
                       <Show when={ctx.settings.error}>
                         <div class="flex items-start gap-2.5 p-4 rounded-lg bg-destructive/10 border border-destructive/20 mb-6">
                           <div class="w-1 h-full min-h-4 rounded-full bg-destructive/60 flex-shrink-0" />
@@ -247,6 +198,18 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                         </div>
                       </Show>
                       <Section />
+                      <Show when={['config', 'logging', 'debug_console'].includes(item.id)}>
+                        <div class="redeven-settings-related mt-8 border-t pt-5">
+                          <h2 class="mb-3 text-xs font-medium text-muted-foreground">{i18n.t('settingsDesign.relatedSettings')}</h2>
+                          <div class="flex flex-wrap gap-2">
+                            <For each={item.id === 'config' ? ['runtime', 'logging'] : item.id === 'logging' ? ['agent', 'debug_console'] : ['logging', 'agent']}>
+                              {(target) => <Button size="sm" variant="outline" onClick={() => sectionSelection.request(target as EnvSettingsSection)}>
+                                {navLabel(target as EnvSettingsSection, target, i18n.t)}<ChevronRight class="ml-2 h-3 w-3" />
+                              </Button>}
+                            </For>
+                          </div>
+                        </div>
+                      </Show>
                     </div>
                   )}
                 />
@@ -254,7 +217,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
             }}
           </For>
         </div>
-      </div>
+      </SettingsLayout>
     </div>
   );
 }

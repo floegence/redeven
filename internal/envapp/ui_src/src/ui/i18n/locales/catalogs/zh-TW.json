@@ -6360,5 +6360,29 @@
     "macCaptureUnavailable": "暫時無法擷取應用程式畫面，請重新連線後重試。",
     "macAddDescription": "填寫已安裝 .app 應用程式套件的絕對路徑。名稱和圖示將從 macOS 讀取。",
     "macBundlePath": "應用程式套件路徑"
+  },
+  "settingsDesign": {
+    "startPort": "起始連接埠",
+    "endPort": "結束連接埠",
+    "relatedSettings": "相關設定",
+    "clearSearch": "清除設定搜尋",
+    "homeDirectory": "家目錄",
+    "defaultShell": "預設 Shell",
+    "permissionCeiling": "權限上限",
+    "userOverrides": "使用者覆寫規則",
+    "appOverrides": "應用程式覆寫規則",
+    "fileLocation": "檔案位置",
+    "toolingDescription": "管理瀏覽器編輯器及工作區使用的連接埠。",
+    "modelsAndProviders": "模型與模型供應商",
+    "flowerPermissions": "權限",
+    "healthAndStorage": "健康狀態與儲存空間",
+    "skillRequestFailed": "技能操作失敗，請查看詳細資訊後重試。",
+    "skillDeleteDescription": "永久刪除 {name} 及其本機檔案？",
+    "skillReinstallDescription": "從已記錄的來源重新安裝 {name}？本機修改將被覆寫。",
+    "validatedSkills": "已驗證的技能",
+    "skillFiles": "技能檔案",
+    "truncatedFile": "此檔案預覽已截斷。",
+    "parentFolder": "上層資料夾",
+    "maintenanceWarning": "此操作可能中斷使用中的終端機與工作階段，是否繼續？"
   }
 }

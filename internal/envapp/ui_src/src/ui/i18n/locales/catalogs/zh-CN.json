@@ -6360,5 +6360,29 @@
     "macCaptureUnavailable": "暂时无法采集应用画面，请重新连接后重试。",
     "macAddDescription": "填写已安装 .app 应用包的绝对路径。名称和图标将从 macOS 读取。",
     "macBundlePath": "应用包路径"
+  },
+  "settingsDesign": {
+    "startPort": "起始端口",
+    "endPort": "结束端口",
+    "relatedSettings": "相关设置",
+    "clearSearch": "清除设置搜索",
+    "homeDirectory": "主目录",
+    "defaultShell": "默认 Shell",
+    "permissionCeiling": "权限上限",
+    "userOverrides": "用户覆盖规则",
+    "appOverrides": "应用覆盖规则",
+    "fileLocation": "文件位置",
+    "toolingDescription": "管理浏览器编辑器和工作区使用的端口。",
+    "modelsAndProviders": "模型与模型提供商",
+    "flowerPermissions": "权限",
+    "healthAndStorage": "健康与存储",
+    "skillRequestFailed": "技能操作失败，请查看详情后重试。",
+    "skillDeleteDescription": "永久删除 {name} 及其本地文件？",
+    "skillReinstallDescription": "从已记录的来源重新安装 {name}？本地修改将被覆盖。",
+    "validatedSkills": "已验证的技能",
+    "skillFiles": "技能文件",
+    "truncatedFile": "此文件预览已截断。",
+    "parentFolder": "上级文件夹",
+    "maintenanceWarning": "此操作可能中断正在运行的终端和会话，是否继续？"
   }
 }

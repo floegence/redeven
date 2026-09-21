@@ -10,6 +10,7 @@ const AUTO_SAVE_DELAY_MS = 700;
 
 export function LoggingSection() {
   const ctx = useEnvSettingsPage();
+  const canEdit = () => ctx.canInteract() && ctx.canAdmin();
   const i18n = useI18n();
 
   const [logFormat, setLogFormat] = createSignal('');
@@ -32,14 +33,14 @@ export function LoggingSection() {
   const clearTimer = (t: number | undefined) => { if (t != null) { window.clearTimeout(t); return undefined; } return undefined; };
 
   createEffect(() => {
-    if (!dirty() || saving() || !ctx.canInteract()) { autoSaveTimer = clearTimer(autoSaveTimer); return; }
+    if (!dirty() || saving() || error() || !canEdit()) { autoSaveTimer = clearTimer(autoSaveTimer); return; }
     autoSaveTimer = clearTimer(autoSaveTimer);
     autoSaveTimer = window.setTimeout(async () => {
       autoSaveTimer = undefined;
-      if (!dirty() || saving() || !ctx.canInteract()) return;
+      if (!dirty() || saving() || error() || !canEdit()) return;
       setSaving(true);
       try {
-        await ctx.saveSettings({ logging: { log_format: logFormat() || null, log_level: logLevel() || null } });
+        await ctx.saveSettings({ log_format: logFormat(), log_level: logLevel() });
         setSaving(false); setSavedAt(Date.now()); setDirty(false); setError(null);
       } catch (e) {
         setSaving(false); setError(formatUnknownError(e) || i18n.t('loggingSettings.saveFailed'));
@@ -51,13 +52,14 @@ export function LoggingSection() {
 
   return (
     <SettingsSection
+      variant="page"
       icon={Database}
       title={i18n.t('loggingSettings.title')}
       description={i18n.t('loggingSettings.description')}
       error={error()}
       badge={i18n.t('loggingSettings.restartRequired')}
       badgeVariant="warning"
-      actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />}
+      actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={canEdit()} />}
     >
       <SettingsList>
         <SettingRow
@@ -66,7 +68,7 @@ export function LoggingSection() {
           description={i18n.t('loggingSettings.defaultJson')}
           control={
           <Select
-            value={logFormat()} onChange={(v) => { setLogFormat(v); setDirty(true); }} disabled={!ctx.canInteract()}
+            value={logFormat()} onChange={(v) => { setLogFormat(v); setError(null); setDirty(true); }} disabled={!canEdit()}
             options={[{ value: '', label: i18n.t('loggingSettings.defaultJson') }, { value: 'json', label: 'json' }, { value: 'text', label: 'text' }]}
             class="w-44"
           />
@@ -78,7 +80,7 @@ export function LoggingSection() {
           description={i18n.t('loggingSettings.defaultInfo')}
           control={
           <Select
-            value={logLevel()} onChange={(v) => { setLogLevel(v); setDirty(true); }} disabled={!ctx.canInteract()}
+            value={logLevel()} onChange={(v) => { setLogLevel(v); setError(null); setDirty(true); }} disabled={!canEdit()}
             options={[{ value: '', label: i18n.t('loggingSettings.defaultInfo') }, { value: 'debug', label: 'debug' }, { value: 'info', label: 'info' }, { value: 'warn', label: 'warn' }, { value: 'error', label: 'error' }]}
             class="w-44"
           />

@@ -100,7 +100,7 @@ describe('Redeven Env App surface theme contract', () => {
       '--redeven-settings-sidebar-selection-indicator: color-mix(in srgb, var(--ring) 82%, var(--foreground) 18%);',
       '--redeven-settings-sidebar-note-fg: var(--muted-foreground);',
       '--redeven-settings-sidebar-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-sidebar-inset-bg));',
-      '--redeven-settings-inset-bg: color-mix(in srgb, var(--redeven-surface-control-muted) 82%, var(--redeven-settings-panel-bg) 18%);',
+      '--redeven-settings-inset-bg: var(--redeven-settings-panel-bg);',
       '--redeven-settings-row-hover-bg: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-inset-bg));',
       '--redeven-settings-inset-border: color-mix(in srgb, var(--foreground) 14%, var(--redeven-settings-inset-bg));',
       '--redeven-settings-divider: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-inset-bg));',
@@ -121,7 +121,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.redeven-settings-table {');
     expect(src).toContain('background: var(--redeven-settings-inset-bg);');
     expect(src).toContain('.redeven-settings-list > .redeven-setting-row + .redeven-setting-row {');
-    expect(src).toContain('.redeven-settings-nav-item--active,');
+    expect(src).toContain('.redeven-settings-shell .floe-settings-navigation__item[aria-current="page"],');
     expect(src).toContain('.redeven-settings-sidebar-note {');
     expect(src).toContain(':root:not(.dark) .redeven-settings-sidebar-group-label,');
     expect(src).toContain('border-color: var(--redeven-settings-sidebar-control-border);');
@@ -129,7 +129,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('background: var(--redeven-settings-sidebar-hover-bg) !important;');
     expect(src).toContain('background: var(--redeven-settings-sidebar-selection-bg) !important;');
     expect(src).toContain('color: var(--redeven-settings-sidebar-selection-fg) !important;');
-    expect(src).toContain('.redeven-settings-nav-item--active::before {');
+    expect(src).toContain('.redeven-settings-shell .floe-settings-navigation__item[aria-current="page"]::before {');
     expect(src).toContain('inset-inline-start: 0.25rem;');
     expect(src).toContain('width: 3px;');
     expect(src).toContain(":not([type='range']):not(.redeven-settings-search),");

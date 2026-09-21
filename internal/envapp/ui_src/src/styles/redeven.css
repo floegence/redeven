@@ -262,7 +262,7 @@
   --redeven-settings-sidebar-selection-indicator: color-mix(in srgb, var(--ring) 82%, var(--foreground) 18%);
   --redeven-settings-sidebar-note-fg: var(--muted-foreground);
   --redeven-settings-sidebar-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-sidebar-inset-bg));
-  --redeven-settings-inset-bg: color-mix(in srgb, var(--redeven-surface-control-muted) 82%, var(--redeven-settings-panel-bg) 18%);
+  --redeven-settings-inset-bg: var(--redeven-settings-panel-bg);
   --redeven-settings-row-bg: var(--redeven-settings-inset-bg);
   --redeven-settings-row-hover-bg: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-inset-bg));
   --redeven-settings-inset-border: color-mix(in srgb, var(--foreground) 14%, var(--redeven-settings-inset-bg));
@@ -1607,7 +1607,7 @@ html.dark .git-changes-table-pending {
   background: var(--redeven-settings-header-bg);
 }
 
-.redeven-settings-sidebar {
+.redeven-settings-shell .floe-settings-layout__sidebar {
   border-color: var(--redeven-settings-sidebar-border) !important;
   background: var(--redeven-settings-sidebar-bg);
 }
@@ -1623,22 +1623,22 @@ html.dark .git-changes-table-pending {
   color: var(--foreground);
 }
 
-.redeven-settings-nav-item:hover {
+.redeven-settings-shell .floe-settings-navigation__item:hover {
   background: var(--redeven-settings-sidebar-hover-bg) !important;
   color: var(--foreground);
 }
 
-.redeven-settings-nav-item {
+.redeven-settings-shell .floe-settings-navigation__item {
   position: relative;
 }
 
-.redeven-settings-nav-item--active,
-.redeven-settings-nav-item--active:hover {
+.redeven-settings-shell .floe-settings-navigation__item[aria-current="page"],
+.redeven-settings-shell .floe-settings-navigation__item[aria-current="page"]:hover {
   background: var(--redeven-settings-sidebar-selection-bg) !important;
   color: var(--redeven-settings-sidebar-selection-fg) !important;
 }
 
-.redeven-settings-nav-item--active::before {
+.redeven-settings-shell .floe-settings-navigation__item[aria-current="page"]::before {
   content: '';
   position: absolute;
   inset-block: 0.375rem;
@@ -1652,10 +1652,6 @@ html.dark .git-changes-table-pending {
   border: 0;
   background: transparent;
   padding: 0;
-}
-
-.redeven-settings-section + .redeven-settings-section {
-  margin-top: 2.5rem;
 }
 
 .redeven-settings-section__icon,
@@ -1792,19 +1788,12 @@ html.dark .git-changes-table-pending {
 }
 
 .redeven-setting-row {
-  min-height: 4.5rem;
   border-color: var(--redeven-settings-inset-border);
   background: var(--redeven-settings-inset-bg);
 }
 
-.redeven-settings-list > .redeven-setting-row {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
 .redeven-settings-list > .redeven-setting-row + .redeven-setting-row {
-  border-top: 1px solid var(--redeven-settings-divider);
+  border-top-color: var(--redeven-settings-divider);
 }
 
 .redeven-settings-list-row {
@@ -1815,44 +1804,8 @@ html.dark .git-changes-table-pending {
   border-top: 1px solid var(--redeven-settings-divider);
 }
 
-.redeven-settings-list > .redeven-setting-row--info {
-  background: color-mix(in srgb, var(--info) 10%, var(--redeven-settings-inset-bg));
-}
-
-.redeven-settings-list > .redeven-setting-row--success {
-  background: color-mix(in srgb, var(--success) 10%, var(--redeven-settings-inset-bg));
-}
-
-.redeven-settings-list > .redeven-setting-row--warning {
-  background: color-mix(in srgb, var(--warning) 12%, var(--redeven-settings-inset-bg));
-}
-
-.redeven-settings-list > .redeven-setting-row--danger {
-  background: color-mix(in srgb, var(--error) 10%, var(--redeven-settings-inset-bg));
-}
-
 .redeven-settings-version-row + .redeven-settings-version-row {
   border-top: 1px solid var(--redeven-settings-divider);
-}
-
-.redeven-setting-row--info {
-  border-color: color-mix(in srgb, var(--info) 30%, var(--redeven-settings-inset-border));
-  background: color-mix(in srgb, var(--info) 10%, var(--redeven-settings-inset-bg));
-}
-
-.redeven-setting-row--success {
-  border-color: color-mix(in srgb, var(--success) 30%, var(--redeven-settings-inset-border));
-  background: color-mix(in srgb, var(--success) 10%, var(--redeven-settings-inset-bg));
-}
-
-.redeven-setting-row--warning {
-  border-color: color-mix(in srgb, var(--warning) 34%, var(--redeven-settings-inset-border));
-  background: color-mix(in srgb, var(--warning) 12%, var(--redeven-settings-inset-bg));
-}
-
-.redeven-setting-row--danger {
-  border-color: color-mix(in srgb, var(--error) 32%, var(--redeven-settings-inset-border));
-  background: color-mix(in srgb, var(--error) 10%, var(--redeven-settings-inset-bg));
 }
 
 .redeven-settings-table {
@@ -1914,8 +1867,8 @@ html.dark .git-changes-table-pending {
     border-color: CanvasText;
   }
 
-  .redeven-settings-nav-item--active,
-  .redeven-settings-nav-item--active:hover,
+  .redeven-settings-shell .floe-settings-navigation__item[aria-current="page"],
+  .redeven-settings-shell .floe-settings-navigation__item[aria-current="page"]:hover,
   .redeven-settings-choice--selected,
   .redeven-settings-choice--selected:hover:not(:disabled):not([aria-disabled='true']),
   .redeven-settings-table__row--selected {
@@ -1923,7 +1876,7 @@ html.dark .git-changes-table-pending {
     color: HighlightText !important;
   }
 
-  .redeven-settings-nav-item--active::before {
+  .redeven-settings-shell .floe-settings-navigation__item[aria-current="page"]::before {
     background: HighlightText;
   }
 }
@@ -5843,3 +5796,15 @@ html.dark .git-content-skeleton__block {
   .git-file-row[aria-selected='true'],
   .git-diff-file-table tr[aria-selected='true'] { border-left-color: Highlight; }
 }
+
+/* Product palette adapters for the published settings surfaces. */
+.redeven-settings-shell .floe-settings-navigation__label {
+  color: var(--redeven-settings-sidebar-note-fg);
+}
+.redeven-settings-shell .floe-settings-section__heading > p,
+.redeven-settings-shell .floe-setting-row__label p {
+  color: var(--redeven-settings-note-fg);
+}
+.redeven-settings-related { border-color: var(--redeven-settings-divider); }
+.redeven-settings-shell [data-flower-settings-panel][hidden] { display: none; }
+.redeven-settings-shell .floe-setting-row__control > * { max-width: 100%; }

@@ -6349,5 +6349,29 @@
     "macCaptureUnavailable": "Das Fenster kann nicht erfasst werden. Verbinde dich erneut und versuche es noch einmal.",
     "macAddDescription": "Gib den absoluten Pfad eines installierten .app-Pakets an. Name und Symbol werden aus macOS gelesen.",
     "macBundlePath": "Pfad zum App-Paket"
+  },
+  "settingsDesign": {
+    "startPort": "Startport",
+    "endPort": "Endport",
+    "relatedSettings": "Verwandte Einstellungen",
+    "clearSearch": "Einstellungssuche leeren",
+    "homeDirectory": "Home-Verzeichnis",
+    "defaultShell": "Standard-Shell",
+    "permissionCeiling": "Maximale Berechtigungen",
+    "userOverrides": "Benutzerspezifische Regeln",
+    "appOverrides": "App-spezifische Regeln",
+    "fileLocation": "Dateispeicherort",
+    "toolingDescription": "Browser-Editor und Ports der Arbeitsbereiche verwalten.",
+    "modelsAndProviders": "Modelle & Anbieter",
+    "flowerPermissions": "Berechtigungen",
+    "healthAndStorage": "Status & Speicher",
+    "skillRequestFailed": "Die Skill-Aktion ist fehlgeschlagen. Prüfen Sie die Details und versuchen Sie es erneut.",
+    "skillDeleteDescription": "{name} und die zugehörigen lokalen Dateien dauerhaft löschen?",
+    "skillReinstallDescription": "{name} aus der gespeicherten Quelle neu installieren? Lokale Änderungen werden überschrieben.",
+    "validatedSkills": "Validierte Skills",
+    "skillFiles": "Skill-Dateien",
+    "truncatedFile": "Diese Dateivorschau ist gekürzt.",
+    "parentFolder": "Übergeordneter Ordner",
+    "maintenanceWarning": "Dieser Vorgang kann aktive Terminals und Sitzungen unterbrechen. Fortfahren?"
   }
 }

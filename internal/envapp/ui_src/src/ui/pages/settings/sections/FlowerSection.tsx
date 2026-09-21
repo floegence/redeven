@@ -4,7 +4,7 @@ import { hydrateFlowerProviderCatalog, applyFlowerModelDiscovery, flowerProvider
 import type { FlowerProvider, FlowerProviderDraft } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { For, Show, createMemo, createSignal, createEffect, onCleanup, untrack } from 'solid-js';
 import { Bot, Eye, Globe, Image, Key, Pencil, Plus, ShieldCheck, Sparkles, Trash, Zap } from '@floegence/floe-webapp-core/icons';
-import { Button, Select } from '@floegence/floe-webapp-core/ui';
+import { Button, Select, Tabs } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { fetchLocalApiJSON } from '../../../services/localApi';
@@ -30,6 +30,7 @@ import type {
 } from '../types';
 import { useI18n, type I18nHelpers } from '../../../i18n';
 import { createAIReadinessController } from '../../../flower/aiReadiness';
+import { createAIReadinessPresentation } from '../../../flower/aiReadinessPresentation';
 import { AIReadinessSettingsSection } from '../AIReadinessSettingsSection';
 
 const AUTO_SAVE_DELAY_MS = 700;
@@ -164,7 +165,10 @@ function validateAIValue(cfg: AIConfig, i18n: I18nHelpers) {
 
 export function FlowerSection() {
   const ctx = useEnvSettingsPage(); const i18n = useI18n();
+  const canEdit = () => ctx.canInteract() && ctx.canAdmin();
+  const [activeTab, setActiveTab] = createSignal('models');
   const readinessController = ctx.env.aiReadinessController ?? createAIReadinessController();
+  const readinessPresentation = createMemo(() => createAIReadinessPresentation(readinessController.snapshot(), i18n));
 
   const [permissionType, setPermissionType] = createSignal<AIPermissionType>('approval_required');
   const [confirmedPermissionType, setConfirmedPermissionType] = createSignal<AIPermissionType>('approval_required');
@@ -217,7 +221,7 @@ export function FlowerSection() {
     queueMicrotask(() => permissionButtonRefs.get(kind)?.focus());
   };
   const choosePermissionType = (kind: AIPermissionType, focus = false) => {
-    if (!ctx.canInteract()) return;
+    if (!canEdit()) return;
     setPermissionType(kind);
     setPermissionDirty(kind !== confirmedPermissionType());
     setPermissionError(null);
@@ -247,7 +251,7 @@ export function FlowerSection() {
 
   let autoSaveTimer: number | undefined;
   const clearTimer = (t: number | undefined) => { if (t != null) { window.clearTimeout(t); return undefined; } return undefined; };
-  createEffect(() => { if (!dirty() || saving() || !ctx.canInteract()) { autoSaveTimer = clearTimer(autoSaveTimer); return; } autoSaveTimer = clearTimer(autoSaveTimer); autoSaveTimer = window.setTimeout(async () => { autoSaveTimer = undefined; if (!dirty() || saving() || !ctx.canInteract()) return; setSaving(true); try { const pd = normalizeAIProviders(providers()).map((p) => serializeFlowerProvider(p as FlowerProviderDraft)); const sv = await fetchLocalApiJSON<SettingsUpdateResponse | unknown>('/_redeven_proxy/api/ai/provider_bundle', { method: 'PUT', body: JSON.stringify({ model_profile: { current_model_id: String(currentModelID() ?? '').trim(), providers: pd } }) }); if (isJSONObject(sv) && isJSONObject((sv as SettingsUpdateResponse).settings)) ctx.mutateSettings((sv as SettingsUpdateResponse).settings); ctx.env.bumpSettingsSeq(); setSavedAt(Date.now()); setDirty(false); setError(null); } catch (e) { setError(formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage')); } finally { setSaving(false); } }, AUTO_SAVE_DELAY_MS); });
+  createEffect(() => { if (!dirty() || saving() || error() || !canEdit()) { autoSaveTimer = clearTimer(autoSaveTimer); return; } autoSaveTimer = clearTimer(autoSaveTimer); autoSaveTimer = window.setTimeout(async () => { autoSaveTimer = undefined; if (!dirty() || saving() || error() || !canEdit()) return; setSaving(true); try { const pd = normalizeAIProviders(providers()).map((p) => serializeFlowerProvider(p as FlowerProviderDraft)); const sv = await fetchLocalApiJSON<SettingsUpdateResponse | unknown>('/_redeven_proxy/api/ai/provider_bundle', { method: 'PUT', body: JSON.stringify({ model_profile: { current_model_id: String(currentModelID() ?? '').trim(), providers: pd } }) }); if (isJSONObject(sv) && isJSONObject((sv as SettingsUpdateResponse).settings)) ctx.mutateSettings((sv as SettingsUpdateResponse).settings); ctx.env.bumpSettingsSeq(); setSavedAt(Date.now()); setDirty(false); setError(null); } catch (e) { setError(formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage')); } finally { setSaving(false); } }, AUTO_SAVE_DELAY_MS); });
 
   const saveAICurrentModelDirectly = async (next: string, previous: string) => { try { await fetchLocalApiJSON('/_redeven_proxy/api/ai/current_model', { method: 'PUT', body: JSON.stringify({ model_id: next }) }); ctx.env.bumpSettingsSeq(); setSavedAt(Date.now()); setError(null); } catch (e) { const message = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setCurrentModelID(previous); setError(message); ctx.notify.error(i18n.t('flowerSettings.saveFailedTitle'), message); } };
 
@@ -256,7 +260,7 @@ export function FlowerSection() {
     providers: normalizeAIProviders(rows).map((provider) => serializeFlowerProvider(provider as FlowerProviderDraft) as AIProvider),
   });
 
-  const saveAIProviderBundle = async (nps: AIProviderRow[], nid: string, pid: string) => { const id = String(pid ?? '').trim(); if (!id) { ctx.notify.error(i18n.t('flowerSettings.invalidProviderTitle'), i18n.t('flowerSettings.providerIdRequired')); return false; } if (!ctx.canAdmin()) { ctx.notify.error(i18n.t('flowerSettings.permissionDeniedTitle'), i18n.t('flowerSettings.adminRequired')); return false; } let av: AIModelProfile; try { av = buildAIValueFromRows(nps, nid); validateAIValue({ ...av, providers: nps } as AIConfig, i18n); setError(null); } catch (e) { const m = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setError(m); ctx.notify.error(i18n.t('flowerSettings.saveFailedTitle'), m); return false; } const pk = String(providerKeyDraft()?.[id] ?? '').trim(); const wk = String(webSearchKeyDraft()?.[id] ?? '').trim(); setSaving(true); try { const sv = await fetchLocalApiJSON<SettingsUpdateResponse | unknown>('/_redeven_proxy/api/ai/provider_bundle', { method: 'PUT', body: JSON.stringify({ model_profile: av, provider_api_key_patches: pk ? [{ provider_id: id, api_key: pk }] : [], web_search_provider_key_patches: wk ? [{ provider_id: id, api_key: wk }] : [] }) }); if (isJSONObject(sv) && isJSONObject((sv as SettingsUpdateResponse).settings)) ctx.mutateSettings((sv as SettingsUpdateResponse).settings); ctx.env.bumpSettingsSeq(); setProviders(nps); setCurrentModelID(nid); setProviderKeyDraft((p) => ({ ...p, [id]: '' })); setWebSearchKeyDraft((p) => ({ ...p, [id]: '' })); setSavedAt(Date.now()); setDirty(false); setError(null); ctx.notify.success(i18n.t('flowerSettings.autosavedTitle'), i18n.t('flowerSettings.providerSaved')); return true; } catch (e) { const m = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setError(m); setDirty(true); ctx.notify.error(i18n.t('flowerSettings.autosaveFailedTitle'), i18n.t('flowerSettings.providerSaveFailed', { message: m })); return false; } finally { setSaving(false); } };
+  const saveAIProviderBundle = async (nps: AIProviderRow[], nid: string, pid: string) => { const id = String(pid ?? '').trim(); if (!id) { ctx.notify.error(i18n.t('flowerSettings.invalidProviderTitle'), i18n.t('flowerSettings.providerIdRequired')); return false; } if (!ctx.canAdmin()) { ctx.notify.error(i18n.t('flowerSettings.permissionDeniedTitle'), i18n.t('flowerSettings.adminRequired')); return false; } let av: AIModelProfile; try { av = buildAIValueFromRows(nps, nid); validateAIValue({ ...av, providers: nps } as AIConfig, i18n); setError(null); } catch (e) { const m = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setError(m); ctx.notify.error(i18n.t('flowerSettings.saveFailedTitle'), m); return false; } const pk = String(providerKeyDraft()?.[id] ?? '').trim(); const wk = String(webSearchKeyDraft()?.[id] ?? '').trim(); setSaving(true); try { const sv = await fetchLocalApiJSON<SettingsUpdateResponse | unknown>('/_redeven_proxy/api/ai/provider_bundle', { method: 'PUT', body: JSON.stringify({ model_profile: av, provider_api_key_patches: pk ? [{ provider_id: id, api_key: pk }] : [], web_search_provider_key_patches: wk ? [{ provider_id: id, api_key: wk }] : [] }) }); if (isJSONObject(sv) && isJSONObject((sv as SettingsUpdateResponse).settings)) ctx.mutateSettings((sv as SettingsUpdateResponse).settings); ctx.env.bumpSettingsSeq(); setProviders(nps); setCurrentModelID(nid); setProviderKeyDraft((p) => ({ ...p, [id]: '' })); setWebSearchKeyDraft((p) => ({ ...p, [id]: '' })); setSavedAt(Date.now()); setDirty(false); setError(null); ctx.notify.success(i18n.t('flowerSettings.autosavedTitle'), i18n.t('flowerSettings.providerSaved')); return true; } catch (e) { const m = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setError(m); setError(null); setDirty(true); ctx.notify.error(i18n.t('flowerSettings.autosaveFailedTitle'), i18n.t('flowerSettings.providerSaveFailed', { message: m })); return false; } finally { setSaving(false); } };
 
   const addAIProviderAndOpenDialog = () => { const d = newAIProviderDraft(); setProviderDialogProvider(d); setProviderDialogIndex(null); setProviderDialogMode('create'); setProviderDialogOpen(true); };
   const openAIProviderDialog = (i: number) => { const p = providers()[i]; if (!p) return; setDiscoveryError(p.catalog_error ?? ''); setProviderDialogProvider(cloneAIProviderRow(p)); setProviderDialogIndex(i); setProviderDialogMode('edit'); setProviderDialogOpen(true); };
@@ -328,7 +332,7 @@ export function FlowerSection() {
     permissionAutoSaveTimer = clearTimer(permissionAutoSaveTimer);
   };
   const savePendingPermission = async () => {
-    if (permissionSaving() || !ctx.canInteract()) return;
+    if (permissionSaving() || !canEdit()) return;
     const target = permissionType();
     if (target === confirmedPermissionType()) {
       setPermissionDirty(false);
@@ -368,7 +372,7 @@ export function FlowerSection() {
   createEffect(() => {
     permissionType();
     clearPermissionTimer();
-    if (!permissionDirty() || permissionSaving() || !ctx.canInteract()) return;
+    if (!permissionDirty() || permissionSaving() || !canEdit()) return;
     permissionAutoSaveTimer = window.setTimeout(() => {
       permissionAutoSaveTimer = undefined;
       void savePendingPermission();
@@ -384,18 +388,18 @@ export function FlowerSection() {
       <SubSectionHeader
         title={i18n.t('flowerSettings.defaultPermissionTitle')}
         description={i18n.t('flowerSettings.defaultPermissionDescription')}
-        actions={<AutoSaveIndicator dirty={permissionDirty()} saving={permissionSaving()} error={permissionError()} savedAt={permissionSavedAt()} enabled={ctx.canInteract()} />}
+        actions={<AutoSaveIndicator dirty={permissionDirty()} saving={permissionSaving()} error={permissionError()} savedAt={permissionSavedAt()} enabled={canEdit()} />}
       />
       <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3" role="radiogroup" aria-label={i18n.t('flowerSettings.defaultPermissionTitle')}>
         <For each={PERMISSION_TYPES}>
           {(kind) => {
             const copy = () => permissionTypeCopy(i18n, kind);
             return (
-              <button ref={(el) => { permissionButtonRefs.set(kind, el); }} type="button" class={cn('redeven-settings-choice group flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left', permissionType() === kind && 'redeven-settings-choice--selected-neutral', !ctx.canInteract() && 'cursor-not-allowed opacity-50')}
+              <button ref={(el) => { permissionButtonRefs.set(kind, el); }} type="button" class={cn('redeven-settings-choice group flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left', permissionType() === kind && 'redeven-settings-choice--selected-neutral', !canEdit() && 'cursor-not-allowed opacity-50')}
                 role="radio" aria-checked={permissionType() === kind}
                 tabIndex={permissionType() === kind ? 0 : -1}
                 onKeyDown={onPermissionTypeKeyDown}
-                onClick={() => choosePermissionType(kind)} disabled={!ctx.canInteract()}>
+                onClick={() => choosePermissionType(kind)} disabled={!canEdit()}>
                 <div class="flex items-center justify-between gap-3">
                   <div class="flex items-center gap-2.5">
                     <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--redeven-status-info-soft)]">
@@ -420,25 +424,27 @@ export function FlowerSection() {
   );
   return (
     <>
-      <AIReadinessSettingsSection
-        controller={readinessController}
-        canAdmin={ctx.canAdmin()}
-        endpointID={ctx.env.env_id()}
-        namespacePublicID={ctx.env.env()?.namespace_public_id ?? ''}
-        modelID={currentModelID()}
-        modelOptions={aiModelOptions().map((option) => ({ id: option.id, label: option.label }))}
-        permissionType={confirmedPermissionType()}
-        workingDir={ctx.settings()?.runtime?.agent_home_dir ?? ''}
-      />
-      <SettingsSection
+      <SettingsSection variant="page"
         icon={Bot} title={i18n.t('aiChrome.flowerTitle')} description={i18n.t('flowerSettings.description')}
         badge={aiModelOptions().length > 0 ? i18n.t('flowerSettings.activeBadge') : i18n.t('flowerSettings.noModelSelected')}
         badgeVariant={aiModelOptions().length > 0 ? 'success' : 'default'} error={error()}
         actions={<>
-          <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />
+          <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={canEdit()} />
         </>}
       >
-        {/* Hero: Current model */}
+        <Show when={activeTab() !== 'health' && ['blocked', 'degraded'].includes(readinessController.snapshot().state)}>
+          <div role="status" class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/40 bg-warning/10 p-4">
+            <span class="text-sm text-foreground">{readinessPresentation().title}</span>
+            <Button size="sm" variant="outline" onClick={() => setActiveTab('health')}>{i18n.t('settingsDesign.healthAndStorage')}</Button>
+          </div>
+        </Show>
+        <Tabs activeId={activeTab()} onChange={setActiveTab} items={[
+          { id: 'models', label: i18n.t('settingsDesign.modelsAndProviders') },
+          { id: 'permissions', label: i18n.t('settingsDesign.flowerPermissions') },
+          { id: 'health', label: i18n.t('settingsDesign.healthAndStorage') },
+        ]} aria-label={i18n.t('aiChrome.flowerTitle')} />
+        <div hidden={activeTab() !== 'models'} data-flower-settings-panel="models" class="space-y-6">
+        {/* Current model */}
         <div class="redeven-settings-choice redeven-settings-choice--selected-neutral rounded-xl border p-5">
           <Show when={currentModelID() && !aiCurrentModelOption()}><p role="alert" class="mb-3 text-sm text-destructive">{modelCatalogCopy(i18n.locale()).unavailable}</p></Show>
           <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">{i18n.t('flowerSettings.currentModelTitle')}</div>
@@ -460,18 +466,18 @@ export function FlowerSection() {
               </div>
             </div>
             <Select value={currentModelID()} options={aiModelOptions().map((it) => ({ value: it.id, label: it.label }))}
-              onChange={(v) => { const nid = String(v ?? '').trim(); if (!aiModelOptions().some((option) => option.id === nid)) return; const pid = String(currentModelID() ?? '').trim(); if (nid === pid) return; setCurrentModelID(nid); if (!dirty() && !saving()) { void saveAICurrentModelDirectly(nid, pid); return; } setDirty(true); }}
-              placeholder={i18n.t('flowerSettings.selectModelPlaceholder')} class="w-full sm:w-56" disabled={!ctx.canInteract() || aiModelOptions().length === 0 || saving()} />
+              onChange={(v) => { const nid = String(v ?? '').trim(); if (!aiModelOptions().some((option) => option.id === nid)) return; const pid = String(currentModelID() ?? '').trim(); if (nid === pid) return; setCurrentModelID(nid); if (!dirty() && !saving()) { void saveAICurrentModelDirectly(nid, pid); return; } setError(null); setDirty(true); }}
+              placeholder={i18n.t('flowerSettings.selectModelPlaceholder')} class="w-full sm:w-56" disabled={!canEdit() || aiModelOptions().length === 0 || saving()} />
           </div>
         </div>
 
-        {renderDefaultPermissionSection()}
+
 
         {/* Providers gallery */}
         <div class="mt-5">
           <SubSectionHeader title={i18n.t('flowerSettings.providersTitle')} description={i18n.t('flowerSettings.providersDescription')}
-            actions={<Button size="sm" variant="default" icon={Plus} onClick={addAIProviderAndOpenDialog} disabled={!ctx.canInteract()}>{i18n.t('flowerSettings.addProvider')}</Button>} />
-          <div class="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
+            actions={<Button size="sm" variant="default" icon={Plus} onClick={addAIProviderAndOpenDialog} disabled={!canEdit()}>{i18n.t('flowerSettings.addProvider')}</Button>} />
+          <div class="mt-3 grid grid-cols-1 gap-3">
             <For each={providers()}>{(provider, index) => {
               const pid = () => String(provider.id ?? '').trim(); const dn = () => localizedProviderDisplayName(provider, i18n.locale(), i18n.t('flowerSettings.providerFallbackName', { count: index() + 1 }));
               const mns = () => (Array.isArray(provider.models) ? provider.models : []).map((m) => String(m.model_name ?? '').trim()).filter(Boolean);
@@ -490,8 +496,8 @@ export function FlowerSection() {
                           <Show when={isDef()}><span class="flex-shrink-0 rounded-full bg-[var(--redeven-settings-selection-bg)] px-1.5 py-px text-[10px] font-medium text-[var(--redeven-settings-selection-fg)]">{i18n.t('flowerSettings.activeProviderBadge')}</span></Show>
                         </div>
                         <div class="flex items-center flex-shrink-0">
-                          <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openAIProviderDialog(index())} disabled={!ctx.canInteract()} aria-label={i18n.t('flowerSettings.editProvider')}><Pencil class="h-3.5 w-3.5" /></Button>
-                          <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => { setProviders((p) => normalizeAIProviders(p.filter((_, i) => i !== index()))); setDirty(true); }} disabled={!ctx.canInteract() || providers().length <= 1} aria-label={i18n.t('flowerSettings.removeProvider')}><Trash class="h-3.5 w-3.5" /></Button>
+                          <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openAIProviderDialog(index())} disabled={!canEdit()} aria-label={i18n.t('flowerSettings.editProvider')}><Pencil class="h-3.5 w-3.5" /></Button>
+                          <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => { setProviders((p) => normalizeAIProviders(p.filter((_, i) => i !== index()))); setError(null); setDirty(true); }} disabled={!canEdit() || providers().length <= 1} aria-label={i18n.t('flowerSettings.removeProvider')}><Trash class="h-3.5 w-3.5" /></Button>
                         </div>
                       </div>
                       <div class="mt-2 space-y-1.5">
@@ -537,6 +543,20 @@ export function FlowerSection() {
               );
             }}</For>
           </div>
+        </div>
+        </div>
+        <div hidden={activeTab() !== 'permissions'} data-flower-settings-panel="permissions">{renderDefaultPermissionSection()}</div>
+        <div hidden={activeTab() !== 'health'} data-flower-settings-panel="health">
+      <AIReadinessSettingsSection
+        controller={readinessController}
+        canAdmin={ctx.canAdmin()}
+        endpointID={ctx.env.env_id()}
+        namespacePublicID={ctx.env.env()?.namespace_public_id ?? ''}
+        modelID={currentModelID()}
+        modelOptions={aiModelOptions().map((option) => ({ id: option.id, label: option.label }))}
+        permissionType={confirmedPermissionType()}
+        workingDir={ctx.settings()?.runtime?.agent_home_dir ?? ''}
+      />
         </div>
       </SettingsSection>
 

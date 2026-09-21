@@ -6345,5 +6345,29 @@
     "macCaptureUnavailable": "창을 캡처할 수 없습니다. 다시 연결한 후 시도하세요.",
     "macAddDescription": "설치된 .app 번들의 절대 경로를 입력하세요. 이름과 아이콘은 macOS에서 가져옵니다.",
     "macBundlePath": "앱 번들 경로"
+  },
+  "settingsDesign": {
+    "startPort": "시작 포트",
+    "endPort": "종료 포트",
+    "relatedSettings": "관련 설정",
+    "clearSearch": "설정 검색 지우기",
+    "homeDirectory": "홈 디렉터리",
+    "defaultShell": "기본 셸",
+    "permissionCeiling": "최대 권한",
+    "userOverrides": "사용자별 재정의",
+    "appOverrides": "앱별 재정의",
+    "fileLocation": "파일 위치",
+    "toolingDescription": "브라우저 편집기와 작업 공간에서 사용하는 포트를 관리합니다.",
+    "modelsAndProviders": "모델 및 제공업체",
+    "flowerPermissions": "권한",
+    "healthAndStorage": "상태 및 저장소",
+    "skillRequestFailed": "스킬 작업에 실패했습니다. 세부 정보를 확인한 후 다시 시도하세요.",
+    "skillDeleteDescription": "{name} 및 로컬 파일을 영구적으로 삭제할까요?",
+    "skillReinstallDescription": "기록된 소스에서 {name}을(를) 다시 설치할까요? 로컬 변경 사항을 덮어씁니다.",
+    "validatedSkills": "검증된 스킬",
+    "skillFiles": "스킬 파일",
+    "truncatedFile": "파일 미리보기의 일부가 잘렸습니다.",
+    "parentFolder": "상위 폴더",
+    "maintenanceWarning": "이 작업은 활성 터미널과 세션을 중단할 수 있습니다. 계속할까요?"
   }
 }
