@@ -440,7 +440,7 @@ describe('Desktop shared i18n dictionaries', () => {
       const copy = DESKTOP_I18N_DICTIONARIES[locale].flowerSurface;
       expect(copy.chat.newChat.length).toBeGreaterThan(0);
       expect(copy.threadList.refreshLabel.length).toBeGreaterThan(0);
-      expect(copy.emptyState.reviewPrompt.length).toBeGreaterThan(0);
+      expect(copy.emptyState.explorePrompt.length).toBeGreaterThan(0);
       expect(copy.settings.addProvider.length).toBeGreaterThan(0);
       expect(copy.settings.backToChat.length).toBeGreaterThan(0);
       if (locale !== 'en-US') expect(copy.chat.send, locale).not.toBe(enUS.flowerSurface.chat.send);
@@ -510,8 +510,8 @@ describe('Desktop shared i18n dictionaries', () => {
       retrying: 'Tentando novamente a solicitação ao modelo...',
       finalizing: 'Finalizando resposta...',
     });
-    expect(DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.emptyState.projectTitle).toBe('读懂这个项目');
-    expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.emptyState.projectTitle).toBe('讀懂這個專案');
+    expect(DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.emptyState.exploreTitle).toBe('了解这里有什么');
+    expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.emptyState.exploreTitle).toBe('了解這裡有什麼');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.threadList.refreshLabel).toBe('重新整理對話');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.settings.backToChat).toBe('返回聊天');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].environmentCenter.askFlowerCardTitle).toBe('詢問 Flower');

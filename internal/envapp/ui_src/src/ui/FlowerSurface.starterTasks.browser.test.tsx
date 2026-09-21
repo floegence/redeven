@@ -13,6 +13,8 @@ afterEach(() => document.documentElement.classList.remove('dark'));
 describe('Flower starter task interaction', () => {
   it.each([
     ['zh-CN', 1100, true], ['zh-CN', 360, false], ['en-US', 360, true], ['de-DE', 360, false],
+    ['zh-TW', 360, true], ['ja-JP', 360, false], ['ko-KR', 360, true], ['fr-FR', 360, false],
+    ['es-ES', 360, true], ['pt-BR', 360, false], ['ru-RU', 360, true],
   ] as const)('keeps %s tasks readable and editable at %s px in dark=%s', async (locale, width, dark) => {
     await page.viewport(width, 1000);
     document.documentElement.classList.toggle('dark', dark);

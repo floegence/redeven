@@ -46,20 +46,30 @@ without restoring the removed glow or a continuous animation.
 
 # Starter tasks
 
-The configured new-conversation page offers four concrete tasks: map the current
-project, review uncommitted Git changes, fix one reproducible failing test, and
-analyze directory disk usage. Compact card titles and descriptions name the
-outcome; each localized prompt defines its working-directory scope, execution
-steps, evidence, and deliverable. They do not assume an attachment, selected code,
-transfer destination, or an unspecified workflow already exists.
+The configured new-conversation page offers four everyday tasks: understand the
+current folder's contents and how to use them, understand the connected computer,
+discover installed applications, and prepare a folder organization plan. Compact
+card titles and descriptions name the outcome. Each complete localized prompt
+defines its scope, evidence, and deliverable without assuming the user is a
+developer or the current directory is a code repository.
 
-Project guidance cites real files and distinguishes documented commands from
-verified ones. Change review reports actionable regressions with locations and
-triggering scenarios. Test repair requires reproduction, a focused fix, and
-rerunning affected tests without weakening assertions. Disk analysis measures
-usage, reports incomplete coverage, and identifies cleanup candidates without
-deleting files. Missing project context, clean Git state, passing tests, and
-environment blockers must be reported honestly rather than inventing work.
+Folder exploration explains purpose, features, audience, and getting-started
+steps from actual documentation and available prerequisites. Documents and
+reference materials receive a content overview and reading order; multiple
+independent projects receive an overview before the user chooses one.
+
+The computer check identifies the actual device and whether it is local or
+remote, reports specifications and current resource use, and explains observed
+conditions without treating a single sample as proof of a persistent problem.
+Application discovery groups actual installed apps by everyday use, suggests
+concrete tasks, and distinguishes installation from confirmed usability. Neither
+task changes settings, ends processes, or installs or starts applications.
+
+Folder organization proposes a simple structure with concrete before/after
+locations, preserves references and application dependencies, and waits for user
+confirmation before applying moves or renames. Matching names or older dates
+alone never justify deletion. All four prompts report unavailable or uncertain
+information honestly and deliver their initial findings in the conversation.
 
 Activating a card by pointer or keyboard fills the complete editable composer
 draft and places the caret at its end. It never launches a turn automatically;
