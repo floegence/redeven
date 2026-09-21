@@ -51,6 +51,7 @@ type Session struct {
 	ID                  string                      `json:"id"`
 	Application         Application                 `json:"application"`
 	State               string                      `json:"state"`
+	EndReason           string                      `json:"end_reason,omitempty"`
 	ErrorCode           string                      `json:"error_code,omitempty"`
 	StartedAt           int64                       `json:"started_at_unix_ms"`
 	Forward             *portforward.ForwardSession `json:"forward,omitempty"`
@@ -60,6 +61,20 @@ type Session struct {
 // Presentation comes from the caller's explicit localized catalog. The window
 // document renders these bounded strings as text, never as markup or script.
 type Presentation struct {
+	Checking              string `json:"checking,omitempty"`
+	ApplicationExited     string `json:"applicationExited,omitempty"`
+	ApplicationExitedHint string `json:"applicationExitedHint,omitempty"`
+	WindowsClosed         string `json:"windowsClosed,omitempty"`
+	WindowsClosedHint     string `json:"windowsClosedHint,omitempty"`
+	SharingStopped        string `json:"sharingStopped,omitempty"`
+	SharingStoppedHint    string `json:"sharingStoppedHint,omitempty"`
+	EndedHint             string `json:"endedHint,omitempty"`
+	SessionMissing        string `json:"sessionMissing,omitempty"`
+	SessionMissingHint    string `json:"sessionMissingHint,omitempty"`
+	AccessRequired        string `json:"accessRequired,omitempty"`
+	AccessHint            string `json:"accessHint,omitempty"`
+	Dismiss               string `json:"dismiss,omitempty"`
+
 	PermissionRequired string `json:"permissionRequired,omitempty"`
 	PermissionHint     string `json:"permissionHint,omitempty"`
 	SessionUnavailable string `json:"sessionUnavailable,omitempty"`

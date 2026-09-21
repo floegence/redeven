@@ -9,17 +9,11 @@
   canvas.setAttribute('aria-label', document.title);
   previous.replaceWith(canvas);
   const context = canvas.getContext('2d', { alpha: false });
-  const panel = document.getElementById('connection');
-  const status = document.getElementById('status');
-  const hint = document.getElementById('hint');
   const retry = document.getElementById('retry');
   const native = window.redevenHostApplicationWindow;
   const controls = document.createElement('div');
   controls.className = 'mac-app-controls';
   controls.hidden = true;
-  const windows = document.createElement('select');
-  windows.setAttribute('aria-label', config.copy.windows);
-  windows.hidden = true;
   const close = document.createElement('button');
   close.textContent = config.copy.closeWindow;
   close.title = config.copy.closeWindow;
@@ -37,7 +31,7 @@
   drawer.setAttribute('aria-label', config.copy.controls);
   const actions = document.createElement('div');
   actions.className = 'mac-app-actions';
-  actions.append(windows, menu, close, menuPanel);
+  actions.append(menu, close, menuPanel);
   document.body.append(controls);
   const controlsButton = document.createElement('button');
   controlsButton.className = 'mac-app-controls-toggle';
@@ -46,6 +40,63 @@
   controlsButton.innerHTML = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 3v4m0 4v6m6-14v8m0 4v2m6-14v2m0 4v8M2 7h4m2 8h4m2-10h4"/></svg>';
   controlsButton.setAttribute('aria-expanded', 'false');
   controlsButton.setAttribute('aria-controls', drawer.id);
+  const windowToggle = document.createElement('button');
+  windowToggle.className = 'mac-app-windows-toggle';
+  windowToggle.hidden = true;
+  windowToggle.title = config.copy.windows;
+  windowToggle.setAttribute('aria-expanded', 'false');
+  windowToggle.setAttribute('aria-controls', drawer.id);
+  windowToggle.innerHTML = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="7" width="11" height="10" rx="2"/><path d="M7 4V3h10v10h-1"/></svg>';
+  const windowCount = document.createElement('span');
+  windowCount.setAttribute('aria-hidden', 'true');
+  windowToggle.append(windowCount);
+  const windowPanel = document.createElement('section');
+  windowPanel.className = 'mac-app-window-picker';
+  windowPanel.hidden = true;
+  windowPanel.setAttribute('aria-label', config.copy.windows);
+  const windowTitle = document.createElement('strong');
+  windowTitle.textContent = config.copy.windows;
+  const windowList = document.createElement('div');
+  windowList.className = 'mac-app-window-list';
+  windowPanel.append(windowTitle, windowList);
+  const windowEntries = new Map();
+  let drawerSection = 'picture';
+  function syncWindowPicker() {
+    windowToggle.hidden = windowEntries.size === 0;
+    windowCount.textContent = String(windowEntries.size);
+    windowToggle.setAttribute('aria-label', `${config.copy.windows} · ${windowEntries.size}`);
+    for (const [id, entry] of windowEntries) {
+      const selected = id === current?.window;
+      entry.button.setAttribute('aria-pressed', String(selected));
+      entry.button.setAttribute('aria-busy', String(selected && renderedGeneration !== current?.generation));
+    }
+    close.disabled = !current?.window || renderedGeneration !== current.generation;
+  }
+  function renderWindows(items) {
+    const focused = document.activeElement;
+    const hadFocus = windowList.contains(focused);
+    const ids = new Set(items.map(item => item.id));
+    for (const [id, entry] of windowEntries) {
+      if (!ids.has(id)) { entry.button.remove(); windowEntries.delete(id); }
+    }
+    items.forEach((item, index) => {
+      let entry = windowEntries.get(item.id);
+      if (!entry) {
+        const button = document.createElement('button');
+        const title = document.createElement('span');
+        button.append(title);
+        button.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8"/></svg>');
+        button.onclick = () => send({action:'select', window:item.id});
+        entry = {button, title}; windowEntries.set(item.id, entry);
+      }
+      const title = item.title || `${document.title} · ${index + 1}`;
+      entry.title.textContent = title; entry.button.title = title;
+      if (windowList.children[index] !== entry.button) windowList.insertBefore(entry.button, windowList.children[index] || null);
+    });
+    syncWindowPicker();
+    if (hadFocus) (focused.isConnected ? focused : windowToggle.hidden ? controlsButton : windowToggle).focus({preventScroll:true});
+    if (!items.length && drawerSection === 'windows') collapseControls();
+  }
   const picturePanel = document.createElement('section');
   picturePanel.id = 'picture-settings';
   picturePanel.className = 'mac-app-picture';
@@ -119,8 +170,8 @@
     statisticValues[key] = value; row.append(label, value); statistics.append(row);
   }
   picturePanel.append(statistics);
-  drawer.append(picturePanel, actions);
-  controls.append(controlsButton, drawer);
+  drawer.append(windowPanel, picturePanel, actions);
+  controls.append(windowToggle, controlsButton, drawer);
   let receivedBytes = 0, paintedFrames = 0, measuredAt = performance.now();
   const statisticsTimer = setInterval(() => {
     const now = performance.now(), elapsed = (now - measuredAt) / 1000;
@@ -137,15 +188,26 @@
   function collapseControls() {
     drawer.hidden = true;
     controlsButton.setAttribute('aria-expanded', 'false');
+    windowToggle.setAttribute('aria-expanded', 'false');
     menuPanel.hidden = true;
     menu.setAttribute('aria-expanded', 'false');
   }
-  controlsButton.onclick = () => {
-    drawer.hidden = !drawer.hidden;
-    controlsButton.setAttribute('aria-expanded', String(!drawer.hidden));
-    if (!drawer.hidden) (picturePanel.hidden ? menu : modeButtons.get(picture.mode)).focus();
-    menuPanel.hidden = true; menu.setAttribute('aria-expanded', 'false');
-  };
+  function toggleControls(section) {
+    const opening = drawer.hidden || drawerSection !== section;
+    collapseControls();
+    drawerSection = section;
+    windowPanel.hidden = section !== 'windows';
+    picturePanel.hidden = section !== 'picture' || document.body.dataset.state !== 'active';
+    drawer.hidden = !opening;
+    if (opening) {
+      const toggle = section === 'windows' ? windowToggle : controlsButton;
+      toggle.setAttribute('aria-expanded', 'true');
+      const selected = windowEntries.get(current?.window)?.button;
+      (section === 'windows' ? selected || windowList.querySelector('button') : picturePanel.hidden ? menu : modeButtons.get(picture.mode))?.focus();
+    }
+  }
+  controlsButton.onclick = () => toggleControls('picture');
+  windowToggle.onclick = () => toggleControls('windows');
   const input = document.createElement('textarea');
   input.className = 'mac-app-input';
   input.setAttribute('aria-label', config.copy.input);
@@ -174,29 +236,14 @@
     document.getElementById('fallback-icon').setAttribute('hidden', '');
   }
   function present(state) {
-    document.body.dataset.state = state;
-    panel.setAttribute(
-      'aria-busy',
-      String(['starting', 'connecting', 'reconnecting', 'waiting'].includes(state)),
-    );
-    status.textContent = config.copy[state] || config.copy.failed;
-    hint.textContent =
-      state === 'disconnected'
-        ? config.copy.connectionHint
-        : state === 'waiting' ? config.copy.waitingHint
-        : state === 'permissionRequired' ? config.copy.permissionHint
-        : state === 'sessionUnavailable' ? config.copy.sessionHint
-        : state === 'sessionFailed' ? config.copy.reopenHint
-        : state === 'captureUnavailable' ? config.copy.captureHint : config.copy.sharedControl;
-    hint.hidden = !hint.textContent;
-    retry.hidden = !['waiting', 'disconnected', 'failed', 'captureUnavailable', 'permissionRequired', 'sessionUnavailable'].includes(state);
-    retry.querySelector('span').textContent =
-      ['waiting', 'disconnected'].includes(state) ? config.copy.reconnect : config.copy.retry;
+    hostApplicationConnection.present(state);
+    canvas.setAttribute('aria-hidden', String(state !== 'active'));
+    canvas.tabIndex = state === 'active' ? 0 : -1;
     controls.hidden = !['active', 'waiting', 'captureUnavailable'].includes(state);
-    picturePanel.hidden = state !== 'active';
+    picturePanel.hidden = state !== 'active' || drawerSection !== 'picture';
     close.hidden = state !== 'active';
-    windows.disabled = !['active', 'captureUnavailable'].includes(state);
-    input.disabled = state !== 'active';
+    syncWindowPicker();
+    input.disabled = state !== 'active' || !renderedGeneration;
     if (state !== 'active') {
       feedback.hidden = true;
       collapseControls();
@@ -239,7 +286,7 @@
     current = null;
     invalidateCapture();
     present(state);
-    if (state === 'ended' && active) {
+    if (hostApplicationConnection.ended(state) && active) {
       if (native) native.request('close');
       else window.close();
     }
@@ -326,21 +373,17 @@
     disconnect(active ? 'reconnecting' : 'connecting');
     abort = new AbortController();
     deadline = setTimeout(() => {
-      if (mine === attempt) disconnect('failed');
-    }, 45000);
+      if (mine === attempt) disconnect('disconnected');
+    }, 6000);
     try {
-      const response = await fetch(config.base + '/_redeven_host_app/state', {
-        cache: 'no-store',
-        signal: abort.signal,
-      });
+      const state = await hostApplicationConnection.read(abort.signal);
       if (mine !== attempt || abort.signal.aborted) return;
-      if (!response.ok) throw Error('Session unavailable');
-      const state = await response.json();
-      if (mine !== attempt || abort.signal.aborted) return;
-      if (state.state === 'ended' || state.state === 'failed') {
-        disconnect(state.state === 'failed' ? 'sessionFailed' : 'ended');
+      if (!['running', 'starting'].includes(state.state)) {
+        disconnect(state.state);
         return;
       }
+      clearTimeout(deadline);
+      deadline = setTimeout(() => { if (mine === attempt) disconnect('disconnected'); }, 45000);
       const url = new URL(
         config.base + '/_redeven_host_app/stream',
         location.href,
@@ -403,22 +446,17 @@
             }
           }, 45000);
           invalidateCapture();
-          if (current?.window !== message.window) present(active ? 'reconnecting' : 'connecting');
+          // Keep the window picker usable while another owned window loads.
+          // Retained pixels are dimmed and input stays bound to decoded frames.
+          const switching = document.body.dataset.state === 'active';
           current = message;
+          if (!switching) present(active ? 'reconnecting' : 'connecting');
           canvas.setAttribute('aria-busy', 'true');
-          windows.value = message.window;
+          input.disabled = true;
+          syncWindowPicker();
           resize();
         } else if (message.type === 'windows') {
-          windows.replaceChildren(
-            ...message.windows.map((item) => {
-              const option = document.createElement('option');
-              option.value = item.id;
-              option.textContent = item.title || document.title;
-              return option;
-            }),
-          );
-          windows.hidden = message.windows.length < 2;
-          if (current) windows.value = current.window;
+          renderWindows(message.windows);
         } else if (message.type === 'menu') {
           if (!current || message.generation !== current.generation) return;
           const build = (items) =>
@@ -445,29 +483,28 @@
           menu.setAttribute('aria-expanded', 'true');
         } else if (message.type === 'error' && message.code !== 'STALE_WINDOW')
           disconnect('failed');
-        else if (message.type === 'ended') disconnect('ended');
+        else if (message.type === 'ended') void reconcile();
         else if (message.type === 'blocked') disconnect(message.code === 'GRAPHICAL_SESSION_REQUIRED' ? 'sessionUnavailable' : 'permissionRequired');
       };
-      connection.onclose = async () => {
+      async function reconcile() {
         if (mine !== attempt || socket !== connection) return;
-        disconnect('disconnected');
+        disconnect('checking');
+        const controller = new AbortController();
+        abort = controller;
+        deadline = setTimeout(() => {
+          if (mine === attempt && !controller.signal.aborted) disconnect('disconnected');
+        }, 6000);
         try {
-          const response = await fetch(
-            config.base + '/_redeven_host_app/state',
-            { cache: 'no-store' },
-          );
-          if (mine !== attempt) return;
-          if (response.ok) {
-            const data = await response.json();
-            if (mine === attempt && (data.state === 'ended' || data.state === 'failed'))
-              disconnect(data.state === 'failed' ? 'sessionFailed' : 'ended');
-          }
+          const data = await hostApplicationConnection.read(controller.signal);
+          if (mine === attempt && !controller.signal.aborted)
+            disconnect(['running', 'starting'].includes(data.state) ? 'disconnected' : data.state);
         } catch {
-          /* Network loss retains the window and its explicit reconnect action. */
+          if (mine === attempt && !controller.signal.aborted) disconnect('disconnected');
         }
-      };
+      }
+      connection.onclose = reconcile;
     } catch {
-      if (mine === attempt) disconnect(active ? 'disconnected' : 'failed');
+      if (mine === attempt && !abort?.signal.aborted) disconnect('disconnected');
     }
   }
   function point(event) {
@@ -613,7 +650,6 @@
     clearInterval(statisticsTimer);
     resetDecoder();
   });
-  windows.onchange = () => send({ action: 'select', window: windows.value });
   close.onclick = () => send({ action: 'close' });
   menu.onclick = () => {
     if (!menuPanel.hidden) {
@@ -643,11 +679,12 @@
         menu.setAttribute('aria-expanded', 'false');
         menu.focus();
       } else if (event.key === 'Escape' && !drawer.hidden) {
-        event.stopImmediatePropagation(); event.preventDefault(); collapseControls(); controlsButton.focus();
+        event.stopImmediatePropagation(); event.preventDefault(); collapseControls(); (drawerSection === 'windows' && !windowToggle.hidden ? windowToggle : controlsButton).focus();
       }
     },
     true,
   );
   retry.onclick = () => void connect();
-  void connect();
+  if (hostApplicationConnection.initial) present(hostApplicationConnection.initial);
+  else void connect();
 })();

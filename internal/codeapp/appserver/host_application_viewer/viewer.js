@@ -2,9 +2,6 @@
 // This adapter owns the application's viewport and one reconnectable viewer.
 (() => {
   const frame = document.getElementById('application');
-  const main = document.getElementById('connection');
-  const status = document.getElementById('status');
-  const hint = document.getElementById('hint');
   const retry = document.getElementById('retry');
   let generation = 0;
   let timer;
@@ -29,14 +26,7 @@
   }
 
   function present(state) {
-    const busy = ['starting', 'connecting', 'reconnecting'].includes(state);
-    document.body.dataset.state = state;
-    main.setAttribute('aria-busy', String(busy));
-    status.textContent = config.copy[state] || config.copy.failed;
-    hint.textContent = state === 'disconnected' ? config.copy.connectionHint : state === 'sessionFailed' ? config.copy.reopenHint : '';
-    hint.hidden = !hint.textContent;
-    retry.hidden = busy || state === 'active' || state === 'ended' || state === 'sessionFailed';
-    retry.querySelector('span').textContent = state === 'disconnected' ? config.copy.reconnect : config.copy.retry;
+    hostApplicationConnection.present(state);
     frame.inert = state !== 'active';
     frame.setAttribute('aria-hidden', String(state !== 'active'));
     frame.tabIndex = state === 'active' ? 0 : -1;
@@ -63,27 +53,25 @@
     present(state);
     // Only a confirmed ended session closes an established viewer. Application
     // save dialogs and transport loss must keep the physical window available.
-    if (state === 'ended' && wasActive) {
+    if (hostApplicationConnection.ended(state) && wasActive) {
       if (nativeWindow) nativeWindow.request('close');
       else window.close();
     }
     if (!retry.hidden) retry.focus({preventScroll:true});
   }
 
-  function connectionLost(attempt) {
+  async function connectionLost(attempt) {
     if (attempt !== generation) return;
-    finish('disconnected');
-    // A closed session and a lost network need different recovery actions.
+    finish('checking');
     const current = generation;
-    request = new AbortController();
-    fetch(config.base + '/_redeven_host_app/state', {cache:'no-store', signal:request.signal})
-      .then(async response => {
-        if (current !== generation) return;
-        if (response.ok) {
-          const data = await response.json();
-          if (current === generation && (data.state === 'ended' || data.state === 'failed')) finish(data.state === 'failed' ? 'sessionFailed' : 'ended');
-        }
-      }).catch(() => {});
+    const controller = new AbortController();
+    request = controller;
+    deadline = setTimeout(() => { if (current === generation) finish('disconnected'); }, 6000);
+    try {
+      const data = await hostApplicationConnection.read(controller.signal);
+      if (current === generation && !controller.signal.aborted)
+        finish(['running', 'starting'].includes(data.state) ? 'disconnected' : data.state);
+    } catch { if (current === generation && !controller.signal.aborted) finish('disconnected'); }
   }
 
   function installClient(attempt) {
@@ -226,13 +214,7 @@
     request = controller;
     const timeout = setTimeout(() => controller.abort(), 6000);
     try {
-      const response = await fetch(config.base + '/_redeven_host_app/state', {cache:'no-store', signal:request.signal});
-      if (attempt !== generation) return;
-      if (!response.ok) {
-        finish('disconnected');
-        return;
-      }
-      const data = await response.json();
+      const data = await hostApplicationConnection.read(controller.signal);
       if (attempt !== generation) return;
       if (data.state === 'running') {
         if (!attached) {
@@ -241,7 +223,7 @@
           present(wasActive ? 'reconnecting' : 'connecting');
           frame.src = config.base + '/index.html';
         }
-      } else if (data.state !== 'starting') { finish(data.state === 'ended' ? 'ended' : 'sessionFailed'); return; }
+      } else if (data.state !== 'starting') { finish(data.state); return; }
       timer = setTimeout(() => observe(attempt), attached ? 5000 : 500);
     } catch { if (attempt === generation) finish('disconnected'); }
     finally { clearTimeout(timeout); }
@@ -259,7 +241,8 @@
     observe(attempt);
   }
   retry.addEventListener('click', connect);
-  window.addEventListener('offline', () => finish('disconnected'));
+  window.addEventListener('offline', () => { if (!hostApplicationConnection.terminal(document.body.dataset.state)) finish('disconnected'); });
   window.addEventListener('pagehide', () => { generation++; clearTimeout(timer); clearTimeout(deadline); request?.abort(); stopClient(); unsubscribeWindow?.(); });
-  connect();
+  if (hostApplicationConnection.initial) present(hostApplicationConnection.initial);
+  else connect();
 })();

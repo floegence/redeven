@@ -6208,6 +6208,19 @@
     }
   },
   "hostApplications": {
+    "checking": "앱 상태 확인 중…",
+    "applicationExited": "앱이 종료되었습니다",
+    "applicationExitedHint": "호스트에서 앱 종료를 확인했습니다. 필요하면 호스트 앱에서 다시 여세요.",
+    "windowsClosed": "앱 창이 닫혔습니다",
+    "windowsClosedHint": "호스트의 공유 창이 모두 닫혔습니다. 앱은 아직 실행 중일 수 있습니다. 호스트 앱에서 창을 다시 열어 공유하세요.",
+    "sharingStopped": "공유가 중지되었습니다",
+    "sharingStoppedHint": "이 공유 세션이 중지되었습니다. 앱은 호스트에서 계속 실행 중일 수 있습니다.",
+    "endedHint": "이 세션이 종료되었습니다. 호스트 앱에서 앱을 다시 열어 새 세션을 시작하세요.",
+    "sessionMissing": "공유 세션을 더 이상 사용할 수 없습니다",
+    "sessionMissingHint": "호스트에 이 세션이 없어 여기서는 앱 상태를 확인할 수 없습니다. 호스트 앱으로 돌아가 확인한 후 다시 여세요.",
+    "accessRequired": "이 세션에 접근할 수 없습니다",
+    "accessHint": "Redeven에서 로그인 상태와 접근 권한을 확인한 후 다시 시도하세요.",
+    "dismiss": "창 닫기",
     "macControls": "앱 제어",
     "prepare": {
       "downloadMethod": "다운로드 방식",
@@ -6250,7 +6263,7 @@
     "connecting": "앱에 연결하는 중…",
     "reconnecting": "다시 연결하는 중…",
     "disconnected": "연결이 끊어졌습니다",
-    "connectionHint": "다시 연결하여 앱을 계속 사용할 수 있습니다. 이 창을 닫아도 세션은 종료되지 않습니다.",
+    "connectionHint": "앱의 현재 상태를 확인할 수 없습니다. 연결 상태를 확인한 후 다시 연결하세요.",
     "reconnect": "다시 연결",
     "add": "앱 추가",
     "addDescription": "설치된 GUI 앱의 실행 파일을 절대 경로로 지정하세요. 인수는 셸을 거치지 않고 직접 전달됩니다.",

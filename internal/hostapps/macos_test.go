@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -391,7 +392,7 @@ func TestMacNativeLaunchErrorRemainsFailed(t *testing.T) {
 while IFS= read -r request; do
  case "$request" in
  *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"ready":true},"applications":[{"id":"macos-fixture","name":"Exiting App"}]}' ;;
- *'"action":"launch"'*) printf '%s\n' '{"type":"error","code":"APPLICATION_EXITED"}' '{"type":"ended"}'; exit 0 ;;
+ *'"action":"launch"'*) printf '%s\n' '{"type":"error","code":"LAUNCH_FAILED"}' '{"type":"ended"}'; exit 0 ;;
  esac
 done
 `)
@@ -400,7 +401,7 @@ done
 		t.Fatal(err)
 	}
 	waitMac(t, m, view.ID, "failed")
-	if m.Sessions("alice")[0].ErrorCode != "application_exited" {
+	if m.Sessions("alice")[0].ErrorCode != "launch_failed" {
 		t.Fatal("native launch diagnostic was lost")
 	}
 }
@@ -509,7 +510,7 @@ while IFS= read -r request; do
  *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"ready":true},"applications":[{"id":"macos-fixture","name":"Background App"}]}' ;;
  *'"action":"launch"'*) printf '%s\n' '{"type":"launched","instance":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' '{"type":"waiting","generation":1}'
  while [ ! -f '`+marker+`' ]; do sleep 0.02; done
- printf '%s\n' '{"type":"error","code":"APPLICATION_EXITED"}' '{"type":"ended"}'; exit 0 ;;
+ printf '%s\n' '{"type":"ended","end_reason":"application_exited"}'; exit 0 ;;
  *'"action":"quit"'*) touch '`+marker+`'; printf '%s\n' '{"type":"quit_requested"}' ;;
  esac
 done
@@ -521,8 +522,11 @@ done
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		m.mu.Lock()
-		attached := m.sessions[view.ID].native.instance != ""
+		native := m.sessions[view.ID].native
 		m.mu.Unlock()
+		native.mu.Lock()
+		attached := native.window != nil
+		native.mu.Unlock()
 		if attached {
 			break
 		}
@@ -537,5 +541,54 @@ done
 	waitMac(t, m, view.ID, "ended")
 	if m.Sessions("alice")[0].ErrorCode != "" {
 		t.Fatal("explicit quit was classified as a failed launch")
+	}
+}
+
+func TestMacTerminalReasonSurvivesForwardRelease(t *testing.T) {
+	for _, reason := range []string{"application_exited", "windows_closed", "sharing_stopped"} {
+		for _, painted := range []bool{false, true} {
+			t.Run(reason+fmt.Sprint(painted), func(t *testing.T) {
+				events := `'{"type":"waiting","generation":1}'`
+				if painted {
+					events = `'{"type":"window","window":"one","generation":1}' '{"type":"frame","generation":1,"data":"ZnJhbWU="}'`
+				}
+				m := macFixtureScript(t, `#!/bin/sh
+while IFS= read -r request; do
+ case "$request" in
+ *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"ready":true},"applications":[{"id":"macos-fixture","name":"Fixture"}]}' ;;
+ *'"action":"launch"'*) printf '%s\n' '{"type":"launched"}' `+events+` ;;
+ *'"action":"detach"'*) printf '%s\n' '{"type":"ended","end_reason":"`+reason+`"}'; exit 0 ;;
+ esac
+done
+`)
+				view, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if painted {
+					waitMac(t, m, view.ID, "running")
+				}
+				// Stop the fixture only after helper admission; Detach itself never invents a reason.
+				deadline := time.Now().Add(3 * time.Second)
+				for {
+					err = m.Detach(context.Background(), "alice", view.ID)
+					if err == nil {
+						break
+					}
+					if time.Now().After(deadline) {
+						t.Fatal(err)
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				waitMac(t, m, view.ID, "ended")
+				terminal, owner, found := m.ForForward(view.Forward.Forward.ForwardID)
+				if !found || owner != "alice" || terminal.EndReason != reason || terminal.ErrorCode != "" || m.Password(view.ID) != "" {
+					t.Fatalf("lost terminal evidence: %+v", terminal)
+				}
+				if forward, _ := m.forwards.GetForward(context.Background(), view.Forward.Forward.ForwardID); forward != nil {
+					t.Fatal("terminal session retained its network route")
+				}
+			})
+		}
 	}
 }

@@ -6,13 +6,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
   JSDOM: new (html: string, options: Record<string, unknown>) => { window: Window & typeof globalThis };
 };
-const source = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/macos.js'), 'utf8');
+const shared = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/connection.js'), 'utf8');
+const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/macos.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '');
 let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.dispatchEvent(new dom.window.Event('beforeunload')); dom?.window.close(); vi.useRealTimers(); });
 
-async function viewer(video = false, icon = '') {
+async function viewer(video = false, icon = '', initial?: Record<string, string>) {
   dom = new JSDOM(html, { url: 'http://localhost/pf/test/_redeven_host_app/', runScripts: 'dangerously', pretendToBeVisual: true });
   const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ state: 'running', password: 'private' }) });
   const drawImage = vi.fn();
@@ -50,7 +51,7 @@ async function viewer(video = false, icon = '') {
   Object.assign(dom.window, { TextDecoder, TextEncoder, VideoDecoder: video ? Decoder : undefined, EncodedVideoChunk: class { constructor(public value: unknown) {} }, fetch, WebSocket: Socket, createImageBitmap: bitmap, redevenHostApplicationWindow: native });
   const statisticsTicks: (() => void)[] = [];
   vi.spyOn(dom.window, 'setInterval').mockImplementation(((callback: () => void) => { statisticsTicks.push(callback); return 1; }) as typeof dom.window.setInterval);
-  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon, copy: { permissionRequired: 'Host permission is required', permissionHint: 'Allow screen recording and accessibility, then reconnect.', sessionUnavailable: 'The graphical session is unavailable', sessionHint: 'Unlock the Mac and sign in, then reconnect.', sessionFailed: 'Application sharing has stopped', reopenHint: 'Return to Host Applications and open the app again.', captureHint: 'Reconnect or choose another window.', controls: 'Application controls', "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
+  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon, initial, copy: { permissionRequired: 'Host permission is required', permissionHint: 'Allow screen recording and accessibility, then reconnect.', sessionUnavailable: 'The graphical session is unavailable', sessionHint: 'Unlock the Mac and sign in, then reconnect.', sessionFailed: 'Application sharing has stopped', reopenHint: 'Return to Host Applications and open the app again.', captureHint: 'Reconnect or choose another window.', controls: 'Application controls', "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
   await drain();
   const socket = () => Socket.instances.at(-1)!;
   const state = () => dom.window.document.body.dataset.state;
@@ -61,6 +62,77 @@ async function viewer(video = false, icon = '') {
 }
 
 describe('macOS application viewer', () => {
+  it.each([
+    ['application_exited', 'applicationExited'],
+    ['windows_closed', 'windowsClosed'],
+    ['sharing_stopped', 'sharingStopped'],
+    ['', 'ended'],
+  ])('renders a refreshed terminal document immediately (%s)', async (end_reason, state) => {
+    const v = await viewer(false, '', {state: 'ended', end_reason});
+    expect(v.state()).toBe(state);
+    expect(v.fetch).not.toHaveBeenCalled();
+    expect(v.socket()).toBeUndefined();
+    expect(v.native.request).not.toHaveBeenCalled();
+    expect(dom.window.document.getElementById('connection')!.getAttribute('aria-busy')).toBe('false');
+    expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(true);
+    expect((dom.window.document.getElementById('dismiss') as HTMLButtonElement).hidden).toBe(false);
+  });
+
+  it('rejects an unknown successful status before opening a capture stream', async () => {
+    const v = await viewer();
+    v.socket().onclose?.(); await drain();
+    v.fetch.mockResolvedValue({ok:true, json:async () => ({state:'unexpected',password:'private'})});
+    await v.retry();
+    expect(v.state()).toBe('disconnected');
+    expect(v.socket().close).toHaveBeenCalled();
+  });
+
+  it('does not offer an ineffective close action in a directly opened browser tab', async () => {
+    const v = await viewer();
+    Object.assign(dom.window, { redevenHostApplicationWindow: undefined, opener: null });
+    v.fetch.mockResolvedValue({ok:true, json:async () => ({state:'ended', end_reason:'windows_closed'})});
+    v.socket().onclose?.(); await drain();
+    expect(v.state()).toBe('windowsClosed');
+    expect((dom.window.document.getElementById('dismiss') as HTMLButtonElement).hidden).toBe(true);
+  });
+
+  it.each([401, 403, 423])('keeps access denial distinct from session closure (%s)', async status => {
+    const v = await viewer(); await v.activate();
+    v.fetch.mockResolvedValue({ok:false,status});
+    v.socket().onclose?.(); await drain();
+    expect(v.state()).toBe('accessRequired');
+    expect(v.native.request).not.toHaveBeenCalled();
+    expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(false);
+  });
+
+  it('checks authoritative state before showing a transport error', async () => {
+    const v = await viewer(); await v.activate();
+    let resolve!: (value: unknown) => void;
+    v.fetch.mockReturnValue(new Promise(done => { resolve = done; }));
+    v.socket().onclose?.();
+    expect(v.state()).toBe('checking');
+    resolve({ok:true,json:async () => ({state:'ended',end_reason:'application_exited'})}); await drain();
+    expect(v.state()).toBe('applicationExited');
+    expect(v.native.request).toHaveBeenCalledWith('close');
+  });
+
+  it('bounds a stalled status reconciliation and ignores its late result', async () => {
+    const v = await viewer(); await v.activate();
+    let timeout!: () => void;
+    vi.spyOn(dom.window, 'setTimeout').mockImplementation(((callback: () => void, delay: number) => {
+      expect(delay).toBe(6000); timeout = callback; return 1;
+    }) as typeof dom.window.setTimeout);
+    let resolve!: (value: unknown) => void;
+    v.fetch.mockReturnValue(new Promise(done => { resolve = done; }));
+    v.socket().onclose?.();
+    expect(v.state()).toBe('checking');
+    timeout();
+    expect(v.state()).toBe('disconnected');
+    resolve({ok:true,json:async () => ({state:'ended'})}); await drain();
+    expect(v.state()).toBe('disconnected');
+    expect(v.native.request).not.toHaveBeenCalled();
+  });
+
   it('discards unfinished composition when the displayed window changes', async () => {
     const v = await viewer(); await v.activate();
     const input = dom.window.document.querySelector('textarea')!;
@@ -96,6 +168,37 @@ describe('macOS application viewer', () => {
     expect(panel.hidden).toBe(true);
   });
 
+  it('exposes every window through a separate counted picker and keeps it open during switching', async () => {
+    const v = await viewer(); await v.activate();
+    v.socket().message({type:'windows',windows:[{id:'owned',title:'Document A'},{id:'other',title:'Document B'}]});
+    const toggle = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-windows-toggle')!;
+    expect(toggle).not.toBeNull();
+    expect(toggle.hidden).toBe(false);
+    expect(toggle.textContent).toContain('2');
+    toggle.click();
+    const panel = dom.window.document.querySelector<HTMLElement>('.mac-app-window-picker')!;
+    expect(panel.hidden).toBe(false);
+    const rows = panel.querySelectorAll<HTMLButtonElement>('button');
+    expect([...rows].map(row => row.textContent)).toEqual(['Document A', 'Document B']);
+    expect(rows[0].getAttribute('aria-pressed')).toBe('true');
+    rows[1].click();
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'select',window:'other',generation:1});
+    v.socket().message({type:'window',window:'other',generation:2,width:640,height:480});
+    expect(panel.hidden).toBe(false);
+    expect(rows[1].getAttribute('aria-busy')).toBe('true');
+    v.socket().frame(); await drain();
+    expect(rows[1].getAttribute('aria-pressed')).toBe('true');
+    expect(rows[1].getAttribute('aria-busy')).toBe('false');
+    expect(panel.hidden).toBe(false);
+    rows[0].focus();
+    v.socket().message({type:'windows',windows:[{id:'other',title:'Document B'},{id:'owned',title:'Renamed document'}]});
+    expect(dom.window.document.activeElement?.textContent).toBe('Renamed document');
+    v.socket().message({type:'windows',windows:[{id:'other',title:'Document B'}]});
+    expect(toggle.textContent).toContain('1');
+    expect(panel.querySelectorAll('button')).toHaveLength(1);
+    expect(dom.window.document.activeElement).toBe(toggle);
+  });
+
   it('keeps other application windows selectable when one capture source fails', async () => {
     const v = await viewer(); await v.activate();
     v.socket().message({type:'windows',windows:[{id:'owned',title:'Main'},{id:'other',title:'Other'}]});
@@ -104,9 +207,10 @@ describe('macOS application viewer', () => {
     expect(v.socket().close).not.toHaveBeenCalled();
     const controls = dom.window.document.querySelector<HTMLElement>('.mac-app-controls')!;
     expect(controls.hidden).toBe(false);
-    const select = controls.querySelector<HTMLSelectElement>('.mac-app-actions select')!;
-    expect(select.disabled).toBe(false);
-    select.value = 'other'; select.dispatchEvent(new dom.window.Event('change'));
+    controls.querySelector<HTMLButtonElement>('.mac-app-windows-toggle')!.click();
+    const other = [...controls.querySelectorAll<HTMLButtonElement>('.mac-app-window-list button')].find(button => button.textContent === 'Other')!;
+    expect(other.disabled).toBe(false);
+    other.click();
     expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'select',window:'other',generation:2});
     v.socket().frame({generation:1}); await drain();
     expect(v.state()).toBe('captureUnavailable');
@@ -210,10 +314,10 @@ describe('macOS application viewer', () => {
     const v = await viewer(); await v.activate();
     v.fetch.mockResolvedValue({ ok: false, status });
     v.socket().onclose?.(); await drain();
-    expect(v.state()).toBe('disconnected');
+    expect(v.state()).toBe('sessionMissing');
     expect(v.native.request).not.toHaveBeenCalled();
     await v.retry();
-    expect(v.state()).toBe('disconnected');
+    expect(v.state()).toBe('sessionMissing');
     expect(v.native.request).not.toHaveBeenCalled();
   });
 

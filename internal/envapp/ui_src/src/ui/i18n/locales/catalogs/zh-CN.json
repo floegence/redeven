@@ -6223,6 +6223,19 @@
     }
   },
   "hostApplications": {
+    "checking": "正在确认应用状态…",
+    "applicationExited": "应用已退出",
+    "applicationExitedHint": "主机已确认应用退出。需要时，请从“主机应用”重新打开。",
+    "windowsClosed": "应用窗口已关闭",
+    "windowsClosedHint": "主机上的共享窗口已全部关闭，应用可能仍在运行。请从“主机应用”重新打开窗口并共享。",
+    "sharingStopped": "共享已停止",
+    "sharingStoppedHint": "本次共享已停止，应用可能仍在主机上运行。",
+    "endedHint": "本次会话已结束。请从“主机应用”重新打开应用，开始新会话。",
+    "sessionMissing": "共享会话已不可用",
+    "sessionMissingHint": "主机已不再保留此会话，无法在这里确认应用状态。请返回“主机应用”查看并重新打开。",
+    "accessRequired": "无法访问此会话",
+    "accessHint": "请在 Redeven 中检查登录状态和访问权限，然后重试。",
+    "dismiss": "关闭窗口",
     "macControls": "应用控制",
     "prepare": {
       "downloadMethod": "下载方式",
@@ -6265,7 +6278,7 @@
     "connecting": "正在连接应用…",
     "reconnecting": "正在重新连接…",
     "disconnected": "连接已中断",
-    "connectionHint": "重新连接即可继续使用应用。关闭此窗口不会结束会话。",
+    "connectionHint": "暂时无法确认应用的当前状态。请检查连接，然后重新连接。",
     "reconnect": "重新连接",
     "add": "添加应用",
     "addDescription": "输入已安装图形应用的可执行文件绝对路径。参数将直接传递，不经过 shell。",

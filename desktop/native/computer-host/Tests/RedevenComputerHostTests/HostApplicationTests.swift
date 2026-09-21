@@ -3,6 +3,22 @@ import AppKit
 @testable import RedevenComputerHost
 
 final class HostApplicationTests: XCTestCase {
+    func testPassiveCaptureChromeRequiresPositiveEvidenceAndPreservesDialogs() {
+        let bounds = CGRect(x: 100, y: 100, width: 500, height: 400)
+        func passive(point: CGPoint? = CGPoint(x: -1, y: 1441), main: Bool? = false, focused: Bool? = false, modal: Bool? = false, controls: Bool = false) -> Bool {
+            HostApplicationWindows.isPassiveSurface(bounds: bounds, activationPoint: point, mainSettable: main, focused: focused, modal: modal, hasControls: controls)
+        }
+        XCTAssertTrue(passive())
+        XCTAssertFalse(passive(point: CGPoint(x: 110, y: 110)))
+        XCTAssertFalse(passive(main: true))
+        XCTAssertFalse(passive(focused: true))
+        XCTAssertFalse(passive(modal: true))
+        XCTAssertFalse(passive(controls: true))
+        XCTAssertFalse(passive(point: nil))
+        XCTAssertFalse(passive(main: nil))
+        XCTAssertFalse(passive(focused: nil))
+        XCTAssertFalse(passive(modal: nil))
+    }
     func testInstanceIdentityChangesWhenProcessOrLaunchGenerationChanges() {
         let url = URL(fileURLWithPath: "/Applications/Fixture.app")
         let date = Date(timeIntervalSince1970: 1234)

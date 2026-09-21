@@ -57,15 +57,23 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
         replace.target = self; actions.addItem(replace); root.submenu = actions
         let animate = NSMenuItem(title: "Toggle animation", action: #selector(toggleAnimation), keyEquivalent: "")
         animate.target = self; actions.addItem(animate)
-        for (title, selector) in [("Open second window", #selector(openSecond)), ("Minimize main window", #selector(minimizeMain)), ("Hide fixture", #selector(hideFixture)), ("Cancel next close", #selector(cancelClose))] {
+        for (title, selector) in [("Open second window", #selector(openSecond)), ("Open utility panel", #selector(openUtility)), ("Minimize main window", #selector(minimizeMain)), ("Hide fixture", #selector(hideFixture)), ("Cancel next close", #selector(cancelClose))] {
             let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
             item.target = self; actions.addItem(item)
         }
+        let quit = NSMenuItem(title: "Quit fixture", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quit.target = NSApp; actions.addItem(quit)
         menu.addItem(root)
         let edit = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         edit.submenu = NSMenu(title: "Edit")
         edit.submenu!.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
         menu.addItem(edit); NSApp.mainMenu = menu
+        if let delay = Bundle.main.object(forInfoDictionaryKey: "RedevenFixtureCloseDelay") as? Double {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self.window?.close() }
+        }
+        if let delay = Bundle.main.object(forInfoDictionaryKey: "RedevenFixtureQuitDelay") as? Double {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { NSApp.terminate(nil) }
+        }
         save()
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -78,6 +86,12 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let second = NSWindow(contentRect: NSRect(x: 250, y: 250, width: 420, height: 260), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         second.isReleasedWhenClosed = false; second.title = "Secondary fixture window"; second.delegate = self
         secondary = second; second.makeKeyAndOrderFront(nil); save()
+    }
+    @objc func openUtility() {
+        let panel = NSPanel(contentRect: NSRect(x: 250, y: 250, width: 420, height: 260), styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        panel.level = .floating
+        panel.isReleasedWhenClosed = false; panel.title = "Fixture utility panel"; panel.delegate = self
+        secondary = panel; panel.makeKeyAndOrderFront(nil); save()
     }
     @objc func minimizeMain() { window.miniaturize(nil); save() }
     @objc func hideFixture() { NSApp.hide(nil); save() }
@@ -124,7 +138,7 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowDidResize(_ notification: Notification) { if field != nil { save() } }
     func windowWillClose(_ notification: Notification) {
         if let closed = notification.object as? NSWindow, closed === secondary { secondary = nil; window.makeKeyAndOrderFront(nil); save(); return }
-        save(); if !replacing { DispatchQueue.main.async { NSApp.terminate(nil) } } }
+        save(); if !replacing && Bundle.main.object(forInfoDictionaryKey: "RedevenFixtureKeepRunning") as? Bool != true { DispatchQueue.main.async { NSApp.terminate(nil) } } }
 }
 let app = FixtureApplication.shared
 app.setActivationPolicy(.regular)

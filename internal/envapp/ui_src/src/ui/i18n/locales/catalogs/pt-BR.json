@@ -6212,6 +6212,19 @@
     }
   },
   "hostApplications": {
+    "checking": "Verificando o estado do aplicativo…",
+    "applicationExited": "O aplicativo foi encerrado",
+    "applicationExitedHint": "O host confirmou que o aplicativo foi encerrado. Abra-o novamente nos aplicativos do host quando precisar.",
+    "windowsClosed": "As janelas do aplicativo foram fechadas",
+    "windowsClosedHint": "Todas as janelas compartilhadas foram fechadas no host. O aplicativo pode continuar em execução. Abra-o nos aplicativos do host para compartilhar uma janela novamente.",
+    "sharingStopped": "O compartilhamento foi interrompido",
+    "sharingStoppedHint": "Esta sessão de compartilhamento foi interrompida. O aplicativo pode continuar em execução no host.",
+    "endedHint": "Esta sessão terminou. Abra o aplicativo novamente nos aplicativos do host para iniciar uma nova sessão.",
+    "sessionMissing": "A sessão de compartilhamento não está mais disponível",
+    "sessionMissingHint": "O host não mantém mais esta sessão. Não é possível confirmar o estado do aplicativo aqui. Volte aos aplicativos do host para verificá-lo e abri-lo novamente.",
+    "accessRequired": "O acesso a esta sessão está indisponível",
+    "accessHint": "Verifique seu login e suas permissões de acesso no Redeven e tente novamente.",
+    "dismiss": "Fechar janela",
     "macControls": "Controles do aplicativo",
     "prepare": {
       "downloadMethod": "Método de download",
@@ -6254,7 +6267,7 @@
     "connecting": "Conectando ao aplicativo…",
     "reconnecting": "Reconectando…",
     "disconnected": "Conexão interrompida",
-    "connectionHint": "Reconecte para continuar usando o aplicativo. Fechar esta janela não encerra a sessão.",
+    "connectionHint": "Não foi possível confirmar o estado atual do aplicativo. Verifique a conexão e reconecte.",
     "reconnect": "Reconectar",
     "add": "Adicionar aplicativo",
     "addDescription": "Informe o caminho absoluto do executável de um aplicativo gráfico instalado. Os argumentos são passados diretamente, sem usar um shell.",

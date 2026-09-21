@@ -6,14 +6,15 @@ const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
 };
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const source = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.js'), 'utf8');
+const shared = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/connection.js'), 'utf8');
+const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '');
 const copy = {starting:'Starting', connecting:'Connecting', reconnecting:'Reconnecting', disconnected:'Disconnected', failed:'Failed', ended:'Ended', retry:'Retry', reconnect:'Reconnect', connectionHint:'Return to your application'};
 let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.close(); });
 
-async function viewer(deferredInitialization = false, native = false, lexicalClient = false) {
+async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>) {
   dom = new JSDOM(html, { url:'http://localhost/pf/test/_redeven_host_app/', runScripts:'dangerously', pretendToBeVisual:true });
   const fetch = vi.fn().mockResolvedValue({ok:true, json:async () => ({state:'running', password:'private'})});
   dom.window.fetch = fetch;
@@ -25,7 +26,7 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
     return vi.fn();
   }) };
   if (native) Object.assign(dom.window, { redevenHostApplicationWindow: nativeWindow });
-  dom.window.eval(`const config = ${JSON.stringify({base:'/pf/test', copy, icon:''})};\n${source}`);
+  dom.window.eval(`const config = ${JSON.stringify({base:'/pf/test', copy, icon:'', initial})};\n${source}`);
   await drain();
   const frame = dom.window.document.querySelector('iframe')!;
   const doc = frame.contentDocument!;
@@ -60,6 +61,18 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
 }
 
 describe('host application viewer', () => {
+  it('renders a refreshed ended session without starting Xpra or requesting credentials', async () => {
+    const v = await viewer(false, true, false, {state:'ended'});
+    expect(v.state()).toBe('ended');
+    expect(v.fetch).not.toHaveBeenCalled();
+    expect(v.frame.getAttribute('src')).toBeNull();
+    expect(v.nativeWindow.request).not.toHaveBeenCalled();
+    dom.window.dispatchEvent(new dom.window.Event('offline'));
+    expect(v.state()).toBe('ended');
+    dom.window.document.querySelector<HTMLButtonElement>('#dismiss')!.click();
+    expect(v.nativeWindow.request).toHaveBeenCalledWith('close');
+  });
+
   it('reveals an application that opens only a dialog window', async () => {
     const v = await viewer();
     const dialog = v.appWindow(1, {modal:true}, 'DIALOG');
@@ -74,7 +87,7 @@ describe('host application viewer', () => {
     v.fetch.mockResolvedValue({ok:true,json:async () => ({state:'failed'})});
     v.doc.dispatchEvent(new dom.window.Event('connection-lost')); await drain();
     expect(v.state()).toBe('sessionFailed');
-    expect(dom.window.document.querySelector('button')!.hidden).toBe(true);
+    expect(dom.window.document.querySelector<HTMLButtonElement>('#retry')!.hidden).toBe(true);
   });
 
   it('fits primary windows, preserves transient dialogs and reveals only painted content', async () => {
@@ -124,11 +137,11 @@ describe('host application viewer', () => {
     expect(v.state()).toBe('disconnected');
     expect(v.client.close).toHaveBeenCalled();
     expect(v.frame.getAttribute('aria-hidden')).toBe('true');
-    expect(dom.window.document.querySelector('button')!.hidden).toBe(false);
+    expect(dom.window.document.querySelector<HTMLButtonElement>('#retry')!.hidden).toBe(false);
     oldDamage(2, 1, 100, 100, 10, '');
     expect(v.state()).toBe('disconnected');
     v.fetch.mockResolvedValue({ok:true, json:async () => ({state:'running', password:'renewed'})});
-    dom.window.document.querySelector('button')!.click();
+    dom.window.document.querySelector<HTMLButtonElement>('#retry')!.click();
     await drain();
     expect(v.state()).toBe('reconnecting');
     expect(JSON.parse(dom.window.sessionStorage.getItem('/pf/test')!).password).toBe('renewed');
@@ -140,7 +153,7 @@ describe('host application viewer', () => {
     v.doc.dispatchEvent(new dom.window.Event('connection-lost'));
     await drain();
     expect(v.state()).toBe('ended');
-    expect(dom.window.document.querySelector('button')!.hidden).toBe(true);
+    expect(dom.window.document.querySelector<HTMLButtonElement>('#retry')!.hidden).toBe(true);
   });
 
   it.each([404, 410])('retains the viewer when its status route returns HTTP %s', async status => {
@@ -149,10 +162,10 @@ describe('host application viewer', () => {
     v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
     v.fetch.mockResolvedValue({ok:false, status});
     v.doc.dispatchEvent(new dom.window.Event('connection-lost')); await drain();
-    expect(v.state()).toBe('disconnected');
+    expect(v.state()).toBe('sessionMissing');
     expect(v.nativeWindow.request).not.toHaveBeenCalled();
-    dom.window.document.querySelector('button')!.click(); await drain();
-    expect(v.state()).toBe('disconnected');
+    dom.window.document.querySelector<HTMLButtonElement>('#retry')!.click(); await drain();
+    expect(v.state()).toBe('sessionMissing');
   });
 
   it('closes the native viewer only after the active application session has ended', async () => {

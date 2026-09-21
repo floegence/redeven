@@ -24,7 +24,9 @@ input. This matrix is not a certification of every installed application.
 | First window delayed beyond 40 seconds | Keep waiting; display eventual pixels without relaunch | Real 48-second fixture, Go watchdog test |
 | Background app with no window | Keep native menu and reconnect available | Real menu/reopen fixtures, viewer tests |
 | Newly launched app stopped before first window | Normal sharing termination, no launch error | Real stop fixture, Go lifecycle test |
-| App exits before any window without a stop request | Explicit launch failure | Go helper test |
+| App exits before any window | Confirmed application exit, independent of who requested it | Real terminal fixture and Go lifecycle test |
+| Multiple shareable windows | Visible counted picker, literal titles, current selection and direct switching; keep picker/focus during updates | Viewer and responsive browser tests |
+| Native capture indicators and utility panels | Exclude passive capture chrome; retain operable utility panels; counts follow actual windows | Swift classification and real multiple-window fixture |
 | New focused secondary window | Show it automatically; return to main when it closes | Real multiple-window fixture |
 | User chooses an existing window or switches rapidly | Preserve explicit choice across inventory refresh; the latest selection wins | Real multiple-window fixture |
 | Close cancelled by app | Retain process and session; do not close viewer optimistically | Real close-cancellation fixture |
@@ -59,8 +61,13 @@ input. This matrix is not a certification of every installed application.
 | Permission revoked or console locked/unavailable | Invalidate capture/input; give distinct permission or unlock guidance | Swift access classification and viewer event tests |
 | Permission restored | Explicit reconnect rebuilds capture and input receipt listener | Native reconnect path; actual OS permission toggling is not part of automated acceptance |
 | Helper unexpectedly exits | Sharing failure, not proof of application exit; reopen from library | Go helper and viewer tests |
-| Terminal sharing status | Keep owner-protected state route; clear stream credential | Go route/ownership tests |
-| Old route returns HTTP 404/410 | Preserve viewer, never infer app exit | Both viewer test suites |
+| Terminal sharing status | Keep owner-protected state route and native end reason; clear stream credential | Go route/ownership tests |
+| Reload after app quit / final window close / detach | Immediate distinct terminal page, no stream, no spinner, no relaunch; dismiss when the window permits it | Real native terminal fixture, both viewer suites and browser layout tests |
+| Disconnect races host exit | Check host state before presenting an outcome | Viewer reconciliation tests |
+| State check stalls or completes late | Bounded recovery; ignore stale outcome | Viewer timeout and generation tests |
+| Session access denied (401/403/423) | Sign-in/access guidance, retry after recovery; never claim exit | Viewer HTTP tests |
+| Malformed successful state response | Do not open a stream or infer application termination | Viewer contract test |
+| Old route returns HTTP 404/410 | Explain session is unavailable; return to library; never infer app exit | Both viewer test suites |
 | Old status/decode callback arrives late | Cannot end, repaint or block a newer connection | macOS/Xpra viewer tests |
 | Window changes while text composition or pointer move is pending | Discard pending input rather than send it to a new target | macOS viewer tests |
 | Native menu belongs to retired generation | Discard it; deliver new window before its dependent menu | macOS viewer and Go ordering tests |
@@ -87,6 +94,7 @@ constraints require separate validation. See the
 # Evidence
 
 - `scripts/check_macos_host_application_waiting.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable lifecycle scenarios.
+- `scripts/check_macos_host_application_termination.py`: host-driven exit before/after a window, last-window closure with a live process, and explicit detachment.
 - `scripts/check_macos_host_application_quit.py`: exact-process quit, cancellation, fresh-helper inventory and detachment.
 - `scripts/check_macos_host_applications.py`: real capture, input, quality and process ownership acceptance.
 - `desktop/native/computer-host/Tests/RedevenComputerHostTests/HostApplicationTests.swift`: unreadable inventory and access classification.

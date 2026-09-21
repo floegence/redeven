@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Native macOS host applications
 description: Real application discovery, direct local launch, owned remote window capture and human input on macOS.
 tags: [runtime, desktop, applications, macos, security]
-timestamp: 2026-09-21T07:00:00Z
+timestamp: 2026-09-21T15:05:00Z
 ---
 # Summary
 
@@ -49,8 +49,24 @@ Window IDs and menu handles must belong to this bound process. The browser canno
 supply an arbitrary PID, application path or capture source.
 
 ScreenCaptureKit captures a selected application window on macOS 13 or newer.
-Child-window inclusion uses the macOS 14.2 API when available. A native window list
-allows selection among the bound process's windows. A newly opened focused window
+Child-window inclusion uses the macOS 14.2 API when available. A separate counted window button stays visible at the viewer's left edge whenever
+shareable windows are available. It opens a scrollable list of literal host window
+titles with the current selection marked, independently of picture settings.
+Untitled windows use the app name and inventory position; the viewer never invents
+application-specific names. Selecting a window keeps the list open, dims retained
+pixels and disables input until a frame from the new binding is decoded. Window
+renames and inventory reordering preserve keyboard focus; removing the focused
+window returns focus to the window button. Escape returns focus to the opener.
+The list follows only the bound process's shareable AX windows, including floating
+tool panels rather than only WindowServer layer zero. Proven window IDs remain
+lifecycle evidence while their WindowServer surfaces exist, even if AX briefly
+omits them. Unrelated menu and status-bar surfaces do not become application windows.
+Passive system capture
+chrome is excluded only when AX confirms no main-window activation, focus, modal
+state or native window controls, and its activation point lies outside its bounds.
+Missing metadata cannot exclude a window; hidden and minimized windows are retained.
+This uses native interaction evidence, never application names or window titles.
+A newly opened focused window
 is selected automatically; inventory refresh does not override an explicit choice
 among existing windows. Rapid explicit selections supersede in-flight capture
 requests; retired callbacks cannot restore an earlier choice. Closing that window returns to a remaining owned window. The [picture and transport contract](macos-application-picture.md) defines Retina
@@ -119,16 +135,17 @@ nonblocking notice. A capture failure preserves the control connection so anothe
 native menu can still be selected; reconnect rebuilds capture and input delivery
 for the same process. Locked/non-console sessions and revoked permissions invalidate
 input, menus and capture once per transition and present distinct recovery guidance.
-Explicit termination of a newly launched windowless app is a normal stop.
+A confirmed process exit ends sharing normally even before the first window.
+Failure to launch and unexpected helper loss remain failures; missing pixels do
+not change a confirmed process exit into a failed launch.
 
-Terminal session presentation remains owner/full-permission protected and is
-resolved by exact forward ID even after its network forward is released. Active
-loopback-target guards continue to protect alternate routes, but a terminal
-session cannot claim a reused loopback address. The viewer uses explicit session
-state to distinguish failure from closure; HTTP 404/410, network errors and late
-responses from an old connection never prove application termination. Only a
-confirmed ended state closes an established physical viewer. An explicitly failed
-sharing session directs the user back to Host Applications to open a new session.
+Terminal state retains the native end reason: `application_exited` confirms the
+bound process exited, `windows_closed` confirms its last shared window closed,
+and `sharing_stopped` confirms detachment. Closing windows and stopping sharing
+never claim the process has quit. An unknown reason stays a generic ended session.
+The helper is the authority; a quit request itself never supplies the end reason.
+The [shared viewer recovery contract](host-applications.md) owns terminal page
+reload, status reconciliation, access failures and physical viewer closure.
 The [lifecycle validation matrix](../operations/host-application-lifecycle.md)
 separates automated recovery evidence from OS/application compatibility limits.
 
@@ -149,5 +166,5 @@ Intel host or third-party application.
 - `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplicationWindows.swift` and `desktop/native/computer-host/Tests/RedevenComputerHostTests/HostApplicationTests.swift`: authoritative inventory and transient window lifecycle.
 - `internal/hostapps/macos.go` and `macos_test.go`: helper resolution, stream credentials, connection ownership, native launch and cleanup.
 - `internal/codeapp/appserver/host_application_viewer/macos.js` and `internal/envapp/ui_src/src/ui/services/macHostApplicationViewer.test.ts`: first frame, generation, IME, recovery and physical viewer closure.
-- `scripts/check_macos_host_applications.py`, `scripts/check_macos_host_application_waiting.py`, `scripts/check_macos_host_application_quit.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable real-app pixel/input/menu/lifecycle acceptance.
+- `scripts/check_macos_host_applications.py`, `scripts/check_macos_host_application_waiting.py`, `scripts/check_macos_host_application_quit.py`, `scripts/check_macos_host_application_termination.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable real-app pixel/input/menu/lifecycle acceptance.
 - `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx`: trusted local launch and remote permission presentation.

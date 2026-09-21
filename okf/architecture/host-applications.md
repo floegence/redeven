@@ -118,6 +118,27 @@ callbacks cannot restore a disconnected or superseded view. Terminated sessions
 cannot offer an unusable retry. A failed initial Desktop
 navigation also has a localized, bridge-free reconnect page.
 
+Terminal documents include an owner-authorized snapshot, without stream credentials.
+Reloading a completed session renders its outcome immediately, without a state
+request, stream connection, progress animation or futile reconnect action. The page
+explains how to open a new session from Host Applications. Close window is offered
+only when the Desktop bridge or browser opener permits programmatic dismissal.
+An established viewer still closes automatically on confirmed session end; a newly
+loaded terminal page remains readable until dismissed. Refresh never launches an app.
+
+After a stream closes, the viewer briefly shows Checking application status while
+reconciling once with the authenticated state endpoint. A six-second deadline bounds
+this check; late responses cannot override recovery or a newer connection. Confirmed
+end/failure, access denial (401/403/423), an unavailable session route (404/410), and
+unconfirmed transport failure have distinct presentation and actions. Unavailable
+routes never imply application exit. Only live sessions reconnect with freshly read
+credentials; malformed successful responses cannot start a stream. Failed sharing
+and expired sessions direct users back to the application library. Terminal records
+are bounded in memory and do not survive Runtime restart; an expired document route
+may no longer be served, and users must reopen from the library rather than rely on
+an old viewer URL.
+
+
 The adapter integrates the selected HTML5 v20/v21 client. It reads
 the client binding inside the upstream document, including v21’s lexical global,
 without modifying installed upstream assets. Primary normal

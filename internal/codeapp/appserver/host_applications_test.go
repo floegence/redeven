@@ -57,7 +57,7 @@ func (s *hostAppsStub) ForForward(id string) (hostapps.Session, string, bool) {
 	if owner == "" {
 		owner = "alice"
 	}
-	return hostapps.Session{ID: "one", State: s.state, ErrorCode: "window_unavailable"}, owner, id == "owned"
+	return hostapps.Session{ID: "one", State: s.state, EndReason: "application_exited", ErrorCode: "window_unavailable"}, owner, id == "owned"
 }
 
 func TestHostApplicationStatusSurvivesReleasedForward(t *testing.T) {
@@ -84,7 +84,7 @@ func TestHostApplicationStatusSurvivesReleasedForward(t *testing.T) {
 						}
 						if path == "state" {
 							var result map[string]string
-							if json.Unmarshal(w.Body.Bytes(), &result) != nil || result["state"] != state || result["password"] != "" || result["error_code"] != "window_unavailable" {
+							if json.Unmarshal(w.Body.Bytes(), &result) != nil || result["state"] != state || result["end_reason"] != "application_exited" || result["password"] != "" || result["error_code"] != "window_unavailable" {
 								t.Fatalf("incorrect authoritative status: %s", w.Body.String())
 							}
 						}
@@ -101,6 +101,9 @@ func TestHostApplicationTerminalLocalRouteRetainsItsPrefix(t *testing.T) {
 		r := WithLocalUIPortForwardRoute(httptest.NewRequest(http.MethodGet, "http://localhost/pf/owned/_redeven_host_app/"+path, nil), "owned")
 		w := httptest.NewRecorder()
 		server.handlePortForwardProxy(w, r)
+		if path == "" && !strings.Contains(w.Body.String(), `"initial":{"end_reason":"application_exited","state":"failed"}`) {
+			t.Fatal("terminal document omitted the authoritative snapshot")
+		}
 		if w.Code != http.StatusOK || (path == "" && !strings.Contains(w.Body.String(), `"base":"/pf/owned"`)) {
 			t.Fatalf("local terminal route: %d %s", w.Code, w.Body.String())
 		}
