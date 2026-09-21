@@ -3,7 +3,7 @@ type: Runtime Contract
 title: macOS application picture quality and delivery
 description: Retina window pixels, live picture controls, hardware video and bounded authenticated frame delivery.
 tags: [runtime, desktop, applications, macos]
-timestamp: 2026-09-21T17:00:00Z
+timestamp: 2026-09-21T17:30:00Z
 ---
 # Summary
 
@@ -32,6 +32,21 @@ Outside input, focus leaving the controls, or Escape closes the popover; Escape
 returns focus to its trigger. Popovers fit narrow and short viewports, and loss of
 the stream retires them. Window selection, native menus, closing the current window
 and confirmed application quit are independent toolbar actions.
+
+The toolbar shows the host's unboxed application icon and name as its menu trigger.
+The adjacent window picker uses a compact host title; an untitled window or a title
+identical to the application name shows the localized window label instead. Only
+multiple windows display a count badge. The full title and count remain accessible,
+and the picker lists every host title, with application name and index only for
+untitled entries. Spare toolbar width is not part of a button. Narrow viewers
+progressively hide action labels while retaining distinct icons and accessible
+names. Light and dark appearances share the same layout and 32-pixel targets.
+
+Native menus and window lists use compact popovers; picture settings separate
+presets, advanced limits and measured statistics. Preset arrow navigation moves
+focus without applying a setting or sending input to the application; activation
+applies it. The quit confirmation identifies the bound application and initially
+focuses Cancel. Expanding any panel preserves the content area's dimensions.
 
 The picture settings offer Automatic, Clarity
 first, Motion first and Save data. Their default limits are respectively 4096/30,

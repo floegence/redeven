@@ -530,6 +530,38 @@ it('keeps controls open during WebKit button blur and closes for a concrete outs
 
 
 describe('fixed application toolbar', () => {
+  it('uses the supplied icon and names the application menu without repeating an untitled window', async () => {
+    const v = await viewer(false, 'data:image/png;base64,AAAA'); await v.activate();
+    const doc = dom.window.document;
+    const menu = doc.querySelector<HTMLButtonElement>('.mac-app-menu-toggle')!;
+    expect(menu.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,AAAA');
+    expect(menu.getAttribute('aria-label')).toBe(`${doc.title} — Menu`);
+    v.socket().message({type:'windows',windows:[{id:'owned',title:''}]});
+    const toggle = doc.querySelector<HTMLButtonElement>('.mac-app-windows-toggle')!;
+    expect(toggle.querySelector('.mac-app-toolbar-label')!.textContent).toBe('Windows');
+    expect(toggle.querySelector<HTMLElement>('.mac-app-window-count')!.hidden).toBe(true);
+    v.socket().message({type:'windows',windows:[{id:'owned',title:'Host document'},{id:'other',title:''}]});
+    expect(toggle.querySelector('.mac-app-toolbar-label')!.textContent).toBe('Host document');
+    expect(toggle.getAttribute('aria-label')).toBe('Windows · 2 — Host document');
+    expect(toggle.querySelector<HTMLElement>('.mac-app-window-count')!.hidden).toBe(false);
+  });
+
+  it('navigates picture presets without changing quality or sending remote input until activation', async () => {
+    const v = await viewer(); await v.activate();
+    const doc = dom.window.document;
+    doc.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!.click();
+    const buttons = [...doc.querySelectorAll<HTMLButtonElement>('.mac-app-picture-modes button')];
+    const key = (value: string) => doc.activeElement!.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:value,bubbles:true}));
+    expect(doc.activeElement).toBe(buttons[0]);
+    key('ArrowRight'); expect(doc.activeElement).toBe(buttons[1]);
+    key('ArrowDown'); expect(doc.activeElement).toBe(buttons[3]);
+    expect(v.socket().send).not.toHaveBeenCalled();
+    buttons[3].click();
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure',mode:'data'});
+    key('Escape');
+    expect(doc.activeElement).toBe(doc.querySelector('.mac-app-controls-toggle'));
+  });
+
   it('offers window, picture, close and quit as direct toolbar actions', async () => {
     const v = await viewer(); await v.activate();
     const toolbar = dom.window.document.querySelector('[role="toolbar"]')!;
