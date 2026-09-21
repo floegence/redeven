@@ -164,7 +164,10 @@ async function openNotesObserver(page) {
     (response) => response.url().includes('/api/notes/snapshot') && response.ok(),
     { timeout: 5000 },
   ).catch(() => undefined);
-  await page.getByRole('button', { name: 'Notes overlay', exact: true }).filter({ visible: true }).last().click();
+  // Activity surfaces may hide the toolbar affordance while keeping the
+  // shell command mounted; invoke that existing control without adding a
+  // second Notes entry point to the product.
+  await page.getByRole('button', { name: 'Notes overlay', exact: true }).last().evaluate((button) => button.click());
   await page.locator('.notes-overlay').waitFor({ state: 'visible' });
   await snapshot;
 }
