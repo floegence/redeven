@@ -1,3 +1,4 @@
+import { parseDesktopSettingsRequest, type DesktopSettingsRequest } from './settingsIPC';
 export const DESKTOP_SECURITY_CHANNEL = 'redeven-desktop:runtime-security';
 export type SecurityAction =
   | 'status'
@@ -17,7 +18,7 @@ export type SecurityRequest = Readonly<{
   saved?: boolean;
 }>;
 export type DesktopSecurityRequest = SecurityRequest &
-  Readonly<{ environment_id: string }>;
+  DesktopSettingsRequest;
 export type SecurityResult = Readonly<{
   enabled: boolean;
   password_configured: boolean;
@@ -59,7 +60,7 @@ export function parseDesktopSecurityRequest(
       throw new Error('Invalid security request.');
   }
   return {
-    environment_id: request.environment_id,
+    ...parseDesktopSettingsRequest(request),
     action: request.action as SecurityAction,
     ...(typeof request.operation_id === 'string'
       ? { operation_id: request.operation_id }

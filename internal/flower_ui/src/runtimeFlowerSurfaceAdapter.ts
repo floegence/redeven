@@ -163,6 +163,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   openWorkingDirectoryInTerminal?: FlowerSurfaceAdapter['openWorkingDirectoryInTerminal'];
   workingDirectoryActionAvailability?: FlowerSurfaceAdapter['workingDirectoryActionAvailability'];
   openLinkedDirectoryBrowser?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
+  retryModelSource?: () => Promise<void>;
   modelSourceRecovery?: FlowerModelSourceRecovery;
   missingThreadID?: string;
   failedToCreateThread?: string;
@@ -496,6 +497,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.openWorkingDirectoryInTerminal ? { openWorkingDirectoryInTerminal: options.openWorkingDirectoryInTerminal } : {}),
     ...(options.workingDirectoryActionAvailability ? { workingDirectoryActionAvailability: options.workingDirectoryActionAvailability } : {}),
     ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
+    ...(options.retryModelSource ? { retryModelSource: options.retryModelSource } : {}),
     ...(options.modelSourceRecovery ? { modelSourceRecovery: options.modelSourceRecovery } : {}),
   };
   return adapter;

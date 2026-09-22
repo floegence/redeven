@@ -7,6 +7,8 @@ import { RuntimeControlError } from './runtimeControlClient';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import type { StartupReport } from './startup';
 import type { DesktopWSLDiscoverySnapshot } from '../shared/desktopWSL';
+import type { DesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
+import type { DesktopRuntimeControlStatus } from '../shared/desktopRuntimePresence';
 import type { DesktopPreferences, DesktopSavedRuntimeTarget } from './desktopPreferences';
 
 export function environmentSettingsFailure(error: unknown): Extract<DesktopSettingsResult, { ok: false }> {
@@ -45,6 +47,26 @@ export async function withEnvironmentAccessOwner<T>(
 export function requireEnvironmentAccessCompatible(startup: StartupReport | null): void {
   if (startup && (startup.runtime_service?.compatibility_epoch ?? 0) < RUNTIME_SERVICE_COMPATIBILITY_EPOCH) {
     throw new RuntimeControlError('SETTINGS_RUNTIME_INCOMPATIBLE', 'Stop or update this older Runtime before managing its access settings.');
+  }
+}
+
+export function requireEnvironmentManagementAvailable(inspection: Readonly<{
+  startup?: StartupReport;
+  maintenance?: DesktopRuntimeMaintenanceRequirement;
+  runtime_target_available?: boolean;
+  runtime_control_status: DesktopRuntimeControlStatus;
+}>): void {
+  requireEnvironmentAccessCompatible(inspection.startup ?? null);
+  if (inspection.maintenance?.kind === 'runtime_update_required') {
+    throw new RuntimeControlError('SETTINGS_RUNTIME_INCOMPATIBLE', inspection.maintenance.message);
+  }
+  if (inspection.maintenance?.kind === 'runtime_restart_required') {
+    throw new RuntimeControlError('SECURITY_RESTART_REQUIRED', inspection.maintenance.message);
+  }
+  // A stopped, reachable Runtime still supports the offline access configuration CLI.
+  if (inspection.runtime_target_available === false && !(inspection.runtime_control_status.state === 'missing'
+    && inspection.runtime_control_status.reason_code === 'not_started')) {
+    throw new RuntimeControlError('RUNTIME_CONTROL_UNREACHABLE', 'The Environment management connection is unavailable.');
   }
 }
 

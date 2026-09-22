@@ -1,3 +1,4 @@
+import { DESKTOP_MODEL_SOURCE_RETRY_CHANNEL } from '../shared/desktopSessionContextIPC';
 import { DESKTOP_SECURITY_CHANNEL, parseDesktopSecurityRequest } from '../shared/runtimeSecurity';
 /// <reference lib="dom" />
 
@@ -50,6 +51,7 @@ import {
 
 export function bootstrapDesktopSettingsBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopSettings', {
+    retryDesktopModels: async () => (await ipcRenderer.invoke(DESKTOP_MODEL_SOURCE_RETRY_CHANNEL)) === true,
     security: async (request: unknown) => {
       const result = await ipcRenderer.invoke(DESKTOP_SECURITY_CHANNEL, parseDesktopSecurityRequest(request));
       if (!result?.ok) throw new Error(String(result?.code || 'SECURITY_UNAVAILABLE'));
@@ -116,8 +118,8 @@ export function bootstrapDesktopSettingsBridge(): void {
       ipcRenderer.on(RUNTIME_FLOWER_ATTACHMENT_PROGRESS_CHANNEL, wrapped);
       return () => ipcRenderer.removeListener(RUNTIME_FLOWER_ATTACHMENT_PROGRESS_CHANNEL, wrapped);
     },
-    cancel: (): void => {
-      ipcRenderer.send(CANCEL_DESKTOP_SETTINGS_CHANNEL);
+    cancel: (dialogToken: number): void => {
+      ipcRenderer.send(CANCEL_DESKTOP_SETTINGS_CHANNEL, dialogToken);
     },
   });
 }

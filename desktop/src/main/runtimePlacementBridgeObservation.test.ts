@@ -77,7 +77,7 @@ describe('observeRuntimePlacementBridge', () => {
   it('refreshes startup only after a ready health probe', async () => {
     const registry = new RuntimePlacementBridgeRegistry(vi.fn());
     const fixture = observationFixture('target-one');
-    registry.trackOpening(fixture.record, 'target-one:open');
+    await registry.acquire(fixture.targetID, 'target-one:open', async () => fixture.record);
     const probe = vi.fn(async () => ({
       ok: true as const,
       value: {
@@ -104,7 +104,7 @@ describe('observeRuntimePlacementBridge', () => {
       attempt_count: phase === 'connecting' ? 1 : 0,
       actions: phase === 'waiting' ? ['retry_now'] : [],
     });
-    registry.trackOpening(fixture.record, 'target-one:open');
+    await registry.acquire(fixture.targetID, 'target-one:open', async () => fixture.record);
     const probe = vi.fn();
 
     const observation = await observeRuntimePlacementBridge(registry, fixture.targetID, probe);
@@ -118,7 +118,7 @@ describe('observeRuntimePlacementBridge', () => {
     const registry = new RuntimePlacementBridgeRegistry(vi.fn());
     const fixture = observationFixture('target-one');
     fixture.setRecovery({ generation: 1, revision: 2, phase: 'paused', attempt_count: 1, actions: ['retry_now'] });
-    registry.trackOpening(fixture.record, 'target-one:open');
+    await registry.acquire(fixture.targetID, 'target-one:open', async () => fixture.record);
     const probe = vi.fn();
     expect(await observeRuntimePlacementBridge(registry, fixture.targetID, probe)).toMatchObject({ kind: 'unavailable', failure: { code: 'recovery_paused' } });
     expect(probe).not.toHaveBeenCalled();
@@ -128,7 +128,7 @@ describe('observeRuntimePlacementBridge', () => {
   it('returns recovery when interruption is published during a health probe', async () => {
     const registry = new RuntimePlacementBridgeRegistry(vi.fn());
     const fixture = observationFixture('target-one');
-    registry.trackOpening(fixture.record, 'target-one:open');
+    await registry.acquire(fixture.targetID, 'target-one:open', async () => fixture.record);
     const probe = vi.fn(async () => {
       fixture.setRecovery({
         generation: 1,
@@ -150,7 +150,7 @@ describe('observeRuntimePlacementBridge', () => {
   it('reports a typed unavailable observation without retiring the bridge', async () => {
     const registry = new RuntimePlacementBridgeRegistry(vi.fn());
     const fixture = observationFixture('target-one');
-    registry.trackOpening(fixture.record, 'target-one:open');
+    await registry.acquire(fixture.targetID, 'target-one:open', async () => fixture.record);
 
     const observation = await observeRuntimePlacementBridge(registry, fixture.targetID, async () => ({
       ok: false,
@@ -166,7 +166,7 @@ describe('observeRuntimePlacementBridge', () => {
     const registry = new RuntimePlacementBridgeRegistry(vi.fn());
     const first = observationFixture('target-one');
     const second = observationFixture('target-one');
-    registry.trackOpening(first.record, 'first:open');
+    await registry.acquire(first.targetID, 'first:open', async () => first.record);
     const firstProbe = deferred<{ ok: false; failure: { kind: 'network_error'; code: string } }>();
     const probe = vi.fn()
       .mockImplementationOnce(() => firstProbe.promise)
@@ -181,7 +181,7 @@ describe('observeRuntimePlacementBridge', () => {
     const observationTask = observeRuntimePlacementBridge(registry, first.targetID, probe);
     await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(1));
     await registry.retire(first.targetID);
-    registry.trackOpening(second.record, 'second:open');
+    await registry.acquire(second.targetID, 'second:open', async () => second.record);
     firstProbe.resolve({ ok: false, failure: { kind: 'network_error', code: 'ECONNRESET' } });
 
     const observation = await observationTask;

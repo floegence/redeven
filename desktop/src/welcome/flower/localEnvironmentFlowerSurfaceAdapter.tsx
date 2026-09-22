@@ -88,6 +88,7 @@ export type DesktopSettingsBridge = Readonly<{
   certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>;
   load: (request: DesktopSettingsRequest) => Promise<DesktopSettingsResult>;
   save: (request: SaveDesktopSettingsRequest) => Promise<SaveDesktopSettingsResult>;
+  retryDesktopModels?: () => Promise<boolean>;
   requestRuntimeFlower: (request: RuntimeFlowerRequest) => Promise<RuntimeFlowerRequestResult>;
   startRuntimeFlowerStream: (request: RuntimeFlowerStreamRequest) => Promise<RuntimeFlowerStreamStartResult>;
   cancelRuntimeFlowerStream: (streamID: string) => void;
@@ -98,7 +99,7 @@ export type DesktopSettingsBridge = Readonly<{
   cancelRuntimeFlowerAttachment: (request: unknown) => Promise<RuntimeFlowerAttachmentCancelResponse>;
   subscribeRuntimeFlowerAttachmentProgress: (listener: (progress: RuntimeFlowerAttachmentProgress) => void) => () => void;
   previewRuntimeFlowerAttachment: (request: unknown) => Promise<RuntimeFlowerAttachmentPreviewResponse>;
-  cancel: () => void;
+  cancel: (dialogToken: number) => void;
 }>;
 
 export type LocalEnvironmentFlowerSurfaceAdapterOptions = Readonly<{
@@ -724,6 +725,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
   options: LocalEnvironmentFlowerSurfaceAdapterOptions = {},
 ): FlowerSurfaceAdapter {
   return createRuntimeFlowerSurfaceAdapter({
+    retryModelSource: async () => { await bridge.retryDesktopModels?.(); },
     runtime: {
       runtime_id: LOCAL_ENVIRONMENT_RUNTIME_ID,
       runtime_kind: 'local_environment',

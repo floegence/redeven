@@ -427,7 +427,7 @@ func (s *runtimeControlServer) handleDesktopModelSourceConnect(w http.ResponseWr
 		ExpiresAtUnixMS: body.ExpiresAtUnixMS,
 	})
 	if err != nil {
-		writeRuntimeControlError(w, http.StatusBadRequest, "DESKTOP_MODEL_SOURCE_CONNECT_FAILED", err.Error())
+		writeDesktopModelSourceError(w, err)
 		return
 	}
 	s.notifyRuntimeServiceChanged()
@@ -474,6 +474,16 @@ func (s *runtimeControlServer) handleDesktopModelSourceRPC(w http.ResponseWriter
 		writeRuntimeControlError(w, http.StatusBadRequest, "DESKTOP_MODEL_SOURCE_INVALID_REQUEST", "Missing desktop model source session id.")
 		return
 	}
+	if strings.TrimSpace(r.Header.Get("X-Redeven-Desktop-Model-Source-Protocol")) != ai.DesktopModelSourceProtocolVersion {
+		writeRuntimeControlError(w, http.StatusBadRequest, "DESKTOP_MODEL_SOURCE_INVALID_REQUEST", "Unsupported desktop model source protocol.")
+		return
+	}
+	lease, err := s.agent.AcquireDesktopModelSource(r.Context())
+	if err != nil {
+		writeDesktopModelSourceError(w, err)
+		return
+	}
+	defer lease.Release()
 	upgrader := websocket.Upgrader{CheckOrigin: func(req *http.Request) bool {
 		return strictSameOriginWSRequest(req, false)
 	}}
@@ -489,7 +499,7 @@ func (s *runtimeControlServer) handleDesktopModelSourceRPC(w http.ResponseWriter
 		Source:          ai.DesktopModelSourceDefaultSource,
 		ProtocolVersion: strings.TrimSpace(r.Header.Get("X-Redeven-Desktop-Model-Source-Protocol")),
 	}
-	err = s.agent.ServeDesktopModelSourceRPC(r.Context(), session, conn, s.notifyRuntimeServiceChanged)
+	err = lease.Serve(session, conn, s.notifyRuntimeServiceChanged)
 	if err != nil && s.log != nil {
 		s.log.Warn("desktop model source rpc closed", "error", logsafe.Error(err))
 	}
@@ -537,4 +547,17 @@ func writeRuntimeControlJSON(w http.ResponseWriter, status int, body runtimeCont
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func writeDesktopModelSourceError(w http.ResponseWriter, err error) {
+	var unavailable *agent.DesktopModelSourceUnavailable
+	if errors.As(err, &unavailable) {
+		if unavailable.Blocked {
+			writeRuntimeControlError(w, http.StatusConflict, "AI_SERVICE_BLOCKED", unavailable.Error())
+		} else {
+			writeRuntimeControlError(w, http.StatusServiceUnavailable, "AI_SERVICE_UNAVAILABLE", unavailable.Error())
+		}
+		return
+	}
+	writeRuntimeControlError(w, http.StatusBadRequest, "DESKTOP_MODEL_SOURCE_CONNECT_FAILED", err.Error())
 }

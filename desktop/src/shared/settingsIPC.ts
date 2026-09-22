@@ -30,7 +30,7 @@ export type DesktopSettingsDraft = Readonly<{
   auto_runtime_probe_enabled: boolean;
 }>;
 
-export type DesktopSettingsRequest = Readonly<{ environment_id: string }>;
+export type DesktopSettingsRequest = Readonly<{ environment_id: string; dialog_token: number }>;
 export type SaveDesktopSettingsRequest = DesktopSettingsRequest & Readonly<{ draft: DesktopSettingsDraft }>;
 export type DesktopSettingsResult = Readonly<
   | { ok: true; snapshot: DesktopSettingsSurfaceSnapshot }
@@ -41,5 +41,7 @@ export type SaveDesktopSettingsResult = DesktopSettingsResult;
 export function parseDesktopSettingsRequest(value: unknown): DesktopSettingsRequest {
   const id = (value as Partial<DesktopSettingsRequest> | null)?.environment_id;
   if (typeof id !== 'string' || !id.trim()) throw new Error('Choose an Environment to manage.');
-  return { environment_id: id.trim() };
+  const token = (value as Partial<DesktopSettingsRequest>).dialog_token;
+  if (!Number.isSafeInteger(token) || token! <= 0) throw new Error('Invalid settings opening.');
+  return { environment_id: id.trim(), dialog_token: token! };
 }

@@ -32,8 +32,9 @@ export type EnvironmentSettingsSession<C> = Readonly<{
 
 /** One opening owns both drafts. Remote completions never choose or reopen a surface. */
 export function createEnvironmentSettingsController<C>(io: {
-  load: (environmentID: string) => Promise<DesktopSettingsResult>;
+  load: (environmentID: string, dialogToken: number) => Promise<DesktopSettingsResult>;
   save: (request: SaveDesktopSettingsRequest) => Promise<DesktopSettingsResult>;
+  closed?: (dialogToken: number) => void;
   lateError: (error: Extract<DesktopSettingsResult, { ok: false }>) => void;
 }) {
   const [session, setSession] = createSignal<EnvironmentSettingsSession<C> | null>(null);
@@ -48,7 +49,7 @@ export function createEnvironmentSettingsController<C>(io: {
     const request = ++readSequence;
     update({ access_state: 'loading', access_error: null });
     let result: DesktopSettingsResult;
-    try { result = await io.load(opening.environment.id); }
+    try { result = await io.load(opening.environment.id, opening.token); }
     catch (error) { result = { ok: false, error: error instanceof Error ? error.message : String(error) }; }
     if (!current(opening) || request !== readSequence) return;
     if (!result.ok) { update({ access_state: 'error', access_error: result }); return; }
@@ -68,7 +69,7 @@ export function createEnvironmentSettingsController<C>(io: {
     ++readSequence;
     update({ saving: 'access', access_error: null });
     let result: DesktopSettingsResult;
-    try { result = await io.save({ environment_id: opening.environment.id, draft: opening.access.draft }); }
+    try { result = await io.save({ environment_id: opening.environment.id, dialog_token: opening.token, draft: opening.access.draft }); }
     catch (error) { result = { ok: false, error: error instanceof Error ? error.message : String(error) }; }
     if (!current(opening)) { if (!result.ok) io.lateError(result); return result.ok; }
     update({ saving: null, access_state: 'ready' });
@@ -80,12 +81,14 @@ export function createEnvironmentSettingsController<C>(io: {
   return {
     session, update, current, loadAccess, saveAccess,
     open(environment: DesktopEnvironmentEntry, connection: C) {
+      const previous = session();
+      if (previous) io.closed?.(previous.token);
       const tab = environment.registration_ref?.kind === 'local_environment' ? 'access' : 'connection';
       setSession({ token: ++sequence, environment, tab, metadata_label: environment.label, connection, connection_baseline: connection,
         access: null, access_state: 'idle', access_error: null, saving: null });
       if (tab === 'access') void loadAccess();
     },
-    close() { ++readSequence; setSession(null); },
+    close() { const previous = session(); ++readSequence; setSession(null); if (previous) io.closed?.(previous.token); },
     selectTab(tab: EnvironmentSettingsTab) {
       update({ tab });
       if (tab === 'access' && session()?.access_state === 'idle') void loadAccess();
@@ -103,9 +106,9 @@ export function createEnvironmentSettingsController<C>(io: {
     },
     savedConnection(environment: DesktopEnvironmentEntry, connection: C) {
       const changed = session()?.environment.id !== environment.id;
-      if (changed) ++readSequence;
+      if (changed) { ++readSequence; const previous = session(); if (previous) io.closed?.(previous.token); }
       update({ environment, metadata_label: environment.label, connection, connection_baseline: connection, saving: null,
-        ...(changed ? { access: null, access_state: 'idle' as const, access_error: null } : {}) });
+        ...(changed ? { token: ++sequence, access: null, access_state: 'idle' as const, access_error: null } : {}) });
     },
   };
 }

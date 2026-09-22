@@ -22,6 +22,44 @@ async function waitForFileText(filePath: string, timeoutMs = 5_000): Promise<str
 }
 
 describe('desktopModelSource', () => {
+  it('settles a failed spawn and removes its temporary directory', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-model-spawn-test-'));
+    try {
+      const source = await startDesktopModelSource({
+        executablePath: path.join(root, 'missing'), stateRoot: root, tempRoot: root,
+        runtimeControl: { protocol_version: 'redeven-runtime-control-v2', base_url: 'http://127.0.0.1:1/', token: 'test' },
+      });
+      await expect(source.closed).resolves.toMatchObject({ stopped: false, message: expect.stringContaining('ENOENT') });
+      await expect(source.ready).rejects.toBeDefined();
+      expect(await fs.readdir(root)).toEqual([]);
+    } finally { await fs.rm(root, { recursive: true, force: true }); }
+  });
+
+  it('reports exit after readiness and cleans up without an explicit stop', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-model-exit-test-'));
+    try {
+      const executablePath = path.join(root, 'source.cjs');
+      await fs.writeFile(executablePath, `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv;
+const report = args[args.indexOf('--startup-report-file') + 1];
+const session_id = args[args.indexOf('--session-id') + 1];
+fs.writeFileSync(report, JSON.stringify({ status: 'connected', session_id, pid: process.pid }));
+setInterval(() => {}, 1000);
+`);
+      await fs.chmod(executablePath, 0o755);
+      const source = await startDesktopModelSource({
+        executablePath, stateRoot: root, tempRoot: root,
+        runtimeControl: { protocol_version: 'redeven-runtime-control-v2', base_url: 'http://127.0.0.1:1/', token: 'test' },
+      });
+      const { pid } = await source.ready;
+      process.kill(pid, 'SIGTERM');
+      await expect(source.closed).resolves.toMatchObject({ stopped: false, message: expect.stringContaining('SIGTERM') });
+      expect(await fs.readdir(root)).toEqual(['source.cjs']);
+      await source.stop();
+    } finally { await fs.rm(root, { recursive: true, force: true }); }
+  });
+
   it('creates a session, passes runtime-control through env, and shuts down cleanly', async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-model-source-test-'));
     const stateRoot = path.join(tempRoot, 'state');

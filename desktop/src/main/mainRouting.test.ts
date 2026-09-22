@@ -331,7 +331,7 @@ describe('main routing', () => {
     expect(handlerStart).toBeGreaterThanOrEqual(0);
     expect(handlerEnd).toBeGreaterThan(handlerStart);
     const handlerSrc = mainSrc.slice(handlerStart, handlerEnd);
-    expect(handlerSrc.match(/sessionRecordForWebContentsID\(event\.sender\.id\)/gu)).toHaveLength(4);
+    expect(handlerSrc.match(/sessionRecordForWebContentsID\(event\.sender\.id\)/gu)).toHaveLength(5);
     expect(handlerSrc).toContain('event.returnValue = sessionRecord?.transport_recovery_snapshot ?? null;');
     expect(handlerSrc).toContain('return sessionRecord?.transport_recovery_session?.requestRecoveryNow() ?? false;');
     expect(handlerSrc).toContain('return sessionRecord?.transport_recovery_session?.stopRecovery() ?? false;');
@@ -895,7 +895,8 @@ describe('main routing', () => {
     expect(providerStart).toBeGreaterThanOrEqual(0);
     expect(providerEnd).toBeGreaterThan(providerStart);
     const providerSrc = mainSrc.slice(providerStart, providerEnd);
-    expect(providerSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(runtimeKey)');
+    expect(providerSrc).toContain('acquireEnvironmentManagementConnection(');
+    expect(providerSrc).not.toContain('prepareDesktopModels(');
     expect(providerSrc).toContain('if (!desktopPlatformCapabilities.native_host_runtime)');
     expect(providerSrc).toContain('await verifyCurrentLocalEnvironmentRuntimeRecord(preferences.local_environment)');
     expect(providerSrc).not.toContain(
@@ -994,23 +995,22 @@ describe('main routing', () => {
       bridgeOpenStart,
     );
     const bridgeOpenSrc = mainSrc.slice(bridgeOpenStart, bridgeOpenEnd);
-    expect(bridgeOpenSrc).toContain('const desktopModelSource = await startDesktopModelSourceForStartup({');
+    expect(bridgeOpenSrc).toContain('await prepareDesktopModels(bridgeLease!)');
     expect(bridgeOpenSrc).not.toContain('await desktopModelSource.ready');
-    expect(bridgeOpenSrc.indexOf('const desktopModelSource = await startDesktopModelSourceForStartup({')).toBeLessThan(
+    expect(bridgeOpenSrc.indexOf('await prepareDesktopModels(bridgeLease!)')).toBeLessThan(
       bridgeOpenSrc.indexOf('sessionRecord = await createSessionRecord(openTarget'),
     );
 
     expect(mainSrc).not.toContain('async function ensureRuntimePlacementReadyRecordFromLauncher(');
     expect(mainSrc).not.toContain('async function ensureRuntimePlacementReadyRecordFromLauncherUncoordinated(');
 
-    const bridgeHelperStart = mainSrc.indexOf('async function openRuntimePlacementBridgeForReadyRecord(');
+    const bridgeHelperStart = mainSrc.indexOf('async function acquireRuntimePlacementBridgeForReadyRecord(');
     const bridgeHelperEnd = mainSrc.indexOf('type ProviderRuntimeLinkTargetRecord', bridgeHelperStart);
     expect(bridgeHelperStart).toBeGreaterThanOrEqual(0);
     expect(bridgeHelperEnd).toBeGreaterThan(bridgeHelperStart);
     const bridgeHelperSrc = mainSrc.slice(bridgeHelperStart, bridgeHelperEnd);
-    expect(bridgeHelperSrc).toContain(
-      'await clearRuntimePlacementBridgeRecord(readyRecord.runtime_key as DesktopRuntimeTargetID)',
-    );
+    expect(bridgeHelperSrc).toContain('runtimePlacementBridgeRegistry.acquire(');
+    expect(bridgeHelperSrc).not.toContain('clearRuntimePlacementBridgeRecord(');
     expect(bridgeHelperSrc).not.toContain('return existing;');
 
     const deleteRuntimeTargetStart = mainSrc.indexOf('async function deleteSavedRuntimeTargetFromWelcome(');
@@ -1207,7 +1207,7 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
     expect(mainSrc).not.toContain('function launcherActionFailureForUnsupportedRuntimePlacement(');
     expect(mainSrc).toContain(
-      'const runtimePlacementBridgeRegistry = new RuntimePlacementBridgeRegistry(handleRuntimePlacementBridgeSettlement);',
+      'const runtimePlacementBridgeRegistry = new RuntimePlacementBridgeRegistry(',
     );
     expect(mainSrc).not.toContain('runtimePlacementBridgeByTargetID');
     expect(mainSrc).toContain(
@@ -1218,7 +1218,7 @@ describe('main routing', () => {
     );
     expect(mainSrc).toContain('startRuntimePlacementBridgeSession({');
     expect(mainSrc).toContain('startDesktopModelSourceForStartup({');
-    expect(mainSrc).toContain('trackRuntimePlacementBridgeRecord(record, operationKey)');
+    expect(mainSrc).not.toContain('trackRuntimePlacementBridgeRecord(');
     expect(mainSrc).toContain('open_connection_required: true');
     expect(mainSrc).toContain('openConnectionRequired: state.open_connection_required === true');
     expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
@@ -1282,32 +1282,32 @@ describe('main routing', () => {
     expect(bridgeOpenSrc).toContain('shellCacheScope: targetID');
     expect(bridgeOpenSrc).toContain('desktopFailureForRuntimePlacementBridgeReadiness(');
     expect(bridgeOpenSrc).not.toContain('Runtime Placement Bridge readiness failed (');
-    expect(bridgeOpenSrc).toContain('local_ui_url: bridgeSession.startup.local_ui_url');
-    expect(bridgeOpenSrc).toContain('local_ui_urls: bridgeSession.startup.local_ui_urls');
-    expect(bridgeOpenSrc).toContain('savedRuntimePlacementSSHPassword(');
+    expect(bridgeOpenSrc).toContain('local_ui_url: current.startup.local_ui_url');
+    expect(bridgeOpenSrc).toContain('local_ui_urls: current.startup.local_ui_urls');
+    expect(mainSrc).toContain('savedRuntimePlacementSSHPassword(');
     expect(bridgeOpenSrc).not.toContain('Start this runtime first, then open it.');
 
     const settleBridgeStart = mainSrc.indexOf('async function handleRuntimePlacementBridgeSettlement(');
     const settleBridgeEnd = mainSrc.indexOf(
-      'async function openRuntimePlacementBridgeForReadyRecord(',
+      'async function acquireRuntimePlacementBridgeForReadyRecord(',
       settleBridgeStart,
     );
     const settleBridgeSrc = mainSrc.slice(settleBridgeStart, settleBridgeEnd);
     const registrySrc = readMainModuleSource('runtimePlacementBridgeRegistry.ts');
-    expect(registrySrc).toContain('entry.settlement = session.closed.then(async (termination) => {');
+    expect(registrySrc).toContain('created.settlement = record.session.closed.then(async termination => {');
     expect(registrySrc).toContain('this.entries.delete(targetID);');
-    expect(registrySrc.indexOf('await entry.record.session.disconnect();')).toBeLessThan(
+    expect(registrySrc.indexOf('await record.session.disconnect();')).toBeLessThan(
       registrySrc.indexOf('await entry.settlement;'),
     );
     expect(settleBridgeSrc).toContain("termination.kind === 'failed'");
     expect(settleBridgeSrc).toContain('sessionRecord.runtime_handle = null;');
     expect(settleBridgeSrc).toContain('sendSessionTransportRecoverySnapshot(sessionRecord);');
-    expect(settleBridgeSrc).toContain('else if (sessionRecord && !sessionRecord.closing)');
+    expect(settleBridgeSrc).toContain('!sessionRecord.closing');
     expect(bridgeOpenSrc).toContain('sessionTransportRecoveryFailed(existingSession)');
     expect(bridgeOpenSrc).toContain('await finalizeSessionClosure(existingSession.session_key);');
     expect(bridgeOpenSrc).toContain('transportRecovery: record.session');
     expect(bridgeOpenSrc).toContain(
-      'runtimePlacementBridgeRegistry.attachSession(targetID, record.session, sessionRecord.session_key)',
+      'bridgeLease!.attachSession(sessionRecord.session_key)',
     );
 
     const shutdownStart = mainSrc.indexOf('async function shutdownDesktopWindowsAndSessions(');

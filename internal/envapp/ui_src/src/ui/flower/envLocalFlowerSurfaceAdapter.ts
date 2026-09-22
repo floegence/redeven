@@ -86,6 +86,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   openWorkingDirectoryInTerminal?: FlowerSurfaceAdapter['openWorkingDirectoryInTerminal'];
   workingDirectoryActionAvailability?: FlowerSurfaceAdapter['workingDirectoryActionAvailability'];
   openLinkedDirectoryBrowser?: FlowerSurfaceAdapter['openLinkedDirectoryBrowser'];
+  retryModelSource?: () => Promise<void>;
   modelSourceRecovery?: FlowerModelSourceRecovery;
 }>;
 
@@ -1058,6 +1059,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     ...(options.openWorkingDirectoryInTerminal ? { openWorkingDirectoryInTerminal: options.openWorkingDirectoryInTerminal } : {}),
     ...(options.workingDirectoryActionAvailability ? { workingDirectoryActionAvailability: options.workingDirectoryActionAvailability } : {}),
     ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
+    ...(options.retryModelSource ? { retryModelSource: options.retryModelSource } : {}),
     ...(options.modelSourceRecovery ? { modelSourceRecovery: options.modelSourceRecovery } : {}),
   });
 }

@@ -1,3 +1,5 @@
+import { DESKTOP_MODEL_SOURCE_RETRY_CHANNEL } from '../shared/desktopSessionContextIPC';
+import { EnvironmentSettingsConnections } from './environmentSettingsConnections';
 import { DESKTOP_SECURITY_CHANNEL, parseDesktopSecurityRequest } from '../shared/runtimeSecurity';
 import { manageRuntimeSecurity } from './runtimeControlClient';
 import { DesktopResourceCache } from './desktopResourceCache';
@@ -8,7 +10,7 @@ import { BROWSER_PACKAGE_CHANNEL, BROWSER_PACKAGE_PROGRESS_CHANNEL, parseBrowser
 import { HostApplicationComponents } from './hostApplicationComponents';
 import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRESS, type HostApplicationComponentsRequest } from '../shared/hostApplicationComponents';
 import { desktopEnvironmentID } from './desktopPreferences';
-import { environmentSettingsFailure, withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, type EnvironmentAccessOwner } from './environmentAccessSettings';
+import { environmentSettingsFailure, withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, requireEnvironmentManagementAvailable, type EnvironmentAccessOwner } from './environmentAccessSettings';
 import { assertRuntimeFlowerCompatible } from '../shared/runtimeFlowerAccess';
 import { runtimeFlowerPath, runtimeFlowerMethod, runtimeFlowerMethodAllowed } from './runtimeFlowerRoutes';
 import { certificateCommandArguments, selectDesktopCertificateImport, runDesktopCertificateCommand, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart, type CertificateImport } from './desktopCertificate';
@@ -370,6 +372,7 @@ import {
 } from './runtimePlacementBridgeSession';
 import {
   RuntimePlacementBridgeRegistry,
+  type RuntimePlacementBridgeLease,
   type RuntimePlacementBridgeAttachment,
   type RuntimePlacementBridgeRecord,
 } from './runtimePlacementBridgeRegistry';
@@ -800,6 +803,7 @@ type DesktopUtilityWindowState = Readonly<{
 }>;
 
 type DesktopSessionRecord = {
+  bridge_lease?: RuntimePlacementBridgeLease;
   session_key: DesktopSessionKey;
   target: DesktopSessionTarget;
   startup: StartupReport;
@@ -1099,7 +1103,16 @@ const localRuntimeMaintenanceByEnvironmentID = new Map<string, DesktopRuntimeMai
 const sshRuntimeReadyByKey = new Map<`ssh:${string}`, SSHRuntimeReadyRecord>();
 const sshRuntimeMaintenanceByKey = new Map<`ssh:${string}`, DesktopRuntimeMaintenanceRequirement>();
 const runtimePlacementMaintenanceByTargetID = new Map<DesktopRuntimeTargetID, DesktopRuntimeMaintenanceRequirement>();
-const runtimePlacementBridgeRegistry = new RuntimePlacementBridgeRegistry(handleRuntimePlacementBridgeSettlement);
+const runtimePlacementBridgeRegistry = new RuntimePlacementBridgeRegistry(
+  handleRuntimePlacementBridgeSettlement,
+  (record, state) => {
+    console.info('[redeven:model-source]', JSON.stringify({
+      environment_id: record.environment_id, runtime_started_at: record.startup.started_at_unix_ms,
+      connection_generation: record.session.getRecoverySnapshot().generation,
+      phase: state.phase, ...(state.phase === 'failed' ? { code: 'MODEL_SOURCE_EXITED' } : {}),
+    }));
+  },
+);
 const runtimePlacementReadyByTargetID = new Map<DesktopRuntimeTargetID, RuntimePlacementReadyRecord>();
 const pendingRuntimePlacementOpenByTargetID = new Map<DesktopRuntimeTargetID, Promise<DesktopLauncherActionResult | null>>();
 const managedEnvironmentOpenRecoveryAttemptsByTargetID = new Map<DesktopRuntimeTargetID, number>();
@@ -1206,6 +1219,7 @@ const RUNTIME_FLOWER_STREAMS_GLOBAL = 64;
 type RuntimeFlowerStreamOperation = {
   key: string;
   streamID: string;
+  bridgeLease?: RuntimePlacementBridgeLease;
   sender: WebContents;
   request?: ClientRequest;
   settled: boolean;
@@ -1339,46 +1353,13 @@ async function startDesktopModelSourceForStartup(args: Readonly<{
   label: string;
   startup: StartupReport;
   signal?: AbortSignal;
-}>): Promise<ManagedDesktopModelSource | null> {
+}>): Promise<ManagedDesktopModelSource> {
   const runtimeControl = args.startup.runtime_control;
-  if (!runtimeControl) {
-    return null;
-  }
-  try {
-    const modelSource = await startDesktopModelSource({
-      executablePath: bundledRuntimeExecutablePath(),
-      stateRoot: preferencesPaths().stateRoot,
-      runtimeControl,
-      tempRoot: app.getPath('temp'),
-      signal: args.signal,
-      onLog: (stream, chunk) => {
-        const text = compact(chunk);
-        if (text) console.log(`[redeven:model-source:${stream}] ${text}`);
-      },
-    });
-    void modelSource.ready.then((readiness) => {
-      if (readiness.modelCount <= 0) {
-        const missing = readiness.missingKeyProviderIDs.length > 0
-          ? ` Missing provider keys: ${readiness.missingKeyProviderIDs.join(', ')}.`
-          : '';
-        console.warn(`[redeven:model-source] Connected to ${args.label}, but no usable Desktop models are available.${missing}`);
-      }
-    }).catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        return;
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[redeven:model-source] Desktop model source stopped before connecting to ${args.label}: ${message}`);
-    });
-    return modelSource;
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw error;
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[redeven:model-source] Desktop model source unavailable for ${args.label}: ${message}`);
-    return null;
-  }
+  if (!runtimeControl) throw new Error('Runtime control is unavailable for Desktop models.');
+  return startDesktopModelSource({
+    executablePath: bundledRuntimeExecutablePath(), stateRoot: preferencesPaths().stateRoot,
+    runtimeControl, tempRoot: app.getPath('temp'), signal: args.signal,
+  });
 }
 
 function localEnvironmentRuntimeRoot(environment: DesktopLocalEnvironmentState): string {
@@ -1597,85 +1578,58 @@ function bridgeRecordFromSession(input: Readonly<{
 
 async function handleRuntimePlacementBridgeSettlement(
   record: RuntimePlacementBridgeRecord,
-  attachment: RuntimePlacementBridgeAttachment,
+  attachments: readonly RuntimePlacementBridgeAttachment[],
   termination: RuntimePlacementBridgeTermination,
 ): Promise<void> {
-  await record.desktop_model_source?.stop().catch(() => undefined);
-  const sessionRecord = attachment.kind === 'session' ? liveSession(attachment.session_key) : null;
-  if (termination.kind === 'failed' && sessionRecord?.transport_recovery_session === record.session) {
-    sessionRecord.unsubscribe_transport_recovery?.();
-    sessionRecord.unsubscribe_transport_recovery = null;
-    sessionRecord.transport_recovery_session = null;
-    sessionRecord.transport_recovery_snapshot = record.session.getRecoverySnapshot();
-    sessionRecord.runtime_handle = null;
-    sessionRecord.diagnostics.clearRuntime();
-    sendSessionTransportRecoverySnapshot(sessionRecord);
-    await sessionRecord.diagnostics.recordLifecycle(
-      'runtime_transport_failed',
-      'Runtime Placement Bridge recovery ended and Desktop retained the disconnected Env App shell.',
-      {
+  for (const attachment of attachments) {
+    const sessionRecord = attachment.kind === 'session' ? liveSession(attachment.session_key) : null;
+    if (termination.kind === 'failed' && sessionRecord?.transport_recovery_session === record.session) {
+      sessionRecord.unsubscribe_transport_recovery?.();
+      sessionRecord.unsubscribe_transport_recovery = null;
+      sessionRecord.transport_recovery_session = null;
+      sessionRecord.transport_recovery_snapshot = record.session.getRecoverySnapshot();
+      sessionRecord.runtime_handle = null;
+      sessionRecord.diagnostics.clearRuntime();
+      sendSessionTransportRecoverySnapshot(sessionRecord);
+      await sessionRecord.diagnostics.recordLifecycle('runtime_transport_failed', 'Runtime connection ended.', {
         failure_code: termination.failure.code,
         recovery_generation: sessionRecord.transport_recovery_snapshot.generation,
         recovery_attempt_count: sessionRecord.transport_recovery_snapshot.attempt_count,
-      },
-    );
-  } else if (sessionRecord && !sessionRecord.closing) {
-    await finalizeSessionClosure(sessionRecord.session_key).catch(() => undefined);
+      });
+    } else if (sessionRecord && !sessionRecord.closing) {
+      await finalizeSessionClosure(sessionRecord.session_key).catch(() => undefined);
+    }
   }
   broadcastDesktopWelcomeSnapshots();
 }
 
-function trackRuntimePlacementBridgeRecord(
-  record: RuntimePlacementBridgeRecord,
-  operationKey: string,
-): RuntimePlacementBridgeRecord {
-  return runtimePlacementBridgeRegistry.trackOpening(record, operationKey);
-}
-
-async function openRuntimePlacementBridgeForReadyRecord(
+async function acquireRuntimePlacementBridgeForReadyRecord(
   readyRecord: RuntimePlacementReadyRecord,
+  owner: string,
   signal?: AbortSignal,
-): Promise<RuntimePlacementBridgeRecord> {
-  await clearRuntimePlacementBridgeRecord(readyRecord.runtime_key as DesktopRuntimeTargetID);
-  const preferences = await loadDesktopPreferencesCached();
-  const sshPassword = savedRuntimePlacementSSHPassword(
-    preferences,
-    readyRecord.host_access,
-    readyRecord.placement,
-    readyRecord.runtime_key as DesktopRuntimeTargetID,
-    readyRecord.environment_id,
-  );
-  const session = await startRuntimePlacementBridgeSession({
-    host_access: readyRecord.host_access,
-    placement: readyRecord.placement,
-    ssh_password: sshPassword,
-    ssh_credential_scope: readyRecord.environment_id,
-    ssh_transport_manager: desktopSSHTransportManager,
-    fallback_local_id: readyRecord.environment_id,
-    signal,
-  });
-  const nextRecord = bridgeRecordFromSession({
-    environmentID: readyRecord.environment_id,
-    label: readyRecord.label,
-    session,
-    runtimeBinaryPath: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-  });
-  const desktopModelSource = await startDesktopModelSourceForStartup({
-    label: nextRecord.label,
-    startup: nextRecord.startup,
-    signal,
-  });
-  const record = {
-    ...nextRecord,
-    desktop_model_source: desktopModelSource,
-  };
-  return trackRuntimePlacementBridgeRecord(
-    record,
-    `${readyRecord.runtime_key}:bridge`,
-  );
+  passwordOverride?: string,
+): Promise<RuntimePlacementBridgeLease> {
+  return runtimePlacementBridgeRegistry.acquire(readyRecord.runtime_key as DesktopRuntimeTargetID, owner, async creationSignal => {
+    const preferences = await loadDesktopPreferencesCached();
+    const sshPassword = savedRuntimePlacementSSHPassword(preferences, readyRecord.host_access, readyRecord.placement,
+      readyRecord.runtime_key as DesktopRuntimeTargetID, readyRecord.environment_id, passwordOverride);
+    const session = await startRuntimePlacementBridgeSession({
+      host_access: readyRecord.host_access, placement: readyRecord.placement, ssh_password: sshPassword,
+      ssh_credential_scope: readyRecord.environment_id, ssh_transport_manager: desktopSSHTransportManager,
+      fallback_local_id: readyRecord.environment_id, signal: creationSignal,
+    });
+    return bridgeRecordFromSession({ environmentID: readyRecord.environment_id, label: readyRecord.label,
+      session, runtimeBinaryPath: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT });
+  }, signal);
 }
 
-type ProviderRuntimeLinkTargetRecord = Readonly<
+async function prepareDesktopModels(lease: RuntimePlacementBridgeLease, retry = false): Promise<void> {
+  return lease.ensureModelSource(signal => startDesktopModelSourceForStartup({
+    label: lease.record.label, startup: lease.record.startup, signal,
+  }), retry);
+}
+
+type ProviderRuntimeLinkTargetRecord = Readonly<{ bridge_lease?: RuntimePlacementBridgeLease }> & Readonly<
   | {
       kind: 'local_environment';
       id: DesktopProviderRuntimeLinkTargetID;
@@ -1710,17 +1664,14 @@ async function resolveProviderRuntimeLinkTarget(
       return null;
     }
     if (runtimeKey !== preferences.local_environment.id) {
-      const runtimeTargetKey = runtimeKey as DesktopRuntimeTargetID;
-      await refreshWelcomeRuntimeHealthForEnvironment(runtimeKey);
-      const bridgeRecord = runtimePlacementBridgeRegistry.get(runtimeTargetKey);
-      const readyRecord = runtimePlacementReadyByTargetID.get(runtimeTargetKey) ?? null;
-      const resolvedBridgeRecord = bridgeRecord ?? (readyRecord?.host_access.kind === 'local_host'
-        ? await openRuntimePlacementBridgeForReadyRecord(readyRecord)
-        : null);
+      const lease = await acquireEnvironmentManagementConnection(runtimeKey, 'provider-link');
+      const resolvedBridgeRecord = lease?.record;
       if (!resolvedBridgeRecord || resolvedBridgeRecord.target_id !== runtimeTargetID || resolvedBridgeRecord.session.host_access.kind !== 'local_host') {
+        await lease?.release();
         return null;
       }
       return {
+        bridge_lease: lease!,
         kind,
         id: runtimeTargetID,
         label: resolvedBridgeRecord.label,
@@ -1738,21 +1689,19 @@ async function resolveProviderRuntimeLinkTarget(
         }
       : null;
   }
-  await refreshWelcomeRuntimeHealthForEnvironment(runtimeKey);
-  const bridgeRecord = runtimePlacementBridgeRegistry.get(runtimeKey as DesktopRuntimeTargetID);
-  const readyRecord = runtimePlacementReadyByTargetID.get(runtimeKey as DesktopRuntimeTargetID) ?? null;
+  const lease = await acquireEnvironmentManagementConnection(runtimeKey, 'provider-link');
   const expectedHostKind = kind === 'wsl_environment' ? 'wsl_host' : 'ssh_host';
-  const resolvedBridgeRecord = bridgeRecord ?? (readyRecord?.host_access.kind === expectedHostKind
-    ? await openRuntimePlacementBridgeForReadyRecord(readyRecord)
-    : null);
+  const resolvedBridgeRecord = lease?.record;
   if (resolvedBridgeRecord && resolvedBridgeRecord.target_id === runtimeTargetID && resolvedBridgeRecord.session.host_access.kind === expectedHostKind) {
     return {
+      bridge_lease: lease!,
       kind,
       id: runtimeTargetID,
       label: resolvedBridgeRecord.label,
       record: resolvedBridgeRecord,
     };
   }
+  await lease?.release();
   return null;
 }
 
@@ -5150,14 +5099,13 @@ async function runNativeRuntimeAuthority(command: readonly string[], input?: unk
   } finally { await executor.release(); }
 }
 
-async function readEnvironmentAccess(owner: EnvironmentAccessOwner): Promise<{ access: RuntimeAccessSettings; startup: StartupReport | null }> {
+async function readEnvironmentAccess(owner: EnvironmentAccessOwner, record: RuntimePlacementBridgeRecord | null): Promise<{ access: RuntimeAccessSettings; startup: StartupReport | null }> {
   if (owner.kind === 'local') {
     const startup = await nativeAccessSettingsStartup();
     const control = startup?.runtime_control && (startup.runtime_service?.compatibility_epoch ?? 0) >= RUNTIME_SERVICE_COMPATIBILITY_EPOCH
       ? startup.runtime_control : null;
     return { access: await (control ? getRuntimeAccessSettings(control) : runNativeRuntimeAuthority(['access', 'get'])), startup };
   }
-  const record = await managedAccessSettingsRecord(owner.environment_id);
   return { access: record ? await getRuntimeAccessSettings(record.startup.runtime_control!)
     : parseRuntimeAccessSettings(await runManagedRuntimeAuthority(owner.environment_id, ['access', 'get'])), startup: record?.startup ?? null };
 }
@@ -5169,15 +5117,34 @@ async function environmentAccessSnapshot(owner: EnvironmentAccessOwner, { access
   return buildEnvironmentAccessSnapshot(owner, environment, access, startup);
 }
 
-async function managedAccessSettingsRecord(environmentID: string): Promise<RuntimePlacementBridgeRecord | null> {
+const environmentSettingsConnections = new EnvironmentSettingsConnections(acquireEnvironmentManagementConnection);
+const settingsWindows = new Set<number>();
+function watchEnvironmentSettingsWindow(sender: WebContents): void {
+  if (settingsWindows.has(sender.id)) return;
+  settingsWindows.add(sender.id);
+  sender.on('did-navigate', () => environmentSettingsConnections.destroy(sender.id));
+  sender.once('destroyed', () => { environmentSettingsConnections.destroy(sender.id); settingsWindows.delete(sender.id); });
+}
+
+async function acquireEnvironmentManagementConnection(environmentID: string, owner: string, signal?: AbortSignal): Promise<RuntimePlacementBridgeLease | null> {
   const preferences = await loadDesktopPreferencesCached();
-  const target = preferences.saved_runtime_targets.find((candidate) => candidate.id === environmentID);
-  if (!target) throw new Error('Access settings require the selected Environment management connection.');
-  await refreshWelcomeRuntimeHealthForEnvironment(target.id);
+  const target = preferences.saved_runtime_targets.find(candidate => candidate.id === environmentID);
+  if (!target) {
+    if (environmentID === preferences.local_environment.id) return null;
+    throw new Error('The selected Environment management connection is unavailable.');
+  }
+  const existing = runtimePlacementBridgeRegistry.get(target.id);
+  if (existing) return runtimePlacementBridgeRegistry.acquire(target.id, owner, async () => { throw new Error('Runtime connection ended. Retry this operation.'); }, signal);
+  const lifecycleKey = runtimeLifecycleTargetKey(target.host_access, target.placement);
+  const lifecycle = lifecycleKey ? runtimeLifecycleCoordinator.active(lifecycleKey) : null;
+  if (lifecycle && lifecycle.intent !== 'refresh' && lifecycle.intent !== 'open') {
+    throw new RuntimeControlError('SETTINGS_RUNTIME_PREPARING', 'Runtime is preparing. Retry when it is ready.');
+  }
+  const inspection = await inspectRuntimePlacementTargetState({ targetID: target.id, environmentID, label: target.label,
+    hostAccess: target.host_access, placement: target.placement, sshPassword: target.ssh_password, signal });
+  requireEnvironmentManagementAvailable(inspection);
   const ready = runtimePlacementReadyByTargetID.get(target.id);
-  const record = runtimePlacementBridgeRegistry.get(target.id)
-    ?? (ready ? await openRuntimePlacementBridgeForReadyRecord(ready) : null);
-  return record?.startup.runtime_control ? record : null;
+  return ready ? acquireRuntimePlacementBridgeForReadyRecord(ready, owner, signal) : null;
 }
 
 async function runManagedRuntimeAuthority(environmentID: string, command: readonly string[], input?: unknown): Promise<unknown> {
@@ -9728,12 +9695,8 @@ async function finalizeSessionClosure(
       },
     );
 
-    const bridgeRecord = runtimePlacementBridgeRegistry.values().find((record) => (
-      desktopSessionKeyFromRuntimeTargetID(record.session.placement_target_id) === sessionKey
-    )) ?? null;
-    if (bridgeRecord) {
-      await runtimePlacementBridgeRegistry.retire(bridgeRecord.session.placement_target_id).catch(() => undefined);
-    }
+    await sessionRecord.bridge_lease?.release();
+    sessionRecord.bridge_lease = undefined;
 
     sessionRecord.runtime_handle = null;
     sessionRecord.diagnostics.clearRuntime();
@@ -9792,6 +9755,8 @@ async function openUtilityWindow(
     role: 'launcher',
     stealAppFocus: options.stealAppFocus,
     onClosed: (closedWindow) => {
+      void releaseRuntimeFlowerBridge();
+      environmentSettingsConnections.destroy(closedWindow.webContentsID);
       utilityWindows.delete(kind);
       utilityWindowKindByWebContentsID.delete(closedWindow.webContentsID);
       updateControlPlaneSyncPoller();
@@ -10134,43 +10099,37 @@ async function attachLocalEnvironmentRuntime(
   );
 }
 
-async function ensureWSLRuntimeFlowerTarget(
-  preferences: DesktopPreferences,
-): Promise<RuntimeFlowerTarget> {
+let runtimeFlowerBridgeLease: RuntimePlacementBridgeLease | undefined;
+async function releaseRuntimeFlowerBridge(): Promise<void> {
+  const lease = runtimeFlowerBridgeLease;
+  runtimeFlowerBridgeLease = undefined;
+  await lease?.release();
+}
+
+async function ensureWSLRuntimeFlowerTarget(preferences: DesktopPreferences): Promise<RuntimeFlowerTarget> {
   const targetID = preferences.default_flower_runtime_target_id;
-  if (!targetID) {
-    throw new Error('Choose a default WSL Environment before opening Flower.');
+  const target = preferences.saved_runtime_targets.find(candidate => candidate.id === targetID);
+  if (!target || target.host_access.kind !== 'wsl_host') throw new Error('Choose a default WSL Environment before opening Flower.');
+  if (runtimeFlowerBridgeLease && (!runtimeFlowerBridgeLease.active || runtimeFlowerBridgeLease.record.environment_id !== target.id)) {
+    await releaseRuntimeFlowerBridge();
   }
-  const target = preferences.saved_runtime_targets.find((candidate) => candidate.id === targetID);
-  if (!target || target.host_access.kind !== 'wsl_host') {
-    throw new Error('The default WSL Environment is no longer registered. Choose another Environment.');
-  }
-  let bridgeRecord = runtimePlacementBridgeRegistry.get(target.id);
-  if (!bridgeRecord) {
-    const lifecycleResult = await startEnvironmentRuntimeFromLauncher({
-      kind: 'start_environment_runtime',
-      environment_id: target.id,
-      runtime_target_id: target.id,
-      placement_target_id: target.id,
-      label: target.label,
-      host_access: target.host_access,
-      placement: target.placement,
-    });
-    if (!lifecycleResult.ok) {
-      throw new Error(lifecycleResult.message);
+  if (!runtimeFlowerBridgeLease) {
+    let lease = await acquireEnvironmentManagementConnection(target.id, 'flower');
+    if (!lease) {
+      const lifecycleResult = await startEnvironmentRuntimeFromLauncher({
+        kind: 'start_environment_runtime', environment_id: target.id, runtime_target_id: target.id,
+        placement_target_id: target.id, label: target.label, host_access: target.host_access, placement: target.placement,
+      });
+      if (!lifecycleResult.ok) throw new Error(lifecycleResult.message);
+      lease = await acquireEnvironmentManagementConnection(target.id, 'flower');
     }
-    await refreshWelcomeRuntimeHealthForEnvironment(target.id);
-    const readyRecord = runtimePlacementReadyByTargetID.get(target.id);
-    if (!readyRecord || readyRecord.host_access.kind !== 'wsl_host') {
-      throw new Error(`${target.label} did not become ready for Flower.`);
-    }
-    bridgeRecord = await openRuntimePlacementBridgeForReadyRecord(readyRecord);
+    if (!lease) throw new Error(`${target.label} did not become ready for Flower.`);
+    try { assertRuntimeFlowerCompatible(lease.record.startup.runtime_service); }
+    catch (error) { await lease.release(); throw error; }
+    runtimeFlowerBridgeLease = lease;
   }
-  assertRuntimeFlowerCompatible(bridgeRecord.startup.runtime_service);
-  return {
-    record: bridgeRecord,
-    local_environment: null,
-  };
+  await prepareDesktopModels(runtimeFlowerBridgeLease);
+  return { record: runtimeFlowerBridgeLease.record, local_environment: null };
 }
 
 async function ensureRuntimeFlowerRecordUncoalesced(preferences: DesktopPreferences): Promise<RuntimeFlowerTarget> {
@@ -10413,6 +10372,20 @@ async function runningBrowserFlowerTarget(): Promise<RuntimeFlowerTarget | null>
     ? { record, local_environment: environment } : null;
 }
 
+async function retainRuntimeFlowerTarget(target: RuntimeFlowerTarget, owner: string): Promise<RuntimePlacementBridgeLease | undefined> {
+  if (!('session' in target.record)) return undefined;
+  const record = target.record;
+  const lease = await runtimePlacementBridgeRegistry.acquire(record.session.placement_target_id, owner, async () => {
+    throw new Error('The Flower Runtime connection has ended.');
+  });
+  if (lease.record.session !== record.session) {
+    await lease.release();
+    throw new Error('The Flower Runtime connection changed.');
+  }
+  await prepareDesktopModels(lease);
+  return lease;
+}
+
 async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> {
   const method = runtimeFlowerMethod(request.method);
   const path = runtimeFlowerPath(request.path);
@@ -10429,6 +10402,8 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   if (!flowerTarget || (request.environment_id && request.environment_id !== flowerTarget.record.environment_id)) {
     throw new Error('The browser installation environment session has ended.');
   }
+  const lease = await retainRuntimeFlowerTarget(flowerTarget, 'flower-request');
+  try {
   const record = flowerTarget.record;
   const url = new URL(path, runtimeFlowerBaseURL(record));
   const environment = flowerTarget.local_environment;
@@ -10519,6 +10494,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
     data: dataRecord && Object.prototype.hasOwnProperty.call(dataRecord, 'data') ? dataRecord.data : parsed,
     ...(responseCapability ? { stagingCapability: responseCapability } : {}),
   };
+  } finally { await lease?.release(); }
 }
 
 function runtimeFlowerStreamOperationKey(senderID: number, streamID: string): string {
@@ -10534,6 +10510,8 @@ function finishRuntimeFlowerStream(operation: RuntimeFlowerStreamOperation, dest
   if (operation.settled) return;
   operation.settled = true;
   runtimeFlowerStreamOperations.delete(operation.key);
+  void operation.bridgeLease?.release();
+  operation.bridgeLease = undefined;
   operation.sender.removeListener('destroyed', operation.senderDestroyedListener);
   if (destroyRequest && operation.request && !operation.request.destroyed) operation.request.destroy();
 }
@@ -10605,6 +10583,9 @@ async function startRuntimeFlowerStream(
 
   try {
     const flowerTarget = await ensureRuntimeFlowerRecord();
+    const lease = await retainRuntimeFlowerTarget(flowerTarget, `flower-stream:${key}`);
+    if (operation.settled) { await lease?.release(); return { ok: false, error: runtimeFlowerError('runtime_flower_stream_cancelled', 'Flower stream was cancelled.') }; }
+    operation.bridgeLease = lease;
     const record = flowerTarget.record;
     const url = new URL(path, runtimeFlowerBaseURL(record));
     const environment = flowerTarget.local_environment;
@@ -14552,9 +14533,14 @@ async function openRuntimePlacementBridgeFromLauncher(
     const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
     const preferences = await loadDesktopPreferencesCached();
     let bridgeSession: RuntimePlacementBridgeSession | null = null;
+    let bridgeLease: RuntimePlacementBridgeLease | undefined;
     let sessionRecord: DesktopSessionRecord | null = null;
     let record = existingBridge;
     try {
+      if (record) {
+        bridgeLease = await runtimePlacementBridgeRegistry.acquire(targetID, operationKey, async () => record!, signal);
+        record = bridgeLease.record;
+      }
       if (!record) {
         if (!readyRecord) {
           updateOpenConnectionOperation(operationKey, {
@@ -14686,7 +14672,6 @@ async function openRuntimePlacementBridgeFromLauncher(
             }
           }
         }
-        const runtimeBinaryPath = DEFAULT_DESKTOP_SSH_RUNTIME_ROOT;
         placement = readyRecord!.placement;
         const sshPassword = savedRuntimePlacementSSHPassword(
           preferences,
@@ -14713,16 +14698,8 @@ async function openRuntimePlacementBridgeFromLauncher(
         let cachedPreflightRefreshAttempted = false;
         for (;;) {
           try {
-            bridgeSession = await startRuntimePlacementBridgeSession({
-              host_access: hostAccess,
-              placement,
-              runtime_binary_path: runtimeBinaryPath,
-              ssh_password: sshPassword,
-              ssh_credential_scope: targetID,
-              ssh_transport_manager: desktopSSHTransportManager,
-              fallback_local_id: environmentID,
-              signal,
-            });
+            bridgeLease = await acquireRuntimePlacementBridgeForReadyRecord(readyRecord!, operationKey, signal, sshPassword);
+          bridgeSession = bridgeLease.record.session;
             break;
           } catch (error) {
             if (
@@ -14936,7 +14913,8 @@ async function openRuntimePlacementBridgeFromLauncher(
           managedEnvironmentOpenRecoveryAttemptsByTargetID.set(targetID, recoveryAttempts + 1);
           const requiredOperation: ManagedRuntimeLifecycleOperation =
             readinessFailure.code === 'runtime_update_required' ? 'update_runtime' : 'restart';
-          await bridgeSession.disconnect().catch(() => undefined);
+          await bridgeLease?.release();
+          bridgeLease = undefined;
           bridgeSession = null;
           updateOpenConnectionOperation(operationKey, {
             hostAccess,
@@ -15002,79 +14980,24 @@ async function openRuntimePlacementBridgeFromLauncher(
           }
           placement = readyRecord.placement;
           const nextBridgeStartedAtUnixMS = Date.now();
-          bridgeSession = await startRuntimePlacementBridgeSession({
-            host_access: hostAccess,
-            placement,
-            runtime_binary_path: runtimeBinaryPath,
-            ssh_password: sshPassword,
-            ssh_credential_scope: targetID,
-            ssh_transport_manager: desktopSSHTransportManager,
-            fallback_local_id: environmentID,
-            signal,
-          });
+          bridgeLease = await acquireRuntimePlacementBridgeForReadyRecord(readyRecord!, operationKey, signal, sshPassword);
+          bridgeSession = bridgeLease.record.session;
           bridgeProxyDurationMS = (bridgeProxyDurationMS ?? 0) + (Date.now() - nextBridgeStartedAtUnixMS);
         }
-        const nextRecord = {
-          ...bridgeRecordFromSession({
-            environmentID,
-            label,
-            session: bridgeSession,
-            runtimeBinaryPath,
-          }),
-          startup: {
-            ...bridgeSession.startup,
-            ...readiness.value,
-            local_ui_url: bridgeSession.startup.local_ui_url,
-            local_ui_urls: bridgeSession.startup.local_ui_urls,
-            runtime_control: bridgeSession.startup.runtime_control,
-          },
-        };
-        record = {
-          ...nextRecord,
-          desktop_model_source: null,
-        };
-        record = trackRuntimePlacementBridgeRecord(record, operationKey);
+        record = runtimePlacementBridgeRegistry.updateIfCurrent(targetID, bridgeSession, current => ({
+          ...current,
+          startup: { ...current.startup, ...readiness.value,
+            local_ui_url: current.startup.local_ui_url, local_ui_urls: current.startup.local_ui_urls,
+            runtime_control: current.startup.runtime_control },
+        }));
+        if (!record) throw new Error('Runtime connection ended while opening the environment.');
       }
       if (!runtimeServiceIsOpenable(record.startup.runtime_service)) {
-        throw launcherActionFailureForRuntimeNotOpenable(record.startup, {
-          environmentID: record.environment_id,
-          targetLabel: record.label,
-        });
+        throw launcherActionFailureForRuntimeNotOpenable(record.startup, { environmentID: record.environment_id, targetLabel: record.label });
       }
-      if (!record.desktop_model_source) {
-        updateOpenConnectionOperation(operationKey, {
-          hostAccess: record.session.host_access,
-          placement: record.session.placement,
-          phase: 'connecting_desktop_model_source',
-          environmentID: record.environment_id,
-          environmentLabel: record.label,
-          targetID,
-          targetLabel: record.label,
-          title: 'Connecting Desktop model source',
-          detail: 'Desktop is preparing local model access while the Env App window loads.',
-        });
-        const modelSourceRecord = record;
-        const desktopModelSourceStartedAtUnixMS = Date.now();
-        const desktopModelSource = await startDesktopModelSourceForStartup({
-          label: modelSourceRecord.label,
-          startup: modelSourceRecord.startup,
-          signal,
-        });
-        const updatedRecord = runtimePlacementBridgeRegistry.updateIfCurrent(
-          modelSourceRecord.session.placement_target_id,
-          modelSourceRecord.session,
-          (current) => ({
-            ...current,
-            desktop_model_source: desktopModelSource,
-          }),
-        );
-        if (!updatedRecord) {
-          await desktopModelSource?.stop().catch(() => undefined);
-        } else {
-          record = updatedRecord;
-          desktopModelSourceDurationMS = Date.now() - desktopModelSourceStartedAtUnixMS;
-        }
-      }
+      const desktopModelSourceStartedAtUnixMS = Date.now();
+      await prepareDesktopModels(bridgeLease!);
+      desktopModelSourceDurationMS = Date.now() - desktopModelSourceStartedAtUnixMS;
       updateOpenConnectionOperation(operationKey, {
         hostAccess: record.session.host_access,
         placement: record.session.placement,
@@ -15105,9 +15028,8 @@ async function openRuntimePlacementBridgeFromLauncher(
         openStartedAtUnixMS,
         transportRecovery: record.session,
       });
-      if (!runtimePlacementBridgeRegistry.attachSession(targetID, record.session, sessionRecord.session_key)) {
-        throw new Error('Runtime Placement Bridge ended before Desktop attached the Env App session.');
-      }
+      bridgeLease!.attachSession(sessionRecord.session_key);
+      sessionRecord.bridge_lease = bridgeLease;
       console.info('[redeven:desktop-session] waiting for session readiness', {
         session_key: sessionRecord.session_key,
         target: sessionRecord.target.label,
@@ -15125,14 +15047,7 @@ async function openRuntimePlacementBridgeFromLauncher(
         target: label,
         error: error instanceof Error ? compact(error.message) : compact(error),
       });
-      if (bridgeSession) {
-        const tracked = runtimePlacementBridgeRegistry.get(bridgeSession.placement_target_id);
-        if (tracked?.session === bridgeSession) {
-          await runtimePlacementBridgeRegistry.retire(bridgeSession.placement_target_id).catch(() => undefined);
-        } else {
-          await bridgeSession.disconnect().catch(() => undefined);
-        }
-      }
+      await bridgeLease?.release();
       const failure = desktopFailureFromError(error, {
         code: 'environment_open_failed',
         title: 'Open Failed',
@@ -16073,6 +15988,11 @@ async function connectProviderRuntimeOperation(
   let runtimeTarget: ProviderRuntimeLinkTargetRecord | null;
   try {
     runtimeTarget = recovery?.target ?? await resolveProviderRuntimeLinkTarget(preferences, request.runtime_target_id);
+    if (recovery && runtimeTarget?.record && 'session' in runtimeTarget.record) {
+      const lease = await acquireEnvironmentManagementConnection(runtimeTarget.record.environment_id, 'provider-recovery');
+      if (!lease || lease.record.session !== runtimeTarget.record.session) { await lease?.release(); return launcherActionFailure('runtime_not_started', 'environment', 'The Runtime connection changed.'); }
+      runtimeTarget = { ...runtimeTarget, bridge_lease: lease };
+    }
   } catch (error) {
     return launcherActionFailureFromSessionOpenError(error, providerEnvironmentFailureContext(environment));
   }
@@ -16084,6 +16004,7 @@ async function connectProviderRuntimeOperation(
       providerEnvironmentFailureContext(environment),
     );
   }
+  try {
   const runtimeRecord = runtimeTarget.record;
   if (!runtimeRecord) {
     return launcherActionFailure(
@@ -16188,6 +16109,7 @@ async function connectProviderRuntimeOperation(
       ?? launcherActionFailureFromProviderAuthError(error, providerEnvironmentFailureContext(environment))
       ?? launcherActionFailureFromProviderLinkError(error, providerEnvironmentFailureContext(environment));
   }
+  } finally { await runtimeTarget.bridge_lease?.release(); }
 }
 
 async function disconnectProviderRuntimeFromLauncher(
@@ -16208,6 +16130,7 @@ async function disconnectProviderRuntimeOperation(
   providerCredentialRecovery.forget(request.runtime_target_id);
   const preferences = await loadDesktopPreferencesCached();
   const runtimeTarget = await resolveProviderRuntimeLinkTarget(preferences, request.runtime_target_id);
+  try {
   const runtimeRecord = runtimeTarget?.record ?? null;
   const currentBinding = runtimeServiceProviderLinkBinding(runtimeRecord?.startup.runtime_service);
   const providerEnvironmentID = compact(request.provider_environment_id);
@@ -16288,6 +16211,7 @@ async function disconnectProviderRuntimeOperation(
         ? providerEnvironmentFailureContext(environment)
         : providerBindingFailureContext(currentBinding, providerEnvironmentID));
   }
+  } finally { await runtimeTarget?.bridge_lease?.release(); }
 }
 
 async function cancelLauncherOperationFromLauncher(
@@ -18214,6 +18138,16 @@ if (!app.requestSingleInstanceLock()) {
     const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
     return sessionRecord?.transport_recovery_session?.stopRecovery() ?? false;
   });
+  ipcMain.handle(DESKTOP_MODEL_SOURCE_RETRY_CHANNEL, async (event) => {
+    if (event.senderFrame !== event.sender.mainFrame) return false;
+    const session = sessionRecordForWebContentsID(event.sender.id);
+    const lease = session && !session.closing && session.root_window.webContentsID === event.sender.id
+      ? session.bridge_lease
+      : utilityWindowKindByWebContentsID.has(event.sender.id) ? runtimeFlowerBridgeLease : undefined;
+    if (!lease?.active) return false;
+    await prepareDesktopModels(lease, true);
+    return true;
+  });
   ipcMain.handle(DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL, (event) => {
     const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
     return sessionRecord?.transport_recovery_session?.requestRecoveryNow() ?? false;
@@ -18346,19 +18280,28 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   ipcMain.handle(DESKTOP_SECURITY_CHANNEL, async (event, input) => {
+    let environmentID = '';
     try {
-    if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) throw new Error('Security settings require the Desktop settings window.');
-    const { environment_id, ...request } = parseDesktopSecurityRequest(input);
-    const data = await withEnvironmentAccessOwner(await loadDesktopPreferencesCached(), environment_id,
-      desktopPlatformCapabilities.native_host_runtime, async (owner) => {
-        await requireEnvironmentAccessHostAvailable(owner, refreshDesktopWSLDiscovery);
-        const startup = owner.kind === 'local' ? await nativeAccessSettingsStartup() : (await managedAccessSettingsRecord(owner.environment_id))?.startup;
-        requireEnvironmentAccessCompatible(startup ?? null);
-        if (!startup?.runtime_control) throw Object.assign(new Error('Start this Runtime to manage two-factor authentication.'), { code: 'SECURITY_START_REQUIRED' });
-        return manageRuntimeSecurity(startup.runtime_control, request);
-      });
+      if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) throw new Error('Security settings require the Desktop settings window.');
+      watchEnvironmentSettingsWindow(event.sender);
+      const parsed = parseDesktopSecurityRequest(input);
+      const { environment_id, dialog_token: _dialogToken, ...request } = parsed;
+      environmentID = environment_id;
+      const data = await environmentSettingsConnections.use(event.sender.id, parsed, async record =>
+        withEnvironmentAccessOwner(await loadDesktopPreferencesCached(), environment_id,
+          desktopPlatformCapabilities.native_host_runtime, async owner => {
+            await requireEnvironmentAccessHostAvailable(owner, refreshDesktopWSLDiscovery);
+            const startup = owner.kind === 'local' ? await nativeAccessSettingsStartup() : record?.startup;
+            requireEnvironmentAccessCompatible(startup ?? null);
+            if (!startup?.runtime_control) throw new RuntimeControlError('SECURITY_START_REQUIRED', 'Start this Runtime to manage two-factor authentication.');
+            return manageRuntimeSecurity(startup.runtime_control, request);
+          }));
       return { ok: true, data };
-    } catch (error) { return { ok: false, code: typeof (error as { code?: unknown })?.code === 'string' ? (error as { code: string }).code : 'SECURITY_UNAVAILABLE' }; }
+    } catch (error) {
+      const code = error instanceof RuntimeControlError ? error.code : 'SECURITY_UNAVAILABLE';
+      if (code !== 'SETTINGS_CLOSED') console.warn('[redeven:security]', { environment_id: environmentID, stage: 'runtime_security', code });
+      return { ok: false, code };
+    }
   });
   ipcMain.handle(DESKTOP_CERTIFICATE_CHANNEL, async (event, request) => {
     if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) {
@@ -18371,12 +18314,15 @@ if (!app.requestSingleInstanceLock()) {
       if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) {
         throw new Error('Access settings require the Desktop settings window.');
       }
-      const { environment_id } = parseDesktopSettingsRequest(request);
-      return await withEnvironmentAccessOwner(await loadDesktopPreferencesCached(), environment_id,
-        desktopPlatformCapabilities.native_host_runtime, async (owner) => {
-          await requireEnvironmentAccessHostAvailable(owner, refreshDesktopWSLDiscovery);
-          return { ok: true, snapshot: await environmentAccessSnapshot(owner, await readEnvironmentAccess(owner)) };
-        });
+      const parsed = parseDesktopSettingsRequest(request);
+      const { environment_id } = parsed;
+      watchEnvironmentSettingsWindow(event.sender);
+      return await environmentSettingsConnections.use(event.sender.id, parsed, async record =>
+        withEnvironmentAccessOwner(await loadDesktopPreferencesCached(), environment_id,
+          desktopPlatformCapabilities.native_host_runtime, async owner => {
+            await requireEnvironmentAccessHostAvailable(owner, refreshDesktopWSLDiscovery);
+            return { ok: true, snapshot: await environmentAccessSnapshot(owner, await readEnvironmentAccess(owner, record)) };
+          }));
     } catch (error) { return environmentSettingsFailure(error); }
   });
   ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (event, request: SaveDesktopSettingsRequest): Promise<SaveDesktopSettingsResult> => {
@@ -18384,16 +18330,18 @@ if (!app.requestSingleInstanceLock()) {
       if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) {
         throw new Error('Access settings require the Desktop settings window.');
       }
-      const { environment_id } = parseDesktopSettingsRequest(request);
+      const parsed = parseDesktopSettingsRequest(request);
+      const { environment_id } = parsed;
+      watchEnvironmentSettingsWindow(event.sender);
       if (!request.draft || typeof request.draft !== 'object') throw new Error('Access settings are missing.');
-      return await withEnvironmentAccessOwner(await loadDesktopPreferencesCached(), environment_id,
-        desktopPlatformCapabilities.native_host_runtime, async (owner) => {
+      return await environmentSettingsConnections.use(event.sender.id, parsed, async record =>
+        withEnvironmentAccessOwner(await loadDesktopPreferencesCached(), environment_id,
+          desktopPlatformCapabilities.native_host_runtime, async owner => {
           await requireEnvironmentAccessHostAvailable(owner, refreshDesktopWSLDiscovery);
           let saved: { access: RuntimeAccessSettings; startup: StartupReport | null };
           if (owner.kind === 'local') {
             saved = await saveLocalEnvironmentSettingsFromWelcome(request.draft);
           } else {
-            const record = await managedAccessSettingsRecord(owner.environment_id);
             const access = record ? await saveRuntimeAccessSettings(record.startup.runtime_control!, request.draft)
               : parseRuntimeAccessSettings(await runManagedRuntimeAuthority(owner.environment_id, ['access', 'set'], {
                 local_ui_bind: request.draft.local_ui_bind, local_ui_protocol: request.draft.local_ui_protocol,
@@ -18403,7 +18351,7 @@ if (!app.requestSingleInstanceLock()) {
           }
           broadcastDesktopWelcomeSnapshots();
           return { ok: true, snapshot: await environmentAccessSnapshot(owner, saved) };
-        });
+        }));
     } catch (error) { return environmentSettingsFailure(error); }
   });
   ipcMain.handle(REQUEST_RUNTIME_FLOWER_CHANNEL, async (_event, request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> => {
@@ -18840,7 +18788,9 @@ if (!app.requestSingleInstanceLock()) {
     finishDesktopCodeWorkspacePreparationOperation(operation);
     return { ok: true, cancelled: true };
   });
-  ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {
+  ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, (event, dialogToken: unknown) => {
+    if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame || !Number.isSafeInteger(dialogToken)) return;
+    environmentSettingsConnections.close(event.sender.id, dialogToken as number);
     setLauncherViewState({
       surface: 'connect_environment',
     });

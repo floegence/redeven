@@ -1,5 +1,7 @@
 {
   "security": {
+    "runtimeChanged": "运行时已重启，请重新进行此安全设置步骤。",
+    "actionUncertain": "响应已丢失。安全状态已刷新，请确认后再继续。",
     "retryLater": "错误尝试过多。请等待冷却结束后再试。",
     "locked": "需要恢复",
     "newPassword": "新环境密码",
