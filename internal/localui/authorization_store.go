@@ -1427,43 +1427,56 @@ WHERE state = 'unspent' AND (
 )`, nowS, nowS); err != nil {
 		return err
 	}
-	retentionMS := localAuthorizationRetention.Milliseconds()
 	for {
-		rows, err := tx.Query(`SELECT lookup_key
+		removed, err := pruneTerminalAuthorizationPairsTx(tx, now, localAuthorizationRetention)
+		if err != nil {
+			return err
+		}
+		if removed < localAuthorizationCleanupBatch {
+			return nil
+		}
+	}
+}
+
+// Retention is diagnostic only. Missing records still reject both artifact
+// admission and receipt replay, so expired terminal pairs can be reclaimed
+// earlier under pressure without reviving an authorization or ending a session.
+func pruneTerminalAuthorizationPairsTx(tx *sql.Tx, now time.Time, retention time.Duration) (int, error) {
+	rows, err := tx.Query(`SELECT lookup_key
 FROM local_authorization_records
 WHERE state IN ('burned','released','revoked')
   AND terminal_at_unix_ms > 0
   AND ? >= max(expires_at_unix_s * 1000, terminal_at_unix_ms) + ?
 ORDER BY terminal_at_unix_ms, lookup_key
-LIMIT ?`, nowMS, retentionMS, localAuthorizationCleanupBatch)
-		if err != nil {
-			return err
+LIMIT ?`, now.UnixMilli(), retention.Milliseconds(), localAuthorizationCleanupBatch)
+	if err != nil {
+		return 0, err
+	}
+	lookups := make([]string, 0, localAuthorizationCleanupBatch)
+	for rows.Next() {
+		var lookup string
+		if err := rows.Scan(&lookup); err != nil {
+			_ = rows.Close()
+			return 0, err
 		}
-		lookups := make([]string, 0, localAuthorizationCleanupBatch)
-		for rows.Next() {
-			var lookup string
-			if err := rows.Scan(&lookup); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			lookups = append(lookups, lookup)
+		lookups = append(lookups, lookup)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	for _, lookup := range lookups {
+		if _, err := tx.Exec(`DELETE FROM local_browser_spends WHERE lookup_key = ?`, lookup); err != nil {
+			return 0, err
 		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		for _, lookup := range lookups {
-			if _, err := tx.Exec(`DELETE FROM local_browser_spends WHERE lookup_key = ?`, lookup); err != nil {
-				return err
-			}
-			if _, err := tx.Exec(`DELETE FROM local_authorization_records WHERE lookup_key = ? AND state IN ('burned','released','revoked')`, lookup); err != nil {
-				return err
-			}
-		}
-		if len(lookups) < localAuthorizationCleanupBatch {
-			break
+		if _, err := tx.Exec(`DELETE FROM local_authorization_records WHERE lookup_key = ? AND state IN ('burned','released','revoked')`, lookup); err != nil {
+			return 0, err
 		}
 	}
-	return nil
+	return len(lookups), nil
 }
 
 func (store *localAuthorizationStore) ensureCapacityTx(tx *sql.Tx, incomingBytes int64) error {
@@ -1480,8 +1493,18 @@ func (store *localAuthorizationStore) ensureCapacityTx(tx *sql.Tx, incomingBytes
 		}
 		return nil
 	}
-	if pairs >= localAuthorizationMaxPairs || logicalBytes > localAuthorizationMaxLogicalBytes-incomingBytes {
-		return errLocalAuthorizationCapacity
+	for pairs >= localAuthorizationMaxPairs || logicalBytes > localAuthorizationMaxLogicalBytes-incomingBytes {
+		removed, err := pruneTerminalAuthorizationPairsTx(tx, time.Now(), 0)
+		if err != nil {
+			return err
+		}
+		if removed == 0 {
+			return errLocalAuthorizationCapacity
+		}
+		pairs, logicalBytes, err = localAuthorizationCapacityUsageTx(tx)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

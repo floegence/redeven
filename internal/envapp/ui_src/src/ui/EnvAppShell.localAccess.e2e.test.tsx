@@ -4948,6 +4948,50 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   });
 
+  it('returns a revoked local session to the access gate without retrying its terminal connection', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => protocolSnapshot.state === 'connected');
+      await flushAsync();
+      getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
+      publishProtocolSnapshot({ state: 'failed', attempt: 1,
+        failure: { phase: 'session', code: 'canceled' }, retryDisposition: { kind: 'terminal' } });
+      await flushAsync();
+      expect(host.textContent).toContain('Unlock local runtime');
+      expect(host.querySelector('input[type="password"]')).toBeTruthy();
+      expect(getLocalAccessStatusMock).toHaveBeenCalledTimes(2);
+      expect(retryNowMock).not.toHaveBeenCalled();
+      expect(replaceConnectionMock).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  });
+
+  it('ignores a stale access check after a replacement local session connects', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => protocolSnapshot.state === 'connected');
+      await flushAsync();
+      const check = deferred<{ password_required: boolean; unlocked: boolean }>();
+      getLocalAccessStatusMock.mockReturnValueOnce(check.promise);
+      publishProtocolSnapshot({ state: 'closed', attempt: 1 });
+      await flushAsync();
+      expect(getLocalAccessStatusMock).toHaveBeenCalledTimes(2);
+      publishProtocolConnected();
+      await flushAsync();
+      check.resolve({ password_required: true, unlocked: false });
+      await flushAsync();
+      expect(host.textContent).not.toContain('Unlock local runtime');
+      expect(protocolSnapshot.state).toBe('connected');
+    } finally { dispose(); }
+  });
+
   it('shows Desktop provider identity while loading local runtime details from the local route', async () => {
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });

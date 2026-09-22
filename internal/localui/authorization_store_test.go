@@ -597,6 +597,79 @@ func TestLocalAuthorizationStorePhysicalAndPairCapacityLimits(t *testing.T) {
 	if err := store.ensureCapacityTx(tx, 1); !errors.Is(err, errLocalAuthorizationCapacity) {
 		t.Fatalf("capacity error = %v, want hard pair limit", err)
 	}
+	// Reconnection storms must not lock out new connections for the full
+	// diagnostic retention window once ended artifacts have expired.
+	if _, err := tx.Exec(`UPDATE local_authorization_records SET state = 'revoked', terminal_at_unix_ms = ? WHERE channel_id = 'capacity-channel-0'`, createdAt); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ensureCapacityTx(tx, 1); !errors.Is(err, errLocalAuthorizationCapacity) {
+		t.Fatalf("unexpired terminal artifact must remain retained: %v", err)
+	}
+	if _, err := tx.Exec(`UPDATE local_authorization_records SET expires_at_unix_s = ? WHERE channel_id = 'capacity-channel-0'`, time.Now().Add(-time.Minute).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ensureCapacityTx(tx, 1); err != nil {
+		t.Fatalf("expired terminal record must make room for a new connection: %v", err)
+	}
+	var records, spends int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM local_authorization_records`).Scan(&records); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM local_browser_spends`).Scan(&spends); err != nil {
+		t.Fatal(err)
+	}
+	if records != localAuthorizationMaxPairs-1 || spends != records {
+		t.Fatalf("pressure cleanup must remove only the expired terminal pair: records=%d spends=%d", records, spends)
+	}
+}
+
+func TestLocalAuthorizationPressurePruningRejectsReplayAndPreservesActiveLeases(t *testing.T) {
+	store := newTestAuthorizationStore(t, filepath.Join(t.TempDir(), "authority.sqlite"))
+	defer store.close()
+	ended, receipt, expires := issueTestAuthorization(t, store, "ended")
+	active, _, _ := issueTestAuthorization(t, store, "active")
+	request := testSpendRequest(ended, receipt, expires, "ended-attempt")
+	if err := store.spend(request); err != nil {
+		t.Fatal(err)
+	}
+	for _, issued := range []flowercontrol.IssuedArtifact{ended, active} {
+		lease, err := store.reserveLookup(issued.LookupKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.markLeased(lease.LookupKey, lease.LeaseID); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.markActivated(lease.ChannelID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.releaseChannel(issuedChannelID(ended)); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := store.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	removed, err := pruneTerminalAuthorizationPairsTx(tx, expires.Add(time.Minute), 0)
+	if err != nil || removed != 1 {
+		t.Fatalf("pressure cleanup = %d, %v; want one ended pair", removed, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.reserveLookup(ended.LookupKey()); err == nil {
+		t.Fatal("pruned artifact was admitted again")
+	}
+	if err := store.spend(request); err == nil {
+		t.Fatal("pruned receipt replay succeeded")
+	}
+	var state string
+	if err := store.db.QueryRow(`SELECT state FROM local_authorization_records WHERE lookup_key = ?`, active.LookupKey()).Scan(&state); err != nil || state != "leased" {
+		t.Fatalf("active session must survive artifact expiry and pressure: %q, %v", state, err)
+	}
+	issueTestAuthorization(t, store, "after-pressure")
 }
 
 func TestLocalAuthorizationStoreConcurrentSpendAndRotation(t *testing.T) {

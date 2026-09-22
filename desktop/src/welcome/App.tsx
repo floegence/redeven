@@ -6542,7 +6542,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               </EnvironmentSettingsPanel>
             )}>
       <EnvironmentAccessSettingsForm
-        security={window.redevenDesktopSettings?.security ? request => window.redevenDesktopSettings!.security!({ ...request, environment_id: settingsSurface().environment_id }) : undefined}
+        security={window.redevenDesktopSettings?.security ? async request => {
+          const opening = settingsSession();
+          const result = await window.redevenDesktopSettings!.security!({ ...request, environment_id: settingsSurface().environment_id });
+          if (opening && settingsController.current(opening) && request.action === 'commit') await settingsController.loadAccess();
+          return result;
+        } : undefined}
         open={Boolean(settingsSession())}
         snapshot={settingsSurface()}
         baselineSnapshot={settingsBaselineSurface()}
