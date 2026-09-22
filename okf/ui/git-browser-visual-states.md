@@ -3,7 +3,7 @@ type: UI Contract
 title: Git browser visual states
 description: Keep Git selection, repository facts, semantic status, hover, and focus visually independent across themes.
 tags: [ui, git, files, accessibility, themes]
-timestamp: 2026-07-30T00:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 # Summary
 
@@ -41,11 +41,7 @@ Commit switches in both graph entry points retain the mounted overview, action r
 
 Diff chrome keeps file identity and Patch/Full Context controls in one compact toolbar, followed by status, counts, and copy. Permanent implementation descriptions and nested panel padding do not displace code. Selection and hover use short color transitions without changing row geometry; a newly mounted patch uses a restrained opacity reveal. Reduced-motion preferences disable these effects. File navigation must remain immediate and must not wait for animation completion.
 
-One shared diff panel owns preview and full-context requests for inline inspection, Activity windows, Workbench widgets, and the remaining dialog adapter. A network request belongs to the exact published protocol RPC transport, selected target and refresh revision, and content mode. A mounted panel waits without sending RPC while transport is absent, then loads automatically when transport becomes available. Transport loss or replacement invalidates old network content and outstanding results. The next transport reloads preview and loads full context only when that mode is selected. Connection recovery and interaction suspension remain owned by the [shell lifecycle](workbench-surface-lifecycle.md); the panel has no independent reconnect controller, timer, or retry queue.
-
-The selected Patch or Full Context mode is a panel browsing preference and remains active while the file selection changes. A changed source, file, or refreshed summary invalidates prior request ownership, including refresh at the same path; closing and disposal invalidate outstanding results. A mode switch retains an in-flight or completed request for the same owner. Caller-supplied patch snapshots retain their independent preview semantics, but explicit refresh and authoritative empty or failed results never revive an obsolete snapshot. Full context may show the current preview while loading. Binary, directory, unavailable, truncated, and failed diff states remain explicit. Commit first-parent presentation comes from the existing runtime contract.
-
-Waiting for a connection is not a missing-resource error. Only an RPC 404 identifies an unavailable diff or source; RPC 403 identifies denied read access. Other failures use safe request-error copy without claiming that a file disappeared or that a decode error proves disconnection. Current-owner errors settle without automatic retry until refresh, a new selection revision, or a new transport. Caller-formatted Stash explanations remain safe, and raw Git output does not become UI copy. A successful result without a file settles as empty instead of leaving a loading overlay or old patch.
+Diff request ownership, refresh, transport recovery, and Workbench placement continuity follow [Git diff request lifecycle](git-diff-request-lifecycle.md). These rules apply to every inspection placement.
 
 Long lines keep their own horizontal scroll viewport. When content overflows, the detail surface consumes Floe Webapp Core’s published `PersistentHorizontalScrollbar` as a persistent in-surface track instead of relying on an OS overlay scrollbar that may disappear; the track mirrors the viewport, supports pointer dragging and track seeking, and exposes keyboard scrolling through the horizontal scrollbar role. Floe owns overflow measurement, native scroll synchronization, pointer and keyboard interaction, scaling, and accessible scrollbar semantics. Redeven supplies placement, the localized label, and the Workbench action-surface contract. The viewport reserves room for this affordance, keeps it inside the detail surface rather than allowing page or Workbench scrolling to own it, and retains independent vertical scrolling. The viewport remains contained at narrow widths and under Workbench projection.
 
@@ -62,9 +58,6 @@ Inline inspection changes local presentation and file navigation only. It does n
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitCommitLoading.browser.test.tsx - Checks mounted-frame and geometric stability through delayed and superseded commit requests in both entry points at landscape, tall, and narrow sizes.
 
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffSplit.browser.test.tsx - Verifies row density, stable commit-file navigation, responsive containment, independent scrolling, keyboard selection, removal of the selected file, and a persistent scrollbar with synchronized seeking, resizing, and scaled pointer dragging in a real browser.
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx - Verifies deferred connection loading, transport replacement, late-result isolation, terminal errors, snapshot ownership, and same-path refresh.
-- redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchGitDiffWidget.browser.test.tsx - Verifies restored widgets load and recover without remounting or changing canvas geometry, while long patches retain local scroll ownership.
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffDialog.test.tsx - Verifies the selected context mode is reused for a newly selected file and requests the matching full-context payload.
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitHistoryBrowser.e2e.test.tsx - Verifies commit navigation clears obsolete diff ownership and preserves commit actions.
 - redeven:internal/envapp/ui_src/src/styles/redeven.css - Defines the shared light, dark, and forced-colors Git interaction tokens and state classes.
 - redeven:internal/envapp/ui_src/src/styles/gitBrowserSelectionVisual.browser.test.tsx - Verifies computed contrast and perceptual separation across all built-in shell themes.

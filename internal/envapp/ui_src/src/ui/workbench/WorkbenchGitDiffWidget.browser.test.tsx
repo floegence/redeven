@@ -1,7 +1,7 @@
 import '../../index.css';
 import { FloeConfigProvider, LayoutProvider, ThemeProvider, NotificationProvider } from '@floegence/floe-webapp-core';
-import { createDefaultWorkbenchState, type WorkbenchState, type WorkbenchWidgetDefinition } from '@floegence/floe-webapp-core/workbench';
-import { createSignal } from 'solid-js';
+import { createDefaultWorkbenchState, type WorkbenchState, type WorkbenchWidgetBodyProps, type WorkbenchWidgetDefinition } from '@floegence/floe-webapp-core/workbench';
+import { batch, createSignal } from 'solid-js';
 import { RpcError } from '@floegence/floe-webapp-protocol';
 import { render } from 'solid-js/web';
 import { commands, page } from 'vitest/browser';
@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EnvWorkbenchInstancesContext, type EnvWorkbenchInstancesContextValue } from './EnvWorkbenchInstancesContext';
 import { WorkbenchGitDiffWidget } from './WorkbenchGitDiffWidget';
 import { RedevenWorkbenchSurface } from './surface/RedevenWorkbenchSurface';
+import type { RuntimeWorkbenchGitDiffTarget } from './runtimeWorkbenchLayout';
 
 const getDiffContent = vi.hoisted(() => vi.fn());
 const rpcTransport = vi.hoisted(() => ({}));
@@ -25,19 +26,100 @@ function mount(scale: number) {
   const host = document.createElement('div');
   host.style.cssText = 'width:100vw;height:100vh';
   document.body.append(host);
-  const definitions: WorkbenchWidgetDefinition[] = [{ type: 'redeven.git-diff', label: 'Diff', defaultTitle: 'Diff', icon: () => null, body: WorkbenchGitDiffWidget, defaultSize: { width: 900, height: 600 }, renderMode: 'projected_surface' }];
+  const [activation, setActivation] = createSignal<WorkbenchWidgetBodyProps['activation']>();
+  const definitions: WorkbenchWidgetDefinition[] = [
+    { type: 'redeven.git-diff', label: 'Diff', defaultTitle: 'Diff', icon: () => null, body: (props) => <WorkbenchGitDiffWidget {...props} activation={activation() ?? props.activation} />, defaultSize: { width: 900, height: 600 }, renderMode: 'projected_surface' },
+    { type: 'redeven.preview', label: 'Preview', defaultTitle: 'Preview', icon: () => null, body: () => <div data-preview-fixture>Other file preview</div>, defaultSize: { width: 300, height: 300 }, renderMode: 'projected_surface' },
+  ];
   const [state, setState] = createSignal<WorkbenchState>({ ...createDefaultWorkbenchState(definitions), theme: 'mica', stickyNotes: [], annotations: [], backgroundLayers: [], viewport: { x: 0, y: 0, scale }, selectedWidgetId: 'diff', widgets: [{ id: 'diff', type: 'redeven.git-diff', title: 'Diff · deleted.ts', x: 60, y: 50, width: 900, height: 600, z_index: 1, created_at_unix_ms: 1 }] });
-  const target = { repoRootPath: '/repo', workspaceSection: 'unstaged' as const, path: 'deleted.ts', changeType: 'deleted' };
+  const [target, setTarget] = createSignal<RuntimeWorkbenchGitDiffTarget | null>({ repoRootPath: '/repo', workspaceSection: 'unstaged', path: 'deleted.ts', changeType: 'deleted' });
   dispose = render(() => <FloeConfigProvider config={{ storage: { enabled: false } }}><ThemeProvider><LayoutProvider><NotificationProvider>
-    <EnvWorkbenchInstancesContext.Provider value={{ gitDiffTarget: () => target, updateWidgetTitle: () => {} } as unknown as EnvWorkbenchInstancesContextValue}>
+    <EnvWorkbenchInstancesContext.Provider value={{ gitDiffTarget: target, updateWidgetTitle: () => {} } as unknown as EnvWorkbenchInstancesContextValue}>
       <RedevenWorkbenchSurface state={state} setState={setState} widgetDefinitions={definitions} onRequestDelete={(id) => setState((value) => ({ ...value, widgets: value.widgets.filter((widget) => widget.id !== id) }))} />
     </EnvWorkbenchInstancesContext.Provider>
   </NotificationProvider></LayoutProvider></ThemeProvider></FloeConfigProvider>, host);
-  return { host, state, setState };
+  // Runtime layout responses deserialize every target, including unchanged ones.
+  const openOtherPreview = () => batch(() => {
+    setTarget((value) => value ? { ...value } : null);
+    setState((value) => ({ ...value, selectedWidgetId: 'preview', widgets: [
+      ...value.widgets,
+      { id: 'preview', type: 'redeven.preview', title: 'Other file preview', x: 1000, y: 50, width: 300, height: 300, z_index: 2, created_at_unix_ms: 2 },
+    ] }));
+  });
+  return { host, state, setState, target, setTarget, openOtherPreview, setActivation };
 }
 const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; deltaY: number }) => Promise<{ before: number; after: number }> };
 
 describe('Workbench diff canvas component', () => {
+  it.each(['patch', 'full-context'])('retains the %s viewport and expanded lines when another preview opens', async (mode) => {
+    await page.viewport(1400, 950);
+    getDiffContent.mockResolvedValue({ file });
+    const { host, openOtherPreview, setTarget, setActivation } = mount(1);
+    await expect.poll(() => host.querySelector('.git-patch-viewer__viewport')).not.toBeNull();
+    if (mode === 'full-context') {
+      await page.getByRole('button', { name: 'Full Context', exact: true }).click();
+      await expect.poll(() => getDiffContent.mock.calls.length).toBe(2);
+    }
+    await page.getByRole('button', { name: 'Show all 384 lines', exact: true }).click();
+    const viewport = host.querySelector<HTMLElement>('.git-patch-viewer__viewport')!;
+    viewport.scrollTop = 450;
+    viewport.scrollLeft = 180;
+    const scroll = { top: viewport.scrollTop, left: viewport.scrollLeft };
+    expect(scroll.top).toBeGreaterThan(0);
+    expect(scroll.left).toBeGreaterThan(0);
+    const requestCount = getDiffContent.mock.calls.length;
+    // Hold accidental requests pending so an immediate response cannot hide a reset.
+    getDiffContent.mockImplementation(() => new Promise(() => {}));
+    openOtherPreview();
+    await expect.poll(() => host.querySelector('[data-preview-fixture]')).not.toBeNull();
+    // A subsequent shared-layout save also returns fresh target objects.
+    setTarget((value) => ({ ...value! }));
+    expect(getDiffContent).toHaveBeenCalledTimes(requestCount);
+    expect(host.querySelector('.git-patch-viewer__viewport')).toBe(viewport);
+    expect({ top: viewport.scrollTop, left: viewport.scrollLeft }).toEqual(scroll);
+    expect(viewport.textContent).toContain('line_380');
+
+    getDiffContent.mockResolvedValue({ file });
+    setActivation({ seq: 1, source: 'local_pointer' });
+    await expect.poll(() => getDiffContent.mock.calls.length).toBe(requestCount * 2);
+    await expect.poll(() => host.querySelector('.git-patch-viewer__viewport')).not.toBeNull();
+    await page.getByRole('button', { name: 'Refresh diff', exact: true }).click();
+    await expect.poll(() => getDiffContent.mock.calls.length).toBe(requestCount * 3);
+  });
+
+  it('retains the in-flight diff request when another preview opens', async () => {
+    let resolve!: (value: { file: typeof file }) => void;
+    getDiffContent.mockImplementation(() => new Promise((done) => { resolve = done; }));
+    const { host, openOtherPreview } = mount(1);
+    await expect.poll(() => getDiffContent.mock.calls.length).toBe(1);
+    const finishOriginalRequest = resolve;
+    openOtherPreview();
+    await expect.poll(() => host.querySelector('[data-preview-fixture]')).not.toBeNull();
+    expect(getDiffContent).toHaveBeenCalledTimes(1);
+    finishOriginalRequest({ file });
+    await expect.poll(() => host.querySelector('.git-patch-viewer__viewport')).not.toBeNull();
+  });
+
+  it.each([
+    { repoRootPath: '/another-repo' },
+    { workspaceSection: 'staged' },
+    { path: 'another.ts' },
+    { oldPath: 'old-name.ts' },
+    { newPath: 'new-name.ts' },
+    { changeType: 'modified' },
+  ] satisfies Partial<RuntimeWorkbenchGitDiffTarget>[])('reloads when the diff target changes: %j', async (change) => {
+    getDiffContent.mockResolvedValue({ file });
+    const { host, setTarget, target } = mount(1);
+    await expect.poll(() => host.querySelector('.git-patch-viewer__viewport')).not.toBeNull();
+    setTarget((value) => ({ ...value!, ...change }));
+    await expect.poll(() => getDiffContent.mock.calls.length).toBe(2);
+    expect(getDiffContent).toHaveBeenLastCalledWith(expect.objectContaining({
+      repoRootPath: target()!.repoRootPath,
+      workspaceSection: target()!.workspaceSection,
+      file: expect.objectContaining({ path: target()!.path, changeType: target()!.changeType, oldPath: target()!.oldPath, newPath: target()!.newPath }),
+    }));
+  });
+
   it('restores before connection and reloads through session replacement without moving or remounting the widget', async () => {
     await page.viewport(1400, 950);
     const [transport, setTransport] = createSignal<object | null>(null);
