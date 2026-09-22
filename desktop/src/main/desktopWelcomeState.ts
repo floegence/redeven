@@ -953,12 +953,6 @@ function localRuntimeState(
   return 'running';
 }
 
-function localRuntimeURL(
-  environment: DesktopLocalEnvironmentState,
-): string {
-  return compact(environment.local_hosting?.current_runtime?.local_ui_url);
-}
-
 function localEnvironmentRuntimeService(
   environment: DesktopLocalEnvironmentState,
 ): DesktopEnvironmentEntry['local_environment_runtime_service'] {
@@ -1198,7 +1192,6 @@ function buildLocalEnvironmentEntry(
   environment: DesktopLocalEnvironmentState,
   openSessions: Readonly<Partial<Record<DesktopLocalEnvironmentStateRoute, DesktopSessionSummary>>>,
   controlPlanes: readonly DesktopControlPlaneSummary[],
-  providerEnvironmentCandidates: readonly DesktopProviderEnvironmentCandidate[],
   cachedRuntimeHealth: DesktopRuntimeHealth | undefined,
   presence: DesktopRuntimePresence | undefined,
   redevenCloudOriginPolicy: RedevenCloudOriginPolicy,
@@ -1303,7 +1296,6 @@ function buildLocalEnvironmentEntry(
     local_environment_runtime_service: runtimeService,
     local_environment_close_behavior: resolvedLocalCloseBehavior,
     provider_runtime_link_target: providerRuntimeLinkTarget,
-    provider_environment_candidates: providerEnvironmentCandidates,
     ...managedRuntimeEntryFields(presence),
     managed_runtime_target_id: presence?.target_id
       ?? desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement),
@@ -1562,65 +1554,36 @@ function buildEnvironmentEntries(
   const localLocalEnvironments = platformCapabilities.native_local_environment
     ? [preferences.local_environment]
     : [];
-  const localRuntimeTargetID = desktopProviderRuntimeLinkTargetID('local_environment', preferences.local_environment.id);
-  const localPresence = managedRuntimePresenceByTargetID[localRuntimeTargetID];
-  const localRuntimeTarget = buildProviderRuntimeLinkTarget({
-    id: localRuntimeTargetID,
-    kind: 'local_environment',
-    environmentID: preferences.local_environment.id,
-    label: preferences.local_environment.label,
-    runtimeKey: preferences.local_environment.id,
-    runtimeURL: localPresence?.local_ui_url ?? localRuntimeURL(preferences.local_environment),
-    runtimeRunning: localPresence?.running,
-    runtimeControlStatus: localPresence?.runtime_control_status,
-    runtimeService: preferredRuntimeService(localEnvironmentRuntimeService(preferences.local_environment), undefined, localPresence),
-    redevenCloudOriginPolicy,
-  });
   const visibleSavedRuntimeTargets = preferences.saved_runtime_targets.filter((target) => (
     platformCapabilities.native_host_runtime || target.host_access.kind !== 'local_host'
   ));
-  const savedRuntimeLinkTargets = visibleSavedRuntimeTargets.map((target) => {
-    const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
-    const runtimeTargetID = desktopProviderRuntimeLinkTargetID(targetKind, target.id);
-    const presence = managedRuntimePresenceByTargetID[runtimeTargetID];
-    return buildProviderRuntimeLinkTarget({
-      id: runtimeTargetID,
-      kind: targetKind,
-      environmentID: target.id,
-      label: target.label,
-      runtimeKey: target.id,
-      runtimeURL: presence?.local_ui_url ?? '',
-      runtimeRunning: presence?.running,
-      runtimeControlStatus: presence?.runtime_control_status,
-      runtimeService: preferredRuntimeService(undefined, undefined, presence),
+  const runtimeEntries = [
+    ...localLocalEnvironments.map(environment => buildLocalEnvironmentEntry(
+      environment,
+      openSessionsByLocalEnvironment(openSessions, environment),
+      controlPlanes,
+      localRuntimeHealth[environment.id],
+      managedRuntimePresenceByTargetID[desktopProviderRuntimeLinkTargetID('local_environment', environment.id)],
       redevenCloudOriginPolicy,
-    });
-  });
-  const runtimeLinkTargets = [
-    ...(platformCapabilities.native_local_environment ? [localRuntimeTarget] : []),
-    ...savedRuntimeLinkTargets,
+    )),
+    ...visibleSavedRuntimeTargets.map(target => buildSavedRuntimeTargetEntry(
+      target,
+      openSessionByRuntimeTarget(openSessions, target),
+      savedRuntimeTargetHealth[target.id],
+      managedRuntimePresenceByTargetID[desktopProviderRuntimeLinkTargetID(providerRuntimeLinkKindForHostAccess(target.host_access), target.id)],
+      redevenCloudOriginPolicy,
+    )),
   ];
-  const providerEnvironmentCandidatesForTarget = (
-    runtimeTargetID: DesktopProviderRuntimeLinkTargetID,
-  ): readonly DesktopProviderEnvironmentCandidate[] => providerEnvironmentCandidatesForSnapshot(
-    preferences.provider_environments,
-    controlPlanes,
-    runtimeLinkTargets,
-    runtimeTargetID,
-  );
+  // Runtime cards, Cloud summaries and candidate occupancy share one observed
+  // binding, including cached health while a probe withdraws live presence.
+  const runtimeLinkTargets = runtimeEntries.flatMap(entry => entry.provider_runtime_link_target ? [entry.provider_runtime_link_target] : []);
   const entries: DesktopEnvironmentEntry[] = [
-    ...localLocalEnvironments
-      .map((environment) => (
-        buildLocalEnvironmentEntry(
-          environment,
-          openSessionsByLocalEnvironment(openSessions, environment),
-          controlPlanes,
-          providerEnvironmentCandidatesForTarget(localRuntimeTarget.id),
-          localRuntimeHealth[environment.id],
-          localPresence,
-          redevenCloudOriginPolicy,
-        )
-      )),
+    ...runtimeEntries.map(entry => ({
+      ...entry,
+      provider_environment_candidates: entry.provider_runtime_link_target
+        ? providerEnvironmentCandidatesForSnapshot(preferences.provider_environments, controlPlanes, runtimeLinkTargets, entry.provider_runtime_link_target.id)
+        : [],
+    })),
     ...preferences.provider_environments.map((environment) => (
       buildProviderEnvironmentEntry(
         environment,
@@ -1683,18 +1646,6 @@ function buildEnvironmentEntries(
       environment,
       openSessionByURL(openSessions, environment.local_ui_url),
       savedExternalRuntimeHealth[environment.id],
-    ));
-  }
-  for (const target of visibleSavedRuntimeTargets) {
-    const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
-    const runtimeTargetID = desktopProviderRuntimeLinkTargetID(targetKind, target.id);
-    entries.push(buildSavedRuntimeTargetEntry(
-      target,
-      openSessionByRuntimeTarget(openSessions, target),
-      savedRuntimeTargetHealth[target.id],
-      managedRuntimePresenceByTargetID[runtimeTargetID],
-      providerEnvironmentCandidatesForTarget(runtimeTargetID),
-      redevenCloudOriginPolicy,
     ));
   }
 
@@ -1791,7 +1742,6 @@ function buildSavedRuntimeTargetEntry(
   openSession: DesktopSessionSummary | null,
   cachedRuntimeHealth: DesktopRuntimeHealth | undefined,
   presence: DesktopRuntimePresence | undefined,
-  providerEnvironmentCandidates: readonly DesktopProviderEnvironmentCandidate[],
   redevenCloudOriginPolicy: RedevenCloudOriginPolicy,
 ): DesktopEnvironmentEntry {
   const probeSource = target.host_access.kind === 'ssh_host'
@@ -1811,8 +1761,8 @@ function buildSavedRuntimeTargetEntry(
   const runtimeHealth = runtimeHealthFromPresence(
     probeSource,
     presence,
-    sessionRuntimeHealth
-    ?? cachedRuntimeHealth
+    cachedRuntimeHealth
+    ?? sessionRuntimeHealth
     ?? unknownRuntimeHealth(probeSource),
   );
   const startedAtUnixMS = runtimeStartedAtUnixMS(
@@ -1879,7 +1829,6 @@ function buildSavedRuntimeTargetEntry(
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenance,
     provider_runtime_link_target: providerRuntimeLinkTarget,
-    provider_environment_candidates: providerEnvironmentCandidates,
     ...managedFields,
     managed_runtime_target_id: desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement),
     managed_runtime_placement_target_id: target.id,

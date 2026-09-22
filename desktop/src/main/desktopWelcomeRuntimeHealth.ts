@@ -1,7 +1,28 @@
-import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
+import { desktopRuntimeMaintenanceForRuntimeService, type DesktopRuntimeHealth, type DesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
 import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
-import { runtimeServiceAIIsPreparing } from '../shared/runtimeService';
+import { normalizeRuntimeServiceSnapshot, runtimeServiceAIIsPreparing } from '../shared/runtimeService';
+import type { StartupReport } from './startup';
+
+/** Keep observed startup identity in health while live presence is revalidated. */
+export function desktopWelcomeOnlineRuntimeHealth(
+  source: DesktopRuntimeHealth['source'],
+  startup: Pick<StartupReport, 'local_ui_url' | 'runtime_service' | 'started_at_unix_ms' | 'pid'>,
+  maintenance?: DesktopRuntimeMaintenanceRequirement,
+): DesktopRuntimeHealth {
+  const runtimeService = startup.runtime_service ? normalizeRuntimeServiceSnapshot(startup.runtime_service) : undefined;
+  const effectiveMaintenance = desktopRuntimeMaintenanceForRuntimeService(maintenance, runtimeService);
+  return {
+    status: 'online',
+    checked_at_unix_ms: Date.now(),
+    source,
+    local_ui_url: startup.local_ui_url,
+    ...(startup.pid ? { runtime_pid: startup.pid } : {}),
+    ...(startup.started_at_unix_ms ? { started_at_unix_ms: startup.started_at_unix_ms } : {}),
+    ...(runtimeService ? { runtime_service: runtimeService } : {}),
+    ...(effectiveMaintenance ? { runtime_maintenance: effectiveMaintenance } : {}),
+  };
+}
 
 export type DesktopWelcomeRuntimeHealthSlot =
   | 'local_environment'

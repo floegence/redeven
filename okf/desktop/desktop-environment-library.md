@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop Environment library
 description: Browse one relationship card through independent Runtime and Cloud access perspectives, including Cloud source grids.
 tags: [desktop, environment, cloud, welcome]
-timestamp: 2026-09-19T00:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 # Summary
 
@@ -17,6 +17,8 @@ Pair Local, SSH, or WSL Runtime entries only when the Runtime link target ID equ
 
 Each group retains a stable primary Runtime ID, original owner references, member IDs, Cloud source identity, combined search content, and an any-owner pin result. A standalone Cloud group uses its Cloud entry ID. Build this projection once per snapshot; overview, source grids, filtering, layout, and summary counts consume it. Gateway management retains its separate projection and contract.
 
+Runtime entries own the observed link targets used by Cloud summaries and candidate occupancy. During a health refresh, cached Runtime Service identity keeps both sides of an existing pair consistent while live presence is withdrawn; a pending check alone must not split a pair or add a standalone Cloud card. Fresh unbound or changed identity immediately updates grouping. Current observed health takes precedence over historical open-window startup reports, and display continuity never restores live control authority.
+
 ## Access perspectives and owner actions
 
 Linked cards expose Runtime and Redeven Cloud as a compact segmented selector in the same header slot used by standalone type badges. Exactly one owner content area and action footer is visible. Overview defaults to Runtime; a Cloud source or Cloud filter defaults to Cloud. Pure Cloud cards use the same Cloud content with a type badge instead of a single tab. Runtime content retains host placement, version, startup age, and lifecycle actions. Cloud content presents source, ENV ID, public remote entry, and the existing remote action model; it has no speculative local version, startup age, or missing-Runtime placeholder.
@@ -28,6 +30,8 @@ Selection belongs to the page session. Search and equivalent snapshots preserve 
 The page header keeps refresh and creation controls together in a compact action group. Only the search field grows to fill available toolbar space; narrow layouts wrap the action group as a unit and keep it aligned to the right. Tooltip anchors never inherit search-field sizing.
 
 Cards retain the existing responsive column model and share a compact header, facts area, and footer. Cards in each grid have equal heights and aligned action footers. Retained perspectives contribute to the same layout cell, so switching views does not change card height; the inactive perspective is invisible, inert, and hidden from assistive technology. Long identity and address values truncate with full details available; translated controls and enlarged text wrap without overlapping or hiding actions.
+
+The retained Environment page keeps its last visible layout measurement while hidden behind Flower. A zero-width hidden element is not a one-column viewport. Returning to the page preserves card positions without replaying entrance motion. Open and equivalent health refreshes preserve card count, order, DOM identity and geometry.
 
 ## Cloud sources and counts
 
@@ -52,6 +56,8 @@ Overview counts do not depend on the selected tab. Count each group once and sum
 - `redeven:desktop/src/welcome/App.tsx` - Source sections, source navigation, and shared grid composition.
 - `redeven:desktop/src/welcome/viewModel.ts` - Owner facts, actions, filtering and group summaries.
 - `redeven:desktop/src/main/desktopWelcomeState.ts` - Display summaries preserve in-flight binding identity without changing candidate rules.
+- `redeven:desktop/src/main/desktopWelcomeRefresh.test.ts` - Deferred health probes preserve Local, SSH and WSL pairs while withdrawing presence and respecting completed unlinking.
 - `redeven:desktop/src/welcome/environmentRelation.test.ts` - Real snapshot builder coverage for Local, SSH, WSL, transitions and failed Cloud synchronization.
 - `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Owner action isolation, source search, pin scope and refresh continuity.
 - `redeven:desktop/scripts/check-environment-relations.mjs` - Mixed grids, real browser actions, tab focus and ten-locale narrow/dark/enlarged-text acceptance.
+- `redeven:desktop/scripts/check-welcome-card-stability.mjs` - Normal-motion per-frame Open, checking snapshots and retained-page return geometry in English and Simplified Chinese.
