@@ -11,7 +11,7 @@
 .web-services-heading h1 { font-size: 18px; font-weight: 600; line-height: 24px; }
 .web-services-heading p { margin-top: 4px; font-size: 12px; line-height: 18px; color: var(--muted-foreground); }
 .web-services-header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.web-services-main { padding: 20px; }
+.web-services-main { padding: 20px; scrollbar-gutter: stable; }
 .web-services-content { display: grid; gap: 24px; }
 .web-services-address { display: flex; align-items: start; gap: 8px; }
 .web-services-address > :first-child { flex: 1; min-width: 0; }

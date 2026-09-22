@@ -18,7 +18,7 @@ import { LocalApiError } from '../services/localApi';
 import { openWebServiceRoute, resolveWebServiceOpenRoute } from '../services/webServiceWindows';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import './host-applications.css';
+import { HostApplicationsHeader, HostApplicationsListSkeleton } from './HostApplicationsPresentation';
 
 class ComponentAcquisitionError extends Error {
   constructor(readonly translationKey: EnvAppTranslationKey) { super(translationKey); }
@@ -27,7 +27,7 @@ class ComponentAcquisitionError extends Error {
 function ApplicationIcon(props: { app: HostApplication }) {
   return <span class="host-app-icon" aria-hidden="true">
     <Show when={props.app.icon.startsWith('data:image/png;base64,')} fallback={<ActivityBarHostApplicationsIcon class="w-6 h-6" />}>
-      <img src={props.app.icon} alt="" loading="lazy" draggable={false} />
+      <img src={props.app.icon} alt="" draggable={false} />
     </Show>
   </span>;
 }
@@ -124,7 +124,7 @@ export function EnvHostApplicationsPage() {
     if (owner === applicationResource.identity()) { request?.abort(); request = null; refreshPending = null; }
   };
   const refresh = (quiet = false): Promise<void> => {
-    if (!canRead()) return Promise.resolve();
+    if (!canRead() || !applicationResource.ready()) return Promise.resolve();
     if (refreshPending) return refreshPending;
     const controller = new AbortController(); request = controller;
     const locale = i18n.locale();
@@ -168,7 +168,7 @@ export function EnvHostApplicationsPage() {
     const active = activation ? activation.active() : true;
     const locale = i18n.locale();
     void locale;
-    if (!canRead() || !active) return;
+    if (!canRead() || !active || !applicationResource.ready()) return;
     void refresh();
     const timer = window.setInterval(() => { if (document.visibilityState !== 'hidden') void refresh(!(isMac() && pendingApplications.size > 0)); }, isMac() ? 2000 : 8000);
     onCleanup(() => { window.clearInterval(timer); request?.abort(); request = null; refreshPending = null; });
@@ -579,18 +579,16 @@ export function EnvHostApplicationsPage() {
   };
 
   return <div class="host-apps h-full min-h-0 flex flex-col" data-testid="host-applications">
-    <header class="host-apps-header">
-      <div class="min-w-0"><div class="host-apps-eyebrow">{i18n.t('hostApplications.eyebrow')}</div><h1>{i18n.t('hostApplications.title')}</h1><p>{i18n.t('hostApplications.description')}</p></div>
-      <div class="flex items-center gap-2 shrink-0">
+    <HostApplicationsHeader actions={<>
+
         <Button variant="ghost" size="sm" onClick={() => void refresh()} disabled={loading() || !canRead()} title={i18n.t('hostApplications.refresh')} aria-label={i18n.t('hostApplications.refresh')}><Refresh class={`w-4 h-4 ${loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
         <Button variant="outline" size="sm" onClick={() => setAddOpen(true)} disabled={!canLaunch() || !catalog()?.availability.supported}><Plus class="w-3.5 h-3.5" />{i18n.t('hostApplications.add')}</Button>
-      </div>
-    </header>
+          </>} />
     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="host-apps-content min-h-0 flex-1 overflow-auto">
       <Show when={error()}><div class="host-apps-notice text-destructive" role="alert">{error()}</div></Show>
-      <Show when={!canRead()}><div class="host-apps-empty"><ActivityBarHostApplicationsIcon class="w-9 h-9" /><h2>{i18n.t('hostApplications.permissionTitle')}</h2><p>{i18n.t('hostApplications.readPermission')}</p></div></Show>
-      <Show when={canRead()}>
-        <Show when={catalog()} fallback={<div role="status" aria-label={i18n.t('hostApplications.loading')} class="host-apps-skeleton"><div class="host-apps-skeleton-heading" aria-hidden="true" /><div class="host-apps-grid" aria-hidden="true"><For each={[0,1,2,3,4,5]}>{() => <div class="host-app-skeleton-tile"><span /><div><i /><i /></div></div>}</For></div></div>}>
+      <Show when={ctx.env()?.permissions?.can_read === false}><div class="host-apps-empty"><ActivityBarHostApplicationsIcon class="w-9 h-9" /><h2>{i18n.t('hostApplications.permissionTitle')}</h2><p>{i18n.t('hostApplications.readPermission')}</p></div></Show>
+      <Show when={ctx.env()?.permissions?.can_read !== false}>
+        <Show when={catalog()} fallback={<HostApplicationsListSkeleton />}>
           <Show when={ready() && !isMac() && setup()?.installed?.ready && (setup()?.update_available || hostApplicationSetupActive(displayedSetup()) || displayedSetup()?.state === 'failed')}>
             <div class="host-apps-notice host-apps-update-notice" role="status">
               <div class="min-w-0 flex-1"><strong>{i18n.t(hostApplicationSetupActive(displayedSetup()) ? hostApplicationSetupHeading(displayedSetup()) : 'hostApplications.update.available')}</strong><p>{i18n.t(displayedSetup()?.state === 'failed' ? 'hostApplications.update.failedRetained' : 'hostApplications.update.description')}</p></div>

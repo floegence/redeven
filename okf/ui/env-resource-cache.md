@@ -18,12 +18,15 @@ retains it with the existing error and retry affordance.
 
 # Identity and authority
 
-The Shell requests `GET /_redeven_proxy/api/ui-cache-scope` after read permission
-and the authenticated connection are established. The server hashes its session's
+The Shell requests `GET /_redeven_proxy/api/ui-cache-scope` as soon as an
+authenticated connection is available, in parallel with current-session read
+permission confirmation. The server hashes its session's
 endpoint, namespace, and user identity into an opaque `scope_id`. The value is
 not a credential and cannot select request authority. Pages reuse that confirmed
-scope; they never request it independently. Before confirmation, live requests
-remain possible but durable snapshots cannot be restored.
+scope; they never request it independently. While either confirmation is pending, inventory pages retain their target
+skeleton and publish neither durable nor temporary live inventory. An ordinary
+scope lookup failure permits live inventory through an isolated volatile owner;
+it never enables durable reads or writes. A permission denial remains closed.
 
 Browser origin storage and Desktop's native environment/account owner partition
 isolate access sources. Resource keys further separate host catalog locale and
@@ -33,7 +36,9 @@ selection, filter, and search state. Scope changes fence asynchronous results.
 Read denial and access locking invalidate the old scope, including its persisted
 records. A transient transport failure does not delete successful snapshots.
 On a new authenticated session, presentation waits for identity confirmation
-again; data fetched under a prior unconfirmed session cannot reappear.
+again. Permission results carry their authenticated connection identity, and old
+cache handles and pending requests are retired before a new owner is exposed.
+Data fetched under a prior unconfirmed session cannot reappear.
 
 # Persistence and presentation
 
@@ -53,7 +58,10 @@ configuration and the renderer configuration. Restart acceptance executes the
 production compiler's emitted cache adapter, without bundling away its package
 loading boundary.
 
-Disk restoration and network refresh run concurrently. A late disk read cannot
+After confirmation, disk restoration and network refresh run concurrently. Floe
+`ResourceSnapshot.restoring` owns the disk read lifecycle, including misses,
+corruption, and storage failure; a successful network response ends restoration
+immediately. A late disk read cannot
 replace a new response. Identical successful projections do not rewrite payloads;
 changed projections coalesce before asynchronous persistence. Failures never
 become successful snapshots. Empty successful inventories are valid cached data.
@@ -71,17 +79,32 @@ Stable resource identities key rendered rows. Refresh preserves surviving row
 nodes, focus, list controls, scroll, and current selections; it does not replay
 entry animations. Container targets update independently and a failed target
 retains its previous inventory. Fresh authoritative absence clears that target's
-selection. Web Service list requests do not wait for template discovery.
+selection. A runtime or inventory request that fails before disk restoration
+finishes still waits for the available snapshot before publishing its error;
+authorization rejection clears presentation immediately. Web Service list
+requests do not wait for template discovery.
 
-## Codespaces loading continuity
+## Startup and loading continuity
 
-Activity and Workbench use the same lightweight Codespaces page frame for lazy
-module loading. Initial inventory loading uses the same responsive grid and card
-header, description row, detail rows, and action footer as loaded content. The
-loading layout reserves the description row even when the eventual description
-is empty; placeholder controls match the actual small button height. Skeletons
-appear only without a successful inventory, including a successful empty one.
-No entry animation or generic whole-page loading message replaces restored data.
+The selected Activity module is preloaded. During initial access checking the
+Shell presents the target page's skeleton immediately, without extending the
+boot cover. Password and two-factor challenges retain the explicit access gate.
+The module fallback and first inventory placeholder share the real page's
+header, controls, list regions, and row geometry. Host Applications reserves its
+running and catalog sections; Containers uses its selected resource view;
+Web Services retains its address form, search toolbar, and list rows; Codespaces
+uses the common card frame. Unknown counts are omitted. Resource additions and
+removals can legitimately change list length.
+
+Successful content, including empty inventories, is not replaced with a loading
+placeholder during refresh. Web Services combines its saved and managed list
+readiness before declaring an empty collection, while showing available nonempty
+content immediately. Its search toolbar stays mounted and a stable scrollbar
+gutter prevents width changes when inventory length crosses the viewport.
+Skeleton rows do not replay entry animations or introduce a cache notice.
+
+Activity navigation has one separate owner defined by
+[Activity navigation restoration](activity-navigation-restoration.md).
 
 Browser Editor readiness is fetched independently without suspending the page.
 Normal inventory and readiness refreshes share the header refresh spinner. A
@@ -118,6 +141,8 @@ requests permissions, launches processes, or starts lifecycle operations.
 - `redeven:internal/envapp/ui_src/src/ui/services/envResourceSnapshots.ts` - Explicit snapshot projections.
 - `redeven:internal/codeapp/appserver/ui_cache_scope_test.go` - Authenticated scope isolation and read permission.
 - `redeven:desktop/src/main/desktopResourceCache.ts` - Asynchronous private files and global budget adapter.
+- `redeven:internal/envapp/ui_src/scripts/checkStartupContinuity.mjs` - Real compiled Shell, delayed permission/scope/network, persistent IndexedDB, and frame-by-frame continuity.
+- `redeven:desktop/scripts/check-startup-continuity.mjs` - Actual Electron restart with production native adapters and changed loopback ports.
 - `redeven:desktop/scripts/check-resource-cache.mjs` - Production compiler output and preload persistence across two Electron processes.
 - `redeven:internal/envapp/ui_src/src/ui/services/envResourceCache.test.ts` - Scope races, authorization clearing, and empty-list retention.
 - `redeven:internal/envapp/ui_src/src/ui/services/envResourceSnapshots.test.ts` - Sensitive field exclusion and corrupt input rejection.

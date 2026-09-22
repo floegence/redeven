@@ -28,7 +28,7 @@ const notificationMocks = vi.hoisted(() => ({
 }));
 
 const envContextMocks = vi.hoisted(() => ({
-  resourceCacheScope: (): string => '',
+  resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: '' }),
   env_id: () => 'env_demo',
   goActivity: vi.fn(),
   env: Object.assign(
@@ -959,7 +959,7 @@ describe('EnvPortForwardsPage', () => {
   let host: HTMLDivElement;
 
   beforeEach(() => {
-    envContextMocks.resourceCacheScope = () => '';
+    envContextMocks.resourceCacheAccess = () => ({ phase: 'ready' as const, generation: 0, scope: '' });
     vi.restoreAllMocks();
     notificationMocks.success.mockReset();
     notificationMocks.error.mockReset();
@@ -1028,7 +1028,7 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('restores saved services on remount while the network is pending', async () => {
-    envContextMocks.resourceCacheScope = () => 'web-services-remount';
+    envContextMocks.resourceCacheAccess = () => ({ phase: 'ready' as const, generation: 0, scope: 'web-services-remount' });
     let dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await flushPage();
@@ -1043,7 +1043,7 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('loads current saved configuration before editing a cached service', async () => {
-    envContextMocks.resourceCacheScope = () => 'web-edit-current';
+    envContextMocks.resourceCacheAccess = () => ({ phase: 'ready' as const, generation: 0, scope: 'web-edit-current' });
     let dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await flushPage();
@@ -1059,7 +1059,7 @@ describe('EnvPortForwardsPage', () => {
     } finally { dispose(); }
   });
 
-  it('delays the quiet card skeleton for the initial web services request', async () => {
+  it('shows matching list rows immediately and retains the toolbar through initial loading', async () => {
     vi.useFakeTimers();
     const forwardsRequest = deferred<{ forwards: any[] }>();
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
@@ -1072,19 +1072,18 @@ describe('EnvPortForwardsPage', () => {
       await flushMicrotasks();
       const listRegion = host.querySelector('[data-testid="web-services-list-region"]');
       expect(listRegion?.querySelector('.redeven-loading-curtain')).toBeNull();
-      expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
-
-      await vi.advanceTimersByTimeAsync(149);
-      expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
-
-      await vi.advanceTimersByTimeAsync(1);
       expect(host.querySelector('[data-testid="web-services-initial-loading"]')).not.toBeNull();
-      expect(host.querySelectorAll('[data-testid="skeleton-card"]')).toHaveLength(3);
+      expect(host.querySelectorAll('[data-testid="web-services-initial-loading"] .web-service-row')).toHaveLength(3);
+      const toolbar = host.querySelector('[data-testid="web-services-toolbar-actions"]');
+      const search = toolbar?.querySelector('input');
+      expect(search).toBeTruthy();
 
       forwardsRequest.resolve({ forwards: [] });
       await flushMicrotasks();
       expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
       expect(host.textContent).toContain('No web services yet');
+      expect(host.querySelector('[data-testid="web-services-toolbar-actions"]')).toBe(toolbar);
+      expect(toolbar?.querySelector('input')).toBe(search);
     } finally {
       dispose();
       vi.useRealTimers();

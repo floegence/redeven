@@ -1,3 +1,6 @@
+vi.mock('./pages/ContainersPresentation', () => ({ ContainersPageSkeleton: () => <div>Containers skeleton</div> }));
+vi.mock('./pages/WebServicesPresentation', () => ({ WebServicesPageSkeleton: () => <div>WebServices skeleton</div> }));
+vi.mock('./pages/HostApplicationsPresentation', () => ({ HostApplicationsPageSkeleton: () => <div>HostApplications skeleton</div> }));
 // @vitest-environment jsdom
 
 import { createContext, createSignal, useContext } from 'solid-js';
@@ -96,7 +99,8 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   }),
 }));
 
-vi.mock('@floegence/floe-webapp-core/app', () => ({
+vi.mock('@floegence/floe-webapp-core/app', async original => ({
+  ...await original<object>(),
   ActivityAppsMain: () => <div>activity main</div>,
   FloeRegistryRuntime: (props: any) => <>{props.children}</>,
   FloeRegistryContributions: () => null,

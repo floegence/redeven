@@ -1,3 +1,4 @@
+import { createActivityNavigation, activityTargetID, type ActivityNavigation } from './services/activityNavigation';
 import {
   BUILT_IN_SHELL_THEME_DEFAULTS,
   CommandProvider,
@@ -48,7 +49,7 @@ const persistenceBinding = resolveEnvAppStorageBinding({
   desktopStateStorageAvailable: isDesktopStateStorageAvailable(),
 });
 
-function buildFloeConfig(t: I18nHelpers['t']) {
+function buildFloeConfig(t: I18nHelpers['t'], navigation: ActivityNavigation) {
   const shellTheme = desktopThemeBridge();
 
   return {
@@ -61,6 +62,7 @@ function buildFloeConfig(t: I18nHelpers['t']) {
         shellTheme,
       ),
     },
+    layout: { sidebar: { persistActiveTab: false, defaultActiveTab: activityTargetID(navigation.initial) } },
     theme: {
       storageKey: 'theme',
       shellPresetStorageKey: 'theme-shell-preset',
@@ -208,7 +210,8 @@ function DesktopThemeSync() {
 
 function EnvAppProviders() {
   const i18n = useI18n();
-  const floeConfig = createMemo(() => buildFloeConfig(i18n.t));
+  const navigation = createActivityNavigation({ envID, namespace: persistenceBinding.namespace });
+  const floeConfig = createMemo(() => buildFloeConfig(i18n.t, navigation));
 
   return (
     <FloeConfigProvider config={floeConfig()}>
@@ -223,7 +226,7 @@ function EnvAppProviders() {
                     <WidgetRegistryProvider>
                       <CommandProvider>
                         <EnvAppFloatingWindowStackProvider>
-                          <EnvAppShell />
+                          <EnvAppShell navigation={navigation} />
                           <CommandPalette zIndex={ENV_APP_FLOATING_LAYER.commandPalette} />
                           <NotificationContainer />
                         </EnvAppFloatingWindowStackProvider>

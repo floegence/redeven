@@ -11,7 +11,7 @@ vi.mock('../i18n', async () => {
 });
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
-  resourceCacheScope: () => state.scope,
+  resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: state.scope }),
   env_id: () => 'host', localRuntime: () => ({}),
 }) }));
 vi.mock('../services/hostApplicationsApi', async importOriginal => {
@@ -87,4 +87,29 @@ it('restores a persisted directory and icon before the network, preserving row f
   expect(host.querySelector('.host-app-tile')).toBe(row);
   expect(document.activeElement).toBe(row);
   expect(host.querySelector('header .animate-spin')).toBeNull();
+});
+
+it.each([390, 1440])('uses the same host header and tile geometry for module and data placeholders at %s px', async width => {
+  const { Suspense, lazy } = await import('solid-js');
+  const { HostApplicationsPageSkeleton } = await import('./HostApplicationsPresentation');
+  state.locale = 'en-US'; state.scope = `host-geometry-${crypto.randomUUID()}`;
+  await page.viewport(width, 900);
+  let finishModule!: (value: { default: typeof EnvHostApplicationsPage }) => void;
+  let finishData!: (value: unknown) => void;
+  const LazyPage = lazy(() => new Promise<{ default: typeof EnvHostApplicationsPage }>(resolve => { finishModule = resolve; }));
+  state.catalog.mockReturnValue(new Promise(resolve => { finishData = resolve; }));
+  const host = document.createElement('div'); host.style.height = '800px'; document.body.append(host);
+  dispose = render(() => <Suspense fallback={<HostApplicationsPageSkeleton />}><LazyPage /></Suspense>, host);
+  const geometry = () => ['.host-apps-header', '.host-apps-content', '.host-apps-library-heading', '.host-app-session', '.host-app-tile'].map(selector => {
+    const rect = host.querySelector(selector)!.getBoundingClientRect(); return { selector, left: rect.left, width: rect.width, height: rect.height };
+  });
+  await document.fonts.ready;
+  const before = geometry();
+  finishModule({ default: EnvHostApplicationsPage });
+  await expect.poll(() => host.querySelector('[data-testid="host-applications"]')).toBeTruthy();
+  expect(geometry()).toEqual(before);
+  const apps = Array.from({ length: 6 }, (_, index) => ({ id: `app-${index}`, name: `Editor ${index}`, description: '', categories: [], icon: '', custom: false }));
+  finishData({ availability: { backend: 'macos', native_ready: true, supported: true, ready: true }, applications: apps, sessions: [], running: apps.slice(0, 3).map(app => ({ application_id: app.id, instances: ['process'] })) });
+  await expect.poll(() => host.querySelector('button.host-app-tile')).toBeTruthy();
+  expect(geometry()).toEqual(before);
 });

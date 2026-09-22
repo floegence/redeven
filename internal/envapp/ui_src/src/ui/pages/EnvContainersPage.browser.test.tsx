@@ -37,7 +37,7 @@ vi.mock('../widgets/ContainerExecTerminal', () => ({
 
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
-    resourceCacheScope: () => browserHarness.scope,
+    resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: browserHarness.scope }),
     env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
     goActivity: vi.fn(),
   }),
@@ -148,6 +148,7 @@ vi.mock('../services/containerResourcesApi', () => ({
 }));
 
 import { EnvContainersPage } from './EnvContainersPage';
+import { ContainersPageSkeleton } from './ContainersPresentation';
 
 const mediaCommands = commands as unknown as {
   emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void>;
@@ -167,14 +168,14 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function mount(variant: 'activity' | 'workbench' = 'activity', appearance: 'light' | 'dark' = 'light') {
+function mount(variant: 'activity' | 'workbench' = 'activity', appearance: 'light' | 'dark' = 'light', skeleton = false) {
   const host = document.createElement('div');
   host.style.position = 'fixed';
   host.style.inset = '0';
   document.body.append(host);
   function Surface() {
     useTheme().setTheme(appearance);
-    return <I18nProvider><EnvContainersPage variant={variant} /></I18nProvider>;
+    return <I18nProvider>{skeleton ? <ContainersPageSkeleton /> : <EnvContainersPage variant={variant} />}</I18nProvider>;
   }
   const dispose = render(() => <ThemeProvider><Surface /></ThemeProvider>, host);
   return { host, dispose };
@@ -1033,13 +1034,22 @@ describe('native Containers responsive product surface', () => {
   });
 
   it.each([
-    { width: 1440, height: 900, mode: 'table' },
-    { width: 390, height: 844, mode: 'cards' },
-  ])('keeps the $mode loading geometry aligned with loaded inventory at $width px', async ({ width, height, mode }) => {
+    { width: 1440, height: 900, mode: 'table', variant: 'activity' as const },
+    { width: 390, height: 844, mode: 'cards', variant: 'activity' as const },
+    { width: 1440, height: 900, mode: 'table', variant: 'workbench' as const },
+    { width: 390, height: 844, mode: 'cards', variant: 'workbench' as const },
+  ])('keeps $variant $mode loading geometry aligned with loaded inventory at $width px', async ({ width, height, mode, variant }) => {
     await page.viewport(width, height);
+    const placeholder = mount('activity', 'light', true);
+    dispose = placeholder.dispose;
+    await settle();
+    const moduleToolbar = placeholder.host.querySelector<HTMLElement>('.container-resource-toolbar')!.getBoundingClientRect();
+    const moduleContentTop = placeholder.host.querySelector<HTMLElement>('.container-inventory-scroll')!.getBoundingClientRect().top;
+    placeholder.dispose();
+    placeholder.host.remove();
     let resolveInventory: ((items: readonly unknown[]) => void) | undefined;
     browserHarness.listResources.mockReturnValue(new Promise((resolve) => { resolveInventory = resolve; }));
-    const mounted = mount('workbench');
+    const mounted = mount(variant);
     dispose = mounted.dispose;
     await settle();
 
@@ -1057,6 +1067,10 @@ describe('native Containers responsive product surface', () => {
     }
     const loadingToolbarRect = loadingToolbar.getBoundingClientRect();
     const loadingContentTop = loadingPage.querySelector<HTMLElement>('.container-inventory-scroll')!.getBoundingClientRect().top;
+    if (variant === 'activity') {
+      expect(Math.abs(moduleToolbar.height - loadingToolbarRect.height)).toBeLessThanOrEqual(1);
+      expect(Math.abs(moduleContentTop - loadingContentTop)).toBeLessThanOrEqual(1);
+    }
     const loadingItemHeight = mode === 'table'
       ? loadingPage.querySelector<HTMLElement>('[data-container-skeleton-row]')!.getBoundingClientRect().height
       : loadingPage.querySelector<HTMLElement>('[data-container-mobile-skeleton] > .container-mobile-card')!.getBoundingClientRect().height;

@@ -408,7 +408,7 @@ function builtPluginInstalledPlugin() {
   };
 }
 
-async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, gitReady = false, tls = null, flowersecPeerFactory = startFlowersecSmokePeer, assetDirectory = distDir } = {}) {
+async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, gitReady = false, tls = null, flowersecPeerFactory = startFlowersecSmokePeer, assetDirectory = distDir, handleRequest, renewPeerOnConnect = false } = {}) {
   if (accessReady && (!tls?.certificate || !tls?.privateKey)) {
     throw new Error('connected built Env App dist server requires an explicit TLS identity');
   }
@@ -420,6 +420,18 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   let directArtifactExpiresAt = '';
   let flowersecPeer = null;
   let proxyUpstream = null;
+  let issuedArtifacts = 0;
+  const renewPeer = async () => {
+    await flowersecPeer?.close();
+    flowersecPeer = await flowersecPeerFactory({
+      httpUpstream: `http://127.0.0.1:${proxyUpstream.address().port}`, tls, gitReady,
+      allowedOrigin: new URL(baseURL).origin,
+      onEvent: (event) => lifecycleEvents.push(event),
+    });
+    directArtifactJSON = flowersecPeer.artifact;
+    directArtifact = JSON.parse(directArtifactJSON);
+    directArtifactExpiresAt = flowersecPeer.expires_at;
+  };
   const lifecycleEvents = [];
   const artifactSpendRequests = [];
   const pluginRequests = [];
@@ -428,6 +440,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   const requestHandler = async (request, response) => {
     try {
       const requestURL = new URL(request.url ?? '/', baseURL || 'http://127.0.0.1');
+      if (await handleRequest?.(request, response, requestURL)) return;
       const pluginRequest = requestURL.pathname.startsWith('/_redevplugin/api/plugins');
       const pluginPayload = pluginRequest && request.method === 'POST' ? await readJSONRequest(request) : null;
       if (pluginRequest) pluginRequests.push({ method: request.method, path: requestURL.pathname, payload: pluginPayload });
@@ -460,6 +473,8 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         return;
       }
       if (accessReady && requestURL.pathname === '/api/local/direct/connect_artifact') {
+        if (renewPeerOnConnect && issuedArtifacts > 0) await renewPeer();
+        issuedArtifacts += 1;
         lifecycleEvents.push('artifact_issued');
         jsonResponse(response, {
           v: 1,
@@ -775,16 +790,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       proxyUpstream.once('error', reject);
       proxyUpstream.listen(0, '127.0.0.1', resolve);
     });
-    flowersecPeer = await flowersecPeerFactory({
-      httpUpstream: `http://127.0.0.1:${proxyUpstream.address().port}`,
-      tls,
-      gitReady,
-      allowedOrigin: new URL(baseURL).origin,
-      onEvent: (event) => lifecycleEvents.push(event),
-    });
-    directArtifactJSON = flowersecPeer.artifact;
-    directArtifact = JSON.parse(directArtifactJSON);
-    directArtifactExpiresAt = flowersecPeer.expires_at;
+    await renewPeer();
   }
   return {
     baseURL,
@@ -1498,7 +1504,7 @@ async function main() {
   process.stdout.write(`${JSON.stringify(report)}\n`);
 }
 
-export { createBuiltDistServer, createBuiltDistTLS };
+export { createBuiltDistServer, createBuiltDistTLS, trustBuiltDistWebTransport };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(async (error) => {

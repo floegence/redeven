@@ -872,7 +872,7 @@ export function EnvCodespacesPage() {
     const active = activation?.active() ?? true;
     activation?.activationSeq();
     if (env.env()?.permissions?.can_read === false) { inventory.invalidate(true); return; }
-    if (active) void refetch().catch(() => undefined);
+    if (active && inventory.ready()) void refetch().catch(() => undefined);
   });
   let presentationOwner = inventory.identity();
   createEffect(() => {
@@ -1326,7 +1326,7 @@ export function EnvCodespacesPage() {
     return false;
   };
   const showCompactRuntimeStatus = () => !showWizard() && Boolean(runtimeStatusError());
-  const initialSpacesLoading = () => spaces() === undefined && inventory.snapshot().refreshing && env.env()?.permissions?.can_read !== false;
+  const initialSpacesLoading = () => spaces() === undefined && (inventory.restoring() || inventory.snapshot().refreshing) && env.env()?.permissions?.can_read !== false;
   const spacesRefreshing = () => inventory.snapshot().refreshing;
   const spacesRenderable = () => spaces() !== undefined;
   const pageRefreshing = () => spacesRefreshing() || runtimeResource.loading;

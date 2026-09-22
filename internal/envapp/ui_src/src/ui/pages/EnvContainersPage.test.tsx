@@ -178,7 +178,7 @@ vi.mock('./EnvContext', async () => {
   harness.setEnvironment = setEnvironment;
   return {
     useEnvContext: () => ({
-      resourceCacheScope: () => harness.cacheScope,
+      resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: harness.cacheScope }),
       env: environment,
       goActivity: harness.goActivity,
     }),
