@@ -2530,7 +2530,7 @@ export function EnvPortForwardsPage() {
     if (service.observed_state !== 'running') return i18n.t('webServices.managed.openUnavailableNotRunning');
     if (!canExecute()) return i18n.t('webServices.permission.executeRequired');
     if (openBusy(`managed:${service.service_id}`)) return i18n.t('webServices.status.opening');
-    if (service.access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()) return i18n.t('webServices.errors.desktopLoopbackRequiresDesktop');
+    if (service.access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()) return i18n.t('webServices.managed.openUnavailableDesktopLoopback');
     return '';
   };
   const openInstalledTemplate = (templateID: string) => {
@@ -3547,7 +3547,7 @@ export function EnvPortForwardsPage() {
                             busyText={openStatus(`managed:${serviceID}`)}
                             canOpen={canExecute() && (service().access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable())}
                             openUnavailableReason={openErrors()[`managed:${serviceID}`] || (service().access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
-                              ? i18n.t('webServices.errors.desktopLoopbackRequiresDesktop')
+                              ? i18n.t('webServices.managed.openUnavailableDesktopLoopback')
                               : undefined)}
                             canManage={canManageManagedService()}
                             onOpen={() => void openManaged(service())}

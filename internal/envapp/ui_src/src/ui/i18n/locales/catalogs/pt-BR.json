@@ -3484,6 +3484,7 @@
       "templateInstalled": "Um serviço deste modelo está instalado neste ambiente.",
       "openUnavailableOperation": "Há uma operação de serviço em andamento.",
       "openUnavailableNotRunning": "O serviço não está em execução.",
+      "openUnavailableDesktopLoopback": "Este serviço está configurado no modo de compatibilidade local e só pode ser usado no Redeven Desktop. Para acessar pelo navegador, abra as configurações do serviço, vá para \"Geral\", altere \"Modo de acesso\" para \"Proxy seguro do Redeven\" e salve as alterações.",
       "installed": "Instalado",
       "duplicate": "Duplicar",
       "moreActions": "Mais",
