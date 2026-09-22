@@ -1,4 +1,12 @@
 {
+  "pageAssetRecovery": {
+    "updated": "Redeven이 업데이트되었습니다",
+    "failed": "앱 콘텐츠 일부를 불러오지 못했습니다",
+    "pageFailed": "이 페이지를 열 수 없습니다",
+    "guidance": "다른 페이지에서 저장하지 않은 작업을 저장한 후 앱을 새로고침하여 계속하세요.",
+    "reload": "앱 새로고침",
+    "waiting": "연결 대기 중…"
+  },
   "document": {
     "title": "Redeven Env App"
   },

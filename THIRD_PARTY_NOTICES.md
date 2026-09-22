@@ -1566,9 +1566,9 @@ SOFTWARE.
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
-| @floegence/floe-webapp-boot | 0.64.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.64.0 |  |
-| @floegence/floe-webapp-core | 0.64.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.64.0 |  |
-| @floegence/floe-webapp-protocol | 0.64.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.64.0 |  |
+| @floegence/floe-webapp-boot | 0.65.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.65.1 |  |
+| @floegence/floe-webapp-core | 0.65.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.65.1 |  |
+| @floegence/floe-webapp-protocol | 0.65.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.65.1 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
 | @floegence/flowersec-core | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.2.2 |  |
 | @floegence/flowersec-core | 5.3.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.3.1 |  |
@@ -1622,17 +1622,29 @@ SOFTWARE.
 | @motionone/types | 10.17.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40motionone%2Ftypes/v/10.17.1 |  |
 | @motionone/utils | 10.18.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40motionone%2Futils/v/10.18.0 |  |
 | @napi-rs/canvas-android-arm64 | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-android-arm64/v/1.0.6 |  |
+| @napi-rs/canvas-android-arm64 | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-android-arm64/v/1.0.9 |  |
 | @napi-rs/canvas-darwin-arm64 | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-arm64/v/1.0.6 |  |
+| @napi-rs/canvas-darwin-arm64 | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-arm64/v/1.0.9 |  |
 | @napi-rs/canvas-darwin-x64 | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-x64/v/1.0.6 |  |
+| @napi-rs/canvas-darwin-x64 | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-x64/v/1.0.9 |  |
 | @napi-rs/canvas-linux-arm-gnueabihf | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm-gnueabihf/v/1.0.6 |  |
+| @napi-rs/canvas-linux-arm-gnueabihf | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm-gnueabihf/v/1.0.9 |  |
 | @napi-rs/canvas-linux-arm64-gnu | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm64-gnu/v/1.0.6 |  |
+| @napi-rs/canvas-linux-arm64-gnu | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm64-gnu/v/1.0.9 |  |
 | @napi-rs/canvas-linux-arm64-musl | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm64-musl/v/1.0.6 |  |
+| @napi-rs/canvas-linux-arm64-musl | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm64-musl/v/1.0.9 |  |
 | @napi-rs/canvas-linux-riscv64-gnu | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-riscv64-gnu/v/1.0.6 |  |
+| @napi-rs/canvas-linux-riscv64-gnu | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-riscv64-gnu/v/1.0.9 |  |
 | @napi-rs/canvas-linux-x64-gnu | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-x64-gnu/v/1.0.6 |  |
+| @napi-rs/canvas-linux-x64-gnu | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-x64-gnu/v/1.0.9 |  |
 | @napi-rs/canvas-linux-x64-musl | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-x64-musl/v/1.0.6 |  |
+| @napi-rs/canvas-linux-x64-musl | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-x64-musl/v/1.0.9 |  |
 | @napi-rs/canvas-win32-arm64-msvc | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-win32-arm64-msvc/v/1.0.6 |  |
+| @napi-rs/canvas-win32-arm64-msvc | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-win32-arm64-msvc/v/1.0.9 |  |
 | @napi-rs/canvas-win32-x64-msvc | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-win32-x64-msvc/v/1.0.6 |  |
+| @napi-rs/canvas-win32-x64-msvc | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-win32-x64-msvc/v/1.0.9 |  |
 | @napi-rs/canvas | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas/v/1.0.6 |  |
+| @napi-rs/canvas | 1.0.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fcanvas/v/1.0.9 |  |
 | @napi-rs/wasm-runtime | 1.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fwasm-runtime/v/1.1.1 |  |
 | @napi-rs/wasm-runtime | 1.1.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fwasm-runtime/v/1.1.5 |  |
 | @noble/ciphers | 2.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40noble%2Fciphers/v/2.4.0 |  |
@@ -2288,6 +2300,7 @@ SOFTWARE.
 | path-scurry | 2.0.2 | BlueOak-1.0.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/path-scurry/v/2.0.2 |  |
 | pathe | 2.0.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/pathe/v/2.0.3 |  |
 | pdfjs-dist | 6.2.108 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/pdfjs-dist/v/6.2.108 |  |
+| pdfjs-dist | 6.3.289 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/pdfjs-dist/v/6.3.289 |  |
 | pe-library | 0.4.1 | MIT | Desktop shell | https://www.npmjs.com/package/pe-library/v/0.4.1 |  |
 | picocolors | 1.1.1 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/picocolors/v/1.1.1 |  |
 | picomatch | 4.0.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/picomatch/v/4.0.4 |  |

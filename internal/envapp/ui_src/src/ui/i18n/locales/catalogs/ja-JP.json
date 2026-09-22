@@ -1,4 +1,12 @@
 {
+  "pageAssetRecovery": {
+    "updated": "Redeven が更新されました",
+    "failed": "アプリの一部のコンテンツを読み込めませんでした",
+    "pageFailed": "このページを開けませんでした",
+    "guidance": "他のページで未保存の作業を保存してから、アプリを再読み込みして続行してください。",
+    "reload": "アプリを再読み込み",
+    "waiting": "接続を待っています…"
+  },
   "document": {
     "title": "Redeven Env App"
   },

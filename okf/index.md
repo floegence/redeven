@@ -46,6 +46,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Product RPC request encoding](architecture/product-rpc-request-encoding.md) - Construct JSON requests that preserve optional filesystem operation semantics before transport dispatch.
 - [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md) - Bound revisioned workspace capture, transport resources, mutation coordination, and linked-worktree removal.
 - [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.
+- [Env App page asset recovery](ui/page-asset-recovery.md) - Detect frontend updates after reconnect and recover failed page modules without automatically discarding unsaved work.
 - [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.
 - [Plugin platform integration](architecture/plugin-platform-integration.md) - Mount the released Host, admit reviewed external packages, and coordinate exact Activity and Workbench placements.
 - [Plugin market consumption](architecture/plugin-market-consumption.md) - Discover one verified latest release per channel while GitHub Releases and ReDevPlugin retain artifact and trust authority.
