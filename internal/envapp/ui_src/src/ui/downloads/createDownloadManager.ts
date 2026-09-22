@@ -48,6 +48,7 @@ function positiveInteger(value: unknown): number | undefined {
 }
 
 function commandInitialTotalBytes(command: DownloadCommand): number | undefined {
+  if (command.source.kind === 'pdf_draft') return command.source.bytes.byteLength;
   if (command.source.kind === 'draft_text') {
     return new TextEncoder().encode(command.source.text).byteLength;
   }

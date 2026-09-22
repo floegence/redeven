@@ -61,7 +61,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
   const resolvedPath = () => String(props.item?.path ?? '').trim();
   const buttonClass = () => cn(PREVIEW_HEADER_ICON_BUTTON_CLASS, props.compact ? 'size-7' : 'size-8');
   const showEditorActions = () =>
-    (props.descriptor.mode === 'text' || props.descriptor.mode === 'markdown') && Boolean(props.canEdit);
+    ['text', 'markdown', 'pdf'].includes(props.descriptor.mode) && Boolean(props.canEdit);
   const [pathCopied, setPathCopied] = createSignal(false);
   const [menu, setMenu] = createSignal<{ x: number; y: number; selection: string } | null>(null);
   const menuId = createUniqueId();
@@ -176,7 +176,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
     },
     {
       id: 'download',
-      label: () => i18n.t('filePreview.downloadFile'),
+      label: () => i18n.t(props.descriptor.mode === 'pdf' && props.editing ? 'filePreview.pdf.saveCopy' : 'filePreview.downloadFile'),
       icon: Download,
       disabled: () => !props.item || Boolean(props.loading),
       run: () => props.onDownload?.(),

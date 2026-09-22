@@ -31,13 +31,13 @@ describe('file preview wiring', () => {
     expect(contentSrc).not.toContain("import { PdfPreviewPane } from './PdfPreviewPane';");
     expect(contentSrc).not.toContain("import { TextFilePreviewPane } from './TextFilePreviewPane';");
     expect(rendererRegistrySrc).toContain("import { DocxPreviewPane } from '../widgets/DocxPreviewPane';");
-    expect(rendererRegistrySrc).toContain("import { PdfPreviewPane } from '../widgets/PdfPreviewPane';");
+    expect(rendererRegistrySrc).toContain("lazy(() => import('../widgets/PdfPreviewPane')");
     expect(rendererRegistrySrc).toContain("import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';");
     expect(rendererRegistrySrc).toContain("import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';");
     expect(rendererRegistrySrc).toContain('<FilePreviewErrorState');
     expect(rendererRegistrySrc).toContain('export const REDEVEN_FILE_PREVIEW_RENDERERS');
     expect(rendererRegistrySrc).toContain('<DocxPreviewPane bytes={props.bytes} surface={props.surface} />');
-    expect(rendererRegistrySrc).toContain('<PdfPreviewPane bytes={props.bytes} surface={props.surface} />');
+    expect(rendererRegistrySrc).toContain('<PdfPreviewPane bytes={props.bytes} surface={props.surface} editing={props.editing}');
     expect(rendererRegistrySrc).toContain('surface={props.surface} />');
     expect(rendererRegistrySrc).toContain('redeven-file-preview-surface-window');
     expect(rendererRegistrySrc).toContain('<TextFilePreviewPane');
@@ -92,7 +92,7 @@ describe('file preview wiring', () => {
     expect(actionsSrc).toContain("import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';");
     expect(actionsSrc).toContain('icon: FlowerNavigationIcon');
     expect(actionsSrc).not.toContain('Sparkles');
-    expect(actionsSrc).toContain("i18n.t('filePreview.downloadFile')");
+    expect(actionsSrc).toContain("'filePreview.pdf.saveCopy' : 'filePreview.downloadFile'");
     expect(contentSrc).toContain('title={resolvedPath()');
     expect(contentSrc).toContain('min-w-0 flex-1 truncate');
     expect(rendererRegistrySrc).toContain('truncated={props.truncated}');

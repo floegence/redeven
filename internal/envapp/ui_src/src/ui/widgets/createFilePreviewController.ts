@@ -18,6 +18,8 @@ import { buildRedevenFileResourceUrl } from '../utils/filePreviewResource';
 import { openReadFileStreamChannel, type ReadFileStreamChannel } from '../utils/fileStreamReader';
 import { getFilePreviewBlockReason } from './FileBrowserShared';
 import { createWorkspaceEffectRpc } from '../services/workspaceEffects';
+import { bytesToBase64 } from '../protocol/redeven_v1/codec/base64';
+import type { BindPdfPreviewEditor, PdfPreviewEditor } from './pdfPreviewEditor';
 
 type PendingPreviewAction =
   | { type: 'close' }
@@ -77,6 +79,8 @@ export interface FilePreviewController {
   updateSelection: (selectionText: string) => void;
   saveCurrent: () => Promise<boolean>;
   revertCurrent: () => void;
+  bindPdfEditor: BindPdfPreviewEditor;
+  exportPdfDraft: () => Promise<Uint8Array<ArrayBuffer>>;
 }
 
 export function createFilePreviewController(params: {
@@ -113,6 +117,9 @@ export function createFilePreviewController(params: {
   let previewReqSeq = 0;
   let saveReqSeq = 0;
   let pendingAction: PendingPreviewAction = null;
+  let pdfEditor: PdfPreviewEditor | null = null;
+  let savedPdfBytes: Uint8Array<ArrayBuffer> | null = null;
+  let pdfEditRevision = 0;
 
   const resetEditorState = (value = '') => {
     setPreviewDraftText(value);
@@ -121,6 +128,9 @@ export function createFilePreviewController(params: {
     setPreviewSaving(false);
     setPreviewSaveError(null);
     setPreviewSelectedText('');
+    pdfEditor = null;
+    savedPdfBytes = null;
+    pdfEditRevision++;
   };
 
   const cleanupPreviewContent = () => {
@@ -172,13 +182,13 @@ export function createFilePreviewController(params: {
     setPreviewOpen(false);
   };
 
-  const hasUnsavedChanges = () => previewOpen() && (previewDescriptor().mode === 'text' || previewDescriptor().mode === 'markdown') && previewDirty();
+  const hasUnsavedChanges = () => previewOpen() && previewDirty();
 
   const canEdit = () => (
     Boolean(
       params.canWrite()
       && previewItem()?.type === 'file'
-      && (previewDescriptor().mode === 'text' || previewDescriptor().mode === 'markdown')
+      && ['text', 'markdown', 'pdf'].includes(previewDescriptor().mode)
       && !previewLoading()
       && !previewError()
       && !previewTruncated(),
@@ -481,6 +491,7 @@ export function createFilePreviewController(params: {
   };
 
   const confirmDiscardAndContinue = async () => {
+    if (previewSaving()) return;
     const action = pendingAction;
     if (!action) return;
 
@@ -516,14 +527,39 @@ export function createFilePreviewController(params: {
     setPreviewSelectedText(String(selectionText ?? '').trim());
   };
 
+  const bindPdfEditor: BindPdfPreviewEditor = (editor) => {
+    if (previewDescriptor().mode === 'pdf' && editor.sourceBytes === previewBytes()) pdfEditor = editor;
+    return {
+      markDirty: () => {
+        if (pdfEditor !== editor || !previewEditing()) return;
+        pdfEditRevision++;
+        setPreviewDirty(true);
+        setPreviewSaveError(null);
+      },
+      dispose: () => { if (pdfEditor === editor) pdfEditor = null; },
+    };
+  };
+
+  const exportPdfDraft = async () => {
+    const editor = pdfEditor;
+    if (previewDescriptor().mode !== 'pdf' || !editor) throw new Error('PDF editor is unavailable.');
+    const bytes = await editor.save();
+    if (pdfEditor !== editor) throw new Error('The PDF preview changed during export.');
+    return bytes;
+  };
+
   const saveCurrent = async (): Promise<boolean> => {
     if (!canEdit() || !previewDirty() || previewSaving()) return false;
 
     const rpc = params.rpc();
     const item = previewItem();
-    if (!rpc || !item || (previewDescriptor().mode !== 'text' && previewDescriptor().mode !== 'markdown')) return false;
+    if (!rpc || !item) return false;
 
     const content = previewDraftText();
+    const isPdf = previewDescriptor().mode === 'pdf';
+    const editor = pdfEditor;
+    if (isPdf && !editor) return false;
+    const editRevision = pdfEditRevision;
     const requestSeq = ++saveReqSeq;
     setPreviewSaving(true);
     setPreviewSaveError(null);
@@ -531,20 +567,28 @@ export function createFilePreviewController(params: {
     try {
       const client = params.client();
       if (!client) return false;
+      const pdfBytes = isPdf ? await editor!.save() : null;
+      if (requestSeq !== saveReqSeq || previewItem()?.path !== item.path || !canEdit() || (isPdf && pdfEditor !== editor)) return false;
       await createWorkspaceEffectRpc(client, rpc).fs.writeFile({
         path: item.path,
-        content,
-        encoding: 'utf8',
+        content: pdfBytes ? bytesToBase64(pdfBytes) : content,
+        encoding: pdfBytes ? 'base64' : 'utf8',
         createDirs: false,
       });
 
       if (requestSeq !== saveReqSeq || previewItem()?.path !== item.path) return false;
 
-      setPreviewText(content);
-      setPreviewDraftText(content);
-      setPreviewBytes(encodeUtf8Bytes(content));
+      if (pdfBytes) {
+        // Keep the live document and reading position. Discard uses the last
+        // acknowledged binary snapshot, not the file's original open bytes.
+        savedPdfBytes = pdfBytes;
+      } else {
+        setPreviewText(content);
+        setPreviewDraftText(content);
+        setPreviewBytes(encodeUtf8Bytes(content));
+      }
       setPreviewTruncated(false);
-      setPreviewDirty(false);
+      setPreviewDirty(isPdf && pdfEditRevision !== editRevision);
       setPreviewSaveError(null);
       params.onSaved?.(item.path);
       return true;
@@ -562,6 +606,13 @@ export function createFilePreviewController(params: {
   };
 
   const revertCurrent = () => {
+    if (previewSaving()) return;
+    if (previewDescriptor().mode === 'pdf') {
+      const bytes = savedPdfBytes ?? previewBytes();
+      resetEditorState();
+      setPreviewBytes(bytes?.slice() ?? null);
+      return;
+    }
     if (previewDescriptor().mode !== 'text' && previewDescriptor().mode !== 'markdown') return;
     resetEditorState(previewText());
   };
@@ -603,5 +654,7 @@ export function createFilePreviewController(params: {
     updateSelection,
     saveCurrent,
     revertCurrent,
+    bindPdfEditor,
+    exportPdfDraft,
   };
 }

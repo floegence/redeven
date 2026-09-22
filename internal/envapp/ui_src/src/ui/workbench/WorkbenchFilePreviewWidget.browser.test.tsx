@@ -2,7 +2,7 @@ import '../../index.css';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { builtInShellThemePresets, FloeConfigProvider, ThemeProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import {
   createDefaultWorkbenchState,
@@ -16,7 +16,14 @@ import { createFilePreviewController } from '../widgets/createFilePreviewControl
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
 import { RedevenWorkbenchSurface } from './surface/RedevenWorkbenchSurface';
 
+import { loadPDFDocument } from '../widgets/pdfPreviewRuntime';
+import formsFixtureUrl from '../widgets/__fixtures__/pdf/forms.pdf?url';
+import unembeddedFixtureUrl from '../widgets/__fixtures__/pdf/mixed-unembedded.pdf?url';
+import longFixtureUrl from '../widgets/__fixtures__/pdf/long-text.pdf?url';
+import pdfFixtureUrl from '../widgets/__fixtures__/pdf/mixed-embedded.pdf?url';
+const pdfCommands = commands as unknown as { selectPdfText: (text: string) => Promise<{ selection: string; clipboard: string }>; recordPdfEvidence: (metrics: { firstPaintMs: number; canvases: number }) => Promise<void> };
 const io = vi.hoisted(() => ({
+  pdfBytes: null as Uint8Array<ArrayBuffer> | null,
   controllers: [] as ReturnType<typeof createFilePreviewController>[],
   copy: vi.fn(async () => {}),
   download: vi.fn(),
@@ -53,7 +60,7 @@ vi.mock('../utils/clipboard', () => ({ writeTextToClipboard: io.copy }));
 vi.mock('../downloads/DownloadContext', () => ({ useDownloadManager: () => ({ enqueue: io.download }) }));
 vi.mock('../utils/fileStreamReader', () => ({
   openReadFileStreamChannel: async () => {
-    const bytes = new TextEncoder().encode(
+    const bytes = io.pdfBytes ?? new TextEncoder().encode(
       '# Preview report\n\nSelected preview paragraph.\n\n## Findings\n\nSaved content.',
     );
     let offset = 0;
@@ -82,6 +89,8 @@ afterEach(() => {
   document.documentElement.removeAttribute('data-floe-surface-style');
   vi.clearAllMocks();
   io.controllers.length = 0;
+  io.pdfBytes = null;
+  io.write.mockReset().mockResolvedValue({});
 });
 
 function mount(mode: 'light' | 'dark', scale = 1) {
@@ -92,9 +101,9 @@ function mount(mode: 'light' | 'dark', scale = 1) {
   host.style.cssText = 'width:100vw;height:100vh';
   document.body.append(host);
   const file = {
-    id: '/workspace/report.md',
-    path: '/workspace/report.md',
-    name: 'A very long preview report filename.md',
+    id: io.pdfBytes ? '/workspace/contract.pdf' : '/workspace/report.md',
+    path: io.pdfBytes ? '/workspace/contract.pdf' : '/workspace/report.md',
+    name: io.pdfBytes ? 'contract.pdf' : 'A very long preview report filename.md',
     type: 'file' as const,
   };
   const definitions: WorkbenchWidgetDefinition[] = [
@@ -199,6 +208,136 @@ function select(element: Element) {
 }
 
 describe('Workbench preview header', () => {
+  it.each([0.65, 1, 1.5])('selects, copies and quotes PDF text under a %s Workbench projection', async scale => {
+    await page.viewport(1800, 1200);
+    io.pdfBytes = new Uint8Array(await (await fetch(pdfFixtureUrl)).arrayBuffer());
+    const { host, state, resize } = mount('light', scale);
+    await vi.waitFor(() => expect(host.querySelector('.textLayer span')).toBeTruthy());
+    const before = { ...state().viewport };
+    const english = await pdfCommands.selectPdfText('Redeven selection');
+    expect(english.selection).toContain('Redeven selection test');
+    expect(english.clipboard).toBe(english.selection);
+    const chinese = await pdfCommands.selectPdfText('中文合同');
+    expect(chinese.selection).toContain('中文合同预览');
+    expect(chinese.clipboard).toBe(chinese.selection);
+    await userEvent.click(page.getByRole('button', { name: 'Ask Flower', exact: true }));
+    expect(io.previewIntent).toHaveBeenLastCalledWith(expect.objectContaining({ selectionText: chinese.selection }));
+    expect(state().viewport).toEqual(before);
+    resize(320);
+    await vi.waitFor(() => {
+      const tools = host.querySelector<HTMLElement>('.pdf-document-controls')!.getBoundingClientRect();
+      const zoom = host.querySelector<HTMLElement>('.preview-zoom-controls')!.getBoundingClientRect();
+      expect(tools.right).toBeLessThanOrEqual(zoom.left);
+    });
+  });
+
+  it('persists native PDF fields and highlights, protects failed saves, and exports the current draft', async () => {
+    await page.viewport(1400, 1000);
+    io.pdfBytes = new Uint8Array(await (await fetch(formsFixtureUrl)).arrayBuffer());
+    const { host, state, resize } = mount('dark', 0.8);
+    await vi.waitFor(() => expect(host.querySelector('.textLayer span')).toBeTruthy());
+    expect(host.querySelector('.annotationLayer input')).toBeNull();
+    const controller = io.controllers.at(-1)!;
+    const source = controller.bytes();
+    const canvasState = { ...state().viewport };
+    await userEvent.click(page.getByRole('button', { name: 'Edit file', exact: true }));
+    await vi.waitFor(() => expect(host.querySelector('input[name="full_name"]')).toBeTruthy());
+    await userEvent.fill(host.querySelector<HTMLInputElement>('input[name="full_name"]')!, 'Saved PDF value');
+    await userEvent.click(host.querySelector<HTMLInputElement>('input[name="accepted"]')!);
+    expect(controller.dirty()).toBe(true);
+    await userEvent.click(page.getByRole('button', { name: 'Zoom in PDF preview', exact: true }));
+    await vi.waitFor(() => expect(host.querySelector<HTMLInputElement>('input[name="full_name"]')!.value).toBe('Saved PDF value'));
+    await pdfCommands.selectPdfText('中文合同');
+    await userEvent.click(page.getByRole('button', { name: 'Highlight selected text', exact: true }));
+    await vi.waitFor(() => expect(host.querySelector('.highlightEditor')).toBeTruthy());
+    resize(320);
+    await vi.waitFor(() => expect(host.querySelector('button[aria-label="More file actions"]')).toBeTruthy());
+    const tools = host.querySelector<HTMLElement>('.pdf-document-controls')!.getBoundingClientRect();
+    expect(tools.right).toBeLessThanOrEqual(host.querySelector<HTMLElement>('.preview-zoom-controls')!.getBoundingClientRect().left);
+    await userEvent.click(page.getByRole('button', { name: 'Annotation history', exact: true }));
+    expect(document.querySelector('[role="menu"]')?.closest('[data-floe-surface-portal-layer]')).toBeTruthy();
+    await userEvent.click(page.getByRole('menuitem', { name: 'Undo annotation', exact: true }));
+    await vi.waitFor(() => expect(host.querySelector('.highlightEditor')).toBeNull());
+    await userEvent.click(page.getByRole('button', { name: 'Annotation history', exact: true }));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Redo annotation', exact: true }));
+    await vi.waitFor(() => expect(host.querySelector('.highlightEditor')).toBeTruthy());
+    resize(900);
+    await vi.waitFor(() => expect(host.querySelector('button[aria-label="Save file"]')).toBeTruthy());
+    const viewport = host.querySelector<HTMLElement>('.pdf-preview-pane')!;
+    const scrollBefore = viewport.scrollTop;
+    io.write.mockRejectedValueOnce(new Error('Storage temporarily unavailable'));
+    await userEvent.click(page.getByRole('button', { name: 'Save file', exact: true }));
+    await vi.waitFor(() => expect(controller.saveError()).toBe('Storage temporarily unavailable'));
+    expect(controller.dirty()).toBe(true);
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Storage temporarily unavailable');
+    await userEvent.click(page.getByRole('button', { name: 'Save PDF copy', exact: true }));
+    await vi.waitFor(() => expect(io.download).toHaveBeenCalledOnce());
+    const command = (io.download.mock.calls[0] as unknown as [{ source: { kind: string; bytes: Uint8Array<ArrayBuffer> } }])[0];
+    expect(command.source.kind).toBe('pdf_draft');
+    const inspect = async (bytes: Uint8Array<ArrayBuffer>, expectedName: string) => {
+      const task = loadPDFDocument(bytes);
+      try {
+        const doc = await task.promise;
+        const fields = await doc.getFieldObjects() as Map<string, Array<{ value: unknown }>> | null;
+        expect(fields!.get('full_name')![0]!.value).toBe(expectedName);
+        expect(fields!.get('accepted')![0]!.value).toBe('Yes');
+        const annotations = await (await doc.getPage(1)).getAnnotations();
+        expect(annotations.filter(annotation => annotation.subtype === 'Highlight')).toHaveLength(1);
+      } finally { await task.destroy(); }
+    };
+    await inspect(command.source.bytes, 'Saved PDF value');
+    expect(controller.dirty()).toBe(true);
+    await userEvent.click(page.getByRole('button', { name: 'Save file', exact: true }));
+    await vi.waitFor(() => expect(controller.dirty()).toBe(false));
+    expect(controller.bytes()).toBe(source);
+    expect(viewport.scrollTop).toBe(scrollBefore);
+    const request = (io.write.mock.calls.at(-1) as unknown as [{ encoding: string; content: string }])[0];
+    expect(request.encoding).toBe('base64');
+    await inspect(Uint8Array.from(atob(request.content), char => char.charCodeAt(0)), 'Saved PDF value');
+    expect(state().viewport).toEqual(canvasState);
+    await page.screenshot({ path: 'workbench-pdf-edited-dark.png' });
+    await userEvent.fill(host.querySelector<HTMLInputElement>('input[name="full_name"]')!, 'Unsaved');
+    await userEvent.click(page.getByRole('button', { name: 'Remove widget', exact: true }));
+    expect(controller.closeConfirmOpen()).toBe(true);
+    await userEvent.click(page.getByRole('button', { name: 'Cancel', exact: true }));
+    expect(controller.dirty()).toBe(true);
+    await userEvent.click(page.getByRole('button', { name: 'Discard changes', exact: true }));
+    await vi.waitFor(() => expect(controller.editing()).toBe(false));
+    await userEvent.click(page.getByRole('button', { name: 'Edit file', exact: true }));
+    await vi.waitFor(() => expect(host.querySelector<HTMLInputElement>('input[name="full_name"]')?.value).toBe('Saved PDF value'));
+  });
+
+  it('renders and selects unembedded Chinese through the locally served CMap assets', async () => {
+    await page.viewport(1400, 1000);
+    io.pdfBytes = new Uint8Array(await (await fetch(unembeddedFixtureUrl)).arrayBuffer());
+    const { host } = mount('light');
+    await vi.waitFor(() => expect(host.querySelector('.textLayer span')).toBeTruthy());
+    const chinese = await pdfCommands.selectPdfText('中文合同');
+    expect(chinese.selection).toContain('中文合同预览');
+    expect(chinese.clipboard).toBe(chinese.selection);
+    await page.screenshot({ path: 'workbench-pdf-cjk-unembedded.png' });
+  });
+
+  it('searches the last of 300 pages while keeping only nearby pages and bounded canvases mounted', async () => {
+    await page.viewport(1400, 1000);
+    io.pdfBytes = new Uint8Array(await (await fetch(longFixtureUrl)).arrayBuffer());
+    const start = performance.now();
+    const { host } = mount('light');
+    await vi.waitFor(() => expect(host.querySelector('.textLayer span')).toBeTruthy(), { timeout: 15000 });
+    const firstPaintMs = performance.now() - start;
+    expect(host.querySelectorAll('canvas').length).toBeLessThanOrEqual(5);
+    await userEvent.click(page.getByRole('button', { name: 'Find in PDF', exact: true }));
+    await userEvent.fill(host.querySelector<HTMLInputElement>('input[type="search"]')!, 'REDEVEN-300');
+    await vi.waitFor(() => expect(host.querySelector('.textLayer .highlight.selected')).toBeTruthy(), { timeout: 15000 });
+    const match = host.querySelector<HTMLElement>('.textLayer .highlight.selected')!;
+    expect(match.closest('.pdf-preview-pane__page')?.getAttribute('data-page-number')).toBe('300');
+    expect(host.querySelector('.pdf-preview-pane__page[data-page-number="1"]')).toBeNull();
+    expect(host.querySelectorAll('canvas').length).toBeLessThanOrEqual(5);
+    for (const canvas of host.querySelectorAll('canvas')) expect(canvas.width * canvas.height).toBeLessThanOrEqual(6_000_000);
+    await pdfCommands.recordPdfEvidence({ firstPaintMs, canvases: host.querySelectorAll('canvas').length });
+    await page.screenshot({ path: 'workbench-pdf-300-page-search.png' });
+  });
+
   it.each(['light', 'dark'] as const)('keeps one row and usable actions at narrow widths in %s', async (mode) => {
     await page.viewport(1200, 900);
     const { host, state, resize, file } = mount(mode, 0.8);

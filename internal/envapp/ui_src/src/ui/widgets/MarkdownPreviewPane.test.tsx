@@ -73,6 +73,8 @@ function createPreviewContext(openPreview: FilePreviewContextValue['openPreview'
       updateSelection: vi.fn(),
       saveCurrent: vi.fn(async () => true),
       revertCurrent: vi.fn(),
+      bindPdfEditor: vi.fn(() => ({ markDirty: vi.fn(), dispose: vi.fn() })),
+      exportPdfDraft: vi.fn(async () => new Uint8Array()),
     },
   };
 }

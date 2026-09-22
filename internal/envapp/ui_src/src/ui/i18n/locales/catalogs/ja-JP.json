@@ -1579,6 +1579,26 @@
     }
   },
   "filePreview": {
+    "pdf": {
+      "search": "PDF 内を検索",
+      "previous": "前の一致箇所",
+      "next": "次の一致箇所",
+      "matches": "{total} 件中 {current} 件目",
+      "noMatches": "一致する項目はありません",
+      "searching": "検索中…",
+      "highlight": "選択したテキストをハイライト",
+      "selectText": "同じページ内でハイライトするテキストを選択してください。",
+      "history": "注釈の履歴",
+      "undo": "注釈を元に戻す",
+      "redo": "注釈をやり直す",
+      "saveCopy": "PDF のコピーを保存",
+      "annotation": "PDF の注釈",
+      "highlightAnnotation": "ハイライトの注釈",
+      "removeHighlight": "ハイライトを削除",
+      "color": "ハイライトの色",
+      "colors": "ハイライトの色の選択肢",
+      "yellow": "黄色"
+    },
     "pathLabel": "パス",
     "unknownPath": "(不明なパス)",
     "pathCopied": "パスをコピーしました",

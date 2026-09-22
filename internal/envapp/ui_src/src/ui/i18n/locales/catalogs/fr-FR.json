@@ -1579,6 +1579,26 @@
     }
   },
   "filePreview": {
+    "pdf": {
+      "search": "Rechercher dans le PDF",
+      "previous": "Résultat précédent",
+      "next": "Résultat suivant",
+      "matches": "{current} sur {total}",
+      "noMatches": "Aucun résultat",
+      "searching": "Recherche en cours…",
+      "highlight": "Surligner le texte sélectionné",
+      "selectText": "Sélectionnez du texte sur une seule page pour le surligner.",
+      "history": "Historique des annotations",
+      "undo": "Annuler l’annotation",
+      "redo": "Rétablir l’annotation",
+      "saveCopy": "Enregistrer une copie du PDF",
+      "annotation": "Annotation PDF",
+      "highlightAnnotation": "Annotation de surlignage",
+      "removeHighlight": "Supprimer le surlignage",
+      "color": "Couleur du surlignage",
+      "colors": "Couleurs de surlignage",
+      "yellow": "Jaune"
+    },
     "pathLabel": "Chemin",
     "unknownPath": "(chemin inconnu)",
     "pathCopied": "Chemin copié",

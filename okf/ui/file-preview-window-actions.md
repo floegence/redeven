@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview window actions
 description: Read files in Activity and Workbench with one set of product actions in the existing title bar.
 tags: [ui, files, preview, floating-windows, selection]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 # Summary
 
@@ -67,6 +67,29 @@ reading text. The existing Ask Flower intent builder remains authoritative for o
 context: it sends file paths, without inlining selected file text. Downloads keep
 the current file and draft mapping owned by the product download command builder.
 
+## PDF drafts and persistence
+
+Writable PDFs expose the existing Edit file action. Editing supports native
+AcroForm fields and highlights on a text selection within one page, with annotation
+undo and redo. This is document annotation and form filling, not arbitrary original
+page-text editing. Read-only previews show saved annotations without editable
+fields. Opening or toggling edit mode never grants filesystem write permission.
+
+The controller binds exactly one editor to the current source bytes. It owns dirty,
+saving, errors, and unsaved-close confirmation; upstream owns serialization. Saving
+serializes the current PDF and rechecks file identity, active editor, and write
+permission before the existing base64 write RPC. A successful write acknowledges
+that snapshot without replacing the active document or moving the reading position.
+Changes made after serialization remain dirty. A failed save retains the draft and
+visible error. Discard returns to the latest acknowledged PDF snapshot. Stale editor
+callbacks and late exports cannot affect a replacement preview.
+
+Save PDF copy exports the current dirty PDF through the existing Downloads flow,
+without overwriting the source or clearing the unsaved-change state. Clean copies
+retain the runtime-file download path. Saving disables document editing and discard;
+close and file replacement retain the controller's unsaved-change confirmation.
+No browser-only blob download bypasses the product download manager.
+
 # Boundaries
 
 Preview loading and error presentation remain in the body. Save errors and
@@ -91,3 +114,5 @@ Preview scale, content bounds, and asynchronous renderer ownership follow the
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewContent.test.tsx` - Preserves inline action behavior and editing availability.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchFilePreviewWidget.tsx` - Supplies header actions from the existing controller and suppresses the body toolbar.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchFilePreviewWidget.browser.test.tsx` - Verifies reading space, responsive actions, selection, and local menu input on the published Workbench.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.test.ts` - Binary saves, failed writes, stale bindings and permission changes during serialization.
+- `redeven:internal/envapp/ui_src/src/ui/downloads/runtimeDownloadSource.test.ts` - PDF draft byte preservation and cancellation without a runtime connection.

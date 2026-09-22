@@ -1,3 +1,4 @@
+import type { BindPdfPreviewEditor } from './pdfPreviewEditor';
 import { Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
@@ -20,6 +21,7 @@ export interface FilePreviewPanelProps {
   text?: string;
   draftText?: string;
   editing?: boolean;
+  bindPdfEditor?: BindPdfPreviewEditor;
   dirty?: boolean;
   saving?: boolean;
   saveError?: string | null;
@@ -60,7 +62,7 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
         <Button size="sm" variant="outline" class="w-full sm:w-auto" onClick={() => props.onCloseConfirmChange?.(false)}>
           {i18n.t('common.actions.cancel')}
         </Button>
-        <Button size="sm" variant="destructive" class="w-full sm:w-auto" onClick={() => void props.onConfirmDiscardClose?.()}>
+        <Button size="sm" variant="destructive" class="w-full sm:w-auto" disabled={props.saving} onClick={() => void props.onConfirmDiscardClose?.()}>
           {i18n.t('filePreview.discardChanges')}
         </Button>
       </div>
@@ -81,6 +83,7 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
             text={props.text}
             draftText={props.draftText}
             editing={props.editing}
+            bindPdfEditor={props.bindPdfEditor}
             dirty={props.dirty}
             saving={props.saving}
             saveError={props.saveError}

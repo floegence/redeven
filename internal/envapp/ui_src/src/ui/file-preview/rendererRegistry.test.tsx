@@ -49,7 +49,7 @@ describe('Redeven file preview renderer registry', () => {
     expect(resolveRedevenFilePreviewRenderer({ mode: 'binary' }).id).toBe('binary');
   });
 
-  it('renders text, PDF, DOCX, spreadsheet, and unsupported bodies without a shared-package preview component', () => {
+  it('renders text, PDF, DOCX, spreadsheet, and unsupported bodies without a shared-package preview component', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const i18n = createI18nHelpers('en-US');
@@ -88,7 +88,7 @@ describe('Redeven file preview renderer registry', () => {
 
     expect(host.querySelector('[data-testid="text-renderer"]')?.textContent).toContain('/workspace/app.ts');
     expect(host.querySelector('[data-testid="markdown-renderer"]')?.textContent).toContain('/workspace/README.md');
-    expect(host.querySelector('[data-testid="pdf-renderer"]')?.textContent).toBe('3');
+    await vi.waitFor(() => expect(host.querySelector('[data-testid="pdf-renderer"]')?.textContent).toBe('3'));
     expect(host.querySelector('[data-testid="docx-renderer"]')?.textContent).toBe('2');
     expect(host.textContent).toContain('Sheet: Sheet1');
     expect(host.textContent).toContain('A1');

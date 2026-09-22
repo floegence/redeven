@@ -1579,6 +1579,26 @@
     }
   },
   "filePreview": {
+    "pdf": {
+      "search": "在 PDF 中尋找",
+      "previous": "上一個相符項目",
+      "next": "下一個相符項目",
+      "matches": "第 {current} 項，共 {total} 項",
+      "noMatches": "沒有相符項目",
+      "searching": "正在尋找…",
+      "highlight": "醒目標示所選文字",
+      "selectText": "請在同一頁內選取要醒目標示的文字。",
+      "history": "註解歷程",
+      "undo": "復原註解",
+      "redo": "重做註解",
+      "saveCopy": "儲存 PDF 副本",
+      "annotation": "PDF 註解",
+      "highlightAnnotation": "醒目標示註解",
+      "removeHighlight": "移除醒目標示",
+      "color": "醒目標示色彩",
+      "colors": "醒目標示色彩選項",
+      "yellow": "黃色"
+    },
     "pathLabel": "路徑",
     "unknownPath": "(未知路徑)",
     "pathCopied": "路徑已複製",

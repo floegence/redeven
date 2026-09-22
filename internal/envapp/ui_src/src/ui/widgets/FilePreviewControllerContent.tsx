@@ -15,6 +15,7 @@ export function FilePreviewControllerContent(props: FilePreviewControllerContent
       text={props.controller.text()}
       draftText={props.controller.draftText()}
       editing={props.controller.editing()}
+      bindPdfEditor={props.controller.bindPdfEditor}
       dirty={props.controller.dirty()}
       saving={props.controller.saving()}
       saveError={props.controller.saveError()}

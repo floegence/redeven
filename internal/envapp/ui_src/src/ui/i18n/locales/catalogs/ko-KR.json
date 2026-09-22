@@ -1579,6 +1579,26 @@
     }
   },
   "filePreview": {
+    "pdf": {
+      "search": "PDF에서 찾기",
+      "previous": "이전 검색 결과",
+      "next": "다음 검색 결과",
+      "matches": "{total}개 중 {current}개",
+      "noMatches": "검색 결과 없음",
+      "searching": "검색 중…",
+      "highlight": "선택한 텍스트 강조 표시",
+      "selectText": "강조 표시할 텍스트를 같은 페이지에서 선택하세요.",
+      "history": "주석 기록",
+      "undo": "주석 실행 취소",
+      "redo": "주석 다시 실행",
+      "saveCopy": "PDF 사본 저장",
+      "annotation": "PDF 주석",
+      "highlightAnnotation": "강조 표시 주석",
+      "removeHighlight": "강조 표시 삭제",
+      "color": "강조 표시 색상",
+      "colors": "강조 표시 색상 선택",
+      "yellow": "노란색"
+    },
     "pathLabel": "경로",
     "unknownPath": "(알 수 없는 경로)",
     "pathCopied": "경로가 복사됨",

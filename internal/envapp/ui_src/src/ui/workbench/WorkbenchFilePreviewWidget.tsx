@@ -276,12 +276,23 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
     env.openFlowerTurnLauncher(result.intent);
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
+    const item = controller.item();
+    let pdfDraftBytes: Uint8Array<ArrayBuffer> | undefined;
+    if (controller.descriptor().mode === 'pdf' && controller.dirty()) {
+      try { pdfDraftBytes = await controller.exportPdfDraft(); }
+      catch (error) {
+        notification.error(i18n.t('shell.notifications.downloadUnavailableTitle'), String(error));
+        return;
+      }
+      if (controller.item() !== item) return;
+    }
     const command = buildFilePreviewDownloadCommand({
       item: controller.item(),
       descriptor: controller.descriptor(),
       dirty: controller.dirty(),
       draftText: controller.draftText(),
+      pdfDraftBytes,
       origin: 'workbench_preview',
     });
     if (!command) {
@@ -449,6 +460,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
         text={controller.text()}
         draftText={controller.draftText()}
         editing={controller.editing()}
+        bindPdfEditor={controller.bindPdfEditor}
         dirty={controller.dirty()}
         saving={controller.saving()}
         saveError={controller.saveError()}
