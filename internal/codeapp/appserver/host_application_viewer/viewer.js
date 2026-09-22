@@ -153,7 +153,7 @@
       : event.key === 'Home' ? buttons[0] : event.key === 'End' ? buttons.at(-1) : null;
     if (next) { event.preventDefault(); next.focus(); }
   });
-  document.addEventListener('pointerdown', event => { if (!controls.contains(event.target)) collapseControls(); });
+  document.addEventListener('pointerdown', event => { if (!controls.contains(event.target)) collapseControls(); }, true);
   controls.addEventListener('focusout', event => { if (event.relatedTarget && !controls.contains(event.relatedTarget)) collapseControls(); });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && panelSection) { event.preventDefault(); event.stopImmediatePropagation(); collapseControls(true); }
@@ -219,6 +219,11 @@
     if (xpra && client === xpra) return;
     if (!xpra || typeof xpra._new_window !== 'function' || typeof xpra.do_send_damage_sequence !== 'function') throw new Error('Unsupported Xpra HTML5 client');
     client = xpra;
+    // Input inside the same-origin application document does not bubble to the
+    // toolbar document. Observe it before Xpra handles it, without consuming it.
+    const dismissControls = () => { if (attempt === generation && client === xpra) collapseControls(); };
+    doc.addEventListener('pointerdown', dismissControls, true);
+    doc.addEventListener('focusin', dismissControls, true);
     xpra.reconnect = false;
     xpra.reconnect_count = 0;
     xpra.callback_close = () => connectionLost(attempt);

@@ -63,6 +63,47 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
 }
 
 describe('host application viewer', () => {
+  it.each(['.mac-app-controls-toggle', '.mac-app-windows-toggle', '.mac-app-quit'])(
+    'dismisses %s from inside Xpra without consuming application input', async selector => {
+      const v = await viewer(false, true);
+      const win = v.appWindow(1, {title:'Document'});
+      v.doc.body.append(win.div);
+      v.client._new_window(1);
+      v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+      const toggle = dom.window.document.querySelector<HTMLButtonElement>(selector)!;
+      const popover = dom.window.document.querySelector<HTMLElement>('.mac-app-popover')!;
+      const input = vi.fn((event: Event) => event.stopPropagation());
+      win.div.addEventListener('pointerdown', input);
+      for (let index = 0; index < 2; index++) {
+        toggle.click();
+        expect(popover.hidden).toBe(false);
+        const event = new dom.window.Event('pointerdown', {bubbles:true, cancelable:true});
+        win.div.dispatchEvent(event);
+        expect(popover.hidden).toBe(true);
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        expect(event.defaultPrevented).toBe(false);
+        expect(input).toHaveBeenCalledTimes(index + 1);
+        expect(dom.window.document.activeElement).not.toBe(toggle);
+      }
+      toggle.click();
+      win.div.dispatchEvent(new dom.window.FocusEvent('focusin', {bubbles:true}));
+      expect(popover.hidden).toBe(true);
+      expect(v.client.send_close_window).not.toHaveBeenCalled();
+      expect(v.client.close).not.toHaveBeenCalled();
+    },
+  );
+
+  it('dismisses on outer content input even when the target stops bubbling', async () => {
+    const v = await viewer();
+    v.appWindow(1); v.client._new_window(1);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    const doc = dom.window.document;
+    doc.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!.click();
+    doc.body.addEventListener('pointerdown', event => event.stopPropagation(), {once:true});
+    doc.body.dispatchEvent(new dom.window.Event('pointerdown', {bubbles:true}));
+    expect(doc.querySelector<HTMLElement>('.mac-app-popover')!.hidden).toBe(true);
+  });
+
   it('waits for a window after a confirmed connection without a first-window deadline', async () => {
     const v = await viewer(false, true);
     v.doc.dispatchEvent(new dom.window.Event('connection-established'));

@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Desktop host application titlebar
 description: Place host application controls alongside native window buttons without adding connection latency.
 tags: [desktop, host-applications, ui]
-timestamp: 2026-09-22T03:20:00Z
+timestamp: 2026-09-22T09:50:25Z
 ---
 # Summary
 
@@ -23,8 +23,14 @@ The row presents application identity, current window and count, picture setting
 close-current-window and confirmed quit. Destructive controls use compact icons
 with explicit accessible names and tooltips. Labels collapse at narrow widths;
 window titles truncate without consuming space reserved for OS controls. Menus
-stay inside the viewport, support keyboard navigation and Escape, and restore
-focus to their trigger. Loading, disconnected and completed Desktop documents
+stay inside the viewport and support keyboard navigation. Escape dismisses the
+popover and restores focus to its trigger. Clicking application content dismisses
+any open toolbar popover without cancelling, replaying or redirecting the click,
+or restoring toolbar focus. This applies both to macOS capture content and the
+same-origin Xpra document, including after reconnection. Content input handlers
+that stop event propagation must not prevent dismissal; moving keyboard focus
+into application content also dismisses the popover. Interacting inside a popover
+retains its normal control behavior. Loading, disconnected and completed Desktop documents
 retain the titlebar with unavailable controls disabled. Preparation and local
 connection-failure documents retain a scriptless draggable title.
 
@@ -74,6 +80,7 @@ be collapsed into one destructive command.
 - `redeven:internal/codeapp/appserver/host_application_viewer/toolbar.js` and `viewer.js` - Shared control presentation and Xpra-owned action routing.
 - `redeven:internal/envapp/ui_src/src/styles/hostApplicationSurfaces.browser.test.tsx` - Native safe areas, compact layouts, dark appearance and bounded popovers.
 - `redeven:desktop/scripts/check-host-application-titlebar.mjs` - Opt-in real Electron titlebar, isolated preload, actions and fullscreen acceptance with a disposable transport fixture.
+- `redeven:internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts` and `macHostApplicationViewer.test.ts` - Outside-input dismissal, focus semantics and preserved application input across both viewer backends.
 
 - `redeven:internal/envapp/ui_src/src/styles/hostApplicationAppearance.browser.test.tsx` - All published palettes, floating materials, locale updates, compact layouts and forced-color focus.
 - `redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs` - Reproducible published styles and complete explicit viewer catalogs.
