@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Native macOS host applications
 description: Real application discovery, direct local launch, owned remote window capture and human input on macOS.
 tags: [runtime, desktop, applications, macos, security]
-timestamp: 2026-09-22T01:30:00Z
+timestamp: 2026-09-22T09:00:00Z
 ---
 # Summary
 
@@ -106,21 +106,13 @@ mouse, wheel, native key chords and composed Unicode text. This is human control
 not a Flower automation or model-observation path. Password/privileged system
 dialogs and OS-reserved shortcuts remain subject to macOS policy.
 
-Application menus come from that app's actual accessibility menu tree; returned
-opaque handles invoke the same enabled menu item. Menus bind to the live application
-and current generation, independently of whether a window exists. Waiting viewers
-keep the toolbar's native menu and quit actions available even without a window. Redeven does not guess a menu title or automatically invoke an app-specific
-action. Native menu titles open anchored dropdown lists with nested navigation,
-disabled actions, arrow-key navigation and Escape returning through the hierarchy.
-Only the currently open menu consumes its generation-bound response; dismissing
-or changing panels cannot be undone by a late response. The toolbar supports
-horizontal keyboard navigation and keeps a single tab entry. Capture/wait
-transitions invalidate old menu handles. Closing a window presses its
-real close action, preserving ordinary save/cancel dialogs. **Stop sharing**
-disconnects either a newly launched or previously running app without quitting it
-or closing its windows. **Quit application** is a separate explicit action
-with the process-generation boundary below. Confirmed loss of the final window closes the physical
-Redeven viewer; a network failure or close request by itself does not. Closing only the viewer preserves the app.
+The [native application menu contract](macos-application-menus.md) owns scoped
+menu export, live execution validation and toolbar navigation. Windowless viewers
+retain application-menu access; system-wide Apple actions are never exported.
+Window closure, sharing detachment and application quit follow the
+[application management contract](macos-application-management.md): ordinary
+closure preserves save/cancel dialogs, and only confirmed final-window loss
+closes the viewer. Closing the viewer itself preserves the application.
 A running process without its first shareable window remains attached indefinitely;
 there is no first-window termination deadline. Explicitly stopping sharing during
 this wait ends normally; missing pixels do not turn a user-requested stop into a

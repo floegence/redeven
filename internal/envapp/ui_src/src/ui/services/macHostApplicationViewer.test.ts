@@ -409,16 +409,16 @@ describe('macOS application viewer', () => {
     expect(v.state()).toBe('active');
   });
 
-  it('renders literal system menu titles and routes only returned item IDs', async () => {
+  it('renders literal native application menu titles and routes only returned item IDs', async () => {
     const v = await viewer(); await v.activate();
     dom.window.document.querySelector<HTMLButtonElement>('.mac-app-menu-toggle')!.click();
-    v.socket().message({ type: 'menu', generation:1, items: [{ id: 'system-item', title: '<b>Host action</b>', enabled: true, children: [] }] });
+    v.socket().message({ type: 'menu', generation:1, items: [{ id: 'application-item', title: '<b>Host action</b>', enabled: true, children: [] }] });
     const panel = dom.window.document.querySelector('.mac-app-menu')!;
     expect(dom.window.document.querySelector<HTMLElement>('.mac-app-popover')!.hidden).toBe(false);
     expect(panel.querySelector('b')).toBeNull();
     expect(panel.textContent).toBe('<b>Host action</b>');
     panel.querySelector('button')!.click();
-    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({ action: 'menu_action', item: 'system-item' });
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({ action: 'menu_action', item: 'application-item' });
     expect((panel as HTMLElement).hidden).toBe(true);
   });
 });

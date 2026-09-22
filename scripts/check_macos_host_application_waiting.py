@@ -24,10 +24,12 @@ def run(helper_path, scenario):
                     CFBundleName=name, CFBundlePackageType='APPL', NSHighResolutionCapable=True)
         if scenario == 'reopen':
             info['RedevenFixtureWindowOnReopen'] = True
-        elif scenario in ('menu', 'stop'):
+        elif scenario in ('menu', 'menu_scope', 'stop'):
             info['RedevenFixtureWindowOnMenu'] = True
         elif scenario == 'delayed':
             info['RedevenFixtureInitialWindowDelay'] = 48.0
+        if scenario == 'menu_scope':
+            info['RedevenFixtureMenuScope'] = True
         with (bundle / 'Contents/Info.plist').open('wb') as file:
             plistlib.dump(info, file)
         subprocess.run(['swiftc', str(Path(__file__).parent / 'fixtures/nativeHostApplication.swift'),
@@ -68,7 +70,7 @@ def run(helper_path, scenario):
                 os.kill(pid, 0)
                 print(json.dumps(dict(scenario=scenario, passed=True, pid=pid)))
                 return
-            if scenario == 'menu':
+            if scenario in ('menu', 'menu_scope'):
                 waiting = helper.wait('waiting')
                 def items(values):
                     for item in values:
@@ -82,7 +84,48 @@ def run(helper_path, scenario):
                         if error.args[0].get('code') == 'TARGET_NOT_READY':
                             return None
                         raise
-                menu = next(i for i in items(eventually(application_menu, 'Fixture menu did not become available')['items']) if i['title'] == 'Open fixture window')
+                snapshot = eventually(application_menu, 'Fixture menu did not become available')['items']
+                if scenario == 'menu_scope':
+                    titles = {i['title'] for i in items(snapshot)}
+                    assert 'Apple' not in titles, 'System Apple menu was exported into the application viewer'
+                    assert {'Fixture global hide', 'Fixture global reveal'}.isdisjoint(titles), titles
+                    assert 'Apple document' in titles, 'Application content was filtered by title'
+                    assert 'Empty fixture submenu' not in titles
+                    assert 'Disabled fixture action' in titles
+                    disabled = next(i for i in items(snapshot) if i['title'] == 'Disabled fixture action')
+                    assert not disabled['enabled'], disabled
+                    for kind in ('disabled', 'container', 'unknown'):
+                        snapshot = application_menu()['items']
+                        disabled = next(i for i in items(snapshot) if i['title'] == 'Disabled fixture action')
+                        item = {'disabled': disabled['id'], 'container': snapshot[0]['id'], 'unknown': 'unissued-system-item'}[kind]
+                        helper.send('menu_action', generation=waiting['generation'], item=item)
+                        helper.wait('operation_error')
+                        assert receipt()['menu_clicks'] == 0, 'Non-executable menu handle was pressed'
+                    # Refreshing a menu revokes all handles from the old snapshot.
+                    previous = next(i for i in items(snapshot) if i['title'] == 'Record menu action')
+                    snapshot = application_menu()['items']
+                    helper.send('menu_action', generation=waiting['generation'], item=previous['id'])
+                    helper.wait('operation_error')
+                    snapshot = application_menu()['items']
+                    action = next(i for i in items(snapshot) if i['title'] == 'Record menu action')
+                    helper.send('menu_action', generation=waiting['generation'], item=action['id'])
+                    eventually(lambda: receipt().get('menu_clicks') == 1, 'Application menu action did not execute')
+                    helper.send('menu_action', generation=waiting['generation'], item=action['id'])
+                    helper.wait('operation_error')
+                    assert receipt()['menu_clicks'] == 1, 'Consumed menu handle executed twice'
+                    for mutation in ('blocked', 'removed'):
+                        snapshot = application_menu()['items']
+                        mutable = next(i for i in items(snapshot) if i['title'] == 'Mutable fixture action')
+                        command = bundle / 'menu-scope-command'
+                        command.write_text(mutation)
+                        eventually(lambda: receipt().get('menu_scope_mutation') == mutation, 'Fixture did not mutate its live menu')
+                        helper.send('menu_action', generation=waiting['generation'], item=mutable['id'])
+                        helper.wait('operation_error')
+                        assert receipt()['menu_clicks'] == 1, 'Retired or global menu action executed'
+                        command.write_text('restored')
+                        eventually(lambda: receipt().get('menu_scope_mutation') == 'restored', 'Fixture did not restore its action')
+                    snapshot = application_menu()['items']
+                menu = next(i for i in items(snapshot) if i['title'] == 'Open fixture window')
                 helper.send('menu_action', generation=waiting['generation'], item=menu['id'])
             window = helper.wait('window', timeout=60)
             helper.wait('frame')
@@ -152,7 +195,7 @@ def run(helper_path, scenario):
             elif scenario == 'delayed':
                 assert time.monotonic() - started >= 45
             assert receipt()['pid'] == pid
-            if scenario == 'menu':
+            if scenario in ('menu', 'menu_scope'):
                 helper.send('menu_action', generation=waiting['generation'], item=menu['id'])
                 assert helper.wait('operation_error')['code'] == 'STALE_WINDOW'
             helper.send('close', window=window['window'], generation=window['generation'])
@@ -171,6 +214,6 @@ def run(helper_path, scenario):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--helper', type=Path, required=True)
-    parser.add_argument('--scenario', choices=['reopen', 'delayed', 'menu', 'stop', 'windows'], required=True)
+    parser.add_argument('--scenario', choices=['reopen', 'delayed', 'menu', 'menu_scope', 'stop', 'windows'], required=True)
     args = parser.parse_args()
     run(args.helper, args.scenario)
