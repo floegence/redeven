@@ -292,12 +292,7 @@
 .two-factor-acknowledgement {
   padding: 0 2px;
 }
-.two-factor-error {
-  color: var(--destructive);
-  font-size: 12px;
-  line-height: 1.6;
-  flex-basis: 100%;
-}
+
 .two-factor-management {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -327,7 +322,7 @@
   flex-shrink: 0;
 }
 .two-factor-disable {
-  color: var(--destructive);
+  color: var(--error);
 }
 @media (max-width: 420px) {
   .two-factor-dialog {
@@ -362,5 +357,40 @@
   }
 }
 
-.two-factor-error-row { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; }
-.two-factor-error-row .two-factor-error { flex: 1; min-width: 0; margin: 0; }
+.two-factor-notice {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--warning) 24%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning) 7%, var(--card));
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.65;
+}
+.two-factor-notice > svg { margin-top: 1px; }
+.two-factor-notice-copy { min-width: 0; overflow-wrap: anywhere; }
+.two-factor-notice-copy h4 { color: var(--foreground); font-weight: 600; }
+.two-factor-notice-copy p { margin-top: 3px; color: var(--muted-foreground); }
+.two-factor-notice > button { grid-column: 2; justify-self: start; }
+.two-factor-notice-action { margin-top: 2px; height: auto; min-height: 32px; white-space: normal; gap: 6px; }
+.two-factor-error {
+  border-color: color-mix(in srgb, var(--error) 25%, transparent);
+  background: color-mix(in srgb, var(--error) 7%, var(--card));
+  color: var(--error);
+}
+.two-factor-https-guide {
+  border-color: color-mix(in srgb, var(--primary) 20%, transparent);
+  background: color-mix(in srgb, var(--primary) 5%, var(--card));
+  color: var(--primary);
+}
+.environment-access-security-heading { scroll-margin-top: 20px; }
+
+@container (min-width: 32rem) {
+  .two-factor-prerequisite { grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; }
+  .two-factor-prerequisite > button { grid-column: 3; margin-top: 0; }
+}

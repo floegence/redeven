@@ -7,9 +7,8 @@
     "newPassword": "新环境密码",
     "confirmPassword": "确认密码",
     "setupPassword": "设置环境密码，保护远程连接。",
-    "httpsRequired": "请先应用 HTTPS 并重启此 运行环境。",
     "retry": "无法完成此步骤，请重试或重新打开安全设置。",
-    "invalidCredentials": "请检查密码，并使用新的验证码。",
+    "invalidCredentials": "请检查环境密码后重试。",
     "disableHelp": "远程连接将仅使用环境密码。",
     "title": "双重验证",
     "scope": "浏览器和远程 URL 登录时需要验证码。",
@@ -44,7 +43,15 @@
     "stepConnect": "身份验证器",
     "stepSave": "恢复码",
     "copied": "已复制",
-    "copyKey": "复制设置密钥"
+    "copyKey": "复制设置密钥",
+    "httpsTitle": "先启用 HTTPS",
+    "httpsHelp": "HTTPS 生效后，即可设置双重验证。",
+    "configureHTTPS": "配置 HTTPS",
+    "httpsSetupTitle": "为双重验证启用 HTTPS",
+    "httpsCertificateStep": "在下方生成或导入证书，再点击“{restart}”。",
+    "httpsRestartStep": "点击下方“{restart}”，重启后继续设置双重验证。",
+    "httpsManualRestartStep": "在下方准备证书并保存设置，重启环境后，再回来设置双重验证。",
+    "invalidCode": "验证码无效或已使用，请输入新的验证码。"
   },
   "flowerSurface": {
     "filesystemPicker": {

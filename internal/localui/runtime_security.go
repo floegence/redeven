@@ -46,5 +46,9 @@ func (s *runtimeControlServer) handleRuntimeSecurity(w http.ResponseWriter, r *h
 	if (req.Action == "commit" || req.Action == "recover") && s.afterSecurityChange != nil {
 		s.afterSecurityChange()
 	}
-	writeRuntimeControlJSON(w, 200, runtimeControlEnvelope{OK: true, Data: result})
+	writeRuntimeControlJSON(w, 200, runtimeControlEnvelope{OK: true, Data: struct {
+		*accessgate.SecurityResult
+		// The private management transport and saved configuration are not the public listener.
+		HTTPSReady bool `json:"https_ready"`
+	}{result, s.accessCurrent.LocalUIProtocol == config.LocalUIProtocolHTTPS}})
 }

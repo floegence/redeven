@@ -16,6 +16,44 @@ try {
   });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  for (const width of [320, 768, 1280]) {
+    for (const theme of ['light', 'dark']) {
+      await page.setViewportSize({ width, height: 820 });
+      await page.goto(`${server.resolvedUrls.local[0]}two-factor.html?full=1&http=1&new-password=1&theme=${theme}`);
+      await page.waitForFunction(dark => document.documentElement.classList.contains('dark') === dark, theme === 'dark');
+      const prerequisite = page.locator('.two-factor-prerequisite');
+      await prerequisite.waitFor();
+      assert.equal(await page.locator('.two-factor-dialog input').count(), 0);
+      const geometry = await prerequisite.evaluate(e => ({ overflow: e.scrollWidth > e.clientWidth, color: getComputedStyle(e).backgroundColor }));
+      assert.equal(geometry.overflow, false);
+      assert.notEqual(geometry.color, 'rgba(0, 0, 0, 0)');
+      await prerequisite.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${output}/https-prerequisite-${width}-${theme}.png`, animations: 'disabled' });
+      await page.getByRole('button', { name: 'Configure HTTPS', exact: true }).click();
+      await page.getByRole('button', { name: 'Create certificate', exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: 'Save and restart', exact: true }).isDisabled(), true);
+      assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Connection security');
+      assert.equal(await page.getByRole('heading', { name: 'Environment settings', exact: true }).isVisible(), true);
+      const panelScroll = await page.locator('.redeven-environment-settings-dialog').evaluate(e => e.scrollTop);
+      assert.equal(panelScroll, 0, 'Prerequisite navigation must not scroll the dialog shell');
+      await page.screenshot({ path: `${output}/https-guidance-${width}-${theme}.png`, animations: 'disabled' });
+      await page.getByRole('button', { name: 'Create certificate', exact: true }).click();
+      await page.getByRole('button', { name: 'Save and restart', exact: true }).click();
+      await page.getByRole('button', { name: 'Set up', exact: true }).waitFor();
+      assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Set up');
+      await page.getByRole('button', { name: 'Set up', exact: true }).click();
+      await page.getByLabel('New environment password', { exact: true }).waitFor();
+    }
+  }
+  await page.goto(`${server.resolvedUrls.local[0]}two-factor.html?error=1`);
+  await page.getByRole('button', { name: 'Set up', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Authenticator code', exact: true }).fill('000000');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('alert').waitFor();
+  const alertColor = await page.getByRole('alert').evaluate(e => getComputedStyle(e).color);
+  const bodyColor = await page.locator('body').evaluate(e => getComputedStyle(e).color);
+  assert.notEqual(alertColor, bodyColor);
+  await page.screenshot({ path: `${output}/verification-error.png`, animations: 'disabled' });
   for (const width of [1024, 320]) {
     await page.setViewportSize({ width, height: 740 });
     await page.goto(`${server.resolvedUrls.local[0]}two-factor.html`);
@@ -105,6 +143,13 @@ try {
     'ru-RU',
   ]) {
     for (const theme of ['light', 'dark']) {
+      await page.goto(`${server.resolvedUrls.local[0]}two-factor.html?full=1&http=1&locale=${locale}&theme=${theme}`);
+      await page.locator('.two-factor-notice-action').click();
+      const guidance = page.locator('.two-factor-https-guide');
+      await guidance.waitFor();
+      assert.equal(await guidance.evaluate(e => e.scrollWidth > e.clientWidth), false, `${locale}/${theme}: HTTPS guidance overflow`);
+      assert.equal(await page.locator('.redeven-environment-settings-dialog').evaluate(e => e.scrollTop), 0);
+      await page.screenshot({ path: `${output}/https-guidance-${locale}-${theme}.png`, animations: 'disabled' });
       await page.goto(
         `${server.resolvedUrls.local[0]}two-factor.html?locale=${locale}&theme=${theme}`,
       );

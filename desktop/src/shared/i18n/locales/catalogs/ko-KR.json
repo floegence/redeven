@@ -7,9 +7,8 @@
     "newPassword": "새 환경 비밀번호",
     "confirmPassword": "비밀번호 확인",
     "setupPassword": "환경 비밀번호를 설정하여 원격 연결을 보호하세요.",
-    "httpsRequired": "먼저 HTTPS를 적용하고 런타임을 다시 시작하세요.",
     "retry": "이 단계를 완료할 수 없습니다. 다시 시도하거나 보안 설정을 다시 여세요.",
-    "invalidCredentials": "비밀번호를 확인하고 새 인증 코드를 사용하세요.",
+    "invalidCredentials": "환경 비밀번호를 확인하고 다시 시도하세요.",
     "disableHelp": "원격 연결에 환경 비밀번호만 사용됩니다.",
     "title": "2단계 인증",
     "scope": "브라우저 및 직접 URL 로그인 시 코드를 요청합니다.",
@@ -44,7 +43,15 @@
     "stepConnect": "인증 앱",
     "stepSave": "복구 코드",
     "copied": "복사됨",
-    "copyKey": "설정 키 복사"
+    "copyKey": "설정 키 복사",
+    "httpsTitle": "먼저 HTTPS를 활성화하세요",
+    "httpsHelp": "HTTPS가 적용되면 2단계 인증을 설정할 수 있습니다.",
+    "configureHTTPS": "HTTPS 설정",
+    "httpsSetupTitle": "2단계 인증을 위한 HTTPS 활성화",
+    "httpsCertificateStep": "아래에서 인증서를 생성하거나 가져온 다음 “{restart}”을 선택하세요.",
+    "httpsRestartStep": "아래의 “{restart}”을 선택하세요. 다시 시작한 후 2단계 인증 설정을 계속하세요.",
+    "httpsManualRestartStep": "아래에서 인증서를 준비하고 설정을 저장한 다음 환경을 다시 시작하세요. 이후 2단계 인증 설정으로 돌아오세요.",
+    "invalidCode": "유효하지 않거나 이미 사용한 코드입니다. 새 코드를 입력하세요."
   },
   "flowerSurface": {
     "filesystemPicker": {

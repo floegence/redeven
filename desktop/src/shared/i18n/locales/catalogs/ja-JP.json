@@ -7,9 +7,8 @@
     "newPassword": "新しい環境パスワード",
     "confirmPassword": "パスワードを確認",
     "setupPassword": "環境パスワードを設定してリモート接続を保護します。",
-    "httpsRequired": "先に HTTPS を適用して ランタイム を再起動してください。",
     "retry": "この手順を完了できません。再試行するか、セキュリティ設定を開き直してください。",
-    "invalidCredentials": "パスワードを確認し、新しい確認コードを入力してください。",
+    "invalidCredentials": "環境のパスワードを確認して、もう一度お試しください。",
     "disableHelp": "リモート接続では環境パスワードのみが使用されます。",
     "title": "二要素認証",
     "scope": "ブラウザーや直接 URL からのログインにコードを要求します。",
@@ -44,7 +43,15 @@
     "stepConnect": "認証アプリ",
     "stepSave": "リカバリーコード",
     "copied": "コピーしました",
-    "copyKey": "設定キーをコピー"
+    "copyKey": "設定キーをコピー",
+    "httpsTitle": "先に HTTPS を有効にする",
+    "httpsHelp": "HTTPS が有効になると、二要素認証を設定できます。",
+    "configureHTTPS": "HTTPS を設定",
+    "httpsSetupTitle": "二要素認証のために HTTPS を有効化",
+    "httpsCertificateStep": "以下で証明書を作成またはインポートし、「{restart}」を選択してください。",
+    "httpsRestartStep": "下の「{restart}」を選択し、再起動後に二要素認証の設定を続けてください。",
+    "httpsManualRestartStep": "以下で証明書を準備して設定を保存し、環境を再起動してください。その後、二要素認証の設定に戻ってください。",
+    "invalidCode": "コードが無効か、使用済みです。新しいコードを入力してください。"
   },
   "flowerSurface": {
     "filesystemPicker": {

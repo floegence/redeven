@@ -3,6 +3,14 @@ import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
   security: {
+    "httpsTitle": "Set up HTTPS first",
+    "httpsHelp": "Two-factor setup becomes available when HTTPS is active.",
+    "configureHTTPS": "Configure HTTPS",
+    "httpsSetupTitle": "Enable HTTPS for two-factor",
+    "httpsCertificateStep": "Create or import a certificate below, then select “{restart}”.",
+    "httpsRestartStep": "Select “{restart}” below. After the restart, continue two-factor setup.",
+    "httpsManualRestartStep": "Prepare a certificate below, save the settings, and restart the environment. Then return to two-factor setup.",
+
     "runtimeChanged": "Runtime restarted. Start this security step again.",
     "actionUncertain": "The response was lost. Security status has been refreshed; review it before continuing.",
     "connectTitle": "Connect your authenticator",
@@ -16,9 +24,9 @@ export const enUS = {
     "newPassword": "New environment password",
     "confirmPassword": "Confirm password",
     "setupPassword": "Set an environment password to protect remote connections.",
-    "httpsRequired": "Apply HTTPS and restart this Runtime first.",
     "retry": "Unable to complete this step. Try again or reopen security settings.",
-    "invalidCredentials": "Check your password and use a new verification code.",
+    "invalidCredentials": "Check your environment password and try again.",
+    "invalidCode": "This code is invalid or has already been used. Try a new code.",
     "disableHelp": "Remote connections will use only the environment password.",
     "title": "Two-factor authentication",
     "scope": "Require a code for browser and direct URL sign-ins.",

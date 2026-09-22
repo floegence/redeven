@@ -3,7 +3,7 @@ type: Security Contract
 title: Runtime two-factor authentication
 description: Configure independent environment TOTP, sign in, recover access, and revoke ordinary sessions without changing SSH authentication.
 tags: [security, authentication, runtime, desktop, totp]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 # Summary
 
@@ -12,6 +12,10 @@ Runtime `accessgate` owns environment authentication independently of Redeven Cl
 # Enrollment and management
 
 Desktop Environment Settings / Access presents one two-factor row. A running Runtime is required for Desktop management. If a different environment password has been saved for the next start, restart before configuring MFA; the old running verifier cannot overwrite the newer saved authority. Security operations take effect immediately and never save a pending address/certificate draft. Apply HTTPS and restart before enrollment: the owner endpoint checks the running public listener, and MFA-enabled startup rejects a public HTTP listener. The independently authenticated private bridge retains its isolated transport.
+
+Desktop reads `https_ready` from the owner security response before offering enrollment. It reflects the running public listener, never the private bridge URL or the saved HTTPS draft. HTTP environments show an inline HTTPS prerequisite with a direct **Configure HTTPS** action instead of a password form. That action selects HTTPS and moves keyboard focus to the existing connection-security section; it does not create a certificate, save settings, or restart automatically. Guidance uses the existing certificate and **Save and restart** controls. A confirmed HTTPS status after restart returns focus to two-factor setup. Ordinary snapshot refreshes retain this guidance. Servers without a valid readiness field require a Runtime update; Desktop never guesses eligibility. The projection is additive to the owner response and does not change compatibility epoch 32, authentication payloads, or server-side enforcement.
+
+Security failures use a themed, icon-marked inline alert above the active form. A late HTTPS rejection closes the obsolete credential form and restores the actionable prerequisite. Secrets are discarded, and writes are never automatically replayed.
 
 First enrollment uses the existing environment password verifier. If none exists, the owner sets an environment password. Scan the Runtime-generated QR in an authenticator, or reveal the manual key; enter its six-digit code. The two-step enrollment view distinguishes authenticator connection from recovery-code storage. A single paste-friendly numeric input preserves leading zeroes; verification requires an explicit action. Manual keys stay collapsed until requested. The next view shows eight numbered recovery codes with copy-success feedback and download actions. The setting row wraps as a complete identity/control group, and the modal retains readable spacing at 320px in light and dark themes. Copy/download and acknowledge saving them, then enable. Merely generating or verifying a pending authenticator does not change active protection. Pending operations expire after five minutes and are bound to the owner control service and exact operation. Replacing an authenticator retains the previous one until commit.
 
@@ -59,7 +63,8 @@ Independent key encryption limits exposure from a database-only disclosure. It d
 - `redeven:internal/accessgate/store.go` - Owns encrypted schema initialization, migration and generation-checked persistence.
 - `redeven:internal/localui/runtime_security_test.go` - Exercises private management admission, actual-listener HTTPS, two-step public authentication and response-loss retry.
 - `redeven:internal/agent/native_codespace.go` - Applies the shared authentication contract before editor streams.
-- `redeven:desktop/src/welcome/TwoFactorSettings.client.test.tsx` - Verifies scan, save-code acknowledgement, commit and unavailable status.
+- `redeven:desktop/src/welcome/TwoFactorSettings.client.test.tsx` - Verifies HTTPS preflight, stale enrollment rejection, scan, save-code acknowledgement, commit and unavailable status.
+- `redeven:desktop/src/welcome/EnvironmentAccessSettingsForm.client.test.tsx` - Exercises HTTPS navigation, explicit certificate preparation, save/restart, and focus returning only after actual readiness.
 - `redeven:desktop/scripts/check-two-factor.mjs` - Checks the real browser setup flow, password confirmation and 320px layout.
 - `redeven:internal/envapp/ui_src/src/ui/EnvironmentAccessGate.browser.test.tsx` - Checks keyboard operation, leading zeroes, recovery input, locales and viewport sizes.
 - `redeven:internal/envapp/ui_src/src/ui/ResourceAccessGate.browser.test.tsx` - Verifies isolated-resource factor completion, scoped resume and local cookie transport.

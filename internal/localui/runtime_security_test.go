@@ -14,6 +14,35 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
+func TestRuntimeSecurityStatusReportsRunningHTTPS(t *testing.T) {
+	gate, err := accessgate.OpenPersistent(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Close()
+	for _, protocol := range []string{config.LocalUIProtocolHTTP, config.LocalUIProtocolHTTPS} {
+		t.Run(protocol, func(t *testing.T) {
+			control := &runtimeControlServer{token: "owner", accessGate: gate, accessCurrent: config.EnvironmentCatalogAccess{LocalUIProtocol: protocol}}
+			req := httptest.NewRequest("POST", "http://localhost/v2/runtime/security", bytes.NewBufferString(`{"action":"status"}`))
+			req.RemoteAddr = "127.0.0.1:1234"
+			req.Header.Set("Authorization", "Bearer owner")
+			res := httptest.NewRecorder()
+			control.handleRuntimeSecurity(res, req)
+			var body struct {
+				Data struct {
+					HTTPSReady *bool `json:"https_ready"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if res.Code != 200 || body.Data.HTTPSReady == nil || *body.Data.HTTPSReady != (protocol == config.LocalUIProtocolHTTPS) {
+				t.Fatalf("missing or inaccurate HTTPS prerequisite: %s", res.Body.String())
+			}
+		})
+	}
+}
+
 func TestRuntimeSecurityOwnerBoundaryAndTwoStepLogin(t *testing.T) {
 	dir := t.TempDir()
 	hash, err := accessgate.HashPassword("environment secret")

@@ -18705,7 +18705,7 @@
         "security",
         "totp"
       ],
-      "timestamp": "2026-09-22T00:00:00Z",
+      "timestamp": "2026-09-23T00:00:00Z",
       "frontmatter": {
         "description": "Configure independent environment TOTP, sign in, recover access, and revoke ordinary sessions without changing SSH authentication.",
         "tags": [
@@ -18715,19 +18715,19 @@
           "security",
           "totp"
         ],
-        "timestamp": "2026-09-22T00:00:00Z",
+        "timestamp": "2026-09-23T00:00:00Z",
         "title": "Runtime two-factor authentication",
         "type": "Security Contract"
       },
-      "body_length": 11571,
+      "body_length": 12994,
       "summary": "Runtime `accessgate` owns environment authentication independently of Redeven Cloud. Enabling two-factor authentication requires the environment password followed by a TOTP or single-use recovery code for ordinary browser, direct URL, and Cloud data sessions. A password-only challenge grants no file, terminal, editor, plugin, or forwarding access. Authenticated native/SSH management retains its separate private host authority; loopback addresses, Cloud administrator claims, and forwarded headers do not establish that authority. Missing or damaged committed authentication state fails closed. Host recovery locks ordinary access until a new password and authenticator are committed.",
       "sections": [
         {
           "id": "enrollment-and-management",
           "title": "Enrollment and management",
           "level": 1,
-          "body": "Desktop Environment Settings / Access presents one two-factor row. A running Runtime is required for Desktop management. If a different environment password has been saved for the next start, restart before configuring MFA; the old running verifier cannot overwrite the newer saved authority. Security operations take effect immediately and never save a pending address/certificate draft. Apply HTTPS and restart before enrollment: the owner endpoint checks the running public listener, and MFA-enabled startup rejects a public HTTP listener. The independently authenticated private bridge retains its isolated transport.\n\nFirst enrollment uses the existing environment password verifier. If none exists, the owner sets an environment password. Scan the Runtime-generated QR in an authenticator, or reveal the manual key; enter its six-digit code. The two-step enrollment view distinguishes authenticator connection from recovery-code storage. A single paste-friendly numeric input preserves leading zeroes; verification requires an explicit action. Manual keys stay collapsed until requested. The next view shows eight numbered recovery codes with copy-success feedback and download actions. The setting row wraps as a complete identity/control group, and the modal retains readable spacing at 320px in light and dark themes. Copy/download and acknowledge saving them, then enable. Merely generating or verifying a pending authenticator does not change active protection. Pending operations expire after five minutes and are bound to the owner control service and exact operation. Replacing an authenticator retains the previous one until commit.\n\nChanging an authenticator, replacing recovery codes, and turning MFA off require the current environment password and a fresh factor. Verification authorizes only that pending operation; the commit does not ask for the same already consumed code again. Ordinary environment login cannot call `POST /v2/runtime/security`; only the existing private Runtime control authority exposes that route. A loopback address alone is insufficient. Password and HTTP downgrade changes through next-start settings are rejected while MFA is active. Disable MFA through its authenticated operation before changing that password, or use explicit host recovery to replace lost credentials.\n\n## Headless owner workflow\n\nRun these commands as the owner of the exact Runtime state directory, locally or through authenticated SSH. Stop that Runtime first so the command can acquire its state lock:\n\n```sh\nredeven security setup --state-root /path/to/environment --recovery-file /private/new-recovery-codes.txt\nredeven security recover --state-root /path/to/environment\n```\n\nSetup requires saved HTTPS configuration. It reads secrets from an attached terminal, shows a manual authenticator key only on that terminal, verifies a code, writes a new recovery file with exclusive creation and mode 0600, and requires explicit activation. It never prints secrets into redirected stdout or accepts them as command arguments. Recovery requires explicit confirmation and sets `recovery_pending`; it does not downgrade to password-only access. Run setup again to set a new password and authenticator before restarting ordinary access. These commands do not alter SSH keys, sshd policy, PAM, host passwords, or execution identity.",
-          "char_count": 3345
+          "body": "Desktop Environment Settings / Access presents one two-factor row. A running Runtime is required for Desktop management. If a different environment password has been saved for the next start, restart before configuring MFA; the old running verifier cannot overwrite the newer saved authority. Security operations take effect immediately and never save a pending address/certificate draft. Apply HTTPS and restart before enrollment: the owner endpoint checks the running public listener, and MFA-enabled startup rejects a public HTTP listener. The independently authenticated private bridge retains its isolated transport.\n\nDesktop reads `https_ready` from the owner security response before offering enrollment. It reflects the running public listener, never the private bridge URL or the saved HTTPS draft. HTTP environments show an inline HTTPS prerequisite with a direct **Configure HTTPS** action instead of a password form. That action selects HTTPS and moves keyboard focus to the existing connection-security section; it does not create a certificate, save settings, or restart automatically. Guidance uses the existing certificate and **Save and restart** controls. A confirmed HTTPS status after restart returns focus to two-factor setup. Ordinary snapshot refreshes retain this guidance. Servers without a valid readiness field require a Runtime update; Desktop never guesses eligibility. The projection is additive to the owner response and does not change compatibility epoch 32, authentication payloads, or server-side enforcement.\n\nSecurity failures use a themed, icon-marked inline alert above the active form. A late HTTPS rejection closes the obsolete credential form and restores the actionable prerequisite. Secrets are discarded, and writes are never automatically replayed.\n\nFirst enrollment uses the existing environment password verifier. If none exists, the owner sets an environment password. Scan the Runtime-generated QR in an authenticator, or reveal the manual key; enter its six-digit code. The two-step enrollment view distinguishes authenticator connection from recovery-code storage. A single paste-friendly numeric input preserves leading zeroes; verification requires an explicit action. Manual keys stay collapsed until requested. The next view shows eight numbered recovery codes with copy-success feedback and download actions. The setting row wraps as a complete identity/control group, and the modal retains readable spacing at 320px in light and dark themes. Copy/download and acknowledge saving them, then enable. Merely generating or verifying a pending authenticator does not change active protection. Pending operations expire after five minutes and are bound to the owner control service and exact operation. Replacing an authenticator retains the previous one until commit.\n\nChanging an authenticator, replacing recovery codes, and turning MFA off require the current environment password and a fresh factor. Verification authorizes only that pending operation; the commit does not ask for the same already consumed code again. Ordinary environment login cannot call `POST /v2/runtime/security`; only the existing private Runtime control authority exposes that route. A loopback address alone is insufficient. Password and HTTP downgrade changes through next-start settings are rejected while MFA is active. Disable MFA through its authenticated operation before changing that password, or use explicit host recovery to replace lost credentials.\n\n## Headless owner workflow\n\nRun these commands as the owner of the exact Runtime state directory, locally or through authenticated SSH. Stop that Runtime first so the command can acquire its state lock:\n\n```sh\nredeven security setup --state-root /path/to/environment --recovery-file /private/new-recovery-codes.txt\nredeven security recover --state-root /path/to/environment\n```\n\nSetup requires saved HTTPS configuration. It reads secrets from an attached terminal, shows a manual authenticator key only on that terminal, verifies a code, writes a new recovery file with exclusive creation and mode 0600, and requires explicit activation. It never prints secrets into redirected stdout or accepts them as command arguments. Recovery requires explicit confirmation and sets `recovery_pending`; it does not downgrade to password-only access. Run setup again to set a new password and authenticator before restarting ordinary access. These commands do not alter SSH keys, sshd policy, PAM, host passwords, or execution identity.",
+          "char_count": 4518
         },
         {
           "id": "sign-in-and-session-contract",
@@ -18791,9 +18791,14 @@
           "description": "Applies the shared authentication contract before editor streams."
         },
         {
-          "id": "redeven:desktop/src/welcome/TwoFactorSettings.client.test.tsx:0:verifies scan, save-code acknowledgement, commit and unavailable status.",
+          "id": "redeven:desktop/src/welcome/TwoFactorSettings.client.test.tsx:0:verifies https preflight, stale enrollment rejection, scan, save-code acknowledgement, commit and unavailable status.",
           "source": "redeven:desktop/src/welcome/TwoFactorSettings.client.test.tsx",
-          "description": "Verifies scan, save-code acknowledgement, commit and unavailable status."
+          "description": "Verifies HTTPS preflight, stale enrollment rejection, scan, save-code acknowledgement, commit and unavailable status."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/EnvironmentAccessSettingsForm.client.test.tsx:0:exercises https navigation, explicit certificate preparation, save/restart, and focus returning only after actual readiness.",
+          "source": "redeven:desktop/src/welcome/EnvironmentAccessSettingsForm.client.test.tsx",
+          "description": "Exercises HTTPS navigation, explicit certificate preparation, save/restart, and focus returning only after actual readiness."
         },
         {
           "id": "redeven:desktop/scripts/check-two-factor.mjs:0:checks the real browser setup flow, password confirmation and 320px layout.",
@@ -25181,5 +25186,5 @@
       ]
     }
   ],
-  "source_sha256": "dff97080d3f79a47a1bca2ff6a982072b6d98452af2838fd5728e6faf864a9d8"
+  "source_sha256": "dec02e4fb0128f06845186043375b2590f1385923bb4a209813271659fb03881"
 }

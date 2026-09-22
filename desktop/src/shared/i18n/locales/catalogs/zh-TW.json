@@ -7,9 +7,8 @@
     "newPassword": "新環境密碼",
     "confirmPassword": "確認密碼",
     "setupPassword": "設定環境密碼，保護遠端連線。",
-    "httpsRequired": "請先套用 HTTPS 並重新啟動此 執行環境。",
     "retry": "無法完成此步驟，請重試或重新開啟安全設定。",
-    "invalidCredentials": "請檢查密碼，並使用新的驗證碼。",
+    "invalidCredentials": "請檢查環境密碼後重試。",
     "disableHelp": "遠端連線將僅使用環境密碼。",
     "title": "雙重驗證",
     "scope": "瀏覽器及遠端 URL 登入時需要驗證碼。",
@@ -44,7 +43,15 @@
     "stepConnect": "驗證器",
     "stepSave": "復原碼",
     "copied": "已複製",
-    "copyKey": "複製設定金鑰"
+    "copyKey": "複製設定金鑰",
+    "httpsTitle": "先啟用 HTTPS",
+    "httpsHelp": "HTTPS 生效後，即可設定雙重驗證。",
+    "configureHTTPS": "設定 HTTPS",
+    "httpsSetupTitle": "為雙重驗證啟用 HTTPS",
+    "httpsCertificateStep": "在下方產生或匯入憑證，再按「{restart}」。",
+    "httpsRestartStep": "按下方「{restart}」，重新啟動後繼續設定雙重驗證。",
+    "httpsManualRestartStep": "在下方準備憑證並儲存設定，重新啟動環境後，再回來設定雙重驗證。",
+    "invalidCode": "驗證碼無效或已使用，請輸入新的驗證碼。"
   },
   "flowerSurface": {
     "filesystemPicker": {

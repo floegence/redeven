@@ -8,6 +8,7 @@ import type {
   SecurityResult,
 } from '../shared/runtimeSecurity';
 
+HTMLElement.prototype.scrollIntoView = vi.fn();
 let dispose = () => {};
 afterEach(() => {
   dispose();
@@ -21,8 +22,20 @@ function click(label: string) {
   if (!button) throw new Error(`Missing button: ${label}`);
   button.click();
 }
+it('offers HTTPS configuration before collecting a password or starting enrollment', async () => {
+  const configureHTTPS = vi.fn();
+  const manage = vi.fn(async () => ({ enabled: false, password_configured: false, recovery_pending: false, recovery_codes_remaining: 0, revision: 1, https_ready: false }));
+  dispose = render(() => <TwoFactorSettings environmentID="remote" i18n={createDesktopI18n('en-US')} manage={manage} configureHTTPS={configureHTTPS} />, document.body);
+  await settle();
+  expect(document.body.textContent).toContain('Set up HTTPS first');
+  expect(document.querySelector('input[type="password"]')).toBeNull();
+  click('Configure HTTPS');
+  expect(configureHTTPS).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(manage).toHaveBeenCalledTimes(1);
+});
 it('confirms enrollment before showing codes and commits only after they are saved', async () => {
-  const base: SecurityResult = {
+  const base: SecurityResult = { https_ready: true,
     enabled: false,
     password_configured: true,
     recovery_pending: false,
@@ -58,7 +71,7 @@ it('confirms enrollment before showing codes and commits only after they are sav
   document.body.append(host);
   dispose = render(
     () => (
-      <TwoFactorSettings
+      <TwoFactorSettings configureHTTPS={() => {}}
         environmentID="environment"
         i18n={createDesktopI18n('en-US')}
         manage={manage}
@@ -107,7 +120,7 @@ it('confirms enrollment before showing codes and commits only after they are sav
 it('keeps unavailable status distinct from Off', async () => {
   dispose = render(
     () => (
-      <TwoFactorSettings
+      <TwoFactorSettings configureHTTPS={() => {}}
         environmentID="offline"
         i18n={createDesktopI18n('en-US')}
         manage={async () => {
@@ -123,7 +136,7 @@ it('keeps unavailable status distinct from Off', async () => {
 });
 
 it('reconciles a lost commit response without repeating the security write', async () => {
-  const base: SecurityResult = { enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
+  const base: SecurityResult = { https_ready: true, enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
   let committed = false;
   const manage = vi.fn(async (request: SecurityRequest): Promise<SecurityResult> => {
     if (request.action === 'setup') return { ...base, operation_id: 'operation', secret: 'KEY', qr_image: 'data:image/png;base64,' };
@@ -134,7 +147,7 @@ it('reconciles a lost commit response without repeating the security write', asy
     }
     return { ...base, enabled: committed, revision: committed ? 2 : 1 };
   });
-  dispose = render(() => <TwoFactorSettings environmentID="environment" i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
+  dispose = render(() => <TwoFactorSettings configureHTTPS={() => {}} environmentID="environment" i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
   await settle(); click('Set up'); await settle();
   const input = document.querySelector('input')!;
   input.value = '012345'; input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -150,11 +163,11 @@ it('reconciles a lost commit response without repeating the security write', asy
 
 it('preserves enrollment while the same environment status refreshes', async () => {
   const [snapshot, setSnapshot] = createSignal({ environmentID: 'environment', revision: 1 });
-  const base: SecurityResult = { enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
+  const base: SecurityResult = { https_ready: true, enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
   const manage = vi.fn(async (request: SecurityRequest): Promise<SecurityResult> => request.action === 'setup'
     ? { ...base, operation_id: 'pending-operation', secret: 'TESTKEY', qr_image: 'data:image/png;base64,' }
     : base);
-  dispose = render(() => <TwoFactorSettings environmentID={snapshot().environmentID} i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
+  dispose = render(() => <TwoFactorSettings configureHTTPS={() => {}} environmentID={snapshot().environmentID} i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
   await settle();
   click('Set up');
   await settle();
@@ -174,10 +187,10 @@ it('preserves enrollment while the same environment status refreshes', async () 
 
 it('invalidates enrollment once after a Runtime restart and offers inline retry', async () => {
   const [started, setStarted] = createSignal<number | undefined>(1);
-  const base: SecurityResult = { enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
+  const base: SecurityResult = { https_ready: true, enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
   const manage = vi.fn(async (request: SecurityRequest): Promise<SecurityResult> => request.action === 'setup'
     ? { ...base, operation_id: 'before-restart', secret: 'KEY', qr_image: 'data:image/png;base64,' } : base);
-  dispose = render(() => <TwoFactorSettings environmentID="environment" runtimeStartedAt={started()} i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
+  dispose = render(() => <TwoFactorSettings configureHTTPS={() => {}} environmentID="environment" runtimeStartedAt={started()} i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
   await settle(); click('Set up'); await settle();
   setStarted(undefined); await settle();
   expect(document.querySelector('.two-factor-qr')).not.toBeNull();
@@ -193,12 +206,49 @@ it('invalidates enrollment once after a Runtime restart and offers inline retry'
 });
 
 it('does not repeat failed status queries until the user retries', async () => {
-  const base: SecurityResult = { enabled: true, password_configured: true, recovery_pending: false, recovery_codes_remaining: 8, revision: 2 };
+  const base: SecurityResult = { https_ready: true, enabled: true, password_configured: true, recovery_pending: false, recovery_codes_remaining: 8, revision: 2 };
   const manage = vi.fn().mockRejectedValueOnce(new Error('RUNTIME_CONTROL_UNREACHABLE')).mockResolvedValue(base);
-  dispose = render(() => <TwoFactorSettings environmentID="environment" i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
+  dispose = render(() => <TwoFactorSettings configureHTTPS={() => {}} environmentID="environment" i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
   await settle(); await settle();
   expect(manage).toHaveBeenCalledTimes(1);
   click('Retry'); await settle();
   expect(manage).toHaveBeenCalledTimes(2);
   expect(document.body.textContent).toContain('On');
+});
+
+
+it('replaces a stale enrollment form with actionable prerequisites if the server requires HTTPS', async () => {
+  const base: SecurityResult = { https_ready: true, enabled: false, password_configured: false, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
+  const manage = vi.fn(async (request: SecurityRequest) => {
+    if (request.action === 'setup') throw new Error('SECURITY_HTTPS_REQUIRED');
+    return base;
+  });
+  dispose = render(() => <TwoFactorSettings environmentID="remote" i18n={createDesktopI18n('en-US')} manage={manage} configureHTTPS={() => {}} />, document.body);
+  await settle(); click('Set up'); await settle();
+  for (const input of document.querySelectorAll<HTMLInputElement>('input[type="password"]')) {
+    input.value = 'test-password'; input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  click('Continue'); await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  expect(document.querySelector('input[type="password"]')).toBeNull();
+  expect(document.body.textContent).toContain('Configure HTTPS');
+  expect(manage.mock.calls.filter(([request]) => request.action === 'setup')).toHaveLength(1);
+});
+
+
+it('keeps the authenticator step and gives code-specific feedback after an invalid code', async () => {
+  const base: SecurityResult = { https_ready: true, enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
+  const manage = vi.fn(async (request: SecurityRequest) => {
+    if (request.action === 'setup') return { ...base, operation_id: 'pending', secret: 'KEY', qr_image: 'data:image/png;base64,' };
+    if (request.action === 'verify') throw new Error('ACCESS_FACTOR_INVALID');
+    return base;
+  });
+  dispose = render(() => <TwoFactorSettings environmentID="environment" i18n={createDesktopI18n('en-US')} manage={manage} configureHTTPS={() => {}} />, document.body);
+  await settle(); click('Set up'); await settle();
+  const input = document.querySelector<HTMLInputElement>('input[autocomplete="one-time-code"]')!;
+  input.value = '000000'; input.dispatchEvent(new Event('input', { bubbles: true }));
+  click('Continue'); await settle();
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe('This code is invalid or has already been used. Try a new code.');
+  expect(document.querySelector('.two-factor-qr')).not.toBeNull();
+  expect(input.value).toBe('000000');
+  expect(document.querySelector('[role="alert"] svg')).not.toBeNull();
 });

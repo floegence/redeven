@@ -8,6 +8,7 @@ import { createDesktopI18n } from '../shared/i18n';
 import { buildDesktopSettingsSurfaceSnapshot } from '../main/settingsPageContent';
 import { applyDesktopAccessModeToDraft, applyDesktopAccessFixedPortToDraft } from '../shared/desktopAccessModel';
 import type { DesktopCertificateReport, DesktopCertificateRequest } from '../shared/desktopCertificate';
+import type { SecurityRequest, SecurityResult } from '../shared/runtimeSecurity';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 import { IDLE_LAUNCHER_BUSY_STATE } from './launcherBusyState';
 
@@ -19,7 +20,7 @@ function button(label: string): HTMLButtonElement {
   return result;
 }
 
-async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'legacy'; remote?: boolean; urls?: string[]; pending?: boolean; certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport> } = {}) {
+async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'legacy'; remote?: boolean; urls?: string[]; pending?: boolean; security?: (request: SecurityRequest) => Promise<SecurityResult>; certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport> } = {}) {
   HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal('CSS', { escape: (value: string) => value });
   const host = document.createElement('div');
@@ -55,10 +56,10 @@ async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'leg
       toggleAutoPort={() => {}} saveSettings={save} runtimeRestartAvailable={Boolean(url)} runtimeRunning={Boolean(url)}
       runtimeStatusLabel={runtimeStatus()} runtimeStatusTone="neutral" dark={false}
       desktopOpenLabel="Open Env App" openInDesktop={() => {}} openInBrowser={open} copyEnvironmentValue={copy}
-      cancelSettings={() => {}} clearStoredLocalUIPassword={() => {}} certificate={certificate} />)} />
+      cancelSettings={() => {}} clearStoredLocalUIPassword={() => {}} certificate={certificate} security={options.security} />)} />
   ), host));
   await settle();
-  return { draft, setDraft, copy, save, open, certificate, setSnapshot, setOpen, setRuntimeStatus };
+  return { snapshot, draft, setDraft, copy, save, open, certificate, setSnapshot, setOpen, setRuntimeStatus };
 }
 
 afterEach(() => {
@@ -284,4 +285,39 @@ describe('Runtime connection settings', () => {
     expect(test.draft().local_ui_password_mode).toBe('keep');
     expect(button('Save for next restart').disabled).toBe(false);
   });
+});
+
+
+it('routes HTTPS prerequisites into existing settings and returns only after the running listener is ready', async () => {
+  let httpsReady = false;
+  const security = vi.fn(async (): Promise<SecurityResult> => ({ https_ready: httpsReady, enabled: false, password_configured: false, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 }));
+  const test = await mount({ remote: true, url: 'http://localhost:23998/', security,
+    certificate: async (request) => request.operation === 'status'
+      ? { status: 'ready', code: '', identity: 'missing', can_manage: true, certificate_kind: 'server' }
+      : { status: 'updated', code: '', identity: 'ready', can_manage: true, certificate_kind: 'server' },
+  });
+  expect(test.certificate).not.toHaveBeenCalled();
+  button('Configure HTTPS').click(); await settle();
+  expect(test.draft().local_ui_protocol).toBe('https');
+  expect(document.activeElement?.textContent).toBe('Connection security');
+  expect(document.querySelector('.two-factor-https-guide')?.textContent).toContain('Create or import a certificate');
+  expect(button('Save and restart').disabled).toBe(true);
+  expect(test.save).not.toHaveBeenCalled();
+  expect(test.certificate.mock.calls.map(([request]) => request?.operation)).toEqual(['status']);
+  button(createDesktopI18n('en-US').t('settings.generateCertificate')).click(); await settle();
+  expect(button('Save and restart').disabled).toBe(false);
+  expect(document.querySelector('.two-factor-https-guide')?.textContent).toContain('After the restart');
+  expect(document.querySelector('.two-factor-setting')?.textContent).toContain('Set up HTTPS first');
+  button('Save and restart').click(); await settle();
+  expect(test.save).toHaveBeenCalledWith({ restartRuntime: true });
+  // Saving a HTTPS draft does not establish that the running listener changed.
+  test.setSnapshot(previous => ({ ...previous, draft: test.draft(), runtime_configuration_pending: true })); await settle();
+  expect(security).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('.two-factor-setting')?.textContent).toContain('Set up HTTPS first');
+  httpsReady = true;
+  test.setSnapshot(previous => ({ ...previous, runtime_started_at_unix_ms: 2, runtime_configuration_pending: false })); await settle();
+  expect(document.querySelector('.two-factor-https-guide')).toBeNull();
+  expect(document.activeElement?.textContent).toBe('Set up');
+  button('Set up').click(); await settle();
+  expect(document.querySelectorAll('.two-factor-dialog input[type="password"]')).toHaveLength(2);
 });
