@@ -74,7 +74,8 @@ export function buildDesktopRuntimeArgs(
   if (localUIBind !== canonicalLocalUIBind(access.local_ui_bind)) {
     args.push('--local-ui-bind-override', localUIBind);
   }
-  if (!access.local_ui_password_configured) args.push('--password-clear');
+  // Runtime owns the persisted verifier. Cached Desktop settings may predate
+  // enrollment; only an explicit access-settings operation may clear it.
 	if (!isLoopbackOnlyBind(parsedBind)) {
 		if (!access.local_ui_password_configured) {
 			throw new Error('Network Local UI access requires a configured password.');

@@ -3494,6 +3494,24 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
   let lastConnectedClient: unknown = null;
 
+  // Policy revocation closes the secure transport before another artifact can
+  // report an access error. Check the Runtime's authority once on terminal
+  // failure, without restarting or scheduling the transport ourselves.
+  const localConnectionState = createMemo(() => isLocalMode() ? protocol.status() : 'idle');
+  createEffect(() => {
+    const state = localConnectionState();
+    if (!runtimeConnectionEstablished() || (state !== 'failed' && state !== 'closed')) return;
+    if (untrack(accessLocked)) return;
+    if (untrack(() => protocol.snapshot().failure?.code.toUpperCase()) === 'ACCESS_PASSWORD_REQUIRED') return;
+    let canceled = false;
+    onCleanup(() => { canceled = true; });
+    void getLocalAccessStatus().then((status) => {
+      if (canceled || !status?.password_required || status.unlocked) return;
+      setLocalAccessStatus(status);
+      markCurrentAccessLocked(i18n.t('accessGate.passwordExpiredError'));
+    });
+  });
+
   createEffect(() => {
     if (!runtimeConnectionEstablished() || connectionAttemptSeq() <= 0) return;
 

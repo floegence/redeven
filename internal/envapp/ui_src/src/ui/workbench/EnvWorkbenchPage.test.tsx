@@ -1277,6 +1277,40 @@ describe('EnvWorkbenchPage', () => {
     ]));
   });
 
+  it('owns the layout observer only while its protocol session is connected', async () => {
+    setProtocolStatus('waiting');
+    setProtocolClient(null);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    expect(layoutApiMocks.getWorkbenchLayoutSnapshot).toHaveBeenCalledTimes(1);
+    expect(layoutApiMocks.connectWorkbenchLayoutEventStream).not.toHaveBeenCalled();
+
+    setProtocolClient({ id: 'connected-1' });
+    setProtocolStatus('connected');
+    await flushMicrotasks();
+    expect(layoutApiMocks.connectWorkbenchLayoutEventStream).toHaveBeenCalledTimes(1);
+    const firstSignal = layoutApiMocks.lastStreamArgs.signal;
+    expect(firstSignal.aborted).toBe(false);
+
+    setProtocolStatus('waiting');
+    await flushMicrotasks();
+    expect(firstSignal.aborted).toBe(true);
+    expect(layoutApiMocks.connectWorkbenchLayoutEventStream).toHaveBeenCalledTimes(1);
+
+    setProtocolClient({ id: 'connected-2' });
+    setProtocolStatus('connected');
+    await flushMicrotasks();
+    expect(layoutApiMocks.connectWorkbenchLayoutEventStream).toHaveBeenCalledTimes(2);
+    expect(layoutApiMocks.lastStreamArgs.signal.aborted).toBe(false);
+    expect(layoutApiMocks.getWorkbenchLayoutSnapshot).toHaveBeenCalledTimes(1);
+
+    setProtocolClient({ id: 'replacement' });
+    await flushMicrotasks();
+    expect(layoutApiMocks.connectWorkbenchLayoutEventStream).toHaveBeenCalledTimes(3);
+  });
+
   it('updates localized Workbench chrome without reloading runtime layout state', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

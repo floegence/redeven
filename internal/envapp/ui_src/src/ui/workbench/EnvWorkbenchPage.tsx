@@ -1510,38 +1510,6 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
 
     const abortController = new AbortController();
 
-    const startRuntimeLayoutStream = async (signal: AbortSignal) => {
-      let connectedOnce = false;
-
-      while (!signal.aborted) {
-        try {
-          await connectWorkbenchLayoutEventStream({
-            afterSeq: runtimeSnapshot().seq,
-            signal,
-            onEvent: (event) => {
-              if (event.type === 'layout.replaced') {
-                const nextSnapshot = event.payload as RuntimeWorkbenchLayoutSnapshot;
-                applyRemoteRuntimeSnapshotWhenReady(nextSnapshot);
-                return;
-              }
-
-              applyRuntimeWidgetState(event.payload as RuntimeWorkbenchWidgetState, event.seq);
-            },
-          });
-          if (signal.aborted) return;
-          connectedOnce = true;
-        } catch (error) {
-          if (signal.aborted || isSessionEventAuthorizationError(error)) return;
-          if (connectedOnce || runtimeLayoutReady()) {
-            console.warn('Workbench layout event stream disconnected:', error);
-          }
-          connectedOnce = true;
-        }
-
-        await waitForAbortOrTimeout(signal, WORKBENCH_LAYOUT_RECONNECT_DELAY_MS);
-      }
-    };
-
     const loadRuntimeLayout = async () => {
       try {
         let snapshot = await getWorkbenchLayoutSnapshot();
@@ -1582,7 +1550,6 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
         applyRuntimeSnapshot(snapshot);
         setInstanceState(readPersistedWorkbenchInstanceState(instanceKey, workbenchState()));
         setRuntimeLayoutReady(true);
-        void startRuntimeLayoutStream(abortController.signal);
       } catch (error) {
         if (abortController.signal.aborted) {
           return;
@@ -1598,6 +1565,49 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
       runtimeLayoutGeneration += 1;
       abortController.abort();
     });
+  });
+
+  // The layout snapshot can load before Flowersec is connected. Its event
+  // observer belongs to the current session, and must stop during reconnects.
+  createEffect(() => {
+    if (!runtimeLayoutReady() || protocol.status() !== 'connected' || !protocol.session?.()) return;
+    const abortController = new AbortController();
+    onCleanup(() => abortController.abort());
+
+    const startRuntimeLayoutStream = async (signal: AbortSignal) => {
+      let connectedOnce = false;
+
+      while (!signal.aborted) {
+        try {
+          await connectWorkbenchLayoutEventStream({
+            afterSeq: runtimeSnapshot().seq,
+            signal,
+            onEvent: (event) => {
+              if (signal.aborted) return;
+              if (event.type === 'layout.replaced') {
+                const nextSnapshot = event.payload as RuntimeWorkbenchLayoutSnapshot;
+                applyRemoteRuntimeSnapshotWhenReady(nextSnapshot);
+                return;
+              }
+
+              applyRuntimeWidgetState(event.payload as RuntimeWorkbenchWidgetState, event.seq);
+            },
+          });
+          if (signal.aborted) return;
+          connectedOnce = true;
+        } catch (error) {
+          if (signal.aborted || isSessionEventAuthorizationError(error)) return;
+          if (connectedOnce || runtimeLayoutReady()) {
+            console.warn('Workbench layout event stream disconnected:', error);
+          }
+          connectedOnce = true;
+        }
+
+        await waitForAbortOrTimeout(signal, WORKBENCH_LAYOUT_RECONNECT_DELAY_MS);
+      }
+    };
+
+    untrack(() => { void startRuntimeLayoutStream(abortController.signal); });
   });
 
   createEffect(() => {

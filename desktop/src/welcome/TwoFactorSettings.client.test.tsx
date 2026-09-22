@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { TwoFactorSettings } from './TwoFactorSettings';
 import { createDesktopI18n } from '../shared/i18n';
 import type {
@@ -119,4 +120,28 @@ it('keeps unavailable status distinct from Off', async () => {
   await settle();
   expect(document.body.textContent).toContain('Unavailable');
   expect(document.querySelector('button')?.disabled).toBe(true);
+});
+
+it('preserves enrollment while the same environment status refreshes', async () => {
+  const [snapshot, setSnapshot] = createSignal({ environmentID: 'environment', revision: 1 });
+  const base: SecurityResult = { enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
+  const manage = vi.fn(async (request: SecurityRequest): Promise<SecurityResult> => request.action === 'setup'
+    ? { ...base, operation_id: 'pending-operation', secret: 'TESTKEY', qr_image: 'data:image/png;base64,' }
+    : base);
+  dispose = render(() => <TwoFactorSettings environmentID={snapshot().environmentID} i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
+  await settle();
+  click('Set up');
+  await settle();
+  expect(document.querySelector('.two-factor-qr img')).not.toBeNull();
+
+  setSnapshot({ environmentID: 'environment', revision: 2 });
+  await settle();
+  expect(document.querySelector('.two-factor-qr img')).not.toBeNull();
+  expect(manage.mock.calls.filter(([request]) => request.action === 'status')).toHaveLength(1);
+  expect(manage).not.toHaveBeenCalledWith({ action: 'cancel', operation_id: 'pending-operation' });
+
+  setSnapshot({ environmentID: 'other-environment', revision: 1 });
+  await settle();
+  expect(document.querySelector('.two-factor-qr img')).toBeNull();
+  expect(manage).toHaveBeenCalledWith({ action: 'cancel', operation_id: 'pending-operation' });
 });

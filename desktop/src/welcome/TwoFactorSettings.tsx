@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createEffect, on, onCleanup } from 'solid-js';
+import { Show, For, createSignal, createEffect, createMemo, on, onCleanup } from 'solid-js';
 import {
   Button,
   Checkbox,
@@ -155,9 +155,12 @@ export function TwoFactorSettings(props: {
       if (current === generation) setBusy(false);
     }
   };
+  // Status snapshots refresh independently of the selected environment. Only
+  // an identity change may discard an in-progress enrollment or owner check.
+  const environmentID = createMemo(() => props.environmentID);
   createEffect(
     on(
-      () => props.environmentID,
+      environmentID,
       () => {
         close();
         setStatus(undefined);

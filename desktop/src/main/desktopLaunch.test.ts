@@ -74,6 +74,15 @@ describe('desktopLaunch', () => {
     expect(buildDesktopRuntimeArgs(environment)).not.toContain('--password-clear');
   });
 
+  it('preserves Runtime authentication when cached Desktop settings predate TOTP enrollment', () => {
+    const environment = testLocalEnvironment({
+      access: testLocalAccess({ local_ui_password: '', local_ui_password_configured: false }),
+    });
+    const plan = buildDesktopRuntimeLaunchPlan(environment, { HOME: '/Users/tester' });
+    expect(plan.args).not.toContain('--password-clear');
+    expect(JSON.parse(plan.startup_secrets_stdin)).toEqual({ version: 1 });
+  });
+
   it('adds one-shot bootstrap metadata and a private stdin envelope to the spawn plan', () => {
     const environment = testProviderBoundLocalEnvironment(
       'https://redeven.test',
@@ -177,7 +186,6 @@ describe('desktopLaunch', () => {
       '127.0.0.1:0',
       '--local-ui-protocol',
       'http',
-      '--password-clear',
       '--state-root',
       '/Users/tester/.redeven',
       '--startup-secrets-stdin',
@@ -222,7 +230,6 @@ describe('desktopLaunch', () => {
       '127.0.0.1:0',
       '--local-ui-protocol',
       'http',
-      '--password-clear',
       '--state-root',
       '/Users/tester/.redeven',
       '--startup-secrets-stdin',
