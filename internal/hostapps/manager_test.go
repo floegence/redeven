@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
+	nativeapps "github.com/floegence/floe-native-apps"
 	"github.com/floegence/redeven/internal/portforward"
 	"github.com/floegence/redeven/internal/portforward/registry"
+	"github.com/gorilla/websocket"
 )
 
 func TestWindowReadinessAllowsOlderXpraInfoLatency(t *testing.T) {
@@ -149,6 +151,37 @@ func TestFinishedSessionDistinguishesStartupFailureFromAnEndedApplication(t *tes
 	}
 }
 
+func TestRunningCaptureFailureRemainsVisibleForRecovery(t *testing.T) {
+	state := t.TempDir()
+	reg, err := registry.Open(filepath.Join(state, "forwards.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwards, err := portforward.New(reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer forwards.Close()
+	m := New(state, state, forwards)
+	f, err := forwards.OpenOwnedForwardSession(context.Background(), "http://127.0.0.1:45312/_redeven_host_app/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &ownedSession{view: Session{ID: "capture-failed", State: "running", Forward: f}, owner: "alice", password: "secret", done: make(chan struct{})}
+	m.sessions[s.view.ID] = s
+	m.finish(s, "capture_failed", nil)
+	view, owner, found := m.ForForward(f.Forward.ForwardID)
+	if !found || owner != "alice" || view.State != "failed" || view.ErrorCode != "capture_failed" || view.EndReason != "" {
+		t.Fatalf("capture failure was presented as a normal application exit: %+v", view)
+	}
+	if m.Password(s.view.ID) != "" {
+		t.Fatal("failed backend retained credentials")
+	}
+	if route, err := forwards.GetForward(context.Background(), f.Forward.ForwardID); err != nil || route != nil {
+		t.Fatal("failed backend retained a live route")
+	}
+}
+
 func TestQuotedLaunchArgumentsNeverEvaluateShellExpressions(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "executed")
 	input := []string{"a'b", "two words", "$(touch " + marker + ")", ""}
@@ -183,6 +216,21 @@ func TestInstalledXpraLaunchResumeAndStop(t *testing.T) {
 	defer forwards.Close()
 	m := New(state, state, forwards)
 	defer m.Close()
+	// Qualification may use a separately prepared, task-owned component state.
+	// The released SDK still verifies its catalog identity and complete tools.
+	if prepared := os.Getenv("REDEVEN_TEST_NATIVE_COMPONENT_STATE"); prepared != "" {
+		pkg, err := nativeapps.NativePackage()
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.setup, err = nativeapps.New(prepared, pkg, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = m.setup.Directory(); err != nil {
+			t.Fatal("prepared component fixture is unavailable:", err)
+		}
+	}
 	appID := os.Getenv("REDEVEN_TEST_HOST_APPLICATION_ID")
 	if appID == "" {
 		executable, err := exec.LookPath("xterm")
@@ -245,6 +293,35 @@ func TestInstalledXpraLaunchResumeAndStop(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(conf, "xpra.conf")); err != nil || string(data) != string(config) {
 		t.Fatal("host Xpra configuration was modified")
+	}
+	// A browser can close during any stage of attachment, including before the
+	// authenticated Xpra hello. Neither a close frame nor transport loss may
+	// destroy an already running, separately owned application session.
+	endpoint := "ws" + strings.TrimSuffix(strings.TrimPrefix(first.Forward.Forward.TargetURL, "http"), "/_redeven_host_app/") + "/"
+	dialer := websocket.Dialer{Subprotocols: []string{"binary"}, HandshakeTimeout: 3 * time.Second}
+	for _, graceful := range []bool{true, false, true} {
+		connection, _, err := dialer.Dial(endpoint, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if graceful {
+			err = connection.WriteControl(websocket.CloseMessage, nil, time.Now().Add(3*time.Second))
+			if err != nil {
+				connection.Close()
+				t.Fatal(err)
+			}
+			_ = connection.SetReadDeadline(time.Now().Add(3 * time.Second))
+			_, _, err = connection.ReadMessage()
+			if timed, ok := err.(net.Error); ok && timed.Timeout() {
+				connection.Close()
+				t.Fatal("backend did not complete the viewer close handshake")
+			}
+		}
+		connection.Close()
+		assertResponsiveWindowInventory(t, m.sessions[first.ID])
+		if current := m.Sessions("alice")[0]; current.State != "running" || current.ID != first.ID {
+			t.Fatalf("viewer detach terminated its application session: %+v", current)
+		}
 	}
 	second, err := m.Launch(context.Background(), "alice", req)
 	if err != nil || second.ID != first.ID {
