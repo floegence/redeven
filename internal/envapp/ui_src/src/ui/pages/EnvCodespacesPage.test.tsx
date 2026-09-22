@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 
-import { Show } from 'solid-js';
+import { Show, Suspense, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { LocalApiError } from '../services/localApi';
+import { envResourceCache } from '../services/envResourceCache';
+import { codespaceSnapshot } from '../services/envResourceSnapshots';
 import { EnvCodespacesPage } from './EnvCodespacesPage';
 import { buildFlowerTurnLauncherCopy } from '../../../../../flower_ui/src/flowerTurnLauncherCopy';
 import { browserEditorSetupError } from '../services/browserEditorSetupError';
@@ -14,6 +17,8 @@ const notificationMocks = vi.hoisted(() => ({
 }));
 
 const envContextMocks = vi.hoisted(() => ({
+  scope: undefined as string | undefined,
+  scopeAccessor: undefined as (() => string | undefined) | undefined,
   env: Object.assign(
     () => ({ permissions: { can_write: true, can_execute: true } }),
     { state: 'ready', loading: false, error: null },
@@ -113,7 +118,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     </button>
   ),
   Card: (props: any) => (
-    <div class={props.class} onContextMenu={props.onContextMenu} data-testid="codespace-card">
+    <div class={props.class} onContextMenu={props.onContextMenu} data-codespace-skeleton={props['data-codespace-skeleton']} data-testid="codespace-card">
       {props.children}
     </div>
   ),
@@ -177,6 +182,7 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
+    resourceCacheScope: () => envContextMocks.scopeAccessor ? envContextMocks.scopeAccessor() : envContextMocks.scope,
     env: envContextMocks.env,
     openFlowerTurnLauncher: envContextMocks.openFlowerTurnLauncher,
     openTerminalInDirectory: envContextMocks.openTerminalInDirectory,
@@ -197,7 +203,8 @@ vi.mock('../services/floeproxyContract', () => ({
   FLOE_APP_CODE: 'com.floegence.redeven.code',
 }));
 
-vi.mock('../services/localApi', () => ({
+vi.mock('../services/localApi', async original => ({
+  ...await original<object>(),
   fetchLocalApiJSON: localApiMocks.fetchLocalApiJSON,
 }));
 
@@ -356,6 +363,7 @@ describe('EnvCodespacesPage', () => {
   let runtimeStatusResponse: any;
 
   beforeEach(() => {
+    envContextMocks.scope = undefined; envContextMocks.scopeAccessor = undefined;
     notificationMocks.success.mockReset();
     notificationMocks.error.mockReset();
     envContextMocks.env = Object.assign(
@@ -476,6 +484,38 @@ describe('EnvCodespacesPage', () => {
     document.body.innerHTML = '';
   });
 
+  it('restores cards after remount while inventory and editor readiness refresh without suspending the page', async () => {
+    envContextMocks.scope = 'codespaces-remount';
+    const dispose = render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+    expect(host.textContent).toContain('Demo Space');
+    dispose();
+    localApiMocks.fetchLocalApiJSON.mockReturnValue(new Promise(() => {}));
+    const close = render(() => <Suspense fallback={<div data-testid="cold-page" />}><EnvCodespacesPage /></Suspense>, host);
+    await flushPage();
+    expect(host.querySelector('[data-testid="cold-page"]')).toBeNull();
+    expect(host.textContent).toContain('Demo Space');
+    expect(host.querySelector('[data-testid="codespaces-initial-loading"]')).toBeNull();
+    expect(host.querySelector('[data-testid="browser-editor-readiness-inline-status"]')).toBeNull();
+    close();
+  });
+
+  it('preserves the same card node after a fresh response updates that codespace', async () => {
+    const dispose = render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+    const card = host.querySelector('[data-testid="codespace-card"]');
+    const original = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url, options) => {
+      const response = await original(url, options);
+      return url === '/_redeven_proxy/api/spaces' ? { spaces: response.spaces.map((space: any) => ({ ...space, name: 'Renamed Space' })) } : response;
+    });
+    host.querySelector<HTMLButtonElement>('button[aria-label="Refresh"]')!.click();
+    await flushPage();
+    expect(host.textContent).toContain('Renamed Space');
+    expect(host.querySelector('[data-testid="codespace-card"]')).toBe(card);
+    dispose();
+  });
+
   it('posts an absolute external directory and preserves all inputs after creation fails', async () => {
     const original = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
     const create = vi.fn().mockRejectedValueOnce(new Error('Permission changed')).mockResolvedValue({});
@@ -501,7 +541,7 @@ describe('EnvCodespacesPage', () => {
     expect(host.querySelector('[data-directory-input]')).toBeNull();
   });
 
-  it('delays the quiet card skeleton for the initial codespaces request', async () => {
+  it('shows the matching card skeleton immediately for the initial codespaces request', async () => {
     vi.useFakeTimers();
     const spacesRequest = deferred<{ spaces: any[] }>();
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
@@ -515,14 +555,8 @@ describe('EnvCodespacesPage', () => {
       await flushMicrotasks();
       const listRegion = host.querySelector('[data-testid="codespaces-list-region"]');
       expect(listRegion?.querySelector('.redeven-loading-curtain')).toBeNull();
-      expect(host.querySelector('[data-testid="codespaces-initial-loading"]')).toBeNull();
-
-      await vi.advanceTimersByTimeAsync(149);
-      expect(host.querySelector('[data-testid="codespaces-initial-loading"]')).toBeNull();
-
-      await vi.advanceTimersByTimeAsync(1);
       expect(host.querySelector('[data-testid="codespaces-initial-loading"]')).not.toBeNull();
-      const skeletonCards = Array.from(host.querySelectorAll('[data-testid="skeleton-card"]'));
+      const skeletonCards = Array.from(host.querySelectorAll('[data-codespace-skeleton]'));
       expect(skeletonCards).toHaveLength(3);
       expect(skeletonCards[0]?.className).not.toContain('hidden');
       expect(skeletonCards[1]?.className).toContain('hidden');
@@ -537,6 +571,114 @@ describe('EnvCodespacesPage', () => {
       dispose();
       vi.useRealTimers();
     }
+  });
+
+  it('retains cached content on network failure and clears it on permission denial', async () => {
+    envContextMocks.scope = 'codespaces-errors';
+    const dispose = render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+    const card = host.querySelector('[data-testid="codespace-card"]');
+    const refresh = () => (host.querySelector('button[aria-label="Refresh"]') as HTMLButtonElement).click();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url.endsWith('/code-runtime/status')) return runtimeStatusResponse;
+      throw new Error('Offline');
+    });
+    refresh(); await flushPage();
+    expect(host.querySelector('[data-testid="codespace-card"]')).toBe(card);
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Offline');
+    expect(host.querySelector('[data-codespace-skeleton]')).toBeNull();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url.endsWith('/code-runtime/status')) return runtimeStatusResponse;
+      throw new LocalApiError({ status: 403, message: 'Access denied' });
+    });
+    refresh(); await flushPage();
+    expect(host.textContent).not.toContain('Demo Space');
+    expect(host.querySelector('[data-codespace-skeleton]')).toBeNull();
+    expect(envResourceCache().resource({ scope: envContextMocks.scope, key: 'codespaces', version: 1, decode: codespaceSnapshot }).snapshot().data).toBeUndefined();
+    dispose();
+  });
+
+  it('keeps a successful empty inventory visible after remount while refreshing', async () => {
+    envContextMocks.scope = 'codespaces-empty';
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => url.endsWith('/spaces') ? { spaces: [] } : runtimeStatusResponse);
+    const dispose = render(() => <EnvCodespacesPage />, host); await flushPage(); dispose();
+    localApiMocks.fetchLocalApiJSON.mockReturnValue(new Promise(() => {}));
+    const close = render(() => <EnvCodespacesPage />, host); await flushPage();
+    expect(host.textContent).toContain('No codespaces yet');
+    expect(host.querySelector('[data-codespace-skeleton]')).toBeNull(); close();
+  });
+
+  it('revalidates cached targets before opening a deletion confirmation', async () => {
+    envContextMocks.scope = 'codespaces-missing';
+    const dispose = render(() => <EnvCodespacesPage />, host); await flushPage(); dispose();
+    const request = deferred<{ spaces: any[] }>();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => url.endsWith('/spaces') ? request.promise : runtimeStatusResponse);
+    const close = render(() => <EnvCodespacesPage />, host); await flushPage();
+    (host.querySelector('button[aria-label="Delete codespace"]') as HTMLButtonElement).click();
+    await flushMicrotasks();
+    expect(host.textContent).not.toContain('Delete Codespace');
+    expect(host.querySelector('[data-testid="codespace-card"]')).not.toBeNull();
+    request.resolve({ spaces: [] }); await flushPage();
+    expect(host.textContent).not.toContain('Delete Codespace');
+    expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false);
+    expect(notificationMocks.error).toHaveBeenCalled(); close();
+  });
+
+  it('fences an in-flight target check when the authenticated scope changes', async () => {
+    const sample = await localApiMocks.fetchLocalApiJSON('/_redeven_proxy/api/spaces');
+    for (const scope of ['codespaces-scope-a', 'codespaces-scope-b']) {
+      envResourceCache().resource({ scope, key: 'codespaces', version: 1, decode: codespaceSnapshot }).set(
+        sample.spaces.map((space: any) => ({ ...space, name: scope })),
+      );
+    }
+    const [scope, setScope] = createSignal('codespaces-scope-a'); envContextMocks.scopeAccessor = scope;
+    const oldRequest = deferred<{ spaces: any[] }>();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url.endsWith('/code-runtime/status')) return runtimeStatusResponse;
+      return scope() === 'codespaces-scope-a' ? oldRequest.promise : new Promise(() => {});
+    });
+    const dispose = render(() => <EnvCodespacesPage />, host); await flushPage();
+    (host.querySelector('button[aria-label="Stop codespace"]') as HTMLButtonElement).click(); await flushMicrotasks();
+    setScope('codespaces-scope-b'); await flushPage();
+    oldRequest.resolve(sample); await flushPage();
+    expect(host.textContent).toContain('codespaces-scope-b');
+    expect(host.textContent).not.toContain('Demo Space');
+    expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
+    dispose();
+  });
+
+  it('reserves the browser popup before delayed target validation and closes it when the target is gone', async () => {
+    envContextMocks.scope = 'codespaces-popup';
+    const dispose = render(() => <EnvCodespacesPage />, host); await flushPage(); dispose();
+    const request = deferred<{ spaces: any[] }>();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => url.endsWith('/spaces') ? request.promise : runtimeStatusResponse);
+    const close = render(() => <EnvCodespacesPage />, host); await flushPage();
+    const popup = { close: vi.fn(), location: { assign: vi.fn() } };
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+    Array.from(host.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Open')!.click();
+    expect(open).toHaveBeenCalledExactlyOnceWith('about:blank', 'redeven_codespace_space-1');
+    expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
+    request.resolve({ spaces: [] }); await flushPage();
+    expect(popup.location.assign).not.toHaveBeenCalled();
+    expect(popup.close).toHaveBeenCalled(); close(); open.mockRestore();
+  });
+
+  it('removes a deleted target from the shared snapshot even when the follow-up refresh fails', async () => {
+    envContextMocks.scope = 'codespaces-delete';
+    const dispose = render(() => <EnvCodespacesPage />, host); await flushPage();
+    (host.querySelector('button[aria-label="Delete codespace"]') as HTMLButtonElement).click(); await flushPage();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, options: RequestInit) => {
+      if (options?.method === 'DELETE') return;
+      if (url.endsWith('/code-runtime/status')) return runtimeStatusResponse;
+      throw new Error('Offline after delete');
+    });
+    const confirm = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Delete')!;
+    confirm.click(); await flushPage();
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1', { method: 'DELETE' });
+    expect(host.textContent).not.toContain('Demo Space'); dispose();
+    const close = render(() => <EnvCodespacesPage />, host); await flushPage();
+    expect(host.textContent).toContain('No codespaces yet');
+    expect(host.textContent).not.toContain('Demo Space'); close();
   });
 
   it('keeps the current codespace card mounted while refreshing', async () => {
@@ -723,7 +865,7 @@ describe('EnvCodespacesPage', () => {
     expect(wizard?.textContent).toContain('unsupported_libc');
   });
 
-  it('keeps the initial Browser Editor runtime check in the header while showing codespaces', async () => {
+  it('shows only the refresh spinner during the initial runtime check while showing codespaces', async () => {
     let resolveRuntimeStatus!: (value: any) => void;
 
     localApiMocks.fetchLocalApiJSON.mockImplementation((url: string) => {
@@ -759,9 +901,8 @@ describe('EnvCodespacesPage', () => {
     expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeNull();
     expect(host.querySelector('[data-testid="codespace-card"]')).toBeTruthy();
     const inlineStatus = host.querySelector('[data-testid="browser-editor-readiness-inline-status"]') as HTMLButtonElement | null;
-    expect(inlineStatus).toBeTruthy();
-    expect(inlineStatus?.textContent).toContain('Checking');
-    expect(inlineStatus?.title).toContain('Checking Browser Editor readiness');
+    expect(inlineStatus).toBeNull();
+    expect(host.querySelector('button[aria-label="Refresh"]')?.getAttribute('aria-busy')).toBe('true');
 
     resolveRuntimeStatus(makeRuntimeStatus());
     await flushPage();
@@ -932,6 +1073,9 @@ describe('EnvCodespacesPage', () => {
     expect(localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/code-runtime/status').length).toBeGreaterThanOrEqual(2);
     expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).not.toHaveBeenCalled();
 
+    await vi.waitFor(() => {
+      expect(Array.from(host.querySelectorAll('button')).some(button => button.textContent?.trim() === 'Set up Browser Editor' && !button.disabled)).toBe(true);
+    });
     const setupButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Set up Browser Editor');
     expect(setupButton).toBeTruthy();
     setupButton?.click();
@@ -1020,6 +1164,9 @@ describe('EnvCodespacesPage', () => {
     startButton?.click();
     await waitForHostText(host, 'Set up Browser Editor');
 
+    await vi.waitFor(() => {
+      expect(Array.from(host.querySelectorAll('button')).some(button => button.textContent?.trim() === 'Set up Browser Editor' && !button.disabled)).toBe(true);
+    });
     const setupButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Set up Browser Editor');
     expect(setupButton).toBeTruthy();
     setupButton?.click();

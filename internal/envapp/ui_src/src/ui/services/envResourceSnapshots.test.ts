@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { containerInventorySnapshot, containerRuntimeSnapshot, containerServiceSnapshot, forwardSnapshot, hostApplicationSnapshot, managedServiceSnapshot } from './envResourceSnapshots';
+import { codespaceSnapshot, containerInventorySnapshot, containerRuntimeSnapshot, containerServiceSnapshot, forwardSnapshot, hostApplicationSnapshot, managedServiceSnapshot } from './envResourceSnapshots';
 
 describe('disposable resource presentation contracts', () => {
   it('keeps application icons and process identities but excludes viewer capabilities', () => {
@@ -28,6 +28,16 @@ describe('disposable resource presentation contracts', () => {
     expect(JSON.stringify([forwards, managed])).not.toContain('secret');
     expect(() => forwardSnapshot([{ forward_id: 'bad', target_url: 'invalid' }])).toThrow();
     expect(() => managedServiceSnapshot([{ service_id: 'bad' }])).toThrow();
+  });
+  it('stores only codespace display fields and rejects invalid identities and field types', () => {
+    const display = { code_space_id: 'space-1', name: 'Workspace', description: '', workspace_path: '/workspace',
+      code_port: 13337, created_at_unix_ms: 1, updated_at_unix_ms: 2, last_opened_at_unix_ms: 3, running: true, pid: 42 };
+    expect(codespaceSnapshot([{ ...display, token: 'secret', entry_url: 'https://secret', operation: { log_tail: ['secret'] }, configuration: { password: 'secret' } }])).toEqual([display]);
+    expect(() => codespaceSnapshot([{ ...display, code_space_id: '' }])).toThrow();
+    expect(() => codespaceSnapshot([{ ...display, running: 'true' }])).toThrow();
+    expect(() => codespaceSnapshot([{ ...display, pid: Infinity }])).toThrow();
+    expect(() => codespaceSnapshot([{ ...display, workspace_path: {} }])).toThrow();
+    expect(codespaceSnapshot([])).toEqual([]);
   });
   it('accepts successful empty inventories for every surface', () => {
     expect(containerRuntimeSnapshot([])).toEqual([]);

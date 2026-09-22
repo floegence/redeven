@@ -1,7 +1,7 @@
 ---
 type: UI Contract
 title: Env App resource snapshots
-description: Restore authorized local presentation snapshots while refreshing Host Applications, Containers, and Web Services.
+description: Restore authorized local presentation snapshots while refreshing Host Applications, Containers, Web Services, and Codespaces.
 tags: [ui, desktop, caching, security]
 timestamp: 2026-09-22T00:00:00Z
 ---
@@ -10,7 +10,7 @@ timestamp: 2026-09-22T00:00:00Z
 The published Floe resource cache owns disposable snapshot restoration, request
 coalescing, response fencing, persistence, and capacity eviction. Redeven owns
 identity confirmation and explicit presentation projections. Host Applications,
-Containers, and Web Services show their most recent successful inventory while
+Containers, Web Services, and Codespaces show their most recent successful inventory while
 fetching current facts. Refresh changes only the existing refresh icon during
 normal operation. Cached facts never authorize an operation. A permission denial
 or locked access clears the affected presentation; ordinary connectivity failure
@@ -60,7 +60,9 @@ become successful snapshots. Empty successful inventories are valid cached data.
 
 The allowlisted projection retains application metadata, PNG icons, and running
 or session summaries; container runtime/service summaries and target inventories;
-and saved and managed Web Service presentation fields, including managed icons.
+saved and managed Web Service presentation fields, including managed icons; and
+Codespace identity, name, description, workspace path, port, timestamps, and
+running/PID summaries. Browser Editor readiness and setup progress remain live.
 It excludes viewer forwards, credentials, query secrets, temporary access URLs,
 active operations, execution plans, configuration contents, logs, terminal data,
 live metrics, and raw inspect documents. Detail requests stay live and on demand.
@@ -71,6 +73,22 @@ entry animations. Container targets update independently and a failed target
 retains its previous inventory. Fresh authoritative absence clears that target's
 selection. Web Service list requests do not wait for template discovery.
 
+## Codespaces loading continuity
+
+Activity and Workbench use the same lightweight Codespaces page frame for lazy
+module loading. Initial inventory loading uses the same responsive grid and card
+header, description row, detail rows, and action footer as loaded content. The
+loading layout reserves the description row even when the eventual description
+is empty; placeholder controls match the actual small button height. Skeletons
+appear only without a successful inventory, including a successful empty one.
+No entry animation or generic whole-page loading message replaces restored data.
+
+Browser Editor readiness is fetched independently without suspending the page.
+Normal inventory and readiness refreshes share the header refresh spinner. A
+missing editor or setup failure still uses the existing explicit setup activity.
+Activating a Codespaces view refreshes its shared inventory; no new polling or
+connection recovery loop is introduced.
+
 # Actions and recovery
 
 A stale application is resolved through current inventory before launch. Quit
@@ -80,7 +98,14 @@ checks. Container mutations continue through the existing exact-target server
 preflight. Web Services retain their current management-plan and open-session
 boundaries; a cached saved forward is resolved before opening its route or
 reviewing an edit or deletion. Editing uses the current full saved configuration,
-never the projection that omits query credentials.
+never the projection that omits query credentials. Codespaces revalidates a stale
+or refreshing inventory before opening, starting, stopping, or reviewing deletion;
+a disappeared target cannot continue into the previous action. When the editor
+is ready, a browser popup is reserved during the click gesture before that
+validation waits on the network; failed validation closes it without navigation. Editor preparation,
+entry ticket, native authentication, and server lifecycle checks stay authoritative.
+Successful deletion removes the target from the shared snapshot before refresh,
+so a subsequent network failure or remount cannot resurrect it.
 
 Successful mutations invalidate affected durable snapshots before refreshing,
 preventing an older in-flight read from restoring a deleted item. Pending work
@@ -99,3 +124,6 @@ requests permissions, launches processes, or starts lifecycle operations.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.browser.test.tsx` - IndexedDB directory/icon restore and focus continuity.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Activity/Workbench inventory continuity.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.browser.test.tsx` - Saved service recovery independent of template discovery.
+
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.test.tsx` - Remount, empty inventory, refresh failures, authorization rejection, deletion validation, and editor setup regression coverage.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.browser.test.tsx` - IndexedDB restoration, stable nodes/focus/scroll, and exact skeleton geometry across viewport sizes and locales.

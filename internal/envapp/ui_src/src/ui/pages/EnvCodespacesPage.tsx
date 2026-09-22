@@ -1,16 +1,9 @@
-import { For, Show, createEffect, createResource, createSignal, onCleanup } from "solid-js";
-import { cn, useNotification } from "@floegence/floe-webapp-core";
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js";
+import { cn, useNotification, useViewActivation } from "@floegence/floe-webapp-core";
 import { AlertTriangle, ChevronDown, ExternalLink, Maximize, Play, RefreshIcon, Stop, Terminal, Trash } from "@floegence/floe-webapp-core/icons";
-import { Panel, PanelContent } from "@floegence/floe-webapp-core/layout";
 import { SnakeLoader } from "@floegence/floe-webapp-core/loading";
 import {
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
   Dropdown,
   Tag,
   type DropdownItem,
@@ -63,14 +56,15 @@ import {
 import { buildFilePathFlowerTurnLauncherIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
 import { canLaunchProcess } from "../utils/permission";
-import { redevenDividerRoleClass, redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
-import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from "../workbench/surface/workbenchWheelInteractive";
+import { redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { FloatingContextMenu, type FloatingContextMenuItem } from "../widgets/FloatingContextMenu";
 import { CreateCodespaceDialog } from './CreateCodespaceDialog';
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
-import { EnvCollectionLoadingSkeleton } from "./EnvCollectionLoadingSkeleton";
+import { CodespaceCardFrame, CodespacesGrid, CodespacesListSkeleton, CodespacesPageFrame } from './CodespacesPresentation';
+import { createEnvCachedResource } from '../services/envResourceCache';
+import { codespaceSnapshot } from '../services/envResourceSnapshots';
 
-type SpaceStatus = Readonly<{
+export type SpaceStatus = Readonly<{
   code_space_id: string;
   name: string;
   description: string;
@@ -83,7 +77,7 @@ type SpaceStatus = Readonly<{
   pid: number;
 }>;
 
-type CodespaceBusyAction = "open" | "start" | "stop";
+type CodespaceBusyAction = "open" | "start" | "stop" | "delete";
 type CodespaceOpenTarget = "desktop_window" | "system_browser";
 
 type CodespaceContextMenuState = Readonly<{
@@ -303,12 +297,12 @@ async function openCodespace(
   openTarget: CodespaceOpenTarget,
   setStatus: (s: string) => void,
   copy: OpenCodespaceCopy,
-  options: Readonly<{ desktopLoadingWindowOpened?: boolean; requestPassword?: (retry: boolean) => Promise<string | undefined> }> = {},
+  options: Readonly<{ strategy?: CodespaceOpenStrategy; desktopLoadingWindowOpened?: boolean; requestPassword?: (retry: boolean) => Promise<string | undefined> }> = {},
 ): Promise<void> {
   const envPublicID = getEnvPublicIDFromSession();
   if (!envPublicID) throw new Error(copy.missingEnvContext);
 
-  const strategy = resolveCodespaceOpenStrategy(openTarget, codeSpaceID, copy.desktopWindowOpenFailed, copy.popupBlocked);
+  const strategy = options.strategy ?? resolveCodespaceOpenStrategy(openTarget, codeSpaceID, copy.desktopWindowOpenFailed, copy.popupBlocked);
   let desktopLoadingWindowOpened = options.desktopLoadingWindowOpened === true;
 
   try {
@@ -482,29 +476,19 @@ function CodespaceCard(props: {
   };
 
   return (
-    <Card
+    <CodespaceCardFrame
       class={cn(
-        "codespace-card border transition-all duration-200",
         isRunning()
           ? "border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]"
           : cn(redevenSurfaceRoleClass("panelInteractive"), "codespace-card--stopped"),
         props.contextMenuOpen ? "ring-1 ring-primary/40" : undefined,
       )}
       onContextMenu={props.onContextMenu}
-    >
-      <CardHeader class="pb-2">
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0 flex-1">
-            <CardTitle class="text-sm truncate">{props.space.name || props.space.code_space_id}</CardTitle>
-            <CardDescription class="text-xs truncate mt-0.5" title={props.space.description}>
-              {props.space.description}
-            </CardDescription>
-          </div>
-          <StatusBadge running={props.space.running} pid={props.space.pid} />
-        </div>
-      </CardHeader>
-      <CardContent class="pb-2">
-        <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+      title={props.space.name || props.space.code_space_id}
+      description={props.space.description}
+      descriptionTitle={props.space.description}
+      status={<StatusBadge running={props.space.running} pid={props.space.pid} />}
+      details={<>
           <div class="text-muted-foreground">{i18n.t("codespaces.fields.id")}</div>
           <div class="font-mono truncate text-right" title={props.space.code_space_id}>
             {props.space.code_space_id}
@@ -519,9 +503,8 @@ function CodespaceCard(props: {
           <Tooltip content={fmtTime(props.space.last_opened_at_unix_ms, i18n)} placement="top">
             <div class="text-right cursor-default">{fmtRelativeTime(props.space.last_opened_at_unix_ms, i18n)}</div>
           </Tooltip>
-        </div>
-      </CardContent>
-      <CardFooter class={cn("pt-2 flex items-center justify-between gap-2 border-t", redevenDividerRoleClass())}>
+      </>}
+      actions={<>
         <Show
           when={isRunning()}
           fallback={
@@ -622,7 +605,7 @@ function CodespaceCard(props: {
         <div class="flex items-center gap-1">
           <Show when={isRunning()}>
             <Tooltip content={i18n.t("codespaces.actions.stopTooltip")} placement="top">
-              <Button size="sm" variant="outline" disabled={isBusy()} onClick={props.onStop} class={cn("px-2", redevenSurfaceRoleClass("control"))}>
+              <Button size="sm" variant="outline" disabled={isBusy()} onClick={props.onStop} aria-label={i18n.t("codespaces.actions.stopTooltip")} class={cn("px-2", redevenSurfaceRoleClass("control"))}>
                 <Show when={props.busyAction === "stop"} fallback={<Stop class="w-4 h-4" />}>
                   <InlineButtonSnakeLoading />
                 </Show>
@@ -635,14 +618,15 @@ function CodespaceCard(props: {
               variant="ghost"
               disabled={isBusy()}
               onClick={props.onDelete}
+              aria-label={i18n.t("codespaces.actions.deleteTooltip")}
               class="px-2 text-muted-foreground hover:text-destructive"
             >
-              <Trash class="w-4 h-4" />
+              <Show when={props.busyAction === "delete"} fallback={<Trash class="w-4 h-4" />}><InlineButtonSnakeLoading /></Show>
             </Button>
           </Tooltip>
         </div>
-      </CardFooter>
-    </Card>
+      </>}
+    />
   );
 }
 
@@ -821,6 +805,7 @@ export function EnvCodespacesPage() {
   const notification = useNotification();
   const env = useEnvContext();
   const i18n = useI18n();
+  const activation = (() => { try { return useViewActivation(); } catch { return null; } })();
 
   const [nativePasswordOpen, setNativePasswordOpen] = createSignal(false);
   const [nativePassword, setNativePassword] = createSignal("");
@@ -895,13 +880,51 @@ export function EnvCodespacesPage() {
 
   const pickerProps = useEnvFilesystemPicker();
   const outlineControlClass = redevenSurfaceRoleClass("control");
-
-  const [spaces, { refetch }] = createResource<SpaceStatus[]>(async () => {
-    const out = await fetchLocalApiJSON<{ spaces: SpaceStatus[] }>("/_redeven_proxy/api/spaces", { method: "GET" });
+  const inventory = createEnvCachedResource(env, () => 'codespaces', codespaceSnapshot);
+  const spaces = inventory.data;
+  const refetch = () => inventory.refresh(async signal => {
+    const out = await fetchLocalApiJSON<{ spaces: SpaceStatus[] }>("/_redeven_proxy/api/spaces", { method: "GET", signal });
     const list = out?.spaces;
     return Array.isArray(list) ? list : [];
   });
-  const [runtimeStatus, { mutate: mutateRuntimeStatus, refetch: refetchRuntimeStatus }] = createResource<CodeRuntimeStatus>(fetchCodeRuntimeStatus);
+  createEffect(() => {
+    inventory.identity();
+    const active = activation?.active() ?? true;
+    activation?.activationSeq();
+    if (env.env()?.permissions?.can_read === false) { inventory.invalidate(true); return; }
+    if (active) void refetch().catch(() => undefined);
+  });
+  let presentationOwner = inventory.identity();
+  createEffect(() => {
+    const currentOwner = inventory.identity();
+    const currentSpaces = spaces();
+    const changed = currentOwner !== presentationOwner;
+    presentationOwner = currentOwner;
+    if (!changed && currentSpaces !== undefined) return;
+    if (changed) { setCreateDialogOpen(false); finishNativePassword(); }
+    setDeleteDialogOpen(false);
+    setDeleteTarget(null);
+    setCodespaceContextMenu(null);
+    setPendingIntent(null);
+  });
+  const [runtimeResource, { mutate: mutateRuntimeStatus, refetch: refetchRuntimeStatus }] = createResource<CodeRuntimeStatus>(fetchCodeRuntimeStatus);
+  // Readiness is independent from inventory presentation and must not suspend the page.
+  const runtimeStatus = () => runtimeResource.state === 'ready' || runtimeResource.state === 'refreshing' ? runtimeResource.latest : undefined;
+  const refreshAfterMutation = async (owner = inventory.identity(), update?: (previous: SpaceStatus[]) => SpaceStatus[]) => {
+    const previous = owner.snapshot().data;
+    owner.invalidate();
+    if (owner !== inventory.identity()) return;
+    if (previous && update) owner.set(update(previous));
+    await refetch().catch(() => undefined);
+  };
+  const resolveCurrentSpace = async (space: SpaceStatus): Promise<SpaceStatus> => {
+    const owner = inventory.identity();
+    const values = inventory.snapshot().stale || inventory.snapshot().refreshing ? await refetch() : spaces();
+    if (owner !== inventory.identity()) throw new DOMException('Resource scope changed', 'AbortError');
+    const current = values?.find(item => item.code_space_id === space.code_space_id);
+    if (!current) throw new Error(i18n.t('codespaces.notifications.missingCodespaceMessage', { name: space.name || space.code_space_id }));
+    return current;
+  };
 
   createEffect(() => {
     const status = runtimeStatus();
@@ -925,6 +948,7 @@ export function EnvCodespacesPage() {
   });
 
   const handleCreate = async (path: string, name: string, description: string) => {
+    const owner = inventory.identity();
     setCreateLoading(true);
     try {
       const metaErr = validateMeta(name, description, i18n);
@@ -938,7 +962,7 @@ export function EnvCodespacesPage() {
           description: description || undefined,
         }),
       });
-      await refetch();
+      await refreshAfterMutation(owner);
       setCreateDialogOpen(false);
       notification.success(
         i18n.t("codespaces.notifications.createdTitle"),
@@ -1037,9 +1061,8 @@ export function EnvCodespacesPage() {
     const current = runtimeStatus();
     if (codeRuntimeReady(current)) return true;
     try {
-      const latest = await fetchCodeRuntimeStatus();
       await refetchRuntimeStatus();
-      if (codeRuntimeReady(latest)) return true;
+      if (codeRuntimeReady(runtimeStatus())) return true;
     } catch {
       // Ignore and use the explicit Browser Editor setup flow below.
     }
@@ -1077,14 +1100,13 @@ export function EnvCodespacesPage() {
 
   const handleStart = async (space: SpaceStatus) => {
     if (busyActionOf(space.code_space_id)) return;
+    const owner = inventory.identity();
     setBusyAction(space.code_space_id, "start");
-    if (!(await ensureCodeRuntimeAvailable("start", space))) {
-      clearBusyAction(space.code_space_id);
-      return;
-    }
     try {
+      space = await resolveCurrentSpace(space);
+      if (!(await ensureCodeRuntimeAvailable("start", space)) || owner !== inventory.identity()) return;
       await fetchLocalApiJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/start`, { method: "POST" });
-      await refetch();
+      await refreshAfterMutation(owner);
       notification.success(
         i18n.t("codespaces.notifications.startedTitle"),
         i18n.t("codespaces.notifications.startedMessage", { name: space.name || space.code_space_id }),
@@ -1098,10 +1120,13 @@ export function EnvCodespacesPage() {
 
   const handleStop = async (space: SpaceStatus) => {
     if (busyActionOf(space.code_space_id)) return;
+    const owner = inventory.identity();
     setBusyAction(space.code_space_id, "stop");
     try {
+      space = await resolveCurrentSpace(space);
+      if (owner !== inventory.identity() || !space.running) return;
       await fetchLocalApiJSON<void>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/stop`, { method: "POST" });
-      await refetch();
+      await refreshAfterMutation(owner);
       notification.success(
         i18n.t("codespaces.notifications.stoppedTitle"),
         i18n.t("codespaces.notifications.stoppedMessage", { name: space.name || space.code_space_id }),
@@ -1116,11 +1141,14 @@ export function EnvCodespacesPage() {
   const handleDeleteConfirm = async () => {
     const target = deleteTarget();
     if (!target) return;
+    const owner = inventory.identity();
 
     setDeleteLoading(true);
     try {
+      await resolveCurrentSpace(target);
+      if (owner !== inventory.identity()) return;
       await fetchLocalApiJSON<void>(`/_redeven_proxy/api/spaces/${encodeURIComponent(target.code_space_id)}`, { method: "DELETE" });
-      await refetch();
+      await refreshAfterMutation(owner, previous => previous.filter(space => space.code_space_id !== target.code_space_id));
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
       notification.success(
@@ -1136,6 +1164,7 @@ export function EnvCodespacesPage() {
 
   const handleOpen = async (space: SpaceStatus, openTarget: CodespaceOpenTarget) => {
     if (busyActionOf(space.code_space_id)) return;
+    const owner = inventory.identity();
     setBusyAction(space.code_space_id, "open");
     const desktopWindowLoading = {
       loadingTitle: i18n.t("codespaces.desktopWindow.loadingTitle"),
@@ -1145,12 +1174,20 @@ export function EnvCodespacesPage() {
       desktopWindowOpenFailed: i18n.t("codespaces.errors.desktopWindowOpenFailed"),
     };
     let desktopLoadingWindowOpened = false;
+    let reservedPopup: CodespaceOpenStrategy | undefined;
+    let opened = false;
     try {
+      // Reserve a browser window within the click gesture before cached-target validation waits on the network.
+      if (openTarget === "system_browser" && !desktopShellCodespaceWindowOpenAvailable() && codeRuntimeReady(runtimeStatus())) {
+        reservedPopup = resolveCodespaceOpenStrategy(openTarget, space.code_space_id, desktopWindowLoading.desktopWindowOpenFailed, i18n.t("codespaces.errors.popupBlocked"));
+      }
+      space = await resolveCurrentSpace(space);
+      if (owner !== inventory.identity()) return;
       if (openTarget === "desktop_window") {
         await openDesktopCodespaceLoadingWindow(space.code_space_id, desktopWindowLoading);
         desktopLoadingWindowOpened = true;
       }
-      if (!(await ensureCodeRuntimeAvailable("open", space, openTarget))) return;
+      if (!(await ensureCodeRuntimeAvailable("open", space, openTarget)) || owner !== inventory.identity()) return;
       await openCodespace(space.code_space_id, openTarget, () => {}, {
         desktopOpenFailed: i18n.t("codespaces.errors.desktopOpenFailed"),
         desktopWindowLoading,
@@ -1161,11 +1198,13 @@ export function EnvCodespacesPage() {
         popupBlocked: i18n.t("codespaces.errors.popupBlocked"),
         requestingEntryTicket: i18n.t("codespaces.status.requestingEntryTicket"),
         starting: i18n.t("codespaces.status.starting"),
-      }, { desktopLoadingWindowOpened, requestPassword: requestNativePassword });
-      await refetch();
+      }, { strategy: reservedPopup, desktopLoadingWindowOpened, requestPassword: requestNativePassword });
+      opened = true;
+      await refreshAfterMutation(owner);
     } catch (e) {
       notification.error(i18n.t("codespaces.notifications.failedToOpenTitle"), e instanceof Error ? e.message : String(e));
     } finally {
+      if (reservedPopup && !opened) closeCodespaceOpenStrategyOnError(reservedPopup);
       clearBusyAction(space.code_space_id);
     }
   };
@@ -1189,9 +1228,18 @@ export function EnvCodespacesPage() {
     await handleOpen(space, intent.open_target ?? (desktopShellCodespaceWindowOpenAvailable() ? "desktop_window" : "system_browser"));
   };
 
-  const openDeleteDialog = (space: SpaceStatus) => {
-    setDeleteTarget(space);
-    setDeleteDialogOpen(true);
+  const openDeleteDialog = async (space: SpaceStatus) => {
+    if (busyActionOf(space.code_space_id)) return;
+    const owner = inventory.identity();
+    setBusyAction(space.code_space_id, 'delete');
+    try {
+      const current = await resolveCurrentSpace(space);
+      if (owner !== inventory.identity()) return;
+      setDeleteTarget(current);
+      setDeleteDialogOpen(true);
+    } catch (error) {
+      notification.error(i18n.t('codespaces.notifications.failedToDeleteTitle'), error instanceof Error ? error.message : String(error));
+    } finally { clearBusyAction(space.code_space_id); }
   };
 
   const openCodespaceContextMenu = (event: MouseEvent, space: SpaceStatus) => {
@@ -1277,8 +1325,9 @@ export function EnvCodespacesPage() {
   };
 
   const spaceList = () => spaces() ?? [];
+  const spacesByID = createMemo(() => new Map(spaceList().map(space => [space.code_space_id, space])));
   const runtimeStatusError = () => {
-    const err = runtimeStatus.error;
+    const err = runtimeResource.error;
     if (err instanceof Error) return err.message;
     if (typeof err === "string") return err;
     return null;
@@ -1296,13 +1345,13 @@ export function EnvCodespacesPage() {
     if (status.active_runtime.detection_state === "unusable") return true;
     return false;
   };
-  const showCompactRuntimeStatus = () => !showWizard() && (runtimeStatus.loading || Boolean(runtimeStatusError()));
-  const initialSpacesLoading = () => spaces.state === "pending";
-  const spacesRefreshing = () => spaces.state === "refreshing";
-  const spacesRenderable = () => spaces.state === "ready" || spaces.state === "refreshing";
-  const pageRefreshing = () => spacesRefreshing() || runtimeStatus.state === "refreshing";
+  const showCompactRuntimeStatus = () => !showWizard() && Boolean(runtimeStatusError());
+  const initialSpacesLoading = () => spaces() === undefined && inventory.snapshot().refreshing && env.env()?.permissions?.can_read !== false;
+  const spacesRefreshing = () => inventory.snapshot().refreshing;
+  const spacesRenderable = () => spaces() !== undefined;
+  const pageRefreshing = () => spacesRefreshing() || runtimeResource.loading;
   const handleRefreshAll = async () => {
-    await Promise.all([refetch(), refetchRuntimeStatus()]);
+    await Promise.allSettled([refetch(), refetchRuntimeStatus()]);
   };
   const sortedSpaces = () => {
     return [...spaceList()].sort((a, b) => {
@@ -1314,59 +1363,15 @@ export function EnvCodespacesPage() {
   };
 
   return (
-    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn("h-full min-h-0 overflow-auto", redevenSurfaceRoleClass("main"))}>
-      <Panel class={cn("overflow-hidden", redevenSurfaceRoleClass("panelStrong"))} data-testid="codespaces-panel">
-        <PanelContent class="p-4 space-y-4">
-          {/* Page header */}
-          <div class="flex items-start justify-between gap-4">
-            <div class="space-y-1">
-              <div class="text-sm font-semibold">{i18n.t("codespaces.title")}</div>
-              <div class="text-xs text-muted-foreground">
-                {i18n.t("codespaces.description")}
-              </div>
-            </div>
-            <div class="flex items-center gap-2 flex-shrink-0">
-              <Show when={showCompactRuntimeStatus()}>
-                <BrowserEditorReadinessInlineStatus
-                  loading={runtimeStatus.loading}
-                  error={runtimeStatusError()}
-                  onRefresh={() => {
-                    void refetchRuntimeStatus();
-                  }}
-                />
-              </Show>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void handleRefreshAll()}
-                disabled={spaces.loading || runtimeStatus.loading}
-                aria-label={i18n.t("codespaces.actions.refresh")}
-                aria-busy={pageRefreshing() ? "true" : undefined}
-                title={i18n.t("codespaces.actions.refresh")}
-                class={outlineControlClass}
-              >
-                <RefreshIcon class={cn("w-3.5 h-3.5 sm:mr-1", pageRefreshing() && "animate-spin motion-reduce:animate-none")} />
-                <span class="hidden sm:inline">{i18n.t("codespaces.actions.refresh")}</span>
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() => setCreateDialogOpen(true)}
-                aria-label={i18n.t("codespaces.actions.newCodespace")}
-                title={i18n.t("codespaces.actions.newCodespace")}
-              >
-                <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                <span class="hidden sm:inline">{i18n.t("codespaces.actions.newCodespace")}</span>
-              </Button>
-            </div>
-          </div>
-
+    <>
+      <CodespacesPageFrame refreshing={pageRefreshing()}
+        onRefresh={() => void handleRefreshAll()} onCreate={() => setCreateDialogOpen(true)}
+        readiness={<Show when={showCompactRuntimeStatus()}><BrowserEditorReadinessInlineStatus
+          loading={runtimeResource.loading} error={runtimeStatusError()} onRefresh={() => void refetchRuntimeStatus()} /></Show>}>
           <Show when={showWizard()}>
             <CodeRuntimePreparePanel
               status={runtimeStatus()}
-              loading={runtimeStatus.loading}
+              loading={runtimeResource.loading}
               error={null}
               localFailure={runtimePrepareLocalFailure()}
               localCancelled={runtimePrepareLocalCancelled()}
@@ -1399,39 +1404,35 @@ export function EnvCodespacesPage() {
             aria-busy={spacesRefreshing() ? "true" : undefined}
             data-testid="codespaces-list-region"
           >
-            <EnvCollectionLoadingSkeleton
-              visible={initialSpacesLoading()}
-              message={i18n.t("codespaces.loadingMessage")}
-              testId="codespaces-initial-loading"
-            />
-            <Show when={spacesRefreshing()}>
-              <span class="sr-only" role="status" aria-live="polite">{i18n.t("codespaces.loadingMessage")}</span>
-            </Show>
+            <Show when={initialSpacesLoading()}><CodespacesListSkeleton /></Show>
+            <Show when={inventory.snapshot().error}>{error => <div class="flex items-center gap-2 text-sm text-destructive" role="alert">
+              <AlertTriangle class="h-4 w-4 shrink-0" /><span>{String(error())}</span>
+              <Button size="sm" variant="outline" onClick={() => void refetch().catch(() => undefined)}>{i18n.t('common.actions.retry')}</Button>
+            </div>}</Show>
             <Show when={spacesRenderable()}>
               <Show when={spaceList().length > 0} fallback={<EmptyState onCreateClick={() => setCreateDialogOpen(true)} />}>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <For each={sortedSpaces()}>
-                    {(space) => (
+                <CodespacesGrid>
+                  <For each={sortedSpaces().map(space => space.code_space_id)}>
+                    {(id) => { const space = () => spacesByID().get(id)!; return (
                       <CodespaceCard
-                        space={space}
-                        busyAction={busyActionOf(space.code_space_id)}
-                        busyLabel={busyLabelOf(space.code_space_id)}
+                        space={space()}
+                        busyAction={busyActionOf(space().code_space_id)}
+                        busyLabel={busyLabelOf(space().code_space_id)}
                         desktopOpenAvailable={desktopShellCodespaceWindowOpenAvailable()}
-                        onOpen={(target) => void handleOpen(space, target)}
-                        onStart={() => void handleStart(space)}
-                        onStop={() => void handleStop(space)}
-                        onDelete={() => openDeleteDialog(space)}
-                        onContextMenu={(event) => openCodespaceContextMenu(event, space)}
-                        contextMenuOpen={codespaceContextMenu()?.space.code_space_id === space.code_space_id}
+                        onOpen={(target) => void handleOpen(space(), target)}
+                        onStart={() => void handleStart(space())}
+                        onStop={() => void handleStop(space())}
+                        onDelete={() => openDeleteDialog(space())}
+                        onContextMenu={(event) => openCodespaceContextMenu(event, space())}
+                        contextMenuOpen={codespaceContextMenu()?.space.code_space_id === space().code_space_id}
                       />
-                    )}
+                    ); }}
                   </For>
-                </div>
+                </CodespacesGrid>
               </Show>
             </Show>
           </div>
-        </PanelContent>
-      </Panel>
+      </CodespacesPageFrame>
 
       <Dialog open={nativePasswordOpen()} onOpenChange={(open) => { if (!open) finishNativePassword(); }} title={i18n.t("accessGate.unlockRuntimeTitle")}>
         <form class="space-y-4" onSubmit={(event) => { event.preventDefault(); finishNativePassword(nativePassword()); }}>
@@ -1500,6 +1501,6 @@ export function EnvCodespacesPage() {
           />
         )}
       </Show>
-    </div>
+    </>
   );
 }
