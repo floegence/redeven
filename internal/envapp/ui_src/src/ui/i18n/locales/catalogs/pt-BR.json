@@ -675,6 +675,18 @@
     }
   },
   "accessGate": {
+    "invalidFactorError": "Código inválido ou já utilizado. Tente um novo código.",
+    "challengeExpiredError": "A autenticação expirou. Digite a senha novamente.",
+    "recoveryPendingError": "Conclua a recuperação de segurança no host antes de conectar.",
+    "unavailableError": "Autenticação indisponível. Tente novamente.",
+    "twoFactorTitle": "Autenticação de dois fatores",
+    "authenticatorHelp": "Digite o código de seis dígitos do seu autenticador.",
+    "recoveryHelp": "Digite um dos seus códigos de recuperação salvos.",
+    "authenticatorLabel": "Código do autenticador",
+    "recoveryLabel": "Código de recuperação",
+    "useRecovery": "Usar um código de recuperação",
+    "useAuthenticator": "Usar um código do autenticador",
+    "backToPassword": "Voltar à senha",
     "checkingTitle": "Preparando acesso seguro",
     "resumingTitle": "Preparando sessão segura",
     "resumeBlockedTitle": "A sessão segura precisa de atenção",

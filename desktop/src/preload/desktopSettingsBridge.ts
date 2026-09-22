@@ -1,3 +1,4 @@
+import { DESKTOP_SECURITY_CHANNEL, parseDesktopSecurityRequest } from '../shared/runtimeSecurity';
 /// <reference lib="dom" />
 
 import { DESKTOP_CERTIFICATE_CHANNEL, parseDesktopCertificateRequest } from '../shared/desktopCertificate';
@@ -49,6 +50,11 @@ import {
 
 export function bootstrapDesktopSettingsBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopSettings', {
+    security: async (request: unknown) => {
+      const result = await ipcRenderer.invoke(DESKTOP_SECURITY_CHANNEL, parseDesktopSecurityRequest(request));
+      if (!result?.ok) throw new Error(String(result?.code || 'SECURITY_UNAVAILABLE'));
+      return result.data;
+    },
     certificate: (request: unknown) => {
       return ipcRenderer.invoke(DESKTOP_CERTIFICATE_CHANNEL, parseDesktopCertificateRequest(request));
     },

@@ -1257,7 +1257,7 @@ func connectLocalDirectSession(t *testing.T, s *Server, httpClient *http.Client,
 	t.Fatalf("Flowersec accepted session %q was not bound to plugin access", acquisition.ChannelID)
 }
 
-func TestServer_E2E_CodespaceBrowserBootstrapFromResumeToken(t *testing.T) {
+func TestServer_E2E_CodespaceBrowserBootstrapFromResumeHeader(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	cfgPath := writeTestConfig(t)
 
@@ -1308,11 +1308,12 @@ func TestServer_E2E_CodespaceBrowserBootstrapFromResumeToken(t *testing.T) {
 		t.Fatalf("unexpected unlock body: %#v", unlockBody)
 	}
 
-	codespaceReq, err := http.NewRequest(http.MethodGet, srv.URL+"/cs/demo/?redeven_access_resume="+unlockBody.Data.ResumeToken, nil)
+	codespaceReq, err := http.NewRequest(http.MethodGet, srv.URL+"/cs/demo/", nil)
 	if err != nil {
 		t.Fatalf("NewRequest codespace error = %v", err)
 	}
 	codespaceReq.Host = "localhost:23998"
+	codespaceReq.Header.Set(localAccessResumeHeader, unlockBody.Data.ResumeToken)
 	codespaceResp, err := client.Do(codespaceReq)
 	if err != nil {
 		t.Fatalf("GET codespace error = %v", err)

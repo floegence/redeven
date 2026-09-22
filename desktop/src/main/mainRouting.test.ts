@@ -379,7 +379,7 @@ describe('main routing', () => {
     expect(helper).not.toContain('sessionKeyByWebContentsID.set(');
     expect(helper).toContain('owner.close(false)');
     expect(helper).toContain('record.codespace_native.get(codeSpaceID) === owner');
-    expect(helper).toContain('createSessionCodeSpaceRoute(record, codeSpaceID, signal, password)');
+    expect(helper).toContain('createSessionCodeSpaceRoute(record, codeSpaceID, signal, authorization)');
     const route = mainSrc.slice(mainSrc.indexOf('async function createSessionCodeSpaceRoute('), start);
     expect(route).toContain("record.transport.kind === 'provider_remote'");
     expect(route).toContain('createRemoteNativeCodeSpaceRoute(');
@@ -515,7 +515,7 @@ describe('main routing', () => {
     const helper = mainSrc.slice(helperStart, helperEnd);
     expect(helper).toContain('!record || record.closing');
     expect(helper).toContain('openSessionCodespaceLoadingWindow(record.session_key, request.code_space_id');
-    expect(helper).toContain('await owner.open(request.password)');
+    expect(helper).toContain('await owner.open(request.authorization)');
     expect(helper).toContain("request.mode === 'open' && failure.code === 'codespace_closed'");
     expect(helper).not.toContain('request.url');
   });
@@ -768,8 +768,9 @@ describe('main routing', () => {
       probeSrc.indexOf('presence: runtimeTargetPresenceFromState(target, state)'),
     );
     expect(probeSrc).toContain('health: runtimeTargetHealthFromState(target, state)');
-    expect(mainSrc).toContain('runtime_pid: state.startup.pid');
-    expect(mainSrc).toContain('started_at_unix_ms: state.startup.started_at_unix_ms');
+    expect(mainSrc).toContain('return desktopWelcomeOnlineRuntimeHealth(source, {');
+    expect(mainSrc).toContain('pid: state.startup?.pid');
+    expect(mainSrc).toContain('started_at_unix_ms: state.startup?.started_at_unix_ms');
   });
 
   it('lets dev SSH bootstrap use an explicit runtime release tag without changing the bundled runtime version', () => {

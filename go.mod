@@ -18,6 +18,7 @@ require (
 	github.com/nwaples/rardecode/v2 v2.2.0
 	github.com/openai/openai-go v1.12.0
 	github.com/pelletier/go-toml/v2 v2.4.3
+	github.com/pquerna/otp v1.5.0
 	github.com/shirou/gopsutil/v4 v4.25.12
 	github.com/yeka/zip v0.0.0-20231116150916-03d6312748a9
 	golang.org/x/crypto v0.55.0
@@ -38,6 +39,7 @@ require (
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
+	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect

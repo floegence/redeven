@@ -675,6 +675,18 @@
     }
   },
   "accessGate": {
+    "invalidFactorError": "Code ungültig oder bereits verwendet. Versuchen Sie einen neuen Code.",
+    "challengeExpiredError": "Anmeldung abgelaufen. Geben Sie Ihr Passwort erneut ein.",
+    "recoveryPendingError": "Schließen Sie vor der Verbindung die Sicherheitswiederherstellung auf dem Host ab.",
+    "unavailableError": "Authentifizierung nicht verfügbar. Versuchen Sie es erneut.",
+    "twoFactorTitle": "Zwei-Faktor-Authentifizierung",
+    "authenticatorHelp": "Geben Sie den sechsstelligen Code Ihrer Authentifizierungs-App ein.",
+    "recoveryHelp": "Geben Sie einen Ihrer gespeicherten Wiederherstellungscodes ein.",
+    "authenticatorLabel": "Authentifizierungscode",
+    "recoveryLabel": "Wiederherstellungscode",
+    "useRecovery": "Wiederherstellungscode verwenden",
+    "useAuthenticator": "Authentifizierungscode verwenden",
+    "backToPassword": "Zurück zum Passwort",
     "checkingTitle": "Sicheren Zugriff vorbereiten",
     "resumingTitle": "Sichere Sitzung vorbereiten",
     "resumeBlockedTitle": "Sichere Sitzung erfordert Aufmerksamkeit",

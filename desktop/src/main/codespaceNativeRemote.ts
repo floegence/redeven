@@ -23,7 +23,7 @@ export async function createRemoteNativeCodeSpaceRoute(
     environmentOrigin: string;
     envPublicID: string;
     codeSpaceID: string;
-    password?: string;
+    authorization?: string;
     signal: AbortSignal;
   }>,
 ): Promise<NativeCodeSpaceRoute> {
@@ -162,6 +162,7 @@ export async function createRemoteNativeCodeSpaceRoute(
   });
   controller.start();
   const authorized = new WeakMap<Session, Promise<void>>();
+  let resumeToken = '';
   const authorize = (session: Session, signal: AbortSignal): Promise<void> => {
     let pending = authorized.get(session);
     if (!pending) {
@@ -169,7 +170,7 @@ export async function createRemoteNativeCodeSpaceRoute(
         const stream = await session.openStream('code/auth_v1', {
           signal,
           metadata: sdk.createStreamMetadata(
-            input.password ? { password: input.password } : {},
+            resumeToken ? { resume_token: resumeToken } : input.authorization ? { delegation: input.authorization } : {},
           ),
         });
         try {
@@ -185,9 +186,11 @@ export async function createRemoteNativeCodeSpaceRoute(
           }
           const result = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
             unlocked?: boolean;
+            resume_token?: string;
           };
           if (result.unlocked !== true)
-            throw new Error('codespace_password_required');
+            throw new Error('codespace_authorization_required');
+          if (result.resume_token) resumeToken = result.resume_token;
         } finally {
           await stream.close();
         }

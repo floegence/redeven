@@ -46,7 +46,7 @@ type Options = {
   window: NativeCodeSpaceWindow;
   profiles: () => Pick<NativeCodeSpaceProfiles, 'port' | 'remember'>;
   loadingURL: (copy: CodespaceLoadingWindowCopy) => string;
-  createRoute: (signal: AbortSignal, password?: string) => Promise<NativeCodeSpaceRoute>;
+  createRoute: (signal: AbortSignal, authorization?: string) => Promise<NativeCodeSpaceRoute>;
   createGateway?: typeof createNativeCodeSpaceGateway;
   onReady: (port: number) => void;
   onFailure: (failure: CodeSpaceNativeWindowError) => void;
@@ -124,7 +124,7 @@ export class CodeSpaceNativeWindow {
     } catch { return false; }
   }
 
-  open(password?: string): Promise<void> {
+  open(authorization?: string): Promise<void> {
     if (this.opening) return this.opening;
     if (this.phase === 'ready') {
       this.options.window.present();
@@ -134,13 +134,13 @@ export class CodeSpaceNativeWindow {
     this.phase = 'opening';
     this.document = undefined;
     ++this.documentRevision;
-    const pending = this.prepare(password);
+    const pending = this.prepare(authorization);
     this.opening = pending;
     void pending.finally(() => { if (this.opening === pending) this.opening = undefined; }).catch(() => undefined);
     return pending;
   }
 
-  private async prepare(password?: string): Promise<void> {
+  private async prepare(authorization?: string): Promise<void> {
     let stage: CodeSpaceOpenStage = 'loading_document';
     try {
       if (!this.initialDocument) throw new Error('codespace_open_failed');
@@ -151,7 +151,7 @@ export class CodeSpaceNativeWindow {
       const profiles = this.options.profiles();
       const port = profiles.port(this.options.identity);
       stage = 'route';
-      const route = await this.options.createRoute(this.lifetime.signal, password);
+      const route = await this.options.createRoute(this.lifetime.signal, authorization);
       if (this.lifetime.signal.aborted) { await route.close(); throw new Error('codespace_closed'); }
       stage = 'gateway';
       const gateway = await (this.options.createGateway ?? createNativeCodeSpaceGateway)(route, port);

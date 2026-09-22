@@ -23,7 +23,7 @@ func TestServer_E2E_LockedUntilUnlock(t *testing.T) {
 	defer upstream.Close()
 
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
-	meta := session.Meta{ChannelID: "ch-test"}
+	meta := session.Meta{ChannelID: "ch-test", FloeApp: "com.floegence.redeven.agent", CodeSpaceID: "env-ui"}
 	gate.RegisterChannel(meta)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -109,7 +109,7 @@ func TestServer_E2E_UnlockRateLimitsRepeatedFailures(t *testing.T) {
 			Retention: time.Minute,
 		},
 	})
-	meta := session.Meta{ChannelID: "ch-test"}
+	meta := session.Meta{ChannelID: "ch-test", FloeApp: "com.floegence.redeven.agent", CodeSpaceID: "env-ui"}
 	gate.RegisterChannel(meta)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -165,7 +165,7 @@ func TestServer_E2E_PreservesExternalOriginContextAndInjectsSessionChannel(t *te
 	}))
 	defer upstream.Close()
 
-	meta := session.Meta{ChannelID: "ch-test"}
+	meta := session.Meta{ChannelID: "ch-test", FloeApp: "com.floegence.redeven.agent", CodeSpaceID: "env-ui"}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -233,7 +233,7 @@ func TestServer_E2E_ProjectsAuthorizedExternalOriginWhenCarrierOmitsBrowserHeade
 	}))
 	defer upstream.Close()
 
-	meta := session.Meta{ChannelID: "ch-test"}
+	meta := session.Meta{ChannelID: "ch-test", FloeApp: "com.floegence.redeven.agent", CodeSpaceID: "env-ui"}
 	externalOrigin := "https://env-demo.ch-session.dev.redeven-sandbox.test"
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

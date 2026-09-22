@@ -373,6 +373,14 @@ function localizedAccessUnlockErrorMessage(error: unknown, i18n: ReturnType<type
     const code = String(error.code ?? '').trim().toUpperCase();
     if (isKnownAccessUnlockErrorCode(code)) {
       switch (code) {
+        case 'ACCESS_FACTOR_INVALID':
+          return i18n.t('accessGate.invalidFactorError');
+        case 'ACCESS_CHALLENGE_EXPIRED':
+          return i18n.t('accessGate.challengeExpiredError');
+        case 'ACCESS_RECOVERY_PENDING':
+          return i18n.t('accessGate.recoveryPendingError');
+        case 'ACCESS_AUTHENTICATION_UNAVAILABLE':
+          return i18n.t('accessGate.unavailableError');
         case 'ACCESS_PASSWORD_INVALID':
           return i18n.t('accessGate.errors.invalidPassword');
         case 'ACCESS_PASSWORD_RETRY_LATER':
@@ -717,6 +725,8 @@ export function EnvAppShell() {
   const [accessRetryNowMs, setAccessRetryNowMs] = createSignal(Date.now());
 
   let accessPasswordInput: HTMLInputElement | undefined;
+  const [accessChallenge, setAccessChallenge] = createSignal('');
+  const [accessRecoveryCode, setAccessRecoveryCode] = createSignal(false);
 
   const accessStatus = createMemo(() => (isLocalMode() ? localAccessStatus() : remoteAccessStatus()));
   const accessChecked = createMemo(() => (isLocalMode() ? localAccessChecked() : remoteAccessChecked()));
@@ -3398,7 +3408,16 @@ export function EnvAppShell() {
     setManualError(null);
 
     try {
-      const out = isLocalMode() ? await unlockLocalAccess(accessPassword()) : await unlockEnvAppAccess(accessPassword());
+      const request = accessChallenge() ? { challenge_id: accessChallenge(), ...(accessRecoveryCode() ? { recovery_code: accessPassword() } : { code: accessPassword() }) } : accessPassword();
+      const out = isLocalMode() ? await unlockLocalAccess(request) : await unlockEnvAppAccess(request);
+      if (out.second_factor_required && out.challenge_id) {
+        setAccessChallenge(out.challenge_id);
+        setCurrentAccessPassword('');
+        queueMicrotask(() => accessPasswordInput?.focus());
+        return;
+      }
+      setAccessChallenge('');
+      setAccessRecoveryCode(false);
       const token = String(out?.resume_token ?? '').trim();
       if (!token) {
         throw new Error(i18n.t('accessGate.missingResumeTokenError'));
@@ -3436,6 +3455,7 @@ export function EnvAppShell() {
         await connect();
       }
     } catch (error) {
+      if (error instanceof AccessUnlockError && error.code === 'ACCESS_CHALLENGE_EXPIRED') { setAccessChallenge(''); setAccessRecoveryCode(false); setCurrentAccessPassword(''); }
       const message = localizedAccessUnlockErrorMessage(error, i18n);
       const retryAfterMs = getAccessUnlockRetryAfterMs(error);
       setCurrentAccessRetryUntil(retryAfterMs > 0 ? Date.now() + retryAfterMs : 0);
@@ -4474,6 +4494,10 @@ export function EnvAppShell() {
       retryActive={accessRetryActive()}
       retryDuration={accessRetryDuration()}
       password={accessPassword()}
+      secondFactor={!!accessChallenge()}
+      recoveryCode={accessRecoveryCode()}
+      onToggleRecovery={() => {setAccessRecoveryCode(!accessRecoveryCode());setCurrentAccessPassword('');setCurrentAccessError(null);}}
+      onBackToPassword={() => {setAccessChallenge('');setCurrentAccessPassword('');setCurrentAccessError(null);}}
       error={accessError()}
       languageMenu={<LanguagePreferenceMenu variant="access_gate" openRequestSeq={languageMenuOpenSeq} notify={notify} />}
       inputRef={(input) => { accessPasswordInput = input; }}

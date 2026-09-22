@@ -818,7 +818,7 @@ func TestServer_LocalPermissionCapDoesNotHotReload(t *testing.T) {
 	}
 }
 
-func TestServer_hasLocalAccess_acceptsResumeTokenQuery(t *testing.T) {
+func TestServer_hasLocalAccess_rejectsResumeTokenQuery(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
 
@@ -840,9 +840,9 @@ func TestServer_hasLocalAccess_acceptsResumeTokenQuery(t *testing.T) {
 		t.Fatalf("expected resume token")
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "https://localhost:23998/cs/demo?"+localAccessResumeQuery+"="+unlockBody.Data.ResumeToken, nil)
-	if !s.hasLocalAccess(req) {
-		t.Fatalf("expected query resume token to grant local access")
+	req := httptest.NewRequest(http.MethodGet, "https://localhost:23998/cs/demo?redeven_access_resume="+unlockBody.Data.ResumeToken, nil)
+	if s.hasLocalAccess(req) {
+		t.Fatalf("query must not carry an access credential")
 	}
 }
 
@@ -882,7 +882,8 @@ func TestServer_handleCodeSpace_bootstrapsLocalAccessCookieFromResumeToken(t *te
 		t.Fatalf("unexpected unlock body: %#v", unlockBody)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/cs/demo/?redeven_access_resume="+unlockBody.Data.ResumeToken, nil)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/cs/demo/", nil)
+	req.Header.Set(localAccessResumeHeader, unlockBody.Data.ResumeToken)
 	res := httptest.NewRecorder()
 	s.handleCodeSpace(res, req)
 
@@ -1395,4 +1396,24 @@ func TestSameOriginWSRequest(t *testing.T) {
 
 func (localUITestBackend) BindRunningCodeSpace(context.Context, string) (appserverpkg.NativeCodeSpaceBinding, error) {
 	return appserverpkg.NativeCodeSpaceBinding{}, errors.New("not implemented")
+}
+
+func TestBookmarkedResourcesOfferLocalBrowserAuthentication(t *testing.T) {
+	s := newTestServer(t, accessgate.New(accessgate.Options{Password: "secret"}))
+	for _, path := range []string{"/cs/demo/", "/pf/demo/"} {
+		req := httptest.NewRequest(http.MethodGet, "https://localhost:23998"+path, nil)
+		req.Header.Set("Accept", "text/html")
+		res := httptest.NewRecorder()
+		if strings.HasPrefix(path, "/cs/") {
+			s.handleCodeSpace(res, req)
+		} else {
+			s.handlePortForward(res, req)
+		}
+		if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `data-redeven-local-access="true"`) {
+			t.Fatalf("bookmark %s: %d %s", path, res.Code, res.Body.String())
+		}
+		if res.Header().Get("Cache-Control") != "no-store" {
+			t.Fatal("authentication document was cacheable")
+		}
+	}
 }

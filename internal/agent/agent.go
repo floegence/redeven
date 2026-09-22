@@ -1215,14 +1215,15 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	a.sessionWG.Add(1)
 	a.mu.Unlock()
 
-	if a.accessGate != nil && a.accessGate.Enabled() {
+	if a.accessGate != nil {
 		a.accessGate.RegisterChannel(metaCopy)
+		a.accessGate.BindChannelLifetime(channelID, cancel)
 	}
 
 	go func(meta *session.Meta) {
 		defer func() {
 			defer a.sessionWG.Done()
-			if a.accessGate != nil && a.accessGate.Enabled() {
+			if a.accessGate != nil {
 				a.accessGate.UnregisterChannel(channelID)
 			}
 			generation := a.removeActiveSession(channelID)

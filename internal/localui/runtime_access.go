@@ -109,6 +109,10 @@ func (s *runtimeControlServer) handleRuntimeAccess(w http.ResponseWriter, r *htt
 			writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_ACCESS_INVALID", "Expected one access settings object.")
 			return
 		}
+		if s.accessGate != nil && (s.accessGate.TwoFactorEnabled() || s.accessGate.SecurityStatus().RecoveryPending) && (input.Protocol != config.LocalUIProtocolHTTPS || input.PasswordMode != "keep") {
+			writeRuntimeControlError(w, 409, "SECURITY_POLICY_ACTIVE", "Keep HTTPS and the current password while two-factor authentication is enabled.")
+			return
+		}
 		access, err = SaveRuntimeAccess(*s.accessLayout, input)
 	default:
 		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
@@ -122,6 +126,9 @@ func (s *runtimeControlServer) handleRuntimeAccess(w http.ResponseWriter, r *htt
 	if err != nil {
 		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_ACCESS_INVALID", err.Error())
 		return
+	}
+	if access != nil {
+		access.LocalUIPasswordConfigured = len(hash) > 0
 	}
 	certificateChanged := false
 	if s.accessCurrent.LocalUIProtocol == config.LocalUIProtocolHTTPS {

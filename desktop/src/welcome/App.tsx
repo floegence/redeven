@@ -1,3 +1,5 @@
+import { TwoFactorSettings } from './TwoFactorSettings';
+import type { SecurityRequest, SecurityResult } from '../shared/runtimeSecurity';
 import { CloudAccountOverview } from './CloudAccountOverview';
 import { EnvironmentCardsPanel, environmentActionUsesLifecycleOwner, type EnvironmentOwnerPresentation, type EnvironmentGuidanceActionResolution, type LifecycleProgressFocusRequest } from './EnvironmentCards';
 import { ConsoleActionIconButton, EnvironmentStatusIndicator } from './environmentCardPrimitives';
@@ -6540,6 +6542,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               </EnvironmentSettingsPanel>
             )}>
       <EnvironmentAccessSettingsForm
+        security={window.redevenDesktopSettings?.security ? request => window.redevenDesktopSettings!.security!({ ...request, environment_id: settingsSurface().environment_id }) : undefined}
         open={Boolean(settingsSession())}
         snapshot={settingsSurface()}
         baselineSnapshot={settingsBaselineSurface()}
@@ -12173,6 +12176,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
   runtimeStatusTone: EnvironmentCardTone;
   dark: boolean;
   certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>;
+  security?: (request: SecurityRequest) => Promise<SecurityResult>;
   resetAccess?: () => void;
   desktopOpenLabel: string;
   openInDesktop: () => void;
@@ -12257,6 +12261,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
         </section>
 
         <div class="environment-access-preferences">
+          <Show when={props.open && props.security}><TwoFactorSettings environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.security!} /></Show>
           <section class="environment-access-row">
             <div class="environment-access-description">
               <h3>{props.i18n.t('settings.visibilityTitle')}</h3>

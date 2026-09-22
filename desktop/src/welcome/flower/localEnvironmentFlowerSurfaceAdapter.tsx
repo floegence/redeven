@@ -1,3 +1,4 @@
+import type { DesktopSecurityRequest, SecurityResult } from '../../shared/runtimeSecurity';
 import { computerManagementAdapter } from '../../../../internal/flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../internal/flower_ui/host/computerFramePath';
 import { messageFilePath } from '../../../../internal/flower_ui/host/messageFilePath';
@@ -83,6 +84,7 @@ import {
 } from '../../../../internal/flower_host_ui/src/flowerAttachmentStaging';
 
 export type DesktopSettingsBridge = Readonly<{
+  security?: (request: DesktopSecurityRequest) => Promise<SecurityResult>;
   certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>;
   load: (request: DesktopSettingsRequest) => Promise<DesktopSettingsResult>;
   save: (request: SaveDesktopSettingsRequest) => Promise<SaveDesktopSettingsResult>;

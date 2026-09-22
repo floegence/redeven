@@ -34,7 +34,6 @@ import {
   localizeBrowserEditorSetupActivity,
   type BrowserEditorSetupLocalFailure,
 } from "../services/browserEditorSetupActivity";
-import { appendLocalAccessResumeQuery } from "../services/localAccessAuth";
 import { trustedLauncherOriginFromSandboxLocation } from "../services/sandboxOrigins";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
 import {
@@ -245,7 +244,7 @@ function navigateCodespaceBrowserPopup(args: Readonly<{
 function buildLocalCodespaceURL(codeSpaceID: string, workspacePath: string, invalidURLMessage: string): string {
   const folder = String(workspacePath ?? "").trim();
   const basePath = `/cs/${encodeURIComponent(codeSpaceID)}/`;
-  const rawURL = appendLocalAccessResumeQuery(folder ? `${basePath}?folder=${encodeURIComponent(folder)}` : basePath);
+  const rawURL = (folder ? `${basePath}?folder=${encodeURIComponent(folder)}` : basePath);
   return absoluteURLFromCurrentLocation(rawURL, invalidURLMessage);
 }
 
@@ -297,7 +296,7 @@ async function openCodespace(
   openTarget: CodespaceOpenTarget,
   setStatus: (s: string) => void,
   copy: OpenCodespaceCopy,
-  options: Readonly<{ strategy?: CodespaceOpenStrategy; desktopLoadingWindowOpened?: boolean; requestPassword?: (retry: boolean) => Promise<string | undefined> }> = {},
+  options: Readonly<{ strategy?: CodespaceOpenStrategy; desktopLoadingWindowOpened?: boolean }> = {},
 ): Promise<void> {
   const envPublicID = getEnvPublicIDFromSession();
   if (!envPublicID) throw new Error(copy.missingEnvContext);
@@ -319,16 +318,10 @@ async function openCodespace(
     if (strategy.kind === "desktop_codespace_window" || strategy.kind === "desktop_external_browser") {
       setStatus(copy.opening);
       const failedMessage = strategy.kind === "desktop_external_browser" ? copy.desktopOpenFailed : copy.desktopWindowOpenFailed;
-      let password: string | undefined;
-      for (;;) {
-        const retry = password !== undefined;
-        const result = await openCodespaceWindowInDesktopShell({ mode: strategy.kind === "desktop_external_browser" ? "browser" : "open", code_space_id: codeSpaceID, ...(password ? { password } : {}) });
-        password = undefined;
-        if (result?.ok) return;
-        if (result?.message !== "codespace_password_required" || !options.requestPassword) throw new Error(result?.message || failedMessage);
-        password = await options.requestPassword(retry);
-        if (!password) throw new Error(failedMessage);
-      }
+      const authorization = local ? undefined : (await fetchLocalApiJSON<{ delegation: string }>('/_redeven_proxy/api/access/delegate', { method: 'POST', body: JSON.stringify({ code_space_id: codeSpaceID }) })).delegation;
+      const result = await openCodespaceWindowInDesktopShell({ mode: strategy.kind === "desktop_external_browser" ? "browser" : "open", code_space_id: codeSpaceID, ...(authorization ? { authorization } : {}) });
+      if (!result?.ok) throw new Error(result?.message || failedMessage);
+      return;
     }
 
     if (local) {
@@ -807,19 +800,6 @@ export function EnvCodespacesPage() {
   const i18n = useI18n();
   const activation = (() => { try { return useViewActivation(); } catch { return null; } })();
 
-  const [nativePasswordOpen, setNativePasswordOpen] = createSignal(false);
-  const [nativePassword, setNativePassword] = createSignal("");
-  const [nativePasswordRejected, setNativePasswordRejected] = createSignal(false);
-  let resolveNativePassword: ((password: string | undefined) => void) | undefined;
-  const finishNativePassword = (password?: string) => {
-    const resolve = resolveNativePassword;
-    resolveNativePassword = undefined;
-    setNativePassword(""); setNativePasswordOpen(false); resolve?.(password);
-  };
-  const requestNativePassword = (retry: boolean): Promise<string | undefined> => new Promise((resolve) => {
-    finishNativePassword(); setNativePasswordRejected(retry); resolveNativePassword = resolve; setNativePasswordOpen(true);
-  });
-  onCleanup(() => finishNativePassword());
   const [createDialogOpen, setCreateDialogOpen] = createSignal(false);
   const [createLoading, setCreateLoading] = createSignal(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
@@ -901,7 +881,7 @@ export function EnvCodespacesPage() {
     const changed = currentOwner !== presentationOwner;
     presentationOwner = currentOwner;
     if (!changed && currentSpaces !== undefined) return;
-    if (changed) { setCreateDialogOpen(false); finishNativePassword(); }
+    if (changed) { setCreateDialogOpen(false); }
     setDeleteDialogOpen(false);
     setDeleteTarget(null);
     setCodespaceContextMenu(null);
@@ -1198,7 +1178,7 @@ export function EnvCodespacesPage() {
         popupBlocked: i18n.t("codespaces.errors.popupBlocked"),
         requestingEntryTicket: i18n.t("codespaces.status.requestingEntryTicket"),
         starting: i18n.t("codespaces.status.starting"),
-      }, { strategy: reservedPopup, desktopLoadingWindowOpened, requestPassword: requestNativePassword });
+      }, { strategy: reservedPopup, desktopLoadingWindowOpened });
       opened = true;
       await refreshAfterMutation(owner);
     } catch (e) {
@@ -1434,19 +1414,7 @@ export function EnvCodespacesPage() {
           </div>
       </CodespacesPageFrame>
 
-      <Dialog open={nativePasswordOpen()} onOpenChange={(open) => { if (!open) finishNativePassword(); }} title={i18n.t("accessGate.unlockRuntimeTitle")}>
-        <form class="space-y-4" onSubmit={(event) => { event.preventDefault(); finishNativePassword(nativePassword()); }}>
-          <label class="block space-y-2">
-            <span class="text-sm">{i18n.t("accessGate.passwordLabel")}</span>
-            <input type="password" autocomplete="off" autofocus value={nativePassword()} onInput={(event) => setNativePassword(event.currentTarget.value)} placeholder={i18n.t("accessGate.passwordPlaceholder")} class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
-          </label>
-          <Show when={nativePasswordRejected()}><p role="alert" class="text-sm text-destructive">{i18n.t("accessGate.errors.invalidPassword")}</p></Show>
-          <div class="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => finishNativePassword()}>{i18n.t("codespaces.actions.cancel")}</Button>
-            <Button type="submit" disabled={!nativePassword()}>{i18n.t("accessGate.unlockAction")}</Button>
-          </div>
-        </form>
-      </Dialog>
+
       <CreateCodespaceDialog
         open={createDialogOpen()}
         loading={createLoading()}

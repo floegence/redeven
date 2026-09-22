@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/floegence/redeven/internal/session"
@@ -28,20 +29,25 @@ type Options struct {
 }
 
 type Status struct {
-	PasswordRequired bool   `json:"password_required"`
-	Unlocked         bool   `json:"unlocked"`
-	FloeApp          string `json:"floe_app,omitempty"`
-	CodeSpaceID      string `json:"code_space_id,omitempty"`
-	SessionKind      string `json:"session_kind,omitempty"`
+	PasswordRequired  bool   `json:"password_required"`
+	TwoFactorRequired bool   `json:"two_factor_required"`
+	Unlocked          bool   `json:"unlocked"`
+	FloeApp           string `json:"floe_app,omitempty"`
+	CodeSpaceID       string `json:"code_space_id,omitempty"`
+	SessionKind       string `json:"session_kind,omitempty"`
 }
 
 type UnlockResult struct {
-	Unlocked            bool   `json:"unlocked"`
-	ResumeToken         string `json:"resume_token,omitempty"`
-	ResumeExpiresAtUnix int64  `json:"resume_expires_at_unix_ms,omitempty"`
+	SecondFactorRequired bool   `json:"second_factor_required,omitempty"`
+	ChallengeID          string `json:"challenge_id,omitempty"`
+	Unlocked             bool   `json:"unlocked"`
+	ResumeToken          string `json:"resume_token,omitempty"`
+	ResumeExpiresAtUnix  int64  `json:"resume_expires_at_unix_ms,omitempty"`
 }
 
 type LocalSessionResult struct {
+	SecondFactorRequired bool   `json:"second_factor_required,omitempty"`
+	ChallengeID          string `json:"challenge_id,omitempty"`
 	Unlocked             bool   `json:"unlocked"`
 	SessionToken         string `json:"-"`
 	AccessSessionID      string `json:"-"`
@@ -51,13 +57,20 @@ type LocalSessionResult struct {
 }
 
 type RegisterChannelOptions struct {
-	Unlocked bool
+	Unlocked        bool
+	Trusted         bool
+	AccessSessionID string
 }
 
 type channelState struct {
-	meta       session.Meta
-	unlocked   bool
-	unlockedAt time.Time
+	trusted         bool
+	cancel          func()
+	expiryTimer     *time.Timer
+	expiresAt       time.Time
+	accessSessionID string
+	meta            session.Meta
+	unlocked        bool
+	unlockedAt      time.Time
 }
 
 type resumeTokenState struct {
@@ -87,12 +100,19 @@ type failedAttemptState struct {
 
 type Gate struct {
 	log             *slog.Logger
-	enabled         bool
+	enabled         atomic.Bool
 	passwordHash    []byte
 	resumeTTL       time.Duration
 	localSessionTTL time.Duration
 	attemptPolicy   AttemptPolicy
 
+	authMu         sync.Mutex
+	store          *authStore
+	auth           authState
+	challenges     map[string]*authChallenge
+	management     map[string]*managementOperation
+	delegations    map[string]*childDelegation
+	revoked        []ExpiredLocalSession
 	mu             sync.Mutex
 	channels       map[string]*channelState
 	resumeTokens   map[string]*resumeTokenState
@@ -124,9 +144,9 @@ func New(opts Options) *Gate {
 	}
 	attemptPolicy := normalizeAttemptPolicy(opts.AttemptPolicy)
 
-	return &Gate{
-		log:             logger,
-		enabled:         enabled,
+	gate := &Gate{
+		log: logger,
+
 		passwordHash:    passwordHash,
 		resumeTTL:       resumeTTL,
 		localSessionTTL: localSessionTTL,
@@ -136,6 +156,12 @@ func New(opts Options) *Gate {
 		localSessions:   make(map[string]*localSessionState),
 		failedAttempts:  make(map[string]*failedAttemptState),
 	}
+	gate.enabled.Store(enabled)
+	gate.auth = authState{PasswordHash: passwordHash, Revision: 1, LastStep: -1}
+	gate.challenges = make(map[string]*authChallenge)
+	gate.management = make(map[string]*managementOperation)
+	gate.delegations = make(map[string]*childDelegation)
+	return gate
 }
 
 // NewWithPasswordHash restores server-owned authentication without retaining a
@@ -147,17 +173,27 @@ func NewWithPasswordHash(hash []byte) (*Gate, error) {
 		}
 	}
 	gate := New(Options{})
-	gate.enabled = len(hash) > 0
+	gate.enabled.Store(len(hash) > 0)
+	gate.auth.PasswordHash = append([]byte(nil), hash...)
 	gate.passwordHash = append([]byte(nil), hash...)
 	return gate, nil
 }
 
 func (g *Gate) Enabled() bool {
-	return g != nil && g.enabled
+	return g != nil && g.enabled.Load()
 }
 
 func (g *Gate) VerifyPassword(password string) bool {
-	if g == nil || !g.enabled {
+	if g == nil {
+		return true
+	}
+	g.authMu.Lock()
+	defer g.authMu.Unlock()
+	return g.verifyPasswordLocked(password)
+}
+
+func (g *Gate) verifyPasswordLocked(password string) bool {
+	if g == nil || !g.enabled.Load() {
 		return true
 	}
 	if len(g.passwordHash) == 0 {
@@ -171,7 +207,7 @@ func (g *Gate) RegisterChannel(meta session.Meta) {
 }
 
 func (g *Gate) RegisterChannelWithOptions(meta session.Meta, opts RegisterChannelOptions) {
-	if g == nil || !g.enabled {
+	if g == nil {
 		return
 	}
 	channelID := strings.TrimSpace(meta.ChannelID)
@@ -184,17 +220,36 @@ func (g *Gate) RegisterChannelWithOptions(meta session.Meta, opts RegisterChanne
 	g.cleanupExpiredLocked(now)
 	metaCopy := meta
 	state := &channelState{
-		meta:     metaCopy,
-		unlocked: opts.Unlocked,
+		meta:            metaCopy,
+		unlocked:        opts.Unlocked,
+		trusted:         opts.Trusted,
+		accessSessionID: opts.AccessSessionID,
 	}
 	if opts.Unlocked {
 		state.unlockedAt = now
+		if !opts.Trusted {
+			state.expiresAt = now.Add(g.resumeTTL)
+		}
+	}
+	if opts.Unlocked && !opts.Trusted && g.enabled.Load() {
+		state.unlocked = false
+		for _, local := range g.localSessions {
+			if local.accessSessionID == opts.AccessSessionID && now.Before(local.expiresAt) {
+				state.unlocked = true
+				state.expiresAt = local.expiresAt
+				break
+			}
+		}
+	}
+	if old := g.channels[channelID]; old != nil && old.expiryTimer != nil {
+		old.expiryTimer.Stop()
 	}
 	g.channels[channelID] = state
+	g.scheduleChannelExpiryLocked(channelID, state)
 }
 
 func (g *Gate) UnregisterChannel(channelID string) {
-	if g == nil || !g.enabled {
+	if g == nil {
 		return
 	}
 	channelID = strings.TrimSpace(channelID)
@@ -202,28 +257,32 @@ func (g *Gate) UnregisterChannel(channelID string) {
 		return
 	}
 	g.mu.Lock()
+	if st := g.channels[channelID]; st != nil && st.expiryTimer != nil {
+		st.expiryTimer.Stop()
+	}
 	delete(g.channels, channelID)
 	g.mu.Unlock()
 }
 
 func (g *Gate) Status(channelID string) Status {
-	if g == nil || !g.enabled {
+	if g == nil || !g.enabled.Load() {
 		return Status{PasswordRequired: false, Unlocked: true}
 	}
+	mfa := g.TwoFactorEnabled()
 	channelID = strings.TrimSpace(channelID)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.cleanupExpiredLocked(time.Now())
 	st := g.channels[channelID]
 	if st == nil {
-		return Status{PasswordRequired: true, Unlocked: false}
+		return Status{PasswordRequired: true, TwoFactorRequired: mfa, Unlocked: false}
 	}
 	return Status{
-		PasswordRequired: true,
-		Unlocked:         st.unlocked,
-		FloeApp:          strings.TrimSpace(st.meta.FloeApp),
-		CodeSpaceID:      strings.TrimSpace(st.meta.CodeSpaceID),
-		SessionKind:      strings.TrimSpace(st.meta.SessionKind),
+		PasswordRequired:  true,
+		TwoFactorRequired: mfa, Unlocked: st.unlocked,
+		FloeApp:     strings.TrimSpace(st.meta.FloeApp),
+		CodeSpaceID: strings.TrimSpace(st.meta.CodeSpaceID),
+		SessionKind: strings.TrimSpace(st.meta.SessionKind),
 	}
 }
 
@@ -235,16 +294,13 @@ func (g *Gate) UnlockChannel(channelID string, password string) (*UnlockResult, 
 	return g.UnlockChannelWithSubject(channelID, password, "")
 }
 
-func (g *Gate) UnlockChannelWithSubject(channelID string, password string, subject string) (*UnlockResult, error) {
-	if g == nil || !g.enabled {
+func (g *Gate) issueChannel(channelID string) (*UnlockResult, error) {
+	if g == nil || !g.enabled.Load() {
 		return &UnlockResult{Unlocked: true}, nil
 	}
 	channelID = strings.TrimSpace(channelID)
 	if channelID == "" {
 		return nil, errors.New("missing channel_id")
-	}
-	if err := g.verifyPasswordForSubject(password, subject); err != nil {
-		return nil, err
 	}
 
 	now := time.Now()
@@ -255,18 +311,25 @@ func (g *Gate) UnlockChannelWithSubject(channelID string, password string, subje
 	if st == nil {
 		return nil, errors.New("channel not found")
 	}
-	st.unlocked = true
-	st.unlockedAt = now
+	accessSessionID, err := randomToken(24)
+	if err != nil {
+		return nil, err
+	}
 
 	out := &UnlockResult{Unlocked: true}
 	if shouldMintResumeTokenLocked(st.meta) {
-		resumeToken, expiresAt, err := g.mintResumeTokenLocked(now, st.meta, "")
+		resumeToken, expiresAt, err := g.mintResumeTokenLocked(now, st.meta, accessSessionID)
 		if err != nil {
 			return nil, err
 		}
 		out.ResumeToken = resumeToken
 		out.ResumeExpiresAtUnix = expiresAt.UnixMilli()
 	}
+	st.unlocked = true
+	st.unlockedAt = now
+	st.expiresAt = now.Add(g.resumeTTL)
+	st.accessSessionID = accessSessionID
+	g.scheduleChannelExpiryLocked(channelID, st)
 	return out, nil
 }
 
@@ -274,12 +337,9 @@ func (g *Gate) MintLocalSession(password string) (*LocalSessionResult, error) {
 	return g.MintLocalSessionWithSubject(password, "")
 }
 
-func (g *Gate) MintLocalSessionWithSubject(password string, subject string) (*LocalSessionResult, error) {
-	if g == nil || !g.enabled {
+func (g *Gate) issueLocalSession() (*LocalSessionResult, error) {
+	if g == nil || !g.enabled.Load() {
 		return &LocalSessionResult{Unlocked: true}, nil
-	}
-	if err := g.verifyPasswordForSubject(password, subject); err != nil {
-		return nil, err
 	}
 	now := time.Now()
 	g.mu.Lock()
@@ -316,36 +376,8 @@ func (g *Gate) MintLocalSessionWithSubject(password string, subject string) (*Lo
 	}, nil
 }
 
-func (g *Gate) MintTrustedLocalSession(meta session.Meta) (*LocalSessionResult, error) {
-	if g == nil || !g.enabled {
-		return &LocalSessionResult{Unlocked: true}, nil
-	}
-	now := time.Now()
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.cleanupExpiredLocked(now)
-
-	lineageExpiresAt := now.Add(g.resumeTTL)
-	sessionToken, accessSessionID, expiresAt, err := g.mintLocalSessionLocked(now, "", lineageExpiresAt)
-	if err != nil {
-		return nil, err
-	}
-	resumeToken, resumeExpiresAt, err := g.mintResumeTokenLocked(now, meta, accessSessionID)
-	if err != nil {
-		return nil, err
-	}
-	return &LocalSessionResult{
-		Unlocked:             true,
-		SessionToken:         sessionToken,
-		AccessSessionID:      accessSessionID,
-		SessionExpiresAtUnix: expiresAt.UnixMilli(),
-		ResumeToken:          resumeToken,
-		ResumeExpiresAtUnix:  resumeExpiresAt.UnixMilli(),
-	}, nil
-}
-
 func (g *Gate) MintLocalSessionFromResumeToken(resumeToken string, meta session.Meta) (*LocalSessionResult, error) {
-	if g == nil || !g.enabled {
+	if g == nil || !g.enabled.Load() {
 		return &LocalSessionResult{Unlocked: true}, nil
 	}
 	resumeToken = strings.TrimSpace(resumeToken)
@@ -380,7 +412,7 @@ func (g *Gate) MintLocalSessionFromResumeToken(resumeToken string, meta session.
 }
 
 func (g *Gate) IsLocalSessionValid(token string) bool {
-	if g == nil || !g.enabled {
+	if g == nil || !g.enabled.Load() {
 		return true
 	}
 	_, ok := g.LocalSessionExpiresAt(token)
@@ -395,7 +427,7 @@ func (g *Gate) LocalSessionExpiresAt(token string) (time.Time, bool) {
 }
 
 func (g *Gate) ResolveLocalSession(token string) (string, time.Time, bool) {
-	if g == nil || !g.enabled {
+	if g == nil || !g.enabled.Load() {
 		return "", time.Time{}, false
 	}
 	token = strings.TrimSpace(token)
@@ -414,7 +446,7 @@ func (g *Gate) ResolveLocalSession(token string) (string, time.Time, bool) {
 }
 
 func (g *Gate) TakeLocalSession(token string) (string, bool) {
-	if g == nil || !g.enabled {
+	if g == nil || !g.enabled.Load() {
 		return "", false
 	}
 	token = strings.TrimSpace(token)
@@ -434,7 +466,7 @@ func (g *Gate) TakeLocalSession(token string) (string, bool) {
 // TakeAccessSessionByResumeToken revokes the complete access-session lineage
 // identified by an active resume token and returns its opaque internal ID.
 func (g *Gate) TakeAccessSessionByResumeToken(resumeToken string) (string, bool) {
-	if g == nil || !g.enabled {
+	if g == nil || !g.enabled.Load() {
 		return "", false
 	}
 	resumeToken = strings.TrimSpace(resumeToken)
@@ -454,7 +486,7 @@ func (g *Gate) TakeAccessSessionByResumeToken(resumeToken string) (string, bool)
 }
 
 func (g *Gate) TakeExpiredLocalSessions(now time.Time) []ExpiredLocalSession {
-	if g == nil || !g.enabled {
+	if g == nil || !g.enabled.Load() {
 		return nil
 	}
 	if now.IsZero() {
@@ -476,7 +508,8 @@ func (g *Gate) TakeExpiredLocalSessions(now time.Time) []ExpiredLocalSession {
 			delete(expiredIDs, st.accessSessionID)
 		}
 	}
-	expired := make([]ExpiredLocalSession, 0, len(expiredIDs))
+	expired := append([]ExpiredLocalSession(nil), g.revoked...)
+	g.revoked = nil
 	for accessSessionID := range expiredIDs {
 		expired = append(expired, ExpiredLocalSession{AccessSessionID: accessSessionID})
 		for token, resume := range g.resumeTokens {
@@ -493,7 +526,7 @@ func (g *Gate) RevokeLocalSession(token string) {
 }
 
 func (g *Gate) RevokeResumeToken(resumeToken string) {
-	if g == nil || !g.enabled {
+	if g == nil || !g.enabled.Load() {
 		return
 	}
 	resumeToken = strings.TrimSpace(resumeToken)
@@ -506,7 +539,7 @@ func (g *Gate) RevokeResumeToken(resumeToken string) {
 }
 
 func (g *Gate) CanResumeMeta(resumeToken string, meta session.Meta) bool {
-	if g == nil || !g.enabled {
+	if g == nil || !g.enabled.Load() {
 		return true
 	}
 	resumeToken = strings.TrimSpace(resumeToken)
@@ -521,7 +554,7 @@ func (g *Gate) CanResumeMeta(resumeToken string, meta session.Meta) bool {
 }
 
 func (g *Gate) ResumeChannel(channelID string, resumeToken string) error {
-	if g == nil || !g.enabled {
+	if g == nil || !g.enabled.Load() {
 		return nil
 	}
 	channelID = strings.TrimSpace(channelID)
@@ -543,10 +576,21 @@ func (g *Gate) ResumeChannel(channelID string, resumeToken string) error {
 	}
 	st.unlocked = true
 	st.unlockedAt = now
+	st.expiresAt = g.resumeTokens[resumeToken].expiresAt
+	st.accessSessionID = g.resumeTokens[resumeToken].accessSessionID
+	g.scheduleChannelExpiryLocked(channelID, st)
 	return nil
 }
 
 func (g *Gate) cleanupExpiredLocked(now time.Time) {
+	for _, st := range g.channels {
+		if st.unlocked && !st.expiresAt.IsZero() && !now.Before(st.expiresAt) {
+			st.unlocked = false
+			if st.cancel != nil {
+				st.cancel()
+			}
+		}
+	}
 	for token, st := range g.resumeTokens {
 		if st == nil || now.After(st.expiresAt) {
 			delete(g.resumeTokens, token)
@@ -567,8 +611,14 @@ func (g *Gate) cleanupExpiredLocked(now time.Time) {
 }
 
 func shouldMintResumeTokenLocked(meta session.Meta) bool {
-	return strings.TrimSpace(meta.FloeApp) == "com.floegence.redeven.agent" &&
-		strings.TrimSpace(meta.CodeSpaceID) == "env-ui"
+	switch strings.TrimSpace(meta.FloeApp) {
+	case "com.floegence.redeven.agent":
+		return strings.TrimSpace(meta.CodeSpaceID) == "env-ui"
+	case "com.floegence.redeven.code", "com.floegence.redeven.portforward":
+		return strings.TrimSpace(meta.CodeSpaceID) != ""
+	default:
+		return false
+	}
 }
 
 func normalizeSessionKind(sessionKind string) string {
@@ -602,6 +652,19 @@ func (g *Gate) validateResumeTokenLocked(now time.Time, resumeToken string, meta
 }
 
 func (g *Gate) revokeAccessSessionLocked(accessSessionID string) {
+	for token, d := range g.delegations {
+		if d.parent.accessSessionID == accessSessionID {
+			delete(g.delegations, token)
+		}
+	}
+	for _, st := range g.channels {
+		if st.accessSessionID == accessSessionID {
+			st.unlocked = false
+			if st.cancel != nil {
+				st.cancel()
+			}
+		}
+	}
 	for candidate, local := range g.localSessions {
 		if local != nil && local.accessSessionID == accessSessionID {
 			delete(g.localSessions, candidate)
@@ -665,7 +728,7 @@ func randomToken(n int) (string, error) {
 }
 
 func (g *Gate) verifyPasswordForSubject(password string, subject string) error {
-	if g == nil || !g.enabled {
+	if g == nil || !g.enabled.Load() {
 		return nil
 	}
 
@@ -679,7 +742,7 @@ func (g *Gate) verifyPasswordForSubject(password string, subject string) error {
 	if retryAfter := g.retryAfterLocked(now, subjectKey); retryAfter > 0 {
 		return &RateLimitError{RetryAfter: retryAfter}
 	}
-	if g.VerifyPassword(password) {
+	if g.verifyPasswordLocked(password) {
 		delete(g.failedAttempts, subjectKey)
 		return nil
 	}
@@ -721,4 +784,19 @@ func (g *Gate) cooldownForFailuresLocked(failures int) time.Duration {
 		cooldown = step.Cooldown
 	}
 	return cooldown
+}
+
+// BindChannelLifetime closes already-open streams at revocation or expiry.
+func (g *Gate) BindChannelLifetime(channelID string, cancel func()) {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if st := g.channels[channelID]; st != nil {
+		st.cancel = cancel
+		if st.accessSessionID != "" && !st.unlocked {
+			cancel()
+		}
+	}
 }

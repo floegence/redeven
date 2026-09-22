@@ -120,7 +120,11 @@ func TestRegisterLocalDirectChannelStartsUnlockedWhenAccessAlreadyAuthorized(t *
 		UserPublicID: "user_local",
 	}
 
-	cleanup := a.registerLocalDirectChannel(meta, LocalDirectSessionOptions{AccessUnlocked: true})
+	local, err := gate.MintLocalSession("secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup := a.registerLocalDirectChannel(meta, LocalDirectSessionOptions{AccessUnlocked: true, AccessSessionID: local.AccessSessionID})
 	defer cleanup()
 
 	if !gate.IsChannelUnlocked(meta.ChannelID) {

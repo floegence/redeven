@@ -675,6 +675,18 @@
     }
   },
   "accessGate": {
+    "invalidFactorError": "验证码无效或已使用，请使用新的验证码。",
+    "challengeExpiredError": "验证已过期，请重新输入密码。",
+    "recoveryPendingError": "请先在主机上完成安全恢复，再连接。",
+    "unavailableError": "身份验证暂不可用，请重试。",
+    "twoFactorTitle": "双重验证",
+    "authenticatorHelp": "输入身份验证器中的六位验证码。",
+    "recoveryHelp": "输入已保存的一个恢复码。",
+    "authenticatorLabel": "身份验证码",
+    "recoveryLabel": "恢复码",
+    "useRecovery": "使用恢复码",
+    "useAuthenticator": "使用身份验证码",
+    "backToPassword": "返回密码验证",
     "checkingTitle": "正在准备安全访问",
     "resumingTitle": "正在准备安全会话",
     "resumeBlockedTitle": "安全会话需要处理",

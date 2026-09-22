@@ -43,6 +43,7 @@ Commands:
               Connect Desktop Local Environment models to runtime-control.
   local-authority
               Maintain the stopped Local UI durable authority store.
+  security    Set up or recover two-factor authentication on a stopped Runtime.
   env         Inspect and plan Redeven environment lifecycle operations.
   targets     Inspect Redeven targets for local automation.
   search      Run web search using configured provider credentials.
@@ -824,6 +825,8 @@ func lookupHelpText(args []string) (string, bool) {
 		return desktopTargetProcessStopHelpText(), true
 	case "desktop-model-source":
 		return desktopModelSourceHelpText(), true
+	case "security", "security setup", "security recover":
+		return securityHelp, true
 	case "local-authority", "local-authority rotate-key":
 		return localAuthorityHelpText(), true
 	case "env":

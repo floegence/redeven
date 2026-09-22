@@ -675,6 +675,18 @@
     }
   },
   "accessGate": {
+    "invalidFactorError": "Code invalide ou déjà utilisé. Essayez un nouveau code.",
+    "challengeExpiredError": "Connexion expirée. Saisissez à nouveau votre mot de passe.",
+    "recoveryPendingError": "Terminez la récupération de sécurité sur l’hôte avant de vous connecter.",
+    "unavailableError": "Authentification indisponible. Réessayez.",
+    "twoFactorTitle": "Authentification à deux facteurs",
+    "authenticatorHelp": "Saisissez le code à six chiffres de votre application.",
+    "recoveryHelp": "Saisissez l’un de vos codes de récupération.",
+    "authenticatorLabel": "Code d’authentification",
+    "recoveryLabel": "Code de récupération",
+    "useRecovery": "Utiliser un code de récupération",
+    "useAuthenticator": "Utiliser un code d’authentification",
+    "backToPassword": "Revenir au mot de passe",
     "checkingTitle": "Préparation de l'accès sécurisé",
     "resumingTitle": "Préparation de la session sécurisée",
     "resumeBlockedTitle": "La session sécurisée nécessite une attention particulière",

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
@@ -39,6 +40,8 @@ type runtimeControlServer struct {
 	accessPasswordHash           []byte
 	accessCertificateFingerprint string
 	accessMu                     sync.Mutex
+	accessGate                   *accessgate.Gate
+	afterSecurityChange          func()
 }
 
 type logger interface {
@@ -158,6 +161,7 @@ func (s *runtimeControlServer) routes() http.Handler {
 	mux.HandleFunc("/v2/desktop-model-source/rpc", s.handleDesktopModelSourceRPC)
 	mux.HandleFunc("GET /v2/runtime/health", s.handleRuntimeHealth)
 	mux.HandleFunc("/v2/runtime/access", s.handleRuntimeAccess)
+	mux.HandleFunc("/v2/runtime/security", s.handleRuntimeSecurity)
 	return withLocalUISecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r == nil {
 			http.Error(w, "invalid request", http.StatusBadRequest)

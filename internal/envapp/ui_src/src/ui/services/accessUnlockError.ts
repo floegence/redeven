@@ -14,6 +14,10 @@ export class AccessUnlockError extends Error {
 
 export function isKnownAccessUnlockErrorCode(code: string): boolean {
   switch (String(code ?? '').trim().toUpperCase()) {
+    case 'ACCESS_FACTOR_INVALID':
+    case 'ACCESS_CHALLENGE_EXPIRED':
+    case 'ACCESS_RECOVERY_PENDING':
+    case 'ACCESS_AUTHENTICATION_UNAVAILABLE':
     case 'ACCESS_PASSWORD_INVALID':
     case 'ACCESS_PASSWORD_RETRY_LATER':
     case 'ACCESS_PASSWORD_REQUIRED':
