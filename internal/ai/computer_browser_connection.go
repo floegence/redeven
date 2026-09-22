@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 )
 
 type ComputerBrowserConnection struct {
+	privatePopup       bool   // Set only by the shared source owner's managed popup event.
 	ManagedProfileID   string `json:"managed_profile_id,omitempty"`
 	ExtensionProfileID string `json:"extension_profile_id,omitempty"`
 	NewTab             bool   `json:"new_tab,omitempty"`
@@ -62,11 +64,15 @@ func (c ComputerBrowserConnection) validate() error {
 }
 
 type ComputerBrowserTab struct {
-	OpenerTabID string `json:"opener_tab_id,omitempty"`
-	ID          string `json:"id"`
-	ProfileID   string `json:"profile_id"`
-	Title       string `json:"title"`
-	URL         string `json:"url"`
+	NativeTargetID        string   `json:"native_target_id,omitempty"`
+	OpenerNativeTargetIDs []string `json:"opener_native_target_ids,omitempty"`
+	Private               bool     `json:"private,omitempty"`
+	OpenerTabIDs          []string `json:"opener_tab_ids,omitempty"`
+	OpenerTabID           string   `json:"opener_tab_id,omitempty"`
+	ID                    string   `json:"id"`
+	ProfileID             string   `json:"profile_id"`
+	Title                 string   `json:"title"`
+	URL                   string   `json:"url"`
 }
 
 func (s *Service) ComputerBrowserTabs(ctx context.Context, meta *session.Meta, endpoint string) ([]ComputerBrowserTab, error) {
@@ -81,7 +87,14 @@ func (s *Service) ComputerBrowserTabs(ctx context.Context, meta *session.Meta, e
 }
 
 func (r *ComputerUseRuntime) BrowserTabs(ctx context.Context, endpoint string) ([]ComputerBrowserTab, error) {
-	return r.cdpBrowserTabs(ctx, endpoint, "inventory", "")
+	tabs, err := r.cdpBrowserTabs(ctx, endpoint, "inventory", "")
+	if err != nil {
+		return nil, err
+	}
+	r.connectMu.Lock()
+	defer r.connectMu.Unlock()
+	tabs, err = r.browserInventoryPrivacy(ctx, endpoint, tabs)
+	return slices.DeleteFunc(tabs, func(tab ComputerBrowserTab) bool { return tab.Private }), err
 }
 
 func (r *ComputerUseRuntime) cdpBrowserTabs(ctx context.Context, endpoint, command, profile string) ([]ComputerBrowserTab, error) {
@@ -173,6 +186,10 @@ func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connec
 	if err != nil {
 		return TargetDescriptor{}, err
 	}
+	tabs, err = r.browserInventoryPrivacy(ctx, connection.CDPURL, tabs)
+	if err != nil {
+		return TargetDescriptor{}, err
+	}
 	var chosen *ComputerBrowserTab
 	for i := range tabs {
 		if tabs[i].ProfileID == connection.ProfileID && (connection.NewTab || tabs[i].ID == connection.TabID) {
@@ -180,7 +197,7 @@ func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connec
 			break
 		}
 	}
-	if chosen == nil || (!connection.NewTab && connection.TabURL != "" && (connection.TabURL != chosen.URL || connection.TabTitle != chosen.Title)) {
+	if chosen == nil || chosen.Private || (!connection.NewTab && connection.TabURL != "" && (connection.TabURL != chosen.URL || connection.TabTitle != chosen.Title)) {
 		return TargetDescriptor{}, &targetToolPolicyError{code: "target_selection_stale"}
 	}
 	if existing := r.managedTabTargetID(connection.CDPURL, chosen.ID); existing != "" {
@@ -196,6 +213,10 @@ func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connec
 	}
 	executor := NewPlaywrightTargetExecutor(resources.NodeBinary, resources.HelperPath, resources.ProfileDir)
 	executor.CDPURL, executor.TabID, executor.BrowserContextID = connection.CDPURL, chosen.ID, chosen.ProfileID
+	executor.sourceHost, err = r.browserSourceHostLocked(ctx)
+	if err != nil {
+		return TargetDescriptor{}, err
+	}
 	target := TargetDescriptor{ID: targetID, Kind: "browser.connected", DisplayName: "Connected Chrome", Locality: "local", Capabilities: []string{"observe", "interaction"}, Ready: true, State: "ready", PermissionState: "granted"}
 	if err := executor.EnsureTargetReady(ctx, targetID); err != nil {
 		_ = executor.Close()

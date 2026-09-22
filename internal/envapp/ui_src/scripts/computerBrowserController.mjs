@@ -5,9 +5,9 @@ const rejections = new Set(['INVALID_REQUEST', 'STALE_REFERENCE', 'AMBIGUOUS_ELE
 // One tool/safety/result path for the managed helper and the extension. The
 // Runtime passes each invocation's current grants; the page never owns them.
 export class BrowserComputerController {
-  constructor(transport) {
+  constructor(transport, pageOptions) {
     this.transport = transport;
-    this.page = new BrowserComputerPage(transport);
+    this.page = new BrowserComputerPage(transport, pageOptions);
   }
   async initialize() { await this.page.initialize(); }
   close() { this.page.close(); }
@@ -61,6 +61,9 @@ export class BrowserComputerController {
     return response;
   }
   async executeOperation(request) {
+    // The Runtime's source owner changes this mode under the same target gate
+    // as AI execution. An old tool request cannot observe a user-owned page.
+    if (this.page.userBrowsing && request.user_control !== true) return { error: 'TARGET_NOT_ALLOWED' };
     // Trusted host command; not exposed in the model toolset. It reveals the
     // existing page without inspecting pixels or changing the control barrier.
     if (request.tool_name === 'computer.reveal') {

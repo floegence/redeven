@@ -17,6 +17,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 
 	root := repositoryRoot(t)
 	wantMigratingOpeners := map[string]struct{}{
+		"internal/browserstore/store.go":            {},
 		"internal/ai/threadstore/store.go":          {},
 		"internal/codeapp/registry/registry.go":     {},
 		"internal/containerresource/store.go":       {},
@@ -28,6 +29,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 		"internal/workbenchlayout/service.go":       {},
 	}
 	wantDirectOpeners := map[string]struct{}{
+		"internal/browserstore/schema.go":           {}, // In-memory reference DDL only; file-backed browser stores use the migration engine.
 		"internal/portforward/registry/schema.go":   {}, // In-memory reference DDL only; the migration engine owns every file-backed registry connection.
 		"internal/persistence/sqliteutil/engine.go": {}, // The migration engine owns the physical connection.
 		"internal/persistence/sqliteutil/backup.go": {}, // Owner-requested read-only SQLite backup; no product schema or migration logic.
@@ -91,11 +93,11 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 					gotMigratingOpeners[rel] = struct{}{}
 				case selector.Sel.Name == "Open" && hasAlias(sqlAliases, receiver.Name) && firstStringArgument(call) == "sqlite":
 					gotDirectOpeners[rel] = struct{}{}
-					if rel == "internal/portforward/registry/schema.go" {
+					if rel == "internal/portforward/registry/schema.go" || rel == "internal/browserstore/schema.go" {
 						if len(call.Args) != 2 {
-							t.Error("registry reference DDL must use an in-memory database")
+							t.Errorf("%s reference DDL must use an in-memory database", rel)
 						} else if literal, ok := call.Args[1].(*ast.BasicLit); !ok || literal.Value != `":memory:"` {
-							t.Error("registry schema verification must never directly open a database file")
+							t.Errorf("%s schema verification must never directly open a database file", rel)
 						}
 					}
 				case selector.Sel.Name == "SQLite" && hasAlias(floretStorageAliases, receiver.Name):

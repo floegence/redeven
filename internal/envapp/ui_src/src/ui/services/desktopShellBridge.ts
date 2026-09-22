@@ -37,6 +37,7 @@ export type DesktopRuntimeMaintenanceResult = Readonly<{
 export type RuntimeMaintenanceContext = DesktopShellRuntimeMaintenanceContext;
 
 export interface DesktopShellBridge {
+  prepareBrowserWindow?: (url: string) => Promise<boolean>;
   openConnectionCenter?: () => Promise<void>;
   openAdvancedSettings?: () => Promise<void>;
   openFlowerSettings?: () => Promise<void>;
@@ -102,6 +103,10 @@ function desktopShellBridge(): DesktopShellBridge | null {
 
 export function desktopShellBridgeAvailable(): boolean {
   return desktopShellBridge() !== null;
+}
+
+export async function prepareDesktopBrowserWindow(url: string): Promise<boolean> {
+  return (await desktopShellBridge()?.prepareBrowserWindow?.(url)) === true;
 }
 
 export async function openConnectionCenter(): Promise<boolean> {

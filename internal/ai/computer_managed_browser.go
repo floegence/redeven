@@ -285,6 +285,10 @@ func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, co
 	if err != nil {
 		return TargetDescriptor{}, err
 	}
+	tabs, err = r.browserInventoryPrivacy(ctx, profile.endpoint, tabs)
+	if err != nil {
+		return TargetDescriptor{}, err
+	}
 	var chosen *ComputerBrowserTab
 	for i := range tabs {
 		if connection.NewTab || tabs[i].ID == connection.TabID {
@@ -292,14 +296,14 @@ func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, co
 			break
 		}
 	}
-	if chosen == nil {
+	if chosen == nil || chosen.Private && !connection.privatePopup {
 		return TargetDescriptor{}, errors.New("select an available managed tab")
 	}
 	if !connection.NewTab && connection.TabURL != "" && (chosen.URL != connection.TabURL || chosen.Title != connection.TabTitle) {
 		return TargetDescriptor{}, &targetToolPolicyError{code: "target_selection_stale"}
 	}
-	if targetID == "" {
-		targetID = r.managedTabTargetID(profile.endpoint, chosen.ID)
+	if existing := r.managedTabTargetID(profile.endpoint, chosen.ID); existing != "" {
+		return r.registry.ResolveTarget(ctx, existing)
 	}
 	if targetID == "" {
 		targetID = "managed-" + chosen.ID
@@ -311,6 +315,10 @@ func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, co
 	executor := NewPlaywrightTargetExecutor(resources.NodeBinary, resources.HelperPath, resources.ProfileDir)
 	executor.CDPURL, executor.TabID, executor.BrowserContextID, executor.ManagedAttachment = profile.endpoint, chosen.ID, chosen.ProfileID, true
 	executor.DownloadDir = filepath.Join(resources.ProfileDir, connection.ManagedProfileID, "downloads")
+	executor.sourceHost, err = r.browserSourceHostLocked(ctx)
+	if err != nil {
+		return TargetDescriptor{}, err
+	}
 	profiles, err := r.managedProfilesLocked()
 	if err != nil {
 		_ = executor.Close()
@@ -337,11 +345,18 @@ func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, co
 	return target, r.registry.Register(target)
 }
 func (s *Service) ManagedBrowserProfiles(ctx context.Context, meta *session.Meta, name string) ([]ComputerManagedProfile, error) {
+	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
+	if !ok {
+		return nil, errors.New("computer runtime unavailable")
+	}
+	return host.ManagedBrowserProfiles(ctx, meta, name)
+}
+
+func (host *ComputerUseRuntime) ManagedBrowserProfiles(ctx context.Context, meta *session.Meta, name string) ([]ComputerManagedProfile, error) {
 	if err := requireRWX(meta); err != nil {
 		return nil, err
 	}
-	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
-	if !ok {
+	if host == nil {
 		return nil, errors.New("computer runtime unavailable")
 	}
 	host.connectMu.Lock()
@@ -378,11 +393,18 @@ func (s *Service) ManagedBrowserProfiles(ctx context.Context, meta *session.Meta
 	return append(profiles, profile), nil
 }
 func (s *Service) ManagedBrowserTabs(ctx context.Context, meta *session.Meta, profileID string) ([]ComputerBrowserTab, error) {
+	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
+	if !ok {
+		return nil, errors.New("computer runtime unavailable")
+	}
+	return host.ManagedBrowserTabs(ctx, meta, profileID)
+}
+
+func (host *ComputerUseRuntime) ManagedBrowserTabs(ctx context.Context, meta *session.Meta, profileID string) ([]ComputerBrowserTab, error) {
 	if err := requireRWX(meta); err != nil {
 		return nil, err
 	}
-	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
-	if !ok {
+	if host == nil {
 		return nil, errors.New("computer runtime unavailable")
 	}
 	host.connectMu.Lock()
@@ -391,5 +413,10 @@ func (s *Service) ManagedBrowserTabs(ctx context.Context, meta *session.Meta, pr
 	if err != nil {
 		return nil, err
 	}
-	return profile.call(ctx, "inventory")
+	tabs, err := profile.call(ctx, "inventory")
+	if err != nil {
+		return nil, err
+	}
+	tabs, err = host.browserInventoryPrivacy(ctx, profile.endpoint, tabs)
+	return slices.DeleteFunc(tabs, func(tab ComputerBrowserTab) bool { return tab.Private }), err
 }

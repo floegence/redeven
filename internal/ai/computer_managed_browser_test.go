@@ -64,6 +64,9 @@ func TestManagedBrowserProfilesShareOnlyTheirOwnLogin(t *testing.T) {
 	if err != nil || !target.Ready {
 		t.Fatalf("prepare: %+v %v", target, err)
 	}
+	if executor := runtime.executors[target.ID].(*PlaywrightTargetExecutor); executor.clients[target.ID].cmd != nil {
+		t.Fatal("managed AI target started a separate per-page helper instead of the shared source host")
+	}
 	navigate := func(targetID, url string) {
 		t.Helper()
 		args, _ := json.Marshal(map[string]string{"url": url})

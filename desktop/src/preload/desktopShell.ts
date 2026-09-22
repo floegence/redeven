@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { BROWSER_PROJECTION_PREPARE_CHANNEL } from '../shared/browserProjectionIPC';
 import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRESS, type HostApplicationComponentsRequest, type HostApplicationComponentsResult, type HostApplicationComponentsProgress } from '../shared/hostApplicationComponents';
 import { HOST_APPLICATION_PREPARATION_CHANNEL, HOST_APPLICATION_PREPARATION_CLOSED_CHANNEL, type HostApplicationPreparationRequest, type HostApplicationPreparationResult } from '../shared/hostApplicationPreparation';
 
@@ -37,6 +38,7 @@ import {
 
 export function bootstrapDesktopShellBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopShell', {
+    prepareBrowserWindow: async (url: string): Promise<boolean> => (await ipcRenderer.invoke(BROWSER_PROJECTION_PREPARE_CHANNEL, { url })) === true,
     openConnectionCenter: async (): Promise<void> => {
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, { kind: 'connection_center' });
     },

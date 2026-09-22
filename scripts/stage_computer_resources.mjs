@@ -52,30 +52,30 @@ export function stageComputerResources(destination, platform = process.platform,
     copy(path.join(downloadRoot, prefix, 'LICENSE'), 'NODE_LICENSE');
     if (nativeTarget && execFileSync(path.join(destination, 'node'), ['--version'], { encoding: 'utf8' }).trim() !== `v${expectedNode}`) throw new Error('Bundled Node version mismatch.');
   } finally { rmSync(downloadRoot, { recursive: true, force: true }); }
-  for (const file of ['redevenComputerHost.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'redevenComputerScript.mjs']) {
+  for (const file of ['redevenComputerHost.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'redevenBrowserHost.mjs', 'computerBrowserHost.mjs', 'computerManagedDownloads.mjs', 'computerBrowserLineage.mjs', 'computerExtensionTransport.mjs', 'computerBrowserSource.mjs', 'computerBrowserViews.mjs', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'redevenComputerScript.mjs']) {
     copy(path.join(repo, 'internal/envapp/ui_src/scripts', file), file);
   }
   const copiedPackages = new Map();
   function copyRuntimePackage(name, resolveFrom) {
-    // Several QuickJS packages intentionally do not export package.json.
-    // Resolve their public entry, then locate that exact package's metadata.
-    let directory = path.dirname(realpathSync(resolveFrom.resolve(name)));
-    while (!existsSync(path.join(directory, 'package.json')) || JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8')).name !== name) {
-      const parent = path.dirname(directory);
-      if (parent === directory) throw new Error(`Runtime package metadata missing: ${name}`);
-      directory = parent;
-    }
-    const packageFile = path.join(directory, 'package.json');
+    // Package metadata is needed for staging, not a CommonJS entrypoint.
+    // ESM-only SDKs and packages with private manifests use the same installed
+    // dependency search paths, including pnpm's resolved symlink graph.
+    const packageFile = (resolveFrom.resolve.paths(name) ?? [])
+      .map(directory => path.join(directory, name, 'package.json'))
+      .find(candidate => existsSync(candidate));
+    if (!packageFile) throw new Error(`Runtime package metadata missing: ${name}`);
     const metadata = JSON.parse(readFileSync(packageFile, 'utf8'));
+    if (metadata.name !== name) throw new Error(`Runtime package identity mismatch: ${name}`);
     if (copiedPackages.has(name)) {
       if (copiedPackages.get(name) !== metadata.version) throw new Error(`Conflicting runtime dependency: ${name}`);
       return;
     }
     copiedPackages.set(name, metadata.version);
     copy(path.dirname(packageFile), `node_modules/${name}`);
-    for (const dependency of Object.keys(metadata.dependencies || {})) copyRuntimePackage(dependency, createRequire(packageFile));
+    for (const dependency of Object.keys(metadata.dependencies || {})) copyRuntimePackage(dependency, createRequire(realpathSync(packageFile)));
   }
   copyRuntimePackage('quickjs-emscripten', requireUI);
+  copyRuntimePackage('@floegence/floebrowser', requireUI);
   for (const name of ['playwright', 'playwright-core']) {
     const packageFile = name === 'playwright'
       ? requireUI.resolve(`${name}/package.json`)

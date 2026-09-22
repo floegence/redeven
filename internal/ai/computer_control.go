@@ -18,6 +18,7 @@ type computerTargetControl struct {
 	turnID   string
 	runID    string
 	pause    *InteractionSafetyDecision
+	browser  *browserTargetLease
 }
 
 // The Runtime owns the barrier. Helpers report observations, not a second
@@ -124,6 +125,10 @@ func (r *ComputerUseRuntime) acquireComputerControl(ctx context.Context, call Ta
 	}
 	control.mu.Lock()
 	defer control.mu.Unlock()
+	if control.browser != nil {
+		unlock()
+		return nil, nil, computerTargetFailure(call, "TARGET_IN_USE")
+	}
 	if call.liveFrame && !call.controlReturn && !call.userInput && control.threadID == "" {
 		unlock()
 		return nil, nil, computerTargetFailure(call, "TARGET_NOT_ALLOWED")

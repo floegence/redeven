@@ -8,12 +8,18 @@ import (
 	"path/filepath"
 
 	"github.com/floegence/redeven/internal/browserinstall"
+	"github.com/floegence/redeven/internal/browserstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
 // ConfigureManagedBrowser is called once by the product runtime before serving.
 // Helpers remain immutable; downloaded browsers and preferences live in state.
 func (r *ComputerUseRuntime) ConfigureManagedBrowser(stateDirectory string) {
+	if r.browserStore != nil {
+		_ = r.browserStore.Close()
+		r.browserStore = nil
+	}
+	r.browserStore, r.browserStoreErr = browserstore.Open(filepath.Join(stateDirectory, "browser.sqlite"))
 	pkg, err := browserinstall.NativePackage()
 	if err == nil {
 		r.browserInstallation, err = browserinstall.New(filepath.Join(stateDirectory, "browser"), pkg)
@@ -40,25 +46,32 @@ func (r *ComputerUseRuntime) checkManagedTarget(targetID string) error {
 	}
 	return nil
 }
-func (s *Service) browserInstaller(meta *session.Meta) (*ComputerUseRuntime, error) {
+func (host *ComputerUseRuntime) browserInstaller(meta *session.Meta) (*ComputerUseRuntime, error) {
 	if err := requireRWX(meta); err != nil {
 		return nil, err
 	}
-	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
-	if !ok || host.browserInstallation == nil {
+	if host == nil || host.browserInstallation == nil {
 		return nil, errors.New("browser installer unavailable")
 	}
 	return host, nil
 }
-func (s *Service) ComputerBrowserInstallation(_ context.Context, meta *session.Meta) (browserinstall.Status, error) {
-	host, err := s.browserInstaller(meta)
+
+func (s *Service) browserInstaller(meta *session.Meta) (*ComputerUseRuntime, error) {
+	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
+	if !ok {
+		return nil, errors.New("browser installer unavailable")
+	}
+	return host.browserInstaller(meta)
+}
+func (r *ComputerUseRuntime) ComputerBrowserInstallation(_ context.Context, meta *session.Meta) (browserinstall.Status, error) {
+	host, err := r.browserInstaller(meta)
 	if err != nil {
 		return browserinstall.Status{}, err
 	}
 	return host.browserInstallation.Snapshot(), nil
 }
-func (s *Service) SetComputerBrowserEnabled(_ context.Context, meta *session.Meta, enabled bool) (browserinstall.Status, error) {
-	host, err := s.browserInstaller(meta)
+func (r *ComputerUseRuntime) SetComputerBrowserEnabled(_ context.Context, meta *session.Meta, enabled bool) (browserinstall.Status, error) {
+	host, err := r.browserInstaller(meta)
 	if err != nil {
 		return browserinstall.Status{}, err
 	}
@@ -86,8 +99,8 @@ type ComputerBrowserInstallRequest struct {
 	Data        string `json:"data,omitempty"`
 }
 
-func (s *Service) InstallComputerBrowser(_ context.Context, meta *session.Meta, request ComputerBrowserInstallRequest) (browserinstall.Status, error) {
-	host, err := s.browserInstaller(meta)
+func (r *ComputerUseRuntime) InstallComputerBrowser(_ context.Context, meta *session.Meta, request ComputerBrowserInstallRequest) (browserinstall.Status, error) {
+	host, err := r.browserInstaller(meta)
 	if err != nil {
 		return browserinstall.Status{}, err
 	}
@@ -112,4 +125,28 @@ func (s *Service) InstallComputerBrowser(_ context.Context, meta *session.Meta, 
 	default:
 		return browserinstall.Status{}, errors.New("invalid browser installation action")
 	}
+}
+
+func (s *Service) ComputerBrowserInstallation(ctx context.Context, meta *session.Meta) (browserinstall.Status, error) {
+	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
+	if !ok {
+		return browserinstall.Status{}, errors.New("browser installer unavailable")
+	}
+	return host.ComputerBrowserInstallation(ctx, meta)
+}
+
+func (s *Service) SetComputerBrowserEnabled(ctx context.Context, meta *session.Meta, enabled bool) (browserinstall.Status, error) {
+	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
+	if !ok {
+		return browserinstall.Status{}, errors.New("browser installer unavailable")
+	}
+	return host.SetComputerBrowserEnabled(ctx, meta, enabled)
+}
+
+func (s *Service) InstallComputerBrowser(ctx context.Context, meta *session.Meta, request ComputerBrowserInstallRequest) (browserinstall.Status, error) {
+	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
+	if !ok {
+		return browserinstall.Status{}, errors.New("browser installer unavailable")
+	}
+	return host.InstallComputerBrowser(ctx, meta, request)
 }

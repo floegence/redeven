@@ -352,6 +352,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	hostApps := hostapps.New(stateAbs, agentHomeDir, pfSvc)
+	browserRuntime, _ := opts.ComputerUseExecutor.(*ai.ComputerUseRuntime)
 	appSrv, err := appserver.New(appserver.Options{
 		HostApplications:      hostApps,
 		Logger:                logger,
@@ -361,6 +362,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ManagedWebServices:    managedSvc,
 		ContainerResources:    containerResourceSvc,
 		AIServiceProvider:     aiReady,
+		BrowserRuntime:        browserRuntime,
 		Notes:                 notesSvc,
 		WorkbenchLayout:       workbenchLayoutSvc,
 		Terminal:              opts.Terminal,

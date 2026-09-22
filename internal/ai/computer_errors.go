@@ -94,7 +94,7 @@ func computerKnownRejection(err error) bool {
 		return false
 	}
 	switch failure.code {
-	case "target_observation_unavailable", "stale_reference", "ambiguous_element", "element_not_found", "condition_timeout", "target_capability_unavailable", "invalid_computer_arguments", "target_not_allowed", "interaction_takeover_required", "target_permission_required":
+	case "target_in_use", "target_observation_unavailable", "stale_reference", "ambiguous_element", "element_not_found", "condition_timeout", "target_capability_unavailable", "invalid_computer_arguments", "target_not_allowed", "interaction_takeover_required", "target_permission_required":
 		return true
 	default:
 		return false

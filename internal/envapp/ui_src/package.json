@@ -37,7 +37,7 @@
     "@floegence/floe-webapp-core": "0.75.0",
     "@floegence/floe-webapp-protocol": "0.75.0",
     "@floegence/floeterm-terminal-web": "0.19.2",
-    "@floegence/flowersec-core": "5.3.1",
+    "@floegence/flowersec-core": "5.4.1",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz",
     "@floegence/redevplugin-contracts": "3.0.32",
     "@floegence/redevplugin-ui": "3.0.32",
@@ -60,10 +60,11 @@
     "shiki": "^3.22.0",
     "solid-js": "^1.9.3",
     "solid-motionone": "^1.0.4",
-    "thinking-orbs": "0.3.1"
+    "thinking-orbs": "0.3.1",
+    "@floegence/floebrowser": "0.1.5"
   },
   "overrides": {
-    "@floegence/flowersec-core": "5.3.1",
+    "@floegence/flowersec-core": "5.4.1",
     "@babel/core": "^7.29.7",
     "brace-expansion": "^5.0.9",
     "dompurify": "^3.4.13",
@@ -85,7 +86,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@floegence/flowersec-core": "5.3.1",
+      "@floegence/flowersec-core": "5.4.1",
       "@babel/core": "^7.29.7",
       "brace-expansion": "^5.0.9",
       "dompurify": "^3.4.13",
@@ -126,7 +127,7 @@
     "globals": "^17.4.0",
     "js-yaml": "^4.3.2",
     "jsdom": "^26.1.0",
-    "playwright": "^1.57.0",
+    "playwright": "^1.63.0",
     "pngjs": "7.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

@@ -459,6 +459,8 @@ import {
   type DesktopTrackedWindow,
 } from './windowRecord';
 import { resolveDesktopWindowSpec } from './windowSpec';
+import { BrowserProjectionWindows } from './browserProjectionWindows';
+import { BROWSER_PROJECTION_PREPARE_CHANNEL } from '../shared/browserProjectionIPC';
 import {
   attachDesktopWindowChromeBroadcast,
   buildDesktopWindowChromeOptions,
@@ -979,6 +981,7 @@ type CreateBrowserWindowArgs = Readonly<{
 }>;
 
 const utilityWindows = new Map<DesktopUtilityWindowKind, DesktopTrackedWindow>();
+const browserProjectionWindows = new BrowserProjectionWindows(options => new BrowserWindow(options));
 const hostApplicationPreparations = new HostApplicationPreparationWindows<DesktopTrackedWindow>(
   record => Boolean(liveTrackedBrowserWindow(record)),
   record => liveTrackedBrowserWindow(record)?.close(),
@@ -8193,6 +8196,8 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
 
   if (args.onWindowOpen) {
     win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+      const projection = browserProjectionWindows.consume(win, { url });
+      if (projection) return projection;
       args.onWindowOpen?.(url, win, frameName);
       return { action: 'deny' };
     });
@@ -18525,6 +18530,12 @@ if (!app.requestSingleInstanceLock()) {
         message: error instanceof Error ? error.message : String(error),
       };
     }
+  });
+  ipcMain.handle(BROWSER_PROJECTION_PREPARE_CHANNEL, (event, request) => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    const parent = BrowserWindow.fromWebContents(event.sender);
+    if (!record || !parent || event.senderFrame !== event.sender.mainFrame || record.root_window.webContentsID !== event.sender.id) return false;
+    return browserProjectionWindows.prepare(parent, request?.url);
   });
   ipcMain.handle(DESKTOP_SHELL_OPEN_CODESPACE_WINDOW_CHANNEL, async (event, request): Promise<DesktopShellOpenCodespaceWindowResponse> => {
     const normalized = normalizeDesktopShellOpenCodespaceWindowRequest(request);
