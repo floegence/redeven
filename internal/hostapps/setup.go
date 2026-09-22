@@ -12,6 +12,7 @@ import (
 
 type SetupPackage struct {
 	ID             string `json:"id"`
+	Digest         string `json:"digest"`
 	Architecture   string `json:"architecture"`
 	SizeBytes      int64  `json:"size_bytes"`
 	InstalledBytes int64  `json:"installed_bytes"`
@@ -43,7 +44,7 @@ func (m *Manager) setupManager() (*nativeapps.Manager, error) {
 }
 func setupView(manager *nativeapps.Manager, owner string) SetupStatus {
 	pkg := manager.Package()
-	return SetupStatus{Status: manager.Snapshot(owner), Package: &SetupPackage{pkg.ID, pkg.Architecture, pkg.SizeBytes, pkg.InstalledBytes}}
+	return SetupStatus{Status: manager.Snapshot(owner), Package: &SetupPackage{pkg.ID, pkg.Digest(), pkg.Architecture, pkg.SizeBytes, pkg.InstalledBytes}}
 }
 func (m *Manager) SetupStatus(owner string) (SetupStatus, error) {
 	manager, err := m.setupManager()
@@ -63,10 +64,13 @@ func (m *Manager) WatchSetup() (<-chan struct{}, func(), error) {
 	changes, stop := manager.Watch()
 	return changes, stop, nil
 }
-func (m *Manager) StartSetup(owner, requestID, source string, size int64) (SetupStatus, error) {
+func (m *Manager) StartSetup(owner, requestID, source string, size int64, digest string) (SetupStatus, error) {
 	manager, err := m.setupManager()
 	if err != nil {
 		return SetupStatus{}, err
+	}
+	if digest != "" && digest != manager.Package().Digest() {
+		return setupView(manager, owner), ErrInvalid
 	}
 	_, err = manager.Start(owner, requestID, source, size)
 	return setupView(manager, owner), err
@@ -95,15 +99,36 @@ func (m *Manager) CompleteSetup(owner, id string) (SetupStatus, error) {
 	_, err = manager.CompleteUpload(owner, id)
 	return setupView(manager, owner), err
 }
+
+type SetupTransferPlan = nativeapps.TransferPlan
+
+func (m *Manager) SetupPlan(ctx context.Context, _ string) (SetupTransferPlan, error) {
+	manager, err := m.setupManager()
+	if err != nil {
+		return SetupTransferPlan{}, err
+	}
+	return manager.Plan(ctx)
+}
+
+func resolveManagedTools(manager *nativeapps.Manager, digest string) (hostTools, error) {
+	root, err := manager.DirectoryFor(digest)
+	if err != nil {
+		return hostTools{}, err
+	}
+	tools, err := nativeapps.ResolveTools(root)
+	if err != nil {
+		return hostTools{}, err
+	}
+	return hostTools{xpra: tools.Xpra, python: tools.Python, xvfb: tools.Xvfb, dbus: tools.DBus, html: tools.HTML, managed: &tools, componentDigest: digest}, nil
+}
+
 func (m *Manager) tools(ctx context.Context) (Availability, hostTools) {
 	if runtime.GOOS == "linux" {
 		manager, err := m.setupManager()
 		if err == nil {
-			root, err := manager.Directory()
-			if err == nil {
-				tools, err := nativeapps.ResolveTools(root)
-				if err == nil {
-					return Availability{Supported: true, Ready: true}, hostTools{xpra: tools.Xpra, python: tools.Python, xvfb: tools.Xvfb, dbus: tools.DBus, html: tools.HTML, managed: &tools}
+			if installed := manager.Snapshot("").Installed; installed != nil && installed.Ready {
+				if tools, err := resolveManagedTools(manager, installed.Digest); err == nil {
+					return Availability{Supported: true, Ready: true}, tools
 				}
 			}
 		}

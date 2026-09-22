@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { HostApplicationComponentsProgress, HostApplicationComponentsResult } from '../shared/hostApplicationComponents';
+import { isHostApplicationTransferPlan, type HostApplicationTransferPlan, type HostApplicationComponentsProgress, type HostApplicationComponentsResult } from '../shared/hostApplicationComponents';
 
 type Acquisition = { controller: AbortController; directory: string; file: string; size: number; finished: Promise<void>; finish: () => void };
 // This adapter delegates acquisition/integrity to the bundled Runtime's released
@@ -17,20 +17,22 @@ export class HostApplicationComponents {
     if (entry.directory) await fs.rm(entry.directory, { recursive: true, force: true });
     if (this.entries.get(owner) === entry) this.entries.delete(owner);
   }
-  async acquire(owner: number, architecture: 'amd64' | 'arm64', progress: (value: HostApplicationComponentsProgress) => void): Promise<HostApplicationComponentsResult> {
+  async acquire(owner: number, architecture: 'amd64' | 'arm64', progress: (value: HostApplicationComponentsProgress) => void, plan?: HostApplicationTransferPlan): Promise<HostApplicationComponentsResult> {
+    if (plan && (!isHostApplicationTransferPlan(plan) || plan.architecture !== architecture)) return { ok: false, error: 'target_mismatch' };
     if (this.entries.has(owner)) return { ok: false };
     let finish!: () => void;
     const finished = new Promise<void>(resolve => { finish = resolve; });
     const entry: Acquisition = { controller: new AbortController(), directory: '', file: '', size: 0, finished, finish };
     this.entries.set(owner, entry);
     let ready = false;
+    let targetMismatch = false;
     try {
       await fs.mkdir(this.root(), { recursive: true, mode: 0o700 });
       entry.directory = await fs.mkdtemp(path.join(this.root(), 'transfer-'));
       entry.file = path.join(entry.directory, 'components.zip');
       if (entry.controller.signal.aborted) return { ok: false };
       await new Promise<void>((resolve, reject) => {
-        const child = spawn(this.executable(), ['host-application-package', '--arch', architecture, '--cache', path.join(this.root(), 'cache'), '--output', entry.file], { signal: entry.controller.signal, stdio: ['ignore', 'pipe', 'ignore'] });
+        const child = spawn(this.executable(), ['host-application-package', '--arch', architecture, '--cache', path.join(this.root(), 'cache'), '--output', entry.file, ...(plan ? ['--plan', JSON.stringify(plan)] : [])], { signal: entry.controller.signal, stdio: ['ignore', 'pipe', 'ignore'] });
         let pending = '';
         child.stdout.setEncoding('utf8');
         child.stdout.on('data', (chunk: string) => {
@@ -49,13 +51,16 @@ export class HostApplicationComponents {
         child.once('error', error => { failure = error; });
         // Abort reports an error before the process has necessarily exited.
         // Ownership and temporary files must survive until close confirms exit.
-        child.once('close', code => !failure && code === 0 ? resolve() : reject(failure ?? new Error('Component acquisition failed')));
+        child.once('close', code => {
+          targetMismatch = code === 3;
+          if (!failure && code === 0) resolve(); else reject(failure ?? new Error('Component acquisition failed'));
+        });
       });
       if (this.entries.get(owner) !== entry || entry.controller.signal.aborted) return { ok: false };
       entry.size = (await fs.stat(entry.file)).size;
       ready = true;
       return { ok: true, size: entry.size };
-    } catch { return { ok: false }; }
+    } catch { return { ok: false, ...(targetMismatch ? { error: 'target_mismatch' as const } : {}) }; }
     finally {
       try {
         if (!ready && entry.directory) await fs.rm(entry.directory, { recursive: true, force: true });

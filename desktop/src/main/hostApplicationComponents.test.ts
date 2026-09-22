@@ -28,6 +28,24 @@ describe.skipIf(process.platform === 'win32')('Desktop component acquisition ada
     expect(await acquisition).toEqual({ ok: false });
     expect((await fs.readdir(path.join(root, 'components'))).filter(name => name.startsWith('transfer-'))).toEqual([]);
   });
+  it('passes the exact receiver plan to the fixed Runtime and reports an unknown catalog', async () => {
+    const { manager, root } = await fixture();
+    await fs.writeFile(path.join(root, 'runtime'), `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(path.join(root, 'arguments'))},JSON.stringify(process.argv.slice(2)));process.exit(3);\n`, { mode: 0o700 });
+    const plan = { package_digest: 'a'.repeat(64), architecture: 'arm64' as const, missing_artifacts: ['b'.repeat(64)], missing_bytes: 50 };
+    expect(await manager.acquire(10, 'arm64', () => {}, plan)).toEqual({ ok: false, error: 'target_mismatch' });
+    const args: string[] = JSON.parse(await fs.readFile(path.join(root, 'arguments'), 'utf8'));
+    expect(JSON.parse(args[args.indexOf('--plan') + 1])).toEqual(plan);
+    expect(args.slice(0, 3)).toEqual(['host-application-package', '--arch', 'arm64']);
+    expect(await manager.read(10, 0)).toEqual({ ok: false });
+    expect((await fs.readdir(path.join(root, 'components'))).filter(name => name.startsWith('transfer-'))).toEqual([]);
+  });
+  it('rejects cross-architecture and path-like artifact selectors before starting acquisition', async () => {
+    const { manager, root } = await fixture();
+    const plan = { package_digest: 'a'.repeat(64), architecture: 'arm64' as const, missing_artifacts: ['b'.repeat(64)], missing_bytes: 50 };
+    expect(await manager.acquire(10, 'amd64', () => {}, plan)).toEqual({ ok: false, error: 'target_mismatch' });
+    expect(await manager.acquire(10, 'arm64', () => {}, { ...plan, missing_artifacts: ['../../payload'] })).toEqual({ ok: false, error: 'target_mismatch' });
+    await expect(fs.stat(path.join(root, 'components'))).rejects.toThrow();
+  });
 });
 
 it.skipIf(process.platform === 'win32')('waits for the exact acquisition process to exit before cancellation completes', async () => {

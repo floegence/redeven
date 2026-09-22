@@ -6252,6 +6252,24 @@
     }
   },
   "hostApplications": {
+    "update": {
+      "unsupported": "此运行时无法使用已安装的组件版本，原有文件已保留。请先更新运行时再继续。",
+      "available": "组件有更新",
+      "view": "查看更新",
+      "title": "更新主机应用组件",
+      "description": "当前组件仍可使用，更新期间也可以继续使用应用。",
+      "start": "更新组件",
+      "local": "使用本地缓存更新，无需下载或上传。",
+      "installedVersion": "已安装",
+      "targetVersion": "推荐版本",
+      "stabilityFix": "推荐版本修复了已知的连接稳定性问题。运行中的应用会继续使用原组件，直到应用重新启动。",
+      "failedRetained": "本次更新未完成。当前组件和正在运行的应用仍可使用。",
+      "damaged": "已安装的组件需要修复，其文件已保留。",
+      "repair": "修复组件",
+      "cacheChanged": "准备期间缓存文件发生了变化，请重新检查可用文件后重试。",
+      "desktopMismatch": "当前 Desktop 无法准备所需组件，请更新 Desktop 或选择主机下载。",
+      "checkingSize": "下载前计算"
+    },
     "linuxRunningHint": "停止共享后，应用会继续运行。你可以从此列表重新连接。",
     "stopSharingDescription": "断开此应用与 Redeven 的连接。应用窗口和未保存的工作会保留。",
     "closeAllWindows": "关闭所有窗口",

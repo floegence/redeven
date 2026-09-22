@@ -6241,6 +6241,24 @@
     }
   },
   "hostApplications": {
+    "update": {
+      "unsupported": "Este ambiente de execução não pode usar a versão instalada dos componentes. Os arquivos foram preservados. Atualize o ambiente de execução antes de continuar.",
+      "available": "Atualização de componentes disponível",
+      "view": "Ver atualização",
+      "title": "Atualizar componentes dos aplicativos do host",
+      "description": "Os componentes instalados continuam disponíveis. Você pode usar os aplicativos durante a atualização.",
+      "start": "Atualizar componentes",
+      "local": "Usar arquivos em cache. Não é necessário baixar nem enviar arquivos.",
+      "installedVersion": "Instalados",
+      "targetVersion": "Versão recomendada",
+      "stabilityFix": "A versão recomendada corrige problemas conhecidos de conexão. Os aplicativos em execução usam os componentes atuais até serem reiniciados.",
+      "failedRetained": "A atualização não foi concluída. Os componentes instalados e os aplicativos em execução continuam disponíveis.",
+      "damaged": "Os componentes instalados precisam de reparo. Seus arquivos foram preservados.",
+      "repair": "Reparar componentes",
+      "cacheChanged": "Os arquivos em cache mudaram. Verifique os arquivos disponíveis e tente novamente.",
+      "desktopMismatch": "Este Desktop não pode preparar os componentes necessários. Atualize o Desktop ou escolha o download no host.",
+      "checkingSize": "Calculado antes do download"
+    },
     "linuxRunningHint": "Os aplicativos continuam em execução após interromper o compartilhamento. Reconecte pela lista.",
     "stopSharingDescription": "Desconectar este aplicativo do Redeven. Suas janelas e o trabalho não salvo permanecem abertos.",
     "closeAllWindows": "Fechar todas as janelas",

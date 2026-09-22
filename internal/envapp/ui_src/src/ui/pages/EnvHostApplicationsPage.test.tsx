@@ -3,17 +3,21 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ cacheScope: '', full: true, running: vi.fn(), quit: vi.fn(), terminate: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
+const state = vi.hoisted(() => ({ cacheScope: '', full: true, running: vi.fn(), quit: vi.fn(), terminate: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupPlan: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
   resourceCacheScope: () => state.cacheScope,
   env_id: () => 'host', localRuntime: () => ({}),
 }) }));
-vi.mock('../services/hostApplicationsApi', async importOriginal => ({ ...await importOriginal<object>(), cancelHostApplicationSetup: state.setupCancel, uploadHostApplicationSetup: state.setupUpload, getHostApplicationSetup: state.setupStatus, startHostApplicationSetup: state.setupStart, observeHostApplicationSetup: state.setupObserve, listHostApplications: state.catalog, listRunningHostApplications: state.running, quitHostApplication: state.quit, terminateHostApplication: state.terminate, detachHostApplication: state.detach, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, stopHostApplication: state.stop, addHostApplication: state.add, requestHostApplicationPermission: state.permission }));
+vi.mock('../services/hostApplicationsApi', async importOriginal => ({ ...await importOriginal<object>(), cancelHostApplicationSetup: state.setupCancel, uploadHostApplicationSetup: state.setupUpload, getHostApplicationSetup: state.setupStatus, getHostApplicationTransferPlan: state.setupPlan, startHostApplicationSetup: state.setupStart, observeHostApplicationSetup: state.setupObserve, listHostApplications: state.catalog, listRunningHostApplications: state.running, quitHostApplication: state.quit, terminateHostApplication: state.terminate, detachHostApplication: state.detach, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, stopHostApplication: state.stop, addHostApplication: state.add, requestHostApplicationPermission: state.permission }));
 vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => true }));
 vi.mock('../services/desktopSessionContext', () => ({ readDesktopSessionContextSnapshot: () => state.localMac ? {target_kind: 'local_environment',target_route:'local_host'} : null }));
 vi.mock('../services/webServiceWindows', () => ({ resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
 
+const transferPlan = { package_digest: 'a'.repeat(64), architecture: 'arm64', missing_artifacts: ['b'.repeat(64)], missing_bytes: 100 };
+const installedSetup = { state: 'ready', received_bytes: 0, expected_bytes: 100, can_cancel: false,
+  installed: { id: 'components-r1', digest: 'c'.repeat(64), architecture: 'arm64', contract: 'xpra-6-private-v1', ready: true },
+  update_available: true, package: { id: 'components-r2', digest: transferPlan.package_digest, architecture: 'arm64', size_bytes: 100, installed_bytes: 200 } };
 const app = { id: 'editor.desktop', name: 'Text Editor', description: 'Edit documents', categories: ['Utility'], icon: '', custom: false };
 const forward = { forward: { forward_id: 'one', target_url: 'http://127.0.0.1:40201' }, app_path: '/_redeven_host_app/', ephemeral: true };
 let host: HTMLDivElement;
@@ -27,6 +31,7 @@ beforeEach(() => {
   state.launch.mockResolvedValue({ id: 'session', application: app, state: 'starting', forward });
   state.open.mockResolvedValue(undefined);
   state.running.mockResolvedValue([]); state.quit.mockResolvedValue(undefined); state.terminate.mockResolvedValue(undefined); state.detach.mockResolvedValue(undefined);
+  state.setupPlan.mockResolvedValue(transferPlan);
   state.setupCancel.mockResolvedValue({ state: "cancelled", received_bytes: 0, expected_bytes: 100 });
   state.setupStatus.mockResolvedValue({ state: 'available', received_bytes: 0, expected_bytes: 100, can_cancel: false, package: { id: 'fixture', architecture: 'arm64', size_bytes: 100, installed_bytes: 200 } });
   state.setupStart.mockResolvedValue({ state: 'downloading', operation_id: 'install', received_bytes: 0, expected_bytes: 100, can_cancel: true });
@@ -37,7 +42,97 @@ beforeEach(() => {
 });
 afterEach(() => { dispose?.(); host.remove(); });
 
+function textButton(text: string, root: ParentNode = document) { return [...root.querySelectorAll('button')].find(el => el.textContent === text)!; }
+async function inspectUpdate() {
+  state.setupStatus.mockResolvedValue(installedSetup);
+  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+  expect(state.setupPlan).not.toHaveBeenCalled();
+  textButton('View update').click(); await settle();
+}
+describe('independent component updates', () => {
+  it('updates from a complete local cache with no Desktop acquisition or upload', async () => {
+    window.redevenDesktopShell!.applicationComponents = state.components;
+    state.setupPlan.mockResolvedValue({ ...transferPlan, missing_artifacts: [], missing_bytes: 0 });
+    state.setupStart.mockResolvedValue({ ...installedSetup, state: 'installing', operation_id: 'update', can_cancel: true });
+    await inspectUpdate();
+    expect(document.querySelector('[role=dialog] input[value=desktop]')).toBeNull();
+    textButton('Update components').click(); await settle();
+    expect(state.setupStart).toHaveBeenCalledWith(expect.any(String), 'cache', 0, transferPlan.package_digest);
+    expect(state.components).not.toHaveBeenCalled();
+    expect(state.setupUpload).not.toHaveBeenCalled();
+    expect(button('Open in new window · Text Editor').disabled).toBe(false);
+  });
+  it.each(['installing', 'failed', 'cancelled'])('preserves launch availability during %s', async status => {
+    state.setupStatus.mockResolvedValue({ ...installedSetup, state: status, error_code: status === 'failed' ? 'download_failed' : undefined });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    button('Open in new window · Text Editor').click(); await settle();
+    expect(state.launch).toHaveBeenCalledOnce();
+    expect(state.setupStart).not.toHaveBeenCalled();
+  });
+  it('keeps read-only update inspection separate from installation permission', async () => {
+    state.full = false;
+    await inspectUpdate();
+    expect(textButton('Update components').disabled).toBe(true);
+    textButton('Update components').click();
+    expect(state.setupStart).not.toHaveBeenCalled();
+  });
+  it('reports an old Desktop without changing download method or starting host acquisition', async () => {
+    window.redevenDesktopShell!.applicationComponents = state.components;
+    state.components.mockResolvedValue({ ok: false });
+    await inspectUpdate();
+    selectDownloadMethod('desktop', document.querySelector('[role=dialog]')!);
+    textButton('Update components').click(); await settle();
+    expect(state.components.mock.calls.map(([request]) => request.action)).toEqual(['capabilities', 'cancel']);
+    expect(state.setupStart).not.toHaveBeenCalled();
+    expect(document.querySelector<HTMLInputElement>('[role=dialog] input[value=desktop]')!.checked).toBe(true);
+    expect(document.querySelector('[role=dialog] [role=alert]')!.textContent).toContain('Desktop');
+  });
+  it('uses full offline import without inspecting the cache or invoking Desktop', async () => {
+    await inspectUpdate(); state.setupPlan.mockClear();
+    state.setupStart.mockResolvedValue({ ...installedSetup, state: 'receiving', operation_id: 'offline', can_cancel: true });
+    state.setupUpload.mockResolvedValue({ ...installedSetup, state: 'validating' });
+    const input = document.querySelector<HTMLInputElement>('[role=dialog] input[type=file]')!;
+    const file = new File([new Uint8Array(100)], 'components.zip');
+    Object.defineProperty(input, 'files', { value: [file] });
+    input.dispatchEvent(new Event('change', { bubbles: true })); await settle();
+    expect(state.setupStart).toHaveBeenCalledWith(expect.any(String), 'upload', 100, transferPlan.package_digest);
+    expect(state.setupUpload).toHaveBeenCalledWith('offline', file, expect.any(AbortSignal));
+    expect(state.setupPlan).not.toHaveBeenCalled();
+    expect(state.components).not.toHaveBeenCalled();
+  });
+  it('does not enter Linux setup on macOS', async () => {
+    state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [] });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(state.setupStatus).not.toHaveBeenCalled();
+    expect(state.setupObserve).not.toHaveBeenCalled();
+    expect(state.setupPlan).not.toHaveBeenCalled();
+  });
+  it('distinguishes repair from first installation and rejects an unknown installed version', async () => {
+    requireSetup();
+    state.setupStatus.mockResolvedValue({ ...installedSetup, state: 'failed', installed: { ...installedSetup.installed, ready: false }, installation_error_code: 'installation_damaged' });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(host.textContent).toContain('The installed components need repair');
+    expect(textButton('Repair components').disabled).toBe(false);
+    state.setupObserve.mock.calls[0][0]({ ...installedSetup, installed: undefined, installation_error_code: 'unsupported_installation' }); await settle();
+    expect(host.textContent).toContain('This runtime cannot use the installed component version');
+    expect(host.querySelector('input[type=file]')).toBeNull();
+    expect(textButton('Prepare').disabled).toBe(true);
+  });
+});
+
 describe('host application interaction', () => {
+  it('keeps installed applications usable and offers an optional component update', async () => {
+    state.setupStatus.mockResolvedValue({ state: 'ready', received_bytes: 0, expected_bytes: 100, can_cancel: false,
+      installed: { id: 'components-r1', digest: 'old', architecture: 'arm64', contract: 'xpra-6-private-v1', ready: true },
+      update_available: true, package: { id: 'components-r2', digest: 'new', architecture: 'arm64', size_bytes: 100, installed_bytes: 200 } });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(host.textContent).toContain('Component update available');
+    expect(host.textContent).not.toContain('Prepare host applications');
+    expect(state.setupStart).not.toHaveBeenCalled();
+    button('Open in new window · Text Editor').click(); await settle();
+    expect(state.launch).toHaveBeenCalledTimes(1);
+    expect(state.setupStart).not.toHaveBeenCalled();
+  });
   it('opens the authorized forward in a Desktop window and resumes a running session', async () => {
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
     expect(state.catalog).toHaveBeenCalledTimes(1);
@@ -223,14 +318,14 @@ it('reuses the exact admission after a lost start response and reconnects observ
 });
 it('downloads through Desktop only when selected and verifies on the host', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
- state.components.mockImplementation(async (request: { action: string }) => request.action === 'acquire' ? { ok: true, size: 180 } : { ok: true, data: new Uint8Array([1]) });
+ state.components.mockImplementation(async (request: { action: string }) => request.action === 'acquire' ? { ok: true, size: 180, supports_transfer_plan: true } : { ok: true, data: new Uint8Array([1]), supports_transfer_plan: true });
  state.setupStart.mockImplementation(async (_id: string, source: string) => source === 'upload'
   ? { state: 'receiving', operation_id: 'relay', received_bytes: 0, expected_bytes: 180, can_cancel: true }
   : { state: 'downloading', operation_id: 'install', received_bytes: 0, expected_bytes: 100, can_cancel: true });
  state.setupUpload.mockResolvedValue({ state: 'validating', operation_id: 'relay', received_bytes: 180, expected_bytes: 180, can_cancel: true });
  await selectAndPrepare('desktop');
- expect(state.components).toHaveBeenCalledWith({ action: 'acquire', architecture: 'arm64' });
- expect(state.setupStart).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'upload', 180);
+ expect(state.components).toHaveBeenCalledWith({ action: 'acquire', architecture: 'arm64', plan: transferPlan });
+ expect(state.setupStart).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'upload', 180, transferPlan.package_digest);
  expect(state.setupUpload).toHaveBeenCalledWith('relay', expect.objectContaining({ size: 180, read: expect.any(Function) }), expect.any(AbortSignal));
  expect(state.launch).not.toHaveBeenCalled();
 });
@@ -249,7 +344,7 @@ it('resumes the selected remote macOS app in its reserved window after actual au
 
 it('cancels a relay admitted after cancellation without uploading or reopening the application', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
- state.components.mockResolvedValue({ ok: true, size: 180 });
+ state.components.mockResolvedValue({ ok: true, size: 180, supports_transfer_plan: true });
  let receive!: (value: unknown) => void;
  state.setupStart.mockImplementation(async (_id: string, source: string) => source === 'upload' ? new Promise(resolve => { receive = resolve; }) : { state: 'downloading', operation_id: 'install', can_cancel: true });
  await selectAndPrepare('desktop');
@@ -261,7 +356,7 @@ it('cancels a relay admitted after cancellation without uploading or reopening t
 });
 it('resumes an interrupted Desktop transfer into the same host operation', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
- state.components.mockResolvedValue({ ok: true, size: 180 });
+ state.components.mockResolvedValue({ ok: true, size: 180, supports_transfer_plan: true });
  state.setupStatus.mockResolvedValue({ state: 'receiving', operation_id: 'existing-transfer', received_bytes: 50, expected_bytes: 180, can_cancel: true, package: { architecture: 'arm64', size_bytes: 100 } });
  state.setupUpload.mockResolvedValue({ state: 'validating', operation_id: 'existing-transfer', received_bytes: 180, expected_bytes: 180, can_cancel: true });
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
@@ -319,7 +414,7 @@ it('shows both download paths and defaults to host download even inside Desktop'
  expect(hostOption!.closest('label')!.textContent).toContain('Host downloads');
  expect(desktopOption!.closest('label')!.textContent).toContain('Desktop downloads and uploads');
  [...host.querySelectorAll('button')].find(el => el.textContent === 'Prepare')!.click(); await settle();
- expect(state.setupStart).toHaveBeenCalledWith(expect.any(String), 'download', 0);
+ expect(state.setupStart).toHaveBeenCalledWith(expect.any(String), 'download', 0, transferPlan.package_digest);
  expect(state.components).not.toHaveBeenCalled();
  state.setupObserve.mock.calls[0][0]({ state: 'failed', operation_id: 'install', error_code: 'download_failed', package: { architecture: 'arm64' } }); await settle();
  expect(state.components).not.toHaveBeenCalled();
@@ -342,7 +437,7 @@ it('preserves an explicit Desktop choice when opening an application setup dialo
 it('cancels Desktop acquisition before there is a host operation', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
  let finish!: (value: unknown) => void;
- state.components.mockImplementation((request: { action: string }) => request.action === 'acquire' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ok:true}));
+ state.components.mockImplementation((request: { action: string }) => request.action === 'acquire' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ok:true,supports_transfer_plan:true}));
  await selectAndPrepare('desktop');
  [...host.querySelectorAll('button')].find(el => el.textContent === 'Cancel')!.click(); await settle();
  finish({ok:true,size:180}); await settle();
@@ -353,7 +448,7 @@ it('cancels Desktop acquisition before there is a host operation', async () => {
 });
 it('reuses Desktop upload admission after its response is lost', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
- state.components.mockResolvedValue({ok:true,size:180});
+ state.components.mockResolvedValue({ok:true,size:180,supports_transfer_plan:true});
  state.setupStart.mockRejectedValue(new Error('Response lost'));
  await selectAndPrepare('desktop');
  preparationButton().click(); await settle();

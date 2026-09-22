@@ -1,7 +1,7 @@
 ---
 type: Runtime Contract
 title: Managed host application preparation
-description: One-action acquisition, verification, cancellation, offline recovery and same-window launch continuation for native host applications.
+description: Compatible installed components, independent user-directed updates, incremental transfer and same-window first-use preparation.
 tags: [runtime, desktop, applications, linux, security]
 timestamp: 2026-09-22T00:00:00Z
 ---
@@ -12,51 +12,57 @@ verification, staging, self-check and activation. Redeven owns authenticated pro
 routes, private state placement, localized preparation and the user's pending app
 opening. Applications execute on the host. Preparation never requires a container,
 VM, package-manager command, custom software source, or administrator password.
-Only a verified installation whose real window, decoded pixels, fresh input and
-WebSocket disconnect/reconnect checks pass self-check becomes ready. Failure preserves an explicit retry boundary;
-closing a pending viewer prevents its automatic application opening.
+Runtime updates never depend on component updates. Compatible installed components
+remain usable during an optional update and after failure or cancellation. A new
+installation activates only after verification and real graphical qualification.
+Closing a pending viewer prevents automatic application opening.
 
 # Component ownership and admission
 
-Redeven consumes `github.com/floegence/floe-native-apps` v0.3.1 as a published Go
+Redeven consumes `github.com/floegence/floe-native-apps` v0.4.0 as a published Go
 module, built with the same Go 1.27.1 toolchain. Its embedded catalog pins original
-publisher URLs, archive sizes, SHA-256, licenses and source references. The Runtime accepts no client-provided URL, hash,
+publisher URLs, archive sizes, SHA-256, licenses and source references. The Runtime accepts no client-provided URL, artifact specification,
 catalog, executable, or install destination. The upstream acquires original Alpine
 APK archives and Xpra HTML5 source, retaining archives in a private cache. Native
 binaries are not added to Redeven's source or supplied by a local sibling checkout.
 
-The complete managed toolset lives under the Runtime's
-`host-applications/native-components` state. It carries its own musl ELF loader,
-Python, GIO/GTK, Xpra, Xvfb, D-Bus, X authorization, keyboard data, image loaders and
-fonts. Private wrappers select package-relative resources without setting a global
-library path. Linux amd64 and arm64 use the same acquisition contract regardless
-of whether the host uses glibc or musl. A valid managed installation takes priority;
-otherwise an already compatible complete system stack remains usable. A partial
-managed installation is never mixed with system support components.
-The released catalog revision invalidates the earlier prepared component identity.
-Upstream preparation corrects the pinned decoder before qualification and atomic
-activation; original publisher archives remain unchanged and cached for reuse.
-The same application process must survive repeated WebSocket viewer closures.
-This qualification runs during component preparation, not on every app opening.
+The complete toolset lives under `host-applications/native-components`, with its
+own loader, Python/GIO/GTK, Xpra/Xvfb, D-Bus and graphical resources. Private wrappers
+keep support libraries out of the application's host environment. Linux amd64 and
+arm64 share this contract on glibc and musl hosts. Valid managed components take
+priority; otherwise a complete compatible system stack remains usable. Partial
+managed components are never mixed with system support tools.
+The upstream preserves published r1/r2 identities and their compatibility contract
+independently of the recommended recipe. r1 remains usable but retains its known
+short-frame decoder defect. r2 corrects that defect before qualification; update
+copy describes the stability fix without claiming that old running apps are fixed.
+Recipe revisions are not separately hosted binary bundles: both reuse the same
+original publisher archives. Future SDK upgrades must preserve supported component
+contracts rather than equating readiness with the newest digest.
 
-The GIO application launcher restores the original host tool/library environment
-from upstream's explicit saved map before executing user software. The session's
-private display and D-Bus addresses remain. Actual application metadata, binaries,
-files, toolkit dependencies and OS permissions remain host-owned. This is display
-isolation, not a security sandbox or an application compatibility layer.
+The [host application contract](host-applications.md) owns restoration of the
+application's environment, private display isolation and host-owned dependencies.
 
 # Preparation execution and recovery
 
-Reading preparation status and observing events requires read permission. Starting,
+Reading status, explicitly inspecting a transfer plan and observing events requires read permission. Starting,
 transferring or cancelling requires read/write/execute permission through the same
 origin and session gates as other Host Applications operations. Owner identity
 comes exclusively from authenticated session metadata. The upstream serializes
 writers with its private-root lease and enforces owner-scoped cancellation and
 idempotent request/chunk admission. Redeven does not keep a second durable
-operation store.
+operation store. Installed identity/readiness and operation state are separate:
+launch uses the former, never the update stage. Upstream atomically migrates v1
+preparation records and recognizes only known, complete historical installations.
+Corrupt or unknown records are rejected read-only; damaged installations have a
+repair diagnosis. Startup and page/status reads do not download, hash all archives
+or run graphical qualification.
 
-One explicit preparation action admits download, integrity verification, extraction
-and native qualification. Events report actual acquisition bytes and stable stages;
+One explicit action admits cache verification, missing-file acquisition, extraction
+and native qualification in an independent staging directory. Only qualified
+components atomically replace the active selection. Old directories remain for live
+apps, whose binding follows the [Linux instance contract](linux-application-lifecycle.md).
+Events report actual acquisition bytes and stable stages;
 the UI does not invent percentage progress for installation or validation. The SSE
 observer reads current authoritative snapshots. Losing the observer does not cancel
 installation or replay admission. Reconnection observes current state; an uncertain
@@ -64,16 +70,27 @@ start response reuses its request ID. A Runtime restart reports interrupted work
 requires explicit continuation, reusing verified archives. Invalid archives, disk
 space, filesystem permission, network and graphical self-check failures have
 localized recovery copy. No failure changes SELinux, AppArmor or host privileges.
+Failure or cancellation preserves installed components and running applications.
 
-The preparation page and application dialog visibly offer host download (selected
+With compatible components installed, the application library remains the primary
+surface. An optional update notice opens current/recommended versions, the stability
+fix and actual missing bytes. Inspection is user-directed; dismissing or ignoring
+the notice keeps apps usable. Complete caches use the explicit `cache` source,
+hide download choices and produce no HTTP acquisition or Desktop transfer. Cache
+changes fail explicitly; this source cannot silently start a download.
+
+When files are missing, the page and application dialog offer host download (selected
 by default) and Desktop download-and-transfer. Desktop is disabled with an
 explanation outside its component bridge. The selected method is shared between
 the page and dialog; failures never switch methods automatically. The compact
 preparation surface keeps method descriptions, package size and actions together.
 Users can select Desktop initially or explicitly after a host download fails.
-Desktop acquires the same architecture catalog through its bundled Runtime. It
-transfers original verified archives as a bounded ZIP through the authorized host
-API. The host independently verifies and qualifies them. The initiating Desktop
+Desktop first proves incremental-transfer support, then delegates the exact
+receiver digest, architecture and missing archive identities to its bundled Runtime.
+Unknown targets fail explicitly without switching source or recipe. The released
+SDK creates a bounded ZIP of only missing verified archives. The host independently
+verifies uploaded and cached files together before qualification. Full offline ZIP
+import remains supported. The initiating Desktop
 document owns this local acquisition; navigation or cancellation retires its exact
 subprocess and temporary transfer, including cancellation before host admission.
 Acquisition byte progress is temporary presentation state; host operation status
@@ -88,27 +105,19 @@ The user's local ZIP path is never sent to the host.
 # Window and permission interaction
 
 Selecting an unavailable application presents preparation for that actual app.
-The confirming click reserves its physical Desktop window or synchronous browser
-popup before acquisition. The view uses the original unframed icon, concise stage
-copy, a thin progress indicator, real download progress and reduced-motion support.
-When qualification succeeds, the library refreshes actual metadata and opens the
-app in that same window. Closing the preparation window or leaving its originating
-document retires the launch intention. If a new launch response arrives after its
-window has closed, Redeven ends only the newly created session. Existing sessions
-are not stopped by that race. Installation may finish independently for later use.
+The confirming click reserves its physical Desktop window or browser popup before
+acquisition. The inert view shows the original icon, concise stage copy, real
+progress and reduced-motion support. Successful qualification refreshes metadata
+and opens the app in that same window. Closing the reservation or leaving its
+originating document retires the launch intention; installation may finish for
+later use. A late launch response cannot reopen a closed reservation or terminate
+the surviving application. Reservations belong to the exact document/application
+and cannot be claimed by another document. The
+[Desktop window contract](../desktop/web-service-browser-window.md) owns adoption.
 
-The Desktop reservation is scoped to the exact Env App document and application.
-Another document cannot claim it. It has no preload, application bridge, browser
-address bar or interactive remote content. On adoption, the existing isolated
-application viewer fills the same native window and retains the normal
-[application lifecycle](host-applications.md).
-
-macOS already ships its native helper. Local Desktop opening continues without
-capture permissions. Remote use guides explicit screen-recording and accessibility
-authorization, retains the selected app and resumes after the actual host preflight
-passes. Permission grants still require the host user's macOS interaction; Redeven
-cannot silently grant them. A graphical login remains required, as defined by the
-[macOS contract](macos-host-applications.md).
+macOS never enters Linux component preparation. Its bundled helper, native local
+opening and explicit remote screen-recording/accessibility authorization follow the
+[macOS contract](macos-host-applications.md); a graphical login is still required.
 
 # Evidence
 
@@ -118,4 +127,6 @@ cannot silently grant them. A graphical login remains required, as defined by th
 - `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx`: pending-window continuation and cancellation races.
 - `desktop/src/main/hostApplicationPreparationWindows.test.ts`: exact document ownership and inert presentation.
 - `desktop/src/main/hostApplicationComponents.test.ts` and `cmd/redeven/host_application_package.go`: Desktop relay and released acquisition delegation.
-- [Upstream v0.3.1](https://github.com/floegence/floe-native-apps/releases/tag/v0.3.1): pinned component catalog, integrity/extraction, silent-session options, safe short-frame decoding, monitored application lifetime and native reconnect qualification.
+- `internal/hostapps/component_update_test.go`: authentic r1 update, old process control, migrated recovery and new-instance selection.
+- `internal/envapp/ui_src/src/styles/hostApplicationUpdates.browser.test.tsx`: all themes/locales, narrow dialogs, keyboard use and accessibility.
+- [Upstream v0.4.0](https://github.com/floegence/floe-native-apps/releases/tag/v0.4.0): compatible identities, atomic activation, verified cache plans, incremental ZIPs and native amd64/arm64 legacy-update qualification.

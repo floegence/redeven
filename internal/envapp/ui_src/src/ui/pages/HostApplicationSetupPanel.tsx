@@ -1,7 +1,7 @@
 import { Show } from 'solid-js';
 import { Button, RadioList } from '@floegence/floe-webapp-core/ui';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
-import { hostApplicationSetupActive, type HostApplicationSetup } from '../services/hostApplicationsApi';
+import { hostApplicationSetupActive, type HostApplicationSetup, type HostApplicationTransferPlan } from '../services/hostApplicationsApi';
 
 export function hostApplicationSetupHeading(setup: HostApplicationSetup | null): EnvAppTranslationKey {
   const keys: Partial<Record<HostApplicationSetup['state'], EnvAppTranslationKey>> = {
@@ -18,6 +18,7 @@ export function hostApplicationSetupError(code: string | undefined): EnvAppTrans
     download_failed: 'hostApplications.prepare.networkError', invalid_archive: 'hostApplications.prepare.archiveError',
     disk_full: 'hostApplications.prepare.diskError', permission_denied: 'hostApplications.prepare.accessError',
     validation_failed: 'hostApplications.prepare.validationError', unsupported_platform: 'hostApplications.prepare.unsupported',
+    cache_changed: 'hostApplications.update.cacheChanged', installation_damaged: 'hostApplications.update.damaged', unsupported_installation: 'hostApplications.update.unsupported',
   };
   return keys[code ?? ''] || 'hostApplications.prepare.retryHint';
 }
@@ -29,6 +30,8 @@ export function hostApplicationSetupProgress(setup: HostApplicationSetup | null)
 
 export function HostApplicationSetupPanel(props: {
   setup: HostApplicationSetup | null;
+  plan?: HostApplicationTransferPlan | null;
+  checkingPlan?: boolean;
   allowed: boolean;
   submitting: boolean;
   canRelay: boolean;
@@ -44,21 +47,29 @@ export function HostApplicationSetupPanel(props: {
 }) {
   const i18n = useI18n();
   const active = () => hostApplicationSetupActive(props.setup);
+  const installed = () => props.setup?.installed;
+  const unsupported = () => props.setup?.state === 'unsupported' || props.setup?.installation_error_code === 'unsupported_installation';
+  const local = () => props.plan?.missing_bytes === 0;
   const progress = () => hostApplicationSetupProgress(props.setup);
   const receiving = () => props.setup?.state === 'receiving' && props.setup.can_cancel;
   const canChoose = () => !props.submitting && (!active() || receiving());
-  const canStart = () => props.allowed && !props.submitting && props.setup?.state !== 'unsupported'
-    && (props.downloadMethod === 'desktop' ? props.canRelay : !receiving());
+  const canStart = () => props.allowed && !props.submitting && !props.checkingPlan && !unsupported()
+    && (local() || (props.downloadMethod === 'desktop' ? props.canRelay : !receiving()));
   let fileInput: HTMLInputElement | undefined;
   return <section class="host-apps-preparation" classList={{ "host-apps-preparation-dialog": props.inDialog }} aria-label={i18n.t('hostApplications.prepare.title')}>
     <div class="host-apps-preparation-copy">
       <Show when={!props.inDialog || active() || props.disconnected || ['failed', 'interrupted', 'cancelled', 'unsupported'].includes(props.setup?.state ?? '')}><h2 aria-live="polite">{i18n.t(props.disconnected ? 'hostApplications.disconnected' : hostApplicationSetupHeading(props.setup))}</h2></Show>
-      <p>{i18n.t(props.disconnected ? 'hostApplications.prepare.connectionHint' : props.setup?.state === 'failed' ? hostApplicationSetupError(props.setup.error_code) : 'hostApplications.prepare.description')}</p>
+      <p>{i18n.t(props.disconnected ? 'hostApplications.prepare.connectionHint' : props.setup?.installation_error_code ? hostApplicationSetupError(props.setup.installation_error_code) : props.setup?.state === 'failed' ? hostApplicationSetupError(props.setup.error_code) : installed() ? 'hostApplications.update.stabilityFix' : 'hostApplications.prepare.description')}</p>
+      <Show when={installed()?.ready}><p class="host-apps-preparation-target">{i18n.t(props.setup?.state === 'failed' ? 'hostApplications.update.failedRetained' : 'hostApplications.update.description')}</p></Show>
+      <Show when={installed()}><dl class="host-apps-component-versions">
+        <div><dt>{i18n.t('hostApplications.update.installedVersion')}</dt><dd>{installed()?.id}</dd></div>
+        <div><dt>{i18n.t('hostApplications.update.targetVersion')}</dt><dd>{props.setup?.package?.id}</dd></div>
+      </dl></Show>
       <Show when={props.applicationName}><p class="host-apps-preparation-target">{i18n.t('hostApplications.prepare.openAfter', { name: props.applicationName ?? '' })}</p></Show>
     </div>
-    <Show when={props.setup?.state !== 'unsupported'}>
+    <Show when={!unsupported() && !local()}>
       <div class="host-apps-preparation-method">
-        <div class="host-apps-preparation-method-heading"><span>{i18n.t('hostApplications.prepare.downloadMethod')}</span><span class="host-apps-preparation-size"><Show when={props.setup?.package}>{new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 }).format(Math.ceil((props.setup?.package?.size_bytes ?? 0) / 1000000))}</Show></span></div>
+        <div class="host-apps-preparation-method-heading"><span>{i18n.t('hostApplications.prepare.downloadMethod')}</span><span class="host-apps-preparation-size"><Show when={props.plan} fallback={i18n.t('hostApplications.update.checkingSize')}>{new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format((props.plan?.missing_bytes ?? 0) / 1000000)}</Show></span></div>
         <RadioList value={receiving() && props.downloadMethod === 'host' ? undefined : props.downloadMethod} onChange={value => props.onDownloadMethodChange(value as 'host' | 'desktop')}
           size="lg" aria-label={i18n.t('hostApplications.prepare.downloadMethod')}
           options={[
@@ -67,6 +78,7 @@ export function HostApplicationSetupPanel(props: {
           ]} />
       </div>
     </Show>
+    <Show when={local()}><p class="host-apps-preparation-target">{i18n.t('hostApplications.update.local')}</p></Show>
     <Show when={active()}>
       <div class={`host-apps-preparation-track ${progress() === undefined ? 'indeterminate' : ''}`} role="progressbar" aria-label={i18n.t(hostApplicationSetupHeading(props.setup))} aria-valuenow={progress() === undefined ? undefined : Math.round(progress()! * 100)} aria-valuemin={0} aria-valuemax={100}>
         <span style={{ width: progress() === undefined ? '35%' : `${progress()! * 100}%` }} />
@@ -77,7 +89,7 @@ export function HostApplicationSetupPanel(props: {
         <Show when={props.disconnected} fallback={
           <Show when={active()} fallback={
             <Button size="sm" disabled={!canStart()} onClick={props.onStart}>
-              {i18n.t(props.submitting ? 'hostApplications.prepare.checking' : props.applicationName ? 'hostApplications.prepare.prepareAndOpen' : props.setup && ['failed', 'interrupted', 'cancelled'].includes(props.setup.state) ? 'hostApplications.prepare.continue' : 'hostApplications.prepare.start')}
+              {i18n.t(props.submitting || props.checkingPlan ? 'hostApplications.prepare.checking' : installed() ? installed()?.ready ? 'hostApplications.update.start' : 'hostApplications.update.repair' : props.applicationName ? 'hostApplications.prepare.prepareAndOpen' : props.setup && ['failed', 'interrupted', 'cancelled'].includes(props.setup.state) ? 'hostApplications.prepare.continue' : 'hostApplications.prepare.start')}
             </Button>
           }>
             <Show when={props.setup?.state === 'receiving' && props.setup.can_cancel && !props.submitting && props.canRelay}>
@@ -88,7 +100,7 @@ export function HostApplicationSetupPanel(props: {
         }><Button size="sm" onClick={props.onReconnect}>{i18n.t('hostApplications.reconnect')}</Button></Show>
       </div>
     </div>
-    <Show when={(!active() && props.setup?.state !== 'unsupported') || (props.setup?.state === 'receiving' && props.setup.can_cancel && !props.submitting)}><details class="host-apps-preparation-details">
+    <Show when={!unsupported() && (!active() || (props.setup?.state === 'receiving' && props.setup.can_cancel && !props.submitting))}><details class="host-apps-preparation-details">
       <summary>{i18n.t('hostApplications.prepare.offline')}</summary>
       <p>{i18n.t('hostApplications.prepare.offlineHint')}</p>
       <input ref={fileInput} type="file" accept=".zip" hidden onChange={event => { const file = event.currentTarget.files?.[0]; if (file) props.onUpload(file); event.currentTarget.value = ''; }} />

@@ -14,9 +14,10 @@ import (
 )
 
 type hostAppsStub struct {
-	owner string
-	calls int
-	state string
+	owner       string
+	calls       int
+	state       string
+	setupDigest string
 }
 
 func (s *hostAppsStub) Catalog(context.Context, string, string) (hostapps.Catalog, error) {
@@ -201,7 +202,13 @@ func (s *hostAppsStub) WatchSetup() (<-chan struct{}, func(), error) {
 	ch <- struct{}{}
 	return ch, func() {}, nil
 }
-func (s *hostAppsStub) StartSetup(owner, request, source string, size int64) (hostapps.SetupStatus, error) {
+func (s *hostAppsStub) SetupPlan(_ context.Context, owner string) (hostapps.SetupTransferPlan, error) {
+	s.calls++
+	s.owner = owner
+	return hostapps.SetupTransferPlan{}, nil
+}
+func (s *hostAppsStub) StartSetup(owner, request, source string, size int64, digest string) (hostapps.SetupStatus, error) {
+	s.setupDigest = digest
 	return s.SetupStatus(owner)
 }
 func (s *hostAppsStub) CancelSetup(owner, id string) (hostapps.SetupStatus, error) {
@@ -218,7 +225,7 @@ func TestHostApplicationSetupPermissionAndOwner(t *testing.T) {
 	for _, full := range []bool{false, true} {
 		backend := &hostAppsStub{}
 		server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: full, CanExecute: full})}
-		for _, test := range []struct{ method, path, body string }{{"GET", "/setup", ""}, {"POST", "/setup", `{"request_id":"request","source":"download","owner":"bob"}`}, {"DELETE", "/setup/id", ""}, {"PUT", "/setup/id/content?offset=0", "data"}, {"POST", "/setup/id/complete", ""}} {
+		for _, test := range []struct{ method, path, body string }{{"GET", "/setup", ""}, {"GET", "/setup/plan", ""}, {"POST", "/setup", `{"request_id":"request","source":"download","owner":"bob"}`}, {"DELETE", "/setup/id", ""}, {"PUT", "/setup/id/content?offset=0", "data"}, {"POST", "/setup/id/complete", ""}} {
 			backend.calls = 0
 			backend.owner = ""
 			request := httptest.NewRequest(test.method, hostApplicationsAPI+test.path, strings.NewReader(test.body))
@@ -239,6 +246,19 @@ func TestHostApplicationSetupPermissionAndOwner(t *testing.T) {
 				t.Fatalf("setup owner mapping: %s %d %q", test.path, response.Code, backend.owner)
 			}
 		}
+	}
+}
+
+func TestHostApplicationSetupCarriesReceiverIdentity(t *testing.T) {
+	backend := &hostAppsStub{}
+	server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	digest := strings.Repeat("a", 64)
+	request := httptest.NewRequest("POST", hostApplicationsAPI+"/setup", strings.NewReader(`{"request_id":"update","source":"cache","package_digest":"`+digest+`"}`))
+	request.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
+	response := httptest.NewRecorder()
+	server.handleHostApplicationsAPI(response, request)
+	if response.Code != 200 || backend.setupDigest != digest || backend.owner != "alice" {
+		t.Fatalf("receiver identity lost: %d %#v", response.Code, backend)
 	}
 }
 

@@ -6241,6 +6241,24 @@
     }
   },
   "hostApplications": {
+    "update": {
+      "unsupported": "Diese Laufzeitumgebung kann die installierte Komponentenversion nicht verwenden. Die Dateien bleiben erhalten. Aktualisieren Sie die Laufzeitumgebung, bevor Sie fortfahren.",
+      "available": "Komponentenupdate verfügbar",
+      "view": "Update ansehen",
+      "title": "Komponenten für Host-Anwendungen aktualisieren",
+      "description": "Installierte Komponenten bleiben verfügbar. Sie können Anwendungen während des Updates weiter nutzen.",
+      "start": "Komponenten aktualisieren",
+      "local": "Das Update verwendet zwischengespeicherte Dateien. Kein Download oder Upload erforderlich.",
+      "installedVersion": "Installiert",
+      "targetVersion": "Empfohlene Version",
+      "stabilityFix": "Die empfohlene Version behebt bekannte Verbindungsprobleme. Laufende Anwendungen verwenden bis zum nächsten Start ihre bisherigen Komponenten.",
+      "failedRetained": "Das Update wurde nicht abgeschlossen. Installierte Komponenten und laufende Anwendungen bleiben verfügbar.",
+      "damaged": "Die installierten Komponenten müssen repariert werden. Ihre Dateien wurden beibehalten.",
+      "repair": "Komponenten reparieren",
+      "cacheChanged": "Zwischengespeicherte Dateien haben sich geändert. Prüfen Sie die verfügbaren Dateien und versuchen Sie es erneut.",
+      "desktopMismatch": "Diese Desktop-Version kann die Komponenten nicht vorbereiten. Aktualisieren Sie Desktop oder wählen Sie den Download auf dem Host.",
+      "checkingSize": "Wird vor dem Download berechnet"
+    },
     "linuxRunningHint": "Nach dem Beenden der Freigabe laufen die Anwendungen weiter. Verbinden Sie sich über diese Liste erneut.",
     "stopSharingDescription": "Trennen Sie diese Anwendung von Redeven. Ihre Fenster und ungespeicherten Arbeiten bleiben geöffnet.",
     "closeAllWindows": "Alle Fenster schließen",

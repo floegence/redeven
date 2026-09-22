@@ -20,17 +20,26 @@ func (g *Server) handleHostApplicationSetup(w http.ResponseWriter, r *http.Reque
 	switch {
 	case path == "" && r.Method == http.MethodGet:
 		status, err = g.hostApps.SetupStatus(owner)
+	case path == "/plan" && r.Method == http.MethodGet:
+		plan, err := g.hostApps.SetupPlan(r.Context(), owner)
+		if err != nil {
+			writeHostAppError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: plan})
+		return
 	case path == "" && r.Method == http.MethodPost:
 		var req struct {
 			RequestID string `json:"request_id"`
 			Source    string `json:"source"`
 			Size      int64  `json:"size_bytes"`
+			Digest    string `json:"package_digest"`
 		}
 		if decodeManagedJSON(r, &req) != nil {
 			writeHostAppError(w, hostapps.ErrInvalid)
 			return
 		}
-		status, err = g.hostApps.StartSetup(owner, req.RequestID, req.Source, req.Size)
+		status, err = g.hostApps.StartSetup(owner, req.RequestID, req.Source, req.Size, req.Digest)
 	case path == "/events" && r.Method == http.MethodGet:
 		g.streamHostApplicationSetup(w, r, owner)
 		return

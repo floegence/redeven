@@ -7,6 +7,24 @@ import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
   hostApplications: {
+    update: {
+      "available": "Component update available",
+      "view": "View update",
+      "title": "Update host application components",
+      "description": "Your installed components remain available. You can keep using applications while updating.",
+      "start": "Update components",
+      "local": "Use cached files to update. No download or upload is needed.",
+      "installedVersion": "Installed",
+      "targetVersion": "Recommended",
+      "stabilityFix": "The recommended version fixes known connection stability issues. Running applications keep their current components until restarted.",
+      "failedRetained": "The update did not finish. Your installed components and running applications remain available.",
+      "damaged": "The installed components need repair. Their files have been preserved.",
+      "repair": "Repair components",
+      "unsupported": "This runtime cannot use the installed component version. Its files have been preserved. Update the runtime before continuing.",
+      "cacheChanged": "Cached files changed during preparation. Check the available files and try again.",
+      "desktopMismatch": "This Desktop cannot prepare the requested components. Update Desktop or choose host download.",
+      "checkingSize": "Calculated before downloading"
+    },
     "macControls": "Application controls",
     prepare: {
       "downloadMethod": "Download method",

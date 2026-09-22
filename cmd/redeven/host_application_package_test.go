@@ -25,3 +25,15 @@ func TestHostApplicationPackageRejectsUntrustedInputs(t *testing.T) {
 		t.Fatalf("invalid request created output: %v", err)
 	}
 }
+
+func TestHostApplicationPackageRejectsMismatchedTransferPlan(t *testing.T) {
+	root := t.TempDir()
+	output := filepath.Join(root, "components.zip")
+	code, _, _ := runCLITest(t, "host-application-package", "--arch", "amd64", "--cache", root, "--output", output, "--plan", `{"package_digest":"unknown","architecture":"amd64","missing_artifacts":[],"missing_bytes":0}`)
+	if code != 3 {
+		t.Fatalf("target mismatch exit=%d", code)
+	}
+	if entries, err := os.ReadDir(root); err != nil || len(entries) != 0 {
+		t.Fatal("mismatched plan performed filesystem acquisition", entries, err)
+	}
+}

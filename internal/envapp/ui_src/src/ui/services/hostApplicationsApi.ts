@@ -1,5 +1,7 @@
 import { readSessionEvents } from './sessionHTTP';
 import { fetchLocalApi, fetchLocalApiJSON } from './localApi';
+import type { HostApplicationTransferPlan } from '../../../../../../desktop/src/shared/hostApplicationComponents';
+export type { HostApplicationTransferPlan };
 
 export type HostApplicationSetup = Readonly<{
   state: 'available' | 'checking' | 'downloading' | 'receiving' | 'verifying' | 'installing' | 'validating' | 'ready' | 'failed' | 'cancelled' | 'interrupted' | 'unsupported';
@@ -8,7 +10,10 @@ export type HostApplicationSetup = Readonly<{
   expected_bytes: number;
   error_code?: string;
   can_cancel: boolean;
-  package?: Readonly<{ id: string; architecture: 'amd64' | 'arm64'; size_bytes: number; installed_bytes: number }>;
+  installed?: Readonly<{ id: string; digest: string; architecture: 'amd64' | 'arm64'; contract: string; ready: boolean }>;
+  update_available?: boolean;
+  installation_error_code?: string;
+  package?: Readonly<{ id: string; digest?: string; architecture: 'amd64' | 'arm64'; size_bytes: number; installed_bytes: number }>;
 }>;
 
 export function hostApplicationSetupActive(setup: HostApplicationSetup | null | undefined): boolean {
@@ -161,8 +166,12 @@ export function getHostApplicationSetup(signal?: AbortSignal) {
   return fetchLocalApiJSON<HostApplicationSetup>(`${base}/setup`, { method: 'GET', signal });
 }
 
-export function startHostApplicationSetup(requestID: string, source: 'download' | 'upload' = 'download', sizeBytes = 0) {
-  return fetchLocalApiJSON<HostApplicationSetup>(`${base}/setup`, { method: 'POST', body: JSON.stringify({ request_id: requestID, source, size_bytes: sizeBytes }) });
+export function getHostApplicationTransferPlan(signal?: AbortSignal) {
+  return fetchLocalApiJSON<HostApplicationTransferPlan>(`${base}/setup/plan`, { method: 'GET', signal });
+}
+
+export function startHostApplicationSetup(requestID: string, source: 'download' | 'upload' | 'cache' = 'download', sizeBytes = 0, packageDigest?: string) {
+  return fetchLocalApiJSON<HostApplicationSetup>(`${base}/setup`, { method: 'POST', body: JSON.stringify({ request_id: requestID, source, size_bytes: sizeBytes, package_digest: packageDigest }) });
 }
 
 export function cancelHostApplicationSetup(operationID: string) {

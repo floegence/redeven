@@ -21,12 +21,21 @@ display, a host reboot or external cgroup cleanup cannot preserve an X11 app.
 ## Instance and sharing ownership
 
 One instance has an opaque ID, authorized caller owner, application metadata,
-loopback address, kernel boot/PID/start identity, creation time and versioned private
+loopback address, kernel boot/PID/start identity, component identity, creation time and versioned private
 record. It owns one isolated Xpra/Xvfb display and D-Bus session. A private store
 lock permits one manager to admit or recover instances at a time. Unknown,
 ambiguous or incomplete records fail closed without being rewritten. Dead process
-generations cannot be reattached. Recovery resolves only approved current native
-tools and also verifies Xpra's session name over the private control socket.
+generations cannot be reattached. Recovery resolves the instance's original tools
+and also verifies Xpra's session name over the private control socket.
+
+Version 2 records bind either the upstream component digest or a complete system
+installation. Updating managed components affects only newly created instances;
+control commands, environment and resumed sharing retain the original binding.
+Version 1 records migrate atomically after upstream process-to-installation
+identification and private backend verification. Recovery never substitutes the
+current recommendation. Unknown or unverifiable bindings fail explicitly without
+terminating the surviving process. Old component directories remain available;
+the [preparation contract](host-application-preparation.md) owns their selection.
 
 A share has its own ID, route, credential and connection-tracking proxy. Stopping
 sharing closes HTTP and hijacked WebSocket connections immediately; deleting a
@@ -99,4 +108,5 @@ stale record. Ordinary closure always preserves native save/cancel decisions.
 - `internal/hostapps/application_proxy.go`: connection revocation including WebSocket hijacks.
 - `internal/hostapps/linux_lifecycle_test.go`: delayed window, save cancellation, credential rotation, shutdown admission, real Runtime process exit, restoration and owned descendant termination.
 - `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts`: waiting, new-window paint, last-window closure and reconnect behavior.
-- [Floe Native Apps v0.3.1](https://github.com/floegence/floe-native-apps/releases/tag/v0.3.1): released lifetime primitives and installed native qualification.
+- `internal/hostapps/component_update_test.go`: component binding, v1 record migration, same-process recovery and new-instance selection after r1-to-r2 update.
+- [Floe Native Apps v0.4.0](https://github.com/floegence/floe-native-apps/releases/tag/v0.4.0): released lifetime, exact installation resolution and process identification.
