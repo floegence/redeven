@@ -2653,8 +2653,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setDesktopUpdateDialogOpen(true);
   }
   const settingsController = createEnvironmentSettingsController<ConnectionDialogState>({
-    load: environment_id => props.runtime.settings.load({ environment_id }),
+    load: (environment_id, dialog_token) => props.runtime.settings.load({ environment_id, dialog_token }),
     save: request => props.runtime.settings.save(request),
+    closed: token => props.runtime.settings.cancel(token),
     lateError: error => showActionToast(settingsAccessErrorMessage(error), 'error'),
   });
   const settingsSession = settingsController.session;
@@ -2767,7 +2768,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const settingsSurface = (): DesktopSettingsSurfaceSnapshot => {
     const saved = settingsBaselineSurface();
     const environment = selectedSettingsEnvironmentEntry()!;
-    return { ...saved, runtime_health: environment.runtime_health,
+    return { ...saved, runtime_health: environment.runtime_health, runtime_started_at_unix_ms: environment.runtime_started_at_unix_ms,
       current_runtime_url: environment.local_ui_url ?? '', current_runtime_urls: environment.local_ui_urls ?? [],
       current_runtime_running: environment.runtime_health.status === 'online',
       runtime_configuration_pending: environment.runtime_health.status === 'online' && saved.runtime_configuration_pending === true
@@ -5391,7 +5392,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     settingsController.close();
     setSettingsError('');
     setConnectionDialogError('');
-    props.runtime.settings.cancel();
   }
 
   async function upsertSavedEnvironment(
@@ -5770,6 +5770,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
   function settingsAccessErrorMessage(error = settingsPresentation()?.access_error): string {
     if (error?.status_code === 401 || error?.status_code === 403) return i18n().t('settings.accessAuthorizationFailed');
+    if (error?.code === 'SETTINGS_RUNTIME_PREPARING') return i18n().t('environmentStatus.runtimePreparing');
+    if (error?.code === 'SETTINGS_RUNTIME_INCOMPATIBLE') return i18n().t('environmentStatus.runtimeNeedsUpdate');
     if (error?.code === 'SETTINGS_WSL_STOPPED') return i18n().t('settings.wslStopped');
     return error?.failure ? localizedOperationFailureSummary(i18n(), error.failure) : error?.error ?? '';
   }
@@ -6523,8 +6525,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           )}</Show>
         )}
         access={(
-          <Show when={settingsPresentation()?.token} keyed>{(_token) => (
-            <Show when={Boolean(settingsPresentation()?.access)} fallback={(
+          <Show when={settingsPresentation()?.token} keyed>{(dialogToken) => {
+            const environmentID = settingsPresentation()!.environment.id;
+            return <Show when={Boolean(settingsPresentation()?.access)} fallback={(
               <EnvironmentSettingsPanel footer={<Button variant="ghost" onClick={cancelSettings}>{i18n().t('common.close')}</Button>}>
                 <div class="space-y-4" role={settingsPresentation()?.access_state === 'error' ? 'alert' : 'status'}>
                   <p class="text-sm">{i18n().t(settingsPresentation()?.access_state === 'loading' ? 'settings.loadingAccess' : 'settings.loadAccessFailed')}</p>
@@ -6544,7 +6547,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <EnvironmentAccessSettingsForm
         security={window.redevenDesktopSettings?.security ? async request => {
           const opening = settingsSession();
-          const result = await window.redevenDesktopSettings!.security!({ ...request, environment_id: settingsSurface().environment_id });
+          const result = await window.redevenDesktopSettings!.security!({ ...request, environment_id: environmentID, dialog_token: dialogToken });
           if (opening && settingsController.current(opening) && request.action === 'commit') await settingsController.loadAccess();
           return result;
         } : undefined}
@@ -6592,7 +6595,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       />
 
             </Show>
-          )}</Show>
+          }}</Show>
         )} />
       <ConnectionDialog {...connectionFormProps} state={newConnectionState()} />
 
@@ -12266,7 +12269,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
         </section>
 
         <div class="environment-access-preferences">
-          <Show when={props.open && props.security}><TwoFactorSettings environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.security!} /></Show>
+          <Show when={props.open && props.security}><TwoFactorSettings environmentID={props.snapshot.environment_id} runtimeStartedAt={props.snapshot.runtime_started_at_unix_ms} i18n={props.i18n} manage={props.security!} /></Show>
           <section class="environment-access-row">
             <div class="environment-access-description">
               <h3>{props.i18n.t('settings.visibilityTitle')}</h3>

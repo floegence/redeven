@@ -4716,6 +4716,7 @@ webSearch: model.web_search,
     if (modelSourceRefreshing()) return;
     setModelSourceRefreshing(true);
     try {
+      await props.adapter.retryModelSource?.();
       setSnapshot(await props.adapter.loadSettings());
       setLoadError('');
     } catch (error) {

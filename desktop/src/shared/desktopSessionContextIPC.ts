@@ -1,3 +1,4 @@
+export const DESKTOP_MODEL_SOURCE_RETRY_CHANNEL = 'redeven-desktop:model-source-retry';
 import type { LocalUIExposure } from './localUIExposure';
 
 export const DESKTOP_SESSION_CONTEXT_GET_CHANNEL = 'redeven-desktop:session-context-get';

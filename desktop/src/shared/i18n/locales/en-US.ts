@@ -3,6 +3,8 @@ import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
   security: {
+    "runtimeChanged": "Runtime restarted. Start this security step again.",
+    "actionUncertain": "The response was lost. Security status has been refreshed; review it before continuing.",
     "connectTitle": "Connect your authenticator",
     "stepConnect": "Authenticator",
     "stepSave": "Recovery codes",

@@ -1,3 +1,4 @@
+import { DESKTOP_MODEL_SOURCE_RETRY_CHANNEL } from '../shared/desktopSessionContextIPC';
 /// <reference lib="dom" />
 
 import { contextBridge, ipcRenderer } from 'electron';
@@ -23,6 +24,7 @@ export interface DesktopSessionContextBridge {
   subscribeTransportRecovery: (listener: (snapshot: DesktopSessionTransportRecoverySnapshot) => void) => () => void;
   requestTransportRecoveryNow: () => Promise<boolean>;
   stopTransportRecovery: () => Promise<boolean>;
+  retryDesktopModels: () => Promise<boolean>;
   renewProviderSession: () => Promise<boolean>;
   notifyAppReady: (payload: DesktopSessionAppReadyPayload) => void;
 }
@@ -62,6 +64,7 @@ export function bootstrapDesktopSessionContextBridge(): void {
   });
 
   const bridge: DesktopSessionContextBridge = {
+    retryDesktopModels: async () => (await ipcRenderer.invoke(DESKTOP_MODEL_SOURCE_RETRY_CHANNEL)) === true,
     renewProviderSession: async () => (
       await ipcRenderer.invoke(DESKTOP_PROVIDER_SESSION_RENEW_CHANNEL)
     ) === true,

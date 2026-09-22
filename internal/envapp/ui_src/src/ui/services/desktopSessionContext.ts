@@ -49,6 +49,7 @@ export interface DesktopSessionContextBridge {
   subscribeTransportRecovery?: (listener: (snapshot: DesktopTransportRecoverySnapshot) => void) => () => void;
   requestTransportRecoveryNow?: () => Promise<boolean>;
   stopTransportRecovery?: () => Promise<boolean>;
+  retryDesktopModels?: () => Promise<boolean>;
   renewProviderSession?: () => Promise<boolean>;
   notifyAppReady?: (payload: {
     state: 'access_gate_interactive' | 'runtime_connected';
@@ -300,4 +301,9 @@ export function notifyDesktopSessionAppReady(
   } catch {
     return false;
   }
+}
+
+export async function retryDesktopModels(): Promise<void> {
+  const bridge = readDesktopHostBridge('redevenDesktopSessionContext', isDesktopSessionContextBridge);
+  await bridge?.retryDesktopModels?.();
 }

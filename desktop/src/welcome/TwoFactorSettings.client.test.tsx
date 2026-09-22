@@ -122,6 +122,32 @@ it('keeps unavailable status distinct from Off', async () => {
   expect(document.querySelector('button')?.disabled).toBe(true);
 });
 
+it('reconciles a lost commit response without repeating the security write', async () => {
+  const base: SecurityResult = { enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
+  let committed = false;
+  const manage = vi.fn(async (request: SecurityRequest): Promise<SecurityResult> => {
+    if (request.action === 'setup') return { ...base, operation_id: 'operation', secret: 'KEY', qr_image: 'data:image/png;base64,' };
+    if (request.action === 'verify') return { ...base, operation_id: 'operation', recovery_codes: ['saved-code'] };
+    if (request.action === 'commit') {
+      committed = true;
+      throw new Error('RUNTIME_CONTROL_UNREACHABLE');
+    }
+    return { ...base, enabled: committed, revision: committed ? 2 : 1 };
+  });
+  dispose = render(() => <TwoFactorSettings environmentID="environment" i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
+  await settle(); click('Set up'); await settle();
+  const input = document.querySelector('input')!;
+  input.value = '012345'; input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await settle(); (document.querySelector('input[type="checkbox"]') as HTMLInputElement).click();
+  await settle(); click('Enable two-factor'); await settle();
+  expect(manage.mock.calls.filter(([request]) => request.action === 'commit')).toHaveLength(1);
+  expect(manage.mock.calls.filter(([request]) => request.action === 'status')).toHaveLength(2);
+  expect(document.body.textContent).toContain('The response was lost');
+  expect(document.body.textContent).not.toContain('saved-code');
+  expect(document.body.textContent).toContain('On');
+});
+
 it('preserves enrollment while the same environment status refreshes', async () => {
   const [snapshot, setSnapshot] = createSignal({ environmentID: 'environment', revision: 1 });
   const base: SecurityResult = { enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
@@ -144,4 +170,35 @@ it('preserves enrollment while the same environment status refreshes', async () 
   await settle();
   expect(document.querySelector('.two-factor-qr img')).toBeNull();
   expect(manage).toHaveBeenCalledWith({ action: 'cancel', operation_id: 'pending-operation' });
+});
+
+it('invalidates enrollment once after a Runtime restart and offers inline retry', async () => {
+  const [started, setStarted] = createSignal<number | undefined>(1);
+  const base: SecurityResult = { enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
+  const manage = vi.fn(async (request: SecurityRequest): Promise<SecurityResult> => request.action === 'setup'
+    ? { ...base, operation_id: 'before-restart', secret: 'KEY', qr_image: 'data:image/png;base64,' } : base);
+  dispose = render(() => <TwoFactorSettings environmentID="environment" runtimeStartedAt={started()} i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
+  await settle(); click('Set up'); await settle();
+  setStarted(undefined); await settle();
+  expect(document.querySelector('.two-factor-qr')).not.toBeNull();
+  expect(manage.mock.calls.filter(([request]) => request.action === 'status')).toHaveLength(1);
+  setStarted(2); await settle();
+  expect(document.querySelector('.two-factor-qr')).toBeNull();
+  expect(document.body.textContent).toContain('Runtime restarted');
+  expect(manage.mock.calls.filter(([request]) => request.action === 'status')).toHaveLength(2);
+  setStarted(2); await settle();
+  expect(manage.mock.calls.filter(([request]) => request.action === 'status')).toHaveLength(2);
+  click('Retry'); await settle();
+  expect(document.body.textContent).not.toContain('Runtime restarted');
+});
+
+it('does not repeat failed status queries until the user retries', async () => {
+  const base: SecurityResult = { enabled: true, password_configured: true, recovery_pending: false, recovery_codes_remaining: 8, revision: 2 };
+  const manage = vi.fn().mockRejectedValueOnce(new Error('RUNTIME_CONTROL_UNREACHABLE')).mockResolvedValue(base);
+  dispose = render(() => <TwoFactorSettings environmentID="environment" i18n={createDesktopI18n('en-US')} manage={manage} />, document.body);
+  await settle(); await settle();
+  expect(manage).toHaveBeenCalledTimes(1);
+  click('Retry'); await settle();
+  expect(manage).toHaveBeenCalledTimes(2);
+  expect(document.body.textContent).toContain('On');
 });

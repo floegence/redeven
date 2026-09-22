@@ -48,7 +48,7 @@ describe('bootstrapDesktopSettingsBridge', () => {
     expect(typeof bridge.subscribeRuntimeFlowerAttachmentProgress).toBe('function');
     expect(typeof bridge.cancel).toBe('function');
 
-    await bridge.save({ environment_id: 'ssh:fixture', draft: {
+    await bridge.save({ environment_id: 'ssh:fixture', dialog_token: 1, draft: {
       local_ui_bind: 'localhost:23998',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
@@ -77,9 +77,9 @@ describe('bootstrapDesktopSettingsBridge', () => {
     await bridge.previewRuntimeFlowerAttachment({
       attachment_id: 'upl-preview-1', staging_scope_id: 'staging-1', staging_capability: 'secret-1', display_name: 'notes.txt',
     });
-    bridge.cancel();
+    bridge.cancel(1);
 
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:save-settings', { environment_id: 'ssh:fixture', draft: {
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:save-settings', { environment_id: 'ssh:fixture', dialog_token: 1, draft: {
       local_ui_bind: 'localhost:23998',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
@@ -105,7 +105,7 @@ describe('bootstrapDesktopSettingsBridge', () => {
       attachment_id: 'upl-preview-1', staging_scope_id: 'staging-1', staging_capability: 'secret-1', display_name: 'notes.txt',
     });
     expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:runtime-flower-stream-cancel', 'stream-1');
-    expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:cancel-settings');
+    expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:cancel-settings', 1);
     expect(Object.keys(bridge).sort()).toEqual([
       'cancel',
       'cancelRuntimeFlowerAttachment',
@@ -116,7 +116,9 @@ describe('bootstrapDesktopSettingsBridge', () => {
       'prepareRuntimeFlowerAttachment',
       'previewRuntimeFlowerAttachment',
       'requestRuntimeFlower',
+      'retryDesktopModels',
       'save',
+      'security',
       'startRuntimeFlowerStream',
       'subscribeRuntimeFlowerAttachmentProgress',
       'subscribeRuntimeFlowerStream',
@@ -128,8 +130,8 @@ describe('bootstrapDesktopSettingsBridge', () => {
     const { bootstrapDesktopSettingsBridge } = await import('./desktopSettingsBridge');
     bootstrapDesktopSettingsBridge();
     const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
-    await bridge.load({ environment_id: ' ssh:fixture ' });
-    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:load-settings', { environment_id: 'ssh:fixture' });
+    await bridge.load({ environment_id: ' ssh:fixture ', dialog_token: 1 });
+    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:load-settings', { environment_id: 'ssh:fixture', dialog_token: 1 });
     expect(() => bridge.load({})).toThrow();
     expect(() => bridge.save({ draft: {} })).toThrow();
   });

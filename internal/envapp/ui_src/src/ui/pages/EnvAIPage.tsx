@@ -22,7 +22,7 @@ import { createAIReadinessController } from '../flower/aiReadiness';
 import { AIReadinessBoundary } from '../flower/AIReadinessBoundary';
 import { useI18n, type EnvAppTranslationKey, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
-import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
+import { readDesktopSessionContextSnapshot, retryDesktopModels } from '../services/desktopSessionContext';
 import { openConnectionCenter, openFlowerSettings } from '../services/desktopShellBridge';
 import '../flower-feature.css';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
@@ -117,6 +117,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
     openCanonicalReferenceTarget: env.openFlowerCanonicalReferenceTarget,
     openLinkedFilePreview: env.openFlowerLinkedFilePreview,
     openLinkedDirectoryBrowser: env.openFlowerLinkedDirectoryBrowser,
+    retryModelSource: retryDesktopModels,
     modelSourceRecovery: {
       describe: (status) => {
         if (status.state === 'missing_keys') {

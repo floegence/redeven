@@ -5,49 +5,62 @@ import (
 	"errors"
 
 	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/gorilla/websocket"
 )
 
-var errAIServiceUnavailable = errors.New("AI service is unavailable")
+// DesktopModelSourceUnavailable distinguishes a preparing service from a service
+// requiring user intervention without creating a second readiness controller.
+type DesktopModelSourceUnavailable struct{ Blocked bool }
 
-func (a *Agent) PrepareDesktopModelSource(session ai.DesktopModelSourceSession) (*ai.AIRuntimeStatus, error) {
-	if a == nil || a.code == nil {
-		return nil, errAIServiceUnavailable
+func (e *DesktopModelSourceUnavailable) Error() string {
+	if e.Blocked {
+		return "AI service requires attention"
 	}
-	aiSvc, _, _, release, err := a.code.AcquireAIService(context.Background())
-	if err != nil || aiSvc == nil || release == nil {
-		return nil, errAIServiceUnavailable
-	}
-	defer release()
-	return aiSvc.PrepareDesktopModelSource(session)
+	return "AI service is unavailable"
 }
 
-func (a *Agent) ServeDesktopModelSourceRPC(ctx context.Context, session ai.DesktopModelSourceSession, conn *websocket.Conn, onChange func()) error {
+type DesktopModelSourceLease struct {
+	service *ai.Service
+	ctx     context.Context
+	release func()
+}
+
+func (l *DesktopModelSourceLease) Release() { l.release() }
+func (l *DesktopModelSourceLease) Serve(session ai.DesktopModelSourceSession, conn *websocket.Conn, onChange func()) error {
+	return l.service.ServeDesktopModelSourceRPC(l.ctx, session, conn, onChange)
+}
+
+// Acquire before upgrading the connection, so HTTP admission reports readiness
+// accurately and the established socket retains the same service generation.
+func (a *Agent) AcquireDesktopModelSource(ctx context.Context) (*DesktopModelSourceLease, error) {
 	if a == nil || a.code == nil {
-		if conn != nil {
-			_ = conn.Close()
-		}
-		return errAIServiceUnavailable
+		return nil, &DesktopModelSourceUnavailable{}
 	}
-	aiSvc, leaseCtx, _, release, err := a.code.AcquireAIService(ctx)
-	if err != nil || aiSvc == nil || release == nil {
-		if conn != nil {
-			_ = conn.Close()
+	service, leaseCtx, _, release, err := a.code.AcquireAIService(ctx)
+	if err != nil {
+		if !errors.Is(err, appserver.ErrAIServiceUnavailable) {
+			return nil, err
 		}
-		return errAIServiceUnavailable
+		return nil, &DesktopModelSourceUnavailable{Blocked: a.code.AIReadiness().State == appserver.AIReadinessBlocked}
 	}
-	defer release()
-	return aiSvc.ServeDesktopModelSourceRPC(leaseCtx, session, conn, onChange)
+	return &DesktopModelSourceLease{service: service, ctx: leaseCtx, release: release}, nil
+}
+
+func (a *Agent) PrepareDesktopModelSource(session ai.DesktopModelSourceSession) (*ai.AIRuntimeStatus, error) {
+	lease, err := a.AcquireDesktopModelSource(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer lease.Release()
+	return lease.service.PrepareDesktopModelSource(session)
 }
 
 func (a *Agent) DisconnectDesktopModelSource() *ai.AIRuntimeStatus {
-	if a == nil || a.code == nil {
+	lease, err := a.AcquireDesktopModelSource(context.Background())
+	if err != nil {
 		return &ai.AIRuntimeStatus{}
 	}
-	aiSvc, _, _, release, err := a.code.AcquireAIService(context.Background())
-	if err != nil || aiSvc == nil || release == nil {
-		return &ai.AIRuntimeStatus{}
-	}
-	defer release()
-	return aiSvc.DisconnectDesktopModelSource()
+	defer lease.Release()
+	return lease.service.DisconnectDesktopModelSource()
 }

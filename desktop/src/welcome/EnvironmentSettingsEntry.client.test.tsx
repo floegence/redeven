@@ -66,7 +66,7 @@ describe('environment card settings entry', () => {
     button('Access & security').click(); await settle();
     expect(document.querySelector('[role="dialog"]')).toBe(dialog);
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-    expect(h.settings.load).toHaveBeenCalledWith({ environment_id: id });
+    expect(h.settings.load).toHaveBeenCalledWith({ environment_id: id, dialog_token: expect.any(Number) });
     if (!ok) expect(dialog?.textContent).toContain('SSH connection refused');
     button('Connection').click(); await settle();
     expect(document.getElementById('ssh-settings-label')).toBe(name);
@@ -180,7 +180,7 @@ describe('settings entry asynchronous isolation', () => {
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     expect((document.getElementById('ssh-settings-ssh_destination') as HTMLInputElement).value).toBe('new-host');
     button('Access & security').click(); await settle();
-    expect(h.settings.load).toHaveBeenLastCalledWith({ environment_id: committedID });
+    expect(h.settings.load).toHaveBeenLastCalledWith({ environment_id: committedID, dialog_token: expect.any(Number) });
   });
   it('preserves an access draft while saving only a connection name', async () => {
     const h = await mount(async () => success);
@@ -206,7 +206,7 @@ describe('settings entry asynchronous isolation', () => {
     const h = await mount(async request => success.ok ? { ...success, snapshot: { ...success.snapshot, environment_id: request.environment_id, environment_kind: 'local' } } : success);
     const local = h.snapshot.environments.find(entry => entry.registration_ref?.kind === 'local_environment')!;
     button(`Settings for ${local.label}`).click(); await settle();
-    expect(h.settings.load).toHaveBeenCalledWith({ environment_id: local.id });
+    expect(h.settings.load).toHaveBeenCalledWith({ environment_id: local.id, dialog_token: expect.any(Number) });
     expect(document.querySelector('[role="dialog"] [role="tablist"]')).toBeNull();
     expect(document.getElementById('local-ui-port')).not.toBeNull();
   });

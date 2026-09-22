@@ -1,5 +1,7 @@
 {
   "security": {
+    "runtimeChanged": "O ambiente de execução foi reiniciado. Repita esta etapa de segurança.",
+    "actionUncertain": "A resposta foi perdida. Confira o estado de segurança atualizado antes de continuar.",
     "retryLater": "Muitas tentativas incorretas. Aguarde o intervalo de espera e tente novamente.",
     "locked": "Recuperação necessária",
     "newPassword": "Nova senha do ambiente",

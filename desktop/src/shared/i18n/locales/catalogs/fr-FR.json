@@ -1,5 +1,7 @@
 {
   "security": {
+    "runtimeChanged": "L’environnement d’exécution a redémarré. Recommencez cette étape de sécurité.",
+    "actionUncertain": "La réponse a été perdue. Vérifiez l’état de sécurité actualisé avant de continuer.",
     "retryLater": "Trop de tentatives incorrectes. Attendez la fin du délai, puis réessayez.",
     "locked": "Récupération requise",
     "newPassword": "Nouveau mot de passe de l’environnement",

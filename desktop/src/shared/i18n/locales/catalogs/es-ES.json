@@ -1,5 +1,7 @@
 {
   "security": {
+    "runtimeChanged": "El entorno de ejecución se ha reiniciado. Repita este paso de seguridad.",
+    "actionUncertain": "Se ha perdido la respuesta. Revise el estado de seguridad actualizado antes de continuar.",
     "retryLater": "Demasiados intentos incorrectos. Espera a que termine el enfriamiento e inténtalo de nuevo.",
     "locked": "Recuperación necesaria",
     "newPassword": "Nueva contraseña del entorno",

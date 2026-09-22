@@ -26,6 +26,7 @@ export type DesktopModelSourceStartupReport = Readonly<{
 export type ManagedDesktopModelSource = Readonly<{
   sessionID: string;
   expiresAtUnixMs: number;
+  closed: Promise<Readonly<{ stopped: boolean; message?: string }>>;
   ready: Promise<Readonly<{
     pid: number;
     configured: boolean;
@@ -112,7 +113,7 @@ async function readStartupReport(reportFile: string, expectedSessionID: string):
 }
 
 async function stopProcess(child: ModelSourceProcess, timeoutMs: number): Promise<void> {
-  if (child.exitCode !== null || child.signalCode) {
+  if (!child.pid || child.exitCode !== null || child.signalCode) {
     return;
   }
   const exited = new Promise<void>((resolve) => {
@@ -131,8 +132,8 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
   throwIfModelSourceStartupCanceled(args.signal);
   const runtimeControl = args.runtimeControl;
   const runtimeControlBaseURL = compact(runtimeControl.base_url);
-	const token = compact(runtimeControl.token);
-	if (!runtimeControlBaseURL || !token) {
+  const token = compact(runtimeControl.token);
+  if (!runtimeControlBaseURL || !token) {
     throw new Error('Runtime Control endpoint is missing Desktop model source connection fields.');
   }
 
@@ -163,6 +164,11 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
   }) as unknown as ModelSourceProcess;
 
   let spawnError: Error | null = null;
+  let stopped = false;
+  const exited = new Promise<Readonly<{ code: number | null; signal: NodeJS.Signals | null; error?: Error }>>((resolve) => {
+    child.once('exit', (code, signal) => resolve({ code, signal }));
+    child.once('error', (error) => resolve({ code: null, signal: null, error }));
+  });
   child.once('error', (error) => {
     if (args.signal?.aborted || (error as Partial<Error> & Readonly<{ code?: string }>)?.name === 'AbortError') {
       spawnError = modelSourceStartupCanceledError();
@@ -192,6 +198,7 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
     return cleanupTask;
   };
   const onAbort = () => {
+    stopped = true;
     void cleanup();
   };
   args.signal?.addEventListener('abort', onAbort, { once: true });
@@ -201,6 +208,9 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
       throwIfModelSourceStartupCanceled(readinessController.signal);
       if (spawnError) throw spawnError;
       const report = await readStartupReport(reportFile, sessionID);
+      if (child.exitCode !== null || child.signalCode) {
+        throw new Error(`Desktop model source exited before connecting (${child.exitCode !== null ? `exit code ${child.exitCode}` : `signal ${child.signalCode}`}).`);
+      }
       if (report) {
         return {
           pid: report.pid,
@@ -209,9 +219,6 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
           missingKeyProviderIDs: report.missing_key_provider_ids ?? [],
         };
       }
-      if (child.exitCode !== null || child.signalCode) {
-        throw new Error(`Desktop model source exited before connecting (${child.exitCode !== null ? `exit code ${child.exitCode}` : `signal ${child.signalCode}`}).`);
-      }
       await delay(STARTUP_REPORT_POLL_MS, readinessController.signal);
     }
   })().catch(async (error: unknown) => {
@@ -219,7 +226,15 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
     throw error;
   });
   void ready.catch(() => undefined);
+  const closed = exited.then(async (result) => {
+    await cleanup();
+    return {
+      stopped,
+      ...(!stopped ? { message: result.error?.message ?? `Desktop model source exited (${result.code !== null ? `exit code ${result.code}` : `signal ${result.signal}`}).` } : {}),
+    };
+  });
   if (args.signal?.aborted) {
+    stopped = true;
     await cleanup();
     throw modelSourceStartupCanceledError();
   }
@@ -227,6 +242,7 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
     sessionID,
     expiresAtUnixMs,
     ready,
-    stop: cleanup,
+    closed,
+    stop: () => { stopped = true; return cleanup(); },
   };
 }

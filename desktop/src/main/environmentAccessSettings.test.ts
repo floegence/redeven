@@ -5,7 +5,9 @@ import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { describe, expect, it, vi } from 'vitest';
 import { testDesktopPreferences, testProviderEnvironment } from '../testSupport/desktopTestHelpers';
 import { RuntimeControlError } from './runtimeControlClient';
-import { environmentSettingsFailure, resolveEnvironmentAccessOwner, withEnvironmentAccessOwner, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, buildEnvironmentAccessSnapshot } from './environmentAccessSettings';
+import { environmentSettingsFailure, resolveEnvironmentAccessOwner, withEnvironmentAccessOwner, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, requireEnvironmentManagementAvailable, buildEnvironmentAccessSnapshot } from './environmentAccessSettings';
+import { desktopRuntimeControlStatusMissing } from '../shared/desktopRuntimePresence';
+import type { DesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
 
 describe('environment access settings authority', () => {
   it.each([401, 403])('preserves authorization status %s and the original diagnostic across settings IPC', status => {
@@ -50,6 +52,22 @@ describe('environment access settings authority', () => {
     expect(() => requireEnvironmentAccessCompatible(null)).not.toThrow();
     expect(() => requireEnvironmentAccessCompatible({ runtime_service: { compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH - 1 } } as StartupReport)).toThrow('Stop or update');
     expect(() => requireEnvironmentAccessCompatible({ runtime_service: { compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH } } as StartupReport)).not.toThrow();
+  });
+
+  it('distinguishes stopped access configuration from unavailable and incompatible management', () => {
+    const stopped = { runtime_target_available: true, runtime_control_status: desktopRuntimeControlStatusMissing('not_started', 'Stopped') };
+    expect(() => requireEnvironmentManagementAvailable(stopped)).not.toThrow();
+    expect(() => requireEnvironmentManagementAvailable({ ...stopped, runtime_target_available: false,
+      runtime_control_status: desktopRuntimeControlStatusMissing('unverified', 'Connection failed') }))
+      .toThrowError(expect.objectContaining({ code: 'RUNTIME_CONTROL_UNREACHABLE' }));
+    expect(() => requireEnvironmentManagementAvailable({ ...stopped,
+      startup: { runtime_service: { compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH - 1 } } as StartupReport }))
+      .toThrowError(expect.objectContaining({ code: 'SETTINGS_RUNTIME_INCOMPATIBLE' }));
+    for (const [kind, code] of [['runtime_update_required', 'SETTINGS_RUNTIME_INCOMPATIBLE'], ['runtime_restart_required', 'SECURITY_RESTART_REQUIRED']] as const) {
+      expect(() => requireEnvironmentManagementAvailable({ ...stopped,
+        maintenance: { kind, message: 'Action required' } as DesktopRuntimeMaintenanceRequirement }))
+        .toThrowError(expect.objectContaining({ code }));
+    }
   });
 
   it('retains the running password requirement, endpoint ownership and matching pending start', () => {

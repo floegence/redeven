@@ -24,6 +24,7 @@ import type {
 
 export function TwoFactorSettings(props: {
   environmentID: string;
+  runtimeStartedAt?: number;
   i18n: DesktopI18n;
   manage: (request: SecurityRequest) => Promise<SecurityResult>;
 }) {
@@ -134,8 +135,24 @@ export function TwoFactorSettings(props: {
     } catch (failure) {
       if (current === generation) {
         const code = failure instanceof Error ? failure.message : '';
+        if (code === 'SETTINGS_CLOSED') return;
+        if (request.action === 'commit' && (code.startsWith('RUNTIME_CONTROL_') || code === 'SECURITY_UNAVAILABLE')) {
+          // A lost response is not permission to replay a security mutation.
+          close();
+          const reconciliation = generation;
+          try {
+            const authoritative = await props.manage({ action: 'status' });
+            if (generation !== reconciliation) return;
+            setStatus(authoritative);
+            setError(props.i18n.t('security.actionUncertain'));
+          } catch { if (generation === reconciliation) setError(props.i18n.t('environmentCenter.runtimeUnavailableNow')); }
+          return;
+        }
         setError(
-          code === 'SECURITY_RESTART_REQUIRED'
+          code === 'SETTINGS_RUNTIME_PREPARING' ? props.i18n.t('environmentStatus.runtimePreparing')
+            : code === 'SETTINGS_RUNTIME_INCOMPATIBLE' ? props.i18n.t('environmentStatus.runtimeNeedsUpdate')
+            : code === 'SECURITY_UNAVAILABLE' || code.startsWith('RUNTIME_CONTROL_') ? props.i18n.t('environmentCenter.runtimeUnavailableNow')
+            : code === 'SECURITY_RESTART_REQUIRED'
             ? props.i18n.t('environmentStatus.restartRequired')
             : code === 'SECURITY_START_REQUIRED'
               ? props.i18n.t('environmentCenter.startRuntimeFirst')
@@ -157,14 +174,22 @@ export function TwoFactorSettings(props: {
   };
   // Status snapshots refresh independently of the selected environment. Only
   // an identity change may discard an in-progress enrollment or owner check.
-  const environmentID = createMemo(() => props.environmentID);
+  const runtimeIdentity = createMemo<{ environmentID: string; startedAt: number }>((previous) => ({
+    environmentID: props.environmentID,
+    startedAt: props.runtimeStartedAt ?? (previous?.environmentID === props.environmentID ? previous.startedAt : 0),
+  }));
+  const environmentID = createMemo(() => `${runtimeIdentity().environmentID}:${runtimeIdentity().startedAt}`);
   createEffect(
     on(
       environmentID,
-      () => {
+      (_, previous) => {
+        const interrupted = previous !== undefined && view() !== 'closed';
         close();
+        const current = generation;
         setStatus(undefined);
-        void run({ action: 'status' });
+        void run({ action: 'status' }).then(() => {
+          if (generation === current && interrupted && !error()) setError(props.i18n.t('security.runtimeChanged'));
+        });
       },
     ),
   );
@@ -257,7 +282,7 @@ export function TwoFactorSettings(props: {
                       ? 'on'
                       : 'off',
                 )
-              : text('unavailable')}
+              : busy() ? props.i18n.t('environmentStatus.checking') : text('unavailable')}
           </span>
           <Button
             size="sm"
@@ -277,9 +302,10 @@ export function TwoFactorSettings(props: {
           </Button>
         </div>
         <Show when={view() === 'closed' && error()}>
-          <p role="alert" class="two-factor-error">
-            {error()}
-          </p>
+          <div class="two-factor-error-row">
+            <p role="alert" class="two-factor-error">{error()}</p>
+            <Button size="sm" variant="ghost" disabled={busy()} onClick={() => void run({ action: 'status' })}>{props.i18n.t('common.retry')}</Button>
+          </div>
         </Show>
       </section>
       <Dialog

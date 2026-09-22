@@ -1320,6 +1320,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   openWorkingDirectoryInTerminal?: (request: FlowerWorkingDirectoryOpenRequest) => Promise<void>;
   workingDirectoryActionAvailability?: () => FlowerWorkingDirectoryActionAvailability;
   openLinkedDirectoryBrowser?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
+  retryModelSource?: () => Promise<void>;
   modelSourceRecovery?: FlowerModelSourceRecovery;
 }>;
 

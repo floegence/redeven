@@ -1,5 +1,7 @@
 {
   "security": {
+    "runtimeChanged": "Die Laufzeit wurde neu gestartet. Beginnen Sie diesen Sicherheitsschritt erneut.",
+    "actionUncertain": "Die Antwort ging verloren. Der Sicherheitsstatus wurde aktualisiert. Prüfen Sie ihn, bevor Sie fortfahren.",
     "retryLater": "Zu viele falsche Versuche. Warten Sie die Abklingzeit ab und versuchen Sie es erneut.",
     "locked": "Wiederherstellung erforderlich",
     "newPassword": "Neues Umgebungspasswort",
