@@ -20,6 +20,7 @@ export type SecurityRequest = Readonly<{
 export type DesktopSecurityRequest = SecurityRequest &
   DesktopSettingsRequest;
 export type SecurityResult = Readonly<{
+  https_ready: boolean;
   enabled: boolean;
   password_configured: boolean;
   recovery_pending: boolean;
@@ -79,6 +80,8 @@ export function parseSecurityResult(value: unknown): SecurityResult {
   if (!value || typeof value !== 'object')
     throw new Error('Invalid security status.');
   const result = value as SecurityResult;
+  if (typeof result.https_ready !== 'boolean')
+    throw new Error('SETTINGS_RUNTIME_INCOMPATIBLE');
   if (
     typeof result.enabled !== 'boolean' ||
     typeof result.password_configured !== 'boolean' ||

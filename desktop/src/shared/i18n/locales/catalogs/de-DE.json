@@ -7,9 +7,8 @@
     "newPassword": "Neues Umgebungspasswort",
     "confirmPassword": "Passwort bestätigen",
     "setupPassword": "Legen Sie ein Umgebungspasswort zum Schutz von Remoteverbindungen fest.",
-    "httpsRequired": "Aktivieren Sie zuerst HTTPS und starten Sie die Laufzeitumgebung neu.",
     "retry": "Dieser Schritt konnte nicht abgeschlossen werden. Versuchen Sie es erneut oder öffnen Sie die Sicherheitseinstellungen erneut.",
-    "invalidCredentials": "Prüfen Sie das Passwort und verwenden Sie einen neuen Bestätigungscode.",
+    "invalidCredentials": "Prüfen Sie Ihr Umgebungspasswort und versuchen Sie es erneut.",
     "disableHelp": "Remoteverbindungen verwenden nur noch das Umgebungspasswort.",
     "title": "Zwei-Faktor-Authentifizierung",
     "scope": "Code bei Anmeldungen im Browser oder über eine direkte URL anfordern.",
@@ -44,7 +43,15 @@
     "stepConnect": "Authentifizierungs-App",
     "stepSave": "Wiederherstellungscodes",
     "copied": "Kopiert",
-    "copyKey": "Einrichtungsschlüssel kopieren"
+    "copyKey": "Einrichtungsschlüssel kopieren",
+    "httpsTitle": "Zuerst HTTPS einrichten",
+    "httpsHelp": "Sobald HTTPS aktiv ist, können Sie die Zwei-Faktor-Authentifizierung einrichten.",
+    "configureHTTPS": "HTTPS konfigurieren",
+    "httpsSetupTitle": "HTTPS für die Zwei-Faktor-Authentifizierung aktivieren",
+    "httpsCertificateStep": "Erstellen oder importieren Sie unten ein Zertifikat und wählen Sie dann „{restart}“.",
+    "httpsRestartStep": "Wählen Sie unten „{restart}“. Fahren Sie nach dem Neustart mit der Einrichtung der Zwei-Faktor-Authentifizierung fort.",
+    "httpsManualRestartStep": "Bereiten Sie unten ein Zertifikat vor, speichern Sie die Einstellungen und starten Sie die Umgebung neu. Kehren Sie dann zur Einrichtung der Zwei-Faktor-Authentifizierung zurück.",
+    "invalidCode": "Dieser Code ist ungültig oder wurde bereits verwendet. Versuchen Sie einen neuen Code."
   },
   "flowerSurface": {
     "filesystemPicker": {

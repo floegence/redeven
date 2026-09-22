@@ -13,6 +13,8 @@ import {
   Download,
   Check,
   ChevronRight,
+  Lock,
+  AlertCircle,
 } from '@floegence/floe-webapp-core/icons';
 import './TwoFactorSettings.css';
 import type { DesktopI18n } from '../shared/i18n';
@@ -25,6 +27,8 @@ import type {
 export function TwoFactorSettings(props: {
   environmentID: string;
   runtimeStartedAt?: number;
+  configureHTTPS: () => void;
+  onHTTPSReady?: () => void;
   i18n: DesktopI18n;
   manage: (request: SecurityRequest) => Promise<SecurityResult>;
 }) {
@@ -45,6 +49,11 @@ export function TwoFactorSettings(props: {
   const [saved, setSaved] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
+  const requiresHTTPS = () => status()?.https_ready === false;
+  let errorNotice: HTMLDivElement | undefined;
+  createEffect(() => {
+    if (error()) queueMicrotask(() => errorNotice?.scrollIntoView({ block: 'nearest' }));
+  });
   let generation = 0;
   const text = (
     key:
@@ -85,9 +94,9 @@ export function TwoFactorSettings(props: {
       | 'newPassword'
       | 'confirmPassword'
       | 'setupPassword'
-      | 'httpsRequired'
       | 'retry'
       | 'invalidCredentials'
+      | 'invalidCode'
       | 'disableHelp'
       | 'retryLater',
   ) => props.i18n.t(`security.${key}`);
@@ -136,6 +145,11 @@ export function TwoFactorSettings(props: {
       if (current === generation) {
         const code = failure instanceof Error ? failure.message : '';
         if (code === 'SETTINGS_CLOSED') return;
+        if (code === 'SECURITY_HTTPS_REQUIRED') {
+          close();
+          setStatus((previous) => previous ? { ...previous, https_ready: false } : previous);
+          return;
+        }
         if (request.action === 'commit' && (code.startsWith('RUNTIME_CONTROL_') || code === 'SECURITY_UNAVAILABLE')) {
           // A lost response is not permission to replay a security mutation.
           close();
@@ -159,17 +173,19 @@ export function TwoFactorSettings(props: {
               : text(
                   code === 'ACCESS_PASSWORD_RETRY_LATER'
                     ? 'retryLater'
-                    : code === 'SECURITY_HTTPS_REQUIRED'
-                      ? 'httpsRequired'
-                      : code === 'ACCESS_PASSWORD_INVALID' ||
-                          code === 'ACCESS_FACTOR_INVALID'
-                        ? 'invalidCredentials'
+                    : code === 'ACCESS_PASSWORD_INVALID'
+                      ? 'invalidCredentials'
+                      : code === 'ACCESS_FACTOR_INVALID'
+                        ? 'invalidCode'
                         : 'retry',
                 ),
         );
       }
     } finally {
-      if (current === generation) setBusy(false);
+      if (current === generation) {
+        setBusy(false);
+        if (request.action === 'status' && status()?.https_ready) props.onHTTPSReady?.();
+      }
     }
   };
   // Status snapshots refresh independently of the selected environment. Only
@@ -195,6 +211,12 @@ export function TwoFactorSettings(props: {
   );
   onCleanup(close);
   const begin = (selected: SecurityAction) => {
+    if ((selected === 'setup' || selected === 'replace') && requiresHTTPS()) {
+      close();
+      props.configureHTTPS();
+      return;
+    }
+    setError('');
     setAction(selected);
     setCode('');
     setUseRecovery(false);
@@ -284,26 +306,41 @@ export function TwoFactorSettings(props: {
                 )
               : busy() ? props.i18n.t('environmentStatus.checking') : text('unavailable')}
           </span>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!status() || busy()}
-            onClick={() =>
-              status()!.enabled && !status()!.recovery_pending
-                ? setView('manage')
-                : begin('setup')
-            }
-          >
-            {text(
-              status()?.enabled && !status()?.recovery_pending
-                ? 'manage'
-                : 'setup',
-            )}
-          </Button>
+          <Show when={!requiresHTTPS()}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!status() || busy()}
+              onClick={() =>
+                status()!.enabled && !status()!.recovery_pending
+                  ? setView('manage')
+                  : begin('setup')
+              }
+            >
+              {text(
+                status()?.enabled && !status()?.recovery_pending
+                  ? 'manage'
+                  : 'setup',
+              )}
+            </Button>
+          </Show>
         </div>
+        <Show when={requiresHTTPS()}>
+          <div class="two-factor-notice two-factor-prerequisite" role="status">
+            <Lock size={18} aria-hidden="true" />
+            <div class="two-factor-notice-copy">
+              <h4>{props.i18n.t('security.httpsTitle')}</h4>
+              <p>{props.i18n.t('security.httpsHelp')}</p>
+            </div>
+            <Button size="sm" variant="outline" class="two-factor-notice-action" onClick={props.configureHTTPS}>
+              {props.i18n.t('security.configureHTTPS')}<ChevronRight size={14} aria-hidden="true" />
+            </Button>
+          </div>
+        </Show>
         <Show when={view() === 'closed' && error()}>
-          <div class="two-factor-error-row">
-            <p role="alert" class="two-factor-error">{error()}</p>
+          <div ref={errorNotice} role="alert" class="two-factor-notice two-factor-error">
+            <AlertCircle size={18} aria-hidden="true" />
+            <p class="two-factor-notice-copy">{error()}</p>
             <Button size="sm" variant="ghost" disabled={busy()} onClick={() => void run({ action: 'status' })}>{props.i18n.t('common.retry')}</Button>
           </div>
         </Show>
@@ -319,6 +356,12 @@ export function TwoFactorSettings(props: {
         contentClass="two-factor-dialog-body"
       >
         <div class="two-factor-flow">
+          <Show when={error()}>
+            <div ref={errorNotice} role="alert" class="two-factor-notice two-factor-error">
+              <AlertCircle size={18} aria-hidden="true" />
+              <p class="two-factor-notice-copy">{error()}</p>
+            </div>
+          </Show>
           <Show
             when={
               isEnrollment() && (view() === 'scan' || view() === 'recovery')
@@ -607,11 +650,6 @@ export function TwoFactorSettings(props: {
                     : 'confirm',
               )}
             </Button>
-          </Show>
-          <Show when={error()}>
-            <p role="alert" class="two-factor-error">
-              {error()}
-            </p>
           </Show>
         </div>
       </Dialog>

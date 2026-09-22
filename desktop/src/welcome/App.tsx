@@ -12204,6 +12204,33 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
   const saving = () => busyStateMatchesAction(props.busyState, 'save_settings');
   const canSave = () => pending() && validation().valid && !saving();
   const [certificateReady, setCertificateReady] = createSignal(false);
+  const [configuringHTTPS, setConfiguringHTTPS] = createSignal(false);
+  let connectionSecurityHeading: HTMLHeadingElement | undefined;
+  let twoFactorArea: HTMLElement | undefined;
+  function revealAccessSetting(element: HTMLElement | undefined): void {
+    const viewport = element?.closest<HTMLElement>('.environment-settings-scroll');
+    if (!viewport || !element) return;
+    // Scroll only the body; scrollIntoView can displace the fixed dialog header and footer.
+    viewport.scrollTop += element.getBoundingClientRect().top - viewport.getBoundingClientRect().top - 20;
+  }
+  function configureHTTPS(): void {
+    setConfiguringHTTPS(true);
+    props.updateDraftField('local_ui_protocol', 'https');
+    queueMicrotask(() => {
+      revealAccessSetting(connectionSecurityHeading);
+      connectionSecurityHeading?.focus({ preventScroll: true });
+    });
+  }
+  function finishHTTPS(): void {
+    if (!configuringHTTPS()) return;
+    setConfiguringHTTPS(false);
+    queueMicrotask(() => {
+      revealAccessSetting(twoFactorArea);
+      twoFactorArea?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+    });
+  }
+  const accessSettingsIdentity = createMemo(() => `${props.open}:${props.snapshot.environment_id}`);
+  createEffect(on(accessSettingsIdentity, () => setConfiguringHTTPS(false)));
   const canApply = () => (pending() || props.snapshot.runtime_configuration_pending) && validation().valid && !saving()
     && (props.draft.local_ui_protocol !== 'https' || certificateReady());
   const connectionRows = createMemo(() => buildRuntimeConnectionRows({
@@ -12269,7 +12296,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
         </section>
 
         <div class="environment-access-preferences">
-          <Show when={props.open && props.security}><TwoFactorSettings environmentID={props.snapshot.environment_id} runtimeStartedAt={props.snapshot.runtime_started_at_unix_ms} i18n={props.i18n} manage={props.security!} /></Show>
+          <Show when={props.open && props.security}><section ref={twoFactorArea}><TwoFactorSettings environmentID={props.snapshot.environment_id} runtimeStartedAt={props.snapshot.runtime_started_at_unix_ms} i18n={props.i18n} manage={props.security!} configureHTTPS={configureHTTPS} onHTTPSReady={finishHTTPS} /></section></Show>
           <section class="environment-access-row">
             <div class="environment-access-description">
               <h3>{props.i18n.t('settings.visibilityTitle')}</h3>
@@ -12296,7 +12323,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
 
           <section class="environment-access-row">
             <div class="environment-access-description">
-              <h3>{props.i18n.t('settings.connectionSecurity')}</h3>
+              <h3 ref={connectionSecurityHeading} tabIndex={-1} class="environment-access-security-heading">{props.i18n.t('settings.connectionSecurity')}</h3>
               <p>{props.i18n.t(props.draft.local_ui_protocol === 'https' ? 'settings.httpsHelp' : 'settings.httpNotice')}</p>
             </div>
             <div class="environment-access-control">
@@ -12307,6 +12334,15 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
                 ]}
                 onChange={(value) => props.updateDraftField('local_ui_protocol', value)} />
             </div>
+            <Show when={configuringHTTPS() && props.draft.local_ui_protocol === 'https'}>
+              <div class="two-factor-notice two-factor-https-guide environment-access-full" role="status">
+                <Shield class="h-4 w-4 shrink-0" aria-hidden="true" />
+                <div class="two-factor-notice-copy">
+                  <h4>{props.i18n.t('security.httpsSetupTitle')}</h4>
+                  <p>{props.i18n.t(!props.runtimeRestartAvailable ? 'security.httpsManualRestartStep' : certificateReady() ? 'security.httpsRestartStep' : 'security.httpsCertificateStep', { restart: props.i18n.t('settings.saveAndRestart') })}</p>
+                </div>
+              </div>
+            </Show>
             <Show when={validation().protocol_error_key}>
               <p role="alert" class="environment-access-full text-xs text-destructive">{props.i18n.t('settings.protocolRequired')}</p>
             </Show>

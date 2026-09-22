@@ -7,9 +7,8 @@
     "newPassword": "Nova senha do ambiente",
     "confirmPassword": "Confirmar senha",
     "setupPassword": "Defina uma senha do ambiente para proteger as conexões remotas.",
-    "httpsRequired": "Aplique HTTPS e reinicie este ambiente primeiro.",
     "retry": "Não foi possível concluir esta etapa. Tente novamente ou reabra as configurações de segurança.",
-    "invalidCredentials": "Verifique a senha e use um novo código de verificação.",
+    "invalidCredentials": "Verifique a senha do ambiente e tente novamente.",
     "disableHelp": "As conexões remotas usarão apenas a senha do ambiente.",
     "title": "Autenticação de dois fatores",
     "scope": "Exigir um código para entrar pelo navegador ou por URL direta.",
@@ -44,7 +43,15 @@
     "stepConnect": "Autenticador",
     "stepSave": "Códigos de recuperação",
     "copied": "Copiado",
-    "copyKey": "Copiar chave de configuração"
+    "copyKey": "Copiar chave de configuração",
+    "httpsTitle": "Configure o HTTPS primeiro",
+    "httpsHelp": "A autenticação de dois fatores pode ser configurada quando o HTTPS estiver ativo.",
+    "configureHTTPS": "Configurar HTTPS",
+    "httpsSetupTitle": "Ativar HTTPS para autenticação de dois fatores",
+    "httpsCertificateStep": "Crie ou importe um certificado abaixo e selecione “{restart}”.",
+    "httpsRestartStep": "Selecione “{restart}” abaixo. Após reiniciar, continue a configuração da autenticação de dois fatores.",
+    "httpsManualRestartStep": "Prepare um certificado abaixo, salve as configurações e reinicie o ambiente. Depois, volte à configuração da autenticação de dois fatores.",
+    "invalidCode": "Este código é inválido ou já foi usado. Tente um novo código."
   },
   "flowerSurface": {
     "filesystemPicker": {

@@ -7,9 +7,8 @@
     "newPassword": "Nueva contraseña del entorno",
     "confirmPassword": "Confirmar contraseña",
     "setupPassword": "Establece una contraseña del entorno para proteger las conexiones remotas.",
-    "httpsRequired": "Aplica HTTPS y reinicia este entorno primero.",
     "retry": "No se pudo completar este paso. Reinténtalo o vuelve a abrir los ajustes de seguridad.",
-    "invalidCredentials": "Comprueba la contraseña y usa un código nuevo.",
+    "invalidCredentials": "Comprueba la contraseña del entorno e inténtalo de nuevo.",
     "disableHelp": "Las conexiones remotas usarán solo la contraseña del entorno.",
     "title": "Autenticación de dos factores",
     "scope": "Solicitar un código al iniciar sesión desde el navegador o una URL directa.",
@@ -44,7 +43,15 @@
     "stepConnect": "Aplicación",
     "stepSave": "Códigos de recuperación",
     "copied": "Copiado",
-    "copyKey": "Copiar clave de configuración"
+    "copyKey": "Copiar clave de configuración",
+    "httpsTitle": "Configura HTTPS primero",
+    "httpsHelp": "Podrás configurar la autenticación de dos factores cuando HTTPS esté activo.",
+    "configureHTTPS": "Configurar HTTPS",
+    "httpsSetupTitle": "Activar HTTPS para la autenticación de dos factores",
+    "httpsCertificateStep": "Crea o importa un certificado abajo y selecciona «{restart}».",
+    "httpsRestartStep": "Selecciona «{restart}» abajo. Tras el reinicio, continúa configurando la autenticación de dos factores.",
+    "httpsManualRestartStep": "Prepara un certificado abajo, guarda la configuración y reinicia el entorno. Después, vuelve a configurar la autenticación de dos factores.",
+    "invalidCode": "Este código no es válido o ya se ha utilizado. Prueba con uno nuevo."
   },
   "flowerSurface": {
     "filesystemPicker": {

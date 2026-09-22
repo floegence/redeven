@@ -7,9 +7,8 @@
     "newPassword": "Nouveau mot de passe de l’environnement",
     "confirmPassword": "Confirmer le mot de passe",
     "setupPassword": "Définissez un mot de passe pour protéger les connexions à distance.",
-    "httpsRequired": "Appliquez HTTPS et redémarrez ce environnement.",
     "retry": "Impossible de terminer cette étape. Réessayez ou rouvrez les paramètres de sécurité.",
-    "invalidCredentials": "Vérifiez le mot de passe et utilisez un nouveau code.",
+    "invalidCredentials": "Vérifiez le mot de passe de l’environnement et réessayez.",
     "disableHelp": "Les connexions à distance utiliseront uniquement le mot de passe de l’environnement.",
     "title": "Authentification à deux facteurs",
     "scope": "Exiger un code pour les connexions par navigateur ou URL directe.",
@@ -44,7 +43,15 @@
     "stepConnect": "Application",
     "stepSave": "Codes de récupération",
     "copied": "Copié",
-    "copyKey": "Copier la clé de configuration"
+    "copyKey": "Copier la clé de configuration",
+    "httpsTitle": "Configurer HTTPS d’abord",
+    "httpsHelp": "L’authentification à deux facteurs peut être configurée une fois HTTPS actif.",
+    "configureHTTPS": "Configurer HTTPS",
+    "httpsSetupTitle": "Activer HTTPS pour l’authentification à deux facteurs",
+    "httpsCertificateStep": "Créez ou importez un certificat ci-dessous, puis sélectionnez « {restart} ».",
+    "httpsRestartStep": "Sélectionnez « {restart} » ci-dessous. Après le redémarrage, poursuivez la configuration de l’authentification à deux facteurs.",
+    "httpsManualRestartStep": "Préparez un certificat ci-dessous, enregistrez les paramètres et redémarrez l’environnement. Revenez ensuite configurer l’authentification à deux facteurs.",
+    "invalidCode": "Ce code est invalide ou a déjà été utilisé. Essayez un nouveau code."
   },
   "flowerSurface": {
     "filesystemPicker": {
