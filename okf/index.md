@@ -105,6 +105,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Shared surface material](ui/surface-material.md) - Apply lightweight shared depth, quiet seams, and immediate control feedback across Env App, Desktop, and Flower.
 - [Input focus boundaries](ui/input-focus-boundaries.md) - Keep one stable focus border across standard and compound inputs while preserving non-input keyboard cues.
 - [Git browser visual states](ui/git-browser-visual-states.md) - Keep selection, current-branch facts, Git status tones, hover, and focus visually independent across themes.
+- [Git diff request lifecycle](ui/git-diff-request-lifecycle.md) - Preserve request ownership and reading state across layout changes while refreshing on new Git targets, explicit actions, and transport replacement.
 - [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.
 - [Workbench composition surfaces and editing](ui/workbench-composition.md) - Edit optional region names and note materials with native input and durable layout storage.
 - [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.
