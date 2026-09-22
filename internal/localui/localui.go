@@ -568,7 +568,6 @@ func (s *Server) configureAcceptor() error {
 			}
 			metaCopy := pending.meta
 			err := s.a.ServeLocalDirectSession(ctx, current, &metaCopy, agent.LocalDirectSessionOptions{
-				AccessUnlocked:            s.accessEnabled() || pending.accessSessionID == "trusted-desktop",
 				TraceID:                   pending.traceID,
 				ConnectArtifactIssuedAtMs: pending.connectArtifactIssuedAtMs,
 				PluginCredentialHash:      pending.pluginCredentialHash,

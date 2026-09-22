@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -124,7 +126,7 @@ func TestRegisterLocalDirectChannelStartsUnlockedWhenAccessAlreadyAuthorized(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup := a.registerLocalDirectChannel(meta, LocalDirectSessionOptions{AccessUnlocked: true, AccessSessionID: local.AccessSessionID})
+	cleanup := a.registerLocalDirectChannel(meta, LocalDirectSessionOptions{AccessSessionID: local.AccessSessionID}, nil)
 	defer cleanup()
 
 	if !gate.IsChannelUnlocked(meta.ChannelID) {
@@ -161,6 +163,7 @@ func TestServeLocalDirectAcceptorSessionAttachesAndDetachesTerminalNotificationS
 	}
 	a := &Agent{
 		log:                    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		accessGate:             accessgate.New(accessgate.Options{}),
 		term:                   manager,
 		sessions:               make(map[string]*activeSession),
 		pluginSessions:         newAuthenticatedPluginSessionRegistry(),
@@ -179,6 +182,7 @@ func TestServeLocalDirectAcceptorSessionAttachesAndDetachesTerminalNotificationS
 	pluginReady := make(chan struct{})
 	go func() {
 		done <- a.ServeLocalDirectSession(context.Background(), sess, meta, LocalDirectSessionOptions{
+			AccessSessionID:      "direct:ch-acceptor-notifications",
 			OnPluginSessionReady: func() { close(pluginReady) },
 		})
 	}()
@@ -288,5 +292,61 @@ func TestServeLocalDirectSessionRejectsAdmissionAfterShutdown(t *testing.T) {
 	}
 	if !a.waitForSessions(50 * time.Millisecond) {
 		t.Fatal("rejected local direct session changed the session wait group")
+	}
+}
+
+type registrationPluginLifecycle struct {
+	recordingPluginSessionLifecycle
+	onBind func()
+}
+
+func (l *registrationPluginLifecycle) BindPluginSessionGeneration(context.Context, *session.Meta, string, string) error {
+	l.onBind()
+	return nil
+}
+
+func TestLocalDirectAdmissionRejectsUnauthorizedOrCancelledBeforeReady(t *testing.T) {
+	for _, scenario := range []string{"missing-login", "revoked-login", "cancelled-before-registration", "revoked-during-plugin-binding"} {
+		t.Run(scenario, func(t *testing.T) {
+			gate := accessgate.New(accessgate.Options{Password: "secret"})
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var logs bytes.Buffer
+			binds, ready := 0, false
+			var loginToken string
+			opts := LocalDirectSessionOptions{OnPluginSessionReady: func() { ready = true }}
+			if scenario != "missing-login" {
+				login, err := gate.MintLocalSession("secret")
+				if err != nil {
+					t.Fatal(err)
+				}
+				opts.AccessSessionID = login.AccessSessionID
+				loginToken = login.SessionToken
+				if scenario == "revoked-login" {
+					gate.RevokeLocalSession(login.SessionToken)
+				}
+			}
+			if scenario == "cancelled-before-registration" {
+				cancel()
+			}
+			a := &Agent{
+				log:                    slog.New(slog.NewTextHandler(&logs, nil)),
+				accessGate:             gate,
+				sessions:               make(map[string]*activeSession),
+				pluginSessions:         newAuthenticatedPluginSessionRegistry(),
+				pluginSessionLifecycle: &registrationPluginLifecycle{onBind: func() { binds++; gate.RevokeLocalSession(loginToken) }},
+			}
+			err := a.ServeLocalDirectSession(ctx, shutdownAdmissionSession{}, &session.Meta{ChannelID: "browser"}, opts)
+			if err == nil || ready || strings.Contains(logs.String(), "local direct session opened") {
+				t.Fatalf("rejected channel published readiness: error=%v ready=%v logs=%s", err, ready, logs.String())
+			}
+			expectedBinds := 0
+			if scenario == "revoked-during-plugin-binding" {
+				expectedBinds = 1
+			}
+			if binds != expectedBinds || len(a.sessions) != 0 || gate.IsChannelUnlocked("browser") {
+				t.Fatal("rejected channel retained session state or activated plugins before authorization")
+			}
+		})
 	}
 }

@@ -93,7 +93,12 @@ func TestService_InitiallyUnlockedChannelSkipsResume(t *testing.T) {
 		CanRead:      true,
 	}
 
-	gate.RegisterChannelWithOptions(rpcMeta, accessgate.RegisterChannelOptions{Unlocked: true})
+	login, err := gate.MintLocalSession("secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate.RegisterChannelWithOptions(rpcMeta, accessgate.RegisterChannelOptions{AccessSessionID: login.AccessSessionID})
+	defer gate.UnregisterChannel(rpcMeta.ChannelID)
 
 	router := sessionrpc.NewRouter()
 	New(gate).Register(router, &rpcMeta)
