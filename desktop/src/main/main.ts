@@ -1109,7 +1109,7 @@ const runtimePlacementBridgeRegistry = new RuntimePlacementBridgeRegistry(
     console.info('[redeven:model-source]', JSON.stringify({
       environment_id: record.environment_id, runtime_started_at: record.startup.started_at_unix_ms,
       connection_generation: record.session.getRecoverySnapshot().generation,
-      phase: state.phase, ...(state.phase === 'failed' ? { code: 'MODEL_SOURCE_EXITED' } : {}),
+      phase: state.phase, ...(state.phase === 'failed' ? { code: 'MODEL_SOURCE_EXITED', message: state.message } : {}),
     }));
   },
 );
@@ -15564,6 +15564,7 @@ async function executeDirectManagedEnvironmentLifecycle(
           sshTransportManager: desktopSSHTransportManager,
           sshCredentialScope: input.environment_id,
           target: sshDetails,
+          runtimeStateRoot: desktopRuntimePlacementStateRoot(input.placement),
           runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
           sshPassword,
           sourceRuntimeRoot: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
@@ -18299,7 +18300,15 @@ if (!app.requestSingleInstanceLock()) {
       return { ok: true, data };
     } catch (error) {
       const code = error instanceof RuntimeControlError ? error.code : 'SECURITY_UNAVAILABLE';
-      if (code !== 'SETTINGS_CLOSED') console.warn('[redeven:security]', { environment_id: environmentID, stage: 'runtime_security', code });
+      if (code !== 'SETTINGS_CLOSED') {
+        const connection = runtimePlacementBridgeRegistry.get(environmentID as DesktopRuntimeTargetID);
+        console.warn('[redeven:security]', {
+          environment_id: environmentID, stage: 'runtime_security', code,
+          ...(connection ? { runtime_started_at: connection.startup.started_at_unix_ms,
+            connection_generation: connection.session.getRecoverySnapshot().generation } : {}),
+          ...(error instanceof RuntimeControlError && error.statusCode !== null ? { status_code: error.statusCode } : {}),
+        });
+      }
       return { ok: false, code };
     }
   });
