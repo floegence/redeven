@@ -1,14 +1,18 @@
+import { createActivityNavigation, activityTargetID, isBuiltinActivityPage, PENDING_ACTIVITY_PLUGIN_ID, type ActivityNavigation, type ActivityRestoreTarget } from './services/activityNavigation';
 import { EnvironmentAccessGate, type AccessGatePhase } from './EnvironmentAccessGate';
-import { createEnvResourceCacheScope } from './services/envResourceCache';
+import { createEnvResourceCacheAccess } from './services/envResourceCache';
 import { isSessionEventAuthorizationError } from './services/sessionHTTP';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
 import { ActivityPageLoading } from './primitives/ActivityPageLoading';
 import { CodespacesPageSkeleton } from './pages/CodespacesPresentation';
+import { HostApplicationsPageSkeleton } from './pages/HostApplicationsPresentation';
+import { WebServicesPageSkeleton } from './pages/WebServicesPresentation';
+import { ContainersPageSkeleton } from './pages/ContainersPresentation';
 import { PageAssetRecoveryNotice, PageLoadError } from './reconnect/PageAssetRecovery';
 import { createEnvAppAssetRecovery } from './reconnect/createEnvAppAssetRecovery';
 import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
 import { writeTextToClipboard } from './utils/clipboard';
-import { ErrorBoundary, For, Show, Suspense, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js';
+import { ErrorBoundary, For, Show, Suspense, batch, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { createUIFirstSelection, deferAfterPaint, type FloeComponent, type UIFirstSelectionEvent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryContributions, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
@@ -288,7 +292,6 @@ const EMPTY_FLOWER_COMPANION_PRESENCE: FlowerCompanionPresenceProjection = {
   unread_completed_count: 0,
 };
 
-const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
 const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
 const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
@@ -464,16 +467,6 @@ function persistDesktopViewMode(mode: EnvViewMode): void {
   writeUIStorageItem(DESKTOP_VIEW_MODE_STORAGE_KEY, mode);
 }
 
-function readPersistedActiveSurface(): EnvActivitySurfaceId | null {
-  const v = String(readUIStorageItem(ACTIVE_SURFACE_STORAGE_KEY) ?? '').trim();
-  if (isEnvSurfaceId(v) || v === PLUGIN_CENTER_ACTIVITY_ID) return v;
-  return null;
-}
-
-function persistActiveSurface(surfaceId: EnvActivitySurfaceId): void {
-  writeUIStorageItem(ACTIVE_SURFACE_STORAGE_KEY, surfaceId);
-}
-
 const ENV_DISPLAY_MODE_SWITCHER_OPTIONS = [
   { id: 'activity', icon: Terminal },
   { id: 'workbench', icon: Grid3x3 },
@@ -517,9 +510,17 @@ function EnvDisplayModeSwitcher(props: {
   );
 }
 
-export function EnvAppShell() {
+export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const desktopBootstrapReadyMs = Math.max(0, envAppNowMs() - envAppModuleStartedAtMs);
   const layout = useLayout();
+  const navigation = props.navigation ?? createActivityNavigation();
+  const initialSurface = activityTargetID(navigation.initial);
+  const initialRegularSurface = isEnvSurfaceId(initialSurface) ? initialSurface : ENV_DEFAULT_SURFACE_ID;
+  if (layout.sidebarActiveTab() !== initialSurface) layout.setSidebarActiveTab(initialSurface, { openSidebar: false });
+  const [pendingPluginRestore, setPendingPluginRestore] = createSignal<Exclude<ActivityRestoreTarget, { kind: 'builtin' }> | undefined>(
+    navigation.initial.kind === 'builtin' ? undefined : navigation.initial,
+  );
+  let transientActivityFallback = '';
   const theme = useTheme();
   const i18n = useI18n();
   const desktopSessionContext = readDesktopSessionContextSnapshot();
@@ -917,24 +918,37 @@ export function EnvAppShell() {
   });
 
   const [envId, setEnvId] = createSignal(getEnvPublicIDFromSession());
-  const environmentDetailRequest = createMemo<EnvironmentDetailRequest | null>(() => {
+  const [permissionConnection, setPermissionConnection] = createSignal<unknown>(null);
+  const permissionOwner = Symbol('permission-session');
+  type SessionEnvironmentDetail = EnvironmentDetail & { [permissionOwner]: unknown };
+  createEffect(() => {
+    const connection = protocol.status() === 'connected' ? protocol.session?.() : null;
+    if (connection) setPermissionConnection(() => connection);
+  });
+  type AuthenticatedEnvironmentRequest = EnvironmentDetailRequest & { connection: unknown };
+  const environmentDetailRequest = createMemo<AuthenticatedEnvironmentRequest | null>(() => {
     const id = envId() || null;
     if (!id) return null;
     if (accessGateVisible()) return null;
     return {
+      connection: permissionConnection(),
       source: isLocalMode() ? 'local' : 'controlplane',
       envId: isLocalMode() ? localRuntime()?.env_public_id || 'env_local' : id,
     };
   });
 
-  const [env, { refetch: refetchEnv }] = createResource<EnvironmentDetail | null, EnvironmentDetailRequest | null>(
+  const [env, { refetch: refetchEnv }] = createResource<SessionEnvironmentDetail | null, AuthenticatedEnvironmentRequest | null>(
     environmentDetailRequest,
-    (request) => (request ? getEnvironment(request) : null),
+    async request => {
+      if (!request) return null;
+      const result = await getEnvironment({ source: request.source, envId: request.envId });
+      return result ? { ...result, [permissionOwner]: request.connection } : null;
+    },
   );
 
-  const resourceCacheScope = createEnvResourceCacheScope({
+  const resourceCacheAccess = createEnvResourceCacheAccess({
     environment: envId,
-    readable: () => Boolean(env()?.permissions?.can_read),
+    readable: () => env()?.[permissionOwner] === permissionConnection() ? env()?.permissions?.can_read : undefined,
     locked: accessGateVisible,
     connection: () => protocol.status() === 'connected' ? protocol.session?.() : null,
   });
@@ -980,10 +994,10 @@ export function EnvAppShell() {
   const controlplaneStatus = createMemo(() => String(env()?.status ?? '').trim());
   const canUseFlower = createMemo(() => !accessGateVisible());
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
-  const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>('workbench');
+  const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>(readPersistedDesktopViewMode() ?? 'workbench');
   const viewMode = createMemo<EnvViewMode>(() => (layout.isMobile() ? 'activity' : desktopViewMode()));
-  const [lastActivitySurface, setLastActivitySurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
-  const [lastRequestedSurface, setLastRequestedSurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
+  const [lastActivitySurface, setLastActivitySurface] = createSignal<EnvSurfaceId>(initialRegularSurface);
+  const [lastRequestedSurface, setLastRequestedSurface] = createSignal<EnvSurfaceId>(initialRegularSurface);
   const [workbenchSurfaceActivationSeq, setWorkbenchSurfaceActivationSeq] = createSignal(0);
   const [workbenchSurfaceActivation, setWorkbenchSurfaceActivation] = createSignal<EnvWorkbenchSurfaceActivationRequest | null>(null);
   const [workbenchOverviewEntrySeq, setWorkbenchOverviewEntrySeq] = createSignal(0);
@@ -1036,7 +1050,7 @@ export function EnvAppShell() {
     }
   };
   const toggleFilesMobileSidebar = () => setFilesMobileSidebarOpen((open) => !open);
-  let initialActivitySurface: EnvActivitySurfaceId | null = null;
+  const initialActivitySurface = initialSurface;
 
   type EnvFlowerTurnHandoffContext = Readonly<{
     mode: EnvViewMode;
@@ -1261,6 +1275,7 @@ export function EnvAppShell() {
   });
 
   const openSettings = (section?: EnvSettingsSection, options?: { origin?: EnvSettingsOrigin }) => {
+    if (viewMode() === 'activity') { transientActivityFallback = ''; setPendingPluginRestore(undefined); navigation.commit({ kind: 'builtin', page: 'settings' }); }
     updatePluginPanel({ open: false });
     setPluginCenterSelectedInventoryKey(undefined);
     setSettingsFocusSection(section ?? 'config');
@@ -1673,13 +1688,6 @@ export function EnvAppShell() {
     })
   ));
 
-  createEffect(() => {
-    const activeID = layout.sidebarActiveTab();
-    if (!activeID.startsWith(PLUGIN_ACTIVITY_COMPONENT_PREFIX)) return;
-    if (activityPluginContributions().some((component) => component.id === activeID)) return;
-    activateActivitySurface(lastActivitySurface(), { persist: false });
-  });
-
   const [workbenchPluginCenterOpen, setWorkbenchPluginCenterOpen] = createSignal(false);
   const [workbenchPluginCenterPresent, setWorkbenchPluginCenterPresent] = createSignal(false);
   let pluginCenterFocusTarget: PluginSurfaceLaunchTarget | undefined;
@@ -1893,7 +1901,10 @@ export function EnvAppShell() {
     const mode = viewMode();
     return serializePluginPlacementOperation(() => performOpenPluginSurface(target, options, mode));
   };
-  const performOpenPinnedActivityPlugin = async (inventoryKey: string): Promise<void> => {
+  const performOpenPinnedActivityPlugin = async (
+    inventoryKey: string, restoredTarget?: PluginSurfaceLaunchTarget, stillCurrent: () => boolean = () => true,
+  ): Promise<void> => {
+    if (!stillCurrent()) return;
     const tile = pluginPanelModel().tiles.find((candidate) => (
       candidate.kind === 'plugin'
       && candidate.item.inventoryKey === inventoryKey
@@ -1903,9 +1914,7 @@ export function EnvAppShell() {
     if (!tile || tile.kind !== 'plugin' || !tile.item.defaultLaunchTarget) {
       throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
     }
-    const requestedTarget = {
-      ...tile.item.defaultLaunchTarget,
-    };
+    const requestedTarget = { ...(restoredTarget ?? tile.item.defaultLaunchTarget) };
     const currentTarget = resolveCurrentPluginSurfaceTarget(requestedTarget);
     if (!currentTarget) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
 
@@ -1924,6 +1933,7 @@ export function EnvAppShell() {
     if (mountedTarget && pluginSurfaceTargetKey(mountedTarget) !== pluginSurfaceTargetKey(currentTarget)) {
       await retireActivityPluginPage(inventoryKey);
     }
+    if (!stillCurrent()) return;
     if (!runtime.target()) runtime.setTarget({ ...currentTarget });
 
     if (viewMode() === 'activity') setEnvSidebarActiveTab(pluginActivityComponentID(inventoryKey), { openSidebar: false });
@@ -3651,26 +3661,8 @@ export function EnvAppShell() {
         setEnvId(getEnvPublicIDFromSession());
       }
 
-      let preferredDesktopViewMode = readPersistedDesktopViewMode() ?? 'workbench';
-      let preferredSurface = readPersistedActiveSurface();
-      if (rt && preferredSurface === 'ports') preferredSurface = 'codespaces';
-      // Plugin Center is an Activity-only surface. It must not override the
-      // separately persisted desktop mode when the user last selected Workbench.
-      // Restore a regular surface for Workbench while preserving the mode choice.
-      if (preferredSurface === PLUGIN_CENTER_ACTIVITY_ID && preferredDesktopViewMode === 'workbench') {
-        preferredSurface = null;
-      }
-      if (preferredSurface === 'ai' && preferredDesktopViewMode === 'workbench') {
-        preferredSurface = null;
-        setPendingAutoOpenAI(true);
-      }
-      const initialSurface = preferredSurface ?? ENV_DEFAULT_SURFACE_ID;
-      const initialRegularSurface = isEnvSurfaceId(initialSurface) ? initialSurface : ENV_DEFAULT_SURFACE_ID;
-      setDesktopViewMode(preferredDesktopViewMode);
-      setLastActivitySurface(initialRegularSurface);
-      setLastRequestedSurface(initialRegularSurface);
-      layout.setSidebarActiveTab(initialSurface, { openSidebar: false });
-      initialActivitySurface = initialSurface;
+      const preferredDesktopViewMode = desktopViewMode();
+      if (initialSurface === 'ai' && preferredDesktopViewMode === 'workbench') setPendingAutoOpenAI(true);
       if (!layout.isMobile() && preferredDesktopViewMode === 'workbench') {
         requestWorkbenchOverviewEntry();
       }
@@ -3839,8 +3831,14 @@ export function EnvAppShell() {
       sidebar: { order: 98, fullScreen: true },
     });
     list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: Settings, component: EnvSettingsPage, sidebar: { order: 100, fullScreen: true } });
+    list.push({ id: PENDING_ACTIVITY_PLUGIN_ID, name: i18n.t('uiCopy.plugin.continuity.loading'), icon: Grid3x3, component: ActivityPageLoading, sidebar: { order: 101, fullScreen: true } });
     return list;
   });
+
+  const pageModules = { terminal: EnvTerminalPage, monitor: EnvMonitorPage, files: EnvFileBrowserPage,
+    codespaces: EnvCodespacesPage, ports: EnvPortForwardsPage, applications: EnvHostApplicationsPage,
+    containers: EnvContainersPage, ai: EnvAIPage, settings: EnvSettingsPage };
+  if (initialSurface in pageModules) void pageModules[initialSurface as keyof typeof pageModules].preload().catch(() => undefined);
 
   const [persistReady, setPersistReady] = createSignal(false);
 
@@ -3863,6 +3861,11 @@ export function EnvAppShell() {
   };
 
   const activateActivitySurface = (surface: EnvActivitySurfaceId, opts?: { persist?: boolean }) => {
+    if (opts?.persist !== false && viewMode() === 'activity') {
+      transientActivityFallback = '';
+      setPendingPluginRestore(undefined);
+      navigation.commit({ kind: 'builtin', page: surface });
+    }
     if (surface === 'ai') {
       setActivityFlowerPresentation('collapsed');
     }
@@ -3870,12 +3873,6 @@ export function EnvAppShell() {
       setSettingsOrigin(null);
       setLastActivitySurface(surface);
       setLastRequestedSurface(surface);
-      if (opts?.persist !== false) {
-        persistActiveSurface(surface);
-      }
-    }
-    if (surface === PLUGIN_CENTER_ACTIVITY_ID && opts?.persist !== false) {
-      persistActiveSurface(surface);
     }
     setEnvSidebarActiveTab(surface, { openSidebar: shouldEnvTabOpenSidebar(surface) });
   };
@@ -3935,7 +3932,7 @@ export function EnvAppShell() {
       focusSurface?: boolean;
       requestWorkbenchOverview?: boolean;
     },
-  ) => {
+  ) => batch(() => {
     const previousMode = viewMode();
     const requestedMode = layout.isMobile() ? 'activity' : mode;
     if (!layout.isMobile()) {
@@ -3954,6 +3951,12 @@ export function EnvAppShell() {
     setLastRequestedSurface(targetSurface);
 
     if (requestedMode === 'activity') {
+      const saved = pendingPluginRestore() ?? navigation.record().target;
+      if (previousMode !== 'activity' && options?.surfaceId === undefined) {
+        if (saved.kind === 'builtin') activateActivitySurface(saved.page, { persist: false });
+        else { setPendingPluginRestore(saved); setEnvSidebarActiveTab(PENDING_ACTIVITY_PLUGIN_ID, { openSidebar: false }); }
+        return;
+      }
       activateActivitySurface(targetSurface, { persist: false });
       return;
     }
@@ -3970,7 +3973,7 @@ export function EnvAppShell() {
     ) {
       requestWorkbenchOverviewEntry();
     }
-  };
+  });
 
   const viewModeSelection = createUIFirstSelection<EnvViewMode, {
     surfaceId: EnvSurfaceId;
@@ -3978,7 +3981,7 @@ export function EnvAppShell() {
   }>({
     committed: viewMode,
     commit: (mode, options) => setViewMode(mode, {
-      surfaceId: options?.surfaceId ?? activeSurface(),
+      surfaceId: mode === 'activity' ? undefined : options?.surfaceId ?? activeSurface(),
       focusSurface: options?.focusSurface ?? mode !== 'activity',
     }),
     onEvent: createUIPresentationEventRecorder({
@@ -4021,14 +4024,65 @@ export function EnvAppShell() {
   });
 
   createEffect(() => {
-    if (!persistReady()) return;
+    if (!persistReady() || viewMode() !== 'activity') return;
     const id = layout.sidebarActiveTab();
-    if (!isEnvSurfaceId(id)) return;
-    setLastActivitySurface(id);
-    if (viewMode() === 'activity') {
-      setLastRequestedSurface(id);
+    if (id === PENDING_ACTIVITY_PLUGIN_ID || id === transientActivityFallback) return;
+    setPendingPluginRestore(undefined);
+    if (isBuiltinActivityPage(id)) {
+      if (isEnvSurfaceId(id)) { setLastActivitySurface(id); setLastRequestedSurface(id); }
+      navigation.commit({ kind: 'builtin', page: id });
+    } else if (id.startsWith(PLUGIN_ACTIVITY_COMPONENT_PREFIX)) {
+      const item = pinnedActivityPluginTiles().find(tile => pluginActivityComponentID(tile.item.inventoryKey) === id)?.item;
+      const target = item && activityPluginPageRuntimes.get(item.inventoryKey)?.target();
+      if (target) navigation.commit({ kind: 'plugin', pluginInstanceID: target.pluginInstanceID, pluginID: target.pluginID, surfaceID: target.surfaceID });
     }
-    persistActiveSurface(id);
+  });
+
+  const activityFallback = () => navigation.fallback(page => page !== 'ai' || canUseFlower());
+  const restoreFallback = (permanent: boolean) => {
+    const fallback = activityFallback();
+    transientActivityFallback = permanent ? '' : fallback;
+    setPendingPluginRestore(undefined);
+    if (permanent) navigation.commit({ kind: 'builtin', page: fallback });
+    activateActivitySurface(fallback, { persist: false });
+  };
+  let restoringPlugin: { target: ActivityRestoreTarget; owner: unknown } | undefined;
+  createEffect(() => {
+    const pending = pendingPluginRestore();
+    if (!pending || viewMode() !== 'activity' || layout.sidebarActiveTab() !== PENDING_ACTIVITY_PLUGIN_ID) return;
+    if (accessGateVisible() || env.state !== 'ready') return;
+    if (layout.isMobile() || !env()?.permissions?.can_read) { restoreFallback(true); return; }
+    if (pluginInventoryError()) { restoreFallback(false); return; }
+    const projection = pluginInventoryProjection();
+    if (!projection || pluginInventoryInitialPending() || !canOpenPluginSurfaces()) return;
+    const item = projection.items.find(item => pending.kind === 'legacy-plugin'
+      ? item.inventoryKey === pending.inventoryKey
+      : item.pluginInstanceID === pending.pluginInstanceID && item.pluginID === pending.pluginID);
+    const tile = item && pinnedActivityPluginTiles().find(tile => tile.item.inventoryKey === item.inventoryKey);
+    const target = pending.kind === 'legacy-plugin' ? tile?.item.defaultLaunchTarget
+      : tile && [tile.item.defaultLaunchTarget, ...(tile.item.launchTargets ?? [])].find(target => target?.surfaceID === pending.surfaceID);
+    if (!tile || !target) { restoreFallback(true); return; }
+    const owner = pluginInventorySource();
+    if (restoringPlugin?.target === pending && restoringPlugin.owner === owner) return;
+    const attempt = { target: pending, owner };
+    restoringPlugin = attempt;
+    const current = () => pendingPluginRestore() === pending && pluginInventorySource() === owner
+      && viewMode() === 'activity' && layout.sidebarActiveTab() === PENDING_ACTIVITY_PLUGIN_ID;
+    void serializePluginPlacementOperation(() => performOpenPinnedActivityPlugin(tile.item.inventoryKey, target, current))
+      .catch(error => {
+        if (!current()) return;
+        reportPluginNavigationFailure(error);
+        restoreFallback(false);
+      }).finally(() => { if (restoringPlugin === attempt) restoringPlugin = undefined; });
+  });
+
+  createEffect(() => {
+    const activeID = layout.sidebarActiveTab();
+    if (!activeID.startsWith(PLUGIN_ACTIVITY_COMPONENT_PREFIX)) return;
+    if (activityPluginContributions().some(component => component.id === activeID)) return;
+    if (accessGateVisible() || pluginInventoryInitialPending()) return;
+    if (pluginInventoryError()) { restoreFallback(false); return; }
+    if (pluginInventoryProjection() || env()?.permissions?.can_read === false) restoreFallback(true);
   });
 
   // Plugin Center belongs to Activity. A stale sidebar tab must never become
@@ -4042,7 +4096,6 @@ export function EnvAppShell() {
     setLastActivitySurface(fallback);
     setLastRequestedSurface(fallback);
     setEnvSidebarActiveTab(fallback, { openSidebar: false });
-    persistActiveSurface(fallback);
   });
 
   const activityItems = (): ActivityBarItem[] => {
@@ -4116,7 +4169,9 @@ export function EnvAppShell() {
         });
       }
     }
-    return items;
+    return items.map(item => isBuiltinActivityPage(item.id) ? {
+      ...item, onClick: item.onClick ?? (() => activateActivitySurface(item.id as EnvActivitySurfaceId)),
+    } : item);
   };
 
   const activityBottomItems = (): ActivityBarItem[] => {
@@ -4717,6 +4772,16 @@ export function EnvAppShell() {
     />
   );
 
+  const renderActivityPageSkeleton = (id: string) => {
+    switch (id) {
+      case 'codespaces': return <CodespacesPageSkeleton />;
+      case 'applications': return <HostApplicationsPageSkeleton />;
+      case 'ports': return <WebServicesPageSkeleton />;
+      case 'containers': return <ContainersPageSkeleton />;
+      default: return <ActivityPageLoading />;
+    }
+  };
+
   const renderActivityShell = () => (
     <Shell
       class="!h-full"
@@ -4805,12 +4870,12 @@ export function EnvAppShell() {
               <ActivityAppsMain
                 activeId={() => layout.sidebarActiveTab()}
                 activationMode="after-paint"
-                renderFallback={id => id === 'codespaces' ? <CodespacesPageSkeleton /> : <ActivityPageLoading />}
+                renderFallback={renderActivityPageSkeleton}
                 renderError={() => <PageLoadError ready={assetRecoveryReady()} />}
               />
             </Show>
             <Show when={viewMode() === 'activity' && accessGateVisible() && !recoveryVisible()}>
-              {accessGatePanel()}
+              <Show when={accessGatePhase() === 'checking'} fallback={accessGatePanel()}>{renderActivityPageSkeleton(layout.sidebarActiveTab())}</Show>
             </Show>
           </div>
           <Show when={viewMode() === 'activity' && recoveryVisible()}>
@@ -4825,7 +4890,7 @@ export function EnvAppShell() {
                 />
               )}
             >
-              {accessGatePanel()}
+              <Show when={accessGatePhase() === 'checking'} fallback={accessGatePanel()}>{renderActivityPageSkeleton(layout.sidebarActiveTab())}</Show>
             </Show>
           </Show>
         </div>
@@ -5005,7 +5070,7 @@ export function EnvAppShell() {
   return (
     <EnvContext.Provider
       value={{
-        resourceCacheScope,
+        resourceCacheAccess,
         flowerDraftCoordinator,
         aiReadinessController,
         env_id: envId,

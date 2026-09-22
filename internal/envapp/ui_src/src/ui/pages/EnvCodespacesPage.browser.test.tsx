@@ -16,7 +16,7 @@ vi.mock('@floegence/floe-webapp-core', async original => ({
 }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
-  resourceCacheScope: () => state.scope,
+  resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: state.scope }),
 }) }));
 vi.mock('../services/filesystemPicker', () => ({ useEnvFilesystemPicker: () => ({}) }));
 vi.mock('../services/localApi', async original => ({ ...await original<object>(), fetchLocalApiJSON: (url: string) => {

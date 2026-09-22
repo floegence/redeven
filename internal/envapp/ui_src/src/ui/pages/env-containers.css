@@ -1128,6 +1128,7 @@
 
 @container (max-width: 639px) {
   .redeven-containers button { min-height: 44px; }
+  .container-resource-tabs__tab { min-height: 44px; }
   .container-header-main { padding: 8px 0; }
   .container-list-page { padding: 12px; }
   .container-filter-switch { max-width: 100%; overflow-x: auto; }

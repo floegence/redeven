@@ -9,7 +9,7 @@ import { EnvPortForwardsPage, ForwardMetadataDialog, ManagedReleaseCandidates, M
 import type { ManagedOperation } from './managedServiceOperationController';
 
 const cacheBrowser = vi.hoisted(() => ({ scope: '', fetch: vi.fn() }));
-vi.mock('./EnvContext', () => ({ useEnvContext: () => ({ resourceCacheScope: () => cacheBrowser.scope, env_id: () => 'browser-web', goActivity: vi.fn(), env: Object.assign(() => ({ permissions: { can_read: true, can_write: true, can_execute: true } }), { state: 'ready' }) }) }));
+vi.mock('./EnvContext', () => ({ useEnvContext: () => ({ resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: cacheBrowser.scope }), env_id: () => 'browser-web', goActivity: vi.fn(), env: Object.assign(() => ({ permissions: { can_read: true, can_write: true, can_execute: true } }), { state: 'ready' }) }) }));
 vi.mock('../services/localApi', async original => ({ ...await original<object>(), fetchLocalApiJSON: cacheBrowser.fetch }));
 vi.mock('@floegence/floe-webapp-core', async original => ({ ...await original<object>(), useNotification: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock('@floegence/floe-webapp-protocol', () => ({ useProtocol: () => ({ session: () => null }) }));
@@ -50,6 +50,31 @@ describe('EnvPortForwardsPage browser presentation', () => {
     dispose = undefined;
     document.body.replaceChildren();
     document.documentElement.classList.remove('dark');
+  });
+
+  it.each([390, 1440])('keeps the Web Service header, address and toolbar geometry stable at %s px', async width => {
+    const { Suspense, lazy } = await import('solid-js');
+    const { WebServicesPageSkeleton } = await import('./WebServicesPresentation');
+    await page.viewport(width, 900);
+    cacheBrowser.scope = `web-geometry-${crypto.randomUUID()}`;
+    let finishModule!: (value: { default: typeof EnvPortForwardsPage }) => void;
+    let finishData!: (value: unknown) => void;
+    const pending = new Promise(resolve => { finishData = resolve; });
+    cacheBrowser.fetch.mockImplementation((url: string) => url.endsWith('/forwards') ? pending : Promise.resolve({ services: [], templates: [] }));
+    const LazyPage = lazy(() => new Promise<{ default: typeof EnvPortForwardsPage }>(resolve => { finishModule = resolve; }));
+    const host = document.createElement('div'); host.style.height = '800px'; document.body.append(host);
+    dispose = render(() => <Suspense fallback={<WebServicesPageSkeleton />}><LazyPage /></Suspense>, host);
+    const geometry = () => ['.web-services-header', '.web-services-address', '.web-services-toolbar', '.web-service-row'].map(selector => {
+      const rect = host.querySelector(selector)!.getBoundingClientRect(); return { selector, left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    });
+    await document.fonts.ready;
+    const before = geometry();
+    finishModule({ default: EnvPortForwardsPage });
+    await expect.poll(() => host.querySelector('[data-testid="web-services-collection"]')).toBeTruthy();
+    expect(geometry()).toEqual(before);
+    finishData({ forwards: [{ forward_id: 'geometry', name: 'Web service', description: '', target_url: 'http://localhost:3000', saved: true, access_mode: 'unified_proxy', health: { status: 'unknown' }, created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: 1 }] });
+    await expect.poll(() => host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
+    expect(geometry()).toEqual(before);
   });
 
   it('restores saved services from IndexedDB and refreshes without waiting for templates or replacing focused rows', async () => {

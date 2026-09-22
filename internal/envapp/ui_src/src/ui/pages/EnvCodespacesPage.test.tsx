@@ -182,7 +182,7 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
-    resourceCacheScope: () => envContextMocks.scopeAccessor ? envContextMocks.scopeAccessor() : envContextMocks.scope,
+    resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: envContextMocks.scopeAccessor ? envContextMocks.scopeAccessor() : envContextMocks.scope }),
     env: envContextMocks.env,
     openFlowerTurnLauncher: envContextMocks.openFlowerTurnLauncher,
     openTerminalInDirectory: envContextMocks.openTerminalInDirectory,

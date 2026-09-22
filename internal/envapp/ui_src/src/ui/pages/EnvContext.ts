@@ -89,7 +89,7 @@ export type OpenTerminalInDirectoryRequest = {
 };
 
 export type EnvContextValue = {
-  resourceCacheScope?: () => string | undefined;
+  resourceCacheAccess?: () => import('../services/envResourceCache').EnvResourceCacheAccess;
   flowerDraftCoordinator?: FlowerComposerDraftCoordinator;
   aiReadinessController?: AIReadinessController;
   env_id: () => string;

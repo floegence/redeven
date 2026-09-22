@@ -1,3 +1,4 @@
+import { WebServicesHeader, WebServicesListSkeleton } from './WebServicesPresentation';
 import { createEnvCachedResource } from '../services/envResourceCache';
 import { forwardSnapshot, managedServiceSnapshot } from '../services/envResourceSnapshots';
 import { openWebServiceRoute, resolveWebServiceOpenRoute } from '../services/webServiceWindows';
@@ -39,7 +40,6 @@ import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { useEnvContext } from './EnvContext';
-import { EnvCollectionLoadingSkeleton } from './EnvCollectionLoadingSkeleton';
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import {
   ServiceTemplateCatalog,
@@ -2110,11 +2110,15 @@ export function EnvPortForwardsPage() {
   createEffect(() => {
     forwardResource.identity(); refreshSeq();
     const active = activation.active(); activation.activationSeq();
-    if (permissionReady() && canExecute() && active) void refreshForwards().catch(() => undefined);
+    if (forwardResource.ready() && permissionReady() && canExecute() && active) void refreshForwards().catch(() => undefined);
     if (permissionReady() && !canExecute()) forwardResource.invalidate(true);
   });
   const forwardsRefreshing = () => forwardResource.snapshot().refreshing;
-  const initialForwardsLoading = () => forwardsRefreshing() && forwardResource.data() === undefined;
+  const collectionRenderable = () => Boolean(forwardResource.data()?.length || managedResource.data()?.length)
+    || ((forwardResource.data() !== undefined || !!forwardResource.snapshot().error || (permissionReady() && !canExecute()))
+      && (managedResource.data() !== undefined || !!managedResource.snapshot().error || (permissionReady() && !canRead())));
+  const initialForwardsLoading = () => !collectionRenderable()
+    && (forwardResource.restoring() || managedResource.restoring() || forwardsRefreshing() || managedLoading());
   const forwardsRenderable = () => forwardResource.data() !== undefined;
   const forwardsCheckFailed = () => Boolean(forwardResource.snapshot().error);
   const managedState = () => managedResource.data() ?? [];
@@ -2263,7 +2267,7 @@ export function EnvPortForwardsPage() {
 
   let managedLoadGeneration = 0;
   const loadManaged = async (refreshCatalog = true) => {
-    if (!permissionReady() || !canRead()) return;
+    if (!permissionReady() || !canRead() || !managedResource.ready()) return;
     const generation = ++managedLoadGeneration;
     setManagedLoading(true);
     try {
@@ -3051,7 +3055,7 @@ export function EnvPortForwardsPage() {
   createEffect(() => {
     managedResource.identity();
     const active = activation.active(); activation.activationSeq();
-    if (permissionReady() && canRead() && active) void loadManaged();
+    if (managedResource.ready() && permissionReady() && canRead() && active) void loadManaged();
     if (permissionReady() && !canRead()) managedResource.invalidate(true);
   });
   onCleanup(() => {
@@ -3315,13 +3319,8 @@ export function EnvPortForwardsPage() {
 
   return (
     <div ref={pageRoot} {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('web-services flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
-      <header class="web-services-header shrink-0" data-testid="web-services-panel">
-        <div class="web-services-header-inner">
-          <div class="web-services-heading">
-            <h1 class="text-base font-semibold tracking-tight">{i18n.t('webServices.title')}</h1>
-            <p class="web-services-description">{i18n.t('webServices.description')}</p>
-          </div>
-          <div class="web-services-header-actions">
+      <WebServicesHeader actions={<>
+
             <Button
               size="sm"
               variant="outline"
@@ -3345,9 +3344,7 @@ export function EnvPortForwardsPage() {
               <Plus class="mr-1.5 h-3.5 w-3.5" />
               <span>{i18n.t('webServices.actions.addService')}</span>
             </Button>
-          </div>
-        </div>
-      </header>
+                </>} />
 
       <main {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="web-services-main min-h-0 flex-1 overflow-auto">
         <div class="web-services-content">
@@ -3466,12 +3463,11 @@ export function EnvPortForwardsPage() {
           </Show>
 
           <section class="space-y-3" data-testid="web-services-collection" aria-labelledby="web-services-collection-title">
-            <Show when={!initialForwardsLoading() || managedState().length > 0}>
               <div class="web-services-toolbar">
                 <div class="web-services-toolbar-heading">
                   <Show when={archiveView() !== 'active'}><Button variant="ghost" size="sm" class="h-8 w-8 px-0" onClick={() => setArchiveView('active')} aria-label={i18n.t('webServices.collection.back')}><ArrowLeft class="h-4 w-4" /></Button></Show>
                   <h2 id="web-services-collection-title" tabindex="-1">{archiveView() === 'active' ? i18n.t('webServices.collection.title') : i18n.t(`webServices.management.archive.${archiveView()}` as EnvAppTranslationKey)}</h2>
-                  <span class="text-xs tabular-nums text-muted-foreground">{filteredForwards().length + filteredManagedServices().length}</span>
+                  <Show when={forwardResource.data() !== undefined || managedResource.data() !== undefined}><span class="text-xs tabular-nums text-muted-foreground">{filteredForwards().length + filteredManagedServices().length}</span></Show>
                 </div>
                 <div class="web-services-toolbar-actions" data-testid="web-services-toolbar-actions">
                   <div class="web-services-search" data-testid="web-services-search">
@@ -3510,7 +3506,6 @@ export function EnvPortForwardsPage() {
                   </Button>
                 </div>
               </div>
-            </Show>
 
             <div
               class="relative"
@@ -3518,15 +3513,11 @@ export function EnvPortForwardsPage() {
               aria-busy={forwardsRefreshing() || managedLoading() ? 'true' : undefined}
               data-testid="web-services-list-region"
             >
-              <EnvCollectionLoadingSkeleton
-                visible={initialForwardsLoading()}
-                message={i18n.t('webServices.loadingMessage')}
-                testId="web-services-initial-loading"
-              />
+              <Show when={initialForwardsLoading()}><WebServicesListSkeleton /></Show>
 
               <Show when={forwardsCheckFailed() || managedLoadError()}><div class="web-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" /><p>{i18n.t(forwardsRenderable() || managedState().length ? 'webServices.collection.refreshFailed' : 'webServices.errors.loadFailedPrefix')}</p></div></Show>
 
-              <Show when={forwardsRenderable() || managedResource.data() !== undefined}>
+              <Show when={collectionRenderable()}>
                 <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !canExecute()} />}>
                   <Show when={filteredForwards().length > 0 || filteredManagedServices().length > 0} fallback={
                     <div class="flex flex-col items-center justify-center px-4 py-12">

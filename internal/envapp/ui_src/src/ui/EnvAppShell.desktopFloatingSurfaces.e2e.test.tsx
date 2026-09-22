@@ -1,3 +1,6 @@
+vi.mock('./pages/ContainersPresentation', () => ({ ContainersPageSkeleton: () => <div>Containers skeleton</div> }));
+vi.mock('./pages/WebServicesPresentation', () => ({ WebServicesPageSkeleton: () => <div>WebServices skeleton</div> }));
+vi.mock('./pages/HostApplicationsPresentation', () => ({ HostApplicationsPageSkeleton: () => <div>HostApplications skeleton</div> }));
 // @vitest-environment jsdom
 
 import { Show, createContext, createEffect, createSignal, useContext } from 'solid-js';
@@ -151,7 +154,8 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   }),
 }));
 
-vi.mock('@floegence/floe-webapp-core/app', () => ({
+vi.mock('@floegence/floe-webapp-core/app', async original => ({
+  ...await original<object>(),
   ActivityAppsMain: (props: any) => {
     const env = useContext(EnvContextMock);
     const filePreview = useContext(FilePreviewContextMock);
@@ -684,7 +688,8 @@ vi.mock('./services/desktopTheme', () => ({
   toggleDesktopTheme: vi.fn(),
 }));
 vi.mock('./services/sandboxOrigins', () => ({ controlPlaneOriginFromSandboxLocation: () => 'https://console.example.com' }));
-vi.mock('./services/uiStorage', () => ({
+vi.mock('./services/uiStorage', async original => ({
+  ...await original<object>(),
   readRendererScopedUIStorageJSON: vi.fn((_key: string, fallback: unknown) => fallback),
   readUIStorageJSON: vi.fn(() => null),
   readUIStorageItem: vi.fn((key: string) => (
@@ -1156,7 +1161,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
       expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-launched');
       expect(host.querySelector('[data-testid="activity-flower-focus-request"]')?.textContent).toMatch(/^env-activity-flower-focus-/);
       expect(host.querySelector('[data-testid="env-ai-focused-thread"]')?.textContent).toBe('');
-      expect(host.querySelector('[data-testid="workbench-flower-activation"]')?.textContent).toBe('|||||');
+      expect(host.querySelector('[data-testid="workbench-flower-activation"]')).toBeNull();
       expect(setSidebarActiveTabMock).not.toHaveBeenCalledWith('ai', expect.anything());
       expect(windowOpenMock).not.toHaveBeenCalled();
     } finally {

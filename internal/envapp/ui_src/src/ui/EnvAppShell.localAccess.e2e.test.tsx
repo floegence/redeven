@@ -1,3 +1,6 @@
+vi.mock('./pages/ContainersPresentation', () => ({ ContainersPageSkeleton: () => <div>Containers skeleton</div> }));
+vi.mock('./pages/WebServicesPresentation', () => ({ WebServicesPageSkeleton: () => <div>WebServices skeleton</div> }));
+vi.mock('./pages/HostApplicationsPresentation', () => ({ HostApplicationsPageSkeleton: () => <div>HostApplications skeleton</div> }));
 // @vitest-environment jsdom
 
 import { For, Show, Suspense, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
@@ -1274,6 +1277,9 @@ vi.mock('./pages/EnvFileBrowserPage', () => ({
     );
   },
 }));
+vi.mock('./pages/EnvHostApplicationsPage', () => ({ EnvHostApplicationsPage: () => <div>activity main</div> }));
+vi.mock('./pages/EnvContainersPage', () => ({ EnvContainersPage: () => <div>activity main</div> }));
+vi.mock('./pages/CodespacesPresentation', () => ({ CodespacesPageSkeleton: () => <div>codespaces skeleton</div> }));
 vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvPortForwardsPage', () => ({ EnvPortForwardsPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvAIPage', () => ({
@@ -1678,6 +1684,48 @@ beforeEach(async () => {
 });
 
 describe('EnvAppShell environment entry affordances', () => {
+  it.each(['terminal', 'monitor', 'files', 'codespaces', 'ports', 'applications', 'containers', 'ai', 'settings', 'plugin-center'])(
+    'keeps saved Activity target %s independent of Workbench startup and mode switching', async target => {
+      const key = 'redeven-envapp:env_local-activity-navigation';
+      const record = { version: 1, target: { kind: 'builtin', page: target }, recentBuiltins: [target] };
+      window.localStorage.setItem(key, JSON.stringify(record));
+      window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+      getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+      getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+      const host = document.createElement('div'); document.body.append(host);
+      const { EnvAppShell } = await import('./EnvAppShell');
+      const dispose = render(() => <EnvAppShell />, host);
+      try {
+        await flushUntil(() => Boolean(host.querySelector('[data-testid="workbench-page"]')), 60);
+        expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual(record);
+        findButtonByText(host, 'Activity')!.click();
+        await flushUntil(() => host.querySelector('[data-testid="display-mode-keep-alive"]')?.getAttribute('data-active-id') === 'activity', 60);
+        await flushUntil(() => sidebarActiveTabValue === target, 60);
+        expect(sidebarActiveTabValue).toBe(target);
+        expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual(record);
+      } finally { dispose(); }
+    }, 10000,
+  );
+
+  it.each(['terminal', 'monitor', 'files', 'codespaces', 'ports', 'applications', 'containers', 'ai', 'settings', 'plugin-center'])(
+    'selects saved Activity page %s before asynchronous runtime discovery and retains it after connection', async target => {
+      window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+      window.localStorage.setItem('redeven_envapp_active_tab', target);
+      let finish!: (value: any) => void;
+      getLocalRuntimeMock.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+      getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+      const host = document.createElement('div'); document.body.append(host);
+      const { EnvAppShell } = await import('./EnvAppShell');
+      const dispose = render(() => <EnvAppShell />, host);
+      try {
+        expect(sidebarActiveTabValue).toBe(target);
+        finish({ env_public_id: 'env_local', effective_run_mode: 'local' });
+        await flushUntil(() => connectMock.mock.calls.length > 0, 60);
+        expect(sidebarActiveTabValue).toBe(target);
+      } finally { dispose(); }
+    }, 10000,
+  );
+
   it('returns Flower-origin runtime settings to Flower and clears the origin on normal settings entry', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -3414,6 +3462,49 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it.each(['restore', 'removed', 'unpinned', 'missing-surface', 'denied', 'offline', 'user-navigation'] as const)(
+    'validates a saved dynamic Activity page: %s', async scenario => {
+      getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+      getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+      window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+      const { createActivityNavigation, PENDING_ACTIVITY_PLUGIN_ID } = await import('./services/activityNavigation');
+      const navigation = createActivityNavigation();
+      navigation.commit({ kind: 'builtin', page: 'ports' });
+      const target = examplePluginProjection('enabled').items[0].defaultLaunchTarget!;
+      navigation.commit({ kind: 'plugin', pluginInstanceID: target.pluginInstanceID, pluginID: target.pluginID, surfaceID: scenario === 'missing-surface' ? 'removed' : target.surfaceID });
+      const stored = window.localStorage.getItem(navigation.key);
+      const pins = JSON.stringify({ schemaVersion: 2, activityInventoryKeys: scenario === 'unpinned' ? [] : ['instance:plugin_example_metrics'], workbenchInventoryKeys: [] });
+      window.localStorage.setItem('redeven.plugin-dock-pins:default', pins);
+      window.localStorage.setItem('redeven.plugin-dock-pins:env_local', pins);
+      let resolve!: (value: any) => void;
+      let reject!: (error: Error) => void;
+      const inventory = new Promise((done, fail) => { resolve = done; reject = fail; });
+      pluginLifecycleMocks.loadInventoryProjection.mockReturnValue(inventory);
+      if (scenario === 'denied') getEnvironmentMock.mockResolvedValue({ public_id: 'env_local', permissions: { can_read: false } });
+      const host = document.createElement('div'); document.body.append(host);
+      const { EnvAppShell } = await import('./EnvAppShell');
+      const dispose = render(() => <EnvAppShell />, host);
+      try {
+        expect(sidebarActiveTabValue).toBe(PENDING_ACTIVITY_PLUGIN_ID);
+        if (scenario !== 'denied') {
+          await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length > 0, 60);
+          expect(sidebarActiveTabValue).toBe(PENDING_ACTIVITY_PLUGIN_ID);
+          expect(window.localStorage.getItem(navigation.key)).toBe(stored);
+        }
+        if (scenario === 'user-navigation') findActivityButton(host, 'files')!.click();
+        if (scenario === 'offline') reject(new Error('Inventory offline'));
+        else resolve(scenario === 'removed' ? { ...examplePluginProjection('enabled'), items: [] } : examplePluginProjection('enabled'));
+        const expected = scenario === 'restore' ? 'redeven.plugin.activity:instance%3Aplugin_example_metrics' : scenario === 'user-navigation' ? 'files' : 'ports';
+        await flushUntil(() => sidebarActiveTabValue === expected, 100);
+        if (scenario === 'restore') {
+          await flushUntil(() => Boolean(host.querySelector('[data-activity-plugin-surface-page]')), 60);
+          expect(JSON.parse(window.localStorage.getItem(navigation.key)!).target).toEqual({ kind: 'plugin', pluginInstanceID: target.pluginInstanceID, pluginID: target.pluginID, surfaceID: target.surfaceID });
+        } else if (scenario === 'offline') expect(window.localStorage.getItem(navigation.key)).toBe(stored);
+        else expect(JSON.parse(window.localStorage.getItem(navigation.key)!).target).toEqual({ kind: 'builtin', page: expected });
+      } finally { resolve(examplePluginProjection('enabled')); dispose(); }
+    },
+  );
+
   it('opens a pinned Activity plugin in the kept-alive main area and preserves it across Workbench placement', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -3775,6 +3866,11 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
       await flushAsync();
       await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      // Instantiate both placement owners before verifying ordered session cleanup.
+      findButtonByText(host, 'Workbench')!.click();
+      await flushUntil(() => Boolean(workbenchPluginSurfaceState.host), 60);
+      findButtonByText(host, 'Activity')!.click();
+      await flushAsync();
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugin_example_metrics"]')));
       await pluginPanelState.lastProps.onOpenPluginSurface(examplePluginProjection('enabled').items[0].defaultLaunchTarget);

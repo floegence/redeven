@@ -106,7 +106,7 @@ import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import { useEnvContext } from './EnvContext';
 import { ContainerExecTerminal } from '../widgets/ContainerExecTerminal';
 import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';
-import './env-containers.css';
+import { ContainerInventorySkeleton, ContainerInventoryToolbarSkeleton, ContainersHeader } from './ContainersPresentation';
 
 type PersistedContainersState = Readonly<{
   version: 2;
@@ -930,7 +930,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     return dockerCLIOutputFormats.filter(({ key }) => dockerCLIString(document, key).trim() !== '').length;
   });
   const containerServicesInitialLoading = createMemo(() => (
-    containerServicesLoading() && servicesResource.data() === undefined
+    (servicesResource.restoring() || containerServicesLoading()) && servicesResource.data() === undefined
   ));
   const [serviceConfigurationError, setServiceConfigurationError] = createSignal('');
   const [pruneOpen, setPruneOpen] = createSignal(false);
@@ -1206,7 +1206,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   };
 
   const loadContainerServices = async () => {
-    if (!canRead()) return;
+    if (!canRead() || !servicesResource.ready()) return;
     servicesLoadAbort?.abort();
     const controller = new AbortController();
     servicesLoadAbort = controller;
@@ -1512,7 +1512,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       setChartsOpen(false);
     }
 
-    if (env.env() === undefined) {
+    if (env.env() === undefined || !resources.ready()) {
       waitingForEnvironment = true;
       return;
     }
@@ -1528,7 +1528,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     let settled = false;
     let discovered = false;
     // Disk and live discovery run together. Only the still-pending generation may restore presentation.
-    void (async () => {
+    const restoration = (async () => {
       const runtime = runtimeResource();
       await runtime.hydrate();
       if (!current() || settled) return;
@@ -1579,6 +1579,9 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             resources.revoke(); runtimeResource().invalidate(true);
             controller.abort();
             setConsoleState({ phase: 'permission', target, runtimes: [] });
+          } else if (current()) {
+            // A quick network failure must not discard a still-loading disk snapshot.
+            await inventoryResource(runtime, target.view).hydrate();
           }
           return { runtime, cause } as const;
         }
@@ -1672,15 +1675,19 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       if (isResourceAuthorizationError(cause) || runtimeIssueFromError(cause) === 'permission') {
         resources.revoke();
         setConsoleState({ phase: 'permission', target, runtimes: nextRuntimes });
-      } else if (consoleState().phase === 'ready') {
-        setConsoleState(state => state.phase === 'ready' ? { ...state, refreshing: false, refreshError: String(cause) } : state);
       } else {
-        setConsoleState({
-          phase: 'error',
-          target,
-          runtimes: nextRuntimes,
-          message: cause instanceof Error ? cause.message : String(cause),
-        });
+        await restoration;
+        if (!current()) return;
+        if (consoleState().phase === 'ready') {
+          setConsoleState(state => state.phase === 'ready' ? { ...state, refreshing: false, refreshError: String(cause) } : state);
+        } else {
+          setConsoleState({
+            phase: 'error',
+            target,
+            runtimes: nextRuntimes,
+            message: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
       }
     } finally { settled = true; }
   };
@@ -1703,30 +1710,32 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   createEffect(() => {
     const environment = env.env();
-    if (environment === undefined || !waitingForEnvironment) return;
+    if (environment === undefined || !resources.ready() || !waitingForEnvironment) return;
     waitingForEnvironment = false;
     void loadConsole(consoleState().target, { rediscoverRuntimes: true });
   });
 
   createEffect(() => {
     const snapshot = runtimeCache.snapshot();
-    if (!snapshot.data && !snapshot.refreshing && snapshot.stale) {
+    if (resources.ready() && !snapshot.data && !snapshot.restoring && !snapshot.refreshing && snapshot.stale) {
       setConsoleState(state => state.runtimes.length ? { phase: 'permission', target: state.target, runtimes: [] } : state);
     }
   });
 
-  let previousScope = resources.scope();
+  let previousOwner = runtimeResource();
   createEffect(() => {
-    const scope = resources.scope();
-    const readable = canRead();
-    if (!readable) {
+    const access = resources.access();
+    const owner = runtimeResource();
+    const readable = env.env()?.permissions?.can_read;
+    if (!resources.ready() || readable === false) {
       consoleLoadAbort?.abort();
-      resources.revoke();
-      setConsoleState(state => ({ phase: 'permission', target: state.target, runtimes: [] }));
+      servicesLoadAbort?.abort();
+      if (readable === false) resources.revoke();
+      setConsoleState(state => ({ phase: access.phase === 'denied' || readable === false ? 'permission' : 'loading', target: state.target, runtimes: [] }));
       return;
     }
-    if (scope !== previousScope) {
-      previousScope = scope;
+    if (owner !== previousOwner) {
+      previousOwner = owner;
       setConsoleState(state => ({ phase: 'loading', target: state.target, runtimes: [] }));
       void reloadConsole(true);
       if (servicesOpen()) void loadContainerServices();
@@ -3481,7 +3490,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     </section>
   );
 
-  const renderInventoryToolbar = (pending = false): JSX.Element => (
+  const renderInventoryToolbar = (pending = false): JSX.Element => pending ? <ContainerInventoryToolbarSkeleton view={view()} /> : (
     <section class="container-resource-toolbar" data-container-summary data-loading={pending ? 'true' : 'false'}>
       <div class="container-search-control">
         <Search class="h-4 w-4" aria-hidden="true" />
@@ -3594,32 +3603,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     </tr></thead>
   );
 
-  const renderInventorySkeleton = (): JSX.Element => (
-    <>
-      <div class="container-resource-table-shell container-resource-table-shell--loading" data-container-resource-skeleton-table>
-        <table class="w-full text-left text-sm">
-          {renderInventoryTableHeader(true)}
-          <tbody><For each={[0, 1, 2, 3, 4]}>{(row) => <tr data-container-skeleton-row aria-hidden="true">
-            <td><div class="container-name-cell"><span class="container-skeleton container-skeleton--resource-icon" /><span class="container-skeleton container-skeleton--name" data-row={row % 3} /></div></td>
-            <td class="container-status-column"><span class={`container-skeleton ${view() === 'images' || view() === 'volumes' ? 'container-skeleton--dot' : 'container-skeleton--status'}`} /></td>
-            <Show when={view() === 'volumes' && showVolumeSizeColumn()}><td><span class="container-skeleton container-skeleton--metric" /></td></Show>
-            <Show when={showSecondaryColumn()}><td class="container-secondary-column" data-numeric={view() !== 'containers' && view() !== 'volumes'}><span class="container-skeleton container-skeleton--secondary" data-row={row % 2} /></td></Show>
-            <Show when={view() === 'containers'}><Show when={showPortsColumn()}><td><span class="container-skeleton container-skeleton--port" data-row={row % 2} /></td></Show><Show when={chartsOpen()}><td><span class="container-skeleton container-skeleton--metric" /></td><td><span class="container-skeleton container-skeleton--metric" /></td></Show></Show>
-            <Show when={view() !== 'containers' && showCreatedColumn()}><td class="container-created-column"><span class="container-skeleton container-skeleton--created" /></td></Show>
-            <td class="container-actions-column"><div class="container-row-actions"><span class="container-skeleton container-skeleton--action" /><span class="container-skeleton container-skeleton--action" /><span class="container-skeleton container-skeleton--chevron" /></div></td>
-          </tr>}</For></tbody>
-        </table>
-      </div>
-      <div class="container-mobile-list container-mobile-list--loading" data-container-mobile-skeleton aria-hidden="true">
-        <For each={[0, 1, 2, 3, 4]}>{(row) => <div class="container-mobile-card">
-          <span class="container-skeleton container-skeleton--resource-icon" />
-          <span class="container-mobile-skeleton-copy"><span class="container-skeleton container-skeleton--name" data-row={row % 3} /><span class="container-skeleton container-skeleton--mobile-secondary" /></span>
-          <span class="container-skeleton container-skeleton--mobile-status" />
-          <span class="container-skeleton container-skeleton--chevron" />
-        </div>}</For>
-      </div>
-    </>
-  );
+  const renderInventorySkeleton = (): JSX.Element => <ContainerInventorySkeleton view={view()} header={renderInventoryTableHeader(true)} volumeSize={showVolumeSizeColumn()} secondary={showSecondaryColumn()} ports={showPortsColumn()} charts={chartsOpen()} created={showCreatedColumn()} />;
 
   const renderDetailSkeleton = (): JSX.Element => (
     <article
@@ -3767,13 +3751,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   return (
     <div class={`redeven-containers flex h-full min-h-0 flex-col ${redevenSurfaceRoleClass('main')}`} data-container-page data-variant={props.variant ?? 'activity'} data-resource-view={view()}>
       <Show when={readyConsole()?.refreshError}><div class="container-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4" /><small>{readyConsole()?.refreshError}</small><Button size="sm" variant="outline" onClick={() => void reloadConsole(true)}>{i18n.t('containers.actions.retry')}</Button></div></Show>
-      <header class="container-command-header shrink-0 px-3 md:px-5">
-        <div class="container-header-main">
-          <div class="flex min-w-0 items-center gap-2.5">
-            <div class="container-product-mark"><Layers class="h-5 w-5" aria-hidden="true" /></div>
-            <h1 class="container-page-title truncate">{i18n.t('containers.title')}</h1>
-          </div>
-          <div class="container-header-controls">
+      <ContainersHeader controls={<>
+
             <Button size="sm" variant="ghost" class="container-icon-action container-services-entry" onClick={openContainerServices} aria-label={i18n.t('containers.services.title')} title={i18n.t('containers.services.title')} aria-pressed={servicesOpen()}>
               <Settings class="h-4 w-4" aria-hidden="true" />
               <Show when={readyRuntimes().length > 0 && runtimeIssues().length > 0}><span class="container-services-entry__issue" aria-hidden="true" /></Show>
@@ -3782,11 +3761,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => setOperationsOpen(true)} aria-label={i18n.t('containers.operations.title')} title={i18n.t('containers.operations.title')}>
               <Activity class="h-4 w-4" aria-hidden="true" />
               <Show when={activeOperationCount() > 0}><span class="container-operation-count">{activeOperationCount()}</span></Show>
-            </Button>
-          </div>
-        </div>
-
-        <Show when={!servicesOpen()}><Tabs
+            </Button>      </>} tabs={<Show when={!servicesOpen()}><Tabs
           class="container-resource-tabs"
           items={resourceTabItems()}
           activeId={view()}
@@ -3795,8 +3770,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           ariaLabel={i18n.t('containers.resourceNavigation')}
           features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false, scrollButtons: 'auto' }}
           slotClassNames={{ scrollContainer: 'container-resource-tabs__scroller', tab: 'container-resource-tabs__tab', indicator: 'container-tab-indicator' }}
-        /></Show>
-      </header>
+        /></Show>} />
 
       <main class="container-content min-h-0 flex-1 overflow-hidden" aria-busy={consoleBusy()}>
         <Show when={servicesOpen()} fallback={<Show when={readyConsole()} fallback={renderConsoleFallback()}>

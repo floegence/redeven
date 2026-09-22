@@ -83,7 +83,8 @@ vi.mock('./EnvAppShell', () => ({
 
 vi.mock('./protocol/redeven_v1', () => ({ redevenV1Contract: {} }));
 
-vi.mock('./services/uiStorage', () => ({
+vi.mock('./services/uiStorage', async original => ({
+  ...await original<object>(),
   createUIStorageAdapter: () => ({}),
   isDesktopStateStorageAvailable: () => false,
   readUIStorageItem: () => null,
