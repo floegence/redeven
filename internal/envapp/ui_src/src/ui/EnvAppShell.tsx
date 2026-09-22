@@ -1,9 +1,11 @@
 import { isSessionEventAuthorizationError } from './services/sessionHTTP';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
 import { ActivityPageLoading } from './primitives/ActivityPageLoading';
+import { PageAssetRecoveryNotice, PageLoadError } from './reconnect/PageAssetRecovery';
+import { createEnvAppAssetRecovery } from './reconnect/createEnvAppAssetRecovery';
 import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
 import { writeTextToClipboard } from './utils/clipboard';
-import { For, Show, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js';
+import { ErrorBoundary, For, Show, Suspense, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { createUIFirstSelection, deferAfterPaint, type FloeComponent, type UIFirstSelectionEvent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryContributions, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
@@ -2973,6 +2975,9 @@ export function EnvAppShell() {
     return protocol.session?.() ?? null;
   });
 
+  const assetRecoveryReady = () => protocol.status() === 'connected' && accessChannelReady();
+  const assetRecovery = createEnvAppAssetRecovery(assetRecoveryReady);
+
   const agentVersionModel = createAgentVersionModel({
     latestVersionRequest: environmentDetailRequest,
     currentPingSource,
@@ -4938,6 +4943,7 @@ export function EnvAppShell() {
                 activeId={() => layout.sidebarActiveTab()}
                 activationMode="after-paint"
                 renderFallback={() => <ActivityPageLoading />}
+                renderError={() => <PageLoadError ready={assetRecoveryReady()} />}
               />
             </Show>
             <Show when={viewMode() === 'activity' && accessGateVisible() && !recoveryVisible()}>
@@ -5052,6 +5058,7 @@ export function EnvAppShell() {
         aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}
         data-env-shell-background
       >
+        <PageAssetRecoveryNotice reason={assetRecovery.reason()} ready={assetRecoveryReady()} />
         <KeepAliveStack
           class="redeven-env-shell-stage min-h-0 flex-1"
           activeId={viewMode()}
@@ -5072,7 +5079,11 @@ export function EnvAppShell() {
               id: 'workbench',
               render: () => (
                 <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
-                  {renderWorkbenchContent()}
+                  <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
+                    <Suspense fallback={<ActivityPageLoading />}>
+                      {renderWorkbenchContent()}
+                    </Suspense>
+                  </ErrorBoundary>
                 </DisplayModePageShell>
               ),
             },

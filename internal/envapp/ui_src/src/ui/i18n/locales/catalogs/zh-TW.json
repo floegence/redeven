@@ -1,4 +1,12 @@
 {
+  "pageAssetRecovery": {
+    "updated": "Redeven 已更新",
+    "failed": "部分應用程式內容載入失敗",
+    "pageFailed": "無法開啟此頁面",
+    "guidance": "請先儲存其他頁面中尚未儲存的內容，再重新載入應用程式以繼續。",
+    "reload": "重新載入應用程式",
+    "waiting": "正在等待連線…"
+  },
   "document": {
     "title": "Redeven Env App"
   },

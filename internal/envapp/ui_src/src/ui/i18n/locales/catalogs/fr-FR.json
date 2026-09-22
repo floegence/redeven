@@ -1,4 +1,12 @@
 {
+  "pageAssetRecovery": {
+    "updated": "Redeven a été mis à jour",
+    "failed": "Certains contenus de l’application n’ont pas pu être chargés",
+    "pageFailed": "Cette page n’a pas pu être ouverte",
+    "guidance": "Enregistrez votre travail non sauvegardé dans les autres pages, puis rechargez l’application pour continuer.",
+    "reload": "Recharger l’application",
+    "waiting": "En attente de connexion…"
+  },
   "document": {
     "title": "Redeven Env App"
   },

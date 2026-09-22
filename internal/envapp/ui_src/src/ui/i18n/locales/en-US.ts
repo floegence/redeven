@@ -1349,6 +1349,14 @@ export const enUS = defineDictionary({
       emptyValue: '—',
     },
   },
+  pageAssetRecovery: {
+    updated: 'Redeven has been updated',
+    failed: 'Some app content could not load',
+    pageFailed: 'This page could not open',
+    guidance: 'Save any unsaved work in other pages, then reload the app to continue.',
+    reload: 'Reload app',
+    waiting: 'Waiting for connection…',
+  },
   shell: {
     loadingPage: 'Loading page…',
     accessibility: {
