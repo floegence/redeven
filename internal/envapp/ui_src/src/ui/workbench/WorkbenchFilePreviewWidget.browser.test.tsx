@@ -21,7 +21,7 @@ import formsFixtureUrl from '../widgets/__fixtures__/pdf/forms.pdf?url';
 import unembeddedFixtureUrl from '../widgets/__fixtures__/pdf/mixed-unembedded.pdf?url';
 import longFixtureUrl from '../widgets/__fixtures__/pdf/long-text.pdf?url';
 import pdfFixtureUrl from '../widgets/__fixtures__/pdf/mixed-embedded.pdf?url';
-const pdfCommands = commands as unknown as { selectPdfText: (text: string) => Promise<{ selection: string; clipboard: string }>; recordPdfEvidence: (metrics: { firstPaintMs: number; canvases: number }) => Promise<void> };
+const pdfCommands = commands as unknown as { selectPdfText: (text: string) => Promise<{ selection: string; clipboard: string }>; savePdfEvidence: (base64: string, script: 'latin' | 'cjk') => Promise<void>; recordPdfEvidence: (metrics: { firstPaintMs: number; canvases: number }) => Promise<void> };
 const io = vi.hoisted(() => ({
   pdfBytes: null as Uint8Array<ArrayBuffer> | null,
   controllers: [] as ReturnType<typeof createFilePreviewController>[],
@@ -231,7 +231,7 @@ describe('Workbench preview header', () => {
     });
   });
 
-  it('persists native PDF fields and highlights, protects failed saves, and exports the current draft', async () => {
+  it.each(['Saved PDF value', '已保存客户 Redeven'])('persists PDF fields (%s) and highlights, protects failed saves, and exports drafts', async fieldValue => {
     await page.viewport(1400, 1000);
     io.pdfBytes = new Uint8Array(await (await fetch(formsFixtureUrl)).arrayBuffer());
     const { host, state, resize } = mount('dark', 0.8);
@@ -242,11 +242,11 @@ describe('Workbench preview header', () => {
     const canvasState = { ...state().viewport };
     await userEvent.click(page.getByRole('button', { name: 'Edit file', exact: true }));
     await vi.waitFor(() => expect(host.querySelector('input[name="full_name"]')).toBeTruthy());
-    await userEvent.fill(host.querySelector<HTMLInputElement>('input[name="full_name"]')!, 'Saved PDF value');
+    await userEvent.fill(host.querySelector<HTMLInputElement>('input[name="full_name"]')!, fieldValue);
     await userEvent.click(host.querySelector<HTMLInputElement>('input[name="accepted"]')!);
     expect(controller.dirty()).toBe(true);
     await userEvent.click(page.getByRole('button', { name: 'Zoom in PDF preview', exact: true }));
-    await vi.waitFor(() => expect(host.querySelector<HTMLInputElement>('input[name="full_name"]')!.value).toBe('Saved PDF value'));
+    await vi.waitFor(() => expect(host.querySelector<HTMLInputElement>('input[name="full_name"]')!.value).toBe(fieldValue));
     await pdfCommands.selectPdfText('中文合同');
     await userEvent.click(page.getByRole('button', { name: 'Highlight selected text', exact: true }));
     await vi.waitFor(() => expect(host.querySelector('.highlightEditor')).toBeTruthy());
@@ -285,7 +285,7 @@ describe('Workbench preview header', () => {
         expect(annotations.filter(annotation => annotation.subtype === 'Highlight')).toHaveLength(1);
       } finally { await task.destroy(); }
     };
-    await inspect(command.source.bytes, 'Saved PDF value');
+    await inspect(command.source.bytes, fieldValue);
     expect(controller.dirty()).toBe(true);
     await userEvent.click(page.getByRole('button', { name: 'Save file', exact: true }));
     await vi.waitFor(() => expect(controller.dirty()).toBe(false));
@@ -293,9 +293,10 @@ describe('Workbench preview header', () => {
     expect(viewport.scrollTop).toBe(scrollBefore);
     const request = (io.write.mock.calls.at(-1) as unknown as [{ encoding: string; content: string }])[0];
     expect(request.encoding).toBe('base64');
-    await inspect(Uint8Array.from(atob(request.content), char => char.charCodeAt(0)), 'Saved PDF value');
+    await pdfCommands.savePdfEvidence(request.content, fieldValue.startsWith('Saved') ? 'latin' : 'cjk');
+    await inspect(Uint8Array.from(atob(request.content), char => char.charCodeAt(0)), fieldValue);
     expect(state().viewport).toEqual(canvasState);
-    await page.screenshot({ path: 'workbench-pdf-edited-dark.png' });
+    await page.screenshot({ path: `workbench-pdf-edited-${fieldValue.startsWith('Saved') ? 'latin' : 'cjk'}-dark.png` });
     await userEvent.fill(host.querySelector<HTMLInputElement>('input[name="full_name"]')!, 'Unsaved');
     await userEvent.click(page.getByRole('button', { name: 'Remove widget', exact: true }));
     expect(controller.closeConfirmOpen()).toBe(true);
@@ -304,7 +305,7 @@ describe('Workbench preview header', () => {
     await userEvent.click(page.getByRole('button', { name: 'Discard changes', exact: true }));
     await vi.waitFor(() => expect(controller.editing()).toBe(false));
     await userEvent.click(page.getByRole('button', { name: 'Edit file', exact: true }));
-    await vi.waitFor(() => expect(host.querySelector<HTMLInputElement>('input[name="full_name"]')?.value).toBe('Saved PDF value'));
+    await vi.waitFor(() => expect(host.querySelector<HTMLInputElement>('input[name="full_name"]')?.value).toBe(fieldValue));
   });
 
   it('renders and selects unembedded Chinese through the locally served CMap assets', async () => {

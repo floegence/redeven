@@ -106,6 +106,11 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        savePdfEvidence: async (_context, base64: string, script: 'latin' | 'cjk') => {
+          const output = path.resolve(__dirname, '.cache/pdf-document-surface');
+          await mkdir(output, { recursive: true });
+          await writeFile(path.join(output, `saved-${script}.pdf`), Buffer.from(base64, 'base64'));
+        },
         recordPdfEvidence: async ({ page }, metrics: { firstPaintMs: number; canvases: number }) => {
           const output = path.resolve(__dirname, '.cache/pdf-document-surface');
           await mkdir(output, { recursive: true });
