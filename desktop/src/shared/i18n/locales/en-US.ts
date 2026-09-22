@@ -2,6 +2,12 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
+  windowStatus: {
+    checkingService: "Checking service status",
+    preparingEditor: "Connecting to the editor service",
+    editorUnavailableDetail: "The editor could not open. Return to Codespaces and try again.",
+    technicalDetails: "Technical details",
+  },
   providerRecovery: {
     expired: "Credentials expired",
     requested: "Connection requested for {label}. Redeven Cloud status will update automatically.",

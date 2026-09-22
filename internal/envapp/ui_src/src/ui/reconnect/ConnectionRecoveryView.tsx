@@ -128,27 +128,28 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
 
   return (
     <section
-      class={`absolute inset-0 z-20 flex overflow-auto px-4 py-6 sm:p-10 ${props.snapshot.state === 'failed' ? 'bg-background' : 'bg-background/90 backdrop-blur-sm'}`}
+      class="floe-window-status z-20"
+      data-backdrop={props.snapshot.state === 'failed' ? undefined : 'workspace'}
       data-testid="connection-recovery-view"
       data-recovery-state={props.snapshot.state}
     >
-      <div class="m-auto w-full max-w-[560px] px-3 py-8 text-center sm:px-8 sm:py-10" data-recovery-content>
+      <div class="floe-window-status__content" data-recovery-content>
         <div>
           <ConnectionRecoveryIllustration state={illustrationState()} />
-          <p class="mx-auto mb-3 max-w-full break-words text-xs font-medium tracking-wide text-muted-foreground">{props.environmentName}</p>
+          <p class="floe-window-status__identity">{props.environmentName}</p>
           <div role={props.snapshot.state === 'failed' ? undefined : 'status'} aria-live="polite" aria-atomic="true">
             {/* This heading receives announcement focus; keyboard indicators remain on the actions. */}
-            <h1 ref={failedHeading} class="text-2xl font-semibold leading-8 tracking-tight text-foreground outline-none" style={{ 'box-shadow': 'none' }}
+            <h1 ref={failedHeading} class="floe-window-status__title outline-none" style={{ 'box-shadow': 'none' }}
               role={props.snapshot.state === 'failed' ? 'alert' : undefined} tabindex={props.snapshot.state === 'failed' ? -1 : undefined}>
               {title()}
             </h1>
-            <p class="mx-auto mt-3 max-w-[340px] text-[13px] leading-6 text-muted-foreground">{summary()}</p>
+            <p class="floe-window-status__description">{summary()}</p>
           </div>
           <Show when={props.snapshot.state === 'recovering'}>
-            <div class="mx-auto mt-7 max-w-[360px] border-y border-border/60 py-4" data-recovery-activity>
-              <p class="mb-2 text-[10px] font-semibold uppercase tracking-[.16em] text-muted-foreground">{i18n.t('connectionRecovery.automaticRetry')}</p>
+            <div class="floe-window-status__activity" data-recovery-activity>
+              <p class="floe-window-status__label">{i18n.t('connectionRecovery.automaticRetry')}</p>
               <div class="flex items-center justify-center gap-2.5 text-sm font-medium text-foreground" role="timer" aria-live="off">
-                <span class="tabular-nums">{retryRemainingSeconds() > 0
+                <span class="tabular-nums" data-floe-progress-shimmer={!offline() && retryRemainingSeconds() === 0 ? 'text' : undefined}>{retryRemainingSeconds() > 0
                   ? i18n.t('connectionRecovery.retryIn', { seconds: retryRemainingSeconds() })
                   : props.snapshot.phase === 'secure_session'
                     ? i18n.t('connectionRecovery.steps.secureSession')
@@ -158,9 +159,9 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
             </div>
           </Show>
           <Show when={props.snapshot.state !== 'succeeded'}>
-            <div class="mt-6 flex flex-wrap items-center justify-center gap-2" data-recovery-actions>
+            <div class="floe-window-status__actions" data-recovery-actions>
               <Show when={canRetry()}>
-                <Button class="min-h-10 cursor-pointer px-4" size="sm" icon={Refresh} disabled={retrying() || serverWait()} onClick={() => void retry()}>
+                <Button class="min-h-10 cursor-pointer bg-foreground px-4 text-background hover:bg-foreground/90" size="sm" icon={Refresh} disabled={retrying() || serverWait()} onClick={() => void retry()}>
                   {i18n.t('connectionRecovery.retryNow')}
                 </Button>
               </Show>
@@ -170,7 +171,7 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
                 </Button>
               </Show>
               <Show when={props.snapshot.state === 'paused'}>
-                <Button ref={resumeButton} class="min-h-10 cursor-pointer px-4" size="sm" icon={Refresh} disabled={stopping() || !online()} onClick={() => void retry()}>
+                <Button ref={resumeButton} class="min-h-10 cursor-pointer bg-foreground px-4 text-background hover:bg-foreground/90" size="sm" icon={Refresh} disabled={stopping() || !online()} onClick={() => void retry()}>
                   {i18n.t('connectionRecovery.resumeRetry')}
                 </Button>
               </Show>
@@ -178,12 +179,12 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
                 <Button class="min-h-10 cursor-pointer px-4" size="sm" onClick={() => void openConnectionCenter()}>{i18n.t('connectionRecovery.openConnectionCenter')}</Button>
               </Show>
               <Show when={props.snapshot.state === 'failed' && !canOpenConnectionCenter()}>
-                <Button class="min-h-10 cursor-pointer px-4" size="sm" icon={Refresh} onClick={() => reopenEnvironmentPage(window)}>{i18n.t('connectionRecovery.reopenEnvironment')}</Button>
+                <Button class="min-h-10 cursor-pointer bg-foreground px-4 text-background hover:bg-foreground/90" size="sm" icon={Refresh} onClick={() => reopenEnvironmentPage(window)}>{i18n.t('connectionRecovery.reopenEnvironment')}</Button>
               </Show>
             </div>
           </Show>
         </div>
-        <details class="mx-auto mt-8 text-xs text-muted-foreground">
+        <details class="floe-window-status__details">
           <summary class="mx-auto w-fit cursor-pointer select-none px-1 py-1.5 text-[11px] transition-colors hover:text-foreground">
             {i18n.t('connectionRecovery.technicalDetails')}
           </summary>

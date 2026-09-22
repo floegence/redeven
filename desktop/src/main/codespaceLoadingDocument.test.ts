@@ -73,8 +73,8 @@ describe('buildCodespaceLoadingDocumentURL', () => {
     ));
 
     expect(html).toContain('--error: #FF8A82');
-    expect(html).toContain('color: var(--error)');
-    expect(html).toContain('background: var(--error)');
+    expect(html).toContain('floe-window-status__content');
+    expect(html).not.toContain('role="progressbar"');
     expect(html).toContain('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;');
     expect(html).toContain('Retry &amp; review &lt;logs&gt;');
     expect(html).toContain('&lt;codespace&gt;');
@@ -93,5 +93,7 @@ describe('buildCodespaceLoadingDocumentURL', () => {
     expect(html).not.toContain('<script');
     expect(html).not.toContain('redevenDesktopShell');
     expect(html).not.toContain('preload');
+    expect(html).toContain('data-floe-progress-shimmer="text"');
+    expect(html).not.toContain('role="progressbar"');
   });
 });

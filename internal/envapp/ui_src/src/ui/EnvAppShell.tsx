@@ -1,3 +1,4 @@
+import { EnvironmentAccessGate, type AccessGatePhase } from './EnvironmentAccessGate';
 import { createEnvResourceCacheScope } from './services/envResourceCache';
 import { isSessionEventAuthorizationError } from './services/sessionHTTP';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
@@ -46,8 +47,6 @@ import {
   BottomBarCompanion,
   DisplayModePageShell,
   KeepAliveStack,
-  Panel,
-  PanelContent,
   Shell,
   StatusIndicator,
   TopBarIconButton,
@@ -354,18 +353,6 @@ function createActivityPluginWindow(
 type FlowerFileActionOpenTarget = Readonly<{
   path?: string;
 }>;
-
-type AccessGatePhase = 'checking' | 'unlock_required' | 'resuming' | 'resume_blocked' | 'ready';
-
-const ACCESS_GATE_IDS = {
-  title: 'redeven-access-gate-title',
-  description: 'redeven-access-gate-description',
-  passwordInput: 'redeven-access-password',
-  passwordHelp: 'redeven-access-password-help',
-  resumeHint: 'redeven-access-resume-hint',
-  error: 'redeven-access-error',
-  notice: 'redeven-access-notice',
-} as const;
 
 class AccessResumeTimeoutError extends Error {
   constructor(message: string) {
@@ -4476,182 +4463,25 @@ export function EnvAppShell() {
     onCleanup(() => unregister());
   });
 
-  const accessGateTitle = createMemo(() => {
-    switch (accessGatePhase()) {
-      case 'checking':
-        return i18n.t('accessGate.checkingTitle');
-      case 'resuming':
-        return i18n.t('accessGate.resumingTitle');
-      case 'resume_blocked':
-        return i18n.t('accessGate.resumeBlockedTitle');
-      case 'unlock_required':
-        return isLocalMode() ? i18n.t('accessGate.unlockLocalRuntimeTitle') : i18n.t('accessGate.unlockRuntimeTitle');
-      default:
-        return isLocalMode() ? i18n.t('accessGate.localRuntimeTitle') : i18n.t('accessGate.environmentTitle');
-    }
-  });
-  const accessGateDescription = createMemo(() => {
-    switch (accessGatePhase()) {
-      case 'checking':
-        return i18n.t('accessGate.checkingDescription');
-      case 'resuming':
-        return i18n.t('accessGate.resumingDescription');
-      case 'resume_blocked':
-        return i18n.t('accessGate.resumeBlockedDescription');
-      case 'unlock_required':
-        return isLocalMode() ? i18n.t('accessGate.unlockLocalDescription') : i18n.t('accessGate.unlockRemoteDescription');
-      default:
-        return i18n.t('accessGate.readyDescription');
-    }
-  });
-  const accessGateCheckingLabel = createMemo(() => i18n.t('accessGate.checkingLabel'));
-  const accessGateResumeHint = createMemo(() => i18n.t('accessGate.resumeHint'));
-  const accessGatePasswordLabel = createMemo(() => i18n.t('accessGate.passwordLabel'));
-  const accessGatePasswordHelp = createMemo(() => {
-    const base = isLocalMode()
-      ? i18n.t('accessGate.localPasswordHelp')
-      : i18n.t('accessGate.remotePasswordHelp');
-    if (accessRetryActive()) {
-      return i18n.t('accessGate.retryPasswordHelp', {
-        base,
-        duration: accessRetryDuration(),
-      });
-    }
-    return base;
-  });
-  const accessGateUnlockLabel = createMemo(() => {
-    if (accessUnlocking()) return i18n.t('accessGate.unlockingAction');
-    if (accessRetryActive()) {
-      return i18n.t('accessGate.retryInAction', { duration: accessRetryDuration() });
-    }
-    return i18n.t('accessGate.unlockAction');
-  });
-  const accessGateRegionDescribedBy = createMemo(() => {
-    const ids: string[] = [ACCESS_GATE_IDS.description, ACCESS_GATE_IDS.notice];
-    if (accessGatePhase() === 'resuming' || accessGatePhase() === 'resume_blocked') {
-      ids.push(ACCESS_GATE_IDS.resumeHint);
-    }
-    if (accessError()) {
-      ids.push(ACCESS_GATE_IDS.error);
-    }
-    return ids.join(' ');
-  });
-  const accessGatePasswordDescribedBy = createMemo(() => {
-    const ids: string[] = [ACCESS_GATE_IDS.passwordHelp];
-    if (accessError()) {
-      ids.push(ACCESS_GATE_IDS.error);
-    }
-    return ids.join(' ');
-  });
-
   const accessGatePanel = () => (
-    <div class="flex h-full min-h-0 items-center justify-center bg-background px-4 py-6">
-      <Panel class="w-full max-w-md border-border shadow-sm">
-        <PanelContent class="p-6">
-          <section
-            class="flex flex-col gap-4"
-            aria-labelledby={ACCESS_GATE_IDS.title}
-            aria-describedby={accessGateRegionDescribedBy()}
-            aria-busy={accessPending() || accessUnlocking() || accessRecoveryBusy()}
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0 space-y-2">
-                <h1 id={ACCESS_GATE_IDS.title} class="text-lg font-semibold text-foreground">{accessGateTitle()}</h1>
-                <p id={ACCESS_GATE_IDS.description} class="text-sm leading-6 text-muted-foreground">{accessGateDescription()}</p>
-              </div>
-              <LanguagePreferenceMenu
-                variant="access_gate"
-                openRequestSeq={languageMenuOpenSeq}
-                notify={notify}
-                class="shrink-0"
-              />
-            </div>
-
-            <Show when={accessGatePhase() === 'unlock_required'}>
-              <form class="flex flex-col gap-3" onSubmit={(event) => void submitAccessUnlock(event)}>
-                <div class="space-y-2">
-                  <label for={ACCESS_GATE_IDS.passwordInput} class="text-sm font-medium text-foreground">
-                    {accessGatePasswordLabel()}
-                  </label>
-                  <input
-                    ref={accessPasswordInput}
-                    id={ACCESS_GATE_IDS.passwordInput}
-                    type="password"
-                    autocomplete="current-password"
-                    placeholder={i18n.t('accessGate.passwordPlaceholder')}
-                    value={accessPassword()}
-                    onInput={(event) => setCurrentAccessPassword(event.currentTarget.value)}
-                    disabled={accessPending() || accessUnlocking()}
-                    aria-describedby={accessGatePasswordDescribedBy()}
-                    aria-invalid={!!accessError()}
-                    class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-[border,box-shadow] placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                  <p id={ACCESS_GATE_IDS.passwordHelp} class="text-xs leading-5 text-muted-foreground">
-                    {accessGatePasswordHelp()}
-                  </p>
-                </div>
-                <button
-                  type="submit"
-                  disabled={accessPending() || accessUnlocking() || accessRetryActive() || !accessPassword()}
-                  class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {accessGateUnlockLabel()}
-                </button>
-              </form>
-            </Show>
-
-            <Show when={accessGatePhase() === 'checking'}>
-              <div class="text-sm text-muted-foreground">{accessGateCheckingLabel()}</div>
-            </Show>
-
-            <Show when={accessGatePhase() === 'resuming' || accessGatePhase() === 'resume_blocked'}>
-              <>
-                <div
-                  id={ACCESS_GATE_IDS.resumeHint}
-                  class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
-                >
-                  {accessGateResumeHint()}
-                </div>
-                <div class="flex flex-col gap-2 sm:flex-row">
-                  <button
-                    type="button"
-                    disabled={accessRecoveryBusy() || accessUnlocking()}
-                    onClick={() => void retryAccessConnection()}
-                    class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {accessRecoveryBusy() ? i18n.t('accessGate.preparingSecureSessionAction') : i18n.t('accessGate.retryConnectionAction')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={reloadAccessPage}
-                    class="inline-flex h-10 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
-                  >
-                    {i18n.t('accessGate.reloadPageAction')}
-                  </button>
-                </div>
-              </>
-            </Show>
-
-            <Show when={accessError()}>
-              <div
-                id={ACCESS_GATE_IDS.error}
-                role="alert"
-                class="rounded-md border border-error/30 bg-error/5 px-3 py-2 text-sm text-error"
-              >
-                {accessError()}
-              </div>
-            </Show>
-
-            <div
-              id={ACCESS_GATE_IDS.notice}
-              class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground"
-            >
-              {i18n.t('accessGate.notice')}
-            </div>
-          </section>
-        </PanelContent>
-      </Panel>
-    </div>
+    <EnvironmentAccessGate
+      phase={accessGatePhase()}
+      local={isLocalMode()}
+      environmentName={envSessionIdentity().displayName}
+      pending={accessPending()}
+      unlocking={accessUnlocking()}
+      recoveryBusy={accessRecoveryBusy()}
+      retryActive={accessRetryActive()}
+      retryDuration={accessRetryDuration()}
+      password={accessPassword()}
+      error={accessError()}
+      languageMenu={<LanguagePreferenceMenu variant="access_gate" openRequestSeq={languageMenuOpenSeq} notify={notify} />}
+      inputRef={(input) => { accessPasswordInput = input; }}
+      onPasswordInput={setCurrentAccessPassword}
+      onSubmit={submitAccessUnlock}
+      onRetry={retryAccessConnection}
+      onReload={reloadAccessPage}
+    />
   );
 
   const filePreviewContextValue = {

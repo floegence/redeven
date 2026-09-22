@@ -2861,5 +2861,11 @@
     "expired": "연결 자격 증명 만료",
     "requested": "{label}의 연결을 요청했습니다. Redeven Cloud 상태가 자동으로 업데이트됩니다.",
     "permissionRevoked": "Cloud 권한이 취소됨"
+  },
+  "windowStatus": {
+    "checkingService": "서비스 상태 확인 중",
+    "preparingEditor": "편집기 서비스에 연결 중",
+    "editorUnavailableDetail": "편집기를 열지 못했습니다. Codespaces로 돌아가 다시 시도하세요.",
+    "technicalDetails": "기술 세부 정보"
   }
 }

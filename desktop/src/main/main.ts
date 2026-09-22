@@ -296,7 +296,7 @@ import { webServiceBrowserContentBounds } from '../shared/webServiceBrowserLayou
 import { openWebServiceInSystemBrowser } from './webServiceBrowserExternal';
 import { isMarkedWebServiceUpstreamUnavailable } from './webServiceBrowserProxyFailure';
 import { isWebServiceBrowserDevToolsShortcut } from './webServiceBrowserShortcuts';
-import { buildWebServiceUnavailableDocumentURL } from './webServiceUnavailableDocument';
+import { buildWebServiceUnavailableDocumentURL, isWebServiceUnavailableRetryIntent, showWebServiceRetryFeedback } from './webServiceUnavailableDocument';
 import {
   startWebServiceLoopbackGateway,
   type WebServiceLoopbackGateway,
@@ -8474,7 +8474,7 @@ async function openSessionCodespaceLoadingWindow(
   const partition = `persist:redeven-code:${identity}`;
   let owner: CodeSpaceNativeWindow;
   const tracked = createBrowserWindow({
-    targetURL: buildCodespaceLoadingDocumentURL(codeSpaceID, desktopThemeState().getSnapshot(), copy),
+    targetURL: buildCodespaceLoadingDocumentURL(codeSpaceID, desktopThemeState().getSnapshot(), { ...copy, locale: desktopLanguageState().getSnapshot().resolved_locale }),
     deferInitialLoad: true,
     stateKey: sessionCodespaceWindowStateKey(sessionKey, codeSpaceID), role: 'codespace_child',
     sessionPartition: partition, diagnostics: record.diagnostics, chrome: 'native', preload: 'none', stealAppFocus: true,
@@ -8506,7 +8506,7 @@ async function openSessionCodespaceLoadingWindow(
       installSession: (gateway) => installNativeCodeSpaceSession(webSession, gateway, tracked.webContentsID),
     },
     profiles: codeSpaceProfiles,
-    loadingURL: (nextCopy) => buildCodespaceLoadingDocumentURL(codeSpaceID, desktopThemeState().getSnapshot(), nextCopy),
+    loadingURL: (nextCopy) => buildCodespaceLoadingDocumentURL(codeSpaceID, desktopThemeState().getSnapshot(), { ...nextCopy, locale: desktopLanguageState().getSnapshot().resolved_locale }),
     createRoute: (signal, password) => createSessionCodeSpaceRoute(record, codeSpaceID, signal, password),
     onReady: (port) => recordWindowLifecycle(record.diagnostics, 'codespace_native_ready', 'native CodeSpace ready', { code_space_id: codeSpaceID, transport: record.transport.kind, port }),
     onFailure: (failure) => recordCodeSpaceOpenFailure(record, codeSpaceID, failure),
@@ -8597,8 +8597,6 @@ function clearWebServiceWindowPartition(partition: string): void {
     webSession.clearCache(),
   ]).catch(() => undefined);
 }
-
-const WEB_SERVICE_BROWSER_RETRY_FEEDBACK_MS = 600;
 
 function webServiceBrowserDocumentURL(): string {
   const locale = desktopLanguageState().getSnapshot().resolved_locale;
@@ -8873,7 +8871,28 @@ function createWebServiceBrowserController(
     else blockExternalNavigation(url);
     return { action: 'deny' };
   });
+  const retryUnavailableService = (): void => {
+    if (loadingUnavailablePage) return;
+    const retryPageURL = unavailablePageURL;
+    const retryRequestURL = unavailableRequestURL || requestedURL;
+    loadingUnavailablePage = true;
+    void showWebServiceRetryFeedback(contentView.webContents, retryPageURL,
+      () => !win.isDestroyed() && unavailablePageURL === retryPageURL,
+    ).then((current) => {
+      if (current) loadRequestedURL(retryRequestURL);
+    }).catch(() => {
+      if (unavailablePageURL !== retryPageURL) return;
+      loadingUnavailablePage = false;
+      errorMessage = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale).t('webServiceBrowser.loadFailed');
+      publishState();
+    });
+  };
   contentView.webContents.on('will-navigate', (event, targetURL) => {
+    if (isWebServiceUnavailableRetryIntent(targetURL, contentView.webContents.getURL(), unavailablePageURL)) {
+      event.preventDefault();
+      retryUnavailableService();
+      return;
+    }
     if (targetURL === unavailablePageURL) return;
     if (allowTargetNavigation(targetURL)) {
       markRequestedNavigation(targetURL);
@@ -8908,21 +8927,15 @@ function createWebServiceBrowserController(
   });
   contentView.webContents.on('did-stop-loading', publishState);
   contentView.webContents.on('did-navigate', (_event, targetURL) => {
-    if (targetURL === unavailablePageURL) loadingUnavailablePage = false;
+    if (unavailablePageURL && targetURL === unavailablePageURL) loadingUnavailablePage = false;
     else requestedURL = targetURL;
     publishState();
   });
   contentView.webContents.on('did-navigate-in-page', (_event, targetURL, isMainFrame) => {
     if (!isMainFrame) return;
-    if (unavailablePageURL && targetURL === `${unavailablePageURL}#retry`) {
-      const retryPageURL = unavailablePageURL;
-      const retryRequestURL = unavailableRequestURL || requestedURL;
-      setTimeout(() => {
-        if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;
-        if (unavailablePageURL !== retryPageURL) return;
-        if (contentView.webContents.getURL() !== `${retryPageURL}#retry`) return;
-        loadRequestedURL(retryRequestURL);
-      }, WEB_SERVICE_BROWSER_RETRY_FEEDBACK_MS);
+    if (unavailablePageURL && targetURL === unavailablePageURL) {
+      loadingUnavailablePage = false;
+      publishState();
       return;
     }
     requestedURL = targetURL;

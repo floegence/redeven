@@ -18,6 +18,9 @@
       ],
       "@floegence/floe-webapp-boot/artifact-source": [
         "node_modules/@floegence/floe-webapp-boot/dist/artifact-source.d.ts"
+      ],
+      "@floegence/floe-webapp-core/window-status": [
+        "node_modules/@floegence/floe-webapp-core/dist/window-status.d.ts"
       ]
     },
     "lib": [

@@ -2861,5 +2861,11 @@
     "expired": "接続認証情報の期限切れ",
     "requested": "{label} の接続を要求しました。Redeven Cloud の状態は自動的に更新されます。",
     "permissionRevoked": "Cloud 権限が取り消されました"
+  },
+  "windowStatus": {
+    "checkingService": "サービスの状態を確認しています",
+    "preparingEditor": "エディターサービスに接続しています",
+    "editorUnavailableDetail": "エディターを開けませんでした。Codespaces に戻って再試行してください。",
+    "technicalDetails": "技術情報"
   }
 }

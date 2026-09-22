@@ -2867,5 +2867,11 @@
     "expired": "Credenciales caducadas",
     "requested": "Se ha solicitado la conexión de {label}. El estado de Redeven Cloud se actualizará automáticamente.",
     "permissionRevoked": "Permiso de Cloud revocado"
+  },
+  "windowStatus": {
+    "checkingService": "Comprobando el estado del servicio",
+    "preparingEditor": "Conectando con el servicio del editor",
+    "editorUnavailableDetail": "No se pudo abrir el editor. Vuelve a Codespaces e inténtalo de nuevo.",
+    "technicalDetails": "Detalles técnicos"
   }
 }

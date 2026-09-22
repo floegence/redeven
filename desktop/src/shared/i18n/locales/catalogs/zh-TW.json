@@ -2861,5 +2861,11 @@
     "expired": "連線憑證已過期",
     "requested": "已要求連線至 {label}，Redeven Cloud 狀態將自動更新。",
     "permissionRevoked": "Cloud 權限已撤銷"
+  },
+  "windowStatus": {
+    "checkingService": "正在檢查服務狀態",
+    "preparingEditor": "正在連線至編輯器服務",
+    "editorUnavailableDetail": "無法開啟編輯器。請返回 Codespaces 後重試。",
+    "technicalDetails": "技術詳細資料"
   }
 }
