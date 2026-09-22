@@ -311,6 +311,7 @@ describe('createRuntimeReconnectController', () => {
       failure: { error_code: 'process_identity_changed' },
     });
     const terminalSnapshot = controller.snapshot();
+    controller.noteSecureSession('failed', { code: 'authentication_failed', retryable: false, technical_detail: '' });
     controller.noteProtocolConnected();
     controller.noteSecureSession('ready');
     expect(controller.snapshot()).toBe(terminalSnapshot);

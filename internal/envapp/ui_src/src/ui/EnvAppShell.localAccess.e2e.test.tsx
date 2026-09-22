@@ -4966,6 +4966,20 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(getLocalAccessStatusMock).toHaveBeenCalledTimes(2);
       expect(retryNowMock).not.toHaveBeenCalled();
       expect(replaceConnectionMock).not.toHaveBeenCalled();
+
+      refreshLocalRuntimeMock.mockResolvedValue({
+        mode: 'local', env_public_id: 'env_local',
+        access_status: { password_required: true, unlocked: true },
+      });
+      const password = host.querySelector('input[type="password"]') as HTMLInputElement;
+      password.value = 'secret';
+      password.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushUntil(() => replaceConnectionMock.mock.calls.length === 1);
+      await flushAsync();
+      expect(protocolSnapshot.state).toBe('connected');
+      expect(host.textContent).not.toContain('Connection needs attention');
+      expect(host.querySelector('[data-recovery-state="succeeded"]')).toBeTruthy();
     } finally { dispose(); }
   });
 
