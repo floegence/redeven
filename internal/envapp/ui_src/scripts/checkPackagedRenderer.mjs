@@ -421,7 +421,8 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   let flowersecPeer = null;
   let proxyUpstream = null;
   let issuedArtifacts = 0;
-  const renewPeer = async () => {
+  let peerRenewal = Promise.resolve();
+  const renewPeer = () => (peerRenewal = peerRenewal.then(async () => {
     await flowersecPeer?.close();
     flowersecPeer = await flowersecPeerFactory({
       httpUpstream: `http://127.0.0.1:${proxyUpstream.address().port}`, tls, gitReady,
@@ -431,7 +432,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
     directArtifactJSON = flowersecPeer.artifact;
     directArtifact = JSON.parse(directArtifactJSON);
     directArtifactExpiresAt = flowersecPeer.expires_at;
-  };
+  }));
   const lifecycleEvents = [];
   const artifactSpendRequests = [];
   const pluginRequests = [];
@@ -798,6 +799,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
     pluginRequests,
     runtimeRecovery,
     close: async () => {
+      await peerRenewal;
       await flowersecPeer?.close();
       if (proxyUpstream) {
         proxyUpstream.closeAllConnections();

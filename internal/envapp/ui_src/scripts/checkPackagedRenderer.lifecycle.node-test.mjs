@@ -46,6 +46,28 @@ test('packaged renderer close terminates its published Flowersec Go peer', async
   }
 });
 
+test('concurrent reconnect artifacts retire every owned smoke peer', async () => {
+  const tls = await createBuiltDistTLS();
+  const active = new Set();
+  let nextID = 0;
+  const server = await createBuiltDistServer({ accessReady: true, tls, renewPeerOnConnect: true,
+    flowersecPeerFactory: async () => {
+      const id = ++nextID;
+      active.add(id);
+      return { artifact: JSON.stringify({ session: { channel_id: `channel-${id}` } }), expires_at: '2099-01-01T00:00:00Z',
+        close: async () => { await new Promise(resolve => setTimeout(resolve, 10)); active.delete(id); },
+      };
+    },
+  });
+  try {
+    const request = () => requestTrustedJSON(new URL('/api/local/direct/connect_artifact', server.baseURL), tls.certificate, '{}');
+    await request();
+    await Promise.all([request(), request()]);
+    assert.equal(active.size, 1, 'only the current peer remains owned');
+  } finally { await server.close(); await tls.cleanup(); }
+  assert.equal(active.size, 0, 'server cleanup retires all peers');
+});
+
 test('packaged renderer TLS cleanup removes its temporary credentials', async () => {
   const tls = await createBuiltDistTLS();
   await access(tls.directory);
@@ -93,6 +115,11 @@ test('unlocked packaged renderer emits a current validated Floe acquisition enve
     assert.deepEqual(assertProxyRuntimeScope(projection.payload), {
       mode: 'service_worker',
       appBasePath: '/_redeven_proxy/env/',
+      http: {
+        additionalPathPrefixes: ['/_redeven_proxy/api/', '/_redevplugin/api/plugins'],
+        extraRequestHeaders: ['x-redevplugin-csrf', 'x-redevplugin-expected-management-revision'],
+      },
+      limits: { maxBodyBytes: 256 * 1024 * 1024 },
       serviceWorker: {
         scriptUrl: '/_redeven_proxy/env/_redeven_sw.js',
         scope: '/_redeven_proxy/env/',
