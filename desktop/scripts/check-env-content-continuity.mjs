@@ -30,20 +30,37 @@ async function freePort() {
   await new Promise(resolve => socket.close(resolve));
   return port;
 }
+async function quitOwnedDesktop(inspectorPort) {
+  const targets = await fetch(`http://127.0.0.1:${inspectorPort}/json/list`).then(response => response.json());
+  const socket = new WebSocket(targets[0].webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
+  // Automate only the test instance's native quit confirmation, after acceptance.
+  const result = new Promise((resolve, reject) => {
+    socket.onmessage = event => {
+      const message = JSON.parse(event.data);
+      if (message.id === 1) message.error || message.result?.exceptionDetails ? reject(new Error(JSON.stringify(message))) : resolve();
+    };
+    socket.onerror = reject;
+  });
+  socket.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: "process.mainModule.require('electron').dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); setTimeout(() => process.mainModule.require('electron').app.quit(), 100);" } }));
+  try { await result; } finally { socket.close(); }
+}
 execFileSync(path.join(desktop, '../scripts/check_desktop_electron_test_runtime.sh'), [desktop], { stdio: 'inherit' });
 console.log('Production continuity artifact:', JSON.stringify({ commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: desktop, encoding: 'utf8' }).trim(), manifest, directory, marker }));
 try {
   for (const phase of ['initial', 'restart']) {
     const port = await freePort();
+    const inspectorPort = await freePort();
     const runtimePort = await freePort();
-    const child = spawn(require('electron'), [desktop, `--user-data-dir=${directory}/profile`, `--redeven-content-run=${marker}`, `--remote-debugging-port=${port}`, '--remote-debugging-address=127.0.0.1'], {
+    const child = spawn(require('electron'), [desktop, `--inspect=127.0.0.1:${inspectorPort}`, `--user-data-dir=${directory}/profile`, `--redeven-content-run=${marker}`, `--remote-debugging-port=${port}`, '--remote-debugging-address=127.0.0.1'], {
       cwd: directory, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, REDEVEN_STATE_ROOT: `${directory}/state`, REDEVEN_DESKTOP_USER_DATA_ROOT: `${directory}/profile`, REDEVEN_DESKTOP_CACHE_ROOT: `${directory}/cache`, REDEVEN_DESKTOP_TEMP_ROOT: `${directory}/temp`, REDEVEN_DESKTOP_AUTO_START_RUNTIME: '1', REDEVEN_DESKTOP_OPEN_DEVTOOLS: '0', REDEVEN_DESKTOP_LOCAL_UI_BIND: `127.0.0.1:${runtimePort}`, REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT: bundle },
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, REDEVEN_STATE_ROOT: `${directory}/state`, REDEVEN_DESKTOP_USER_DATA_ROOT: `${directory}/profile`, REDEVEN_DESKTOP_CACHE_ROOT: `${directory}/cache`, REDEVEN_DESKTOP_TEMP_ROOT: `${directory}/temp`, REDEVEN_DESKTOP_AUTO_START_RUNTIME: '1', REDEVEN_DESKTOP_OPEN_DEVTOOLS: '0', REDEVEN_DESKTOP_LOCAL_UI_BIND: `127.0.0.1:${runtimePort}`, REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT: bundle, REDEVEN_DESKTOP_BUNDLE_VERSION: manifest.version, REDEVEN_DESKTOP_BUNDLE_COMMIT: manifest.commit },
     });
     let log = '';
     child.stdout.on('data', chunk => { log += chunk; }); child.stderr.on('data', chunk => { log += chunk; });
     const exited = new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
     let browser;
+    let welcome;
     try {
       await eventually(async () => {
         assert.equal(child.exitCode, null, `Electron exited before CDP: ${log}`);
@@ -51,7 +68,14 @@ try {
       }, 'Production Electron CDP did not start');
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
       const context = browser.contexts()[0];
-      const welcome = await eventually(() => context.pages().find(page => page.url().includes('/welcome/')), `Welcome did not open: ${log}`);
+      await context.addInitScript(() => {
+        const NativeWebSocket = window.WebSocket;
+        globalThis.__continuitySockets = [];
+        window.WebSocket = class extends NativeWebSocket {
+          constructor(...args) { super(...args); globalThis.__continuitySockets.push(this); }
+        };
+      });
+      welcome = await eventually(() => context.pages().find(page => page.url().includes('/welcome/')), `Welcome did not open: ${log}`);
       const open = () => welcome.getByRole('button', { name: /^(Open|Show|打开|显示) Env App$/ }).first();
       await open().click({ timeout: 60000 });
       let page = await eventually(() => context.pages().find(page => page.url().includes('/_redeven_proxy/env/')), 'Env App did not open from Welcome');
@@ -70,17 +94,20 @@ try {
         await page.evaluate(() => window.redevenDesktopShell.minimizeWindow());
         await open().click();
         assert.equal(await page.locator('button.host-app-tile').first().evaluate(row => row === globalThis.__retainedRow), true);
-        const cdp = await context.newCDPSession(page);
-        await cdp.send('Network.enable');
-        await cdp.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
-        await page.waitForTimeout(1000);
-        await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+        const reconfirmed = page.waitForResponse(response => response.url().endsWith('/ui-cache-scope') && response.status() === 200);
+        const closed = await page.evaluate(() => {
+          const sockets = globalThis.__continuitySockets.filter(socket => socket.readyState === WebSocket.OPEN);
+          sockets.forEach(socket => socket.close(4001, 'Continuity test transport interruption'));
+          return sockets.length;
+        });
+        assert.ok(closed > 0, 'The production connection must actually be interrupted');
+        await reconfirmed;
         await page.getByRole('button', { name: /^(Reconnect|重新连接|重连)$/ }).waitFor({ timeout: 60000 });
         await page.waitForFunction(() => !document.querySelector('.host-apps-header .animate-spin'));
         assert.equal(await page.locator('button.host-app-tile').first().evaluate(row => row === globalThis.__retainedRow), true);
         const frames = await page.evaluate(() => globalThis.__continuityFrames);
         assert.ok(frames.length && frames.every(frame => frame.row && !frame.skeleton), JSON.stringify(frames));
-        console.log('PASS production hide/show and reconnect:', JSON.stringify(frames));
+        console.log('PASS production hide/show and reconnect:', JSON.stringify({ interruptedSockets: closed, reconfirmed: true, frames }));
         await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
         await page.evaluate(() => window.redevenDesktopShell.closeWindow()).catch(() => {});
         await eventually(() => page.isClosed(), 'Env App close did not destroy its window');
@@ -96,10 +123,23 @@ try {
       if (browser) for (const page of browser.contexts()[0].pages()) console.error('Window:', page.url(), await page.locator('body').innerText().catch(() => 'unavailable'));
       throw error;
     } finally {
-      await browser?.close();
-      if (child.exitCode === null && child.signalCode === null) process.kill(-child.pid, 'SIGTERM');
+      // Desktop deliberately leaves host runtimes alive on quit. Stop only this
+      // isolated profile's local Runtime through its normal lifecycle boundary.
+      if (welcome && !welcome.isClosed()) {
+        const stopped = await welcome.evaluate(async () => {
+          const launcher = window.redevenDesktopLauncher;
+          const local = (await launcher.getSnapshot()).environments.find(environment => environment.kind === 'local_environment');
+          return local ? launcher.performAction({ kind: 'stop_environment_runtime', environment_id: local.id }) : null;
+        });
+        assert.ok(stopped?.ok, `Owned Runtime shutdown failed: ${JSON.stringify(stopped)}`);
+      }
+      if (child.exitCode === null && child.signalCode === null) await quitOwnedDesktop(inspectorPort);
+      await eventually(() => child.exitCode !== null || child.signalCode !== null, 'Production Desktop did not shut down');
       const result = await exited;
-      assert.notEqual(result.signal, 'SIGKILL', 'An external SIGKILL is a test failure');
+      await browser?.close();
+      assert.equal(result.signal, null, `Electron must quit normally: ${JSON.stringify(result)}`);
+      assert.equal(result.code, 0);
+      console.log('PASS production Desktop shutdown:', phase);
     }
   }
 } finally { await rm(directory, { recursive: true, force: true }); }
