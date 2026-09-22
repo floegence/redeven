@@ -3,7 +3,7 @@ type: Validation Guide
 title: Host application distribution validation
 description: Installed-stack evidence, architecture limits and repeatable native application acceptance.
 tags: [runtime, applications, linux, validation]
-timestamp: 2026-09-21T06:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 # Summary
 
@@ -32,6 +32,11 @@ component directory. The managed preparation acceptance installs the original ar
 and launches a host Python/GTK application, verifies private session/environment
 isolation, resumes it, and stops it. Run with `REDEVEN_TEST_NATIVE_BUNDLE` pointing
 to the upstream-generated ZIP and select `TestManagedPreparationAndHostApplication`.
+The test reports launch-to-window readiness, then requires another authoritative
+Xpra window inventory response within three seconds. Installed system-stack
+acceptance applies the same query check. This catches the repeated five-second
+audio initialization wait without weakening the requirement for a real mapped
+window. Keep these native checks opt-in; they require a prepared graphical stack.
 Product preparation additionally exercises owner permission,
 SSE status, cancellation, same-window continuation and Desktop relay tests.
 
@@ -127,6 +132,7 @@ Repeat on an authorized Mac with Xcode command-line tools:
 ```sh
 swift test --package-path desktop/native/computer-host
 python3 scripts/check_macos_host_application_quit.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host
+python3 scripts/check_macos_host_application_startup.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --output /tmp/redeven-native-startup.json
 python3 scripts/check_macos_host_applications.py desktop/native/computer-host/.build/debug/redeven-computer-host --output /tmp/redeven-native-app-evidence
 python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario delayed
 python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario reopen
@@ -140,8 +146,18 @@ It records real input receipts and pixels; teardown verifies the exact executabl
 path before stopping a fixture process. Missing graphical login or permissions is
 an explicit failure, not a skipped or simulated acceptance run.
 
+The startup fixture measures native attachment and reconnect separately, checks
+one initial capture negotiation, and verifies suspension and capture replacement.
+The browser surface regression decodes and acknowledges one static H.264 frame
+without waiting for a second frame. Native timings exclude viewer loading and
+browser decode; an end-to-end claim additionally needs a timed first decoded
+frame from the matching Runtime/helper/viewer build.
+
 # Evidence
 
 - `internal/hostapps/manager_test.go`: installed GIO and Xpra launch/resume/stop tests.
+- `internal/hostapps/setup_test.go`: published component preparation and responsive application window inventory.
+- `scripts/check_macos_host_application_startup.py`: native attach/reconnect and capture lifecycle measurements.
+- `internal/envapp/ui_src/src/styles/hostApplicationSurfaces.browser.test.tsx`: first static video frame decode and acknowledgement.
 - `internal/hostapps/desktop_test.py`: native metadata, icon and argument checks.
 - `internal/codeapp/appserver/host_application_viewer/viewer.js`: HTML client and lifecycle adapter.

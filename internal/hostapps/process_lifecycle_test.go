@@ -9,10 +9,46 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 )
+
+func TestSessionLaunchDisablesAudioSubsystem(t *testing.T) {
+	m := macFixture(t)
+	dir := filepath.Join(m.state, "sessions", "silent")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	arguments := filepath.Join(dir, "arguments")
+	launcher := filepath.Join(dir, "launcher")
+	if err := os.WriteFile(launcher, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+quoteArgv([]string{arguments})+"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	forward, err := m.forwards.OpenOwnedForwardSession(context.Background(), "http://127.0.0.1:45534/_redeven_host_app/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &ownedSession{view: Session{ID: "silent", State: "starting", Forward: forward}, owner: "alice", done: make(chan struct{}), tools: hostTools{dbus: launcher}}
+	m.sessions[s.view.ID] = s
+	m.run(s, dir, "127.0.0.1:45534")
+	data, err := os.ReadFile(arguments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := map[string]string{}
+	for _, argument := range strings.Split(string(data), "\n") {
+		if name, value, ok := strings.Cut(argument, "="); ok {
+			options[name] = value
+		}
+	}
+	for name, want := range map[string]string{"--audio": "no", "--pulseaudio": "no", "--speaker": "disabled", "--microphone": "disabled"} {
+		if options[name] != want {
+			t.Errorf("silent application session must disable %s; got %q", name, options[name])
+		}
+	}
+}
 
 func TestWindowReadinessCancellationReapsProbeChildren(t *testing.T) {
 	dir, err := os.MkdirTemp("", "xpra-cancel-")

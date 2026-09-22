@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Host application catalog and owned native sessions
 description: Browse Linux and macOS host applications and open owned, reconnectable graphical sessions through existing authorized windows.
 tags: [runtime, desktop, applications, security, ui]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 # Summary
 
@@ -75,6 +75,13 @@ On Linux, a launch gets a private D-Bus session, virtual X server, authenticated
 listener, and process group. A GIO launch receipt, responding HTML5 endpoint, and a nonempty Xpra window
 inventory must all be ready before the session becomes running. Startup has a bounded
 deadline; failure stops the owned process group and removes its route and secret.
+Silent sessions use the released native component library's `XpraNoAudioArgs`
+policy to disable audio initialization completely; starting muted must not delay
+window readiness on an unavailable audio backend. The same policy applies to
+managed and supported system installations. A successful Linux transition records
+session creation-to-window readiness and final inventory-query durations in the
+Runtime log, identified by session ID. These timings exclude viewer loading and
+first decoded pixels; they must not be presented as end-to-end connection latency.
 The Runtime limits concurrent sessions to twelve and retains at most forty-eight
 session records per Runtime lifetime. Startup failures retain failed status so a
 failed launch cannot disappear silently from the library. A previously running
