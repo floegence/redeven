@@ -126,6 +126,8 @@ export const enUS = defineDictionary({
     "macAppRunning": "Running",
     "macQuit": "Quit application",
     "macQuitTitle": "Quit {name}?",
+    "sessionQuitDescription": "Close all windows in this application session. The application may ask you to save changes; cancelling keeps the window open.",
+    "sessionPictureHint": "Changes apply immediately without reconnecting. Higher quality uses more bandwidth.",
     "macQuitDescription": "This asks the application to quit and close all of its windows on this Mac, including windows opened outside Redeven. The application may ask you to save changes; you can cancel there.",
     "macQuitViewerPending": "Quit requested. Respond to any save dialog in the application. Cancelling keeps it open.",
     "macQuitPending": "Open the application to respond to any save dialog. If you cancel quitting, it stays open.",

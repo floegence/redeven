@@ -8671,7 +8671,7 @@ function createWebServiceBrowserController(
     stateKey: sessionWebServiceWindowStateKey(sessionRecord.session_key, request.forward_id),
     role: 'web_service_child',
     diagnostics: sessionRecord.diagnostics,
-    chrome: applicationWindow ? 'native' : 'desktop',
+    chrome: 'desktop',
     preload: applicationWindow ? 'none' : 'web_service_browser',
     stealAppFocus: true,
     presentOnReadyToShow: !applicationWindow,
@@ -18639,7 +18639,7 @@ if (!app.requestSingleInstanceLock()) {
       const entry = hostApplicationPreparations.reserve(owner, request.application_id, () => createBrowserWindow({
         targetURL: `data:text/html;charset=utf-8,${encodeURIComponent(document)}`,
         stateKey: sessionWebServiceWindowStateKey(record.session_key, 'preparing-application'),
-        role: 'web_service_child', diagnostics: record.diagnostics, chrome: 'native', preload: 'none', stealAppFocus: true,
+        role: 'web_service_child', diagnostics: record.diagnostics, chrome: 'desktop', preload: 'none', stealAppFocus: true,
       }));
       if (!hostApplicationPreparationObservers.has(event.sender.id)) {
         hostApplicationPreparationObservers.add(event.sender.id);

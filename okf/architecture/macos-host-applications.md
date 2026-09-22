@@ -52,7 +52,7 @@ Window IDs and menu handles must belong to this bound process. The browser canno
 supply an arbitrary PID, application path or capture source.
 
 ScreenCaptureKit captures a selected application window on macOS 13 or newer.
-Child-window inclusion uses the macOS 14.2 API when available. A counted window selector in the fixed top toolbar shows the current host window
+Child-window inclusion uses the macOS 14.2 API when available. A counted window selector in the [application toolbar](../desktop/host-application-titlebar.md) shows the current host window
 title and is enabled whenever shareable windows are available. It opens a scrollable list of literal host window
 titles with the current selection marked, independently of picture settings.
 Untitled windows use the app name and inventory position; the viewer never invents

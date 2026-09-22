@@ -6339,6 +6339,8 @@
     "macAppRunning": "En cours",
     "macQuit": "Quitter l’application",
     "macQuitTitle": "Quitter {name} ?",
+    "sessionQuitDescription": "Fermer toutes les fenêtres de cette session d’application. L’application peut vous demander d’enregistrer les modifications ; si vous annulez, la fenêtre reste ouverte.",
+    "sessionPictureHint": "Les modifications s’appliquent immédiatement, sans reconnexion. Une qualité supérieure utilise davantage de bande passante.",
     "macQuitDescription": "L’application sera invitée à quitter et à fermer toutes ses fenêtres sur ce Mac, y compris celles ouvertes en dehors de Redeven. Elle peut vous demander d’enregistrer vos modifications ; vous pourrez alors annuler la fermeture.",
     "macQuitViewerPending": "La fermeture a été demandée. Répondez à toute demande d’enregistrement dans l’application. Si vous annulez, elle reste ouverte.",
     "macQuitPending": "Ouvrez l’application pour répondre à une éventuelle demande d’enregistrement. Si vous annulez la fermeture, elle reste ouverte.",

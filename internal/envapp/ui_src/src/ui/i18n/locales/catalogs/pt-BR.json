@@ -6339,6 +6339,8 @@
     "macAppRunning": "Em execução",
     "macQuit": "Encerrar aplicativo",
     "macQuitTitle": "Encerrar {name}?",
+    "sessionQuitDescription": "Fechar todas as janelas desta sessão do aplicativo. O aplicativo pode pedir para salvar as alterações; se você cancelar, a janela continuará aberta.",
+    "sessionPictureHint": "As alterações são aplicadas imediatamente, sem reconectar. Uma qualidade maior usa mais largura de banda.",
     "macQuitDescription": "Isso solicita que o aplicativo encerre e feche todas as suas janelas neste Mac, incluindo as abertas fora do Redeven. O aplicativo pode pedir para salvar as alterações; você poderá cancelar o encerramento nele.",
     "macQuitViewerPending": "A saída foi solicitada. Responda às solicitações para salvar no aplicativo. Se cancelar, ele permanecerá aberto.",
     "macQuitPending": "Abra o aplicativo para responder a qualquer diálogo de salvamento. Se você cancelar o encerramento, ele continuará aberto.",

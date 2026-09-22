@@ -1,3 +1,5 @@
+import { buildDesktopWindowChromeStyleText } from '../shared/windowChromeContract';
+import { resolveDesktopWindowChromeSnapshot } from '../shared/windowChromePlatform';
 import type { DesktopThemeSnapshot } from '../shared/desktopTheme';
 
 export type WebServiceUnavailableCopy = Readonly<{
@@ -38,6 +40,8 @@ export function buildWebServiceUnavailableDocumentURL(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${htmlEscape(copy.documentTitle)}</title>
   <style>
+${presentation === 'application' ? buildDesktopWindowChromeStyleText(resolveDesktopWindowChromeSnapshot()) : ''}
+.host-application-loading-titlebar{position:fixed;inset:0 0 auto;display:flex;align-items:center;height:var(--redeven-desktop-titlebar-height);padding-inline:var(--redeven-desktop-titlebar-start-inset) var(--redeven-desktop-titlebar-end-inset);font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;app-region:drag;user-select:none}
     :root {
       color-scheme: ${theme.resolvedTheme};
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -98,7 +102,7 @@ export function buildWebServiceUnavailableDocumentURL(
   </style>
 </head>
 <body class="${presentation}">
-  <main>
+${presentation === 'application' ? `<header class="host-application-loading-titlebar">${htmlEscape(copy.documentTitle)}</header>` : ''}  <main>
     <div class="signal" aria-hidden="true">
       <svg viewBox="0 0 24 24"><path d="M9.5 14.5 14.5 9.5"/><path d="m7 17-1.2 1.2a3.5 3.5 0 0 1-5-5L5 9a3.5 3.5 0 0 1 5 0"/><path d="m17 7 1.2-1.2a3.5 3.5 0 0 1 5 5L19 15a3.5 3.5 0 0 1-5 0"/></svg>
     </div>

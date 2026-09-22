@@ -9,6 +9,7 @@ import { Dialog } from '../ui/primitives/EnvAppModal';
 import { enUS } from '../ui/i18n/locales/en-US';
 import viewerHTML from '../../../../codeapp/appserver/host_application_viewer/viewer.html?raw';
 import viewerCSS from '../../../../codeapp/appserver/host_application_viewer/viewer.css?raw';
+import toolbarJS from '../../../../codeapp/appserver/host_application_viewer/toolbar.js?raw';
 import connectionJS from '../../../../codeapp/appserver/host_application_viewer/connection.js?raw';
 import viewerJS from '../../../../codeapp/appserver/host_application_viewer/macos.js?raw';
 
@@ -58,7 +59,7 @@ it.each([320, 390, 1000].flatMap(width => ['light', 'dark'].map(scheme => ({widt
   const config = {base:'/fixture', icon:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', copy};
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS).replace('{{.Config}}', JSON.stringify(config))
-    .replace('{{.Script}}', `window.fetch = () => new Promise(() => {});\n${connectionJS}\n${viewerJS}`);
+    .replace('{{.Script}}', `window.fetch = () => new Promise(() => {});\n${connectionJS}\n${toolbarJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.querySelector('.mac-app-controls-toggle')).toBeTruthy();
   const doc = frame.contentDocument!, view = frame.contentWindow!;
@@ -126,7 +127,7 @@ it.each([
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:'/fixture',copy,initial:{state:'ended',end_reason:reason}}))
-    .replace('{{.Script}}', `window.redevenHostApplicationWindow = {request() {}}; window.fetch = () => { throw Error('Terminal document must not reconnect'); };\n${connectionJS}\n${viewerJS}`);
+    .replace('{{.Script}}', `window.redevenHostApplicationWindow = {request() {}}; window.fetch = () => { throw Error('Terminal document must not reconnect'); };\n${connectionJS}\n${toolbarJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.state).toBe(state);
   const doc = frame.contentDocument!, view = frame.contentWindow!;
@@ -134,7 +135,8 @@ it.each([
   expect(doc.querySelector('#hint')!.textContent).toBe(copy[state + 'Hint']);
   expect(view.getComputedStyle(doc.querySelector('.progress')!).display).toBe('none');
   expect(view.getComputedStyle(doc.querySelector('#retry')!).display).toBe('none');
-  expect(view.getComputedStyle(doc.querySelector('.mac-app-controls')!).display).toBe('none');
+  expect(view.getComputedStyle(doc.querySelector('.mac-app-controls')!).display).not.toBe('none');
+  expect([...doc.querySelectorAll<HTMLButtonElement>('.mac-app-toolbar button')].every(button => button.disabled)).toBe(true);
   const dismiss = doc.querySelector<HTMLButtonElement>('#dismiss')!;
   expect(dismiss.textContent).toBe(copy.dismiss);
   expect(view.getComputedStyle(dismiss).cursor).toBe('pointer');
@@ -174,7 +176,7 @@ it.each([320, 390, 1000])('keeps the counted window picker usable at %s px while
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Text Editor')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',copy}))
-    .replace('{{.Script}}', `${fixture}\n${connectionJS}\n${viewerJS}`);
+    .replace('{{.Script}}', `${fixture}\n${connectionJS}\n${toolbarJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.state).toBe('active');
   const doc = frame.contentDocument!, view = frame.contentWindow!;
@@ -255,7 +257,7 @@ it('decodes and acknowledges a single static native video frame without waiting 
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Name}}', 'Decoder Fixture')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',copy:{}}))
-    .replace('{{.Script}}', `${fixture}\n${connectionJS}\n${viewerJS}`);
+    .replace('{{.Script}}', `${fixture}\n${connectionJS}\n${toolbarJS}\n${viewerJS}`);
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.video).toBe('true');
   await expect.poll(() => frame.contentDocument?.body.dataset.ack, {timeout:2000}).toBe('1');
@@ -266,4 +268,51 @@ it('decodes and acknowledges a single static native video frame without waiting 
   const pixel = canvas.getContext('2d')!.getImageData(32,32,1,1).data;
   expect(pixel[0]).toBeGreaterThan(60);
   expect(pixel[0]).toBeLessThan(100);
+});
+
+
+it.each([
+  {platform:'macOS', width:520, start:84, end:16, scheme:'light'},
+  {platform:'macOS', width:1200, start:84, end:16, scheme:'dark'},
+  {platform:'macOS fullscreen', width:520, start:16, end:16, scheme:'light'},
+  {platform:'Windows', width:520, start:16, end:144, scheme:'light'},
+  {platform:'Linux', width:520, start:16, end:136, scheme:'dark'},
+])('integrates the toolbar into $platform native chrome at $width px', async ({width,start,end,scheme}) => {
+  const frame = document.createElement('iframe'); frame.style.cssText = `width:${width}px;height:500px;border:0`;
+  const copy: Record<string, unknown> = {};
+  for (const [key,value] of Object.entries(enUS.hostApplications)) {
+    if (typeof value === 'string') copy[key.startsWith('mac') ? key[3].toLowerCase() + key.slice(4) : key] = value;
+  }
+  const native = `window.redevenHostApplicationWindow = {request() {}};
+    document.documentElement.dataset.redevenHostApplicationChrome = 'true';
+    document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '40px');
+    document.documentElement.style.setProperty('--redeven-desktop-titlebar-start-inset', '${start}px');
+    document.documentElement.style.setProperty('--redeven-desktop-titlebar-end-inset', '${end}px');
+    window.fetch = () => new Promise(() => {});`;
+  frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}','en-US').replaceAll('{{.Name}}','Text Editor')
+    .replaceAll('{{.Nonce}}','fixture').replace('{{.Style}}',viewerCSS)
+    .replace('{{.Config}}',JSON.stringify({base:'/fixture',copy,icon:''}))
+    .replace('{{.Script}}', `${native}\n${connectionJS}\n${toolbarJS}\n${viewerJS}`);
+  document.body.append(frame);
+  await expect.poll(() => frame.contentDocument?.querySelector('.mac-app-toolbar')).toBeTruthy();
+  const doc=frame.contentDocument!, view=frame.contentWindow!;
+  doc.documentElement.style.colorScheme=scheme;
+  const toolbar=doc.querySelector<HTMLElement>('.mac-app-toolbar')!;
+  expect(doc.querySelector('.mac-app-controls')!.getBoundingClientRect().height).toBe(40);
+  expect(view.getComputedStyle(doc.querySelector('.mac-app-controls')!).display).not.toBe('none');
+  expect(toolbar.scrollWidth).toBeLessThanOrEqual(width);
+  for (const button of toolbar.querySelectorAll<HTMLButtonElement>('button')) {
+    const bounds=button.getBoundingClientRect();
+    expect(bounds.left).toBeGreaterThanOrEqual(start);
+    expect(bounds.right).toBeLessThanOrEqual(width-end);
+    expect(bounds.top).toBeGreaterThanOrEqual(0); expect(bounds.bottom).toBeLessThanOrEqual(40);
+  }
+  expect(doc.querySelector('#application')!.getBoundingClientRect().top).toBe(40);
+  const picture=doc.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
+  picture.disabled=false; picture.click();
+  const popover=doc.querySelector<HTMLElement>('.mac-app-popover')!;
+  await Promise.all(popover.getAnimations().map(animation=>animation.finished));
+  expect(popover.getBoundingClientRect().top).toBeGreaterThanOrEqual(40);
+  expect(popover.getBoundingClientRect().right).toBeLessThanOrEqual(width-8);
+  expect(view.getComputedStyle(picture).cursor).toBe('pointer');
 });

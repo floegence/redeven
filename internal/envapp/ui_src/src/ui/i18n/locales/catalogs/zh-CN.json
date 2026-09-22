@@ -6350,6 +6350,8 @@
     "macAppRunning": "运行中",
     "macQuit": "退出应用",
     "macQuitTitle": "退出 {name}？",
+    "sessionQuitDescription": "关闭此应用会话中的所有窗口。应用可能会提示保存更改；取消后窗口会保持打开。",
+    "sessionPictureHint": "设置即时生效，无需重新连接。画质越高，带宽占用越大。",
     "macQuitDescription": "这会请求应用退出，并关闭它在此 Mac 上的所有窗口，包括在 Redeven 之外打开的窗口。应用可能会提示保存更改，你也可以在其中取消退出。",
     "macQuitViewerPending": "已请求退出。请在应用中处理保存提示；取消退出后，应用会保持打开。",
     "macQuitPending": "请打开应用处理可能出现的保存对话框。取消退出后，应用会继续运行。",

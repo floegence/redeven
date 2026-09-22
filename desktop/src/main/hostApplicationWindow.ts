@@ -1,3 +1,4 @@
+import { desktopWindowChromeSnapshotForWindow } from './windowChrome';
 import type { BrowserWindow, IpcMainEvent, WebContents } from 'electron';
 import { HOST_APPLICATION_WINDOW_ACTION_CHANNEL, HOST_APPLICATION_WINDOW_STATE_CHANNEL, isHostApplicationWindowAction } from '../shared/hostApplicationWindowIPC';
 
@@ -14,6 +15,7 @@ export function attachHostApplicationWindow(win: BrowserWindow, contents: WebCon
     if (win.isDestroyed() || contents.isDestroyed() || !isBootstrap(contents.getURL())) return;
     contents.send(HOST_APPLICATION_WINDOW_STATE_CHANNEL, {
       maximized: win.isMaximized() || win.isFullScreen(), minimized: win.isMinimized(),
+      chrome: desktopWindowChromeSnapshotForWindow(win),
     });
   };
   const receive = (event: IpcMainEvent, channel: string, action: unknown): void => {

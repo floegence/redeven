@@ -108,3 +108,33 @@ body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; 
 .mac-app-window-list button[aria-busy="true"] svg { opacity:.35; }
 .mac-app-window-list button:hover { background:light-dark(#e7ecf2,#3b4451); }
 .mac-app-window-list button:focus-visible { outline-offset:-2px; }
+
+/* In Desktop this single row is the native titlebar. OS buttons keep their
+   platform-owned space; remote content begins strictly below the toolbar. */
+:root[data-redeven-host-application-chrome="true"] .mac-app-viewer { --mac-toolbar-height:var(--redeven-desktop-titlebar-height,40px); }
+:root[data-redeven-host-application-chrome="true"] .mac-app-toolbar {
+  padding-inline-start:var(--redeven-desktop-titlebar-start-inset,84px);
+  padding-inline-end:var(--redeven-desktop-titlebar-end-inset,16px);
+  app-region:drag; user-select:none;
+}
+:root[data-redeven-host-application-chrome="true"] .mac-app-toolbar button,
+:root[data-redeven-host-application-chrome="true"] .mac-app-popover { app-region:no-drag; }
+:root[data-redeven-host-application-chrome="true"] .mac-app-toolbar>button { height:28px; min-height:28px; border-radius:6px; }
+:root[data-redeven-host-application-chrome="true"] .mac-app-toolbar-icon { width:18px; height:18px; }
+.host-app-identity { display:flex; align-items:center; gap:8px; max-width:210px; min-width:0; padding:0 8px; font-size:12px; font-weight:600; }
+.host-app-identity>svg { width:18px; height:18px; stroke:currentColor; stroke-width:1.5; }
+#application.host-app-frame { top:var(--mac-toolbar-height); height:calc(100% - var(--mac-toolbar-height)); }
+@media(max-width:680px) { .host-app-identity { max-width:160px; } }
+@media(max-width:560px) {
+  .host-app-identity { max-width:120px; }
+  :root[data-redeven-host-application-chrome="true"] .mac-app-menu-toggle { max-width:95px; }
+  :root[data-redeven-host-application-chrome="true"] .host-app-identity { max-width:95px; }
+}
+@media(max-width:460px) {
+  :root[data-redeven-host-application-chrome="true"] .host-app-identity .mac-app-toolbar-label,
+  :root[data-redeven-host-application-chrome="true"] .mac-app-menu-toggle .mac-app-toolbar-label,
+  :root[data-redeven-host-application-chrome="true"] .mac-app-identity-separator { display:none; }
+}
+
+:root[data-redeven-host-application-chrome="true"] .mac-app-close .mac-app-toolbar-label,
+:root[data-redeven-host-application-chrome="true"] .mac-app-quit .mac-app-toolbar-label { display:none; }

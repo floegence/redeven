@@ -67,6 +67,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 - [Desktop development bundle retention](desktop/desktop-development-bundles.md) - Remove obsolete development packages while retaining current, recent, and running-process bundles.
 - [Desktop Web Service browser window](desktop/web-service-browser-window.md) - Preserve trusted chrome, isolated application state, exact navigation authority, and recoverable connection failures.
+- [Desktop host application titlebar](desktop/host-application-titlebar.md) - Operate application windows and picture settings beside native window buttons while preserving fast connection and normal close semantics.
 - [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.
 - [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Separate Desktop direct lifecycle coordination from Runtime and optional access transports.
 - [Desktop Environment library](desktop/desktop-environment-library.md) - Browse shared Runtime/Cloud cards, source grids, scoped actions and consistent group counts.

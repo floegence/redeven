@@ -25,8 +25,144 @@
     document.getElementById('fallback-icon').setAttribute('hidden', '');
   }
 
+  document.body.classList.add('mac-app-viewer');
+  frame.classList.add('host-app-frame');
+  const {controls, toolbar, menu, windowToggle, windowCount, controlsButton, close, quit,
+    popover, windowPanel, windowList, quitPanel, cancelQuit, confirmQuit} = createHostApplicationToolbar();
+  // Linux applications expose their own menus inside their rendered windows.
+  const identity = document.createElement('div');
+  identity.className = 'host-app-identity';
+  identity.append(...menu.childNodes);
+  identity.querySelector('.mac-app-dropdown-chevron').remove();
+  menu.replaceWith(identity);
+  if (/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(config.icon)) {
+    const icon = document.createElement('img');
+    icon.src = config.icon; icon.alt = ''; icon.className = 'mac-app-toolbar-icon';
+    identity.querySelector('svg').replaceWith(icon);
+  }
+  const windows = new Map();
+  const picture = {mode:'auto'};
+  try {
+    const saved = localStorage.getItem('redeven.xpra-app.picture.v1');
+    if (['auto', 'clarity', 'smooth', 'data'].includes(saved)) picture.mode = saved;
+  } catch { /* Preferences are optional. */ }
+  const picturePanel = document.createElement('section');
+  picturePanel.className = 'mac-app-picture';
+  const pictureTitle = document.createElement('strong'); pictureTitle.textContent = config.copy.picture;
+  const {modes, modeButtons} = createHostApplicationPictureModes(picture, () => {
+    try { localStorage.setItem('redeven.xpra-app.picture.v1', picture.mode); } catch { /* Preferences are optional. */ }
+    applyPicture();
+  });
+  const pictureHint = document.createElement('p'); pictureHint.textContent = config.copy.pictureHint;
+  picturePanel.append(pictureTitle, modes, pictureHint);
+  popover.append(windowPanel, picturePanel, quitPanel);
+  const panels = {windows:windowPanel, picture:picturePanel, quit:quitPanel};
+  const toggles = {windows:windowToggle, picture:controlsButton, quit};
+  let panelSection;
+  function positionPopover() {
+    if (!panelSection) return;
+    const anchor = toggles[panelSection].getBoundingClientRect();
+    popover.style.left = `${Math.max(8, Math.min(anchor.left, innerWidth - popover.offsetWidth - 8))}px`;
+  }
+  function collapseControls(restore = false) {
+    const toggle = toggles[panelSection];
+    panelSection = null; popover.hidden = true;
+    for (const panel of Object.values(panels)) panel.hidden = true;
+    for (const toggle of Object.values(toggles)) toggle.setAttribute('aria-expanded', 'false');
+    if (restore && toggle && !toggle.disabled) toggle.focus({preventScroll:true});
+  }
+  function toggleControls(section) {
+    const opening = panelSection !== section;
+    collapseControls();
+    if (!opening || toggles[section].disabled) return;
+    panelSection = section; popover.dataset.section = section;
+    popover.hidden = false; panels[section].hidden = false;
+    toggles[section].setAttribute('aria-expanded', 'true'); positionPopover();
+    (section === 'quit' ? cancelQuit : section === 'picture' ? modeButtons.get(picture.mode)
+      : windowList.querySelector('[aria-pressed="true"]') || windowList.querySelector('button'))?.focus();
+  }
+  function currentWindow() {
+    return windows.get(client?.focused_wid)?.win || [...windows.values()].find(entry => entry.win.focused)?.win
+      || windows.values().next().value?.win;
+  }
+  function syncToolbar() {
+    const active = document.body.dataset.state === 'active' && client?.connected;
+    controls.hidden = !nativeWindow && !active;
+    for (const button of toolbar.querySelectorAll('button')) button.disabled = !active || !windows.size;
+    windowCount.textContent = String(windows.size); windowCount.hidden = windows.size < 2;
+    const current = currentWindow();
+    const title = current?.metadata.title || config.copy.windows;
+    windowToggle.querySelector('.mac-app-toolbar-label').textContent = title;
+    windowToggle.title = `${config.copy.windows} · ${windows.size} — ${title}`;
+    windowToggle.setAttribute('aria-label', windowToggle.title);
+    for (const {win, button, label} of windows.values()) {
+      label.textContent = win.metadata.title || document.title;
+      button.title = label.textContent;
+      button.setAttribute('aria-pressed', String(win === current));
+    }
+    if (!toolbar.querySelector('button:not(:disabled)[tabindex="0"]')) {
+      const first = toolbar.querySelector('button:not(:disabled)');
+      for (const button of toolbar.querySelectorAll('button')) button.tabIndex = button === first ? 0 : -1;
+    }
+  }
+  function applyPicture() {
+    if (!client?.connected) return;
+    const [quality, speed] = {auto:[-1,-1], clarity:[95,-1], smooth:[65,90], data:[40,75]}[picture.mode];
+    client.send(['quality', quality]); client.send(['speed', speed]);
+  }
+  for (const [section, toggle] of Object.entries(toggles)) {
+    toggle.setAttribute('aria-controls', popover.id); toggle.setAttribute('aria-expanded', 'false');
+    if (section === 'quit') toggle.setAttribute('aria-haspopup', 'dialog');
+    toggle.onclick = () => toggleControls(section);
+  }
+  close.onclick = () => {
+    collapseControls(); const win = currentWindow();
+    if (client?.connected && win) client.send_close_window(win);
+    frame.focus();
+  };
+  cancelQuit.onclick = () => collapseControls(true);
+  confirmQuit.onclick = () => {
+    collapseControls(true);
+    // Ask the application's top-level windows to close normally. Do not shut
+    // down Xpra or destroy a process: unsaved-work dialogs must remain operable.
+    if (!client?.connected) return;
+    const top = [...windows.values()].filter(({win}) => !win.metadata['transient-for'] && !win.metadata.modal);
+    for (const {win} of top.length ? top : windows.values()) client.send_close_window(win);
+    frame.focus();
+  };
+  toolbar.addEventListener('focusin', event => {
+    for (const button of toolbar.querySelectorAll('button')) button.tabIndex = button === event.target ? 0 : -1;
+  });
+  toolbar.addEventListener('keydown', event => {
+    const buttons = [...toolbar.querySelectorAll('button:not(:disabled)')], index = buttons.indexOf(document.activeElement);
+    const next = event.key === 'ArrowRight' ? buttons[(index + 1) % buttons.length]
+      : event.key === 'ArrowLeft' ? buttons[(index - 1 + buttons.length) % buttons.length]
+      : event.key === 'Home' ? buttons[0] : event.key === 'End' ? buttons.at(-1) : null;
+    if (next) { event.preventDefault(); collapseControls(); next.focus(); }
+    if (event.key === 'ArrowDown') {
+      const section = Object.keys(toggles).find(key => toggles[key] === document.activeElement);
+      if (section) { event.preventDefault(); if (panelSection !== section) toggleControls(section); }
+    }
+  });
+  windowList.addEventListener('keydown', event => {
+    const buttons = [...windowList.querySelectorAll('button')], index = buttons.indexOf(document.activeElement);
+    const next = event.key === 'ArrowDown' ? buttons[(index + 1) % buttons.length]
+      : event.key === 'ArrowUp' ? buttons[(index - 1 + buttons.length) % buttons.length]
+      : event.key === 'Home' ? buttons[0] : event.key === 'End' ? buttons.at(-1) : null;
+    if (next) { event.preventDefault(); next.focus(); }
+  });
+  document.addEventListener('pointerdown', event => { if (!controls.contains(event.target)) collapseControls(); });
+  controls.addEventListener('focusout', event => { if (event.relatedTarget && !controls.contains(event.relatedTarget)) collapseControls(); });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && panelSection) { event.preventDefault(); event.stopImmediatePropagation(); collapseControls(true); }
+  }, true);
+  frame.addEventListener('focus', () => collapseControls());
+  window.addEventListener('resize', positionPopover);
+
   function present(state) {
     hostApplicationConnection.present(state);
+    syncToolbar();
+    if (state !== 'active') collapseControls();
     frame.inert = state !== 'active';
     frame.setAttribute('aria-hidden', String(state !== 'active'));
     frame.tabIndex = state === 'active' ? 0 : -1;
@@ -35,6 +171,7 @@
   function stopClient() {
     const previous = client;
     client = null;
+    windows.clear(); windowList.replaceChildren(); syncToolbar();
     attached = false;
     applyNativeState = () => {};
     if (previous) {
@@ -99,6 +236,27 @@
     doc.head.append(style);
     doc.documentElement.style.backgroundColor = getComputedStyle(document.body).backgroundColor;
 
+    const setFocus = xpra.set_focus;
+    xpra.set_focus = function(win) { setFocus.call(this, win); syncToolbar(); };
+    function trackWindow(win) {
+      if (windows.has(win.wid)) return;
+      const button = document.createElement('button'), label = document.createElement('span');
+      button.append(label);
+      button.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8"/></svg>');
+      button.onclick = () => {
+        if (attempt !== generation || xpra.id_to_window[win.wid] !== win) return;
+        xpra.set_focus(win); collapseControls(); frame.focus();
+      };
+      windows.set(win.wid, {win, button, label}); windowList.append(button);
+      const metadata = win.update_metadata, destroy = win.destroy;
+      win.update_metadata = function(value) { metadata.call(this, value); if (attempt === generation) syncToolbar(); };
+      win.destroy = function() {
+        destroy.call(this);
+        if (attempt !== generation) return;
+        windows.delete(win.wid); button.remove(); syncToolbar();
+      };
+      syncToolbar();
+    }
     const primaryWindows = new Set();
     const paintableWindows = new Set();
     function syncWindowState(win) {
@@ -116,6 +274,7 @@
       if (!win || win.override_redirect || win.tray) return;
       if (win.metadata['transient-for'] || win.metadata.modal || win.has_windowtype(['DIALOG'])) {
         paintableWindows.add(win.wid);
+        trackWindow(win);
         // A headless display may be larger than the viewer. Keep dialog controls
         // reachable by negotiating a bounded size, never scaling their pixels.
         const resized = win.screen_resized;
@@ -135,6 +294,7 @@
       }
       if (win.windowtype.length && !win.has_windowtype(['NORMAL'])) return;
       paintableWindows.add(win.wid);
+      trackWindow(win);
       if (!primaryWindows.has(win.wid)) {
         primaryWindows.add(win.wid);
         win.div.classList.add('redeven-primary');
@@ -182,6 +342,7 @@
         frame.focus();
       });
     };
+    if (picture.mode !== 'auto') applyPicture();
     if (xpra.connected) xpra.send_control_refresh(100, {'refresh-now':true});
   }
 

@@ -109,9 +109,9 @@ for confirmation because unsaved application data may be lost.
 
 On Linux and remote macOS targets, opening uses an application presentation of the existing
 [Desktop isolated forward window](../desktop/web-service-browser-window.md), or a
-synchronously reserved popup in browser mode. Desktop uses a native title bar,
-application title, and full content bounds without browser navigation or an
-address field. The Xpra document has no Desktop preload or bridge. Only the
+synchronously reserved popup in browser mode. Desktop uses the [application titlebar contract](../desktop/host-application-titlebar.md)
+for native window buttons, application controls and content bounds without browser
+navigation or an address field. The Xpra document has no Desktop preload or bridge. Only the
 Redeven bootstrap receives a narrow, current-window presentation capability as
 defined by the Desktop window contract. Browser popups retain browser-owned chrome.
 
