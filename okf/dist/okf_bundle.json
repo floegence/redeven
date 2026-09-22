@@ -18445,7 +18445,7 @@
         "title": "Env App resource snapshots",
         "type": "UI Contract"
       },
-      "body_length": 5989,
+      "body_length": 6341,
       "summary": "The published Floe resource cache owns disposable snapshot restoration, request\ncoalescing, response fencing, persistence, and capacity eviction. Redeven owns\nidentity confirmation and explicit presentation projections. Host Applications,\nContainers, and Web Services show their most recent successful inventory while\nfetching current facts. Refresh changes only the existing refresh icon during\nnormal operation. Cached facts never authorize an operation. A permission denial\nor locked access clears the affected presentation; ordinary connectivity failure\nretains it with the existing error and retry affordance.",
       "sections": [
         {
@@ -18459,8 +18459,8 @@
           "id": "persistence-and-presentation",
           "title": "Persistence and presentation",
           "level": 1,
-          "body": "Browser clients use Floe's asynchronous IndexedDB adapter. Desktop exposes an\nasynchronous, root-session-only IPC adapter backed by private, atomically replaced\nfiles in `userData/resource-cache`. Cache files never enter synchronous UI\npreferences. Floe's eviction policy applies a 32 MiB budget; Desktop additionally\napplies the same policy across its complete private cache directory so opening\nanother environment does not multiply that budget. Eviction affects only\nre-fetchable snapshots, never user configuration. Snapshots have a version and\nvalidated projection, no time expiry, and least-recently-used eviction. Malformed,\nincompatible, unavailable, or quota-limited storage does not block live content.\n\nDisk restoration and network refresh run concurrently. A late disk read cannot\nreplace a new response. Identical successful projections do not rewrite payloads;\nchanged projections coalesce before asynchronous persistence. Failures never\nbecome successful snapshots. Empty successful inventories are valid cached data.\n\nThe allowlisted projection retains application metadata, PNG icons, and running\nor session summaries; container runtime/service summaries and target inventories;\nand saved and managed Web Service presentation fields, including managed icons.\nIt excludes viewer forwards, credentials, query secrets, temporary access URLs,\nactive operations, execution plans, configuration contents, logs, terminal data,\nlive metrics, and raw inspect documents. Detail requests stay live and on demand.\n\nStable resource identities key rendered rows. Refresh preserves surviving row\nnodes, focus, list controls, scroll, and current selections; it does not replay\nentry animations. Container targets update independently and a failed target\nretains its previous inventory. Fresh authoritative absence clears that target's\nselection. Web Service list requests do not wait for template discovery.",
-          "char_count": 1908
+          "body": "Browser clients use Floe's asynchronous IndexedDB adapter. Desktop exposes an\nasynchronous, root-session-only IPC adapter backed by private, atomically replaced\nfiles in `userData/resource-cache`. Cache files never enter synchronous UI\npreferences. Floe's eviction policy applies a 32 MiB budget; Desktop additionally\napplies the same policy across its complete private cache directory so opening\nanother environment does not multiply that budget. Eviction affects only\nre-fetchable snapshots, never user configuration. Snapshots have a version and\nvalidated projection, no time expiry, and least-recently-used eviction. Malformed,\nincompatible, unavailable, or quota-limited storage does not block live content.\n\nDesktop preserves the published cache module's native ESM import inside its\nCommonJS main-process output. Type checking covers both the production compiler\nconfiguration and the renderer configuration. Restart acceptance executes the\nproduction compiler's emitted cache adapter, without bundling away its package\nloading boundary.\n\nDisk restoration and network refresh run concurrently. A late disk read cannot\nreplace a new response. Identical successful projections do not rewrite payloads;\nchanged projections coalesce before asynchronous persistence. Failures never\nbecome successful snapshots. Empty successful inventories are valid cached data.\n\nThe allowlisted projection retains application metadata, PNG icons, and running\nor session summaries; container runtime/service summaries and target inventories;\nand saved and managed Web Service presentation fields, including managed icons.\nIt excludes viewer forwards, credentials, query secrets, temporary access URLs,\nactive operations, execution plans, configuration contents, logs, terminal data,\nlive metrics, and raw inspect documents. Detail requests stay live and on demand.\n\nStable resource identities key rendered rows. Refresh preserves surviving row\nnodes, focus, list controls, scroll, and current selections; it does not replay\nentry animations. Container targets update independently and a failed target\nretains its previous inventory. Fresh authoritative absence clears that target's\nselection. Web Service list requests do not wait for template discovery.",
+          "char_count": 2240
         },
         {
           "id": "actions-and-recovery",
@@ -18492,9 +18492,9 @@
           "description": "Asynchronous private files and global budget adapter."
         },
         {
-          "id": "redeven:desktop/scripts/check-resource-cache.mjs:0:production preload persistence across two electron processes.",
+          "id": "redeven:desktop/scripts/check-resource-cache.mjs:0:production compiler output and preload persistence across two electron processes.",
           "source": "redeven:desktop/scripts/check-resource-cache.mjs",
-          "description": "Production preload persistence across two Electron processes."
+          "description": "Production compiler output and preload persistence across two Electron processes."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/services/envResourceCache.test.ts:0:scope races, authorization clearing, and empty-list retention.",
@@ -24225,5 +24225,5 @@
       ]
     }
   ],
-  "source_sha256": "e3dc8ff6df132dda35c1db3d9584a04f27b51df42a9ee9759790dfb913febf48"
+  "source_sha256": "d0609bbd5ab7e885df133f99ad2448346a90d48e07a1c4d69c66c9ff73c5fa63"
 }
