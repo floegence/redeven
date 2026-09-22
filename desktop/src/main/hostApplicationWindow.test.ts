@@ -2,10 +2,12 @@ import { EventEmitter } from 'node:events';
 import type { BrowserWindow, IpcMainEvent, WebContents } from 'electron';
 import { describe, expect, it, vi } from 'vitest';
 import { resolveDesktopWindowChromeSnapshot } from '../shared/windowChromePlatform';
+import { desktopRendererThemeSnapshot } from '../shared/desktopThemeIPC';
+import { DesktopThemeState } from './desktopThemeState';
 import { attachHostApplicationWindow } from './hostApplicationWindow';
 import { HOST_APPLICATION_WINDOW_ACTION_CHANNEL as actionChannel, HOST_APPLICATION_WINDOW_STATE_CHANNEL as stateChannel } from '../shared/hostApplicationWindowIPC';
 
-function fixture() {
+function fixture(appearance?: Parameters<typeof attachHostApplicationWindow>[3]) {
   const url = 'http://127.0.0.1:18181/pf/owned/_redeven_host_app/';
   const state = { maximized:false, minimized:false, fullscreen:false };
   const win = Object.assign(new EventEmitter(), {
@@ -14,9 +16,9 @@ function fixture() {
     unmaximize: vi.fn(() => { state.maximized = false; }), setFullScreen: vi.fn((value: boolean) => { state.fullscreen = value; }),
   });
   const contents = Object.assign(new EventEmitter(), { isDestroyed: () => false, mainFrame:{url}, getURL: () => contents.mainFrame.url, send: vi.fn() });
-  attachHostApplicationWindow(win as unknown as BrowserWindow, contents as unknown as WebContents, url);
+  const publish = attachHostApplicationWindow(win as unknown as BrowserWindow, contents as unknown as WebContents, url, appearance);
   const send = (action: unknown, override: Record<string, unknown> = {}) => contents.emit('ipc-message', {sender:contents, senderFrame:contents.mainFrame, ...override} as unknown as IpcMainEvent, actionChannel, action);
-  return {win, contents, state, send};
+  return {win, contents, state, send, publish};
 }
 
 describe('native host application window controls', () => {
@@ -50,6 +52,20 @@ describe('native host application window controls', () => {
       v.contents.mainFrame.url = url; v.send('close');
     }
     expect(v.win.close).not.toHaveBeenCalled();
+    expect(v.contents.send).not.toHaveBeenCalled();
+  });
+
+  it('refreshes only the admitted bootstrap from the current main-owned appearance', () => {
+    const state = new DesktopThemeState({getRendererItem:()=>null, setRendererItem:()=>{}}, {shouldUseDarkColors:false, themeSource:'system', on:()=>{}, off:()=>{}});
+    let locale: 'zh-CN' | 'de-DE' = 'zh-CN';
+    const appearance = () => ({theme:desktopRendererThemeSnapshot(state.getSnapshot()), locale});
+    const v = fixture(appearance);
+    v.publish();
+    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, expect.objectContaining(appearance()));
+    locale = 'de-DE'; v.publish();
+    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, expect.objectContaining({locale:'de-DE'}));
+    v.contents.mainFrame.url = 'http://127.0.0.1:18181/pf/owned/index.html';
+    v.contents.send.mockClear(); v.publish();
     expect(v.contents.send).not.toHaveBeenCalled();
   });
 

@@ -5,6 +5,9 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { buildDesktopWindowChromeOptions } from '../../src/main/windowChrome';
 import { attachHostApplicationWindow } from '../../src/main/hostApplicationWindow';
+import { DesktopThemeState } from '../../src/main/desktopThemeState';
+import { desktopRendererThemeSnapshot } from '../../src/shared/desktopThemeIPC';
+import { REDEVEN_SUPPORTED_LOCALES, type RedevenLocale } from '../../src/shared/i18n/localeMeta';
 import { enUS } from '../../../internal/envapp/ui_src/src/ui/i18n/locales/en-US';
 
 // Real native window, preload and production viewer; only Xpra transport is a
@@ -32,16 +35,18 @@ set_focus(win){this.focused_wid=win.wid;Object.values(this.id_to_window).forEach
 send(packet){window.operations.push(packet)},send_close_window(win){window.operations.push(['close-window',win.wid])},close(){}};
 client.set_focus(client.id_to_window[1]);
 addEventListener('load',()=>setTimeout(()=>client.do_send_damage_sequence(1,1,800,600,1,''),80));`;
+const catalogSource = readFileSync(path.join(source, 'catalog.generated.js'), 'utf8');
+const catalog = JSON.parse(catalogSource.slice(catalogSource.indexOf(' = ') + 3).trim().slice(0, -1));
 const html = readFileSync(path.join(source, 'viewer.html'), 'utf8').replaceAll('{{.Name}}', 'Text Editor').replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Nonce}}', 'fixture')
-  .replace('{{.Style}}', readFileSync(path.join(source, 'viewer.css'), 'utf8')).replace('{{.Config}}', JSON.stringify({ base: '/fixture', copy, icon: '' }))
-  .replace('{{.Script}}', ['connection.js', 'toolbar.js', 'viewer.js'].map(file => readFileSync(path.join(source, file), 'utf8')).join('\n'));
+  .replace('{{.Style}}', ['appearance.generated.css', 'viewer.css'].map(file => readFileSync(path.join(source, file), 'utf8')).join('\n')).replace('{{.Config}}', JSON.stringify({ base: '/fixture', copy, icon: '' }))
+  .replace('{{.Script}}', ['catalog.generated.js', 'appearance.js', 'connection.js', 'toolbar.js', 'viewer.js'].map(file => readFileSync(path.join(source, file), 'utf8')).join('\n'));
 const server = createServer((request, response) => {
   response.setHeader('Content-Type', 'text/html; charset=utf-8');
   if (request.url?.endsWith('/state')) {
     response.setHeader('Content-Type', 'application/json');
     response.end(JSON.stringify({ state: 'running', password: 'fixture' }));
   } else if (request.url === '/fixture/index.html')
-    response.end(`<!doctype html><html><head><style>body{margin:0;background:#fafbfc;color:#27303a;font:14px -apple-system,BlinkMacSystemFont,sans-serif}article{padding:70px 80px}small{font-size:10px;letter-spacing:.14em;color:#939ba6}h1{font-size:32px;letter-spacing:-.03em;font-weight:600;margin:16px 0}p{color:#89919c}</style></head><body><script>${clientScript}</script></body></html>`);
+    response.end(`<!doctype html><html><head><style>body{margin:0;background:#fafbfc;color:#27303a;font:14px -apple-system,BlinkMacSystemFont,sans-serif}article{padding:70px 80px;min-height:100vh;box-sizing:border-box;background:#fafbfc}small{font-size:10px;letter-spacing:.14em;color:#939ba6}h1{font-size:32px;letter-spacing:-.03em;font-weight:600;margin:16px 0}p{color:#89919c}</style></head><body><script>${clientScript}</script></body></html>`);
   else {
     response.setHeader('Content-Security-Policy', "default-src 'none'; img-src data: blob:; connect-src 'self'; frame-src 'self'; script-src 'nonce-fixture'; style-src 'nonce-fixture'; base-uri 'none'; frame-ancestors 'none'");
     response.end(html);
@@ -57,7 +62,9 @@ async function run() {
   const win = new BrowserWindow({ width: 1120, height: 760, show: true, ...buildDesktopWindowChromeOptions(), webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
   const view = new WebContentsView({ webPreferences: { preload: process.env.REDEVEN_TITLEBAR_PRELOAD, sandbox: true, contextIsolation: true, nodeIntegration: false } });
   win.contentView.addChildView(view);
-  attachHostApplicationWindow(win, view.webContents, url);
+  const theme = new DesktopThemeState({getRendererItem:()=>null, setRendererItem:()=>{}}, {shouldUseDarkColors:false, themeSource:'system', on:()=>{}, off:()=>{}});
+  let locale: RedevenLocale = 'en-US';
+  const publishAppearance = attachHostApplicationWindow(win, view.webContents, url, () => ({theme:desktopRendererThemeSnapshot(theme.getSnapshot()), locale}));
   const layout = () => {
     const [width, height] = win.getContentSize();
     view.setBounds({ x: 0, y: 0, width, height });
@@ -88,12 +95,31 @@ async function run() {
     const operations = await evaluate(`document.querySelector('#application').contentWindow.operations`);
     assert(operations.some((v: unknown[]) => v[0] === 'quality' && v[1] === 95));
     await evaluate(`document.querySelector('.mac-app-controls-toggle').focus();if(document.querySelector('.mac-app-popover').hidden)document.querySelector('.mac-app-controls-toggle').click();Promise.all(document.getAnimations().filter(a=>a.effect.getTiming().iterations!==Infinity).map(a=>a.finished))`);
+    await evaluate(`window.savedFrame=document.querySelector('#application');window.savedClient=savedFrame.contentWindow.redevenXpraClient();window.savedToggle=document.querySelector('.mac-app-controls-toggle');`);
+    const operationCount = operations.length;
+    for (const nextLocale of REDEVEN_SUPPORTED_LOCALES) {
+      locale = nextLocale; publishAppearance();
+      await wait(`document.querySelector('.mac-app-controls-toggle').title===${JSON.stringify(catalog.locales[locale].picture)}`);
+      assert.equal(await evaluate(`document.querySelector('.mac-app-picture p').textContent`), catalog.locales[locale].sessionPictureHint);
+      assert.equal(await evaluate(`document.activeElement===savedToggle && document.querySelector('#application')===savedFrame && savedFrame.contentWindow.redevenXpraClient()===savedClient && savedClient.focused_wid===2`), true);
+      assert.equal(await evaluate(`savedFrame.contentWindow.operations.length`), operationCount);
+      assert.equal(await evaluate(`document.querySelector('[data-picture-mode="clarity"]').getAttribute('aria-pressed')`), 'true');
+    }
     const output = process.env.REDEVEN_TITLEBAR_EVIDENCE;
-    if (output) {
-      mkdirSync(output, { recursive: true });
-      const image = await view.webContents.capturePage();
-      assert(!image.isEmpty());
-      writeFileSync(path.join(output, 'desktop-titlebar.png'), image.toPNG());
+    if (output) mkdirSync(output, { recursive: true });
+    locale = 'zh-CN';
+    for (const [mode, preset] of [['light', 'porcelain-light'], ['dark', 'forest'], ['dark', 'dracula']] as const) {
+      theme.setShellTheme(mode, preset); theme.setSource(mode); publishAppearance();
+      await wait(`document.documentElement.dataset.floeShellTheme===${JSON.stringify(preset)} && document.documentElement.lang==='zh-CN' && document.documentElement.classList.contains(${JSON.stringify(mode)})`);
+      await evaluate(`Promise.all(document.getAnimations().filter(a=>a.effect.getTiming().iterations!==Infinity).map(a=>a.finished))`);
+      const colors = await evaluate(`(()=>{const ref=document.createElement('div');ref.style.background='var(--background)';document.body.append(ref);const expected=getComputedStyle(ref).backgroundColor;ref.remove();return {expected,actual:getComputedStyle(document.querySelector('.mac-app-controls')).backgroundColor}})()`);
+      assert.equal(colors.actual, colors.expected);
+      assert.equal(await evaluate(`savedFrame.contentWindow.operations.length`), operationCount);
+      if (output) {
+        const image = await view.webContents.capturePage();
+        assert(!image.isEmpty());
+        writeFileSync(path.join(output, 'desktop-titlebar-' + preset + '-zh-CN.png'), image.toPNG());
+      }
     }
     await evaluate(`document.querySelector('.mac-app-controls-toggle').click();document.querySelector('.mac-app-quit').click()`);
     assert.equal(await evaluate(`document.querySelector('#application').contentWindow.operations.filter(v=>v[0]==='close-window').length`), 0);

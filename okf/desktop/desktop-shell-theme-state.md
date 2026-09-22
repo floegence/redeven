@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop shell theme state
 description: Select global appearance, synchronize Desktop windows, and recover a failed theme change without losing workspace state.
 tags: [desktop, themes, ui, electron]
-timestamp: 2026-09-19T00:00:00Z
+timestamp: 2026-09-22T03:20:00Z
 ---
 # Summary
 
@@ -13,7 +13,7 @@ Redeven Desktop owns the global `system | light | dark` source and the remembere
 
 ## Catalog and authority
 
-The shared Desktop contract derives admitted ids, defaults, and semantic metadata from published Floe Webapp v0.58.0's browser-neutral `/themes` entry. Its 26 presets include 12 light and 14 dark choices, with Porcelain first in each mode and the other presets retaining their published relative order. Porcelain Light uses warm ivory surfaces and dark ink. Porcelain Dark uses near-black backgrounds, charcoal surfaces, and warm white text. Its idle input edges are deliberately quiet; the shared focus border provides stronger interaction feedback. Redeven must not copy the palette or weaken the upstream high-contrast and forced-color behavior.
+The shared Desktop contract derives admitted ids, defaults, and semantic metadata from published Floe Webapp v0.65.2's browser-neutral `/themes` entry. Its 26 presets include 12 light and 14 dark choices, with Porcelain first in each mode and the other presets retaining their published relative order. Porcelain Light uses warm ivory surfaces and dark ink. Porcelain Dark uses near-black backgrounds, charcoal surfaces, and warm white text. Its idle input edges are deliberately quiet; the shared focus border provides stronger interaction feedback. Redeven must not copy the palette or weaken the upstream high-contrast and forced-color behavior.
 
 The selection schema remains version 1, persisted separately from the source key. Invalid versions, unknown ids, and cross-mode ids normalize independently to the upstream per-mode defaults. Valid stored selections, including Classic presets, remain unchanged.
 
@@ -40,6 +40,8 @@ Env App settings derive content, sidebar, panel, inset, divider, control, and se
 Every native titlebar background comes from the published preview, and its symbol color from the semantic foreground, including Classic presets. Symbol contrast must remain at least 3:1. Same-mode preset changes still update native chrome.
 
 Web Service windows share Desktop decorations and theme registration. Their trusted local toolbar has a 40 px draggable title row and 54 px navigation row matching the native background, with platform controls and safe areas preserved. The address surface uses a subtle fill and the published [input focus boundary](../ui/input-focus-boundaries.md). Main generates preset CSS from published metadata; its dedicated preload reads only validated theme and window-chrome snapshots. Switching selectors never reloads the toolbar or application, replaces an address draft, resets selection, or reclaims focus. Address drafts survive blur and background page updates until navigation, cancellation, or clearing. The toolbar does not expose the page bridge. Unavailable-service documents retain their main-owned refresh path.
+
+Host application bootstrap documents consume published Floe token CSS and receive validated theme ids through their restricted native-window channel. Theme and locale updates preserve the current transport, window selection, picture settings and focus; the [host application titlebar contract](host-application-titlebar.md) owns presentation details.
 
 The main-only semantic palette carries background, surface, muted surface, foreground, muted foreground, border, primary, primary foreground, and status roles under a validated version. Codespace loading documents receive the current snapshot and refresh from tracked loading state after a change. The blocked-startup builder accepts that projection and uses the published light default when none is supplied; it has no production realtime coordinator. Renderer IPC rejects semantic palettes; full renderers use Floe token CSS and Monaco definitions.
 

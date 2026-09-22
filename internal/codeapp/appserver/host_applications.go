@@ -223,14 +223,23 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, _ *http.Request
 		script = macHostApplicationJS
 	}
 	_ = hostApplicationBootTemplate.Execute(w, struct {
-		Name, Nonce, Locale string
-		Config, Script      template.JS
-		Style               template.CSS
-	}{s.Application.Name, nonce, s.Presentation.Locale, template.JS(config), template.JS(hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + script), template.CSS(hostApplicationCSS)})
+		Name, Nonce, Locale, Theme string
+		Config, Script             template.JS
+		Style                      template.CSS
+	}{s.Application.Name, nonce, s.Presentation.Locale, s.Presentation.ShellTheme, template.JS(config), template.JS(hostApplicationCatalogJS + "\n" + hostApplicationAppearanceJS + "\n" + hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + script), template.CSS(hostApplicationAppearanceCSS + "\n" + hostApplicationCSS)})
 }
 
 //go:embed host_application_viewer/viewer.html
 var hostApplicationHTML string
+
+//go:embed host_application_viewer/appearance.generated.css
+var hostApplicationAppearanceCSS string
+
+//go:embed host_application_viewer/catalog.generated.js
+var hostApplicationCatalogJS string
+
+//go:embed host_application_viewer/appearance.js
+var hostApplicationAppearanceJS string
 
 //go:embed host_application_viewer/viewer.css
 var hostApplicationCSS string

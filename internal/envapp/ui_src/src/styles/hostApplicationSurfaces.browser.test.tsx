@@ -8,10 +8,16 @@ import { HostApplicationSetupPanel } from '../ui/pages/HostApplicationSetupPanel
 import { Dialog } from '../ui/primitives/EnvAppModal';
 import { enUS } from '../ui/i18n/locales/en-US';
 import viewerHTML from '../../../../codeapp/appserver/host_application_viewer/viewer.html?raw';
-import viewerCSS from '../../../../codeapp/appserver/host_application_viewer/viewer.css?raw';
+import rawViewerCSS from '../../../../codeapp/appserver/host_application_viewer/viewer.css?raw';
 import toolbarJS from '../../../../codeapp/appserver/host_application_viewer/toolbar.js?raw';
-import connectionJS from '../../../../codeapp/appserver/host_application_viewer/connection.js?raw';
+import rawConnectionJS from '../../../../codeapp/appserver/host_application_viewer/connection.js?raw';
 import viewerJS from '../../../../codeapp/appserver/host_application_viewer/macos.js?raw';
+
+import appearanceCSS from '../../../../codeapp/appserver/host_application_viewer/appearance.generated.css?raw';
+import appearanceJS from '../../../../codeapp/appserver/host_application_viewer/appearance.js?raw';
+import catalogJS from '../../../../codeapp/appserver/host_application_viewer/catalog.generated.js?raw';
+const viewerCSS = appearanceCSS + '\n' + rawViewerCSS;
+const connectionJS = catalogJS + '\n' + appearanceJS + '\n' + rawConnectionJS;
 
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); });
@@ -63,7 +69,7 @@ it.each([320, 390, 1000].flatMap(width => ['light', 'dark'].map(scheme => ({widt
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.querySelector('.mac-app-controls-toggle')).toBeTruthy();
   const doc = frame.contentDocument!, view = frame.contentWindow!;
-  doc.documentElement.style.colorScheme = scheme;
+  doc.documentElement.dataset.floeShellTheme = scheme === 'dark' ? 'porcelain-dark' : 'porcelain-light';
   expect(view.getComputedStyle(doc.querySelector('#fallback-icon')!).display).toBe('none');
   const identity = doc.querySelector('.app-identity')!.getBoundingClientRect();
   const title = doc.querySelector('h1')!.getBoundingClientRect();

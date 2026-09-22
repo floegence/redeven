@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DESKTOP_SHELL_THEME_DEFAULTS } from '../shared/desktopTheme';
+import { desktopWindowThemeSnapshotForShellTheme } from '../main/desktopTheme';
 import { resolveDesktopWindowChromeSnapshot } from '../shared/windowChromePlatform';
 import { HOST_APPLICATION_WINDOW_ACTION_CHANNEL as actionChannel, HOST_APPLICATION_WINDOW_STATE_CHANNEL as stateChannel } from '../shared/hostApplicationWindowIPC';
 const mocks = vi.hoisted(() => ({expose:vi.fn(), send:vi.fn(), on:vi.fn(), remove:vi.fn()}));
@@ -32,6 +34,21 @@ describe('host application presentation preload', () => {
     expect(document.documentElement.style.getPropertyValue('--redeven-desktop-titlebar-start-inset')).toBe('16px');
     receive({}, {maximized:false, minimized:false, chrome:resolveDesktopWindowChromeSnapshot('win32')});
     expect(document.documentElement.style.getPropertyValue('--redeven-desktop-titlebar-end-inset')).toBe('144px');
+  });
+  it('updates the explicit theme and locale without exposing preferences or arbitrary palettes', async () => {
+    await import('./hostApplicationWindow');
+    const receive = mocks.on.mock.calls[0][1];
+    const theme = { source:'dark', resolvedTheme:'dark', shellThemes:{...DESKTOP_SHELL_THEME_DEFAULTS, dark:'forest'}, activeShellTheme:'forest', window:desktopWindowThemeSnapshotForShellTheme('forest') };
+    receive({}, {maximized:false, minimized:false, theme, locale:'zh-CN'});
+    expect(document.documentElement.dataset.floeShellTheme).toBe('forest');
+    expect(document.documentElement.lang).toBe('zh-CN');
+    receive({}, {maximized:false, minimized:false, theme:{...theme, semantic:{background:'red'}}, locale:'xx-invalid'});
+    expect(document.documentElement.dataset.floeShellTheme).toBe('forest');
+    expect(document.documentElement.lang).toBe('zh-CN');
+    receive({}, {maximized:false, minimized:false, theme:{...theme, activeShellTheme:'dracula', shellThemes:{...DESKTOP_SHELL_THEME_DEFAULTS, dark:'dracula'}}, locale:'de-DE'});
+    expect(document.documentElement.dataset.floeShellTheme).toBe('dracula');
+    expect(document.documentElement.lang).toBe('de-DE');
+    expect(Object.keys(mocks.expose.mock.calls[0][1]).sort()).toEqual(['request', 'subscribe']);
   });
   it('does not expose controls to the Xpra document or any child frame', async () => {
     history.replaceState(null, '', '/pf/owned/index.html');

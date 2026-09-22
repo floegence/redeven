@@ -26,7 +26,8 @@ def main():
     if cache.exists():
         shutil.rmtree(cache)
     os.execvp("sh", ["sh", "-ec", (
-        "tsc -p tsconfig.json && vite build "
+        "node scripts/buildHostApplicationAppearance.mjs --check "
+        "&& tsc -p tsconfig.json && vite build "
         "&& node scripts/checkInitialBuildBudget.mjs "
         "&& node scripts/precompressAssets.mjs"
     )])

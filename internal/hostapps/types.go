@@ -61,6 +61,7 @@ type Session struct {
 // Presentation comes from the caller's explicit localized catalog. The window
 // document renders these bounded strings as text, never as markup or script.
 type Presentation struct {
+	ShellTheme      string `json:"shellTheme,omitempty"`
 	Quit            string `json:"quit,omitempty"`
 	QuitTitle       string `json:"quitTitle,omitempty"`
 	QuitDescription string `json:"quitDescription,omitempty"`

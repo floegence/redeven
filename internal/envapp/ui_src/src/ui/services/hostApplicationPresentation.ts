@@ -1,0 +1,83 @@
+import type { EnvAppTranslationKey } from '../i18n/locales';
+import type { I18nHelpers } from '../i18n/createI18n';
+import type { HostApplicationPresentation } from './hostApplicationsApi';
+
+// One mapping owns launch copy and the generated standalone locale catalogs.
+export const hostApplicationCopyKeys = {
+  menu: 'hostApplications.macMenu',
+  windows: 'hostApplications.macWindows',
+  closeWindow: 'hostApplications.macCloseWindow',
+  quit: 'hostApplications.macQuit',
+  quitTitle: 'hostApplications.macQuitTitle',
+  quitPending: 'hostApplications.macQuitViewerPending',
+  quitFailed: 'hostApplications.macQuitFailed',
+  cancel: 'hostApplications.cancel',
+  picture: 'hostApplications.macPicture',
+  pictureAuto: 'hostApplications.macPictureAuto',
+  pictureClarity: 'hostApplications.macPictureClarity',
+  pictureSmooth: 'hostApplications.macPictureSmooth',
+  pictureData: 'hostApplications.macPictureData',
+  pictureAdvanced: 'hostApplications.macPictureAdvanced',
+  picturePixels: 'hostApplications.macPicturePixels',
+  pictureResolution: 'hostApplications.macPictureResolution',
+  pictureFrameRate: 'hostApplications.macPictureFrameRate',
+  pictureActualRate: 'hostApplications.macPictureActualRate',
+  pictureBandwidth: 'hostApplications.macPictureBandwidth',
+  controls: 'hostApplications.macControls',
+  pictureTransport: 'hostApplications.macPictureTransport',
+  pictureVideo: 'hostApplications.macPictureVideo',
+  pictureImages: 'hostApplications.macPictureImages',
+  operationFailed: 'hostApplications.macOperationFailed',
+  waiting: 'hostApplications.macWaiting',
+  waitingHint: 'hostApplications.macWaitingHint',
+  captureUnavailable: 'hostApplications.macCaptureUnavailable',
+  permissionRequired: 'hostApplications.macPermissionRequired',
+  permissionHint: 'hostApplications.macPermissionHint',
+  sessionUnavailable: 'hostApplications.macSessionUnavailable',
+  sessionHint: 'hostApplications.macSessionHint',
+  sessionFailed: 'hostApplications.macSessionFailed',
+  reopenHint: 'hostApplications.macReopenHint',
+  checking: 'hostApplications.checking',
+  applicationExited: 'hostApplications.applicationExited',
+  applicationExitedHint: 'hostApplications.applicationExitedHint',
+  windowsClosed: 'hostApplications.windowsClosed',
+  windowsClosedHint: 'hostApplications.windowsClosedHint',
+  sharingStopped: 'hostApplications.sharingStopped',
+  sharingStoppedHint: 'hostApplications.sharingStoppedHint',
+  endedHint: 'hostApplications.endedHint',
+  sessionMissing: 'hostApplications.sessionMissing',
+  sessionMissingHint: 'hostApplications.sessionMissingHint',
+  accessRequired: 'hostApplications.accessRequired',
+  accessHint: 'hostApplications.accessHint',
+  dismiss: 'hostApplications.dismiss',
+  captureHint: 'hostApplications.macCaptureHint',
+  sharedControl: 'hostApplications.macSharedControl',
+  input: 'hostApplications.macInput',
+  connecting: 'hostApplications.connecting',
+  reconnecting: 'hostApplications.reconnecting',
+  disconnected: 'hostApplications.disconnected',
+  connectionHint: 'hostApplications.connectionHint',
+  reconnect: 'hostApplications.reconnect',
+  starting: 'hostApplications.starting',
+  failed: 'hostApplications.errors.failed',
+  ended: 'hostApplications.ended',
+  retry: 'hostApplications.retry',
+  quitDescription: 'hostApplications.macQuitDescription',
+  pictureHint: 'hostApplications.macPictureHint',
+} as const satisfies Record<string, EnvAppTranslationKey>;
+
+export function hostApplicationPresentation(
+  i18n: Pick<I18nHelpers, 't'> & { locale: () => string },
+  name: string,
+  macOS: boolean,
+  shellTheme: string,
+): HostApplicationPresentation {
+  const copy = Object.fromEntries(Object.entries(hostApplicationCopyKeys)
+    .map(([key, source]) => [key, i18n.t(source, { name })])) as Record<keyof typeof hostApplicationCopyKeys, string>;
+  return {
+    ...copy,
+    locale: i18n.locale(), shellTheme,
+    quitDescription: i18n.t(macOS ? 'hostApplications.macQuitDescription' : 'hostApplications.sessionQuitDescription'),
+    pictureHint: i18n.t(macOS ? 'hostApplications.macPictureHint' : 'hostApplications.sessionPictureHint'),
+  };
+}

@@ -1528,31 +1528,57 @@ SOFTWARE.
 | @emnapi/wasi-threads | 1.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40emnapi%2Fwasi-threads/v/1.1.0 |  |
 | @emnapi/wasi-threads | 1.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40emnapi%2Fwasi-threads/v/1.2.1 |  |
 | @esbuild/aix-ppc64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Faix-ppc64/v/0.28.1 |  |
+| @esbuild/aix-ppc64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Faix-ppc64/v/0.28.2 |  |
 | @esbuild/android-arm | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fandroid-arm/v/0.28.1 |  |
+| @esbuild/android-arm | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fandroid-arm/v/0.28.2 |  |
 | @esbuild/android-arm64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fandroid-arm64/v/0.28.1 |  |
+| @esbuild/android-arm64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fandroid-arm64/v/0.28.2 |  |
 | @esbuild/android-x64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fandroid-x64/v/0.28.1 |  |
+| @esbuild/android-x64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fandroid-x64/v/0.28.2 |  |
 | @esbuild/darwin-arm64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fdarwin-arm64/v/0.28.1 |  |
+| @esbuild/darwin-arm64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fdarwin-arm64/v/0.28.2 |  |
 | @esbuild/darwin-x64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fdarwin-x64/v/0.28.1 |  |
+| @esbuild/darwin-x64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fdarwin-x64/v/0.28.2 |  |
 | @esbuild/freebsd-arm64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Ffreebsd-arm64/v/0.28.1 |  |
+| @esbuild/freebsd-arm64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Ffreebsd-arm64/v/0.28.2 |  |
 | @esbuild/freebsd-x64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Ffreebsd-x64/v/0.28.1 |  |
+| @esbuild/freebsd-x64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Ffreebsd-x64/v/0.28.2 |  |
 | @esbuild/linux-arm | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Flinux-arm/v/0.28.1 |  |
+| @esbuild/linux-arm | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Flinux-arm/v/0.28.2 |  |
 | @esbuild/linux-arm64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Flinux-arm64/v/0.28.1 |  |
+| @esbuild/linux-arm64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Flinux-arm64/v/0.28.2 |  |
 | @esbuild/linux-ia32 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Flinux-ia32/v/0.28.1 |  |
+| @esbuild/linux-ia32 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Flinux-ia32/v/0.28.2 |  |
 | @esbuild/linux-loong64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Flinux-loong64/v/0.28.1 |  |
+| @esbuild/linux-loong64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Flinux-loong64/v/0.28.2 |  |
 | @esbuild/linux-mips64el | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Flinux-mips64el/v/0.28.1 |  |
+| @esbuild/linux-mips64el | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Flinux-mips64el/v/0.28.2 |  |
 | @esbuild/linux-ppc64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Flinux-ppc64/v/0.28.1 |  |
+| @esbuild/linux-ppc64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Flinux-ppc64/v/0.28.2 |  |
 | @esbuild/linux-riscv64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Flinux-riscv64/v/0.28.1 |  |
+| @esbuild/linux-riscv64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Flinux-riscv64/v/0.28.2 |  |
 | @esbuild/linux-s390x | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Flinux-s390x/v/0.28.1 |  |
+| @esbuild/linux-s390x | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Flinux-s390x/v/0.28.2 |  |
 | @esbuild/linux-x64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Flinux-x64/v/0.28.1 |  |
+| @esbuild/linux-x64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Flinux-x64/v/0.28.2 |  |
 | @esbuild/netbsd-arm64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fnetbsd-arm64/v/0.28.1 |  |
+| @esbuild/netbsd-arm64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fnetbsd-arm64/v/0.28.2 |  |
 | @esbuild/netbsd-x64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fnetbsd-x64/v/0.28.1 |  |
+| @esbuild/netbsd-x64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fnetbsd-x64/v/0.28.2 |  |
 | @esbuild/openbsd-arm64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fopenbsd-arm64/v/0.28.1 |  |
+| @esbuild/openbsd-arm64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fopenbsd-arm64/v/0.28.2 |  |
 | @esbuild/openbsd-x64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fopenbsd-x64/v/0.28.1 |  |
+| @esbuild/openbsd-x64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fopenbsd-x64/v/0.28.2 |  |
 | @esbuild/openharmony-arm64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fopenharmony-arm64/v/0.28.1 |  |
+| @esbuild/openharmony-arm64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fopenharmony-arm64/v/0.28.2 |  |
 | @esbuild/sunos-x64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fsunos-x64/v/0.28.1 |  |
+| @esbuild/sunos-x64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fsunos-x64/v/0.28.2 |  |
 | @esbuild/win32-arm64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fwin32-arm64/v/0.28.1 |  |
+| @esbuild/win32-arm64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fwin32-arm64/v/0.28.2 |  |
 | @esbuild/win32-ia32 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fwin32-ia32/v/0.28.1 |  |
+| @esbuild/win32-ia32 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fwin32-ia32/v/0.28.2 |  |
 | @esbuild/win32-x64 | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40esbuild%2Fwin32-x64/v/0.28.1 |  |
+| @esbuild/win32-x64 | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/%40esbuild%2Fwin32-x64/v/0.28.2 |  |
 | @eslint-community/eslint-utils | 4.9.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40eslint-community%2Feslint-utils/v/4.9.1 |  |
 | @eslint-community/regexpp | 4.12.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40eslint-community%2Fregexpp/v/4.12.2 |  |
 | @eslint/config-array | 0.21.2 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40eslint%2Fconfig-array/v/0.21.2 |  |
@@ -1566,9 +1592,9 @@ SOFTWARE.
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
-| @floegence/floe-webapp-boot | 0.65.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.65.1 |  |
-| @floegence/floe-webapp-core | 0.65.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.65.1 |  |
-| @floegence/floe-webapp-protocol | 0.65.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.65.1 |  |
+| @floegence/floe-webapp-boot | 0.65.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.65.2 |  |
+| @floegence/floe-webapp-core | 0.65.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.65.2 |  |
+| @floegence/floe-webapp-protocol | 0.65.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.65.2 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
 | @floegence/flowersec-core | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.2.2 |  |
 | @floegence/flowersec-core | 5.3.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.3.1 |  |
@@ -2058,6 +2084,7 @@ SOFTWARE.
 | es-toolkit | 1.49.0 | MIT | Desktop shell | https://www.npmjs.com/package/es-toolkit/v/1.49.0 |  |
 | es6-error | 4.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/es6-error/v/4.1.1 |  |
 | esbuild | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/esbuild/v/0.28.1 |  |
+| esbuild | 0.28.2 | MIT | Env App UI | https://www.npmjs.com/package/esbuild/v/0.28.2 |  |
 | escalade | 3.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/escalade/v/3.2.0 |  |
 | escape-string-regexp | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/escape-string-regexp/v/4.0.0 |  |
 | eslint-plugin-solid | 0.14.5 | MIT | Env App UI | https://www.npmjs.com/package/eslint-plugin-solid/v/0.14.5 |  |

@@ -998,7 +998,7 @@ type DesktopWebServiceBrowserController = Readonly<{
   contentView: WebContentsView;
   navigate: (address: string) => DesktopWebServiceBrowserActionResponse;
   perform: (action: DesktopWebServiceBrowserAction) => Promise<DesktopWebServiceBrowserActionResponse>;
-  refreshUnavailableTheme: () => void;
+  refreshAppearance: () => void;
   snapshot: () => DesktopWebServiceBrowserState;
   accessMode: NormalizedDesktopShellOpenWebServiceWindowRequest['access_mode'];
   presentation: NormalizedDesktopShellOpenWebServiceWindowRequest['presentation'];
@@ -1008,9 +1008,9 @@ type DesktopWebServiceBrowserController = Readonly<{
 const webServiceBrowserByToolbarWebContentsID = new Map<number, DesktopWebServiceBrowserController>();
 const webServiceWindowOpenTasks = new Map<string, Promise<DesktopShellOpenWebServiceWindowResponse>>();
 
-function refreshWebServiceUnavailableDocuments(): void {
+function refreshWebServicePresentation(): void {
   for (const controller of webServiceBrowserByToolbarWebContentsID.values()) {
-    controller.refreshUnavailableTheme();
+    controller.refreshAppearance();
   }
 }
 const sessionCloseTasks = new Map<DesktopSessionKey, Promise<void>>();
@@ -3913,7 +3913,7 @@ function desktopThemeState(): DesktopThemeState {
       process.platform,
       () => {
         refreshCodespaceLoadingDocuments();
-        refreshWebServiceUnavailableDocuments();
+        refreshWebServicePresentation();
       },
     );
   }
@@ -3927,6 +3927,7 @@ function desktopLanguageState(): DesktopLanguageState {
       onSnapshotChanged: () => {
         installOrRefreshAppMenu();
         broadcastDesktopWelcomeSnapshots();
+        refreshWebServicePresentation();
       },
     });
   }
@@ -8693,7 +8694,10 @@ function createWebServiceBrowserController(
   const contentViewIdentity = snapshotWebContentsIdentity(contentView.webContents);
   sessionKeyByWebContentsID.set(contentViewIdentity.webContentsID, sessionRecord.session_key);
   win.contentView.addChildView(contentView);
-  if (applicationWindow) attachHostApplicationWindow(win, contentView.webContents, browserEntryURL);
+  const refreshHostAppearance = applicationWindow ? attachHostApplicationWindow(win, contentView.webContents, browserEntryURL, () => ({
+    theme: desktopRendererThemeSnapshot(desktopThemeState().getSnapshot()),
+    locale: desktopLanguageState().getSnapshot().resolved_locale,
+  })) : () => {};
 
   const layoutContent = (): void => {
     if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;
@@ -8771,8 +8775,9 @@ function createWebServiceBrowserController(
     }
     publishState();
   };
-  const refreshUnavailableTheme = (): void => {
+  const refreshAppearance = (): void => {
     if (win.isDestroyed()) return;
+    refreshHostAppearance();
     if (!unavailablePageURL || contentView.webContents.isDestroyed()) return;
     unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow);
     loadingUnavailablePage = true;
@@ -8985,7 +8990,7 @@ function createWebServiceBrowserController(
     contentView,
     navigate,
     perform,
-    refreshUnavailableTheme,
+    refreshAppearance,
     snapshot,
     accessMode: request.access_mode,
     presentation: request.presentation,

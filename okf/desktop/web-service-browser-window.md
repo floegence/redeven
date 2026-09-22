@@ -41,8 +41,10 @@ geometry, application progress, disconnection, and session lifecycle.
 Only the Redeven host-application bootstrap receives a dedicated presentation
 preload. It can request close, minimize, maximize, or unmaximize for its own native
 window and observe that window's state. The preload applies validated native
-titlebar insets to the bootstrap only; fullscreen updates come from the same
-authoritative native window events. Electron main binds every request to the
+titlebar insets, main-owned theme id and resolved locale to the bootstrap only.
+Appearance snapshots admit published preset ids and supported locales, never
+arbitrary styles or the main-only semantic palette. Fullscreen updates come from
+the same authoritative native window events. Electron main binds every request to the
 attached live WebContents, its current main frame, and the exact entry origin and
 bootstrap path. Subframes, other forwards, navigated documents, and unknown actions
 are rejected. The Xpra iframe, native host document, and unavailable document receive

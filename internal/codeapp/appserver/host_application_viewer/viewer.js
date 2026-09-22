@@ -14,8 +14,9 @@
   let nativeState;
   let applyNativeState = () => {};
   const unsubscribeWindow = nativeWindow?.subscribe(state => {
+    const changed = nativeState?.maximized !== state.maximized || nativeState?.minimized !== state.minimized;
     nativeState = state;
-    applyNativeState();
+    if (changed) applyNativeState();
   });
 
   if (/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(config.icon)) {
@@ -48,12 +49,12 @@
   } catch { /* Preferences are optional. */ }
   const picturePanel = document.createElement('section');
   picturePanel.className = 'mac-app-picture';
-  const pictureTitle = document.createElement('strong'); pictureTitle.textContent = config.copy.picture;
+  const pictureTitle = document.createElement('strong'); hostApplicationAppearance.copy(pictureTitle, 'picture');
   const {modes, modeButtons} = createHostApplicationPictureModes(picture, () => {
     try { localStorage.setItem('redeven.xpra-app.picture.v1', picture.mode); } catch { /* Preferences are optional. */ }
     applyPicture();
   });
-  const pictureHint = document.createElement('p'); pictureHint.textContent = config.copy.pictureHint;
+  const pictureHint = document.createElement('p'); hostApplicationAppearance.copy(pictureHint, 'pictureHint');
   picturePanel.append(pictureTitle, modes, pictureHint);
   popover.append(windowPanel, picturePanel, quitPanel);
   const panels = {windows:windowPanel, picture:picturePanel, quit:quitPanel};
@@ -89,11 +90,11 @@
     const active = document.body.dataset.state === 'active' && client?.connected;
     controls.hidden = !nativeWindow && !active;
     for (const button of toolbar.querySelectorAll('button')) button.disabled = !active || !windows.size;
-    windowCount.textContent = String(windows.size); windowCount.hidden = windows.size < 2;
+    windowCount.textContent = hostApplicationAppearance.number(windows.size); windowCount.hidden = windows.size < 2;
     const current = currentWindow();
     const title = current?.metadata.title || config.copy.windows;
     windowToggle.querySelector('.mac-app-toolbar-label').textContent = title;
-    windowToggle.title = `${config.copy.windows} · ${windows.size} — ${title}`;
+    windowToggle.title = `${config.copy.windows} · ${hostApplicationAppearance.number(windows.size)} — ${title}`;
     windowToggle.setAttribute('aria-label', windowToggle.title);
     for (const {win, button, label} of windows.values()) {
       label.textContent = win.metadata.title || document.title;
@@ -105,6 +106,7 @@
       for (const button of toolbar.querySelectorAll('button')) button.tabIndex = button === first ? 0 : -1;
     }
   }
+  hostApplicationAppearance.subscribe(() => { syncToolbar(); positionPopover(); });
   function applyPicture() {
     if (!client?.connected) return;
     const [quality, speed] = {auto:[-1,-1], clarity:[95,-1], smooth:[65,90], data:[40,75]}[picture.mode];
