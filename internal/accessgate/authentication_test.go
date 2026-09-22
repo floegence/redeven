@@ -119,11 +119,9 @@ func TestAuthenticationPolicyRevokesOrdinaryLineages(t *testing.T) {
 		t.Fatal(err)
 	}
 	trustedCancelled := false
-	g.RegisterChannelWithOptions(session.Meta{ChannelID: "trusted"}, RegisterChannelOptions{Unlocked: true, Trusted: true})
-	g.BindChannelLifetime("trusted", func() { trustedCancelled = true })
+	g.RegisterChannelWithOptions(session.Meta{ChannelID: "trusted"}, RegisterChannelOptions{Trusted: true, Cancel: func() { trustedCancelled = true }})
 	cancelled := false
-	g.RegisterChannelWithOptions(session.Meta{ChannelID: "active"}, RegisterChannelOptions{Unlocked: true, AccessSessionID: ordinary.AccessSessionID})
-	g.BindChannelLifetime("active", func() { cancelled = true })
+	g.RegisterChannelWithOptions(session.Meta{ChannelID: "active"}, RegisterChannelOptions{AccessSessionID: ordinary.AccessSessionID, Cancel: func() { cancelled = true }})
 	enableTestMFA(t, g)
 	if g.IsLocalSessionValid(ordinary.SessionToken) || trustedCancelled || !g.IsChannelUnlocked("trusted") || !cancelled {
 		t.Fatal("incorrect ordinary/trusted revocation boundary")
@@ -272,11 +270,11 @@ func TestAuthenticationPolicyRejectsPreviouslyUnprotectedPendingChannel(t *testi
 	}
 	// This artifact was issued before a password existed. It has no authenticated
 	// lineage, so resolving it after policy activation must not unlock a channel.
-	g.RegisterChannelWithOptions(session.Meta{ChannelID: "pending-before-mfa"}, RegisterChannelOptions{Unlocked: true})
+	g.RegisterChannelWithOptions(session.Meta{ChannelID: "pending-before-mfa"}, RegisterChannelOptions{})
 	if g.IsChannelUnlocked("pending-before-mfa") {
 		t.Fatal("stale unprotected artifact bypassed MFA")
 	}
-	g.RegisterChannelWithOptions(session.Meta{ChannelID: "authenticated-host"}, RegisterChannelOptions{Unlocked: true, Trusted: true})
+	g.RegisterChannelWithOptions(session.Meta{ChannelID: "authenticated-host"}, RegisterChannelOptions{Trusted: true})
 	if !g.IsChannelUnlocked("authenticated-host") {
 		t.Fatal("explicit host authority was lost")
 	}

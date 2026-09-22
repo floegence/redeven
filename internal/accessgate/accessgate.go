@@ -57,7 +57,8 @@ type LocalSessionResult struct {
 }
 
 type RegisterChannelOptions struct {
-	Unlocked        bool
+	// Cancel closes the channel on revocation or expiry. It must not call back into Gate.
+	Cancel          func()
 	Trusted         bool
 	AccessSessionID string
 }
@@ -214,25 +215,18 @@ func (g *Gate) RegisterChannelWithOptions(meta session.Meta, opts RegisterChanne
 	if channelID == "" {
 		return
 	}
-	now := time.Now()
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	now := time.Now()
 	g.cleanupExpiredLocked(now)
-	metaCopy := meta
 	state := &channelState{
-		meta:            metaCopy,
-		unlocked:        opts.Unlocked,
+		meta:            meta,
+		cancel:          opts.Cancel,
 		trusted:         opts.Trusted,
 		accessSessionID: opts.AccessSessionID,
+		unlocked:        opts.Trusted || !g.enabled.Load(),
 	}
-	if opts.Unlocked {
-		state.unlockedAt = now
-		if !opts.Trusted {
-			state.expiresAt = now.Add(g.resumeTTL)
-		}
-	}
-	if opts.Unlocked && !opts.Trusted && g.enabled.Load() {
-		state.unlocked = false
+	if !state.unlocked && opts.AccessSessionID != "" {
 		for _, local := range g.localSessions {
 			if local.accessSessionID == opts.AccessSessionID && now.Before(local.expiresAt) {
 				state.unlocked = true
@@ -240,6 +234,9 @@ func (g *Gate) RegisterChannelWithOptions(meta session.Meta, opts RegisterChanne
 				break
 			}
 		}
+	}
+	if state.unlocked {
+		state.unlockedAt = now
 	}
 	if old := g.channels[channelID]; old != nil && old.expiryTimer != nil {
 		old.expiryTimer.Stop()
@@ -784,19 +781,4 @@ func (g *Gate) cooldownForFailuresLocked(failures int) time.Duration {
 		cooldown = step.Cooldown
 	}
 	return cooldown
-}
-
-// BindChannelLifetime closes already-open streams at revocation or expiry.
-func (g *Gate) BindChannelLifetime(channelID string, cancel func()) {
-	if g == nil {
-		return
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if st := g.channels[channelID]; st != nil {
-		st.cancel = cancel
-		if st.accessSessionID != "" && !st.unlocked {
-			cancel()
-		}
-	}
 }

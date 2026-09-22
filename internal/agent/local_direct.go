@@ -33,7 +33,6 @@ func sanitizeAuditError(err error) string {
 //
 // The session metadata MUST be treated as authoritative and is used to enforce permission caps.
 type LocalDirectSessionOptions struct {
-	AccessUnlocked            bool
 	TrustedManagement         bool
 	TraceID                   string
 	ConnectArtifactIssuedAtMs int64
@@ -43,7 +42,7 @@ type LocalDirectSessionOptions struct {
 	OnPluginSessionReady      func()
 }
 
-func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSessionOptions) func() {
+func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSessionOptions, cancel context.CancelFunc) func() {
 	if a == nil || a.accessGate == nil {
 		return func() {}
 	}
@@ -53,7 +52,7 @@ func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSe
 	}
 
 	a.accessGate.RegisterChannelWithOptions(meta, accessgate.RegisterChannelOptions{
-		Unlocked:        opts.AccessUnlocked,
+		Cancel:          cancel,
 		Trusted:         opts.TrustedManagement,
 		AccessSessionID: opts.AccessSessionID,
 	})
@@ -116,16 +115,18 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 	a.sessionWG.Add(1)
 	a.mu.Unlock()
 	defer a.sessionWG.Done()
+	defer sess.Close()
 
-	cleanupAccessGate := a.registerLocalDirectChannel(metaCopy, opts)
-	if a.accessGate != nil {
-		a.accessGate.BindChannelLifetime(channelID, cancel)
-	}
+	cleanupAccessGate := a.registerLocalDirectChannel(metaCopy, opts, cancel)
 
 	defer cleanupAccessGate()
-	if opts.AccessUnlocked && a.accessGate != nil && a.accessGate.Enabled() && !a.accessGate.IsChannelUnlocked(channelID) {
+	if !a.accessGate.IsChannelUnlocked(channelID) {
 		a.removeActiveSession(channelID)
 		return errors.New("access session expired before channel activation")
+	}
+	if err := sessCtx.Err(); err != nil {
+		a.removeActiveSession(channelID)
+		return err
 	}
 	generation, err := a.activatePluginSession(metaCopy, opts.PluginCredentialHash, opts.HasPluginCredential, opts.AccessSessionID)
 	if err != nil {
@@ -137,10 +138,6 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 		active.pluginGeneration = generation
 	}
 	a.mu.Unlock()
-	if opts.OnPluginSessionReady != nil {
-		opts.OnPluginSessionReady()
-	}
-
 	defer func() {
 		closedGeneration := a.removeActiveSession(channelID)
 		a.startPluginSessionClose(channelID, closedGeneration)
@@ -213,6 +210,13 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 		}
 	}()
 
+	if err := sessCtx.Err(); err != nil {
+		return err
+	}
+	if opts.OnPluginSessionReady != nil {
+		opts.OnPluginSessionReady()
+	}
+
 	if a.diag != nil {
 		detail := map[string]any{
 			"channel_id":    channelID,
@@ -263,8 +267,6 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 			},
 		})
 	}
-
-	defer sess.Close()
 
 	if a.term != nil {
 		detachTerminalSink := a.term.AttachSink(meta, sess.RPC(), a.accessGate)

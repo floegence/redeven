@@ -358,7 +358,7 @@ func TestGate_RegisterChannelWithOptionsStartsUnlocked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gate.RegisterChannelWithOptions(meta, RegisterChannelOptions{Unlocked: true, AccessSessionID: local.AccessSessionID})
+	gate.RegisterChannelWithOptions(meta, RegisterChannelOptions{AccessSessionID: local.AccessSessionID})
 
 	status := gate.Status(meta.ChannelID)
 	if !status.PasswordRequired {
@@ -369,5 +369,19 @@ func TestGate_RegisterChannelWithOptionsStartsUnlocked(t *testing.T) {
 	}
 	if !gate.IsChannelUnlocked(meta.ChannelID) {
 		t.Fatalf("channel should start unlocked")
+	}
+}
+
+func TestGate_UnprotectedDirectChannelKeepsLifetime(t *testing.T) {
+	gate := New(Options{})
+	cancelled := false
+	gate.RegisterChannelWithOptions(session.Meta{ChannelID: "browser"}, RegisterChannelOptions{AccessSessionID: "direct:browser", Cancel: func() { cancelled = true }})
+	defer gate.UnregisterChannel("browser")
+	if !gate.Status("browser").Unlocked || cancelled {
+		t.Fatalf("unprotected browser must stay authorized and connected: status=%+v cancelled=%v", gate.Status("browser"), cancelled)
+	}
+	state := gate.channels["browser"]
+	if !state.unlocked || !state.expiresAt.IsZero() || state.expiryTimer != nil {
+		t.Fatal("unprotected access must have consistent authorization without an authentication deadline")
 	}
 }

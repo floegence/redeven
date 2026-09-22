@@ -62,9 +62,9 @@ func TestServer_E2E_HTTPSLocalhostConnectsDirectSessionOverWSS(t *testing.T) {
 		t.Fatalf("ParseBind() error = %v", err)
 	}
 
-	s := newTestServer(t, nil)
+	s := newTestServer(t, accessgate.New(accessgate.Options{}))
 	s.bind = bind
-	s.a = newRuntimeHealthTestAgent(t, s.configPath)
+	s.a = newRuntimeHealthTestAgent(t, s.configPath, s.accessGate)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	if err := s.StartOnListeners(ctx, []net.Listener{listener}, nil); err != nil {
@@ -209,6 +209,35 @@ func TestServer_E2E_HTTPSLocalhostConnectsDirectSessionOverWSS(t *testing.T) {
 	if !bytes.Equal(got, payload) {
 		t.Fatalf("file body length = %d, want %d with identical bytes", len(got), len(payload))
 	}
+
+	// Each browser tab owns its own session; closing one must not affect another.
+	secondEnvelope := mintPrivateDesktopBridgeArtifact(t, client, localhostURL, "")
+	second := connectDesktopBridgeArtifact(t, connectCtx, s, secondEnvelope.ConnectArtifact, localhostURL)
+	defer second.Close()
+	for range 3 {
+		for _, tab := range []flowersec.Session{current, second} {
+			if err := tab.RPC().Call(connectCtx, monitor.TypeID_SYS_MONITOR, map[string]any{}, &monitorResponse); err != nil {
+				t.Fatal(err)
+			}
+			response := localSessionProxyRequest(t, connectCtx, tab, "/_redeven_proxy/api/spaces", false)
+			if response.Status != http.StatusOK {
+				t.Fatalf("browser HTTP response = %+v", response)
+			}
+			if _, err := tab.ProbeLiveness(connectCtx); err != nil {
+				t.Fatal(err)
+			}
+		}
+		event := localSessionProxyRequest(t, connectCtx, second, "/_redeven_proxy/api/notes/events", true)
+		if event.Status != http.StatusOK {
+			t.Fatalf("second tab event response = %+v", event)
+		}
+	}
+	if err := second.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := current.ProbeLiveness(connectCtx); err != nil {
+		t.Fatalf("closing another tab interrupted the first: %v", err)
+	}
 }
 
 func TestServerDoesNotAdvertiseConfiguredAddressBeforeListening(t *testing.T) {
@@ -230,7 +259,7 @@ func TestServer_E2E_PublicHTTPWithoutCertificatesUsesOnePort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.a = newRuntimeHealthTestAgent(t, s.configPath)
+	s.a = newRuntimeHealthTestAgent(t, s.configPath, s.accessGate)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.StartOnListeners(ctx, []net.Listener{listener}, nil); err != nil {
@@ -628,8 +657,8 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 		defer cancel()
 		envelope := mintDesktopBridgeArtifact(t, s, client, bridge.URL, resumeToken)
 		current := connectDesktopBridgeArtifact(t, ctx, s, envelope.ConnectArtifact, bridge.URL)
-		assertDesktopBridgeSessionReady(t, ctx, current)
 		assertPluginCatalogEventuallyStatus(t, client, bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
+		assertDesktopBridgeSessionReady(t, ctx, current)
 
 		logoutReq, err := http.NewRequest(http.MethodPost, bridge.URL+"/api/local/access/logout", nil)
 		if err != nil {
@@ -654,6 +683,7 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 		newResumeToken := unlockDesktopBridge(t, client, bridge.URL)
 		newEnvelope := mintDesktopBridgeArtifact(t, s, client, bridge.URL, newResumeToken)
 		newSession := connectDesktopBridgeArtifact(t, ctx, s, newEnvelope.ConnectArtifact, bridge.URL)
+		assertPluginCatalogEventuallyStatus(t, client, bridge.URL, newEnvelope.PluginSessionCredential, http.StatusOK)
 		assertDesktopBridgeSessionReady(t, ctx, newSession)
 		_ = newSession.Close()
 		assertDirectStateEventuallyEmpty(t, s)
@@ -676,8 +706,8 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 		defer cancel()
 		envelope := mintDesktopBridgeArtifact(t, s, client, bridge.URL, resumeToken)
 		current := connectDesktopBridgeArtifact(t, ctx, s, envelope.ConnectArtifact, bridge.URL)
-		assertDesktopBridgeSessionReady(t, ctx, current)
 		assertPluginCatalogEventuallyStatus(t, client, bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
+		assertDesktopBridgeSessionReady(t, ctx, current)
 
 		expired := gate.TakeExpiredLocalSessions(time.Now().Add(4 * time.Second))
 		if len(expired) != 1 {
@@ -696,7 +726,7 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 func newDesktopBridgeTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 	t.Helper()
 	s := newTestServer(t, gate)
-	s.a = newRuntimeHealthTestAgent(t, s.configPath)
+	s.a = newRuntimeHealthTestAgent(t, s.configPath, s.accessGate)
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen for secure Local UI test server: %v", err)
@@ -918,8 +948,8 @@ func assertDesktopBridgeSessionReady(t *testing.T, ctx context.Context, current 
 	if err := current.RPC().Call(ctx, accessrpc.TypeIDAccessStatus, &struct{}{}, &status); err != nil {
 		t.Fatalf("access status RPC through Desktop bridge error = %v", err)
 	}
-	if status.PasswordRequired {
-		t.Fatal("unlocked Desktop bridge session still reports password required")
+	if !status.Unlocked {
+		t.Fatal("authenticated session reports locked access")
 	}
 }
 

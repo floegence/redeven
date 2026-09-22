@@ -1216,8 +1216,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	a.mu.Unlock()
 
 	if a.accessGate != nil {
-		a.accessGate.RegisterChannel(metaCopy)
-		a.accessGate.BindChannelLifetime(channelID, cancel)
+		a.accessGate.RegisterChannelWithOptions(metaCopy, accessgate.RegisterChannelOptions{Cancel: cancel})
 	}
 
 	go func(meta *session.Meta) {

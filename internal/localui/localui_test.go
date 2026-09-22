@@ -242,6 +242,9 @@ func newTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 
 func newTestServerWithAppServer(t *testing.T, gate *accessgate.Gate, appSrv *appserverpkg.Server, cfgPath string) *Server {
 	t.Helper()
+	if gate == nil {
+		gate = accessgate.New(accessgate.Options{})
+	}
 	testDeviceCA := newTestLocalUIDeviceCA(t)
 	localPermissionCap := config.ResolvePermissionCapFromConfigPath(
 		cfgPath,
@@ -276,8 +279,11 @@ func newTestLocalUIDeviceCA(t *testing.T) *deviceCA {
 	return testDeviceCA
 }
 
-func newRuntimeHealthTestAgent(t *testing.T, cfgPath string) *agent.Agent {
+func newRuntimeHealthTestAgent(t *testing.T, cfgPath string, gate *accessgate.Gate) *agent.Agent {
 	t.Helper()
+	if gate == nil {
+		t.Fatal("runtime fixture requires the Local UI authentication gate")
+	}
 	const runtimeInstanceID = "local-ui-test-process"
 	lockPath := filepath.Join(filepath.Dir(cfgPath), "agent.lock")
 	runtimeLock, err := lockfile.Acquire(lockPath)
@@ -299,6 +305,7 @@ func newRuntimeHealthTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 			PermissionPolicy: policy,
 		},
 		ConfigPath:             cfgPath,
+		AccessGate:             gate,
 		InstanceID:             runtimeInstanceID,
 		LocalUIEnabled:         true,
 		ControlChannelEnabled:  false,
@@ -503,7 +510,7 @@ func TestServer_PluginManagementAPIRejectsCallerChannelWithoutCredential(t *test
 func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
-	s.a = newRuntimeHealthTestAgent(t, s.configPath)
+	s.a = newRuntimeHealthTestAgent(t, s.configPath, s.accessGate)
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/runtime/health", nil)
 	res := httptest.NewRecorder()
@@ -1281,13 +1288,15 @@ func TestServer_Start_UsesActualDynamicPortForDisplayURLs(t *testing.T) {
 		t.Fatalf("ParseBind() error = %v", err)
 	}
 
+	gate := accessgate.New(accessgate.Options{})
 	s := &Server{
+		accessGate: gate,
 		protocol:   "https",
 		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		bind:       bind,
 		configPath: cfgPath,
 		appServer:  newTestAppServer(t, cfgPath),
-		a:          newRuntimeHealthTestAgent(t, cfgPath),
+		a:          newRuntimeHealthTestAgent(t, cfgPath, gate),
 		pending:    make(map[string]pendingDirect),
 		deviceCA:   newTestLocalUIDeviceCA(t),
 	}

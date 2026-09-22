@@ -18698,7 +18698,7 @@
         "title": "Runtime two-factor authentication",
         "type": "Security Contract"
       },
-      "body_length": 9973,
+      "body_length": 11571,
       "summary": "Runtime `accessgate` owns environment authentication independently of Redeven Cloud. Enabling two-factor authentication requires the environment password followed by a TOTP or single-use recovery code for ordinary browser, direct URL, and Cloud data sessions. A password-only challenge grants no file, terminal, editor, plugin, or forwarding access. Authenticated native/SSH management retains its separate private host authority; loopback addresses, Cloud administrator claims, and forwarded headers do not establish that authority. Missing or damaged committed authentication state fails closed. Host recovery locks ordinary access until a new password and authenticator are committed.",
       "sections": [
         {
@@ -18712,8 +18712,8 @@
           "id": "sign-in-and-session-contract",
           "title": "Sign-in and session contract",
           "level": 1,
-          "body": "Password success creates a five-minute authentication-only challenge. Local browser challenges bind a separate Secure/HttpOnly/SameSite cookie; encrypted remote challenges bind the Runtime-verified channel. The same form accepts an authenticator or recovery code. A successful retry of the same live challenge returns the original session result instead of consuming a second factor. Changing the challenge, IP, or channel does not reset factor throttling.\n\nOrdinary access sessions have a twelve-hour absolute lifetime. Resume and child connections do not extend it. Cookies are HttpOnly, Secure on public TLS, and same-site. Header-based resume remains supported; full access credentials are never accepted from URL query parameters. Same-origin editor resources use the established cookie. Native remote editors consume a 30-second, one-shot delegation for their exact environment, owner, and CodeSpace, then receive an exact-scope resume credential bounded by the parent deadline. Each child still checks its own effective read/write/execute permissions. A parent logout revokes its descendants. Bookmarked CodeSpace and Web Service pages render the same Runtime-owned authentication gate before any resource data is forwarded. Direct URLs authenticate with the same-origin challenge cookie; isolated remote origins receive only an exact-resource resume credential held in session storage. Such a grant cannot authenticate the Env App, another resource, user, or environment. Unauthenticated static asset access terminates in the embedded Runtime UI rather than forwarding resource-owned paths.\n\nMFA enable/replace/disable, recovery-code rotation, and owner recovery invalidate ordinary sessions, challenges, delegations, accepted/pending artifacts, plugin authority, and open data streams. Native host management remains scoped to its own authenticated bridge. Revocation cancels access/observers and preserves the existing background-task lifecycle. Runtime restart clears in-memory sessions and incomplete operations; it preserves committed authentication state.",
-          "char_count": 2069
+          "body": "The gate alone decides channel authorization when registering the channel and its lifetime cancellation callback under one lock. Callers supply verified private-management identity or an ordinary login session ID, never an `unlocked` assertion. Without authentication, ordinary channels remain registered and authorized with no authentication expiry timer; enabling protection revokes those existing channels. Trusted private-management channels retain their independent authority and have no ordinary login deadline. With authentication enabled, a direct channel requires a currently valid local login and inherits that login's exact deadline; registration cannot create or extend authorization. Direct activation rejects missing, revoked, expired, or cancelled access before announcing plugin readiness. Remote channels may remain connected while locked to complete authentication, but their business resources stay denied. Revocation and expiry always reach the callback registered with the channel; there is no separate lifetime-binding phase or authorization inference from a nonempty session ID.\n\nPassword success creates a five-minute authentication-only challenge. Local browser challenges bind a separate Secure/HttpOnly/SameSite cookie; encrypted remote challenges bind the Runtime-verified channel. The same form accepts an authenticator or recovery code. A successful retry of the same live challenge returns the original session result instead of consuming a second factor. Changing the challenge, IP, or channel does not reset factor throttling.\n\nOrdinary access sessions have a twelve-hour absolute lifetime. Resume and child connections do not extend it. Cookies are HttpOnly, Secure on public TLS, and same-site. Header-based resume remains supported; full access credentials are never accepted from URL query parameters. Same-origin editor resources use the established cookie. Native remote editors consume a 30-second, one-shot delegation for their exact environment, owner, and CodeSpace, then receive an exact-scope resume credential bounded by the parent deadline. Each child still checks its own effective read/write/execute permissions. A parent logout revokes its descendants. Bookmarked CodeSpace and Web Service pages render the same Runtime-owned authentication gate before any resource data is forwarded. Direct URLs authenticate with the same-origin challenge cookie; isolated remote origins receive only an exact-resource resume credential held in session storage. Such a grant cannot authenticate the Env App, another resource, user, or environment. Unauthenticated static asset access terminates in the embedded Runtime UI rather than forwarding resource-owned paths.\n\nMFA enable/replace/disable, recovery-code rotation, and owner recovery invalidate ordinary sessions, challenges, delegations, accepted/pending artifacts, plugin authority, and open data streams. Native host management remains scoped to its own authenticated bridge. Revocation cancels access/observers and preserves the existing background-task lifecycle. Runtime restart clears in-memory sessions and incomplete operations; it preserves committed authentication state.",
+          "char_count": 3172
         },
         {
           "id": "persistence-replay-and-recovery",
@@ -18728,6 +18728,21 @@
           "id": "redeven:internal/accessgate/authentication_test.go:0:exercises real codes, replay, restart, recovery consumption, throttle persistence, collisions, revocation and child scope.",
           "source": "redeven:internal/accessgate/authentication_test.go",
           "description": "Exercises real codes, replay, restart, recovery consumption, throttle persistence, collisions, revocation and child scope."
+        },
+        {
+          "id": "redeven:internal/accessgate/channel_registration_test.go:0:verifies open-access registration, authentication activation, inherited deadlines, revocation, and remote mfa admission.",
+          "source": "redeven:internal/accessgate/channel_registration_test.go",
+          "description": "Verifies open-access registration, authentication activation, inherited deadlines, revocation, and remote MFA admission."
+        },
+        {
+          "id": "redeven:internal/agent/local_direct_test.go:0:rejects unauthorized or cancelled direct activation before plugin readiness.",
+          "source": "redeven:internal/agent/local_direct_test.go",
+          "description": "Rejects unauthorized or cancelled direct activation before plugin readiness."
+        },
+        {
+          "id": "redeven:internal/localui/localui_e2e_test.go:0:shares the real gate between local ui and agent and exercises persistent rpc, http, event streams, and independent browser sessions.",
+          "source": "redeven:internal/localui/localui_e2e_test.go",
+          "description": "Shares the real gate between Local UI and Agent and exercises persistent RPC, HTTP, event streams, and independent browser sessions."
         },
         {
           "id": "redeven:internal/accessgate/store_test.go:0:verifies interrupted migration, read-only startup probes, fail-closed corruption/schema checks and denied writes.",
@@ -25008,5 +25023,5 @@
       ]
     }
   ],
-  "source_sha256": "3b69618bfda12b1dfd7048c32cce16439b3a7cf82a36dc3546e4f630bbfde9d3"
+  "source_sha256": "02bd3fdbe91dc7c724d2a4fead94ce31890049695a6babb448cde468cf940098"
 }

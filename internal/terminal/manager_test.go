@@ -1137,7 +1137,12 @@ func TestContextAndWorkNotificationsFollowDynamicAccessGateState(t *testing.T) {
 		router := sessionrpc.NewRouter()
 		client := newTestRPCPeer(router)
 		meta := session.Meta{ChannelID: channelID, CanRead: true, CanWrite: true, CanExecute: true}
-		gate.RegisterChannelWithOptions(meta, accessgate.RegisterChannelOptions{Unlocked: unlocked})
+		gate.RegisterChannel(meta)
+		if unlocked {
+			if _, err := gate.UnlockChannel(channelID, "secret"); err != nil {
+				t.Fatal(err)
+			}
+		}
 		contextUpdates := make(chan terminalExecutionContextUpdatePayload, 4)
 		workUpdates := make(chan terminalWorkStateUpdatePayload, 4)
 		client.OnNotify(TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE, func(_ context.Context, payload json.RawMessage) {
