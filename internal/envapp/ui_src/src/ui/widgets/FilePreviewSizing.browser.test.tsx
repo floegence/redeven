@@ -74,7 +74,7 @@ describe('File preview sizing with real renderers', () => {
     for (const button of controls.querySelectorAll<HTMLElement>('button,[role=button]')) assertContained(viewport, button);
     // The empty part of the overlay must remain available to the reading surface.
     const view = viewport.getBoundingClientRect();
-    expect(viewport.contains(document.elementFromPoint(view.left + 12, view.top + 18))).toBe(true);
+    expect(viewport.contains(document.elementFromPoint(view.left + (kind === 'pdf' ? 70 : 12), view.top + 18))).toBe(true);
     trigger.focus();
     await userEvent.keyboard('{Enter}');
     await userEvent.keyboard('{End}{Enter}');
@@ -87,7 +87,8 @@ describe('File preview sizing with real renderers', () => {
     // The compact strip stays on one line without reserving reading space.
     host.style.width = '220px'; host.style.height = '100px';
     await vi.waitFor(() => {
-      expect(viewport.clientHeight).toBe(100);
+      // Classic horizontal scrollbars consume clientHeight, but not the surface box.
+      expect(viewport.offsetHeight).toBe(100);
       expect(controls.getBoundingClientRect().height).toBeLessThanOrEqual(44);
       for (const button of controls.querySelectorAll<HTMLElement>('button,[role=button]')) {
         assertContained(viewport, button);
@@ -100,7 +101,7 @@ describe('File preview sizing with real renderers', () => {
     await vi.waitFor(() => expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(zoomIn.getAttribute('aria-label')));
   });
 
-  it.each([1, 0.65, 1.5])('fits PDF content and keeps the canvas stable under a %s projection', async projection => {
+  it.each([1, 0.65, 1.5])('fits PDF content and keeps the page owner stable under a %s projection', async projection => {
     await page.viewport(1600, 1100);
     const host = mount(() => <PdfPreviewPane bytes={createPreviewPDF([{ width: 600, height: 400 }])} />, 900, 620, projection);
     await renderedPDF(host);
@@ -109,12 +110,15 @@ describe('File preview sizing with real renderers', () => {
     assertContained(viewport, frame());
     expect(parseFloat(frame().style.width)).toBeGreaterThan(600);
     const canvas = host.querySelector('canvas');
+    const pageOwner = host.querySelector('.floe-pdf-page');
     // CSS serialization and integer bitmap allocation may differ by one pixel.
     expect(Math.abs(canvas!.width - Math.floor(parseFloat(frame().style.width) * Math.max(1, window.devicePixelRatio)))).toBeLessThanOrEqual(1);
     host.style.width = '380px'; host.style.height = '310px';
     await vi.waitFor(() => assertContained(viewport, frame()));
     await renderedPDF(host);
-    expect(host.querySelector('canvas')).toBe(canvas);
+    // PDF.js replaces a bitmap on zoom while preserving the page and annotation owner.
+    expect(host.querySelector('.floe-pdf-page')).toBe(pageOwner);
+    expect(host.querySelectorAll('canvas')).toHaveLength(1);
     expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
     const controls = host.querySelector<HTMLElement>('.pdf-preview-controls')!;
     assertContained(viewport, controls);

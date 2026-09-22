@@ -1,11 +1,13 @@
-import { For, Show, type JSX } from 'solid-js';
+import { For, Show, Suspense, lazy, type JSX } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import type { FilePreviewDescriptor, FilePreviewSurface, PreviewMode } from '../utils/filePreview';
 import { DocxPreviewPane } from '../widgets/DocxPreviewPane';
 import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';
 import { MarkdownPreviewPane } from '../widgets/MarkdownPreviewPane';
-import { PdfPreviewPane } from '../widgets/PdfPreviewPane';
+import type { BindPdfPreviewEditor } from '../widgets/pdfPreviewEditor';
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
+const PdfPreviewPane = lazy(() => import('../widgets/PdfPreviewPane').then(module => ({ default: module.PdfPreviewPane })));
 import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';
 import { ImagePreviewPane } from '../widgets/ImagePreviewPane';
 import { useI18n } from '../i18n';
@@ -30,6 +32,8 @@ export type RedevenFilePreviewRenderProps = Readonly<{
   text?: string;
   draftText?: string;
   editing?: boolean;
+  saving?: boolean;
+  bindPdfEditor?: BindPdfPreviewEditor;
   saveError?: string | null;
   message?: string;
   objectUrl?: string;
@@ -176,7 +180,10 @@ export const REDEVEN_FILE_PREVIEW_RENDERERS: readonly RedevenFilePreviewRenderer
   {
     id: 'pdf',
     modes: ['pdf'],
-    render: (props) => <PdfPreviewPane bytes={props.bytes} surface={props.surface} />,
+    render: (props) => {
+      const i18n = useI18n();
+      return <Suspense fallback={<RedevenLoadingCurtain visible eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPdf')} />}><PdfPreviewPane bytes={props.bytes} surface={props.surface} editing={props.editing} saving={props.saving} saveError={props.saveError} bindPdfEditor={props.bindPdfEditor} onSelectionChange={props.onSelectionChange} /></Suspense>;
+    },
   },
   {
     id: 'docx',

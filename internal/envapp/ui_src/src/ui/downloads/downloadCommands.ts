@@ -51,6 +51,7 @@ export function buildFilePreviewDownloadCommand(params: Readonly<{
   descriptor: FilePreviewDescriptor;
   dirty: boolean;
   draftText: string;
+  pdfDraftBytes?: Uint8Array<ArrayBuffer>;
   origin: Extract<DownloadCommandOrigin, 'file_preview' | 'workbench_preview'>;
 }>): DownloadCommand | null {
   const item = params.item;
@@ -63,6 +64,11 @@ export function buildFilePreviewDownloadCommand(params: Readonly<{
   }
   const name = compact(item.name) || path.split('/').filter(Boolean).pop() || 'download';
   const mime = mimeFromExtDot(getExtDot(name)) ?? undefined;
+
+  if (params.pdfDraftBytes && params.descriptor.mode === 'pdf') {
+    return { entryKind: 'file', origin: params.origin, preferredName: name,
+      source: { kind: 'pdf_draft', path, name, bytes: params.pdfDraftBytes, mime: 'application/pdf' } };
+  }
 
   if (
     params.dirty

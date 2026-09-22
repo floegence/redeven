@@ -4,3 +4,6 @@ spec/redevplugin/official-containers-plugin/**/release.json.sig binary
 internal/ai/testdata/upgrade/10ce4c152/producer_test.go.txt whitespace=-blank-at-eol
 internal/ai/testdata/upgrade/10ce4c152-waiting/producer_test.go.txt whitespace=-blank-at-eol
 internal/ai/testdata/upgrade/10ce4c152-lifecycle/producer_test.go.txt whitespace=-blank-at-eol
+
+# PDF fixtures retain byte offsets and binary stream data.
+internal/envapp/ui_src/src/ui/widgets/__fixtures__/pdf/*.pdf binary

@@ -1579,6 +1579,26 @@
     }
   },
   "filePreview": {
+    "pdf": {
+      "search": "在 PDF 中查找",
+      "previous": "上一个匹配",
+      "next": "下一个匹配",
+      "matches": "第 {current} 项，共 {total} 项",
+      "noMatches": "无匹配结果",
+      "searching": "正在查找…",
+      "highlight": "高亮选中文字",
+      "selectText": "请在同一页内选择要高亮的文字。",
+      "history": "批注历史",
+      "undo": "撤销批注",
+      "redo": "重做批注",
+      "saveCopy": "保存 PDF 副本",
+      "annotation": "PDF 批注",
+      "highlightAnnotation": "高亮批注",
+      "removeHighlight": "删除高亮",
+      "color": "高亮颜色",
+      "colors": "高亮颜色选项",
+      "yellow": "黄色"
+    },
     "pathLabel": "路径",
     "unknownPath": "(未知路径)",
     "pathCopied": "路径已复制",

@@ -1,3 +1,4 @@
+import type { BindPdfPreviewEditor } from './pdfPreviewEditor';
 import { Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
@@ -22,6 +23,7 @@ export interface FilePreviewContentProps {
   text?: string;
   draftText?: string;
   editing?: boolean;
+  bindPdfEditor?: BindPdfPreviewEditor;
   dirty?: boolean;
   saving?: boolean;
   saveError?: string | null;

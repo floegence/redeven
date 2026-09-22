@@ -52,6 +52,72 @@ afterEach(() => {
 });
 
 describe('createFilePreviewController', () => {
+  it('keeps a PDF draft dirty after a failed binary save and confirms before closing', async () => {
+    const file = { id: '/workspace/form.pdf', name: 'form.pdf', path: '/workspace/form.pdf', type: 'file' } satisfies FileItem;
+    const writeFile = vi.fn().mockRejectedValueOnce(new Error('Disk is full')).mockResolvedValue({ success: true });
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('%PDF-1.7 fixture'));
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => ({ fs: { writeFile } } as any), canWrite: () => true });
+      return disposeRoot;
+    });
+    try {
+      await controller.openPreview(file);
+      expect(controller.canEdit()).toBe(true);
+      controller.beginEditing();
+      const sourceBytes = controller.bytes()!;
+      const savedBytes = new Uint8Array([37, 80, 68, 70, 0, 255]);
+      const editor = controller.bindPdfEditor({ sourceBytes, save: async () => savedBytes });
+      editor.markDirty();
+      expect(await controller.saveCurrent()).toBe(false);
+      expect(controller.dirty()).toBe(true);
+      expect(controller.saveError()).toBe('Disk is full');
+      controller.closePreview();
+      expect(controller.closeConfirmOpen()).toBe(true);
+      controller.cancelPendingAction();
+      expect(await controller.saveCurrent()).toBe(true);
+      expect(writeFile).toHaveBeenLastCalledWith({ path: file.path, content: 'JVBERgD/', encoding: 'base64', createDirs: false });
+      expect(controller.dirty()).toBe(false);
+      // A successful save must not replace the active bytes and jump back to page one.
+      expect(controller.bytes()).toBe(sourceBytes);
+      editor.markDirty();
+      controller.revertCurrent();
+      expect(controller.bytes()).toEqual(savedBytes);
+      expect(controller.editing()).toBe(false);
+      editor.markDirty();
+      expect(controller.dirty()).toBe(false);
+    } finally { dispose(); }
+  });
+
+  it('rejects stale PDF editors and rechecks write permission after serialization', async () => {
+    const file = { id: '/form.pdf', name: 'form.pdf', path: '/form.pdf', type: 'file' } satisfies FileItem;
+    const writeFile = vi.fn();
+    const bytes = deferred<Uint8Array<ArrayBuffer>>();
+    const [canWrite, setCanWrite] = createSignal(true);
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('%PDF-1.7 fixture'));
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => ({ fs: { writeFile } } as any), canWrite });
+      return disposeRoot;
+    });
+    try {
+      await controller.openPreview(file);
+      controller.beginEditing();
+      const editor = controller.bindPdfEditor({ sourceBytes: controller.bytes()!, save: () => bytes.promise });
+      editor.markDirty();
+      const saving = controller.saveCurrent();
+      setCanWrite(false);
+      bytes.resolve(new Uint8Array([37, 80, 68, 70]));
+      expect(await saving).toBe(false);
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(controller.dirty()).toBe(true);
+      await controller.confirmDiscardAndContinue();
+      controller.revertCurrent();
+      editor.markDirty();
+      expect(controller.dirty()).toBe(false);
+    } finally { dispose(); }
+  });
+
   it('loads a text preview, tracks dirty state, and saves edits through rpc.fs.writeFile', async () => {
     const file = { id: '/workspace/demo.ts', name: 'demo.ts', path: '/workspace/demo.ts', type: 'file' } satisfies FileItem;
     const writeFile = vi.fn(async () => ({ success: true }));

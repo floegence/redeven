@@ -1579,6 +1579,26 @@
     }
   },
   "filePreview": {
+    "pdf": {
+      "search": "Im PDF suchen",
+      "previous": "Vorheriger Treffer",
+      "next": "Nächster Treffer",
+      "matches": "{current} von {total}",
+      "noMatches": "Keine Treffer",
+      "searching": "Suche läuft…",
+      "highlight": "Ausgewählten Text hervorheben",
+      "selectText": "Wählen Sie den hervorzuhebenden Text auf einer einzelnen Seite aus.",
+      "history": "Anmerkungsverlauf",
+      "undo": "Anmerkung rückgängig machen",
+      "redo": "Anmerkung wiederherstellen",
+      "saveCopy": "PDF-Kopie speichern",
+      "annotation": "PDF-Anmerkung",
+      "highlightAnnotation": "Hervorhebung",
+      "removeHighlight": "Hervorhebung entfernen",
+      "color": "Farbe der Hervorhebung",
+      "colors": "Farben für Hervorhebungen",
+      "yellow": "Gelb"
+    },
     "previewWindowTitle": "Dateivorschau",
     "pathLabel": "Pfad",
     "unknownPath": "(unbekannter Pfad)",

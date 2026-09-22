@@ -106,6 +106,31 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        recordPdfEvidence: async ({ page }, metrics: { firstPaintMs: number; canvases: number }) => {
+          const output = path.resolve(__dirname, '.cache/pdf-document-surface');
+          await mkdir(output, { recursive: true });
+          await writeFile(path.join(output, 'long-document.json'), JSON.stringify({
+            ...metrics, pages: 300, browser: page.context().browser()?.version(),
+            scope: 'Local fixture stream; includes document metadata and first text layer; not a network benchmark.',
+          }, null, 2));
+        },
+        selectPdfText: async ({ page }, text: string) => {
+          const frame = await frameForSelector(page, '.pdf-preview-pane .textLayer');
+          await frame.evaluate(() => document.getSelection()?.removeAllRanges());
+          const span = frame.locator('.pdf-preview-pane .textLayer span').filter({ hasText: text }).first();
+          await span.scrollIntoViewIfNeeded();
+          const rect = await span.boundingBox();
+          if (!rect) throw new Error('PDF text is unavailable');
+          await page.mouse.move(rect.x + 1, rect.y + rect.height / 2);
+          await page.mouse.down();
+          await page.mouse.move(rect.x + rect.width - 1, rect.y + rect.height / 2, { steps: 12 });
+          await page.mouse.up();
+          const selection = await frame.evaluate(() => document.getSelection()?.toString());
+          await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+          await page.keyboard.press(process.platform === 'darwin' ? 'Meta+c' : 'Control+c');
+          const clipboard = await frame.evaluate(() => navigator.clipboard.readText());
+          return { selection, clipboard };
+        },
         inspectComputerProgress: async ({ page }, theme: string) => {
           const frame = await frameForSelector(page, '.flower-computer-entry');
           const selectors = ['.flower-computer-entry', '.flower-computer-stage-ball'];

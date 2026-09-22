@@ -47,12 +47,23 @@ export function FilePreviewHost() {
     env.openFlowerTurnLauncher(result.intent);
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
+    const item = filePreview.controller.item();
+    let pdfDraftBytes: Uint8Array<ArrayBuffer> | undefined;
+    if (filePreview.controller.descriptor().mode === 'pdf' && filePreview.controller.dirty()) {
+      try { pdfDraftBytes = await filePreview.controller.exportPdfDraft(); }
+      catch (error) {
+        notification.error(i18n.t('shell.notifications.downloadUnavailableTitle'), String(error));
+        return;
+      }
+      if (filePreview.controller.item() !== item) return;
+    }
     const command = buildFilePreviewDownloadCommand({
       item: filePreview.controller.item(),
       descriptor: filePreview.controller.descriptor(),
       dirty: filePreview.controller.dirty(),
       draftText: filePreview.controller.draftText(),
+      pdfDraftBytes,
       origin: 'file_preview',
     });
     if (!command) {
@@ -71,6 +82,7 @@ export function FilePreviewHost() {
       text={filePreview.controller.text()}
       draftText={filePreview.controller.draftText()}
       editing={filePreview.controller.editing()}
+      bindPdfEditor={filePreview.controller.bindPdfEditor}
       dirty={filePreview.controller.dirty()}
       saving={filePreview.controller.saving()}
       saveError={filePreview.controller.saveError()}

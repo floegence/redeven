@@ -1579,6 +1579,26 @@
     }
   },
   "filePreview": {
+    "pdf": {
+      "search": "Buscar en el PDF",
+      "previous": "Coincidencia anterior",
+      "next": "Siguiente coincidencia",
+      "matches": "{current} de {total}",
+      "noMatches": "Sin coincidencias",
+      "searching": "Buscando…",
+      "highlight": "Resaltar el texto seleccionado",
+      "selectText": "Selecciona texto de una sola página para resaltarlo.",
+      "history": "Historial de anotaciones",
+      "undo": "Deshacer anotación",
+      "redo": "Rehacer anotación",
+      "saveCopy": "Guardar una copia del PDF",
+      "annotation": "Anotación del PDF",
+      "highlightAnnotation": "Anotación de resaltado",
+      "removeHighlight": "Eliminar resaltado",
+      "color": "Color de resaltado",
+      "colors": "Colores de resaltado",
+      "yellow": "Amarillo"
+    },
     "pathLabel": "Ruta",
     "unknownPath": "(ruta desconocida)",
     "pathCopied": "Ruta copiada",

@@ -2,6 +2,7 @@ import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
 import solid from 'vite-plugin-solid';
+import { pdfAssetsPlugin } from '@floegence/floe-webapp-core/pdf-assets';
 
 import { REDEVEN_ENV_APP_BASE_PATH } from './src/build/envAppBasePath';
 
@@ -35,7 +36,7 @@ function chunkModuleManifest(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [solid(), tailwindcss(), chunkModuleManifest()],
+  plugins: [solid(), tailwindcss(), chunkModuleManifest(), pdfAssetsPlugin()],
   resolve: {
     alias: [
       { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|icons|layout|loading|ui)$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },

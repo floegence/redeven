@@ -822,6 +822,34 @@ function renderLinuxRuntimeLicenses() {
   }).join('\n\n');
 }
 
+// Verify the exact engine-owned resource notices rather than treating the full
+// PDF asset bundle as the engine's Apache license. The font exception is explicit.
+function renderPdfResourceLicenses() {
+  const coreManifest = fs.realpathSync(path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floe-webapp-core/package.json'));
+  const pdfRequire = createRequire(coreManifest);
+  const root = path.dirname(pdfRequire.resolve('pdfjs-dist/package.json'));
+  const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+  if (version !== '6.3.289') throw new Error('Review PDF resource licenses for the new engine version.');
+  const files = [
+    ['LICENSE', 'Apache-2.0', '0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594'],
+    ['cmaps/LICENSE', 'Adobe CMap redistribution terms', 'aa92ab5a472974865a96fd4a4e9c13bb41bf6fe1b309cb6b8da48bc9e19839a2'],
+    ['standard_fonts/LICENSE_FOXIT', 'BSD-style Foxit font terms', 'b578cdd2345840ada550bd12519533812320d5f1d21cf4c1c7e1b1b0a31c98b7'],
+    ['standard_fonts/LICENSE_LIBERATION', 'GPL-2.0 with font exception', 'd2c4d5b3e115a519cb58eb691aa64538397e2611f9ebe801392cf9667997e7dc'],
+    ['wasm/LICENSE_JBIG2', 'BSD-style PDFium terms', '9e66b7f1b934a28b37f3bc4dac97915de1674271e79a0a88182a18ed9731b4d1'],
+    ['wasm/LICENSE_OPENJPEG', 'BSD-2-Clause', 'a6af136f3e15038a666b61f376612a07d9a4e48cb7c01adbf3e33b3f14ab49b6'],
+    ['wasm/LICENSE_PDFJS_JBIG2', 'Apache-2.0', 'aad3cce09842e00e9e11ad5e8fef8cc02fbc3a3768fe2f007443b9cee37aaee5'],
+    ['wasm/LICENSE_PDFJS_OPENJPEG', 'BSD-style terms', '717fc62da03292dbb4dd0c8280bd4ce7bb8550dcf31d772bc93455fb50313425'],
+    ['wasm/LICENSE_PDFJS_QCMS', 'MIT', '508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1'],
+    ['wasm/LICENSE_QCMS', 'MIT', '36d847ae882f6574ebc72f56a4f354e4f104fde4a584373496482e97d52d31bc'],
+    ['iccs/LICENSE', 'CC0-1.0', '286e4fd7b447330b2c88e23890e3cd0a9d38cb398d4a59cb247f578ccbda3213'],
+  ];
+  return files.map(([name, license, digest]) => {
+    const bytes = fs.readFileSync(path.join(root, name));
+    if (crypto.createHash('sha256').update(bytes).digest('hex') !== digest) throw new Error(`PDF resource notice changed: ${name}`);
+    return `### pdfjs-dist@${version}: ${name} (${license})\n\n\`\`\`text\n${bytes.toString('utf8').replace(/[ \t]+$/gm, '').trim()}\n\`\`\``;
+  }).join('\n\n');
+}
+
 function renderNotices(goEntries, npmEntries, terminalAgentIcons, containerServiceIcons, floetermThemeNotices) {
   return `# Third-Party Notices
 
@@ -922,6 +950,12 @@ ${floetermThemeNotices.tokyoNightLicenseText}
 The Env App bundles JetBrains Mono, Iosevka, Source Code Pro, and IBM Plex Mono font files. System font candidates are loaded from the client device and are not redistributed by Redeven.
 
 ${renderTerminalFontLicenses()}
+
+## Bundled PDF Resource Licenses
+
+The lazy PDF surface consumes PDF.js 6.3.289 from the published Floe Webapp dependency. Its worker, CMaps, unmodified standard fonts, WASM codecs, and ICC profiles are served locally. The original resource notices are retained next to the assets and reproduced below. Liberation font redistribution uses the explicit font exception in its notice; it is not a GPL-only application dependency. Synthetic CJK test PDFs contain a Noto Sans SC subset under the adjacent fixture OFL notice and are not included in the production UI.
+
+${renderPdfResourceLicenses()}
 
 ## Desktop Runtime Notices
 

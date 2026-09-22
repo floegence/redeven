@@ -10,8 +10,8 @@ function encodeUtf8(value: string): Uint8Array<ArrayBuffer> {
 export function createRuntimeDownloadSource(client: () => Session | null | undefined): RuntimeDownloadSource {
   return {
     async open(command: DownloadCommand, signal: AbortSignal) {
-      if (command.source.kind === 'draft_text') {
-        const bytes = encodeUtf8(command.source.text);
+      if (command.source.kind === 'draft_text' || command.source.kind === 'pdf_draft') {
+        const bytes = command.source.kind === 'pdf_draft' ? command.source.bytes : encodeUtf8(command.source.text);
         return {
           totalBytes: bytes.byteLength,
           chunks: (async function* draftChunks() {

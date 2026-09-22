@@ -19,7 +19,15 @@ export type DraftTextDownloadSourceSpec = Readonly<{
   mime?: string;
 }>;
 
-export type DownloadSourceSpec = RuntimeFileDownloadSourceSpec | DraftTextDownloadSourceSpec;
+export type PdfDraftDownloadSourceSpec = Readonly<{
+  kind: 'pdf_draft';
+  path: string;
+  name: string;
+  bytes: Uint8Array<ArrayBuffer>;
+  mime: 'application/pdf';
+}>;
+
+export type DownloadSourceSpec = RuntimeFileDownloadSourceSpec | DraftTextDownloadSourceSpec | PdfDraftDownloadSourceSpec;
 
 export type DownloadCommandOrigin =
   | 'file_browser_context_menu'
