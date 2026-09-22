@@ -12,7 +12,7 @@ const source = await build({
   bundle: true, write: false, platform: 'node', format: 'esm',
 });
 const { enUS, hostApplicationCopyKeys, SUPPORTED_LOCALES } = await import(`data:text/javascript;base64,${Buffer.from(source.outputFiles[0].text).toString('base64')}`);
-const keys = { ...hostApplicationCopyKeys, sessionQuitDescription: 'hostApplications.sessionQuitDescription', sessionPictureHint: 'hostApplications.sessionPictureHint' };
+const keys = { ...hostApplicationCopyKeys, sessionQuit: 'hostApplications.closeAllWindows', sessionQuitTitle: 'hostApplications.closeAllWindowsTitle', sessionWaitingHint: 'hostApplications.sessionWaitingHint', sessionQuitDescription: 'hostApplications.sessionQuitDescription', sessionPictureHint: 'hostApplications.sessionPictureHint' };
 const locales = Object.fromEntries(SUPPORTED_LOCALES.map(locale => {
   const dictionary = locale === 'en-US' ? enUS : JSON.parse(readFileSync(path.join(root, `src/ui/i18n/locales/catalogs/${locale}.json`), 'utf8'));
   return [locale, Object.fromEntries(Object.entries(keys).map(([key, source]) => {

@@ -6251,6 +6251,17 @@
     }
   },
   "hostApplications": {
+    "linuxRunningHint": "停止共享後，應用程式會繼續執行。你可以從此清單重新連線。",
+    "stopSharingDescription": "中斷此應用程式與 Redeven 的連線。應用程式視窗及尚未儲存的工作會保留。",
+    "closeAllWindows": "關閉所有視窗",
+    "closeAllWindowsTitle": "關閉 {name} 的所有視窗？",
+    "closeWindowsPending": "已要求關閉視窗。請開啟應用程式處理可能出現的儲存提示。背景處理程序可能繼續執行。",
+    "sessionWaitingHint": "應用程式正在執行，但沒有開啟的視窗。你可以關閉此檢視視窗，稍後重新連線。",
+    "applicationChanged": "應用程式已重新啟動。請檢查後再次確認。",
+    "stopSharing": "停止共享",
+    "forceQuit": "強制結束",
+    "forceQuitTitle": "強制結束 {name}？",
+    "forceQuitDescription": "立即結束應用程式，不顯示儲存提示。尚未儲存的工作將會遺失。",
     "checking": "正在確認應用程式狀態…",
     "applicationExited": "應用程式已結束",
     "applicationExitedHint": "主機已確認應用程式結束。需要時，請從「主機應用程式」重新開啟。",

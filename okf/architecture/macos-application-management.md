@@ -18,7 +18,7 @@ physical viewer closure.
 
 # Running applications and explicit quit
 
-**Running on this Mac** uses AppKit's current regular application processes,
+**Running applications** uses AppKit's current regular application processes,
 including direct native launches, windowless applications and apps opened outside
 Redeven. Sharing sessions are not a process inventory. Applications remain
 manageable after a viewer or Runtime restarts; names and icons still come from
@@ -56,7 +56,11 @@ dialog, keeps quit available, and removes the row only after an OS snapshot conf
 exit. An unconfirmed transport result remains an actionable error without automatic
 retry. Explicit quit intent for an attached windowless process prevents a confirmed
 exit from being mislabeled as startup failure; it never ends a session optimistically.
-There is no force-quit fallback. A sharing stop never requests application
+There is no force-quit fallback. A separate library Force quit action presents an
+explicit loss-of-unsaved-work confirmation and calls `forceTerminate()` only after
+the same entire-set process-generation validation. A stale target is rejected
+before acting. This action is never dispatched by a viewer disconnect, ordinary
+quit cancellation or an unknown request outcome. A sharing stop never requests application
 termination; only the explicit Quit application action may request graceful
 termination of the exact selected process generation. A failed viewer opening
 also never rolls back a host session based on stale catalog state.

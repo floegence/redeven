@@ -34,14 +34,18 @@ func (s *hostAppsStub) Stop(_ context.Context, owner, _ string) error {
 	s.owner = owner
 	return nil
 }
-func (s *hostAppsStub) Running(context.Context) ([]hostapps.RunningApplication, error) {
+func (s *hostAppsStub) Running(_ context.Context, owner string) ([]hostapps.RunningApplication, error) {
 	s.calls++
+	s.owner = owner
 	return []hostapps.RunningApplication{}, nil
 }
 func (s *hostAppsStub) Quit(_ context.Context, owner string, _ hostapps.QuitRequest) error {
 	s.calls++
 	s.owner = owner
 	return nil
+}
+func (s *hostAppsStub) Terminate(ctx context.Context, owner string, req hostapps.QuitRequest) error {
+	return s.Quit(ctx, owner, req)
 }
 func (s *hostAppsStub) Detach(_ context.Context, owner, _ string) error {
 	s.calls++
@@ -127,7 +131,7 @@ func TestHostApplicationPermissionsAndAuthoritativeOwner(t *testing.T) {
 			}
 		}
 		backend.calls = 0
-		for _, test := range []struct{ method, path string }{{"POST", hostApplicationsAPI}, {"POST", hostApplicationsAPI + "/sessions"}, {"POST", hostApplicationsAPI + "/permissions"}, {"DELETE", hostApplicationsAPI + "/sessions/one"}, {"POST", hostApplicationsAPI + "/quit"}, {"POST", hostApplicationsAPI + "/sessions/one/detach"}} {
+		for _, test := range []struct{ method, path string }{{"POST", hostApplicationsAPI}, {"POST", hostApplicationsAPI + "/sessions"}, {"POST", hostApplicationsAPI + "/permissions"}, {"DELETE", hostApplicationsAPI + "/sessions/one"}, {"POST", hostApplicationsAPI + "/quit"}, {"POST", hostApplicationsAPI + "/terminate"}, {"POST", hostApplicationsAPI + "/sessions/one/detach"}} {
 			r := httptest.NewRequest(test.method, test.path, strings.NewReader(`{}`))
 			r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
 			w := httptest.NewRecorder()

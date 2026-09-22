@@ -6240,6 +6240,17 @@
     }
   },
   "hostApplications": {
+    "linuxRunningHint": "Les applications continuent de fonctionner après l’arrêt du partage. Reconnectez-vous depuis cette liste.",
+    "stopSharingDescription": "Déconnecter cette application de Redeven. Ses fenêtres et les travaux non enregistrés restent ouverts.",
+    "closeAllWindows": "Fermer toutes les fenêtres",
+    "closeAllWindowsTitle": "Fermer toutes les fenêtres de {name} ?",
+    "closeWindowsPending": "La fermeture a été demandée. Ouvrez l’application pour répondre aux éventuelles demandes d’enregistrement. Les processus en arrière-plan peuvent continuer.",
+    "sessionWaitingHint": "L’application est en cours d’exécution, mais aucune fenêtre n’est ouverte. Vous pouvez fermer cette visionneuse et vous reconnecter plus tard.",
+    "applicationChanged": "L’application a redémarré. Vérifiez son état et confirmez à nouveau.",
+    "stopSharing": "Arrêter le partage",
+    "forceQuit": "Forcer à quitter",
+    "forceQuitTitle": "Forcer la fermeture de {name} ?",
+    "forceQuitDescription": "Fermer immédiatement l’application sans demande d’enregistrement. Le travail non enregistré sera perdu.",
     "checking": "Vérification de l’état de l’application…",
     "applicationExited": "L’application a quitté",
     "applicationExitedHint": "L’hôte a confirmé la fermeture de l’application. Rouvrez-la depuis les applications de l’hôte si nécessaire.",

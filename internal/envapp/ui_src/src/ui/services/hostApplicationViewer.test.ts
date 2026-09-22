@@ -63,6 +63,17 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
 }
 
 describe('host application viewer', () => {
+  it('waits for a window after a confirmed connection without a first-window deadline', async () => {
+    const v = await viewer(false, true);
+    v.doc.dispatchEvent(new dom.window.Event('connection-established'));
+    expect(v.state()).toBe('waiting');
+    expect(v.nativeWindow.request).not.toHaveBeenCalled();
+    v.appWindow(1);
+    v.client._new_window(1);
+    expect(v.state()).toBe('connecting');
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    expect(v.state()).toBe('active');
+  });
   it('keeps application controls visible and routes them through the current Xpra session', async () => {
     const v = await viewer(false, true);
     const first = v.appWindow(1, {title:'Document one'}), second = v.appWindow(2, {title:'Document two'});
@@ -129,6 +140,17 @@ describe('host application viewer', () => {
     v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
     expect(v.state()).toBe('active');
     expect(dialog.metadataUpdated).not.toHaveBeenCalled();
+  });
+
+  it('does not redirect close-all to a lone save dialog', async () => {
+    const v = await viewer();
+    v.appWindow(1, {modal:true, title:'Save changes'}, 'DIALOG');
+    v.client._new_window(1);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    dom.window.document.querySelector<HTMLButtonElement>('.mac-app-quit')!.click();
+    dom.window.document.querySelector<HTMLButtonElement>('.mac-app-confirm-quit')!.click();
+    expect(v.client.send_close_window).not.toHaveBeenCalled();
+    expect(v.state()).toBe('active');
   });
 
   it('directs a failed session back to the application library instead of retrying it', async () => {
@@ -240,7 +262,7 @@ describe('host application viewer', () => {
     expect(v.nativeWindow.request).not.toHaveBeenCalledWith('close');
     delete v.client.id_to_window[2]; v.client.on_last_window(); await drain();
     expect(v.nativeWindow.request).toHaveBeenCalledWith('close');
-    expect(v.state()).toBe('ended');
+    expect(v.state()).toBe('windowsClosed');
   });
 
   it('closes a browser popup after its active application ends', async () => {

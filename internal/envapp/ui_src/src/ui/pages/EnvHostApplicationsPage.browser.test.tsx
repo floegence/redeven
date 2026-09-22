@@ -53,7 +53,7 @@ it.each([390, 1440].flatMap(width => (['en-US', 'zh-CN'] as const).map(locale =>
     expect(header.textContent).toBe(title);
     expect(description.parentElement).toBe(body);
     expect(body.children).toHaveLength(1);
-    expect(description.textContent).toContain(locale === 'zh-CN' ? '应用窗口和未保存的工作会保留在 Mac 上。' : 'Its windows and unsaved work will remain open on the Mac.');
+    expect(description.textContent).toContain(locale === 'zh-CN' ? '应用窗口和未保存的工作会保留。' : 'Its windows and unsaved work stay open.');
     expect(description.getBoundingClientRect().top).toBeGreaterThan(header.getBoundingClientRect().bottom);
     expect(description.getBoundingClientRect().bottom).toBeLessThan(footer.getBoundingClientRect().top);
     expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);

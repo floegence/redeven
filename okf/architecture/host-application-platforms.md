@@ -23,6 +23,8 @@ The integration accepts Xpra 6.x with local X11 server and command-line client
 support, HTML5 client v20 or v21, Xvfb, xauth, dbus-run-session, dbus-daemon, and a
 Python 3 interpreter with working GIO/GTK 3 introspection. Other Xpra major versions
 and HTML5 generations need explicit adapter validation before being advertised.
+The monitored application launcher also requires Linux pidfds (kernel 5.3 or
+later), child subreaping and Python support for pidfd operations.
 
 The Runtime checks actual executable availability, Xpra's version and advertised
 local server commands, imports the GIO/GTK bindings, and validates the installed
@@ -43,11 +45,11 @@ executables on PATH; an interactive shell's environment does not imply that a
 system service inherits it.
 
 Detection is a prerequisite check, not a promise that every application will work.
-The actual launch still requires a GIO receipt, an HTTP endpoint, and Xpra's
-nonempty window inventory. The inventory probe allows up to eight seconds because
-Xpra 6.2 spends about five seconds gathering optional codec information even when
-its X11 windows are ready. Application-specific failures retain the bounded
-startup and cleanup contract. Library refresh reruns detection after installation.
+The actual launch requires an owned process receipt and a responsive HTML endpoint.
+Window and first-pixel readiness remain separate; a background application is not
+a startup failure. The [Linux lifecycle owner](linux-application-lifecycle.md)
+defines monitored process lifetime, recovery and ordinary/forced close boundaries.
+Library refresh reruns detection after installation.
 Redeven does not elevate privileges, change package repositories, install system
 packages, or disable SELinux/AppArmor automatically.
 

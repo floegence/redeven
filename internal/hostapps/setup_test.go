@@ -174,6 +174,13 @@ Gtk.main()
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	defer func() {
+		a := m.sessions[session.ID].application
+		if a != nil && a.record.Process.Alive() {
+			_ = m.Terminate(context.Background(), "alice", QuitRequest{ApplicationID: a.record.Application.ID, Instances: []string{a.record.ID}})
+			waitUntil(t, func() bool { return !a.record.Process.Alive() }, 8*time.Second)
+		}
+	}()
 	assertResponsiveWindowInventory(t, m.sessions[session.ID])
 	var environment map[string]string
 	data, err := os.ReadFile(receipt)

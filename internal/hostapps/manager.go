@@ -7,9 +7,6 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
-	"log/slog"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,18 +26,26 @@ import (
 var desktopHelper []byte
 
 type ownedSession struct {
-	native    *macSession
-	view      Session
-	owner     string
-	password  string
-	cmd       *exec.Cmd
-	done      chan struct{}
-	stopping  bool
-	socketDir string
-	tools     hostTools
+	application *linuxApplication
+	proxy       *applicationProxy
+	finishOnce  sync.Once
+	native      *macSession
+	view        Session
+	owner       string
+	password    string
+	done        chan struct{}
+	stopping    bool
+	socketDir   string
+	tools       hostTools
 }
 
 type Manager struct {
+	appsMu                      sync.Mutex
+	applications                map[string]*linuxApplication
+	appsLock                    *os.File
+	appsStop                    chan struct{}
+	appsDone                    sync.WaitGroup
+	launcher                    string
 	setupMu                     sync.Mutex
 	setup                       *nativeapps.Manager
 	setupClosed                 bool
@@ -59,7 +64,7 @@ type Manager struct {
 
 func New(state, home string, forwards *portforward.Service) *Manager {
 	root := filepath.Join(state, "host-applications")
-	return &Manager{state: root, home: home, helper: filepath.Join(root, "desktop.py"), custom: filepath.Join(root, "applications"), forwards: forwards, sessions: make(map[string]*ownedSession)}
+	return &Manager{state: root, home: home, helper: filepath.Join(root, "desktop.py"), custom: filepath.Join(root, "applications"), forwards: forwards, sessions: make(map[string]*ownedSession), applications: make(map[string]*linuxApplication), appsStop: make(chan struct{})}
 }
 
 func (m *Manager) prepare() error {
@@ -72,6 +77,9 @@ func (m *Manager) prepare() error {
 			return
 		}
 		m.prepareErr = os.WriteFile(m.helper, desktopHelper, 0o600)
+		if m.prepareErr == nil {
+			m.launcher, m.prepareErr = nativeapps.WriteApplicationLauncher(m.state)
+		}
 	})
 	return m.prepareErr
 }
@@ -103,6 +111,25 @@ func (m *Manager) Catalog(ctx context.Context, owner, locale string) (Catalog, e
 		return m.macCatalog(ctx, owner)
 	}
 	catalog, _, err := m.catalog(ctx, owner, locale)
+	if err == nil && catalog.Availability.Ready {
+		catalog.Running, err = m.linuxRunning(ctx, owner)
+		// A removed desktop entry must not make a still-running owned instance
+		// disappear from management. Retain its admitted identity until it exits.
+		if err == nil {
+			seen := make(map[string]bool)
+			for _, app := range catalog.Applications {
+				seen[app.ID] = true
+			}
+			m.appsMu.Lock()
+			for _, a := range m.applications {
+				if !a.ended && a.record.Owner == owner && a.record.Process.Alive() && !seen[a.record.Application.ID] {
+					catalog.Applications = append(catalog.Applications, a.record.Application)
+					seen[a.record.Application.ID] = true
+				}
+			}
+			m.appsMu.Unlock()
+		}
+	}
 	return catalog, err
 }
 
@@ -158,7 +185,6 @@ func (m *Manager) Add(ctx context.Context, req AddRequest) error {
 }
 
 func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (Session, error) {
-	appID, locale := req.ApplicationID, req.Locale
 	if owner == "" {
 		return Session{}, ErrInvalid
 	}
@@ -183,219 +209,7 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 	if req.Mode != "" && req.Mode != "stream" {
 		return Session{}, ErrInvalid
 	}
-	m.mu.Lock()
-	for _, s := range m.sessions {
-		if !s.stopping && s.owner == owner && s.view.Application.ID == appID && (s.view.State == "starting" || s.view.State == "running") {
-			view := cloneSession(s.view)
-			m.mu.Unlock()
-			return view, nil
-		}
-	}
-	m.mu.Unlock()
-	catalog, tools, err := m.catalog(ctx, owner, locale)
-	if err != nil {
-		return Session{}, err
-	}
-	if !catalog.Availability.Ready {
-		return Session{}, ErrUnavailable
-	}
-	var app Application
-	for _, candidate := range catalog.Applications {
-		if candidate.ID == appID {
-			app = candidate
-			break
-		}
-	}
-	if app.ID == "" {
-		return Session{}, ErrNotFound
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
-		return Session{}, ErrUnavailable
-	}
-	active := 0
-	for _, s := range m.sessions {
-		if s.view.State != "starting" && s.view.State != "running" {
-			continue
-		}
-		active++
-		if !s.stopping && s.owner == owner && s.view.Application.ID == appID {
-			return cloneSession(s.view), nil
-		}
-	}
-	if active >= 12 {
-		return Session{}, ErrLimit
-	}
-	m.trimCompletedLocked()
-	id := randomID()
-	dir := filepath.Join(m.state, "sessions", id)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return Session{}, err
-	}
-	allocated := false
-	defer func() {
-		if !allocated {
-			_ = os.RemoveAll(dir)
-		}
-	}()
-	password := randomID() + randomID()
-	if err := os.WriteFile(filepath.Join(dir, "password"), []byte(password), 0o600); err != nil {
-		return Session{}, err
-	}
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		return Session{}, err
-	}
-	address := listener.Addr().String()
-	forward, err := m.forwards.OpenOwnedForwardSession(ctx, "http://"+address+"/_redeven_host_app/")
-	if err != nil {
-		_ = listener.Close()
-		return Session{}, err
-	}
-	socketDir, err := os.MkdirTemp("", "redeven-xpra-")
-	if err != nil {
-		_ = listener.Close()
-		m.forwards.ReleaseOwnedForwardSession(forward.Forward.ForwardID)
-		return Session{}, err
-	}
-	if err := os.Mkdir(filepath.Join(socketDir, "xpra"), 0700); err != nil {
-		_ = listener.Close()
-		_ = os.RemoveAll(socketDir)
-		m.forwards.ReleaseOwnedForwardSession(forward.Forward.ForwardID)
-		return Session{}, err
-	}
-	view := Session{ID: id, Application: app, State: "starting", StartedAt: time.Now().UnixMilli(), Forward: forward, Presentation: req.Presentation}
-	s := &ownedSession{view: view, owner: owner, password: password, socketDir: socketDir, tools: tools, done: make(chan struct{})}
-	m.sessions[id] = s
-	allocated = true
-	_ = listener.Close()
-	go m.run(s, dir, address)
-	return cloneSession(view), nil
-}
-
-func (m *Manager) run(s *ownedSession, dir, address string) {
-	code := ""
-	defer func() { m.finish(s, code, nil) }()
-	args := []string{s.tools.xpra, "start", "--daemon=no", "--systemd-run=no", "--attach=no", "--use-display=no", "--bind-ws=" + address,
-		"--ws-auth=file:filename=" + filepath.Join(dir, "password"), "--html=" + s.tools.html, "--sessions-dir=" + filepath.Join(s.socketDir, "sessions"), "--socket-dir=" + s.socketDir,
-		"--socket-dirs=" + s.socketDir, "--exit-with-client=no", "--exit-with-windows=yes", "--exit-with-children=no",
-		"--terminate-children=yes", "--start-new-commands=no", "--sharing=no", "--mdns=no",
-		"--source=", "--source-start=", "--input-method=none", "--webcam=no", "--printing=no", "--file-transfer=no",
-		"--notifications=no", "--dbus-launch=", "--session-name=" + s.view.Application.Name,
-		"--xvfb=" + quoteArgv([]string{s.tools.xvfb, "-screen", "0", "3840x2160x24", "-nolisten", "tcp", "-noreset", "+extension", "Composite", "-auth", "$XAUTHORITY"}),
-		"--start-child=" + quoteArgv([]string{s.tools.python, m.helper, "launch", m.custom, s.view.Application.ID, filepath.Join(dir, "launch.json")}),
-	}
-	args = append(args, nativeapps.XpraNoAudioArgs()...)
-	// Xpra clears inherited DBUS_* variables before configuring its session.
-	// Pass our newly created private bus through its explicit child environment;
-	// dbus-run-session remains the lifetime owner of both the bus and Xpra.
-	launcher := []string{"--", "/bin/sh", "-c", `exec "$@" --dbus=no --dbus-control=no "--start-env=DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"`, "redeven-xpra"}
-	cmd := exec.Command(s.tools.dbus, append(launcher, args...)...)
-	cmd.Dir = m.home
-	cmd.Env = append(xpraEnvironment(s.tools.environment(applicationEnvironment(os.Environ()))), "XDG_RUNTIME_DIR="+s.socketDir)
-	configureProcess(cmd)
-	log, err := os.OpenFile(filepath.Join(dir, "session.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		code = "launch_failed"
-		return
-	}
-	defer log.Close()
-	cmd.Stdout, cmd.Stderr = log, log
-	m.mu.Lock()
-	if s.stopping || m.closed {
-		m.mu.Unlock()
-
-		return
-	}
-	err = cmd.Start()
-	if err == nil {
-		s.cmd = cmd
-	}
-	m.mu.Unlock()
-	if err != nil {
-		code = "launch_failed"
-		return
-	}
-	readyCtx, cancelReady := context.WithCancel(context.Background())
-	defer cancelReady()
-	readyDone := make(chan struct{})
-	go func() { defer close(readyDone); m.waitReady(readyCtx, s, dir, address) }()
-	err = cmd.Wait()
-	// The private process group belongs to this session, including descendants
-	// whose launcher has already exited. Never retain orphaned X11 resources.
-	_ = killProcess(cmd)
-	cancelReady()
-	<-readyDone
-	m.mu.Lock()
-	if err != nil && !s.stopping {
-		code = "capture_failed"
-		slog.Warn("host application capture backend exited", "session", s.view.ID, "backend", "xpra", "error", err)
-	}
-	m.mu.Unlock()
-}
-
-func (m *Manager) waitReady(ctx context.Context, s *ownedSession, dir, address string) {
-	timer := time.NewTimer(40 * time.Second)
-	defer timer.Stop()
-	tick := time.NewTicker(250 * time.Millisecond)
-	defer tick.Stop()
-	client := http.Client{Timeout: time.Second}
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-			m.mu.Lock()
-			s.view.ErrorCode = "launch_timeout"
-			m.mu.Unlock()
-			m.requestStop(s)
-			return
-		case <-tick.C:
-			data, err := os.ReadFile(filepath.Join(dir, "launch.json"))
-			if err != nil {
-				continue
-			}
-			var receipt struct {
-				OK bool `json:"ok"`
-			}
-			if json.Unmarshal(data, &receipt) != nil {
-				continue
-			}
-			if !receipt.OK {
-				m.mu.Lock()
-				s.view.ErrorCode = "launch_failed"
-				m.mu.Unlock()
-				m.requestStop(s)
-				return
-			}
-			request, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+address+"/index.html", nil)
-			res, err := client.Do(request)
-			if err != nil {
-				continue
-			}
-			_ = res.Body.Close()
-			if res.StatusCode != http.StatusOK {
-				continue
-			}
-			// A successful GIO launch alone can still redirect a singleton to
-			// another display. Read Xpra's own inventory before reporting ready.
-			inventoryStarted := time.Now()
-			if !sessionHasWindows(ctx, s.tools.xpra, s.socketDir) {
-				continue
-			}
-			m.mu.Lock()
-			becameReady := s.view.State == "starting" && !s.stopping
-			if becameReady {
-				s.view.State = "running"
-			}
-			m.mu.Unlock()
-			if becameReady {
-				slog.Info("host application window ready", "session", s.view.ID, "backend", "xpra", "duration_ms", time.Now().UnixMilli()-s.view.StartedAt, "inventory_duration_ms", time.Since(inventoryStarted).Milliseconds())
-			}
-			return
-		}
-	}
+	return m.launchLinux(ctx, owner, req)
 }
 
 func sessionHasWindows(parent context.Context, xpra, socketDir string) bool {
@@ -435,44 +249,59 @@ func infoHasWindows(info string) bool {
 }
 
 func (m *Manager) finish(s *ownedSession, code string, release func()) {
-	m.mu.Lock()
-	wasRunning := s.view.State == "running"
-	if s.view.ErrorCode == "" {
-		s.view.ErrorCode = code
-	}
-	s.view.State = "ended"
-	// A capture failure must remain visible for recovery instead of triggering
-	// the viewer's normal application-ended dismissal.
-	if s.view.ErrorCode != "" && (!wasRunning || s.native != nil || s.view.ErrorCode == "capture_failed") {
-		s.view.State = "failed"
-	}
-	s.stopping = true
-	s.password = ""
-	m.forwards.ReleaseOwnedForwardSession(s.view.Forward.Forward.ForwardID)
-	_ = os.Remove(filepath.Join(m.state, "sessions", s.view.ID, "password"))
-	_ = os.RemoveAll(s.socketDir)
-	m.mu.Unlock()
-	// Publish the terminal state before closing transport, but report completion
-	// only after the supervisor has reclaimed every process and connection.
-	if release != nil {
-		release()
-	}
-	close(s.done)
+	s.finishOnce.Do(func() {
+		m.mu.Lock()
+		wasRunning := s.view.State == "running"
+		if s.view.ErrorCode == "" {
+			s.view.ErrorCode = code
+		}
+		s.view.State = "ended"
+		// A capture failure must remain visible for recovery instead of triggering
+		// the viewer's normal application-ended dismissal.
+		if s.view.ErrorCode != "" && (!wasRunning || s.native != nil || s.view.ErrorCode == "capture_failed") {
+			s.view.State = "failed"
+		}
+		s.stopping = true
+		s.password = ""
+		m.forwards.ReleaseOwnedForwardSession(s.view.Forward.Forward.ForwardID)
+		_ = os.Remove(filepath.Join(m.state, "sessions", s.view.ID, "password"))
+		if s.application == nil {
+			_ = os.RemoveAll(s.socketDir)
+		}
+		m.mu.Unlock()
+		// Publish the terminal state before closing transport, but report completion
+		// only after the supervisor has reclaimed every process and connection.
+		if release != nil {
+			release()
+		}
+		if s.proxy != nil {
+			s.proxy.Close()
+		}
+		close(s.done)
+	})
 }
 
 // requestStop commits a single stop independently of the request's lifetime.
-// Cancelling an HTTP request may stop waiting, but cannot abandon process cleanup.
+// Cancelling an HTTP request may stop waiting, but cannot retain shared input.
 func (m *Manager) requestStop(s *ownedSession) {
+	if s.application != nil {
+		m.mu.Lock()
+		if s.stopping {
+			m.mu.Unlock()
+			return
+		}
+		s.stopping = true
+		s.view.EndReason = "sharing_stopped"
+		m.mu.Unlock()
+		m.finish(s, "", nil)
+		return
+	}
 	m.mu.Lock()
-	first := !s.stopping
 	s.stopping = true
-	cmd := s.cmd
 	native := s.native
 	m.mu.Unlock()
 	if native != nil {
 		native.cancel()
-	} else if first && cmd != nil {
-		go func() { _ = stopProcess(context.Background(), cmd, s.done) }()
 	}
 }
 
@@ -496,6 +325,18 @@ func (m *Manager) Stop(ctx context.Context, owner, id string) error {
 }
 
 func (m *Manager) Close() error {
+	// Admission holds appsMu until its share is registered. Shutdown must take
+	// its snapshot after that admission, including a slow native backend launch.
+	m.appsMu.Lock()
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		m.appsMu.Unlock()
+		return nil
+	}
+	m.closed = true
+	m.mu.Unlock()
+	m.appsMu.Unlock()
 	m.setupMu.Lock()
 	m.setupClosed = true
 	if m.setup != nil {
@@ -516,6 +357,14 @@ func (m *Manager) Close() error {
 		<-s.done
 	}
 	m.closeMacHost()
+	m.appsMu.Lock()
+	close(m.appsStop)
+	if m.appsLock != nil {
+		_ = m.appsLock.Close()
+		m.appsLock = nil
+	}
+	m.appsMu.Unlock()
+	m.appsDone.Wait()
 	return nil
 }
 

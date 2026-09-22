@@ -26,7 +26,9 @@ const hostApplicationAppearance = (() => {
     if (messages && root.lang !== locale) {
       locale = root.lang;
       config.copy = {...config.copy, ...messages, locale,
-        quitTitle: messages.quitTitle.replaceAll('{name}', document.title),
+        quit: messages[config.backend === 'macos' ? 'quit' : 'sessionQuit'],
+        quitTitle: messages[config.backend === 'macos' ? 'quitTitle' : 'sessionQuitTitle'].replaceAll('{name}', document.title),
+        waitingHint: messages[config.backend === 'macos' ? 'waitingHint' : 'sessionWaitingHint'],
         quitDescription: messages[config.backend === 'macos' ? 'quitDescription' : 'sessionQuitDescription'],
         pictureHint: messages[config.backend === 'macos' ? 'pictureHint' : 'sessionPictureHint']};
     }

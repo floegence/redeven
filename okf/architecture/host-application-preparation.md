@@ -18,7 +18,7 @@ closing a pending viewer prevents its automatic application opening.
 
 # Component ownership and admission
 
-Redeven consumes `github.com/floegence/floe-native-apps` v0.2.2 as a published Go
+Redeven consumes `github.com/floegence/floe-native-apps` v0.3.1 as a published Go
 module, built with the same Go 1.27.1 toolchain. Its embedded catalog pins original
 publisher URLs, archive sizes, SHA-256, licenses and source references. The Runtime accepts no client-provided URL, hash,
 catalog, executable, or install destination. The upstream acquires original Alpine
@@ -118,4 +118,4 @@ cannot silently grant them. A graphical login remains required, as defined by th
 - `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx`: pending-window continuation and cancellation races.
 - `desktop/src/main/hostApplicationPreparationWindows.test.ts`: exact document ownership and inert presentation.
 - `desktop/src/main/hostApplicationComponents.test.ts` and `cmd/redeven/host_application_package.go`: Desktop relay and released acquisition delegation.
-- [Upstream v0.2.2](https://github.com/floegence/floe-native-apps/releases/tag/v0.2.2): pinned component catalog, integrity/extraction, silent-session options, safe short-frame decoding and native reconnect qualification.
+- [Upstream v0.3.1](https://github.com/floegence/floe-native-apps/releases/tag/v0.3.1): pinned component catalog, integrity/extraction, silent-session options, safe short-frame decoding, monitored application lifetime and native reconnect qualification.

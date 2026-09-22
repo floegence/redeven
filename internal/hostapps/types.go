@@ -152,8 +152,9 @@ type Backend interface {
 	Catalog(context.Context, string, string) (Catalog, error)
 	Sessions(string) []Session
 	Launch(context.Context, string, LaunchRequest) (Session, error)
-	Running(context.Context) ([]RunningApplication, error)
+	Running(context.Context, string) ([]RunningApplication, error)
 	Quit(context.Context, string, QuitRequest) error
+	Terminate(context.Context, string, QuitRequest) error
 	Detach(context.Context, string, string) error
 	Stop(context.Context, string, string) error
 	Add(context.Context, AddRequest) error

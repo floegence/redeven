@@ -62,7 +62,7 @@ Xpra's existing quality/speed commands on the current connection. Defaults add n
 handshake or startup wait; reconnect reapplies a saved non-default preset.
 
 Closing the current application window uses its normal backend close request.
-Confirmed Linux quit asks the session's top-level windows to close normally;
+Linux labels the confirmed operation Close all windows and asks top-level windows to close normally;
 application save dialogs remain operable and cancellation keeps the viewer open.
 It never sends server shutdown or force-kills the application. macOS quit retains
 its existing application-wide confirmation. The native outer close button still

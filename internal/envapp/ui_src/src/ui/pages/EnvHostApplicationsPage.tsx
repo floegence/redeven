@@ -9,7 +9,7 @@ import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { useEnvContext } from './EnvContext';
-import { addHostApplication, cancelHostApplicationSetup, getHostApplicationSetup, hostApplicationSetupActive, observeHostApplicationSetup, startHostApplicationSetup, uploadHostApplicationSetup, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, listRunningHostApplications, quitHostApplication, detachHostApplication, type RunningHostApplication, stopHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSession, type HostApplicationSetup } from '../services/hostApplicationsApi';
+import { addHostApplication, cancelHostApplicationSetup, getHostApplicationSetup, hostApplicationSetupActive, observeHostApplicationSetup, startHostApplicationSetup, uploadHostApplicationSetup, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, listRunningHostApplications, quitHostApplication, terminateHostApplication, detachHostApplication, type RunningHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSession, type HostApplicationSetup } from '../services/hostApplicationsApi';
 import { HostApplicationSetupPanel, hostApplicationSetupHeading, hostApplicationSetupProgress } from './HostApplicationSetupPanel';
 import { hostApplicationPreparationDocument, updateHostApplicationPreparationDocument, type HostApplicationPreparationView } from '../../../../../../desktop/src/shared/hostApplicationPreparation';
 import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopShellBridge';
@@ -89,7 +89,7 @@ export function EnvHostApplicationsPage() {
   let completingSetup = false;
   const [ending, setEnding] = createSignal<HostApplicationSession | null>(null);
   const [stopBusy, setStopBusy] = createSignal(false);
-  const [quitting, setQuitting] = createSignal<{ app: HostApplication; instances: string[] } | null>(null);
+  const [quitting, setQuitting] = createSignal<{ app: HostApplication; instances: string[]; force?: boolean } | null>(null);
   const [quitBusy, setQuitBusy] = createSignal(false);
   const [quitError, setQuitError] = createSignal('');
   const [quitNotices, setQuitNotices] = createSignal<Record<string, string[]>>({});
@@ -106,7 +106,7 @@ export function EnvHostApplicationsPage() {
   const translateError = (e: unknown, fallback: EnvAppTranslationKey = 'hostApplications.errors.failed') => {
     const keys: Record<string, EnvAppTranslationKey> = {
       HOST_APP_UNAVAILABLE: 'hostApplications.errors.unavailable', HOST_APP_NOT_FOUND: 'hostApplications.errors.notFound',
-      HOST_APP_QUIT_REJECTED: 'hostApplications.macQuitRejected', HOST_APP_INVALID: 'hostApplications.errors.invalid', HOST_APP_LIMIT: 'hostApplications.errors.limit',
+      HOST_APP_QUIT_REJECTED: isMac() ? 'hostApplications.macQuitRejected' : 'hostApplications.macOperationFailed', HOST_APP_INVALID: 'hostApplications.errors.invalid', HOST_APP_LIMIT: 'hostApplications.errors.limit',
     };
     return i18n.t(e instanceof LocalApiError && keys[e.code] ? keys[e.code] : fallback);
   };
@@ -131,7 +131,7 @@ export function EnvHostApplicationsPage() {
           if (quiet && current && !stale) {
             const [sessions, running] = await Promise.all([
               listHostApplicationSessions(signal),
-              current.availability.backend === 'macos' ? listRunningHostApplications(signal) : Promise.resolve(undefined),
+              listRunningHostApplications(signal),
             ]);
             value = { ...current, sessions, running };
           } else value = await listHostApplications(locale, signal);
@@ -408,13 +408,13 @@ export function EnvHostApplicationsPage() {
   const runningByApp = createMemo(() => new Map(running().map(s => [s.application.id, s])));
   // Preserve focused controls across OS snapshots; process generations, rather
   // than newly decoded JSON object identities, determine whether a row changed.
-  const macRunning = createMemo<(RunningHostApplication & { app: HostApplication })[]>(previous => (catalog()?.running ?? []).flatMap(instance => {
+  const runningApplications = createMemo<(RunningHostApplication & { app: HostApplication })[]>(previous => (catalog()?.running ?? []).flatMap(instance => {
     const app = catalog()?.applications.find(candidate => candidate.id === instance.application_id);
     if (!app) return [];
     const retained = previous?.find(item => item.app === app && item.instances.join(',') === instance.instances.join(','));
     return [retained ?? { ...instance, app }];
   }).sort((a, b) => a.app.name.localeCompare(b.app.name, i18n.locale()) || a.application_id.localeCompare(b.application_id)));
-  const macRunningIDs = createMemo(() => new Set(macRunning().map(item => item.application_id)));
+  const runningApplicationIDs = createMemo(() => new Set(runningApplications().map(item => item.application_id)));
   const quitNotice = (item: RunningHostApplication) => quitNotices()[item.application_id]?.some(id => item.instances.includes(id));
   const requestQuit = async () => {
     const target = quitting();
@@ -427,17 +427,17 @@ export function EnvHostApplicationsPage() {
       const instances = runningNow.find(item => item.application_id === target.app.id)?.instances ?? [];
       if (instances.length === 0) { setQuitting(null); invalidateCatalog(); await refresh(true); return; }
       if ([...instances].sort().join(',') !== [...target.instances].sort().join(',')) {
-        setQuitting({ app: target.app, instances });
-        setQuitError(i18n.t('hostApplications.macQuitChanged'));
+        setQuitting({ ...target, instances });
+        setQuitError(i18n.t('hostApplications.applicationChanged'));
         return;
       }
-      await quitHostApplication(target.app.id, instances);
+      await (target.force ? terminateHostApplication : quitHostApplication)(target.app.id, instances);
       invalidateCatalog(operationResource);
       if (disposed) return;
-      setQuitNotices(previous => ({ ...previous, [target.app.id]: target.instances }));
+      if (!target.force) setQuitNotices(previous => ({ ...previous, [target.app.id]: target.instances }));
       setQuitting(null);
       await refresh(true);
-    } catch (e) { if (!disposed) setQuitError(translateError(e, 'hostApplications.macQuitFailed')); }
+    } catch (e) { if (!disposed) setQuitError(translateError(e, isMac() ? 'hostApplications.macQuitFailed' : 'hostApplications.macOperationFailed')); }
     finally { if (!disposed) setQuitBusy(false); }
   };
   const starting = (appID: string) => Boolean(busy()[appID] || runningByApp().get(appID)?.state === 'starting');
@@ -451,8 +451,7 @@ export function EnvHostApplicationsPage() {
   });
 
   const applicationsByID = createMemo(() => new Map((catalog()?.applications ?? []).map(app => [app.id, app])));
-  const sessionsByID = createMemo(() => new Map(running().map(session => [session.id, session])));
-  const processesByID = createMemo(() => new Map(macRunning().map(item => [item.app.id, item])));
+  const processesByID = createMemo(() => new Map(runningApplications().map(item => [item.app.id, item])));
 
   const open = async (app: HostApplication, prepared?: PendingApplication) => {
     if (!canLaunch() || busy()[app.id]) return;
@@ -533,7 +532,7 @@ export function EnvHostApplicationsPage() {
         if (disposed || operationResource !== applicationResource.identity() || applicationResource.snapshot().stale) return;
         if (!catalog()?.sessions.some(session => session.id === target.id && ['starting', 'running'].includes(session.state))) { setEnding(null); return; }
       }
-      await (isMac() ? detachHostApplication(target.id) : stopHostApplication(target.id));
+      await detachHostApplication(target.id);
       invalidateCatalog(operationResource); setEnding(null); await refresh(true);
     }
     catch (e) { setError(translateError(e)); }
@@ -573,33 +572,20 @@ export function EnvHostApplicationsPage() {
             </div></div>
           </Show>
           <Show when={canRead() && !canLaunch()}><div class="host-apps-notice">{i18n.t('hostApplications.launchPermission')}</div></Show>
-          <Show when={isMac() && macRunning().length}>
-            <section class="host-apps-running" aria-label={i18n.t('hostApplications.macRunning')}>
-              <div class="host-apps-section-title"><h2>{i18n.t('hostApplications.macRunning')}</h2><span>{macRunning().length}</span></div>
-              <p class="host-apps-hint">{i18n.t('hostApplications.macRunningHint')}</p>
-              <div class="host-apps-session-grid host-apps-process-grid"><For each={macRunning().map(item => item.app.id)}>{appID => { const item = () => processesByID().get(appID)!; return  <div class={`host-app-session host-app-process ${redevenSurfaceRoleClass('panelInteractive')}`}>
+          <Show when={runningApplications().length}>
+            <section class="host-apps-running" aria-label={i18n.t('hostApplications.running')}>
+              <div class="host-apps-section-title"><h2>{i18n.t('hostApplications.running')}</h2><span>{runningApplications().length}</span></div>
+              <p class="host-apps-hint">{i18n.t(isMac() ? 'hostApplications.macRunningHint' : 'hostApplications.linuxRunningHint')}</p>
+              <div class="host-apps-session-grid host-apps-process-grid"><For each={runningApplications().map(item => item.app.id)}>{appID => { const item = () => processesByID().get(appID)!; return  <div class={`host-app-session host-app-process ${redevenSurfaceRoleClass('panelInteractive')}`}>
                 <div class="host-app-process-row">
                   <button class="host-app-session-open" aria-label={`${i18n.t('hostApplications.resume')} · ${item().app.name}`} onClick={() => void open(item().app)} disabled={!canLaunch() || busy()[item().app.id]}>
                     <ApplicationIcon app={item().app} /><span class="min-w-0"><strong class="block truncate">{item().app.name}</strong><span class="host-app-status"><span class="host-app-status-dot" />{i18n.t(runningByApp().has(item().app.id) ? 'hostApplications.macSharing' : 'hostApplications.macAppRunning')}</span></span>
                   </button>
-                  <Show when={runningByApp().get(item().app.id)}>{session => <button class="host-app-stop" onClick={() => setEnding(session())} disabled={!canLaunch()} title={i18n.t('hostApplications.macStopSharing')} aria-label={`${i18n.t('hostApplications.macStopSharing')} · ${item().app.name}`}><Stop class="w-3.5 h-3.5" /></button>}</Show>
-                  <button class="host-app-quit" aria-label={`${i18n.t('hostApplications.macQuit')} · ${item().app.name}`} disabled={!canLaunch() || !catalog()?.availability.native_ready} onClick={() => { setQuitError(''); setQuitting({ app: item().app, instances: [...item().instances] }); }}>{i18n.t('hostApplications.macQuit')}</button>
+                  <Show when={runningByApp().get(item().app.id)}>{session => <button class="host-app-stop" onClick={() => setEnding(session())} disabled={!canLaunch()} title={i18n.t('hostApplications.stopSharing')} aria-label={`${i18n.t('hostApplications.stopSharing')} · ${item().app.name}`}><Stop class="w-3.5 h-3.5" /></button>}</Show>
+                  <button class="host-app-quit" aria-label={`${i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows')} · ${item().app.name}`} disabled={!canLaunch() || !(isMac() ? catalog()?.availability.native_ready : ready())} onClick={() => { setQuitError(''); setQuitting({ app: item().app, instances: [...item().instances] }); }}>{i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows')}</button>
                 </div>
-                <Show when={quitNotice(item())}><p class="host-app-quit-notice" role="status">{i18n.t('hostApplications.macQuitPending')}</p></Show>
+                <Show when={quitNotice(item())}><p class="host-app-quit-notice" role="status">{i18n.t(isMac() ? 'hostApplications.macQuitPending' : 'hostApplications.closeWindowsPending')}</p></Show>
               </div>; }}</For></div>
-            </section>
-          </Show>
-          <Show when={!isMac() && running().length}>
-            <section class="host-apps-running" aria-label={i18n.t('hostApplications.running')}>
-              <div class="host-apps-section-title"><h2>{i18n.t('hostApplications.running')}</h2><span>{running().length}</span></div>
-              <p class="host-apps-hint">{i18n.t('hostApplications.retained')}</p>
-              <div class="host-apps-session-grid"><For each={running().map(session => session.id)}>{sessionID => { const session = () => sessionsByID().get(sessionID)!; return <div class={`host-app-session ${redevenSurfaceRoleClass('panelInteractive')}`}>
-                  <button class="host-app-session-open" onClick={() => void open(session().application)} disabled={!canLaunch() || busy()[session().application.id]}>
-                    <ApplicationIcon app={session().application} /><span class="min-w-0"><strong class="block truncate">{session().application.name}</strong><span class="host-app-status"><span class="host-app-status-dot" />{i18n.t(session().state === 'starting' ? 'hostApplications.starting' : 'hostApplications.resume')}</span></span><ExternalLink class="w-3.5 h-3.5 ml-auto shrink-0 opacity-50" />
-                  </button>
-                  <button class="host-app-stop" onClick={() => setEnding(session())} disabled={!canLaunch()} title={i18n.t('hostApplications.stop')} aria-label={`${i18n.t('hostApplications.stop')} · ${session().application.name}`}><Stop class="w-3.5 h-3.5" /></button>
-                </div>
-              ; }}</For></div>
             </section>
           </Show>
           <Show when={catalog()!.availability.supported && (ready() || catalog()!.applications.length > 0)}><section class="host-apps-library" aria-label={i18n.t('hostApplications.library')}>
@@ -617,7 +603,7 @@ export function EnvHostApplicationsPage() {
             </div>
             <Show when={apps().length} fallback={<Show when={ready()}><div class="host-apps-empty"><Search class="w-8 h-8" /><h2>{i18n.t(query() ? 'hostApplications.noResults' : 'hostApplications.emptyTitle')}</h2><p>{i18n.t(query() ? 'hostApplications.noResultsDescription' : 'hostApplications.emptyDescription')}</p></div></Show>}>
               <div class="host-apps-grid"><For each={apps().map(app => app.id)}>{appID => { const app = () => applicationsByID().get(appID)!; return  <div class="host-app-tile-wrap">
-                <button class={`host-app-tile ${redevenSurfaceRoleClass('panelInteractive')}`} aria-busy={starting(app().id)} disabled={!canLaunch() || busy()[app().id]} onClick={() => void open(app())} aria-label={`${i18n.t((runningByApp().has(app().id) || macRunningIDs().has(app().id)) ? 'hostApplications.resume' : 'hostApplications.open')} · ${app().name}`}>
+                <button class={`host-app-tile ${redevenSurfaceRoleClass('panelInteractive')}`} aria-busy={starting(app().id)} disabled={!canLaunch() || busy()[app().id]} onClick={() => void open(app())} aria-label={`${i18n.t((runningByApp().has(app().id) || runningApplicationIDs().has(app().id)) ? 'hostApplications.resume' : 'hostApplications.open')} · ${app().name}`}>
                   <ApplicationIcon app={app()} />
                   <div class="host-app-tile-copy">
                     <strong title={app().name}>{app().name}</strong>
@@ -625,7 +611,7 @@ export function EnvHostApplicationsPage() {
                   </div>
                   <span class="host-app-tile-affordance" aria-hidden="true">
                     <Show when={starting(app().id)} fallback={<>
-                      <Show when={runningByApp().get(app().id)?.state === 'running' || macRunningIDs().has(app().id)}><span class="host-app-status-dot" /></Show>
+                      <Show when={runningByApp().get(app().id)?.state === 'running' || runningApplicationIDs().has(app().id)}><span class="host-app-status-dot" /></Show>
                       <ExternalLink class="host-app-open-icon w-3.5 h-3.5" />
                     </>}><span class="host-app-launch-indicator" /></Show>
                   </span>
@@ -647,12 +633,12 @@ export function EnvHostApplicationsPage() {
       </div>}>{preparationPanel(true)}</Show>
     </Dialog>
     <Dialog open={Boolean(quitting())} onOpenChange={value => { if (!value && !quitBusy()) setQuitting(null); }} class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')}
-      title={i18n.t('hostApplications.macQuitTitle', { name: quitting()?.app.name ?? '' })}
-      footer={<><Button variant="ghost" disabled={quitBusy()} onClick={() => setQuitting(null)}>{i18n.t('hostApplications.cancel')}</Button><Button variant="destructive" loading={quitBusy()} disabled={quitBusy()} onClick={() => void requestQuit()}>{i18n.t('hostApplications.macQuit')}</Button></>}>
-      <p class="host-app-quit-description">{i18n.t('hostApplications.macQuitDescription')}</p>
+      title={i18n.t(quitting()?.force ? 'hostApplications.forceQuitTitle' : isMac() ? 'hostApplications.macQuitTitle' : 'hostApplications.closeAllWindowsTitle', { name: quitting()?.app.name ?? '' })}
+      footer={<><Show when={!quitting()?.force}><Button variant="ghost" disabled={quitBusy()} onClick={() => { setQuitError(''); setQuitting(value => value ? { ...value, force: true } : null); }}>{i18n.t('hostApplications.forceQuit')}</Button></Show><Button variant="ghost" disabled={quitBusy()} onClick={() => setQuitting(null)}>{i18n.t('hostApplications.cancel')}</Button><Button variant="destructive" loading={quitBusy()} disabled={quitBusy()} onClick={() => void requestQuit()}>{i18n.t(quitting()?.force ? 'hostApplications.forceQuit' : isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows')}</Button></>}>
+      <p class="host-app-quit-description">{i18n.t(quitting()?.force ? 'hostApplications.forceQuitDescription' : isMac() ? 'hostApplications.macQuitDescription' : 'hostApplications.sessionQuitDescription')}</p>
       <Show when={quitError()}><p role="alert" class="host-app-error">{quitError()}</p></Show>
     </Dialog>
-    <ConfirmDialog open={Boolean(ending())} onOpenChange={value => { if (!value && !stopBusy()) setEnding(null); }} title={i18n.t(isMac() ? 'hostApplications.macStopSharing' : 'hostApplications.stopTitle')} bodyDescription={i18n.t(isMac() ? 'hostApplications.macStopSharingDescription' : 'hostApplications.stopDescription')} confirmText={i18n.t(isMac() ? 'hostApplications.macStopSharing' : 'hostApplications.stop')} cancelText={i18n.t('hostApplications.cancel')} variant={isMac() ? 'default' : 'destructive'} loading={stopBusy()} onConfirm={() => void stop()} />
+    <ConfirmDialog open={Boolean(ending())} onOpenChange={value => { if (!value && !stopBusy()) setEnding(null); }} title={i18n.t('hostApplications.stopSharing')} bodyDescription={i18n.t('hostApplications.stopSharingDescription')} confirmText={i18n.t('hostApplications.stopSharing')} cancelText={i18n.t('hostApplications.cancel')} variant="default" loading={stopBusy()} onConfirm={() => void stop()} />
     <Dialog class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')} open={addOpen()} onOpenChange={value => { if (!addBusy()) setAddOpen(value); }} title={i18n.t('hostApplications.addTitle')} footer={<><Button variant="ghost" onClick={() => setAddOpen(false)} disabled={addBusy()}>{i18n.t('hostApplications.cancel')}</Button><Button onClick={() => void add()} disabled={addBusy() || (!isMac() && !name().trim()) || !executable().trim()}>{i18n.t('hostApplications.add')}</Button></>}>
       <div class="space-y-4"><p class="text-sm text-muted-foreground">{i18n.t(isMac() ? 'hostApplications.macAddDescription' : 'hostApplications.addDescription')}</p>
         <Show when={!isMac()}><label class="block space-y-1.5"><span class="text-xs font-medium">{i18n.t('hostApplications.name')}</span><Input value={name()} onInput={e => setName(e.currentTarget.value)} maxLength={120} /></label></Show>

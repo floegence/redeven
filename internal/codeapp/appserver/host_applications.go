@@ -43,25 +43,32 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 	}
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == hostApplicationsAPI+"/running":
-		running, err := g.hostApps.Running(r.Context())
+		running, err := g.hostApps.Running(r.Context(), meta.UserPublicID)
 		if err != nil {
 			writeHostAppError(w, err)
 		} else {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: running})
 		}
-	case r.Method == http.MethodPost && r.URL.Path == hostApplicationsAPI+"/quit":
+	case r.Method == http.MethodPost && (r.URL.Path == hostApplicationsAPI+"/quit" || r.URL.Path == hostApplicationsAPI+"/terminate"):
 		var req hostapps.QuitRequest
 		if decodeManagedJSON(r, &req) != nil {
 			writeHostAppError(w, hostapps.ErrInvalid)
 			return true
 		}
-		err := g.hostApps.Quit(r.Context(), meta.UserPublicID, req)
+		action := "host_application_quit"
+		var err error
+		if r.URL.Path == hostApplicationsAPI+"/terminate" {
+			action = "host_application_force_quit"
+			err = g.hostApps.Terminate(r.Context(), meta.UserPublicID, req)
+		} else {
+			err = g.hostApps.Quit(r.Context(), meta.UserPublicID, req)
+		}
 		if err != nil {
-			g.appendAudit(meta, "host_application_quit", "failure", map[string]any{"application_id": truncateString(req.ApplicationID, 160)}, err)
+			g.appendAudit(meta, action, "failure", map[string]any{"application_id": truncateString(req.ApplicationID, 160)}, err)
 			writeHostAppError(w, err)
 			return true
 		}
-		g.appendAudit(meta, "host_application_quit", "requested", map[string]any{"application_id": req.ApplicationID}, nil)
+		g.appendAudit(meta, action, "requested", map[string]any{"application_id": req.ApplicationID}, nil)
 		writeJSON(w, http.StatusAccepted, apiResp{OK: true})
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, hostApplicationsAPI+"/sessions/") && strings.HasSuffix(r.URL.Path, "/detach"):
 		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, hostApplicationsAPI+"/sessions/"), "/detach")
