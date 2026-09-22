@@ -424,6 +424,7 @@ describe('EnvCodespacesPage', () => {
     });
     localApiMocks.fetchLocalApiJSON.mockReset();
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/access/delegate') return { delegation: 'scoped-authorization' };
       if (url === '/_redeven_proxy/api/code-runtime/status') {
         return runtimeStatusResponse;
       }
@@ -1288,28 +1289,17 @@ describe('EnvCodespacesPage', () => {
     windowOpenSpy.mockRestore();
   });
 
-  it.each(['open', 'browser'])('requests a Code App password for %s in the trusted page and clears rejected input before retrying', async (mode) => {
-    const bridge = vi.fn().mockImplementation(async (request) => request.mode === 'loading' || request.password === 'correct-password' ? { ok: true } : { ok: false, message: 'codespace_password_required' });
+  it.each(['open', 'browser'])('delegates only this CodeSpace for %s without another password prompt', async (mode) => {
+    controlplaneMocks.getLocalRuntime.mockResolvedValue(null);
+    const bridge = vi.fn().mockResolvedValue({ ok: true });
     window.redevenDesktopShell = { openCodespaceWindow: bridge };
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === (mode === 'browser' ? 'Open in Browser' : 'Open in Desktop'))?.click();
     await flushPage();
-    const submit = async (password: string) => {
-      const input = host.querySelector<HTMLInputElement>('input[type="password"]');
-      expect(input).toBeTruthy();
-      input!.value = password;
-      input!.dispatchEvent(new InputEvent('input', { bubbles: true }));
-      input!.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-      await flushPage();
-    };
-    expect(host.querySelector('[role="alert"]')).toBeNull();
-    await submit('incorrect-password');
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain('The access password is incorrect.');
-    expect(host.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe('');
-    await submit('correct-password');
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/access/delegate', { method: 'POST', body: JSON.stringify({ code_space_id: 'space-1' }) });
     expect(host.querySelector('input[type="password"]')).toBeNull();
-    expect(bridge).toHaveBeenLastCalledWith({ mode, code_space_id: 'space-1', password: 'correct-password' });
+    expect(bridge).toHaveBeenLastCalledWith({ mode, code_space_id: 'space-1', authorization: 'scoped-authorization' });
     expect(controlplaneMocks.mintEnvEntryTicketForApp).not.toHaveBeenCalled();
   });
 

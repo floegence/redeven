@@ -48,7 +48,7 @@ native file/media requests stay independent of session acquisition.
 
 # Boundaries
 
-Public Env App shell GET/HEAD requests may pass before unlock so the login page can load. Local APIs, direct sessions, codespaces, and port-forward routes remain access-gated in password mode. Each browser or Desktop client has its own access-session authority; logout revokes that owner without disrupting peers. Public access conveys no Runtime lifecycle permission.
+Public Env App shell GET/HEAD requests may pass before unlock so the login page can load. Local APIs, direct sessions, codespaces, and port-forward routes remain protected by the [Runtime environment authentication authority](../security/runtime-two-factor-authentication.md). Ordinary browser sessions have independent access lineages; logout revokes that owner without disrupting peers. Authenticated private Desktop management keeps its separate host authority. Public access conveys no Runtime lifecycle permission.
 
 The private listener accepts only its canonical numeric-loopback Host or a validated per-forward `.localhost` virtual Host. The canonical bridge, mint operation, embedded content, and any Desktop compatibility gateway require separate unforgeable authorities with exact scope; none can authorize another Host, port, forward, partition, or Runtime instance. Browser entries and sessions are bounded, expire in memory, and are never persisted. Runtime-control, Desktop model-source, and management sockets remain loopback or local-socket protected regardless of public exposure. The authority keyring is permission-restricted and separate from SQLite; missing keys, schema drift, future schema versions, and database errors fail closed without state reset.
 

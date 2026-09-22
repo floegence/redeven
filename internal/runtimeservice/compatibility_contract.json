@@ -4,9 +4,10 @@
     "release_version": "v0.13.0",
     "previous_release": "v0.11.0",
     "reviewed_at": "2026-09-22",
-    "review_id": "provider-credential-recovery-v1",
-    "summary": "Epoch 31 adds explicit Runtime provider connection state and generation-fenced renewal for expired control credentials. Older peers remain upgrade-only; Desktop and Runtime must agree before automatic recovery can issue a new credential generation.",
+    "review_id": "runtime-access-totp-v1",
+    "summary": "Epoch 32 adds persistent Runtime environment authentication, password plus TOTP challenges, owner-only security management and exact-editor delegation. Older Desktop and Runtime peers remain upgrade-only so password-only native editor authorization cannot silently substitute for the current access contract.",
     "checked_surfaces": [
+      "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 32; epoch 31 is upgrade-only. Runtime owns encrypted authentication state, one-shot factors, recovery, absolute session expiry and revocation. Native CodeSpace receives a one-shot exact-resource delegation from its authenticated parent and resumes within that parent lifetime. Public URL query credentials are rejected. Private authenticated host management retains its independent authority and never claims TOTP verification.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 31; epoch 30 is upgrade-only. Runtime provider_link.connection_state reports connected only after control registration, separates retrying, authorization_required, disabled, error and unknown, and preserves local availability when Cloud credentials expire. Desktop renews only expired or exhausted credential pools for an already attached target, fences account and binding generations, stops after bounded transient retries, and exposes restore plus explicit disconnect when recovery needs review. Portal renewals atomically advance the matching binding generation and reject stale or replayed requests; permission revocation is distinct from sign-in expiry. Flowersec remains the sole transport reconnect owner.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 30; epoch 29 is upgrade-only. Chrome status reports host, platform, Linux Chrome detection and one prerequisite or launch diagnostic. Action failures preserve stage, reason and diagnostic ID in the existing error_code/data envelope. Linux launch checks the current graphical session and observes process exits without claiming handshake readiness. Source package generation and cache validation require computer.zip; historical published packages remain installable and report missing capability explicitly.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 29; epoch 28 is upgrade-only. Authenticated computer/managed/browser GET/PUT/POST manages installation and preference. Source selection and enabling never download. Installed binaries and website data survive disable/restart. Runtime release archives and SSH installation retain computer.zip; native Desktop stages thin helpers, while managed WSL retains the matching Linux archive. Browser ZIPs are optional pinned official distributions.",
@@ -65,7 +66,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 31,
+  "compatibility_epoch": 32,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -88,7 +89,8 @@
     27,
     28,
     29,
-    30
+    30,
+    31
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

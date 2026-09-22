@@ -1,3 +1,4 @@
+import type { AccessAuthenticationRequest } from "./localApi";
 import type { ArtifactSource, JsonValue } from '@floegence/flowersec-core';
 import type { HTTPDirectArtifactSourceV1, PrivateLoopbackArtifactSourceV1 } from '@floegence/flowersec-core/browser';
 import type {
@@ -80,6 +81,8 @@ export type LocalAccessStatus = {
 };
 
 export type LocalAccessUnlockResult = {
+ second_factor_required?: boolean;
+ challenge_id?: string;
   unlocked: boolean;
   session_expires_at_unix_ms?: number;
   resume_token?: string;
@@ -429,14 +432,14 @@ export async function getLocalAccessStatus(): Promise<LocalAccessStatus | null> 
   return null;
 }
 
-export async function unlockLocalAccess(password: string): Promise<LocalAccessUnlockResult> {
+export async function unlockLocalAccess(password: string | AccessAuthenticationRequest): Promise<LocalAccessUnlockResult> {
   const out = await fetchLocalJSON<LocalAccessUnlockResult>('/api/local/access/unlock', {
     method: 'POST',
-    body: JSON.stringify({ password: String(password ?? '') }),
+    body: JSON.stringify(typeof password === 'string' ? { password } : password),
   });
   const unlocked = Boolean(out?.unlocked) || Boolean(String(out?.resume_token ?? '').trim());
-  if (!unlocked) throw new Error('Unlock failed');
-  return { ...out, unlocked: true };
+  if (!unlocked && !out?.second_factor_required) throw new Error('Unlock failed');
+  return { ...out, unlocked };
 }
 
 export async function getLocalRuntime(): Promise<LocalRuntimeInfo | null> {

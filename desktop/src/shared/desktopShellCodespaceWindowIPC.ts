@@ -12,7 +12,7 @@ export type DesktopShellOpenCodespaceWindowLoadingRequest = Readonly<{
 export type DesktopShellOpenCodespaceWindowOpenRequest = Readonly<{
   mode: 'open' | 'browser';
   code_space_id: string;
-  password?: string;
+  authorization?: string;
 }>;
 
 export type DesktopShellOpenCodespaceWindowRequest =
@@ -43,7 +43,7 @@ export function normalizeDesktopShellOpenCodespaceWindowRequest(
     'url' in candidate ||
     'host' in candidate ||
     'port' in candidate ||
-    'route' in candidate
+    'route' in candidate || 'password' in candidate
   ) {
     return null;
   }
@@ -63,16 +63,16 @@ export function normalizeDesktopShellOpenCodespaceWindowRequest(
 
   if (mode === 'open' || mode === 'browser') {
     if (
-      candidate.password !== undefined &&
-      (typeof candidate.password !== 'string' ||
-        candidate.password.length > 1024)
+      candidate.authorization !== undefined &&
+      (typeof candidate.authorization !== 'string' ||
+        candidate.authorization.length > 1024)
     )
       return null;
     return {
       mode,
       code_space_id: codeSpaceID,
-      ...(typeof candidate.password === 'string'
-        ? { password: candidate.password }
+      ...(typeof candidate.authorization === 'string'
+        ? { authorization: candidate.authorization }
         : {}),
     };
   }

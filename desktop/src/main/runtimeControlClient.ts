@@ -1,3 +1,4 @@
+import { parseSecurityResult, type SecurityRequest, type SecurityResult } from '../shared/runtimeSecurity';
 import http from 'node:http';
 import https from 'node:https';
 
@@ -34,7 +35,8 @@ type RuntimeControlServiceRoute =
 	| 'v2/provider-link/connect'
 	| 'v2/provider-link/disconnect'
 	| 'v2/code-workspace-engine/status'
-  | 'v2/runtime/access';
+  | 'v2/runtime/access'
+  | 'v2/runtime/security';
 
 export type RuntimeAccessSettings = Readonly<{
   local_ui_bind: string;
@@ -288,4 +290,8 @@ export async function getCodeWorkspaceEngineStatus(
 ): Promise<unknown> {
 	const envelope = await requestRuntimeControl(endpoint, 'v2/code-workspace-engine/status', { method: 'GET', signal });
   return envelope.data;
+}
+
+export async function manageRuntimeSecurity(endpoint: DesktopRuntimeControlEndpoint, request: SecurityRequest): Promise<SecurityResult> {
+ return parseSecurityResult((await requestRuntimeControl(endpoint, 'v2/runtime/security', { method: 'POST', body: request })).data);
 }

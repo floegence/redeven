@@ -34,6 +34,7 @@ func sanitizeAuditError(err error) string {
 // The session metadata MUST be treated as authoritative and is used to enforce permission caps.
 type LocalDirectSessionOptions struct {
 	AccessUnlocked            bool
+	TrustedManagement         bool
 	TraceID                   string
 	ConnectArtifactIssuedAtMs int64
 	PluginCredentialHash      [sha256.Size]byte
@@ -43,7 +44,7 @@ type LocalDirectSessionOptions struct {
 }
 
 func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSessionOptions) func() {
-	if a == nil || a.accessGate == nil || !a.accessGate.Enabled() {
+	if a == nil || a.accessGate == nil {
 		return func() {}
 	}
 	channelID := strings.TrimSpace(meta.ChannelID)
@@ -52,7 +53,9 @@ func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSe
 	}
 
 	a.accessGate.RegisterChannelWithOptions(meta, accessgate.RegisterChannelOptions{
-		Unlocked: opts.AccessUnlocked,
+		Unlocked:        opts.AccessUnlocked,
+		Trusted:         opts.TrustedManagement,
+		AccessSessionID: opts.AccessSessionID,
 	})
 	return func() {
 		a.accessGate.UnregisterChannel(channelID)
@@ -114,6 +117,16 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 	a.mu.Unlock()
 	defer a.sessionWG.Done()
 
+	cleanupAccessGate := a.registerLocalDirectChannel(metaCopy, opts)
+	if a.accessGate != nil {
+		a.accessGate.BindChannelLifetime(channelID, cancel)
+	}
+
+	defer cleanupAccessGate()
+	if opts.AccessUnlocked && a.accessGate != nil && a.accessGate.Enabled() && !a.accessGate.IsChannelUnlocked(channelID) {
+		a.removeActiveSession(channelID)
+		return errors.New("access session expired before channel activation")
+	}
 	generation, err := a.activatePluginSession(metaCopy, opts.PluginCredentialHash, opts.HasPluginCredential, opts.AccessSessionID)
 	if err != nil {
 		a.removeActiveSession(channelID)
@@ -128,10 +141,7 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 		opts.OnPluginSessionReady()
 	}
 
-	cleanupAccessGate := a.registerLocalDirectChannel(metaCopy, opts)
-
 	defer func() {
-		cleanupAccessGate()
 		closedGeneration := a.removeActiveSession(channelID)
 		a.startPluginSessionClose(channelID, closedGeneration)
 

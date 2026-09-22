@@ -46,10 +46,14 @@ func TestNativeCodeSpaceAuthorizationAndRequestBoundary(t *testing.T) {
 	if got := request("127.0.0.1:45678", "/terminal"); got != 423 {
 		t.Fatalf("Env App unlock promoted into Code App: %d", got)
 	}
-	for _, values := range []map[string]any{{"password": true}, {"password": strings.Repeat("x", 1025)}, {"resume_token": "env-token"}, {"password": "native-secret", "code_space_id": "other"}} {
+	for _, values := range []map[string]any{{"password": true}, {"password": strings.Repeat("x", 1025)}, {"password": "native-secret", "code_space_id": "other"}} {
 		if _, err := nativeCodeSpaceAuthorization(gate, meta, values); err == nil {
 			t.Fatal("invalid native authorization metadata accepted")
 		}
+	}
+	body, err := nativeCodeSpaceAuthorization(gate, meta, map[string]any{"resume_token": "env-token"})
+	if err != nil || strings.Contains(string(body), `"unlocked":true`) {
+		t.Fatal("unbound environment resume admitted into native editor")
 	}
 	for _, password := range []string{"", "wrong", "native-secret"} {
 		body, err := nativeCodeSpaceAuthorization(gate, meta, map[string]any{"password": password})

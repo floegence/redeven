@@ -675,6 +675,18 @@
     }
   },
   "accessGate": {
+    "invalidFactorError": "유효하지 않거나 이미 사용한 코드입니다. 새 코드를 입력하세요.",
+    "challengeExpiredError": "인증이 만료되었습니다. 비밀번호를 다시 입력하세요.",
+    "recoveryPendingError": "연결하기 전에 호스트에서 보안 복구를 완료하세요.",
+    "unavailableError": "인증을 사용할 수 없습니다. 다시 시도하세요.",
+    "twoFactorTitle": "2단계 인증",
+    "authenticatorHelp": "인증 앱의 6자리 코드를 입력하세요.",
+    "recoveryHelp": "저장한 복구 코드 중 하나를 입력하세요.",
+    "authenticatorLabel": "인증 코드",
+    "recoveryLabel": "복구 코드",
+    "useRecovery": "복구 코드 사용",
+    "useAuthenticator": "인증 코드 사용",
+    "backToPassword": "비밀번호 입력으로 돌아가기",
     "checkingTitle": "보안 액세스 준비 중",
     "resumingTitle": "보안 세션 준비 중",
     "resumeBlockedTitle": "보안 세션에 확인이 필요합니다",

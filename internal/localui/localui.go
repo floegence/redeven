@@ -32,6 +32,7 @@ import (
 	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
+	envui "github.com/floegence/redeven/internal/envapp/ui"
 	"github.com/floegence/redeven/internal/portforward"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
@@ -44,7 +45,6 @@ const (
 	LocalEnvPublicID = "env_local"
 
 	localAccessResumeHeader       = "X-Redeven-Access-Resume"
-	localAccessResumeQuery        = "redeven_access_resume"
 	localDesktopBridgeTokenHeader = "X-Redeven-Desktop-Bridge-Token"
 
 	localNamespacePublicID = "ns_local"
@@ -418,6 +418,9 @@ func New(opts Options) (*Server, error) {
 	if err := config.ValidateLocalUIProtocol(opts.Protocol); err != nil {
 		return nil, err
 	}
+	if opts.AccessGate != nil && opts.AccessGate.TwoFactorEnabled() && opts.Protocol != config.LocalUIProtocolHTTPS {
+		return nil, errors.New("two-factor authentication requires an HTTPS public listener")
+	}
 	exposure := runtimemanagement.NewLocalUIExposure(opts.Protocol, bind.IsNetworkExposure(), opts.AccessGate != nil && opts.AccessGate.Enabled())
 	if err := exposure.Validate(); err != nil {
 		return nil, err
@@ -565,12 +568,13 @@ func (s *Server) configureAcceptor() error {
 			}
 			metaCopy := pending.meta
 			err := s.a.ServeLocalDirectSession(ctx, current, &metaCopy, agent.LocalDirectSessionOptions{
-				AccessUnlocked:            s.accessEnabled(),
+				AccessUnlocked:            s.accessEnabled() || pending.accessSessionID == "trusted-desktop",
 				TraceID:                   pending.traceID,
 				ConnectArtifactIssuedAtMs: pending.connectArtifactIssuedAtMs,
 				PluginCredentialHash:      pending.pluginCredentialHash,
 				HasPluginCredential:       true,
 				AccessSessionID:           pending.accessSessionID,
+				TrustedManagement:         pending.accessSessionID == "trusted-desktop",
 				OnPluginSessionReady: func() {
 					s.markAcceptedPluginSessionReady(channelID, pending.accessSessionID, pending.pluginCredentialHash)
 				},
@@ -703,6 +707,24 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		return err
 	}
 	runtimeControl.accessLayout = &accessLayout
+	runtimeControl.accessGate = s.accessGate
+	runtimeControl.afterSecurityChange = func() {
+		s.directMu.Lock()
+		ids := make([]string, 0, len(s.pluginAccess))
+		for id := range s.pluginAccess {
+			if id != "trusted-desktop" {
+				ids = append(ids, id)
+			}
+		}
+		s.directMu.Unlock()
+		for _, id := range ids {
+			s.closePluginAccessSession(id)
+		}
+		for _, expired := range s.accessGate.TakeExpiredLocalSessions(time.Now()) {
+			s.closePluginAccessSession(expired.AccessSessionID)
+		}
+	}
+
 	runtimeControl.accessCertificateFingerprint = deviceIdentityServingFingerprint(s.deviceCA)
 	runtimeControl.accessCurrent = config.EnvironmentCatalogAccess{
 		LocalUIBind: s.bind.ListenLabel(), LocalUIProtocol: s.protocol, LocalUIPasswordConfigured: s.accessEnabled(),
@@ -972,9 +994,7 @@ type runtimeHealthResp struct {
 	RuntimeService   runtimeservice.Snapshot           `json:"runtime_service"`
 }
 
-type accessUnlockReq struct {
-	Password string `json:"password"`
-}
+type accessUnlockReq = accessgate.AuthenticationRequest
 
 func (s *Server) accessEnabled() bool {
 	return s != nil && s.accessGate != nil && s.accessGate.Enabled()
@@ -1020,7 +1040,7 @@ func (s *Server) localAccessResumeToken(r *http.Request) string {
 	if token := strings.TrimSpace(r.Header.Get(localAccessResumeHeader)); token != "" {
 		return token
 	}
-	return strings.TrimSpace(r.URL.Query().Get(localAccessResumeQuery))
+	return ""
 }
 
 func unlockAttemptSubject(r *http.Request) string {
@@ -1056,7 +1076,7 @@ func writeUnlockError(w http.ResponseWriter, err error) {
 	writeJSON(w, http.StatusUnauthorized, apiResp{
 		OK: false,
 		Error: &apiError{
-			Code:    "ACCESS_PASSWORD_INVALID",
+			Code:    accessgate.AuthenticationErrorCode(err),
 			Message: err.Error(),
 		},
 	})
@@ -1070,7 +1090,7 @@ func (s *Server) hasLocalAccess(r *http.Request) bool {
 	if token != "" && s.accessGate.IsLocalSessionValid(token) {
 		return true
 	}
-	return s.accessGate.CanResumeMeta(s.localAccessResumeToken(r), localAccessResumeMeta())
+	return s.accessGate.CanResumeMeta(s.localAccessResumeToken(r), localAccessResumeMeta()) || (token == "" && isTrustedLocalUIBridge(r))
 }
 
 func (s *Server) ensureLocalAccessHTTPResponse(w http.ResponseWriter, r *http.Request) bool {
@@ -1087,7 +1107,7 @@ func (s *Server) ensureLocalAccessHTTPResponse(w http.ResponseWriter, r *http.Re
 
 	resumeToken := s.localAccessResumeToken(r)
 	if resumeToken == "" {
-		return false
+		return s.localAccessToken(r) == "" && isTrustedLocalUIBridge(r)
 	}
 
 	result, err := s.accessGate.MintLocalSessionFromResumeToken(resumeToken, localAccessResumeMeta())
@@ -1114,6 +1134,9 @@ func (s *Server) activeLocalAccessSession(r *http.Request) (string, time.Time, b
 		return strings.TrimSpace(resumed.accessSessionID), resumed.expiresAt, true
 	}
 	token := s.localAccessToken(r)
+	if token == "" && isTrustedLocalUIBridge(r) {
+		return "trusted-desktop", time.Time{}, true
+	}
 	accessSessionID, expiresAt, ok := s.accessGate.ResolveLocalSession(token)
 	if !ok {
 		return "", time.Time{}, false
@@ -1185,6 +1208,9 @@ func (s *Server) handleEnvAppProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.accessEnabled() && !s.isPublicEnvAppRequest(r) {
 		if !s.ensureLocalAccessHTTPResponse(w, r) {
+			if envui.ServeAccessPage(w, r, true) {
+				return
+			}
 			http.Error(w, "access password required", http.StatusLocked)
 			return
 		}
@@ -1437,6 +1463,9 @@ func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.accessEnabled() {
 		if !s.ensureLocalAccessHTTPResponse(w, r) {
+			if envui.ServeAccessPage(w, r, true) {
+				return
+			}
 			http.Error(w, "access password required", http.StatusLocked)
 			return
 		}
@@ -1467,6 +1496,9 @@ func (s *Server) handlePortForward(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.accessEnabled() {
 		if !s.ensureLocalAccessHTTPResponse(w, r) {
+			if envui.ServeAccessPage(w, r, true) {
+				return
+			}
 			http.Error(w, "access password required", http.StatusLocked)
 			return
 		}
@@ -1573,7 +1605,24 @@ func (s *Server) handleAccessUnlock(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: &apiError{Message: "invalid json"}})
 		return
 	}
-	result, err := s.accessGate.MintLocalSessionWithSubject(req.Password, unlockAttemptSubject(r))
+	if s.accessGate.TwoFactorEnabled() && r.TLS == nil && !isTrustedLocalUIBridge(r) {
+		http.Error(w, "HTTPS is required for two-factor authentication", http.StatusForbidden)
+		return
+	}
+	binding := ""
+	if cookie, err := r.Cookie("redeven_auth_challenge"); err == nil {
+		binding = cookie.Value
+	}
+	if req.ChallengeID == "" && s.accessGate.TwoFactorEnabled() {
+		raw := make([]byte, 32)
+		if _, err := rand.Read(raw); err != nil {
+			http.Error(w, "authentication unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		binding = base64.RawURLEncoding.EncodeToString(raw)
+		http.SetCookie(w, &http.Cookie{Name: "redeven_auth_challenge", Value: binding, Path: "/api/local/access", Secure: r.TLS != nil, HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 300})
+	}
+	result, err := s.accessGate.AuthenticateLocal(req, unlockAttemptSubject(r), binding)
 	if err != nil {
 		writeUnlockError(w, err)
 		return
@@ -1921,6 +1970,9 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 
 	meta.ChannelID = channelID
 	accessSessionID = strings.TrimSpace(accessSessionID)
+	if accessSessionID == "" && privateLoopback {
+		accessSessionID = "trusted-desktop"
+	}
 	if accessSessionID == "" {
 		accessSessionID = "direct:" + channelID
 	}

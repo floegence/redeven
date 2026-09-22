@@ -1,14 +1,10 @@
 const LOCAL_ACCESS_RESUME_HEADER = 'X-Redeven-Access-Resume';
-const LOCAL_ACCESS_RESUME_QUERY = 'redeven_access_resume';
+
 
 let localAccessResumeToken = '';
 
 export function getLocalAccessResumeHeaderName(): string {
   return LOCAL_ACCESS_RESUME_HEADER;
-}
-
-export function getLocalAccessResumeQueryName(): string {
-  return LOCAL_ACCESS_RESUME_QUERY;
 }
 
 export function readLocalAccessResumeToken(): string {
@@ -27,17 +23,4 @@ export function applyLocalAccessResumeHeader(headers: Headers): void {
   const token = readLocalAccessResumeToken();
   if (!token) return;
   headers.set(LOCAL_ACCESS_RESUME_HEADER, token);
-}
-
-export function appendLocalAccessResumeQuery(rawURL: string): string {
-  const token = readLocalAccessResumeToken();
-  if (!token) return rawURL;
-
-  try {
-    const url = new URL(String(rawURL ?? ''), window.location.href);
-    url.searchParams.set(LOCAL_ACCESS_RESUME_QUERY, token);
-    return url.toString();
-  } catch {
-    return rawURL;
-  }
 }

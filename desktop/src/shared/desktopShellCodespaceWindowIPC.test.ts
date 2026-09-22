@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { normalizeDesktopShellOpenCodespaceWindowRequest as normalize } from './desktopShellCodespaceWindowIPC';
-it.each(['open', 'browser'])('accepts only a bounded %s resource intent and keeps passwords ephemeral', (mode) => {
+it.each(['open', 'browser'])('accepts only a bounded %s resource intent and keeps authorizations ephemeral', (mode) => {
   expect(normalize({ mode, code_space_id: 'space-one' })).toEqual({
     mode,
     code_space_id: 'space-one',
@@ -9,9 +9,9 @@ it.each(['open', 'browser'])('accepts only a bounded %s resource intent and keep
     normalize({
       mode,
       code_space_id: 'space-one',
-      password: ' secret ',
+      authorization: ' secret ',
     }),
-  ).toEqual({ mode, code_space_id: 'space-one', password: ' secret ' });
+  ).toEqual({ mode, code_space_id: 'space-one', authorization: ' secret ' });
   for (const extra of [
     { url: 'https://example.com' },
     { host: 'localhost' },

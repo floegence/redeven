@@ -1,6 +1,7 @@
 package accessgate
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -14,7 +15,7 @@ const credentialFileName = "local-ui-password.bcrypt"
 
 // ReadPasswordHash reads only a private regular file. Absence is distinct from
 // a damaged credential, which must stop startup instead of removing the gate.
-func ReadPasswordHash(stateDir string) ([]byte, error) {
+func readLegacyPasswordHash(stateDir string) ([]byte, error) {
 	path := filepath.Join(stateDir, credentialFileName)
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -49,6 +50,25 @@ func HashPassword(password string) ([]byte, error) {
 // WritePasswordHash is called by the Runtime owner under its state lock.
 // Clearing is explicit; an omitted startup secret never clears a saved hash.
 func WritePasswordHash(stateDir string, hash []byte) error {
+	if _, err := os.Lstat(filepath.Join(stateDir, authKeyName)); !errors.Is(err, os.ErrNotExist) {
+		store, state, err := openAuthStore(stateDir, nil)
+		if err != nil {
+			return err
+		}
+		defer store.db.Close()
+		if state.Secret != "" || state.RecoveryPending {
+			return errors.New("use authenticated security settings to change a protected environment password")
+		}
+		if len(hash) > 0 {
+			if _, err := bcrypt.Cost(hash); err != nil {
+				return err
+			}
+		}
+		state.PasswordHash = append([]byte(nil), hash...)
+		state.Revision++
+		return store.save(state)
+	}
+
 	path := filepath.Join(stateDir, credentialFileName)
 	if len(hash) == 0 {
 		err := os.Remove(path)
@@ -79,4 +99,30 @@ func WritePasswordHash(stateDir string, hash []byte) error {
 		return err
 	}
 	return os.Rename(f.Name(), path)
+}
+
+// ReadPasswordHash reads the single committed authority after migration.
+func ReadPasswordHash(stateDir string) ([]byte, error) {
+	if _, err := os.Lstat(filepath.Join(stateDir, authKeyName)); errors.Is(err, os.ErrNotExist) {
+		if _, dbErr := os.Lstat(filepath.Join(stateDir, authDatabaseName)); errors.Is(dbErr, os.ErrNotExist) {
+			return readLegacyPasswordHash(stateDir)
+		}
+	}
+	// Interrupted first initialization has no committed authority yet. Only the
+	// private legacy verifier may supply the initial policy; this read never writes.
+	if raw, err := os.ReadFile(filepath.Join(stateDir, authKeyName)); err == nil {
+		var key authKey
+		if json.Unmarshal(raw, &key) == nil && !key.Initialized {
+			info, statErr := os.Lstat(filepath.Join(stateDir, authDatabaseName))
+			if errors.Is(statErr, os.ErrNotExist) || (statErr == nil && info.Size() == 0) {
+				return readLegacyPasswordHash(stateDir)
+			}
+		}
+	}
+	store, state, err := openAuthStoreMode(stateDir, nil, true)
+	if err != nil {
+		return nil, err
+	}
+	defer store.db.Close()
+	return append([]byte(nil), state.PasswordHash...), nil
 }

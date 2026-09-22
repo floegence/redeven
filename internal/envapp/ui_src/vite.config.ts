@@ -60,6 +60,7 @@ export default defineConfig({
     outDir: path.resolve(__dirname, '../ui/dist/env'),
     emptyOutDir: true,
     manifest: true,
+    rolldownOptions: { input: { index: path.resolve(__dirname, 'index.html'), access: path.resolve(__dirname, 'access.html') } },
   },
   server: {
     host: true,

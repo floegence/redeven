@@ -675,6 +675,18 @@
     }
   },
   "accessGate": {
+    "invalidFactorError": "驗證碼無效或已使用，請使用新的驗證碼。",
+    "challengeExpiredError": "驗證已過期，請重新輸入密碼。",
+    "recoveryPendingError": "請先在主機上完成安全復原，再連線。",
+    "unavailableError": "身分驗證暫不可用，請重試。",
+    "twoFactorTitle": "雙重驗證",
+    "authenticatorHelp": "輸入驗證器中的六位數代碼。",
+    "recoveryHelp": "輸入您已儲存的一組復原碼。",
+    "authenticatorLabel": "驗證器代碼",
+    "recoveryLabel": "復原碼",
+    "useRecovery": "使用復原碼",
+    "useAuthenticator": "使用驗證器代碼",
+    "backToPassword": "返回密碼驗證",
     "checkingTitle": "正在準備安全存取",
     "resumingTitle": "正在準備安全工作階段",
     "resumeBlockedTitle": "安全工作階段需要處理",

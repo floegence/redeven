@@ -7,7 +7,11 @@ export type EnvAppAccessStatus = {
   unlocked: boolean;
 };
 
+export type AccessAuthenticationRequest = { password?: string; challenge_id?: string; code?: string; recovery_code?: string };
+
 export type EnvAppAccessUnlockResult = {
+ second_factor_required?: boolean;
+ challenge_id?: string;
   unlocked: boolean;
   resume_token?: string;
   resume_expires_at_unix_ms?: number;
@@ -287,13 +291,13 @@ export async function getEnvAppAccessStatus(): Promise<EnvAppAccessStatus> {
   return out;
 }
 
-export async function unlockEnvAppAccess(password: string): Promise<EnvAppAccessUnlockResult> {
+export async function unlockEnvAppAccess(password: string | AccessAuthenticationRequest): Promise<EnvAppAccessUnlockResult> {
   const out = await fetchLocalApiJSON<EnvAppAccessUnlockResult>('/_redeven_proxy/api/access/unlock', {
     method: 'POST',
     credentials: 'omit',
-    body: JSON.stringify({ password: String(password ?? '') }),
+    body: JSON.stringify(typeof password === 'string' ? { password } : password),
   });
   const unlocked = Boolean(out?.unlocked) || Boolean(String(out?.resume_token ?? '').trim());
-  if (!unlocked) throw new Error('Unlock failed');
-  return { ...out, unlocked: true };
+  if (!unlocked && !out?.second_factor_required) throw new Error('Unlock failed');
+  return { ...out, unlocked };
 }

@@ -354,7 +354,11 @@ func TestGate_RegisterChannelWithOptionsStartsUnlocked(t *testing.T) {
 		UserPublicID: "user_local",
 	}
 
-	gate.RegisterChannelWithOptions(meta, RegisterChannelOptions{Unlocked: true})
+	local, err := gate.MintLocalSession("secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate.RegisterChannelWithOptions(meta, RegisterChannelOptions{Unlocked: true, AccessSessionID: local.AccessSessionID})
 
 	status := gate.Status(meta.ChannelID)
 	if !status.PasswordRequired {

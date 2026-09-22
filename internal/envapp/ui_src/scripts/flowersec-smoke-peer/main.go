@@ -260,10 +260,10 @@ func newHandlers(nativeCode, visualGit bool) (*flowersec.SessionHandlers, error)
 	if nativeCode {
 		var unlocked atomic.Bool
 		if err := handlers.HandleStream("code/auth_v1", func(_ context.Context, incoming flowersec.IncomingStream) error {
-			if incoming.Metadata.Values()["password"] == "native-secret" {
+			if incoming.Metadata.Values()["delegation"] == "native-delegation" {
 				unlocked.Store(true)
 			}
-			return json.NewEncoder(incoming.Stream).Encode(map[string]bool{"unlocked": unlocked.Load()})
+			return json.NewEncoder(incoming.Stream).Encode(map[string]any{"unlocked": unlocked.Load(), "resume_token": "native-resume"})
 		}); err != nil {
 			return nil, err
 		}

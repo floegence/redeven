@@ -1,3 +1,5 @@
+import { DESKTOP_SECURITY_CHANNEL, parseDesktopSecurityRequest } from '../shared/runtimeSecurity';
+import { manageRuntimeSecurity } from './runtimeControlClient';
 import { DesktopResourceCache } from './desktopResourceCache';
 import { DESKTOP_RESOURCE_CACHE_CHANNEL } from '../shared/resourceCacheIPC';
 import { ProviderCredentialRecovery, providerCredentialsNeedRenewal } from './providerCredentialRecovery';
@@ -8420,10 +8422,10 @@ async function sessionCodeSpaceIdentity(record: DesktopSessionRecord, codeSpaceI
   return nativeCodeSpaceIdentity(target, codeSpaceID, account);
 }
 
-async function createSessionCodeSpaceRoute(record: DesktopSessionRecord, codeSpaceID: string, signal: AbortSignal, password?: string) {
+async function createSessionCodeSpaceRoute(record: DesktopSessionRecord, codeSpaceID: string, signal: AbortSignal, authorization?: string) {
   const webSession = session.fromPartition(record.session_partition);
   return record.transport.kind === 'provider_remote'
-    ? createRemoteNativeCodeSpaceRoute({ webSession, environmentOrigin: record.transport.baseURL, envPublicID: record.target.kind === 'local_environment' ? record.target.env_public_id ?? '' : '', codeSpaceID, password, signal })
+    ? createRemoteNativeCodeSpaceRoute({ webSession, environmentOrigin: record.transport.baseURL, envPublicID: record.target.kind === 'local_environment' ? record.target.env_public_id ?? '' : '', codeSpaceID, authorization, signal })
     : createLocalNativeCodeSpaceRoute({ transport: record.transport, startup: record.startup, webSession, codeSpaceID, signal });
 }
 
@@ -8478,7 +8480,7 @@ async function openSessionCodespaceLoadingWindow(
     },
     profiles: codeSpaceProfiles,
     loadingURL: (nextCopy) => buildCodespaceLoadingDocumentURL(codeSpaceID, desktopThemeState().getSnapshot(), { ...nextCopy, locale: desktopLanguageState().getSnapshot().resolved_locale }),
-    createRoute: (signal, password) => createSessionCodeSpaceRoute(record, codeSpaceID, signal, password),
+    createRoute: (signal, authorization) => createSessionCodeSpaceRoute(record, codeSpaceID, signal, authorization),
     onReady: (port) => recordWindowLifecycle(record.diagnostics, 'codespace_native_ready', 'native CodeSpace ready', { code_space_id: codeSpaceID, transport: record.transport.kind, port }),
     onFailure: (failure) => recordCodeSpaceOpenFailure(record, codeSpaceID, failure),
   });
@@ -8520,14 +8522,14 @@ async function openCodespaceWindowFromShell(
       if (record.closing) throw new Error('codespace_closed');
       await record.codespace_browser.open(request.code_space_id, {
         identity, profiles: codeSpaceProfiles(),
-        createRoute: (signal) => createSessionCodeSpaceRoute(record, request.code_space_id, signal, request.password),
+        createRoute: (signal) => createSessionCodeSpaceRoute(record, request.code_space_id, signal, request.authorization),
         openExternal: openExternalURL,
       });
       return { ok: true };
     }
     const owner = record.codespace_native.get(request.code_space_id);
     if (!owner) throw new Error('codespace_closed');
-    await owner.open(request.password);
+    await owner.open(request.authorization);
     return { ok: true };
   } catch (error) {
     const failure = codeSpaceWindowFailure(error, request.mode === 'loading' ? 'loading_document' : 'route');
@@ -18343,6 +18345,21 @@ if (!app.requestSingleInstanceLock()) {
     return desktopDownloadWriter.open(normalized.token);
   });
 
+  ipcMain.handle(DESKTOP_SECURITY_CHANNEL, async (event, input) => {
+    try {
+    if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) throw new Error('Security settings require the Desktop settings window.');
+    const { environment_id, ...request } = parseDesktopSecurityRequest(input);
+    const data = await withEnvironmentAccessOwner(await loadDesktopPreferencesCached(), environment_id,
+      desktopPlatformCapabilities.native_host_runtime, async (owner) => {
+        await requireEnvironmentAccessHostAvailable(owner, refreshDesktopWSLDiscovery);
+        const startup = owner.kind === 'local' ? await nativeAccessSettingsStartup() : (await managedAccessSettingsRecord(owner.environment_id))?.startup;
+        requireEnvironmentAccessCompatible(startup ?? null);
+        if (!startup?.runtime_control) throw Object.assign(new Error('Start this Runtime to manage two-factor authentication.'), { code: 'SECURITY_START_REQUIRED' });
+        return manageRuntimeSecurity(startup.runtime_control, request);
+      });
+      return { ok: true, data };
+    } catch (error) { return { ok: false, code: typeof (error as { code?: unknown })?.code === 'string' ? (error as { code: string }).code : 'SECURITY_UNAVAILABLE' }; }
+  });
   ipcMain.handle(DESKTOP_CERTIFICATE_CHANNEL, async (event, request) => {
     if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) {
       throw new Error('Certificate management requires the Desktop settings window.');

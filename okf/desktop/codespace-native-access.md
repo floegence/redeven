@@ -13,7 +13,7 @@ Desktop owns each built-in CodeSpace window, persistent browser profile, protect
 
 ## Trusted opening requests
 
-The trusted environment root frame submits `loading` or `open` with a DNS-safe CodeSpace ID. Open may carry an ephemeral access password for the separately authorized remote Code App session. It accepts no URL, host, port, route, or legacy navigation request. Env App starts the editor first; Desktop resolves the route from the sender's existing EnvironmentSession. Loading is a scriptless local document. [Whole-window status surfaces](../ui/window-status-surfaces.md) owns its shared visual treatment and progress indication.
+The trusted environment root frame submits `loading` or `open` with a DNS-safe CodeSpace ID. Open carries a one-shot exact-editor delegation issued by the authenticated environment session for remote Code App access. Desktop keeps its exact-scope resume credential only in memory and does not extend the parent lifetime. It accepts no URL, host, port, route, or legacy navigation request. Env App starts the editor first; Desktop resolves the route from the sender's existing EnvironmentSession. Loading is a scriptless local document. [Whole-window status surfaces](../ui/window-status-surfaces.md) owns its shared visual treatment and progress indication.
 
 ## Window navigation and recovery
 
@@ -49,7 +49,7 @@ Compatibility epoch 14 introduced isolated system-browser presentation origins w
 
 # Boundaries
 
-The opt-in Electron fixture exercises the production window owner through loading-document handoff, editor readiness, same-origin redirects, document, Worker, Service Worker and WebSocket requests, and unauthenticated loopback rejection. The real editor fixture uses an explicitly selected installed code-server binary and task-owned state/ports to open a workspace, read and edit a file in Monaco, save it to disk, execute terminal input through a fixture-owned shell profile, and reopen the editor at its saved origin. The native remote fixture uses a real TLS Flowersec Go peer with fixture control-plane acquisition and spend responses to exercise Node session startup, strict target binding, password authorization, and binary HTTP. These fixtures do not certify a deployed SSH placement or Redeven Cloud environment. It is separate from ordinary source CI and does not start or stop a user's environment. Focused HTTP tests cover authorization, generation rejection, raw bytes, upgrade heads, cookies, and origin conflicts.
+The opt-in Electron fixture exercises the production window owner through loading-document handoff, editor readiness, same-origin redirects, document, Worker, Service Worker and WebSocket requests, and unauthenticated loopback rejection. The real editor fixture uses an explicitly selected installed code-server binary and task-owned state/ports to open a workspace, read and edit a file in Monaco, save it to disk, execute terminal input through a fixture-owned shell profile, and reopen the editor at its saved origin. The native remote fixture uses a real TLS Flowersec Go peer with fixture control-plane acquisition and spend responses to exercise Node session startup, strict target binding, resource-scoped authorization, and binary HTTP. These fixtures do not certify a deployed SSH placement or Redeven Cloud environment. It is separate from ordinary source CI and does not start or stop a user's environment. Focused HTTP tests cover authorization, generation rejection, raw bytes, upgrade heads, cookies, and origin conflicts.
 
 # Evidence
 

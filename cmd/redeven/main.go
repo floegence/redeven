@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -93,6 +94,8 @@ func (c *cli) run(args []string) int {
 		return c.hostApplicationPackageCmd(args[1:])
 	case "desktop-model-source":
 		return c.desktopModelSourceCmd(args[1:])
+	case "security":
+		return c.securityCmd(args[1:])
 	case "local-authority":
 		return c.localAuthorityCmd(args[1:])
 	case "env":
@@ -403,7 +406,14 @@ func (c *cli) runCmd(args []string) int {
 			return 2
 		}
 		if startupSecrets.localUIPassword.value != "" {
-			passwordHash, err = accessgate.HashPassword(startupSecrets.localUIPassword.value)
+			existing, readErr := accessgate.ReadPasswordHash(stateLayout.StateDir)
+			if readErr != nil {
+				err = readErr
+			} else if current, e := accessgate.NewWithPasswordHash(existing); e == nil && len(existing) > 0 && current.VerifyPassword(startupSecrets.localUIPassword.value) {
+				passwordHash = existing
+			} else {
+				passwordHash, err = accessgate.HashPassword(startupSecrets.localUIPassword.value)
+			}
 		} else if !*passwordClear {
 			passwordHash, err = accessgate.ReadPasswordHash(stateLayout.StateDir)
 		}
@@ -587,14 +597,24 @@ func (c *cli) runCmd(args []string) int {
 		Detail: lockPath,
 	})
 
-	accessGate, err := accessgate.NewWithPasswordHash(passwordHash)
+	if mode != runModeRemote && (startupSecrets.localUIPassword.value != "" || *passwordClear) {
+		existing, readErr := accessgate.ReadPasswordHash(stateLayout.StateDir)
+		if readErr != nil {
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, readErr.Error())
+		}
+		if !bytes.Equal(existing, passwordHash) {
+			if err := accessgate.WritePasswordHash(stateLayout.StateDir, passwordHash); err != nil {
+				return failDesktopLaunch(desktopLaunchCodeStartupFailed, err.Error())
+			}
+		}
+	}
+	accessGate, err := accessgate.OpenPersistent(stateLayout.StateDir)
 	if err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupInvalid, err.Error())
 	}
-	if mode != runModeRemote && (startupSecrets.localUIPassword.value != "" || *passwordClear) {
-		if err := accessgate.WritePasswordHash(stateLayout.StateDir, passwordHash); err != nil {
-			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("save environment password: %v", err))
-		}
+	defer accessGate.Close()
+	if accessGate.TwoFactorEnabled() && mode != runModeRemote && localUIProtocol != config.LocalUIProtocolHTTPS {
+		return failDesktopLaunch(desktopLaunchCodeStartupInvalid, "Two-factor authentication requires HTTPS for browser and direct URL access.")
 	}
 	if bootstrapViaFlags {
 		_ = startupReporter.Emit(runtimepresentation.Event{

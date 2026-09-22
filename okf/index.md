@@ -64,6 +64,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Security
 
+- [Runtime two-factor authentication](security/runtime-two-factor-authentication.md) - Set up environment MFA, sign in, recover lost factors, and enforce session revocation.
 - [Local UI network exposure](security/local-ui-network-exposure.md) - Configure network scope, authenticated HTTP/HTTPS endpoints, exact authorities, and independent client sessions.
 - [Local UI certificates](security/local-ui-certificates.md) - Import, regenerate, or remove HTTPS identities safely and configure client trust explicitly.
 - [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.

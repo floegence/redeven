@@ -1,0 +1,363 @@
+.two-factor-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+  min-width: 0;
+}
+.two-factor-setting-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.two-factor-setting-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.two-factor-setting-copy {
+  min-width: 0;
+}
+.two-factor-setting-copy h3 {
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.5;
+}
+.two-factor-setting-copy p {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+}
+.two-factor-setting-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.two-factor-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.two-factor-status > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+.two-factor-status[data-enabled='true'] {
+  color: var(--primary);
+}
+.two-factor-status[data-enabled='true'] > span {
+  opacity: 1;
+}
+.two-factor-dialog {
+  width: calc(100% - 32px);
+  max-width: 440px;
+  border-radius: 16px;
+}
+.two-factor-dialog-body {
+  padding: 24px 28px 28px;
+}
+.two-factor-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+.two-factor-progress {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 2px;
+}
+.two-factor-progress li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.two-factor-progress li[aria-current='step'],
+.two-factor-progress li[data-complete='true'] {
+  border-color: var(--primary);
+  color: var(--foreground);
+}
+.two-factor-step-number {
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 10px;
+  background: var(--muted);
+}
+[aria-current='step'] .two-factor-step-number,
+[data-complete='true'] .two-factor-step-number {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+.two-factor-heading {
+  text-align: center;
+}
+.two-factor-heading h3 {
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.two-factor-heading p {
+  margin-top: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+.two-factor-emblem {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 18px;
+  border-radius: 15px;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.two-factor-pairing {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+}
+.two-factor-qr {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 2px 6px #00000005;
+}
+.two-factor-qr img {
+  display: block;
+  width: 168px;
+  height: 168px;
+}
+.two-factor-manual {
+  width: 100%;
+  min-width: 0;
+  font-size: 11px;
+}
+.two-factor-manual summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  list-style: none;
+}
+.two-factor-manual summary::-webkit-details-marker {
+  display: none;
+}
+.two-factor-manual[open] summary svg {
+  transform: rotate(90deg);
+}
+.two-factor-manual-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  background: var(--muted);
+  border-radius: 8px;
+}
+.two-factor-manual-key code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  user-select: all;
+  font-family: var(--font-mono);
+}
+.two-factor-manual-key button {
+  flex-shrink: 0;
+}
+.two-factor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.two-factor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+}
+.two-factor-dialog .two-factor-field input {
+  min-height: 40px;
+  border-radius: 8px;
+}
+.two-factor-verify .two-factor-field {
+  text-align: center;
+}
+.two-factor-dialog input.two-factor-code-input {
+  height: 48px;
+  font-family: var(--font-mono);
+  font-size: 24px;
+  text-align: center;
+  letter-spacing: 0.22em;
+  font-weight: 400;
+}
+.two-factor-code-input::placeholder {
+  opacity: 0.35;
+}
+.two-factor-primary {
+  min-height: 40px;
+  width: 100%;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.two-factor-text-action {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.two-factor-recovery-sheet {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--muted) 35%, var(--card));
+  overflow: hidden;
+}
+.two-factor-recovery-codes {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 12px 16px;
+}
+.two-factor-recovery-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 29px;
+}
+.two-factor-recovery-item > span {
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+  opacity: 0.65;
+  user-select: none;
+}
+.two-factor-recovery-item code {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+.two-factor-recovery-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+.two-factor-recovery-actions button {
+  gap: 7px;
+  height: auto;
+  min-height: 30px;
+  white-space: normal;
+  line-height: 1.4;
+}
+.two-factor-recovery-actions svg {
+  flex-shrink: 0;
+}
+.two-factor-acknowledgement {
+  padding: 0 2px;
+}
+.two-factor-error {
+  color: var(--destructive);
+  font-size: 12px;
+  line-height: 1.6;
+  flex-basis: 100%;
+}
+.two-factor-management {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.two-factor-management button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 15px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.two-factor-management button + button {
+  border-top: 1px solid var(--border);
+}
+.two-factor-management button:hover {
+  background: var(--muted);
+}
+.two-factor-management button span {
+  flex: 1;
+}
+.two-factor-management svg {
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+.two-factor-disable {
+  color: var(--destructive);
+}
+@media (max-width: 420px) {
+  .two-factor-dialog {
+    width: calc(100% - 24px);
+    border-radius: 12px;
+    max-height: calc(100dvh - 24px);
+  }
+  .two-factor-dialog-body {
+    padding: 20px 16px;
+  }
+  .two-factor-flow {
+    gap: 20px;
+  }
+  .two-factor-heading h3 {
+    font-size: 20px;
+  }
+  .two-factor-progress {
+    gap: 12px;
+  }
+  .two-factor-progress li {
+    gap: 6px;
+    font-size: 10px;
+  }
+  .two-factor-recovery-codes {
+    padding: 12px;
+  }
+  .two-factor-recovery-item {
+    gap: 9px;
+  }
+  .two-factor-recovery-item code {
+    font-size: 12px;
+  }
+}

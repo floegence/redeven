@@ -69,21 +69,27 @@ func (a *Agent) registerNativeCodeSpaceStreams(ctx context.Context, handlers *fl
 
 // Authorization uses the existing channel scope; no Env App resume token is promoted.
 func nativeCodeSpaceAuthorization(gate *accessgate.Gate, meta *session.Meta, values map[string]any) ([]byte, error) {
-	password := ""
-	if len(values) > 0 {
-		value, ok := values["password"].(string)
-		if !ok || len(values) != 1 || len(value) > 1024 {
-			return nil, errors.New("invalid codespace authorization request")
-		}
-		password = value
+	raw, err := json.Marshal(values)
+	if err != nil || len(raw) > 4096 {
+		return nil, errors.New("invalid codespace authorization request")
 	}
-	if password != "" {
-		if _, err := gate.UnlockChannelWithSubject(meta.ChannelID, password, meta.UserPublicID); err != nil {
-			return []byte(`{"unlocked":false,"password_required":true}`), nil
-		}
+	var req accessgate.AuthenticationRequest
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.DisallowUnknownFields()
+	if err = decoder.Decode(&req); err != nil {
+		return nil, errors.New("invalid codespace authorization request")
 	}
-	status := gate.Status(meta.ChannelID)
-	return json.Marshal(map[string]bool{"unlocked": status.Unlocked, "password_required": status.PasswordRequired})
+	if len(req.Password) > 1024 || len(req.ChallengeID) > 128 || len(req.Delegation) > 128 || len(req.ResumeToken) > 128 || len(req.Code) > 64 || len(req.RecoveryCode) > 128 {
+		return nil, errors.New("invalid codespace authorization request")
+	}
+	if req.Password != "" || req.ChallengeID != "" || req.Delegation != "" || req.ResumeToken != "" {
+		result, err := gate.AuthenticateChannel(meta.ChannelID, req, meta.UserPublicID)
+		if err != nil {
+			return json.Marshal(map[string]any{"unlocked": false, "password_required": true, "error": err.Error(), "retry_after_ms": accessgate.RetryAfter(err).Milliseconds()})
+		}
+		return json.Marshal(result)
+	}
+	return json.Marshal(gate.Status(meta.ChannelID))
 }
 
 func nativeCodeSpaceRequestGuard(handler http.Handler, meta *session.Meta, gate *accessgate.Gate, authority string) http.Handler {

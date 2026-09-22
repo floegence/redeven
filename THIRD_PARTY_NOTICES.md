@@ -1387,6 +1387,7 @@ SOFTWARE.
 | github.com/bodgit/plumbing | v1.3.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/bodgit/plumbing@v1.3.0 | Detected from LICENSE. |
 | github.com/bodgit/sevenzip | v1.6.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/bodgit/sevenzip@v1.6.1 | Detected from LICENSE. |
 | github.com/bodgit/windows | v1.0.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/bodgit/windows@v1.0.1 | Detected from LICENSE. |
+| github.com/boombuler/barcode | v1.0.1-0.20190219062509-6c824513bacc | MIT | Runtime | https://pkg.go.dev/github.com/boombuler/barcode@v1.0.1-0.20190219062509-6c824513bacc | Detected from LICENSE. |
 | github.com/coder/websocket | v1.8.15 | BSD-style | Runtime | https://pkg.go.dev/github.com/coder/websocket@v1.8.15 | coder/websocket is distributed under a BSD-style license. |
 | github.com/creack/pty | v1.1.24 | MIT | Runtime | https://pkg.go.dev/github.com/creack/pty@v1.1.24 | Detected from LICENSE. |
 | github.com/dlclark/regexp2 | v1.12.0 | MIT | Runtime | https://pkg.go.dev/github.com/dlclark/regexp2@v1.12.0 | Detected from LICENSE. |
@@ -1423,6 +1424,7 @@ SOFTWARE.
 | github.com/pierrec/lz4/v4 | v4.1.22 | BSD-style | Runtime | https://pkg.go.dev/github.com/pierrec/lz4/v4@v4.1.22 | Detected from LICENSE. |
 | github.com/pkoukk/tiktoken-go | v0.1.8 | MIT | Runtime | https://pkg.go.dev/github.com/pkoukk/tiktoken-go@v0.1.8 | Detected from LICENSE. |
 | github.com/power-devops/perfstat | v0.0.0-20240221224432-82ca36839d55 | MIT | Runtime | https://pkg.go.dev/github.com/power-devops/perfstat@v0.0.0-20240221224432-82ca36839d55 | Detected from LICENSE. |
+| github.com/pquerna/otp | v1.5.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/pquerna/otp@v1.5.0 | Detected from LICENSE. |
 | github.com/quic-go/qpack | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/qpack@v0.6.0 | Detected from LICENSE.md. |
 | github.com/quic-go/quic-go | v0.62.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/quic-go@v0.62.0 | Detected from LICENSE. |
 | github.com/quic-go/webtransport-go | v0.13.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/webtransport-go@v0.13.0 | Detected from LICENSE. |

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -53,9 +54,7 @@ type apiError struct {
 	RetryAfterMs int64  `json:"retry_after_ms,omitempty"`
 }
 
-type unlockReq struct {
-	Password string `json:"password"`
-}
+type unlockReq = accessgate.AuthenticationRequest
 
 func unlockAttemptSubject(r *http.Request) string {
 	if r == nil {
@@ -90,7 +89,7 @@ func writeUnlockError(w http.ResponseWriter, err error) {
 	writeJSON(w, http.StatusUnauthorized, apiResp{
 		OK: false,
 		Error: &apiError{
-			Code:    "ACCESS_PASSWORD_INVALID",
+			Code:    accessgate.AuthenticationErrorCode(err),
 			Message: err.Error(),
 		},
 	})
@@ -238,7 +237,11 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleAccessAPI(w, r)
 		return
 	}
-	if s.gate != nil && s.gate.Enabled() && !s.gate.IsChannelUnlocked(strings.TrimSpace(s.meta.ChannelID)) && !isPublicEnvAppRequest(r) {
+	if s.serveBrowserGate(w, r) {
+		return
+	}
+	publicShell := s.meta.FloeApp == "com.floegence.redeven.agent" && s.meta.CodeSpaceID == "env-ui" && isPublicEnvAppRequest(r)
+	if s.gate != nil && s.gate.Enabled() && !s.gate.IsChannelUnlocked(strings.TrimSpace(s.meta.ChannelID)) && !publicShell {
 		http.Error(w, "access password required", http.StatusLocked)
 		return
 	}
@@ -258,6 +261,32 @@ func (s *Server) handleAccessAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
 		return
+	case "/_redeven_proxy/api/access/delegate":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		var req struct {
+			CodeSpaceID string `json:"code_space_id"`
+		}
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if err := decoder.Decode(new(any)); err != io.EOF {
+			http.Error(w, "expected one request", http.StatusBadRequest)
+			return
+		}
+		token, err := s.gate.DelegateCodeSpace(s.meta.ChannelID, req.CodeSpaceID)
+		if err != nil {
+			writeUnlockError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]string{"delegation": token}})
+		return
 	case "/_redeven_proxy/api/access/unlock":
 		if r.Method != http.MethodPost {
 			writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: &apiError{Message: "method not allowed"}})
@@ -268,11 +297,18 @@ func (s *Server) handleAccessAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var req unlockReq
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: &apiError{Message: "invalid json"}})
 			return
 		}
-		res, err := s.gate.UnlockChannelWithSubject(strings.TrimSpace(s.meta.ChannelID), req.Password, unlockAttemptSubject(r))
+		if err := decoder.Decode(new(any)); err != io.EOF {
+			http.Error(w, "invalid request", 400)
+			return
+		}
+		res, err := s.gate.AuthenticateChannel(strings.TrimSpace(s.meta.ChannelID), req, unlockAttemptSubject(r))
 		if err != nil {
 			writeUnlockError(w, err)
 			return
