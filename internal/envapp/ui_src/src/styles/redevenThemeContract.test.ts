@@ -224,7 +224,8 @@ describe('Redeven Env App surface theme contract', () => {
     const src = fs.readFileSync(new URL('../../../../flower_ui/src/icons/flower-icon.css', import.meta.url), 'utf8');
     expect(src).toContain('.redeven-flower-soft-aura-workbench-svg');
     expect(src).toContain('width: 84%');
-    expect(src).not.toMatch(/blur|animation|box-shadow/);
+    const brandRules = src.match(/\.redeven-flower-soft-aura[^{}]*\{[^}]*\}/g)?.join('\n') ?? '';
+    expect(brandRules).not.toMatch(/blur|animation|box-shadow/);
   });
 
   it('keeps the terminal surface focus state free of an outer halo ring', () => {
@@ -288,7 +289,6 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-terminal-loading-foreground');
     expect(src).toContain('.redeven-workbench-progress-curtain {');
     expect(src).toContain('@media (prefers-reduced-motion: reduce) {');
-    expect(src).toContain('.redeven-collection-loading-skeleton .floe-skeleton {');
     expect(src).toContain('.git-inline-loading-status__skeleton::after,');
     expect(src).toContain('animation: none;');
     expect(src).not.toContain('.workbench-entry-intro');

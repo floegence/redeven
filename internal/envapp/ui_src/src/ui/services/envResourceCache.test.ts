@@ -19,6 +19,51 @@ function mount(scope: () => string | undefined) {
 }
 
 describe('Env App cache identity and presentation binding', () => {
+  it.each([{ values: ['visible'] }, { values: [] }])('retains the same handle and successful content through same-user revalidation: %j', async ({ values }) => {
+    const confirmed = '9'.repeat(64);
+    const verification = deferred<{ scope_id: string }>();
+    requests.fetch.mockResolvedValueOnce({ scope_id: confirmed }).mockReturnValueOnce(verification.promise);
+    const [connection, setConnection] = createSignal<string | null>('first');
+    const [readable, setReadable] = createSignal<boolean | undefined>(true);
+    const access = createRoot(dispose => { cleanups.push(dispose); return createEnvResourceCacheAccess({ environment: () => 'same-user', locked: () => false, readable, connection }); });
+    const page = createRoot(dispose => { cleanups.push(dispose); return createEnvCachedResource({ resourceCacheAccess: access }, () => 'retained-list', decode); });
+    await settle();
+    await page.refresh(async () => values);
+    const original = page.identity();
+    const operationCurrent = page.captureAuthority();
+    setConnection(null); await settle();
+    expect(page.data()).toEqual(values);
+    setReadable(undefined); setConnection('replacement'); await settle();
+    expect(page.data()).toEqual(values);
+    expect(page.identity()).toBe(original);
+    expect(page.ready()).toBe(false);
+    verification.resolve({ scope_id: confirmed }); await settle();
+    expect(page.data()).toEqual(values);
+    expect(page.ready()).toBe(false);
+    setReadable(true); await settle();
+    expect(page.data()).toEqual(values);
+    expect(page.ready()).toBe(true);
+    expect(page.identity()).toBe(original);
+    expect(operationCurrent()).toBe(false);
+  });
+
+  it('removes the previous user as soon as a changed identity is confirmed, even before permissions settle', async () => {
+    const next = deferred<{ scope_id: string }>();
+    requests.fetch.mockResolvedValueOnce({ scope_id: '1'.repeat(64) }).mockReturnValueOnce(next.promise);
+    const [connection, setConnection] = createSignal('first');
+    const [readable, setReadable] = createSignal<boolean | undefined>(true);
+    const access = createRoot(dispose => { cleanups.push(dispose); return createEnvResourceCacheAccess({ environment: () => 'changed-user', readable, locked: () => false, connection }); });
+    const page = createRoot(dispose => { cleanups.push(dispose); return createEnvCachedResource({ resourceCacheAccess: access }, () => 'list', decode); });
+    await settle(); await page.refresh(async () => ['private']);
+    setReadable(undefined); setConnection('second'); await settle();
+    expect(page.data()).toEqual(['private']);
+    next.resolve({ scope_id: '2'.repeat(64) }); await settle();
+    expect(page.data()).toBeUndefined();
+    expect(access().phase).toBe('pending');
+    setReadable(false); await settle();
+    expect(access().phase).toBe('denied');
+  });
+
   it('requests identity in parallel with permissions without exposing persistent data early', async () => {
     const pending = deferred<{ scope_id: string }>();
     requests.fetch.mockReturnValue(pending.promise);
@@ -33,6 +78,69 @@ describe('Env App cache identity and presentation binding', () => {
     setReadable(true); await settle();
     expect(scope().scope).toBe('e'.repeat(64));
     expect(requests.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('cancels old requests immediately and ignores late denial during transport replacement', async () => {
+    requests.fetch.mockResolvedValue({ scope_id: '8'.repeat(64) });
+    const [connection, setConnection] = createSignal('first');
+    const access = createRoot(dispose => { cleanups.push(dispose); return createEnvResourceCacheAccess({ environment: () => 'request-fence', readable: () => true, locked: () => false, connection }); });
+    const page = createRoot(dispose => { cleanups.push(dispose); return createEnvCachedResource({ resourceCacheAccess: access }, () => 'requests', decode); });
+    await settle(); await page.refresh(async () => ['previous']);
+    let deny!: (reason: unknown) => void;
+    const old = page.refresh(() => new Promise<string[]>((_resolve, reject) => { deny = reject; }));
+    const cancelled = expect(old).rejects.toMatchObject({ name: 'AbortError' });
+    await settle(); setConnection('replacement'); await settle();
+    await cancelled;
+    await page.refresh(async () => ['current']);
+    deny(new LocalApiError({ status: 403, message: 'obsolete denial' })); await settle();
+    expect(page.data()).toEqual(['current']);
+    expect(access().phase).toBe('ready');
+  });
+
+  it('retains the confirmed owner after a scope lookup failure and retries explicitly', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    requests.fetch.mockResolvedValueOnce({ scope_id: '7'.repeat(64) }).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ scope_id: '7'.repeat(64) });
+    const [connection, setConnection] = createSignal('first');
+    const access = createRoot(dispose => { cleanups.push(dispose); return createEnvResourceCacheAccess({ environment: () => 'lookup-failure', readable: () => true, locked: () => false, connection }); });
+    const page = createRoot(dispose => { cleanups.push(dispose); return createEnvCachedResource({ resourceCacheAccess: access }, () => 'list', decode); });
+    await settle(); await page.refresh(async () => ['visible']);
+    const owner = page.identity();
+    setConnection('replacement'); await settle();
+    expect(page.data()).toEqual(['visible']);
+    expect(page.identity()).toBe(owner);
+    expect(page.ready()).toBe(false);
+    access().retry?.(); await settle();
+    expect(page.ready()).toBe(true);
+    expect(page.identity()).toBe(owner);
+    warning.mockRestore();
+  });
+
+  it('keeps a live-only owner for the authentication lifetime even when scope lookup recovers', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    requests.fetch.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ scope_id: '6'.repeat(64) });
+    const [connection, setConnection] = createSignal('first');
+    const access = createRoot(dispose => { cleanups.push(dispose); return createEnvResourceCacheAccess({ environment: () => 'volatile-owner', readable: () => true, locked: () => false, connection }); });
+    const first = createRoot(dispose => { cleanups.push(dispose); return createEnvCachedResource({ resourceCacheAccess: access }, () => 'list', decode); });
+    const second = createRoot(dispose => { cleanups.push(dispose); return createEnvCachedResource({ resourceCacheAccess: access }, () => 'list', decode); });
+    await settle(); await first.refresh(async () => ['live']);
+    const owner = first.identity();
+    expect(second.data()).toEqual(['live']);
+    setConnection('replacement'); await settle();
+    expect(first.data()).toEqual(['live']);
+    expect(first.identity()).toBe(owner);
+    expect(access().scope).toBeUndefined();
+    warning.mockRestore();
+  });
+
+  it('revokes presentation immediately for an explicit authentication boundary', async () => {
+    requests.fetch.mockResolvedValueOnce({ scope_id: '5'.repeat(64) }).mockReturnValue(new Promise(() => {}));
+    const [authentication, setAuthentication] = createSignal(0);
+    const access = createRoot(dispose => { cleanups.push(dispose); return createEnvResourceCacheAccess({ environment: () => 'auth-boundary', readable: () => true, locked: () => false, connection: () => 'transport', authentication }); });
+    const page = createRoot(dispose => { cleanups.push(dispose); return createEnvCachedResource({ resourceCacheAccess: access }, () => 'list', decode); });
+    await settle(); await page.refresh(async () => ['private']);
+    setAuthentication(1); await settle();
+    expect(page.data()).toBeUndefined();
+    expect(page.ready()).toBe(false);
   });
 
   it('keeps restoration pending after unlock until the authenticated connection is available', async () => {
@@ -76,7 +184,7 @@ describe('Env App cache identity and presentation binding', () => {
     const old = page.refresh(() => slow.promise);
     setScope('confirmed-b'); await settle();
     await page.refresh(async () => ['bob']);
-    slow.resolve(['late-alice']); await old;
+    slow.resolve(['late-alice']); await expect(old).rejects.toMatchObject({ name: 'AbortError' });
     expect(page.data()).toEqual(['bob']);
     expect(original.data()).toEqual(['late-alice']);
   });
@@ -122,7 +230,7 @@ describe('Env App cache identity and presentation binding', () => {
     expect(resource.snapshot().data).toBeUndefined();
     expect(requests.fetch).toHaveBeenCalledTimes(2);
   });
-  it('retains disconnected content but confirms a new session before restoring its user scope', async () => {
+  it('retains transport revalidation content and clears it when a different user is confirmed', async () => {
     const next = deferred<{ scope_id: string }>();
     const first = deferred<{ scope_id: string }>();
     requests.fetch.mockReturnValueOnce(first.promise).mockReturnValueOnce(next.promise);
@@ -137,8 +245,8 @@ describe('Env App cache identity and presentation binding', () => {
     setConnection(null); await settle();
     expect(page.data()).toEqual(['alice']);
     setConnection('bob-session'); await settle();
-    expect(scope().scope).toBeUndefined();
-    expect(page.data()).toBeUndefined();
+    expect(scope().phase).toBe('revalidating');
+    expect(page.data()).toEqual(['alice']);
     next.resolve({ scope_id: 'd'.repeat(64) }); await settle();
     expect(scope().scope).toBe('d'.repeat(64));
     expect(page.data()).toBeUndefined();

@@ -37,7 +37,7 @@ export function EnvHostApplicationsPage() {
   const i18n = useI18n();
   const activation = (() => { try { return useViewActivation(); } catch { return null; } })();
   const canRead = () => Boolean(ctx.env()?.permissions?.can_read);
-  const canLaunch = () => Boolean(canRead() && ctx.env()?.permissions?.can_write && ctx.env()?.permissions?.can_execute);
+  const canLaunch = () => Boolean(applicationResource.ready() && canRead() && ctx.env()?.permissions?.can_write && ctx.env()?.permissions?.can_execute);
   const applicationResource = createEnvCachedResource(ctx, () => `host-applications:${i18n.locale()}`, hostApplicationSnapshot);
   const catalog = () => applicationResource.data() ?? null;
   const isMac = createMemo(() => catalog()?.availability.backend === 'macos');
@@ -67,6 +67,7 @@ export function EnvHostApplicationsPage() {
   };
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal('');
+  const displayError = () => error() || (applicationResource.snapshot().error ? translateError(applicationResource.snapshot().error) : '');
   const [query, setQuery] = createSignal('');
   const [category, setCategory] = createSignal('');
   const [busy, setBusy] = createSignal<Record<string, boolean>>({});
@@ -124,7 +125,8 @@ export function EnvHostApplicationsPage() {
     if (owner === applicationResource.identity()) { request?.abort(); request = null; refreshPending = null; }
   };
   const refresh = (quiet = false): Promise<void> => {
-    if (!canRead() || !applicationResource.ready()) return Promise.resolve();
+    if (!applicationResource.ready()) { applicationResource.retry(); return Promise.resolve(); }
+    if (!canRead()) return Promise.resolve();
     if (refreshPending) return refreshPending;
     const controller = new AbortController(); request = controller;
     const locale = i18n.locale();
@@ -153,7 +155,7 @@ export function EnvHostApplicationsPage() {
           }).catch(() => { if (!disposed && !controller.signal.aborted) setSetupDisconnected(true); });
         }
       } catch (e) {
-        if (!disposed && !controller.signal.aborted) setError(translateError(e));
+        if (!disposed && !controller.signal.aborted && !(e instanceof DOMException && e.name === 'AbortError')) setError(translateError(e));
       } finally {
         if (request === controller) { request = null; if (!disposed) setLoading(false); }
       }
@@ -171,7 +173,7 @@ export function EnvHostApplicationsPage() {
     if (!canRead() || !active || !applicationResource.ready()) return;
     void refresh();
     const timer = window.setInterval(() => { if (document.visibilityState !== 'hidden') void refresh(!(isMac() && pendingApplications.size > 0)); }, isMac() ? 2000 : 8000);
-    onCleanup(() => { window.clearInterval(timer); request?.abort(); request = null; refreshPending = null; });
+    onCleanup(() => { window.clearInterval(timer); request?.abort(); request = null; refreshPending = null; setLoading(false); });
   });
   const resumeMacPreparation = () => { if (isMac()) void refresh(pendingApplications.size === 0); };
   window.addEventListener('focus', resumeMacPreparation);
@@ -451,8 +453,9 @@ export function EnvHostApplicationsPage() {
     setQuitBusy(true); setQuitError('');
     try {
       const operationResource = applicationResource.identity();
+    const operationCurrent = applicationResource.captureAuthority();
       const runningNow = await listRunningHostApplications();
-      if (disposed || operationResource !== applicationResource.identity()) return;
+      if (disposed || !operationCurrent()) return;
       const instances = runningNow.find(item => item.application_id === target.app.id)?.instances ?? [];
       if (instances.length === 0) { setQuitting(null); invalidateCatalog(); await refresh(true); return; }
       if ([...instances].sort().join(',') !== [...target.instances].sort().join(',')) {
@@ -485,6 +488,7 @@ export function EnvHostApplicationsPage() {
   const open = async (app: HostApplication, prepared?: PendingApplication) => {
     if (!canLaunch() || busy()[app.id]) return;
     const operationResource = applicationResource.identity();
+    const operationCurrent = applicationResource.captureAuthority();
     if (applicationResource.snapshot().stale || applicationResource.snapshot().refreshing) {
       if (!prepared && !desktopShellWebServiceWindowOpenAvailable() && !nativeLaunch()) {
         prepared = { app, popup: window.open('about:blank', `redeven-host-app-${ctx.env_id()}-${encodeURIComponent(app.id)}`), active: true };
@@ -493,7 +497,7 @@ export function EnvHostApplicationsPage() {
       await refresh();
       setBusy(value => ({ ...value, [app.id]: false }));
       const current = catalog()?.applications.find(item => item.id === app.id);
-      if (disposed || applicationResource.identity() !== operationResource || applicationResource.snapshot().stale || !current) {
+      if (disposed || !operationCurrent() || applicationResource.snapshot().stale || !current) {
         if (prepared) closePending(prepared);
         if (!disposed) setAppErrors(value => ({ ...value, [app.id]: i18n.t(current ? 'hostApplications.errors.failed' : 'hostApplications.errors.notFound') }));
         return;
@@ -554,11 +558,12 @@ export function EnvHostApplicationsPage() {
   const stop = async () => {
     const target = ending(); if (!target || stopBusy()) return;
     const operationResource = applicationResource.identity();
+    const operationCurrent = applicationResource.captureAuthority();
     setStopBusy(true);
     try {
       if (applicationResource.snapshot().stale || applicationResource.snapshot().refreshing) {
         await refresh(true);
-        if (disposed || operationResource !== applicationResource.identity() || applicationResource.snapshot().stale) return;
+        if (disposed || !operationCurrent() || applicationResource.snapshot().stale) return;
         if (!catalog()?.sessions.some(session => session.id === target.id && ['starting', 'running'].includes(session.state))) { setEnding(null); return; }
       }
       await detachHostApplication(target.id);
@@ -585,7 +590,7 @@ export function EnvHostApplicationsPage() {
         <Button variant="outline" size="sm" onClick={() => setAddOpen(true)} disabled={!canLaunch() || !catalog()?.availability.supported}><Plus class="w-3.5 h-3.5" />{i18n.t('hostApplications.add')}</Button>
           </>} />
     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="host-apps-content min-h-0 flex-1 overflow-auto">
-      <Show when={error()}><div class="host-apps-notice text-destructive" role="alert">{error()}</div></Show>
+      <Show when={displayError()}><div class="host-apps-notice text-destructive" role="alert">{displayError()}</div></Show>
       <Show when={ctx.env()?.permissions?.can_read === false}><div class="host-apps-empty"><ActivityBarHostApplicationsIcon class="w-9 h-9" /><h2>{i18n.t('hostApplications.permissionTitle')}</h2><p>{i18n.t('hostApplications.readPermission')}</p></div></Show>
       <Show when={ctx.env()?.permissions?.can_read !== false}>
         <Show when={catalog()} fallback={<HostApplicationsListSkeleton />}>
@@ -604,7 +609,7 @@ export function EnvHostApplicationsPage() {
               </div></Show>
             </div></div>
           </Show>
-          <Show when={canRead() && !canLaunch()}><div class="host-apps-notice">{i18n.t('hostApplications.launchPermission')}</div></Show>
+          <Show when={applicationResource.ready() && canRead() && !canLaunch()}><div class="host-apps-notice">{i18n.t('hostApplications.launchPermission')}</div></Show>
           <Show when={runningApplications().length}>
             <section class="host-apps-running" aria-label={i18n.t('hostApplications.running')}>
               <div class="host-apps-section-title"><h2>{i18n.t('hostApplications.running')}</h2><span>{runningApplications().length}</span></div>
@@ -636,7 +641,7 @@ export function EnvHostApplicationsPage() {
             </div>
             <Show when={apps().length} fallback={<Show when={ready()}><div class="host-apps-empty"><Search class="w-8 h-8" /><h2>{i18n.t(query() ? 'hostApplications.noResults' : 'hostApplications.emptyTitle')}</h2><p>{i18n.t(query() ? 'hostApplications.noResultsDescription' : 'hostApplications.emptyDescription')}</p></div></Show>}>
               <div class="host-apps-grid"><For each={apps().map(app => app.id)}>{appID => { const app = () => applicationsByID().get(appID)!; return  <div class="host-app-tile-wrap">
-                <button class={`host-app-tile ${redevenSurfaceRoleClass('panelInteractive')}`} aria-busy={starting(app().id)} disabled={!canLaunch() || busy()[app().id]} onClick={() => void open(app())} aria-label={`${i18n.t((runningByApp().has(app().id) || runningApplicationIDs().has(app().id)) ? 'hostApplications.resume' : 'hostApplications.open')} · ${app().name}`}>
+                <button class={`host-app-tile ${redevenSurfaceRoleClass('panelInteractive')}`} aria-busy={starting(app().id)} disabled={busy()[app().id] || (applicationResource.ready() && !canLaunch())} aria-disabled={!canLaunch()} onClick={() => void open(app())} aria-label={`${i18n.t((runningByApp().has(app().id) || runningApplicationIDs().has(app().id)) ? 'hostApplications.resume' : 'hostApplications.open')} · ${app().name}`}>
                   <ApplicationIcon app={app()} />
                   <div class="host-app-tile-copy">
                     <strong title={app().name}>{app().name}</strong>

@@ -2065,8 +2065,8 @@ export function EnvPortForwardsPage() {
   // Permission checks
   const permissionReady = () => ctx.env.state === 'ready';
   const canRead = () => Boolean(ctx.env()?.permissions?.can_read);
-  const canExecute = () => Boolean(ctx.env()?.permissions?.can_execute);
-  const canManageManagedService = () => Boolean(ctx.env()?.permissions?.can_read && ctx.env()?.permissions?.can_write && ctx.env()?.permissions?.can_execute);
+  const canExecute = () => forwardResource.ready() && Boolean(ctx.env()?.permissions?.can_execute);
+  const canManageManagedService = () => managedResource.ready() && Boolean(ctx.env()?.permissions?.can_read && ctx.env()?.permissions?.can_write && ctx.env()?.permissions?.can_execute);
   const activation = (() => {
     try {
       return useViewActivation();
@@ -2088,21 +2088,19 @@ export function EnvPortForwardsPage() {
     if (canExecute()) addressInput?.focus({ preventScroll: true });
   });
 
-  createEffect(() => {
-    const active = activation.active();
-    activation.activationSeq();
-    if (!active || !canExecute()) return;
+  createEffect(on(() => [activation.active(), activation.activationSeq()], () => {
+    if (!activation.active() || !canExecute()) return;
 
     window.requestAnimationFrame(() => {
       if (!activation.active() || addressInput?.disabled) return;
       addressInput?.focus({ preventScroll: true });
     });
-  });
+  }));
 
   const forwardResource = createEnvCachedResource(ctx, () => 'web-service-forwards', forwardSnapshot);
   const managedResource = createEnvCachedResource(ctx, () => 'managed-web-services', managedServiceSnapshot);
   const [refreshSeq, setRefreshSeq] = createSignal(0);
-  const bumpRefresh = () => { forwardResource.invalidate(); setRefreshSeq(n => n + 1); };
+  const bumpRefresh = () => { if (!forwardResource.ready()) forwardResource.retry(); forwardResource.invalidate(); setRefreshSeq(n => n + 1); };
   const refreshForwards = () => forwardResource.refresh(async signal => {
     const out = await fetchLocalApiJSON<{ forwards: PortForward[] }>('/_redeven_proxy/api/forwards', { method: 'GET', signal });
     return Array.isArray(out?.forwards) ? out.forwards : [];
@@ -2111,11 +2109,11 @@ export function EnvPortForwardsPage() {
     forwardResource.identity(); refreshSeq();
     const active = activation.active(); activation.activationSeq();
     if (forwardResource.ready() && permissionReady() && canExecute() && active) void refreshForwards().catch(() => undefined);
-    if (permissionReady() && !canExecute()) forwardResource.invalidate(true);
+    if (permissionReady() && !ctx.env()?.permissions?.can_execute) forwardResource.invalidate(true);
   });
   const forwardsRefreshing = () => forwardResource.snapshot().refreshing;
   const collectionRenderable = () => Boolean(forwardResource.data()?.length || managedResource.data()?.length)
-    || ((forwardResource.data() !== undefined || !!forwardResource.snapshot().error || (permissionReady() && !canExecute()))
+    || ((forwardResource.data() !== undefined || !!forwardResource.snapshot().error || (permissionReady() && !ctx.env()?.permissions?.can_execute))
       && (managedResource.data() !== undefined || !!managedResource.snapshot().error || (permissionReady() && !canRead())));
   const initialForwardsLoading = () => !collectionRenderable()
     && (forwardResource.restoring() || managedResource.restoring() || forwardsRefreshing() || managedLoading());
@@ -2302,8 +2300,8 @@ export function EnvPortForwardsPage() {
             notify.error(i18n.t('webServices.managed.operationStreamFailed'), error instanceof Error ? error.message : String(error));
           });
       }
-    } catch {
-      if (generation === managedLoadGeneration) setManagedLoadError(true);
+    } catch (error) {
+      if (generation === managedLoadGeneration && !(error instanceof DOMException && error.name === 'AbortError')) setManagedLoadError(true);
     } finally { if (generation === managedLoadGeneration) setManagedLoading(false); }
   };
 
@@ -2472,15 +2470,17 @@ export function EnvPortForwardsPage() {
   };
 
   const reviewManagement = async (service: ManagedService) => {
+    if (!canManageManagedService()) return;
+    const operationCurrent = managedResource.captureAuthority();
 		setManagementTarget({service,action:'restore'});
     try {
       const review = await fetchLocalApiJSON<HostManagementReview>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(service.service_id)}/management-review`, { method: 'POST', body: '{}' });
-      setManagementReview(review);
+      if (operationCurrent()) setManagementReview(review);
     } catch (error) { notify.error(i18n.t('webServices.managed.restoreManagement'), error instanceof LocalApiError ? managedFailureMessage(error.code, i18n) : error instanceof Error ? error.message : String(error)); }
   };
   const restoreManagement = async () => {
     const review = managementReview();
-    if (!review || managementRestoreBusy()) return;
+    if (!canManageManagedService() || !review || managementRestoreBusy()) return;
     setManagementRestoreBusy(true);
     try {
       await fetchLocalApiJSON(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(review.service_id)}/restore-management`, { method: 'POST', body: JSON.stringify({ saved_identity: review.saved_identity, fingerprint: review.fingerprint, confirmed: true }) });
@@ -3066,6 +3066,7 @@ export function EnvPortForwardsPage() {
 
   // Create service handler
   const doCreate = async (target: string, name: string, description: string, accessMode: WebServiceAccessMode) => {
+    if (!canExecute()) return;
     if (!target) {
       notify.error(i18n.t('webServices.notifications.missingTargetTitle'), i18n.t('webServices.notifications.missingTargetMessage'));
       return;
@@ -3091,10 +3092,11 @@ export function EnvPortForwardsPage() {
   };
 
   const resolveCurrentForward = async (forward: PortForward): Promise<PortForward> => {
-    const owner = forwardResource.identity();
+    if (!forwardResource.ready()) throw new DOMException('Resource identity is pending', 'AbortError');
+    const operationCurrent = forwardResource.captureAuthority();
     const current = (forwardResource.snapshot().stale || forwardResource.snapshot().refreshing)
       ? (await refreshForwards()).find(item => item.forward_id === forward.forward_id) : forward;
-    if (owner !== forwardResource.identity()) throw new DOMException('Resource scope changed', 'AbortError');
+    if (!operationCurrent()) throw new DOMException('Resource scope changed', 'AbortError');
     if (!current) throw new Error(i18n.t('webServices.errors.loadFailedPrefix'));
     return current;
   };
@@ -3115,6 +3117,7 @@ export function EnvPortForwardsPage() {
 
   // Delete service handler
   const doDelete = async (id: string) => {
+    if (!canExecute()) return;
     const fid = String(id ?? '').trim();
     if (!fid) return;
     setDeleting(true);
@@ -3337,7 +3340,7 @@ export function EnvPortForwardsPage() {
               variant="default"
               class="h-8"
               onClick={() => setCreateOpen(true)}
-              disabled={permissionReady() && !canExecute()}
+              disabled={permissionReady() && !ctx.env()?.permissions?.can_execute}
               aria-label={i18n.t('webServices.actions.addService')}
               title={i18n.t('webServices.actions.addService')}
             >
@@ -3449,7 +3452,7 @@ export function EnvPortForwardsPage() {
             </form>
           </section>
 
-          <Show when={permissionReady() && !canExecute()}>
+          <Show when={permissionReady() && !ctx.env()?.permissions?.can_execute}>
             <div class="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
               <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path
@@ -3518,7 +3521,7 @@ export function EnvPortForwardsPage() {
               <Show when={forwardsCheckFailed() || managedLoadError()}><div class="web-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" /><p>{i18n.t(forwardsRenderable() || managedState().length ? 'webServices.collection.refreshFailed' : 'webServices.errors.loadFailedPrefix')}</p></div></Show>
 
               <Show when={collectionRenderable()}>
-                <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !canExecute()} />}>
+                <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !ctx.env()?.permissions?.can_execute} />}>
                   <Show when={filteredForwards().length > 0 || filteredManagedServices().length > 0} fallback={
                     <div class="flex flex-col items-center justify-center px-4 py-12">
                       <p class="text-sm text-muted-foreground">{searchQuery() ? i18n.t('webServices.search.noMatches', { query: searchQuery() }) : i18n.t('webServices.collection.archiveEmpty')}</p>

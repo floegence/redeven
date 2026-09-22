@@ -3,10 +3,10 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ cacheScope: '', full: true, running: vi.fn(), quit: vi.fn(), terminate: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupPlan: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
+const state = vi.hoisted(() => ({ cacheScope: '', generation: 0, full: true, running: vi.fn(), quit: vi.fn(), terminate: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupPlan: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
-  resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: state.cacheScope }),
+  resourceCacheAccess: () => ({ phase: 'ready' as const, generation: state.generation, scope: state.cacheScope }),
   env_id: () => 'host', localRuntime: () => ({}),
 }) }));
 vi.mock('../services/hostApplicationsApi', async importOriginal => ({ ...await importOriginal<object>(), cancelHostApplicationSetup: state.setupCancel, uploadHostApplicationSetup: state.setupUpload, getHostApplicationSetup: state.setupStatus, getHostApplicationTransferPlan: state.setupPlan, startHostApplicationSetup: state.setupStart, observeHostApplicationSetup: state.setupObserve, listHostApplications: state.catalog, listRunningHostApplications: state.running, quitHostApplication: state.quit, terminateHostApplication: state.terminate, detachHostApplication: state.detach, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, stopHostApplication: state.stop, addHostApplication: state.add, requestHostApplicationPermission: state.permission }));
@@ -25,7 +25,7 @@ let dispose: (() => void) | undefined;
 const settle = () => new Promise(resolve => setTimeout(resolve, 30));
 function button(label: string) { return [...host.querySelectorAll('button')].find(el => el.getAttribute('aria-label') === label)!; }
 beforeEach(() => {
-  vi.clearAllMocks(); state.cacheScope = ''; state.full = true; state.localMac = false;
+  vi.clearAllMocks(); state.generation = 0; state.cacheScope = ''; state.full = true; state.localMac = false;
   state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
   state.sessions.mockResolvedValue([{ id: 'session', application: app, state: 'running', forward }]);
   state.launch.mockResolvedValue({ id: 'session', application: app, state: 'starting', forward });
@@ -476,6 +476,21 @@ describe('macOS running application management', () => {
     state.running.mockResolvedValue([instance]);
     state.sessions.mockResolvedValue([]);
   }
+  it('does not dispatch a quit from a preflight begun under a retired connection', async () => {
+    runningCatalog();
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    button('Quit application · Text Editor').click(); await settle();
+    let resolve!: (value: unknown) => void;
+    state.running.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const dialog = document.querySelector('[role="dialog"]')!;
+    [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Quit application')!.click();
+    await settle();
+    state.generation += 1;
+    resolve([instance]); await settle();
+    expect(state.quit).not.toHaveBeenCalled();
+    expect(state.terminate).not.toHaveBeenCalled();
+  });
+
   it('exposes quit for applications with no sharing session and keeps cancelled quits visible', async () => {
     runningCatalog();
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();

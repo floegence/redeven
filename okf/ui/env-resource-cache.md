@@ -23,10 +23,12 @@ authenticated connection is available, in parallel with current-session read
 permission confirmation. The server hashes its session's
 endpoint, namespace, and user identity into an opaque `scope_id`. The value is
 not a credential and cannot select request authority. Pages reuse that confirmed
-scope; they never request it independently. While either confirmation is pending, inventory pages retain their target
-skeleton and publish neither durable nor temporary live inventory. An ordinary
-scope lookup failure permits live inventory through an isolated volatile owner;
-it never enables durable reads or writes. A permission denial remains closed.
+scope; they never request it independently. On first entry, while either confirmation
+is pending, inventory pages retain their target skeleton and publish neither
+durable nor temporary live inventory. An ordinary first scope lookup failure
+permits live inventory through one Shell-owned volatile cache shared by Activity
+and Workbench. That authentication lifetime stays volatile even if a later scope
+lookup succeeds. It never adopts unconfirmed durable records.
 
 Browser origin storage and Desktop's native environment/account owner partition
 isolate access sources. Resource keys further separate host catalog locale and
@@ -35,10 +37,23 @@ resource facts within a confirmed scope; each instance retains its own navigatio
 selection, filter, and search state. Scope changes fence asynchronous results.
 Read denial and access locking invalidate the old scope, including its persisted
 records. A transient transport failure does not delete successful snapshots.
-On a new authenticated session, presentation waits for identity confirmation
-again. Permission results carry their authenticated connection identity, and old
-cache handles and pending requests are retired before a new owner is exposed.
-Data fetched under a prior unconfirmed session cannot reappear.
+Transport replacement changes request authority, not data ownership. The Shell
+cancels requests through Floe `cancelRefreshes(scope)` and enters revalidation,
+retaining confirmed handles, subscriptions, successful empty results, and row
+nodes. Cancellation rejects callers with `AbortError`; a late response or denial
+cannot affect the current generation. Permission and scope checks run in parallel
+and grant new request authority together. A confirmed different user immediately
+retires the old presentation, even if permissions are still pending. Explicit
+locking, denial, reauthentication, or environment/source changes revoke the old
+owner. Ordinary revalidation failure keeps confirmed content and uses existing
+error/retry controls. It never starts a second reconnection loop.
+
+Environment permission loading is background state and cannot suspend the page
+module. Its last successful presentation remains available on ordinary failures,
+but pending or failed confirmation cannot authorize resource operations. The
+Shell distinguishes initial checking and ordinary recovery from explicit locking;
+normal recovery does not unmount the established page. Container projections
+follow that same owner instead of clearing their inventory on connection changes.
 
 # Persistence and presentation
 
@@ -91,7 +106,8 @@ Shell presents the target page's skeleton immediately, without extending the
 boot cover. Password and two-factor challenges retain the explicit access gate.
 The module fallback and first inventory placeholder share the real page's
 header, controls, list regions, and row geometry. Host Applications reserves its
-running and catalog sections; Containers uses its selected resource view;
+running and catalog sections; Containers shares the validated persisted view and
+table header with its content, and data placeholders use current column settings;
 Web Services retains its address form, search toolbar, and list rows; Codespaces
 uses the common card frame. Unknown counts are omitted. Resource additions and
 removals can legitimately change list length.
@@ -142,9 +158,11 @@ requests permissions, launches processes, or starts lifecycle operations.
 - `redeven:internal/codeapp/appserver/ui_cache_scope_test.go` - Authenticated scope isolation and read permission.
 - `redeven:desktop/src/main/desktopResourceCache.ts` - Asynchronous private files and global budget adapter.
 - `redeven:internal/envapp/ui_src/scripts/checkStartupContinuity.mjs` - Real compiled Shell, delayed permission/scope/network, persistent IndexedDB, and frame-by-frame continuity.
+- `redeven:desktop/scripts/check-env-content-continuity.mjs` - Production Welcome entry, owned Runtime artifact, window hide/show, reconnect, close/reopen, and process restart.
 - `redeven:desktop/scripts/check-startup-continuity.mjs` - Actual Electron restart with production native adapters and changed loopback ports.
 - `redeven:desktop/scripts/check-resource-cache.mjs` - Production compiler output and preload persistence across two Electron processes.
-- `redeven:internal/envapp/ui_src/src/ui/services/envResourceCache.test.ts` - Scope races, authorization clearing, and empty-list retention.
+- `redeven:internal/envapp/ui_src/src/ui/services/envResourceCache.test.ts` - Transport revalidation, cancellation, scope races, authorization clearing, and empty-list retention.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Delayed permission and identity checks preserve mounted content across connection replacement.
 - `redeven:internal/envapp/ui_src/src/ui/services/envResourceSnapshots.test.ts` - Sensitive field exclusion and corrupt input rejection.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.browser.test.tsx` - IndexedDB directory/icon restore and focus continuity.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Activity/Workbench inventory continuity.

@@ -1,6 +1,6 @@
 import { createActivityNavigation, activityTargetID, isBuiltinActivityPage, PENDING_ACTIVITY_PLUGIN_ID, type ActivityNavigation, type ActivityRestoreTarget } from './services/activityNavigation';
 import { EnvironmentAccessGate, type AccessGatePhase } from './EnvironmentAccessGate';
-import { createEnvResourceCacheAccess } from './services/envResourceCache';
+import { createEnvResourceCacheAccess, isResourceAuthorizationError } from './services/envResourceCache';
 import { isSessionEventAuthorizationError } from './services/sessionHTTP';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
 import { ActivityPageLoading } from './primitives/ActivityPageLoading';
@@ -12,7 +12,7 @@ import { PageAssetRecoveryNotice, PageLoadError } from './reconnect/PageAssetRec
 import { createEnvAppAssetRecovery } from './reconnect/createEnvAppAssetRecovery';
 import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
 import { writeTextToClipboard } from './utils/clipboard';
-import { ErrorBoundary, For, Show, Suspense, batch, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js';
+import { ErrorBoundary, For, Show, Suspense, batch, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Resource, type Setter } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { createUIFirstSelection, deferAfterPaint, type FloeComponent, type UIFirstSelectionEvent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryContributions, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
@@ -748,6 +748,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     return !isLocalMode() && Boolean(String(accessResumeToken() ?? '').trim());
   });
   const [accessRecoveryBusy, setAccessRecoveryBusy] = createSignal(false);
+  const [authenticationRevision, setAuthenticationRevision] = createSignal(0);
   const accessLocked = createMemo(() => {
     if (!accessPasswordRequired()) return false;
     if (isLocalMode()) return !accessServerUnlocked();
@@ -823,6 +824,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   };
 
   const markCurrentAccessLocked = (message: string) => {
+    setAuthenticationRevision(value => value + 1);
     if (isLocalMode()) {
       setLocalAccessStatus((current) => ({
         password_required: true,
@@ -929,7 +931,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const environmentDetailRequest = createMemo<AuthenticatedEnvironmentRequest | null>(() => {
     const id = envId() || null;
     if (!id) return null;
-    if (accessGateVisible()) return null;
+    if (accessGateVisible() || accessRecoveryBusy()) return null;
     return {
       connection: permissionConnection(),
       source: isLocalMode() ? 'local' : 'controlplane',
@@ -937,21 +939,45 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     };
   });
 
-  const [env, { refetch: refetchEnv }] = createResource<SessionEnvironmentDetail | null, AuthenticatedEnvironmentRequest | null>(
+  type EnvironmentResult = { data: SessionEnvironmentDetail | null | undefined; error?: unknown };
+  // Permission checks are background work. Only page modules may suspend their layout.
+  // Keeping failures in the result also preserves the last presentation without reusing its authority.
+  const [environmentResult, { refetch: refetchEnvironmentResult }] = createResource<EnvironmentResult, AuthenticatedEnvironmentRequest | null>(
     environmentDetailRequest,
-    async request => {
-      if (!request) return null;
-      const result = await getEnvironment({ source: request.source, envId: request.envId });
-      return result ? { ...result, [permissionOwner]: request.connection } : null;
+    async (request, previous) => {
+      if (!request) return { data: undefined };
+      try {
+        const result = await getEnvironment({ source: request.source, envId: request.envId });
+        return { data: result ? { ...result, [permissionOwner]: request.connection } : null };
+      } catch (error) {
+        return { data: isResourceAuthorizationError(error) ? null : previous.value?.data, error };
+      }
     },
+    { initialValue: { data: undefined } },
   );
+  const env = Object.defineProperties(() => environmentResult.latest.data, {
+    latest: { get: () => environmentResult.latest.data },
+    loading: { get: () => environmentResult.loading },
+    error: { get: () => environmentResult.latest.error },
+    state: { get: () => environmentResult.latest.error ? 'errored' : environmentResult.loading
+      ? environmentResult.latest.data === undefined ? 'pending' : 'refreshing'
+      : environmentResult.latest.data === undefined ? 'unresolved' : 'ready' },
+  }) as Resource<SessionEnvironmentDetail | null>;
+  const refetchEnv = async () => (await refetchEnvironmentResult())?.data;
 
   const resourceCacheAccess = createEnvResourceCacheAccess({
-    environment: envId,
-    readable: () => env()?.[permissionOwner] === permissionConnection() ? env()?.permissions?.can_read : undefined,
-    locked: accessGateVisible,
-    connection: () => protocol.status() === 'connected' ? protocol.session?.() : null,
+    environment: () => envId() ? JSON.stringify([envId(), desktopSessionContext?.renderer_storage_scope_id, desktopSessionContext?.session_source, isLocalMode() ? 'local' : 'controlplane']) : '',
+    authentication: authenticationRevision,
+    permissionError: () => env.error,
+    readable: () => isResourceAuthorizationError(env.error) ? false
+      : !env.loading && !env.error && env()?.[permissionOwner] === permissionConnection() ? env()?.permissions?.can_read : undefined,
+    locked: accessLocked,
+    connection: () => protocol.status() === 'connected' && !accessPending() && !accessRecoveryBusy() && !accessResumePending()
+      ? protocol.session?.() : null,
+    retryPermissions: () => { void refetchEnv(); },
   });
+  const activityContentAvailable = () => !accessGateVisible() || recoveryVisible()
+    || (!accessLocked() && resourceCacheAccess().owner !== undefined);
 
   const [manualError, setManualError] = createSignal<string | null>(null);
   const [runtimeConnectionEstablished, setRuntimeConnectionEstablished] = createSignal(false);
@@ -3433,6 +3459,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         throw new Error(i18n.t('accessGate.missingResumeTokenError'));
       }
 
+      setAuthenticationRevision(value => value + 1);
       setCurrentAccessResumeToken(token);
       setCurrentAccessPassword('');
       accessResumeClient = null;
@@ -4884,7 +4911,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
             inert={recoveryVisible()}
             aria-hidden={recoveryVisible() ? 'true' : undefined}
           >
-            <Show when={!accessGateVisible() || recoveryVisible()}>
+            <Show when={activityContentAvailable()}>
               <ActivityAppsMain
                 activeId={() => layout.sidebarActiveTab()}
                 activationMode="after-paint"
@@ -4892,7 +4919,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
                 renderError={() => <PageLoadError ready={assetRecoveryReady()} />}
               />
             </Show>
-            <Show when={viewMode() === 'activity' && accessGateVisible() && !recoveryVisible()}>
+            <Show when={viewMode() === 'activity' && !activityContentAvailable()}>
               <Show when={accessGatePhase() === 'checking'} fallback={accessGatePanel()}>{renderActivityPageSkeleton(layout.sidebarActiveTab())}</Show>
             </Show>
           </div>
@@ -4934,7 +4961,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         inert={recoveryVisible() || workbenchPluginCenterBlocking()}
         aria-hidden={recoveryVisible() || workbenchPluginCenterBlocking() ? 'true' : undefined}
       >
-        <Show when={!accessGateVisible() || recoveryVisible()}>
+        <Show when={activityContentAvailable()}>
           <EnvWorkbenchPage
             inputEnabled={viewMode() === 'workbench' && !workbenchPluginCenterBlocking() && !recoveryVisible()}
             dockItems={pluginDockItems()}
@@ -4963,7 +4990,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
             }}
           />
         </Show>
-        <Show when={viewMode() === 'workbench' && accessGateVisible() && !recoveryVisible()}>
+        <Show when={viewMode() === 'workbench' && !activityContentAvailable()}>
           {accessGatePanel()}
         </Show>
       </div>
