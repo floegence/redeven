@@ -735,11 +735,11 @@
   });
   close.onclick = () => { collapseControls(); send({ action: 'close' }); };
   document.addEventListener('pointerdown', event => {
-    if (!controls.contains(event.target)) collapseControls();
+    if (!popover.contains(event.target) && !toggles[panelSection]?.contains(event.target)) collapseControls();
   }, true);
   controls.addEventListener('focusout', event => {
     // WebKit may blur to the document before clicking another control.
-    if (event.relatedTarget && !controls.contains(event.relatedTarget)) collapseControls();
+    if (event.relatedTarget && !popover.contains(event.relatedTarget) && !toggles[panelSection]?.contains(event.relatedTarget)) collapseControls();
   });
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape' || !panelSection) return;

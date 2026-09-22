@@ -63,6 +63,51 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
 }
 
 describe('host application viewer', () => {
+  it.each(['.mac-app-controls', '.mac-app-toolbar', '.mac-app-toolbar-spacer', '.mac-app-toolbar-separator', '.host-app-identity'])(
+    'dismisses toolbar popovers on %s input without acting on the application', async selector => {
+      const v = await viewer(false, true);
+      v.appWindow(1); v.client._new_window(1);
+      v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+      const doc = dom.window.document;
+      const popover = doc.querySelector<HTMLElement>('.mac-app-popover')!;
+      for (const section of ['.mac-app-controls-toggle', '.mac-app-windows-toggle', '.mac-app-quit']) {
+        const toggle = doc.querySelector<HTMLButtonElement>(section)!;
+        toggle.click();
+        expect(popover.hidden).toBe(false);
+        const event = new dom.window.Event('pointerdown', {bubbles:true, cancelable:true});
+        doc.querySelector(selector)!.dispatchEvent(event);
+        expect(popover.hidden).toBe(true);
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        expect(event.defaultPrevented).toBe(false);
+      }
+      expect(v.client.send_close_window).not.toHaveBeenCalled();
+      expect(v.client.close).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves active-trigger toggling and switches popovers on another trigger', async () => {
+    const v = await viewer(false, true);
+    v.appWindow(1); v.client._new_window(1);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    const doc = dom.window.document;
+    const picture = doc.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
+    const windows = doc.querySelector<HTMLButtonElement>('.mac-app-windows-toggle')!;
+    const popover = doc.querySelector<HTMLElement>('.mac-app-popover')!;
+    picture.click();
+    picture.querySelector('svg')!.dispatchEvent(new dom.window.Event('pointerdown', {bubbles:true}));
+    picture.focus(); picture.click();
+    expect(popover.hidden).toBe(true);
+    picture.click();
+    windows.dispatchEvent(new dom.window.Event('pointerdown', {bubbles:true}));
+    expect(popover.hidden).toBe(true);
+    windows.focus(); windows.click();
+    expect(popover.hidden).toBe(false);
+    expect(popover.dataset.section).toBe('windows');
+    expect(picture.getAttribute('aria-expanded')).toBe('false');
+    picture.focus();
+    expect(popover.hidden).toBe(true);
+  });
+
   it.each(['.mac-app-controls-toggle', '.mac-app-windows-toggle', '.mac-app-quit'])(
     'dismisses %s from inside Xpra without consuming application input', async selector => {
       const v = await viewer(false, true);

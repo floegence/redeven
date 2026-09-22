@@ -16669,7 +16669,7 @@
         "host-applications",
         "ui"
       ],
-      "timestamp": "2026-09-22T09:50:25Z",
+      "timestamp": "2026-09-22T10:08:44Z",
       "frontmatter": {
         "description": "Place host application controls alongside native window buttons without adding connection latency.",
         "tags": [
@@ -16677,19 +16677,19 @@
           "host-applications",
           "ui"
         ],
-        "timestamp": "2026-09-22T09:50:25Z",
+        "timestamp": "2026-09-22T10:08:44Z",
         "title": "Desktop host application titlebar",
         "type": "Runtime Contract"
       },
-      "body_length": 5770,
+      "body_length": 6303,
       "summary": "The Redeven bootstrap owns host application toolbar presentation; macOS capture and Xpra remain the command and session authorities. Desktop provides native window geometry through the restricted [application presentation boundary](web-service-browser-window.md#host-application-presentation). One compact titlebar exposes window selection, picture settings and normal close actions without another connection or startup wait. Disconnection disables unavailable actions while preserving the native window and retry path.",
       "sections": [
         {
           "id": "layout",
           "title": "Layout",
           "level": 1,
-          "body": "The first-party host-application bootstrap places its controls in one 40-pixel\nDesktop titlebar, alongside platform-owned traffic lights or caption buttons.\nIt uses the existing Desktop chrome contract for left/right safe areas and\nfullscreen transitions. Empty header space drags the window; buttons and popovers\nexplicitly reject dragging. Capture pixels begin below this row and are never\ncovered by it. Browser popups retain their browser frame and use a 46-pixel\nin-page application toolbar.\n\nThe row presents application identity, current window and count, picture settings,\nclose-current-window and confirmed quit. Destructive controls use compact icons\nwith explicit accessible names and tooltips. Labels collapse at narrow widths;\nwindow titles truncate without consuming space reserved for OS controls. Menus\nstay inside the viewport and support keyboard navigation. Escape dismisses the\npopover and restores focus to its trigger. Clicking application content dismisses\nany open toolbar popover without cancelling, replaying or redirecting the click,\nor restoring toolbar focus. This applies both to macOS capture content and the\nsame-origin Xpra document, including after reconnection. Content input handlers\nthat stop event propagation must not prevent dismissal; moving keyboard focus\ninto application content also dismisses the popover. Interacting inside a popover\nretains its normal control behavior. Loading, disconnected and completed Desktop documents\nretain the titlebar with unavailable controls disabled. Preparation and local\nconnection-failure documents retain a scriptless draggable title.",
-          "char_count": 1614
+          "body": "The first-party host-application bootstrap places its controls in one 40-pixel\nDesktop titlebar, alongside platform-owned traffic lights or caption buttons.\nIt uses the existing Desktop chrome contract for left/right safe areas and\nfullscreen transitions. Empty header space drags the window when no toolbar\npopover is open; buttons and popovers explicitly reject dragging. While a popover\nis open, the header temporarily receives pointer input so an outside click can\ndismiss it instead of being consumed by native window dragging. Dismissal restores\nnative dragging immediately. Capture pixels begin below this row and are never\ncovered by it. Browser popups retain their browser frame and use a 46-pixel\nin-page application toolbar.\n\nThe row presents application identity, current window and count, picture settings,\nclose-current-window and confirmed quit. Destructive controls use compact icons\nwith explicit accessible names and tooltips. Labels collapse at narrow widths;\nwindow titles truncate without consuming space reserved for OS controls. Menus\nstay inside the viewport and support keyboard navigation. Escape dismisses the\npopover and restores focus to its trigger. Only the open popover and its own\ntrigger belong to its interaction boundary, never the entire header. Clicking\nheader padding, gaps, separators, a noninteractive application identity or\napplication content dismisses any open toolbar popover without cancelling,\nreplaying or redirecting the click,\nor restoring toolbar focus. This applies both to macOS capture content and the\nsame-origin Xpra document, including after reconnection. Content input handlers\nthat stop event propagation must not prevent dismissal; moving keyboard focus\noutside the popover and its trigger also dismisses it. Clicking the active trigger\ncloses it once; clicking a different trigger replaces it with that trigger's\npopover. Interacting inside a popover retains its normal control behavior.\nLoading, disconnected and completed Desktop documents\nretain the titlebar with unavailable controls disabled. Preparation and local\nconnection-failure documents retain a scriptless draggable title.",
+          "char_count": 2147
         },
         {
           "id": "appearance-and-language",
@@ -24834,5 +24834,5 @@
       ]
     }
   ],
-  "source_sha256": "650941dda2ed03a29f27c2e48e6c0a7137b6cdc7c39ecda5f47379a795ac69b7"
+  "source_sha256": "041394c629077d5c2c64e865a8dac5f5ac19b7fc9e23b87caa9f341f85a0f18d"
 }

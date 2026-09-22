@@ -118,6 +118,9 @@ body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; 
 }
 :root[data-redeven-host-application-chrome="true"] .mac-app-toolbar button,
 :root[data-redeven-host-application-chrome="true"] .mac-app-popover { app-region:no-drag; }
+/* Native drag regions consume pointer input. While a popover is open, the
+   header must receive the outside click; hiding it restores native dragging. */
+:root[data-redeven-host-application-chrome="true"] .mac-app-controls:has(>.mac-app-popover:not([hidden])) .mac-app-toolbar { app-region:no-drag; }
 :root[data-redeven-host-application-chrome="true"] .mac-app-toolbar>button { height:28px; min-height:28px; border-radius:var(--floe-radius-control); }
 :root[data-redeven-host-application-chrome="true"] .mac-app-toolbar-icon { width:18px; height:18px; }
 .host-app-identity { display:flex; align-items:center; gap:8px; max-width:210px; min-width:0; padding:0 8px; font-size:12px; font-weight:600; }

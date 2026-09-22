@@ -153,8 +153,12 @@
       : event.key === 'Home' ? buttons[0] : event.key === 'End' ? buttons.at(-1) : null;
     if (next) { event.preventDefault(); next.focus(); }
   });
-  document.addEventListener('pointerdown', event => { if (!controls.contains(event.target)) collapseControls(); }, true);
-  controls.addEventListener('focusout', event => { if (event.relatedTarget && !controls.contains(event.relatedTarget)) collapseControls(); });
+  document.addEventListener('pointerdown', event => {
+    if (!popover.contains(event.target) && !toggles[panelSection]?.contains(event.target)) collapseControls();
+  }, true);
+  controls.addEventListener('focusout', event => {
+    if (event.relatedTarget && !popover.contains(event.relatedTarget) && !toggles[panelSection]?.contains(event.relatedTarget)) collapseControls();
+  });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && panelSection) { event.preventDefault(); event.stopImmediatePropagation(); collapseControls(true); }
   }, true);
