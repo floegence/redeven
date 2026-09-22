@@ -72,7 +72,12 @@ the current file and draft mapping owned by the product download command builder
 Writable PDFs expose the existing Edit file action. Editing supports native
 AcroForm fields and highlights on a text selection within one page, with annotation
 undo and redo. This is document annotation and form filling, not arbitrary original
-page-text editing. Read-only previews show saved annotations without editable
+page-text editing. PDF.js saves full Unicode field values, but when the original
+field font cannot encode them, it sets `NeedAppearances` instead of embedding a
+replacement form font. Cross-viewer appearance then depends on that viewer's
+font availability and form-appearance generation. This is not a guarantee of
+self-contained multilingual form appearance; verify the target viewer before
+printing or distributing those forms. Read-only previews show saved annotations without editable
 fields. Opening or toggling edit mode never grants filesystem write permission.
 
 The controller binds exactly one editor to the current source bytes. It owns dirty,
