@@ -17,6 +17,8 @@ const getEnvAppAccessStatusMock = vi.fn();
 const unlockEnvAppAccessMock = vi.fn();
 const fetchLocalApiJSONMock = vi.fn();
 const getEnvironmentMock = vi.fn();
+const cacheProbe = { enabled: false };
+const cacheScopeMock = vi.fn(async () => ({ scope_id: 'a'.repeat(64) }));
 const mintLocalDirectConnectArtifactMock = vi.fn();
 const waitForLocalPluginSessionReadyMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
@@ -1277,7 +1279,18 @@ vi.mock('./pages/EnvFileBrowserPage', () => ({
     );
   },
 }));
-vi.mock('./pages/EnvHostApplicationsPage', () => ({ EnvHostApplicationsPage: () => <div>activity main</div> }));
+vi.mock('./pages/EnvHostApplicationsPage', async () => {
+  const { createEnvCachedResource } = await import('./services/envResourceCache');
+  return { EnvHostApplicationsPage: () => {
+    if (!cacheProbe.enabled) return <div>activity main</div>;
+    const ctx = useContext(EnvContextMock);
+    const cache = createEnvCachedResource(ctx, () => 'shell-continuity-probe', value => value as string[]);
+    createEffect(() => { if (cache.ready()) void cache.refresh(async () => ['visible']); });
+    return <div data-testid="cache-probe" data-permission={String(ctx.env()?.permissions?.can_read)}>
+      <Show when={cache.data()} fallback={<div data-testid="cache-skeleton" />}><input value="retained" data-testid="cache-row" /></Show>
+    </div>;
+  } };
+});
 vi.mock('./pages/EnvContainersPage', () => ({ EnvContainersPage: () => <div>activity main</div> }));
 vi.mock('./pages/CodespacesPresentation', () => ({ CodespacesPageSkeleton: () => <div>codespaces skeleton</div> }));
 vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div>activity main</div> }));
@@ -1380,7 +1393,7 @@ vi.mock('./utils/askFlowerPath', () => ({
 vi.mock('./utils/windowNavigation', () => ({ reopenEnvironmentPage: vi.fn(), reloadCurrentPage: reloadCurrentPageMock }));
 vi.mock('./services/localApi', () => ({
   fetchLocalApiJSON: (url: string, ...args: unknown[]) => url === '/_redeven_proxy/api/ui-cache-scope'
-    ? Promise.resolve({ scope_id: 'a'.repeat(64) }) : fetchLocalApiJSONMock(url, ...args),
+    ? cacheScopeMock() : fetchLocalApiJSONMock(url, ...args),
   localApiRequestCredentials: () => 'same-origin',
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
   uploadLocalApiFile: vi.fn(),
@@ -1520,6 +1533,8 @@ afterEach(() => {
 });
 
 beforeEach(async () => {
+  cacheProbe.enabled = false;
+  cacheScopeMock.mockReset().mockResolvedValue({ scope_id: 'a'.repeat(64) });
   const localStorage = createStorageMock();
   const sessionStorage = createStorageMock();
   Object.defineProperty(window, 'localStorage', { configurable: true, value: localStorage });
@@ -1684,6 +1699,36 @@ beforeEach(async () => {
 });
 
 describe('EnvAppShell environment entry affordances', () => {
+  it('keeps mounted content while a replacement connection revalidates permission and scope', async () => {
+    cacheProbe.enabled = true;
+    localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    localStorage.setItem('redeven_envapp_activity_navigation', JSON.stringify({ version: 1, current: { kind: 'builtin', id: 'applications' }, builtinHistory: ['applications'] }));
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      setSidebarActiveTabMock('applications');
+      await flushUntil(() => !!host.querySelector('[data-testid="cache-row"]'), 80);
+      const row = host.querySelector<HTMLInputElement>('[data-testid="cache-row"]')!;
+      row.focus();
+      const permission = deferred<any>(); const scope = deferred<{ scope_id: string }>();
+      getEnvironmentMock.mockReturnValueOnce(permission.promise);
+      cacheScopeMock.mockReturnValueOnce(scope.promise);
+      publishProtocolConnected('replacement-content-session');
+      await flushAsync();
+      expect(host.querySelector('[data-testid="cache-row"]')).toBe(row);
+      expect(host.textContent).not.toContain('HostApplications skeleton');
+      expect(host.querySelector('[data-testid="cache-skeleton"]')).toBeNull();
+      scope.resolve({ scope_id: 'a'.repeat(64) }); await flushAsync();
+      expect(host.querySelector('[data-testid="cache-row"]')).toBe(row);
+      permission.resolve({ public_id: 'env_local', permissions: { can_read: true, can_write: true, can_execute: true } });
+      await flushAsync();
+      expect(host.querySelector('[data-testid="cache-row"]')).toBe(row);
+      expect(document.activeElement).toBe(row);
+    } finally { dispose(); }
+  });
+
   it.each(['terminal', 'monitor', 'files', 'codespaces', 'ports', 'applications', 'containers', 'ai', 'settings', 'plugin-center'])(
     'keeps saved Activity target %s independent of Workbench startup and mode switching', async target => {
       const key = 'redeven-envapp:env_local-activity-navigation';

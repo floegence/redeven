@@ -798,6 +798,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
     artifactSpendRequests: () => [...artifactSpendRequests],
     pluginRequests,
     runtimeRecovery,
+    disconnectTransport: () => flowersecPeer?.close(),
     close: async () => {
       await peerRenewal;
       await flowersecPeer?.close();

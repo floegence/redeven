@@ -3,6 +3,7 @@ import { Activity, Database, FileText, Filter, Layers, Package, Plus, Refresh, S
 import { Button, Input, Tabs } from '@floegence/floe-webapp-core/ui';
 import { useI18n } from '../i18n';
 import type { ContainerResourceView } from '../services/containerResourcesApi';
+import { sanitizePersistedState } from './containerPageState';
 import { readUIStorageJSON } from '../services/uiStorage';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import './env-containers.css';
@@ -37,7 +38,27 @@ export function ContainerInventoryToolbarSkeleton(props: { view: ContainerResour
   </section>;
 }
 
-export function ContainerInventorySkeleton(props: { view: ContainerResourceView; header: JSX.Element; volumeSize?: boolean; secondary?: boolean; ports?: boolean; charts?: boolean; created?: boolean }) {
+type InventoryColumns = { view: ContainerResourceView; volumeSize?: boolean; secondary?: boolean; ports?: boolean; charts?: boolean; created?: boolean };
+type InventorySort = 'name' | 'status' | 'size' | 'secondary' | 'created';
+
+export function ContainerInventoryTableHeader(props: InventoryColumns & { sortKey?: InventorySort; sortDirection?: 'ascending' | 'descending'; renderSort?: (key: InventorySort, label: string) => JSX.Element }) {
+  const i18n = useI18n();
+  const column = (key: InventorySort, label: string, className: string, numeric = false) => <th class={className} data-numeric={numeric || undefined} aria-sort={props.sortKey === key ? props.sortDirection : 'none'}>
+    {props.renderSort ? props.renderSort(key, label) : <span class="container-sort-control">{label}</span>}
+  </th>;
+  const secondaryLabel = () => i18n.t(props.view === 'containers' ? 'containers.columns.image' : props.view === 'images' ? 'containers.columns.size' : props.view === 'volumes' ? 'containers.columns.driver' : 'containers.columns.running');
+  return <thead><tr>
+    {column('name', i18n.t('containers.columns.name'), 'container-name-column')}
+    {column('status', i18n.t('containers.columns.status'), 'container-status-column')}
+    <Show when={props.view === 'volumes' && props.volumeSize}>{column('size', i18n.t('containers.volumeUsage.size'), 'container-volume-size')}</Show>
+    <Show when={props.secondary}>{column('secondary', secondaryLabel(), 'container-secondary-column', props.view !== 'containers' && props.view !== 'volumes')}</Show>
+    <Show when={props.view === 'containers'}><Show when={props.ports}><th class="container-port-column">{i18n.t('containers.detail.ports')}</th></Show><Show when={props.charts}><th class="container-metric-column">{i18n.t('containers.stats.cpu')}</th><th class="container-metric-column">{i18n.t('containers.stats.memory')}</th></Show></Show>
+    <Show when={props.view !== 'containers' && props.created}>{column('created', i18n.t('containers.columns.created'), 'container-created-column')}</Show>
+    <th class="container-actions-column">{i18n.t('containers.detail.actions')}</th>
+  </tr></thead>;
+}
+
+export function ContainerInventorySkeleton(props: InventoryColumns & { header: JSX.Element }) {
   return <>
       <div class="container-resource-table-shell container-resource-table-shell--loading" data-container-resource-skeleton-table>
         <table class="w-full text-left text-sm">
@@ -66,13 +87,10 @@ export function ContainerInventorySkeleton(props: { view: ContainerResourceView;
 
 export function ContainersPageSkeleton() {
   const i18n = useI18n();
-  const saved = readUIStorageJSON<{ view?: ContainerResourceView }>('containers:activity', {});
-  const views: ContainerResourceView[] = ['containers', 'images', 'volumes', 'compose-projects', 'pods'];
-  const view = views.includes(saved.view!) ? saved.view! : 'containers';
+  const { view } = sanitizePersistedState(readUIStorageJSON('containers:activity', {}));
   const tabs = ['containers', 'images', 'volumes', ...(view === 'compose-projects' || view === 'pods' ? [view] : [])] as ContainerResourceView[];
   const secondary = view !== 'volumes';
-  const secondaryKey = view === 'containers' ? 'containers.columns.image' : view === 'images' ? 'containers.columns.size' : 'containers.columns.running';
-  const header = <thead><tr><th class="container-name-column"><span class="container-sort-control">{i18n.t('containers.columns.name')}</span></th><th class="container-status-column"><span class="container-sort-control">{i18n.t('containers.columns.status')}</span></th><Show when={view === 'volumes'}><th class="container-volume-size">{i18n.t('containers.volumeUsage.size')}</th></Show><Show when={secondary}><th class="container-secondary-column">{i18n.t(secondaryKey)}</th></Show><Show when={view === 'containers'}><th class="container-port-column">{i18n.t('containers.detail.ports')}</th></Show><th class="container-actions-column">{i18n.t('containers.detail.actions')}</th></tr></thead>;
+  const header = <ContainerInventoryTableHeader view={view} volumeSize secondary={secondary} ports />;
   return <div class={`redeven-containers flex h-full min-h-0 flex-col ${redevenSurfaceRoleClass('main')}`} data-container-page data-resource-view={view}>
     <ContainersHeader tabs={<Tabs class="container-resource-tabs" items={tabs.map(id => ({ id, label: i18n.t(`containers.views.${id}`), icon: <ContainerViewIcon view={id} class="h-4 w-4" />, disabled: true }))} activeId={view} onChange={() => {}} size="md" ariaLabel={i18n.t('containers.resourceNavigation')} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false, scrollButtons: 'auto' }} slotClassNames={{ scrollContainer: 'container-resource-tabs__scroller', tab: 'container-resource-tabs__tab', indicator: 'container-tab-indicator' }} />} />
     <main class="container-content min-h-0 flex-1 overflow-hidden" aria-busy="true"><div class="container-list-page" data-container-list-loading aria-label={i18n.t('containers.loading')}><ContainerInventoryToolbarSkeleton view={view} /><div class="container-inventory-scroll"><ContainerInventorySkeleton view={view} header={header} volumeSize secondary={secondary} ports /></div></div></main>

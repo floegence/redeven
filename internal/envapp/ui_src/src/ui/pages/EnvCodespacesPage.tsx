@@ -898,9 +898,10 @@ export function EnvCodespacesPage() {
     await refetch().catch(() => undefined);
   };
   const resolveCurrentSpace = async (space: SpaceStatus): Promise<SpaceStatus> => {
-    const owner = inventory.identity();
+    if (!inventory.ready()) throw new DOMException('Resource identity is pending', 'AbortError');
+    const operationCurrent = inventory.captureAuthority();
     const values = inventory.snapshot().stale || inventory.snapshot().refreshing ? await refetch() : spaces();
-    if (owner !== inventory.identity()) throw new DOMException('Resource scope changed', 'AbortError');
+    if (!operationCurrent()) throw new DOMException('Resource scope changed', 'AbortError');
     const current = values?.find(item => item.code_space_id === space.code_space_id);
     if (!current) throw new Error(i18n.t('codespaces.notifications.missingCodespaceMessage', { name: space.name || space.code_space_id }));
     return current;
@@ -928,6 +929,7 @@ export function EnvCodespacesPage() {
   });
 
   const handleCreate = async (path: string, name: string, description: string) => {
+    if (!inventory.ready()) return;
     const owner = inventory.identity();
     setCreateLoading(true);
     try {
@@ -1079,12 +1081,14 @@ export function EnvCodespacesPage() {
   };
 
   const handleStart = async (space: SpaceStatus) => {
+    if (!inventory.ready()) return;
     if (busyActionOf(space.code_space_id)) return;
     const owner = inventory.identity();
+    const operationCurrent = inventory.captureAuthority();
     setBusyAction(space.code_space_id, "start");
     try {
       space = await resolveCurrentSpace(space);
-      if (!(await ensureCodeRuntimeAvailable("start", space)) || owner !== inventory.identity()) return;
+      if (!(await ensureCodeRuntimeAvailable("start", space)) || !operationCurrent()) return;
       await fetchLocalApiJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/start`, { method: "POST" });
       await refreshAfterMutation(owner);
       notification.success(
@@ -1099,12 +1103,14 @@ export function EnvCodespacesPage() {
   };
 
   const handleStop = async (space: SpaceStatus) => {
+    if (!inventory.ready()) return;
     if (busyActionOf(space.code_space_id)) return;
     const owner = inventory.identity();
+    const operationCurrent = inventory.captureAuthority();
     setBusyAction(space.code_space_id, "stop");
     try {
       space = await resolveCurrentSpace(space);
-      if (owner !== inventory.identity() || !space.running) return;
+      if (!operationCurrent() || !space.running) return;
       await fetchLocalApiJSON<void>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/stop`, { method: "POST" });
       await refreshAfterMutation(owner);
       notification.success(
@@ -1119,14 +1125,16 @@ export function EnvCodespacesPage() {
   };
 
   const handleDeleteConfirm = async () => {
+    if (!inventory.ready()) return;
     const target = deleteTarget();
     if (!target) return;
     const owner = inventory.identity();
+    const operationCurrent = inventory.captureAuthority();
 
     setDeleteLoading(true);
     try {
       await resolveCurrentSpace(target);
-      if (owner !== inventory.identity()) return;
+      if (!operationCurrent()) return;
       await fetchLocalApiJSON<void>(`/_redeven_proxy/api/spaces/${encodeURIComponent(target.code_space_id)}`, { method: "DELETE" });
       await refreshAfterMutation(owner, previous => previous.filter(space => space.code_space_id !== target.code_space_id));
       setDeleteDialogOpen(false);
@@ -1143,8 +1151,10 @@ export function EnvCodespacesPage() {
   };
 
   const handleOpen = async (space: SpaceStatus, openTarget: CodespaceOpenTarget) => {
+    if (!inventory.ready()) return;
     if (busyActionOf(space.code_space_id)) return;
     const owner = inventory.identity();
+    const operationCurrent = inventory.captureAuthority();
     setBusyAction(space.code_space_id, "open");
     const desktopWindowLoading = {
       loadingTitle: i18n.t("codespaces.desktopWindow.loadingTitle"),
@@ -1162,12 +1172,12 @@ export function EnvCodespacesPage() {
         reservedPopup = resolveCodespaceOpenStrategy(openTarget, space.code_space_id, desktopWindowLoading.desktopWindowOpenFailed, i18n.t("codespaces.errors.popupBlocked"));
       }
       space = await resolveCurrentSpace(space);
-      if (owner !== inventory.identity()) return;
+      if (!operationCurrent()) return;
       if (openTarget === "desktop_window") {
         await openDesktopCodespaceLoadingWindow(space.code_space_id, desktopWindowLoading);
         desktopLoadingWindowOpened = true;
       }
-      if (!(await ensureCodeRuntimeAvailable("open", space, openTarget)) || owner !== inventory.identity()) return;
+      if (!(await ensureCodeRuntimeAvailable("open", space, openTarget)) || !operationCurrent()) return;
       await openCodespace(space.code_space_id, openTarget, () => {}, {
         desktopOpenFailed: i18n.t("codespaces.errors.desktopOpenFailed"),
         desktopWindowLoading,
@@ -1209,12 +1219,13 @@ export function EnvCodespacesPage() {
   };
 
   const openDeleteDialog = async (space: SpaceStatus) => {
+    if (!inventory.ready()) return;
     if (busyActionOf(space.code_space_id)) return;
-    const owner = inventory.identity();
+    const operationCurrent = inventory.captureAuthority();
     setBusyAction(space.code_space_id, 'delete');
     try {
       const current = await resolveCurrentSpace(space);
-      if (owner !== inventory.identity()) return;
+      if (!operationCurrent()) return;
       setDeleteTarget(current);
       setDeleteDialogOpen(true);
     } catch (error) {
@@ -1260,7 +1271,7 @@ export function EnvCodespacesPage() {
   };
 
   const canOpenCodespaceInTerminal = (space: SpaceStatus): boolean => (
-    canLaunchProcess(env.env()?.permissions)
+    inventory.ready() && canLaunchProcess(env.env()?.permissions)
     && canOpenDirectoryPathInTerminal(space.workspace_path)
   );
 
@@ -1331,6 +1342,7 @@ export function EnvCodespacesPage() {
   const spacesRenderable = () => spaces() !== undefined;
   const pageRefreshing = () => spacesRefreshing() || runtimeResource.loading;
   const handleRefreshAll = async () => {
+    if (!inventory.ready()) { inventory.retry(); return; }
     await Promise.allSettled([refetch(), refetchRuntimeStatus()]);
   };
   const sortedSpaces = () => {

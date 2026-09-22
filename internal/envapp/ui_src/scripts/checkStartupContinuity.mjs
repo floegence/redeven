@@ -3,6 +3,14 @@ import { chromium } from 'playwright';
 import { createBuiltDistTLS, trustBuiltDistWebTransport } from './checkPackagedRenderer.mjs';
 import { cachePages, navigationPages, navigationKey, navigationRecord, createContinuityServer, observeContinuityFrames } from './fixtures/startupContinuity.mjs';
 
+async function assertEventually(predicate) {
+  const deadline = Date.now() + 15000;
+  while (!predicate()) {
+    assert.ok(Date.now() < deadline, 'Expected reconnect request did not arrive');
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+}
+
 const tls = await createBuiltDistTLS();
 const server = await createContinuityServer(tls);
 const browser = await chromium.launch({ args: [`--ignore-certificate-errors-spki-list=${tls.certificateSPKIHash}`] });
@@ -53,6 +61,30 @@ try {
       assert.ok(shown >= 0 && frames.slice(shown).every(frame => frame.row && !frame.skeleton), `${target}: content regressed ${JSON.stringify(frames)}`);
       assert.deepEqual(errors, [], `${target}: renderer errors`);
       console.log(`PASS real Shell cache startup: ${target}`, JSON.stringify(frames));
+      // Exercise an already visible window, not only a cold cache remount.
+      const releasePermission = server.hold('permissions');
+      const releaseScope = server.hold('scope');
+      const releaseData = server.hold('data');
+      const requestsBeforeReconnect = server.requests.length;
+      await page.evaluate(() => { globalThis.__continuityFrames.length = 0; });
+      try {
+        await server.disconnectTransport();
+        await page.waitForFunction(() => globalThis.__continuityFrames.length > 0);
+        assert.equal(await row.evaluate(element => element === globalThis.__continuityRow), true, `${target}: preserve content before reconfirmation`);
+        releasePermission();
+        await assertEventually(() => server.requests.slice(requestsBeforeReconnect).some(path => path.endsWith('/ui-cache-scope')));
+        assert.equal(await row.evaluate(element => element === globalThis.__continuityRow), true, `${target}: preserve content while scope is pending`);
+        assert.equal(await page.locator(selectors.skeleton).count(), 0);
+        releaseScope();
+        releaseData();
+        await page.getByRole('button', { name: 'Reconnect', exact: true }).waitFor();
+        await page.waitForFunction(() => !globalThis.document.querySelector('[data-floe-shell-slot="main"] .animate-spin'));
+        assert.equal(await row.evaluate(element => element === globalThis.__continuityRow), true, `${target}: reconnect must retain the row node`);
+        const warmFrames = await page.evaluate(() => globalThis.__continuityFrames);
+        assert.ok(warmFrames.every(frame => frame.row && !frame.skeleton), `${target}: warm content regressed ${JSON.stringify(warmFrames)}`);
+        console.log(`PASS real Shell warm reconnect: ${target}`, JSON.stringify(warmFrames));
+      } finally { releasePermission(); releaseScope(); releaseData(); }
+
       server.setDataFailure(true);
       await page.reload();
       await page.locator(selectors.row).filter({ hasText: selectors.title }).first().waitFor();

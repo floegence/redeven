@@ -10,6 +10,7 @@ import { requestContainerResourceNavigation } from '../services/containerResourc
 
 const browserHarness = vi.hoisted(() => ({
   scope: '',
+  phase: () => 'ready' as 'ready' | 'revalidating',
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
   listRuntimes: vi.fn(),
   listResources: vi.fn(),
@@ -37,7 +38,7 @@ vi.mock('../widgets/ContainerExecTerminal', () => ({
 
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
-    resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: browserHarness.scope }),
+    resourceCacheAccess: () => ({ phase: browserHarness.phase(), generation: 0, scope: browserHarness.scope }),
     env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
     goActivity: vi.fn(),
   }),
@@ -186,6 +187,7 @@ describe('native Containers responsive product surface', () => {
 
   beforeEach(() => {
     browserHarness.scope = '';
+    browserHarness.phase = () => 'ready';
     document.documentElement.classList.add('dark');
     window.localStorage.clear();
     window.localStorage.setItem('redeven_ui_language_preference', 'en-US');
@@ -278,6 +280,27 @@ describe('native Containers responsive product surface', () => {
     expect(mounted.host.querySelector('[data-container-engine-state]')).toBeNull();
     expect(mounted.host.querySelector('[data-container-list-loading]')).toBeNull();
     expect(mounted.host.querySelector('[data-container-resource-table]')).not.toBeNull();
+  });
+
+  it('retains the displayed inventory and search field while its confirmed owner revalidates', async () => {
+    const { createSignal } = await import('solid-js');
+    const [phase, setPhase] = createSignal<'ready' | 'revalidating'>('ready');
+    browserHarness.phase = phase;
+    browserHarness.scope = `revalidation-${crypto.randomUUID()}`;
+    const mounted = mount(); dispose = mounted.dispose; const root = mounted.host;
+    await expect.poll(() => root.textContent).toContain('postgres-development');
+    await expect.poll(() => root.querySelector('header .animate-spin')).toBeNull();
+    const row = root.querySelector('.container-resource-table-shell tbody tr');
+    const search = root.querySelector<HTMLInputElement>('.container-search-control input')!;
+    search.focus();
+    setPhase('revalidating');
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    expect(root.querySelector('.container-resource-table-shell tbody tr')).toBe(row);
+    expect(root.querySelector('[data-container-list-loading]')).toBeNull();
+    expect(document.activeElement).toBe(search);
+    setPhase('ready');
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    expect(root.querySelector('.container-resource-table-shell tbody tr')).toBe(row);
   });
 
   it('shares cached inventory across Activity and Workbench without losing row focus during refresh', async () => {

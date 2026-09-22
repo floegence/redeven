@@ -4438,10 +4438,6 @@ html.dark .git-content-skeleton__block {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .redeven-collection-loading-skeleton .floe-skeleton {
-    animation: none;
-  }
-
   .redeven-loading-curtain__indicator-bar {
     animation: none;
     background: var(--muted-foreground);

@@ -21,106 +21,160 @@ export function envResourceCache(): ResourceCache {
 
 export const isResourceAuthorizationError = isSessionEventAuthorizationError;
 
+type ResourceOwner = Readonly<{ cache: ResourceCache; scope: string; persistent: boolean }>;
 export type EnvResourceCacheAccess = Readonly<{
-  phase: 'pending' | 'ready' | 'denied';
+  phase: 'pending' | 'ready' | 'revalidating' | 'denied';
+  /** Fences requests; it is not the identity of the visible data. */
   generation: number;
   scope?: string;
+  owner?: ResourceOwner;
+  error?: unknown;
+  retry?: () => void;
+  revoke?: () => void;
 }>;
 
-/** Confirm identity and permissions independently, then expose one authenticated cache owner. */
+/** The Shell owns confirmation; transport replacement never retires a confirmed presentation. */
 export function createEnvResourceCacheAccess(options: {
   environment: Accessor<string>;
   readable: Accessor<boolean | undefined>;
   locked: Accessor<boolean>;
   connection: Accessor<unknown>;
+  authentication?: Accessor<unknown>;
+  retryPermissions?: () => void;
+  permissionError?: Accessor<unknown>;
 }): Accessor<EnvResourceCacheAccess> {
   const [state, setState] = createSignal<EnvResourceCacheAccess>({ phase: 'pending', generation: 0 });
+  const [retryRevision, setRetryRevision] = createSignal(0);
   let environment = '';
+  let authentication: unknown;
   let connectionIdentity: unknown;
   let controller: AbortController | undefined;
+  let owner: ResourceOwner | undefined;
   let confirmedScope: string | undefined;
   let generation = 0;
   let blocked = false;
-  const revoke = () => {
+  let attemptedRetry = 0;
+  let lookup: { phase: 'pending' | 'ready' | 'failed' | 'denied'; scope?: string; error?: unknown } = { phase: 'pending' };
+  const cancel = () => {
     controller?.abort();
     controller = undefined;
-    connectionIdentity = undefined;
-    if (confirmedScope) void shared?.clearScope(confirmedScope);
+    owner?.cache.cancelRefreshes(owner.scope);
+  };
+  const clearOwner = () => {
+    if (owner) {
+      owner.cache.cancelRefreshes(owner.scope);
+      void owner.cache.clearScope(owner.scope);
+    }
+    owner = undefined;
     confirmedScope = undefined;
+  };
+  const retry = () => { options.retryPermissions?.(); setRetryRevision(value => value + 1); };
+  const publish = (phase: EnvResourceCacheAccess['phase'], error?: unknown) => {
+    const previous = untrack(state);
+    if (previous.phase === phase && previous.generation === generation && previous.owner === owner && previous.error === error) return;
+    if (phase === 'revalidating' && previous.phase === 'ready') {
+      if (previous.generation === generation) ++generation;
+      owner?.cache.cancelRefreshes(owner.scope);
+    }
+    setState({ phase, generation, owner, scope: owner?.persistent ? owner.scope : undefined, error, retry, revoke });
+  };
+  const revoke = () => {
+    ++generation;
+    cancel();
+    clearOwner();
+    lookup = { phase: 'denied' };
+    publish('denied');
+  };
+  const commit = () => {
+    if (lookup.phase === 'denied') { publish('denied'); return; }
+    if (!connectionIdentity || options.readable() !== true || lookup.phase === 'pending') {
+      publish(owner ? 'revalidating' : 'pending', options.permissionError?.());
+      return;
+    }
+    if (lookup.phase === 'failed') {
+      if (owner?.persistent) { publish('revalidating', lookup.error); return; }
+      owner ??= { cache: createResourceCache({ storage: volatileStorage }), scope: 'live', persistent: false };
+    } else {
+      if (confirmedScope && confirmedScope !== lookup.scope) clearOwner();
+      confirmedScope = lookup.scope;
+      owner ??= { cache: envResourceCache(), scope: confirmedScope!, persistent: true };
+    }
+    publish('ready');
   };
   createEffect(() => {
     const nextEnvironment = options.environment();
-    const readable = options.readable();
-    const locked = options.locked();
+    const nextAuthentication = options.authentication?.();
+    const denied = options.readable() === false || options.locked();
     const connection = options.connection();
-    const denied = readable === false || locked;
-    if (nextEnvironment !== environment || denied !== blocked) {
-      revoke();
-      environment = nextEnvironment;
-      blocked = denied;
-      setState({ phase: readable === false || locked ? 'denied' : 'pending', generation: ++generation });
-    }
-    if (!nextEnvironment || readable === false || locked || !connection || connection === connectionIdentity) return;
-    controller?.abort();
-    // Retire requests and in-memory results from the previous authenticated session.
-    shared?.dispose();
-    shared = undefined;
-    connectionIdentity = connection;
-    const request = new AbortController();
-    controller = request;
-    const owner = ++generation;
-    setState({ phase: 'pending', generation: owner });
-    void fetchLocalApiJSON<{ scope_id: string }>('/_redeven_proxy/api/ui-cache-scope', { method: 'GET', signal: request.signal })
-      .then(result => {
-        if (request.signal.aborted) return;
-        if (!/^[a-f0-9]{64}$/u.test(result.scope_id)) throw new Error('Invalid resource cache scope');
-        const previous = confirmedScope;
-        if (previous && previous !== result.scope_id) void envResourceCache().clearScope(previous);
-        confirmedScope = result.scope_id;
-        setState({ phase: 'ready', generation: owner, scope: result.scope_id });
-      }).catch(error => {
-        if (request.signal.aborted) return;
-        if (isResourceAuthorizationError(error)) {
-          revoke();
-          setState({ phase: 'denied', generation: owner });
-        } else {
-          console.warn('Resource snapshot scope could not be confirmed', error);
-          setState({ phase: 'ready', generation: owner });
+    const retryAttempt = retryRevision();
+    options.permissionError?.();
+    untrack(() => {
+      if (nextEnvironment !== environment || nextAuthentication !== authentication || denied !== blocked) {
+        cancel();
+        clearOwner();
+        environment = nextEnvironment;
+        authentication = nextAuthentication;
+        blocked = denied;
+        connectionIdentity = undefined;
+        lookup = { phase: denied ? 'denied' : 'pending' };
+        ++generation;
+      }
+      if (denied || !nextEnvironment) { publish(denied ? 'denied' : 'pending'); return; }
+      if (connection !== connectionIdentity || retryAttempt !== attemptedRetry) {
+        cancel();
+        connectionIdentity = connection;
+        attemptedRetry = retryAttempt;
+        lookup = { phase: 'pending' };
+        const requestGeneration = ++generation;
+        if (connection) {
+          const request = new AbortController();
+          controller = request;
+          void fetchLocalApiJSON<{ scope_id: string }>('/_redeven_proxy/api/ui-cache-scope', { method: 'GET', signal: request.signal })
+            .then(result => {
+              if (request.signal.aborted || generation !== requestGeneration) return;
+              if (!/^[a-f0-9]{64}$/u.test(result.scope_id)) throw new Error('Invalid resource cache scope');
+              if (confirmedScope && confirmedScope !== result.scope_id) clearOwner();
+              lookup = { phase: 'ready', scope: result.scope_id };
+              commit();
+            }).catch(error => {
+              if (request.signal.aborted || generation !== requestGeneration) return;
+              if (isResourceAuthorizationError(error)) { revoke(); return; }
+              console.warn('Resource snapshot scope could not be confirmed', error);
+              lookup = { phase: 'failed', error };
+              commit();
+            });
         }
-      });
+      }
+      commit();
+    });
   });
-  const flush = () => { void shared?.flush(); };
+  const flush = () => { void owner?.cache.flush(); };
   window.addEventListener('pagehide', flush);
-  onCleanup(() => { controller?.abort(); window.removeEventListener('pagehide', flush); flush(); });
-  return createMemo<EnvResourceCacheAccess>(() => {
-    const current = state();
-    if (options.locked() || options.readable() === false) return { phase: 'denied', generation: current.generation };
-    if (options.readable() === undefined) return { phase: 'pending', generation: current.generation };
-    return current;
-  });
+  onCleanup(() => { cancel(); window.removeEventListener('pagehide', flush); flush(); });
+  return state;
 }
 
-/** Unavailable identity may use live data only after the scope request has settled. */
+/** Standalone views use an isolated live-only owner; Shell views share its confirmed owner. */
 export function createEnvResourceCollection(ctx: Pick<EnvContextValue, 'resourceCacheAccess'>) {
   const access = (): EnvResourceCacheAccess => ctx.resourceCacheAccess?.() ?? { phase: 'ready' as const, generation: 0 };
-  const transient = createMemo(() => {
-    void access().generation;
-    const cache = createResourceCache({ storage: volatileStorage });
-    onCleanup(() => cache.dispose());
-    return cache;
-  });
-  onCleanup(() => { void shared?.flush(); });
+  const transient = createResourceCache({ storage: volatileStorage });
+  onCleanup(() => { transient.dispose(); void shared?.flush(); });
+  const visible = () => access().phase === 'ready' || access().phase === 'revalidating';
   return {
     access,
+    visible,
     ready: () => access().phase === 'ready',
-    scope: () => access().scope,
+    retry: () => access().retry?.(),
     resource<T>(key: string, decode: (value: unknown) => T, persist: (value: T) => unknown = decode): CachedResource<T> {
       const current = access();
-      const scope = current.phase === 'ready' ? current.scope : undefined;
-      return (scope ? envResourceCache() : transient()).resource({ scope: scope || current.phase, key, version: 1, decode, persist });
+      const owner = visible() ? current.owner : undefined;
+      const scope = visible() ? current.scope : undefined;
+      return (owner?.cache ?? (scope ? envResourceCache() : transient)).resource({ scope: owner?.scope ?? (scope || `unconfirmed:${current.generation}`), key, version: 1, decode, persist });
     },
     revoke(scope = access().scope) {
-      if (scope) void envResourceCache().clearScope(scope);
+      const current = access();
+      if (current.revoke && scope === current.scope) current.revoke();
+      else if (scope) { envResourceCache().cancelRefreshes(scope); void envResourceCache().clearScope(scope); }
     },
   };
 }
@@ -134,24 +188,36 @@ export function createEnvCachedResource<T>(ctx: Pick<EnvContextValue, 'resourceC
     const unsubscribe = current.subscribe(() => setRevision(value => value + 1));
     onCleanup(unsubscribe);
   });
-  const snapshot = (): ResourceSnapshot<T> => { revision(); return resource().snapshot(); };
+  const snapshot = (): ResourceSnapshot<T> => {
+    revision();
+    const value = resource().snapshot();
+    return collection.access().error ? { ...value, error: collection.access().error } : value;
+  };
+  const captureAuthority = () => {
+    const current = untrack(resource);
+    const generation = untrack(collection.access).generation;
+    return () => collection.ready() && collection.access().generation === generation && resource() === current;
+  };
   return {
+    captureAuthority,
     snapshot,
     ready: collection.ready,
-    restoring: () => collection.access().phase === 'pending' || (collection.ready() && snapshot().restoring),
-    data: () => collection.ready() ? snapshot().data : undefined,
+    retry: collection.retry,
+    restoring: () => collection.access().phase === 'pending' || (collection.visible() && snapshot().restoring),
+    data: () => collection.visible() ? snapshot().data : undefined,
     identity: resource,
     hydrate: () => untrack(resource).hydrate(),
     refresh: async (fetcher: (signal: AbortSignal) => Promise<T>) => {
       if (!untrack(collection.ready)) throw new DOMException('Resource identity is pending', 'AbortError');
       const current = untrack(resource);
-      const scope = untrack(collection.scope);
-      try { return await current.refresh(fetcher); }
-      catch (error) {
-        if (isResourceAuthorizationError(error)) {
-          current.invalidate(true);
-          if (scope) collection.revoke(scope);
-        }
+      const access = untrack(collection.access);
+      const isCurrent = captureAuthority();
+      try {
+        const value = await current.refresh(fetcher);
+        if (!isCurrent()) throw new DOMException('Resource request was superseded', 'AbortError');
+        return value;
+      } catch (error) {
+        if (isCurrent() && isResourceAuthorizationError(error)) { current.invalidate(true); collection.revoke(access.scope); }
         throw error;
       }
     },
