@@ -5,6 +5,7 @@ import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import { normalizeRuntimeServiceSnapshot } from '../shared/runtimeService';
 import {
   DesktopWelcomeRuntimeHealthStore,
+  desktopWelcomeOnlineRuntimeHealth,
   desktopWelcomeRuntimeHealthIsFresh,
   desktopWelcomeRuntimeHealthForEnvironment,
   type DesktopWelcomeRuntimeHealthTarget,
@@ -76,6 +77,30 @@ function presence(
 }
 
 describe('DesktopWelcomeRuntimeHealthStore', () => {
+  it('caches observed startup age and identity without copying live control credentials', async () => {
+    const startup = {
+      local_ui_url: 'http://localhost:24000/',
+      started_at_unix_ms: 123456,
+      pid: 123,
+      local_ui_bridge_token: 'private-bridge-token',
+      runtime_control: { token: 'private-control-token' },
+    };
+    const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
+    const observedHealth = desktopWelcomeOnlineRuntimeHealth('local_runtime_probe', startup);
+    const runtimeTarget = target(async () => ({ health: observedHealth }), { slot: 'local_environment' });
+    await store.refresh([runtimeTarget]);
+    const probe = deferred<{ health: DesktopRuntimeHealth }>();
+    const refreshing = store.refresh([{ ...runtimeTarget, probe: () => probe.promise }], { force: true });
+    expect(store.snapshot().localRuntimeHealth.demo).toEqual({
+      status: 'online', source: 'local_runtime_probe', checked_at_unix_ms: expect.any(Number),
+      local_ui_url: startup.local_ui_url, started_at_unix_ms: startup.started_at_unix_ms,
+      runtime_pid: startup.pid, freshness: 'checking',
+    });
+    probe.resolve({ health: health({ status: 'offline' }) });
+    await refreshing;
+    expect(store.snapshot().localRuntimeHealth.demo.started_at_unix_ms).toBeUndefined();
+  });
+
   it('resolves managed Runtime health for an Open preflight by registration id', () => {
     const sshHealth = health({
       offline_reason_code: 'not_started',

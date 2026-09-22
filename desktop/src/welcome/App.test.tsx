@@ -515,7 +515,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('noMatchingGatewaysTitle');
     expect(styles).toContain('.redeven-gateway-grid');
     expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.5rem), 22rem));');
-    expect(styles).toContain('.redeven-gateway-card {\n  animation: none;');
+    expect(styles).not.toContain('redeven-card-entrance');
   });
 
   it('describes Local Environment Settings inside the same shell model', () => {

@@ -363,7 +363,10 @@ export function EnvironmentCardsPanel(
     }
 
     const updateLayoutMetrics = () => {
-      setEnvironmentLibraryWidthPx(readMeasuredElementWidth(element));
+      const width = readMeasuredElementWidth(element);
+      // A retained page reports zero while hidden; keep its last visible layout.
+      if (width <= 0) return;
+      setEnvironmentLibraryWidthPx(width);
       setRootFontSizePx(readDocumentRootFontSizePx());
     };
 

@@ -71,15 +71,16 @@ export function mixedEnvironmentFixture(options: {
     const linked = (options.linkKind ?? 'local_environment') === target.kind && (target.kind !== 'ssh_environment' || index === 1);
     const presence = { target_id: target.id, placement_target_id: desktopRuntimeTargetID(target.host, target.placement), environment_id: target.environmentID, label: target.label,
       kind: target.kind, runtime_key: target.id, host_access: target.host, placement: target.placement,
-      running: true, openable: true, local_ui_url: `http://localhost:${23998 + index}/`, checked_at_unix_ms: now,
+      running: true, openable: true, local_ui_url: `http://localhost:${23998 + index}/`, checked_at_unix_ms: now, started_at_unix_ms: now - 120000,
       runtime_control_status: { state: 'available' as const },
       runtime_service: linked ? runtimeService : { ...runtimeService, bindings: { ...runtimeService.bindings!, provider_link: { state: 'unbound' as const, remote_enabled: false } } },
     };
     return [target.id, { ...presence, operations: buildDesktopRuntimeOperationPlans({ surface: 'managed_runtime_card', ...presence }) } satisfies DesktopRuntimePresence];
   }));
-  const snapshot = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences({ local_environment: local, saved_runtime_targets: targets }),
+  const inputs = { preferences: testDesktopPreferences({ local_environment: local, saved_runtime_targets: targets }),
     controlPlanes: sources, redevenCloudOriginPolicy: { allow_development: true }, managedRuntimePresenceByTargetID: presences,
     ...(options.linkKind === 'wsl_environment' ? { platformCapabilities: resolveDesktopPlatformCapabilities('win32') } : {}),
-  });
-  return { snapshot, sources, targets };
+  };
+  const snapshot = buildDesktopWelcomeSnapshot(inputs);
+  return { snapshot, sources, targets, inputs };
 }

@@ -8,7 +8,7 @@ import '../../src/welcome/index.css';
 declare global {
   interface Window {
     settingsFixtureSnapshot: DesktopWelcomeSnapshot;
-    settingsFixture: { requests: DesktopLauncherActionRequest[]; loads: number; resolveOld: () => void; publish: (value: DesktopWelcomeSnapshot) => void };
+    settingsFixture: { requests: DesktopLauncherActionRequest[]; loads: number; resolveOld: () => void; publish: (value: DesktopWelcomeSnapshot) => void; beforeAction?: () => Promise<void> };
   }
 }
 document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '40px');
@@ -42,5 +42,9 @@ const settings: DesktopWelcomeRuntime['settings'] = {
 };
 render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{ settings, launcher: {
   getSnapshot: async () => snapshot, subscribeSnapshot: listener => { receiveSnapshot = listener; return () => { receiveSnapshot = undefined; }; }, getSSHConfigHosts: async () => [],
-  performAction: async request => { window.settingsFixture.requests.push(request); return { ok: true, outcome: 'saved_environment' }; },
+  performAction: async request => {
+    window.settingsFixture.requests.push(request);
+    await window.settingsFixture.beforeAction?.();
+    return { ok: true, outcome: 'saved_environment' };
+  },
 } }} />, document.getElementById('root')!);

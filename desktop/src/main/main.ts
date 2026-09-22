@@ -151,6 +151,7 @@ import { buildDesktopRuntimeLaunchPlan, desktopAutoStartRuntimeEnabled } from '.
 import { loadDesktopBundle, type DesktopBundle } from './desktopBundle';
 import {
   desktopWelcomeRuntimeHealthForEnvironment,
+  desktopWelcomeOnlineRuntimeHealth,
   DesktopWelcomeRuntimeHealthStore,
   type DesktopWelcomeRuntimeHealthProbeEvent,
   type DesktopWelcomeRuntimeHealthProbeResult,
@@ -4490,24 +4491,6 @@ function openSessionSummaries(): readonly DesktopSessionSummary[] {
     }));
 }
 
-function onlineRuntimeHealth(
-  source: DesktopRuntimeHealth['source'],
-  localUIURL: string,
-  runtimeService?: RuntimeServiceSnapshot,
-  runtimeMaintenance?: DesktopRuntimeMaintenanceRequirement,
-): DesktopRuntimeHealth {
-  const normalizedRuntimeService = runtimeService ? normalizeRuntimeServiceSnapshot(runtimeService) : undefined;
-  const effectiveMaintenance = desktopRuntimeMaintenanceForRuntimeService(runtimeMaintenance, normalizedRuntimeService);
-  return {
-    status: 'online',
-    checked_at_unix_ms: Date.now(),
-    source,
-    local_ui_url: localUIURL,
-    ...(normalizedRuntimeService ? { runtime_service: normalizedRuntimeService } : {}),
-    ...(effectiveMaintenance ? { runtime_maintenance: effectiveMaintenance } : {}),
-  };
-}
-
 function offlineRuntimeHealth(
   source: DesktopRuntimeHealth['source'],
   offlineReasonCode: NonNullable<DesktopRuntimeHealth['offline_reason_code']>,
@@ -4614,7 +4597,7 @@ async function probeLocalEnvironmentRuntimeHealth(
   if (verifiedRecord) {
     localRuntimeMaintenanceByEnvironmentID.delete(localEnvironment.id);
     return {
-      health: onlineRuntimeHealth('local_runtime_probe', verifiedRecord.startup.local_ui_url, verifiedRecord.startup.runtime_service),
+      health: desktopWelcomeOnlineRuntimeHealth('local_runtime_probe', verifiedRecord.startup),
       presence: await localEnvironmentPresenceFromRecord(localEnvironment, verifiedRecord),
     };
   }
@@ -4666,10 +4649,7 @@ async function probeLocalEnvironmentRuntimeHealth(
   }
   localRuntimeMaintenanceByEnvironmentID.delete(localEnvironment.id);
   return {
-    health: {
-      ...onlineRuntimeHealth('local_runtime_probe', runtime.local_ui_url, runtime.runtime_service),
-      ...(runtime.started_at_unix_ms ? { started_at_unix_ms: runtime.started_at_unix_ms } : {}),
-    },
+    health: desktopWelcomeOnlineRuntimeHealth('local_runtime_probe', runtime),
   };
 }
 
@@ -4687,10 +4667,7 @@ async function probeSavedExternalRuntimeHealth(
     }
     const startup = result.value;
     return {
-      health: {
-        ...onlineRuntimeHealth('external_local_ui_probe', startup.local_ui_url, startup.runtime_service),
-        ...(startup.started_at_unix_ms ? { started_at_unix_ms: startup.started_at_unix_ms } : {}),
-      },
+      health: desktopWelcomeOnlineRuntimeHealth('external_local_ui_probe', startup),
     };
   } catch {
     return {
@@ -4738,18 +4715,12 @@ function runtimeTargetHealthFromState(
     );
   }
   if (state.running || state.maintenance) {
-    return {
-      ...onlineRuntimeHealth(
-        source,
-        state.local_ui_url,
-        state.runtime_service,
-        state.maintenance,
-      ),
-      ...(state.startup?.pid ? { runtime_pid: state.startup.pid } : {}),
-      ...(state.startup?.started_at_unix_ms
-        ? { started_at_unix_ms: state.startup.started_at_unix_ms }
-        : {}),
-    };
+    return desktopWelcomeOnlineRuntimeHealth(source, {
+      local_ui_url: state.local_ui_url,
+      runtime_service: state.runtime_service,
+      pid: state.startup?.pid,
+      started_at_unix_ms: state.startup?.started_at_unix_ms,
+    }, state.maintenance);
   }
   return offlineRuntimeHealth(
     source,
