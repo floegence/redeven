@@ -22,6 +22,9 @@ function fixture(t) {
     const source = path.join(packageRoot, 'scripts', name);
     if (existsSync(source)) copyFileSync(source, path.join(cwd, 'scripts', name));
   }
+  writeFileSync(path.join(cwd, 'scripts/buildHostApplicationAppearance.mjs'), `
+    if (!process.argv.includes('--check')) throw new Error('Build must verify committed appearance assets');
+  `);
   writeFileSync(path.join(cwd, 'scripts/checkInitialBuildBudget.mjs'), `
     import { accessSync } from 'node:fs';
     accessSync('../ui/dist/env/assets/json.worker-abcdefgh.js');

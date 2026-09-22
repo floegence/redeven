@@ -175,7 +175,7 @@ func TestHostApplicationBootstrapEscapesUntrustedNamesAndCopy(t *testing.T) {
 	server := &Server{}
 	w := httptest.NewRecorder()
 	payload := `</script><script>alert(1)</script>`
-	server.serveHostApplicationBoot(w, httptest.NewRequest("GET", "/", nil), hostapps.Session{Application: hostapps.Application{Name: payload}, Presentation: hostapps.Presentation{Starting: payload}}, "/pf/example")
+	server.serveHostApplicationBoot(w, httptest.NewRequest("GET", "/", nil), hostapps.Session{Application: hostapps.Application{Name: payload}, Presentation: hostapps.Presentation{Starting: payload, ShellTheme: payload}}, "/pf/example")
 	if strings.Contains(w.Body.String(), payload) {
 		t.Fatal("bootstrap allows script injection")
 	}

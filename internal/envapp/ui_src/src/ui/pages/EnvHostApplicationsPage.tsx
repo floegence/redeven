@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack }
 import { useViewActivation } from '@floegence/floe-webapp-core';
 import { ExternalLink, Plus, Refresh, Search, Stop } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
+import { hostApplicationPresentation } from '../services/hostApplicationPresentation';
 import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
@@ -442,58 +443,9 @@ export function EnvHostApplicationsPage() {
     }
     setBusy(v => ({ ...v, [app.id]: true })); setAppErrors(v => ({ ...v, [app.id]: '' }));
     try {
-      const result = await launchHostApplication(app.id, i18n.locale(), {
-        locale: i18n.locale(),
-        menu: i18n.t('hostApplications.macMenu'), windows: i18n.t('hostApplications.macWindows'), closeWindow: i18n.t('hostApplications.macCloseWindow'),
-        quit: i18n.t('hostApplications.macQuit'),
-        quitTitle: i18n.t('hostApplications.macQuitTitle', { name: app.name }),
-        quitDescription: i18n.t(isMac() ? 'hostApplications.macQuitDescription' : 'hostApplications.sessionQuitDescription'),
-        quitPending: i18n.t('hostApplications.macQuitViewerPending'),
-        quitFailed: i18n.t('hostApplications.macQuitFailed'),
-        cancel: i18n.t('hostApplications.cancel'),
-        picture: i18n.t('hostApplications.macPicture'),
-        pictureAuto: i18n.t('hostApplications.macPictureAuto'),
-        pictureClarity: i18n.t('hostApplications.macPictureClarity'),
-        pictureSmooth: i18n.t('hostApplications.macPictureSmooth'),
-        pictureData: i18n.t('hostApplications.macPictureData'),
-        pictureHint: i18n.t(isMac() ? 'hostApplications.macPictureHint' : 'hostApplications.sessionPictureHint'),
-        pictureAdvanced: i18n.t('hostApplications.macPictureAdvanced'),
-        picturePixels: i18n.t('hostApplications.macPicturePixels'),
-        pictureResolution: i18n.t('hostApplications.macPictureResolution'),
-        pictureFrameRate: i18n.t('hostApplications.macPictureFrameRate'),
-        pictureActualRate: i18n.t('hostApplications.macPictureActualRate'),
-        pictureBandwidth: i18n.t('hostApplications.macPictureBandwidth'),
-        controls: i18n.t('hostApplications.macControls'),
-        pictureTransport: i18n.t('hostApplications.macPictureTransport'),
-        pictureVideo: i18n.t('hostApplications.macPictureVideo'),
-        pictureImages: i18n.t('hostApplications.macPictureImages'),
-        operationFailed: i18n.t('hostApplications.macOperationFailed'), waiting: i18n.t('hostApplications.macWaiting'), waitingHint: i18n.t('hostApplications.macWaitingHint'), captureUnavailable: i18n.t('hostApplications.macCaptureUnavailable'),
-        permissionRequired: i18n.t('hostApplications.macPermissionRequired'),
-        permissionHint: i18n.t('hostApplications.macPermissionHint'),
-        sessionUnavailable: i18n.t('hostApplications.macSessionUnavailable'),
-        sessionHint: i18n.t('hostApplications.macSessionHint'),
-        sessionFailed: i18n.t('hostApplications.macSessionFailed'),
-        reopenHint: i18n.t('hostApplications.macReopenHint'),
-        checking: i18n.t('hostApplications.checking'),
-        applicationExited: i18n.t('hostApplications.applicationExited'),
-        applicationExitedHint: i18n.t('hostApplications.applicationExitedHint'),
-        windowsClosed: i18n.t('hostApplications.windowsClosed'),
-        windowsClosedHint: i18n.t('hostApplications.windowsClosedHint'),
-        sharingStopped: i18n.t('hostApplications.sharingStopped'),
-        sharingStoppedHint: i18n.t('hostApplications.sharingStoppedHint'),
-        endedHint: i18n.t('hostApplications.endedHint'),
-        sessionMissing: i18n.t('hostApplications.sessionMissing'),
-        sessionMissingHint: i18n.t('hostApplications.sessionMissingHint'),
-        accessRequired: i18n.t('hostApplications.accessRequired'),
-        accessHint: i18n.t('hostApplications.accessHint'),
-        dismiss: i18n.t('hostApplications.dismiss'),
-        captureHint: i18n.t('hostApplications.macCaptureHint'),
-        sharedControl: i18n.t('hostApplications.macSharedControl'), input: i18n.t('hostApplications.macInput'),
-        connecting: i18n.t('hostApplications.connecting'), reconnecting: i18n.t('hostApplications.reconnecting'),
-        disconnected: i18n.t('hostApplications.disconnected'), connectionHint: i18n.t('hostApplications.connectionHint'), reconnect: i18n.t('hostApplications.reconnect'),
-        starting: i18n.t('hostApplications.starting'), failed: i18n.t('hostApplications.errors.failed'),
-        ended: i18n.t('hostApplications.ended'), retry: i18n.t('hostApplications.retry'),
-      }, localNative ? 'native' : 'stream');
+      const result = await launchHostApplication(app.id, i18n.locale(), hostApplicationPresentation(
+        i18n, app.name, isMac(), document.documentElement.dataset.floeShellTheme ?? '',
+      ), localNative ? 'native' : 'stream');
       if (disposed || (prepared && !await pendingIsOpen(prepared)) || popup?.closed) {
         // Launch admission belongs to the host. A stale catalog cannot prove
         // this page owns the session returned by server-side deduplication.

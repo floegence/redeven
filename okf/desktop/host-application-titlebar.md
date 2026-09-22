@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Desktop host application titlebar
 description: Place host application controls alongside native window buttons without adding connection latency.
 tags: [desktop, host-applications, ui]
-timestamp: 2026-09-22T02:30:00Z
+timestamp: 2026-09-22T03:20:00Z
 ---
 # Summary
 
@@ -28,6 +28,29 @@ focus to their trigger. Loading, disconnected and completed Desktop documents
 retain the titlebar with unavailable controls disabled. Preparation and local
 connection-failure documents retain a scriptless draggable title.
 
+# Appearance and language
+
+The bootstrap consumes published Floe `standalone.css`: primitive sizing and
+fonts, all 26 shell presets, shared floating material and input focus rules. It
+uses the same `soft-neumorphic` material as Env App. Local CSS owns only viewer
+layout and maps control states to upstream semantic tokens; it must not maintain
+a second light/dark palette. Forced colors retain visible selection and focus.
+
+The launch presentation supplies the current Env App preset and localized copy.
+Desktop then projects its authoritative theme id and resolved locale through the
+existing restricted native-window channel, after snapshot validation. No semantic
+palette, arbitrary CSS, application capability or extra startup handshake crosses
+this boundary. The same theme and language change notifications refresh open
+application windows without navigation or reconnection.
+
+One typed key mapping owns launch copy and the generated ten-locale bootstrap
+catalog. Generation requires every explicit translation and consumes the released
+Floe package; builds reject stale artifacts. Visible text, tooltips, accessibility
+names, error feedback and confirmation copy update in place. Host-provided app,
+window and native menu names remain host content. Picture selections, active
+window, keyboard focus and transport ownership survive presentation changes.
+The inline assets add no request or connection wait.
+
 # Backend commands
 
 The shared toolbar and picture-preset presentation do not own backend state.
@@ -51,3 +74,6 @@ be collapsed into one destructive command.
 - `redeven:internal/codeapp/appserver/host_application_viewer/toolbar.js` and `viewer.js` - Shared control presentation and Xpra-owned action routing.
 - `redeven:internal/envapp/ui_src/src/styles/hostApplicationSurfaces.browser.test.tsx` - Native safe areas, compact layouts, dark appearance and bounded popovers.
 - `redeven:desktop/scripts/check-host-application-titlebar.mjs` - Opt-in real Electron titlebar, isolated preload, actions and fullscreen acceptance with a disposable transport fixture.
+
+- `redeven:internal/envapp/ui_src/src/styles/hostApplicationAppearance.browser.test.tsx` - All published palettes, floating materials, locale updates, compact layouts and forced-color focus.
+- `redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs` - Reproducible published styles and complete explicit viewer catalogs.

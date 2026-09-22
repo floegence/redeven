@@ -1,8 +1,10 @@
+import type { DesktopRendererThemeSnapshot } from '../shared/desktopTheme';
+import type { RedevenLocale } from '../shared/i18n/localeMeta';
 import { desktopWindowChromeSnapshotForWindow } from './windowChrome';
 import type { BrowserWindow, IpcMainEvent, WebContents } from 'electron';
 import { HOST_APPLICATION_WINDOW_ACTION_CHANNEL, HOST_APPLICATION_WINDOW_STATE_CHANNEL, isHostApplicationWindowAction } from '../shared/hostApplicationWindowIPC';
 
-export function attachHostApplicationWindow(win: BrowserWindow, contents: WebContents, entryURL: string): void {
+export function attachHostApplicationWindow(win: BrowserWindow, contents: WebContents, entryURL: string, appearance?: () => Readonly<{theme: DesktopRendererThemeSnapshot; locale: RedevenLocale}>): () => void {
   const entry = new URL(entryURL);
   const isBootstrap = (url: string): boolean => {
     try {
@@ -16,6 +18,7 @@ export function attachHostApplicationWindow(win: BrowserWindow, contents: WebCon
     contents.send(HOST_APPLICATION_WINDOW_STATE_CHANNEL, {
       maximized: win.isMaximized() || win.isFullScreen(), minimized: win.isMinimized(),
       chrome: desktopWindowChromeSnapshotForWindow(win),
+      ...appearance?.(),
     });
   };
   const receive = (event: IpcMainEvent, channel: string, action: unknown): void => {
@@ -42,4 +45,5 @@ export function attachHostApplicationWindow(win: BrowserWindow, contents: WebCon
     win.removeListener('maximize', publish).removeListener('unmaximize', publish).removeListener('minimize', publish)
       .removeListener('restore', publish).removeListener('enter-full-screen', publish).removeListener('leave-full-screen', publish);
   });
+  return publish;
 }

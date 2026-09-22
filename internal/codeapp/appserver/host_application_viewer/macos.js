@@ -22,9 +22,11 @@
     const available = ['active', 'waiting', 'captureUnavailable'].includes(document.body.dataset.state);
     windowToggle.disabled = !available || windowEntries.size === 0;
     menu.disabled = !available;
+    menu.title = `${document.title} — ${config.copy.menu}`;
+    menu.setAttribute('aria-label', menu.title);
     quit.disabled = !available || quitPending;
     controlsButton.disabled = document.body.dataset.state !== 'active';
-    windowCount.textContent = String(windowEntries.size);
+    windowCount.textContent = hostApplicationAppearance.number(windowEntries.size);
     windowCount.hidden = windowEntries.size < 2;
     for (const [id, entry] of windowEntries) {
       const selected = id === current?.window;
@@ -34,7 +36,7 @@
     const hostTitle = windowEntries.get(current?.window)?.hostTitle;
     const title = hostTitle && hostTitle !== document.title ? hostTitle : config.copy.windows;
     windowToggle.querySelector('.mac-app-toolbar-label').textContent = title;
-    windowToggle.title = `${config.copy.windows} · ${windowEntries.size}${title === config.copy.windows ? '' : ` — ${title}`}`;
+    windowToggle.title = `${config.copy.windows} · ${hostApplicationAppearance.number(windowEntries.size)}${title === config.copy.windows ? '' : ` — ${title}`}`;
     windowToggle.setAttribute('aria-label', windowToggle.title);
     close.disabled = !available || !current?.window || renderedGeneration !== current.generation;
     if (![...toolbar.querySelectorAll('button')].some(button => !button.disabled && button.tabIndex === 0)) {
@@ -71,10 +73,10 @@
   const picturePanel = document.createElement('section');
   picturePanel.id = 'picture-settings';
   picturePanel.className = 'mac-app-picture';
-  picturePanel.setAttribute('aria-label', config.copy.picture);
+  hostApplicationAppearance.copy(picturePanel, 'picture', 'aria-label');
 
   const pictureTitle = document.createElement('strong');
-  pictureTitle.textContent = config.copy.picture;
+  hostApplicationAppearance.copy(pictureTitle, 'picture');
   picturePanel.append(pictureTitle);
   const picture = { mode: 'auto', max_dimension: 0, frame_rate: 0 };
   const preferenceKey = 'redeven.mac-app.picture.v1';
@@ -92,24 +94,26 @@
   const {modes, modeButtons} = createHostApplicationPictureModes(picture, () => { savePicture(); configurePicture(); });
   picturePanel.append(modes);
   const pictureHint = document.createElement('p');
-  pictureHint.textContent = config.copy.pictureHint;
+  hostApplicationAppearance.copy(pictureHint, 'pictureHint');
   picturePanel.append(pictureHint);
   const advanced = document.createElement('details');
   const advancedTitle = document.createElement('summary');
-  advancedTitle.textContent = config.copy.pictureAdvanced;
+  const advancedLabel = document.createElement('span');
+  hostApplicationAppearance.copy(advancedLabel, 'pictureAdvanced'); advancedTitle.append(advancedLabel);
   advancedTitle.insertAdjacentHTML('beforeend', chevron);
   advanced.append(advancedTitle);
   for (const [field, title, values, unit] of [
-    ['max_dimension', config.copy.pictureResolution, [0, 1600, 1920, 2560, 3840, 4096], 'px'],
-    ['frame_rate', config.copy.pictureFrameRate, [0, 15, 24, 30, 60], 'FPS'],
+    ['max_dimension', 'pictureResolution', [0, 1600, 1920, 2560, 3840, 4096], 'px'],
+    ['frame_rate', 'pictureFrameRate', [0, 15, 24, 30, 60], 'FPS'],
   ]) {
     const label = document.createElement('label');
-    const text = document.createElement('span'); text.textContent = title;
+    const text = document.createElement('span'); hostApplicationAppearance.copy(text, title);
     const select = document.createElement('select');
-    select.setAttribute('aria-label', title);
+    hostApplicationAppearance.copy(select, title, 'aria-label');
     for (const value of values) {
       const option = document.createElement('option'); option.value = String(value);
-      option.textContent = value === 0 ? config.copy.pictureAuto : `${value} ${unit}`;
+      if (value === 0) hostApplicationAppearance.copy(option, 'pictureAuto');
+      else option.textContent = `${value} ${unit}`;
       select.append(option);
     }
     select.value = String(picture[field]);
@@ -120,10 +124,10 @@
   const statistics = document.createElement('div');
   statistics.className = 'mac-app-picture-statistics';
   const statisticValues = {};
-  for (const [key, title] of [['resolution', config.copy.picturePixels], ['rate', config.copy.pictureActualRate], ['bandwidth', config.copy.pictureBandwidth], ['transport', config.copy.pictureTransport]]) {
+  for (const [key, title] of [['resolution', 'picturePixels'], ['rate', 'pictureActualRate'], ['bandwidth', 'pictureBandwidth'], ['transport', 'pictureTransport']]) {
     const row = document.createElement('div');
-    const label = document.createElement('span'); label.textContent = title;
-    const value = document.createElement('output'); value.textContent = '—'; value.setAttribute('aria-label', title);
+    const label = document.createElement('span'); hostApplicationAppearance.copy(label, title);
+    const value = document.createElement('output'); value.textContent = '—'; hostApplicationAppearance.copy(value, title, 'aria-label');
     statisticValues[key] = value; row.append(label, value); statistics.append(row);
   }
   picturePanel.append(statistics);
@@ -131,8 +135,8 @@
   let receivedBytes = 0, paintedFrames = 0, measuredAt = performance.now();
   const statisticsTimer = setInterval(() => {
     const now = performance.now(), elapsed = (now - measuredAt) / 1000;
-    statisticValues.rate.textContent = `${(paintedFrames / elapsed).toFixed(1)} FPS`;
-    statisticValues.bandwidth.textContent = `${(receivedBytes * 8 / elapsed / 1e6).toFixed(2)} Mb/s`;
+    statisticValues.rate.textContent = `${hostApplicationAppearance.number(paintedFrames / elapsed, 1)} FPS`;
+    statisticValues.bandwidth.textContent = `${hostApplicationAppearance.number(receivedBytes * 8 / elapsed / 1e6, 2)} Mb/s`;
     receivedBytes = 0; paintedFrames = 0; measuredAt = now;
   }, 1000);
   function savePicture() {
@@ -145,6 +149,7 @@
     socket.send(JSON.stringify({action, ...picture, ...size,
       pixel_ratio: Math.min(4, Math.max(0.5, devicePixelRatio || 1)), video: videoSupported}));
   }
+  hostApplicationAppearance.subscribe(() => { syncWindowPicker(); positionPopover(); });
   const panels = { windows: windowPanel, picture: picturePanel, menu: menuPanel, quit: quitPanel };
   const toggles = { windows: windowToggle, picture: controlsButton, menu, quit };
   let menuTimer;
@@ -204,7 +209,7 @@
       menuPanel.replaceChildren();
       menuPanel.setAttribute('aria-busy', 'true');
       menuTimer = setTimeout(() => {
-        if (panelSection === 'menu') { collapseControls(true); showFeedback(config.copy.operationFailed); }
+        if (panelSection === 'menu') { collapseControls(true); showFeedback('operationFailed'); }
       }, 6000);
       send({action:'menu'});
     } else {
@@ -281,12 +286,12 @@
     if (!input.disabled) input.focus({preventScroll:true});
     send({action:'quit_application'});
     quitTimer = setTimeout(() => {
-      quitPending = false; syncWindowPicker(); showFeedback(config.copy.quitFailed);
+      quitPending = false; syncWindowPicker(); showFeedback('quitFailed');
     }, 6000);
   };
   const input = document.createElement('textarea');
   input.className = 'mac-app-input';
-  input.setAttribute('aria-label', config.copy.input);
+  hostApplicationAppearance.copy(input, 'input', 'aria-label');
   input.autocomplete = 'off';
   document.body.append(input);
   const feedback = document.createElement('div');
@@ -294,7 +299,7 @@
   feedback.setAttribute('role', 'status');
   feedback.hidden = true;
   document.body.append(feedback);
-  function showFeedback(message) { feedback.textContent = message; feedback.hidden = false; }
+  function showFeedback(key) { hostApplicationAppearance.copy(feedback, key); feedback.hidden = false; }
   let socket,
     attempt = 0,
     active = false,
@@ -437,7 +442,7 @@
           renderedGeneration = current.generation;
           canvas.setAttribute('aria-busy', 'false');
           statisticValues.resolution.textContent = `${width} × ${height}`;
-          statisticValues.transport.textContent = config.copy[next.meta.transport === 'video' ? 'pictureVideo' : 'pictureImages'];
+          hostApplicationAppearance.copy(statisticValues.transport, next.meta.transport === 'video' ? 'pictureVideo' : 'pictureImages');
           paintedFrames++;
           socket.send(JSON.stringify({ action: 'frame_ack', generation: next.generation, frame_id: next.meta.frame_id }));
           if (!firstFrame) {
@@ -523,12 +528,12 @@
           present(message.type === 'waiting' ? 'waiting' : 'captureUnavailable');
         } else if (message.type === 'operation_error') {
           if (message.action === 'quit_application') {
-            clearTimeout(quitTimer); quitPending = false; syncWindowPicker(); showFeedback(config.copy.quitFailed);
-          } else if (message.code !== 'STALE_WINDOW') showFeedback(config.copy.operationFailed);
+            clearTimeout(quitTimer); quitPending = false; syncWindowPicker(); showFeedback('quitFailed');
+          } else if (message.code !== 'STALE_WINDOW') showFeedback('operationFailed');
           if (message.action === 'menu' && panelSection === 'menu') collapseControls(true);
         } else if (message.type === 'operation_complete') {
           if (message.action === 'quit_application') {
-            clearTimeout(quitTimer); quitPending = false; syncWindowPicker(); showFeedback(config.copy.quitPending);
+            clearTimeout(quitTimer); quitPending = false; syncWindowPicker(); showFeedback('quitPending');
           } else feedback.hidden = true;
         } else if (message.type === 'window') {
           clearTimeout(deadline);
@@ -554,7 +559,7 @@
           if (!current || message.generation !== current.generation || panelSection !== 'menu') return;
           clearTimeout(menuTimer);
           menuPanel.removeAttribute('aria-busy');
-          if (!message.items.length) { collapseControls(true); showFeedback(config.copy.operationFailed); return; }
+          if (!message.items.length) { collapseControls(true); showFeedback('operationFailed'); return; }
           menuPath = [{title:config.copy.menu, items:message.items}];
           renderMenu();
         } else if (message.type === 'error' && message.code !== 'STALE_WINDOW')

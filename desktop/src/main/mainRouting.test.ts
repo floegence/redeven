@@ -409,7 +409,10 @@ describe('main routing', () => {
     expect(helperSrc).toContain('webServiceBrowserContentBounds(width, height, request.presentation)');
     expect(helperSrc).toContain('const contentView = new WebContentsView({');
     expect(helperSrc).toContain('applicationWindow ? { preload: resolveHostApplicationWindowPreloadPath(');
-    expect(helperSrc).toContain('if (applicationWindow) attachHostApplicationWindow(win, contentView.webContents, browserEntryURL);');
+    expect(helperSrc).toContain('applicationWindow ? attachHostApplicationWindow(win, contentView.webContents, browserEntryURL, () => ({');
+    expect(helperSrc).toContain('theme: desktopRendererThemeSnapshot(desktopThemeState().getSnapshot())');
+    expect(helperSrc).toContain('locale: desktopLanguageState().getSnapshot().resolved_locale');
+    expect(helperSrc).toContain('refreshHostAppearance();');
     expect(helperSrc).toContain('const contentViewIdentity = snapshotWebContentsIdentity(contentView.webContents);');
     expect(helperSrc).toContain(
       'sessionKeyByWebContentsID.set(contentViewIdentity.webContentsID, sessionRecord.session_key);',
@@ -434,7 +437,7 @@ describe('main routing', () => {
     expect(helperSrc).toContain('webServiceUnavailableDocumentURL(targetAddress, applicationWindow)');
     expect(helperSrc).toContain('callback({ cancel: true });');
     expect(helperSrc).toContain('WEB_SERVICE_BROWSER_RETRY_FEEDBACK_MS');
-    expect(helperSrc).toContain('const refreshUnavailableTheme = (): void => {');
+    expect(helperSrc).toContain('const refreshAppearance = (): void => {');
     expect(helperSrc).not.toContain('void win.loadURL(webServiceBrowserDocumentURL());');
     expect(helperSrc).toContain('unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow);');
     expect(helperSrc).toContain('if (unavailablePageURL !== retryPageURL) return;');
@@ -490,7 +493,7 @@ describe('main routing', () => {
     expect(helperEnd).toBeGreaterThan(helperStart);
     const helperSrc = mainSrc.slice(helperStart, helperEnd);
     expect(mainSrc).toContain('refreshCodespaceLoadingDocuments();');
-    expect(mainSrc).toContain('refreshWebServiceUnavailableDocuments();');
+    expect(mainSrc).toContain('refreshWebServicePresentation();');
     expect(helperSrc).toContain('for (const owner of record.codespace_native.values())');
     expect(helperSrc).toContain('owner.refreshLoading()');
     expect(helperSrc).not.toContain('for (const [codeSpaceID, codespaceWindow] of sessionRecord.codespace_windows)');

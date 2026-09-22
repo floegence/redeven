@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
   JSDOM: new (html: string, options: Record<string, unknown>) => { window: Window & typeof globalThis };
 };
-const shared = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/connection.js'), 'utf8');
+const shared = ['catalog.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
 const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/toolbar.js'), 'utf8') + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/macos.js'), 'utf8');
-const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '');
+const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '').replace('{{.Locale}}', 'en-US');
 let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.dispatchEvent(new dom.window.Event('beforeunload')); dom?.window.close(); vi.useRealTimers(); });
@@ -48,6 +48,7 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
     decode = vi.fn(() => { this.callbacks.output({displayWidth: 1280, displayHeight: 960, close: vi.fn()}); });
     close() { this.state = 'closed'; }
   }
+  Object.assign(dom.window, {matchMedia: () => ({matches:false})});
   Object.assign(dom.window, { TextDecoder, TextEncoder, VideoDecoder: video ? Decoder : undefined, EncodedVideoChunk: class { constructor(public value: unknown) {} }, fetch, WebSocket: Socket, createImageBitmap: bitmap, redevenHostApplicationWindow: native });
   const statisticsTicks: (() => void)[] = [];
   vi.spyOn(dom.window, 'setInterval').mockImplementation(((callback: () => void) => { statisticsTicks.push(callback); return 1; }) as typeof dom.window.setInterval);

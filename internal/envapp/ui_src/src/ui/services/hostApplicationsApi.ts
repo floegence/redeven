@@ -47,6 +47,7 @@ export type HostApplicationCatalog = Readonly<{
 }>;
 
 export type HostApplicationPresentation = Readonly<{
+  shellTheme?: string;
   checking?: string;
   applicationExited?: string;
   applicationExitedHint?: string;

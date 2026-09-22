@@ -37,6 +37,7 @@ const hostApplicationConnection = (() => {
       else window.close();
     };
   }
+  hostApplicationAppearance.subscribe(() => present(document.body.dataset.state));
   const initial = ['ended', 'failed'].includes(config.initial?.state) ? state(config.initial) : null;
   return {ended, terminal, read, present, initial};
 })();
