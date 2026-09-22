@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Desktop Web Service browser window
 description: Present trusted browser chrome around an isolated authorized application view without exposing transport details.
 tags: [desktop, managed-services, security, ui]
-timestamp: 2026-09-09T00:00:00Z
+timestamp: 2026-09-22T02:30:00Z
 ---
 # Summary
 
@@ -27,8 +27,9 @@ Target navigation and popups may remain in the isolated window only while the ex
 
 The semantic forward-window request optionally selects `presentation: application`.
 The default remains the browser presentation described above. Application presentation
-uses native OS chrome, no browser toolbar, no shell preload, and a target view
-filling the complete content area. Its title is the application document title
+uses the shared Desktop titlebar geometry with native OS window buttons, no
+browser navigation toolbar, no shell preload, and a target view filling the
+complete content area. Its title is the application document title
 without the Web Service suffix. The same forward admission, isolated partition,
 request routing, window reuse, and teardown remain authoritative. Presentation is
 part of reuse identity so opening a different presentation cannot silently retain
@@ -39,12 +40,14 @@ geometry, application progress, disconnection, and session lifecycle.
 
 Only the Redeven host-application bootstrap receives a dedicated presentation
 preload. It can request close, minimize, maximize, or unmaximize for its own native
-window and observe that window's state. Electron main binds every request to the
+window and observe that window's state. The preload applies validated native
+titlebar insets to the bootstrap only; fullscreen updates come from the same
+authoritative native window events. Electron main binds every request to the
 attached live WebContents, its current main frame, and the exact entry origin and
 bootstrap path. Subframes, other forwards, navigated documents, and unknown actions
 are rejected. The Xpra iframe, native host document, and unavailable document receive
 no page bridge. No environment identity, credentials, filesystem, shell, or general
-Desktop APIs are exposed. Native event subscriptions are removed with the view.
+Desktop APIs are exposed. Native event subscriptions are removed with the view. The [application titlebar contract](host-application-titlebar.md) owns control layout, backend command routing and recovery presentation.
 
 # Boundaries
 

@@ -226,7 +226,7 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, _ *http.Request
 		Name, Nonce, Locale string
 		Config, Script      template.JS
 		Style               template.CSS
-	}{s.Application.Name, nonce, s.Presentation.Locale, template.JS(config), template.JS(hostApplicationConnectionJS + "\n" + script), template.CSS(hostApplicationCSS)})
+	}{s.Application.Name, nonce, s.Presentation.Locale, template.JS(config), template.JS(hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + script), template.CSS(hostApplicationCSS)})
 }
 
 //go:embed host_application_viewer/viewer.html
@@ -245,3 +245,6 @@ var hostApplicationBootTemplate = template.Must(template.New("host-app").Parse(h
 
 //go:embed host_application_viewer/macos.js
 var macHostApplicationJS string
+
+//go:embed host_application_viewer/toolbar.js
+var hostApplicationToolbarJS string

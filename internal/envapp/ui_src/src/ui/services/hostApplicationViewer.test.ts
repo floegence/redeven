@@ -7,7 +7,7 @@ const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const shared = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/connection.js'), 'utf8');
-const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.js'), 'utf8');
+const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/toolbar.js'), 'utf8') + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '');
 const copy = {starting:'Starting', connecting:'Connecting', reconnecting:'Reconnecting', disconnected:'Disconnected', failed:'Failed', ended:'Ended', retry:'Retry', reconnect:'Reconnect', connectionHint:'Return to your application'};
 let dom: InstanceType<typeof JSDOM>;
@@ -33,11 +33,12 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
   doc.open(); doc.write('<html><head></head><body></body></html>'); doc.close();
   const windows: Record<number, ReturnType<typeof appWindow>> = {};
   function appWindow(id: number, metadata: Record<string, unknown> = {}, type = 'NORMAL') {
+    const metadataUpdated = vi.fn();
     const win = {
       wid:id, div:doc.createElement('div'), metadata, windowtype:[type], override_redirect:false, tray:false,
       has_windowtype:(types: string[]) => types.includes(type), screen_resized:vi.fn(),
       set_maximized:vi.fn(), set_minimized:vi.fn(), initiate_moveresize:vi.fn(), move_resize:vi.fn(),
-      update_metadata:vi.fn(), handle_resized:vi.fn(), w:1096, h:856, x:100, y:100,
+      metadataUpdated, update_metadata:metadataUpdated, destroy:vi.fn(), handle_resized:vi.fn(), w:1096, h:856, x:100, y:100,
       leftoffset:1, rightoffset:1, topoffset:30, bottomoffset:1,
     };
     windows[id] = win;
@@ -46,7 +47,7 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
   const client = {
     _get_desktop_size:() => [1000, 680], id_to_window:windows, connected:true, reconnect:true, reconnect_count:5,
     _new_window:vi.fn(), do_send_damage_sequence:vi.fn(), send_configure_window:vi.fn(),
-    send_control_refresh:vi.fn(), close:vi.fn(), callback_close:() => {}, on_last_window:vi.fn(),
+    send_control_refresh:vi.fn(), send:vi.fn(), send_close_window:vi.fn(), focused_wid:1, set_focus:vi.fn((win: {wid:number}) => { client.focused_wid = win.wid; }), close:vi.fn(), callback_close:() => {}, on_last_window:vi.fn(),
   };
   if (!deferredInitialization) {
     Object.assign(frame.contentWindow!, {client});
@@ -61,6 +62,53 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
 }
 
 describe('host application viewer', () => {
+  it('keeps application controls visible and routes them through the current Xpra session', async () => {
+    const v = await viewer(false, true);
+    const first = v.appWindow(1, {title:'Document one'}), second = v.appWindow(2, {title:'Document two'});
+    v.client._new_window(1); v.client._new_window(2);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    const button = (selector: string) => dom.window.document.querySelector<HTMLButtonElement>(selector)!;
+    expect(button('.mac-app-windows-toggle')).not.toBeNull();
+    button('.mac-app-windows-toggle').click();
+    const entries = dom.window.document.querySelectorAll<HTMLButtonElement>('.mac-app-window-list button');
+    expect(entries).toHaveLength(2);
+    entries[1].click();
+    expect(v.client.focused_wid).toBe(second.wid);
+    button('.mac-app-controls-toggle').click();
+    button('[data-picture-mode="clarity"]').click();
+    expect(v.client.send).toHaveBeenCalledWith(['quality', 95]);
+    expect(v.client.close).not.toHaveBeenCalled();
+    button('.mac-app-close').click();
+    expect(v.client.send_close_window).toHaveBeenLastCalledWith(second);
+    v.client.send_close_window.mockClear();
+    button('.mac-app-quit').click();
+    expect(v.client.send_close_window).not.toHaveBeenCalled();
+    button('.mac-app-confirm-quit').click();
+    expect(v.client.send_close_window.mock.calls.map(([win]) => win)).toEqual([first, second]);
+    expect(v.nativeWindow.request).not.toHaveBeenCalledWith('close');
+  });
+
+  it('keeps modal dialogs open during quit and rejects stale picker actions after disconnection', async () => {
+    const v = await viewer();
+    const main = v.appWindow(1, {title:'Document'});
+    const dialog = v.appWindow(2, {'transient-for':1, modal:true, title:'Save changes'}, 'DIALOG');
+    v.client._new_window(1); v.client._new_window(2);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    const doc = dom.window.document;
+    doc.querySelector<HTMLButtonElement>('.mac-app-windows-toggle')!.click();
+    const previousChoice = doc.querySelector<HTMLButtonElement>('.mac-app-window-list button')!;
+    doc.querySelector<HTMLButtonElement>('.mac-app-quit')!.click();
+    doc.querySelector<HTMLButtonElement>('.mac-app-confirm-quit')!.click();
+    expect(v.client.send_close_window).toHaveBeenCalledOnce();
+    expect(v.client.send_close_window).toHaveBeenCalledWith(main);
+    expect(v.client.send_close_window).not.toHaveBeenCalledWith(dialog);
+    expect(v.state()).toBe('active');
+    v.doc.dispatchEvent(new dom.window.Event('connection-lost')); await drain();
+    previousChoice.click();
+    expect(v.client.focused_wid).toBe(1);
+    expect([...doc.querySelectorAll<HTMLButtonElement>('.mac-app-toolbar button')].every(button => button.disabled)).toBe(true);
+  });
+
   it('renders a refreshed ended session without starting Xpra or requesting credentials', async () => {
     const v = await viewer(false, true, false, {state:'ended'});
     expect(v.state()).toBe('ended');
@@ -79,7 +127,7 @@ describe('host application viewer', () => {
     v.client._new_window(1);
     v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
     expect(v.state()).toBe('active');
-    expect(dialog.update_metadata).not.toHaveBeenCalled();
+    expect(dialog.metadataUpdated).not.toHaveBeenCalled();
   });
 
   it('directs a failed session back to the application library instead of retrying it', async () => {
@@ -96,8 +144,8 @@ describe('host application viewer', () => {
     const dialog = v.appWindow(2, {'transient-for':1}, 'DIALOG');
     const popup = v.appWindow(3, {}, 'POPUP_MENU');
     v.client._new_window(1); v.client._new_window(2); v.client._new_window(3);
-    expect(primary.update_metadata).toHaveBeenCalledWith({decorations:false});
-    expect(dialog.update_metadata).not.toHaveBeenCalled();
+    expect(primary.metadataUpdated).toHaveBeenCalledWith({decorations:false});
+    expect(dialog.metadataUpdated).not.toHaveBeenCalled();
     expect(dialog.w).toBe(974);
     expect(dialog.h).toBe(625);
     expect(dialog.y + dialog.h).toBeLessThan(680);

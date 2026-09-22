@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { BrowserWindow, IpcMainEvent, WebContents } from 'electron';
 import { describe, expect, it, vi } from 'vitest';
+import { resolveDesktopWindowChromeSnapshot } from '../shared/windowChromePlatform';
 import { attachHostApplicationWindow } from './hostApplicationWindow';
 import { HOST_APPLICATION_WINDOW_ACTION_CHANNEL as actionChannel, HOST_APPLICATION_WINDOW_STATE_CHANNEL as stateChannel } from '../shared/hostApplicationWindowIPC';
 
@@ -23,12 +24,19 @@ describe('native host application window controls', () => {
     const v = fixture();
     v.send('maximize');
     expect(v.win.maximize).toHaveBeenCalledOnce();
-    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:true, minimized:false});
+    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:true, minimized:false, chrome:resolveDesktopWindowChromeSnapshot()});
     v.send('unmaximize'); v.send('minimize');
-    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:false, minimized:true});
+    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:false, minimized:true, chrome:resolveDesktopWindowChromeSnapshot()});
     v.state.minimized = false; v.win.emit('restore');
-    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:false, minimized:false});
+    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:false, minimized:false, chrome:resolveDesktopWindowChromeSnapshot()});
     v.send('close'); expect(v.win.close).toHaveBeenCalledOnce();
+  });
+
+  it('updates the titlebar safe area from native fullscreen state', () => {
+    const v = fixture();
+    v.state.fullscreen = true; v.win.emit('enter-full-screen');
+    expect(v.contents.send).toHaveBeenLastCalledWith(stateChannel, {maximized:true, minimized:false,
+      chrome:resolveDesktopWindowChromeSnapshot(process.platform, {fullScreen:true})});
   });
 
   it('rejects child frames, other contents, other routes, and unknown actions', () => {

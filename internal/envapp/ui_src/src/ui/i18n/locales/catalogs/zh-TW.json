@@ -6350,6 +6350,8 @@
     "macAppRunning": "執行中",
     "macQuit": "結束應用程式",
     "macQuitTitle": "結束 {name}？",
+    "sessionQuitDescription": "關閉此應用程式工作階段中的所有視窗。應用程式可能會提示儲存變更；取消後視窗會保持開啟。",
+    "sessionPictureHint": "設定立即生效，無須重新連線。畫質越高，頻寬用量越大。",
     "macQuitDescription": "這會請求應用程式結束，並關閉它在此 Mac 上的所有視窗，包括在 Redeven 以外開啟的視窗。應用程式可能會提示儲存變更，你也可以在其中取消結束。",
     "macQuitViewerPending": "已要求結束應用程式。請在應用程式中處理儲存提示；取消結束後，應用程式會保持開啟。",
     "macQuitPending": "請開啟應用程式處理可能出現的儲存對話框。取消結束後，應用程式會繼續執行。",

@@ -404,7 +404,7 @@ describe('main routing', () => {
     );
     expect(helperSrc).toContain("role: 'web_service_child'");
     expect(helperSrc).toContain("preload: applicationWindow ? 'none' : 'web_service_browser'");
-    expect(helperSrc).toContain("chrome: applicationWindow ? 'native' : 'desktop'");
+    expect(helperSrc).toContain("chrome: 'desktop'");
     expect(helperSrc).toContain("targetURL: applicationWindow ? 'about:blank' : webServiceBrowserDocumentURL()");
     expect(helperSrc).toContain('webServiceBrowserContentBounds(width, height, request.presentation)');
     expect(helperSrc).toContain('const contentView = new WebContentsView({');
