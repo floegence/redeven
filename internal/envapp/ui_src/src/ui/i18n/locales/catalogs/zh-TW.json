@@ -6252,6 +6252,24 @@
     }
   },
   "hostApplications": {
+    "update": {
+      "unsupported": "此執行階段無法使用已安裝的元件版本，原有檔案已保留。請先更新執行階段再繼續。",
+      "available": "元件有更新",
+      "view": "查看更新",
+      "title": "更新主機應用程式元件",
+      "description": "目前的元件仍可使用，更新期間也能繼續使用應用程式。",
+      "start": "更新元件",
+      "local": "使用本機快取更新，無需下載或上傳。",
+      "installedVersion": "已安裝",
+      "targetVersion": "建議版本",
+      "stabilityFix": "建議版本修正了已知的連線穩定性問題。執行中的應用程式會繼續使用原元件，直到應用程式重新啟動。",
+      "failedRetained": "本次更新未完成。目前的元件與執行中的應用程式仍可使用。",
+      "damaged": "已安裝的元件需要修復，檔案已保留。",
+      "repair": "修復元件",
+      "cacheChanged": "準備期間快取檔案有所變更，請重新檢查可用檔案後再試。",
+      "desktopMismatch": "目前的 Desktop 無法準備所需元件，請更新 Desktop 或選擇由主機下載。",
+      "checkingSize": "下載前計算"
+    },
     "linuxRunningHint": "停止共享後，應用程式會繼續執行。你可以從此清單重新連線。",
     "stopSharingDescription": "中斷此應用程式與 Redeven 的連線。應用程式視窗及尚未儲存的工作會保留。",
     "closeAllWindows": "關閉所有視窗",

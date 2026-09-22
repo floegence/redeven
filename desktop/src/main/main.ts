@@ -18645,12 +18645,13 @@ if (!app.requestSingleInstanceLock()) {
       event.sender.once('destroyed', () => { void hostApplicationComponents.cancel(owner); hostApplicationComponentOwners.delete(owner); });
     }
     try {
+      if (request.action === 'capabilities') return { ok: true, supports_transfer_plan: true };
       if (request.action === 'cancel') { await hostApplicationComponents.cancel(owner); return { ok: true }; }
       if (request.action === 'read') return await hostApplicationComponents.read(owner, request.offset);
       if (request.action !== 'acquire' || !['amd64', 'arm64'].includes(request.architecture)) return { ok: false };
       return await hostApplicationComponents.acquire(owner, request.architecture, progress => {
         if (!event.sender.isDestroyed()) event.sender.send(HOST_APPLICATION_COMPONENTS_PROGRESS, progress);
-      });
+      }, request.plan);
     } catch { return { ok: false }; }
   });
   ipcMain.handle(HOST_APPLICATION_PREPARATION_CHANNEL, async (event, value: unknown): Promise<HostApplicationPreparationResult> => {

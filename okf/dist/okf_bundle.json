@@ -156,7 +156,7 @@
             "path": "architecture/host-application-preparation.md",
             "type": "Runtime Contract",
             "title": "Managed host application preparation",
-            "description": "One-action acquisition, verification, cancellation, offline recovery and same-window launch continuation for native host applications.",
+            "description": "Compatible installed components, independent user-directed updates, incremental transfer and same-window first-use preparation.",
             "tags": [
               "applications",
               "desktop",
@@ -164,7 +164,7 @@
               "runtime",
               "security"
             ],
-            "summary": "The released `floe-native-apps` library owns Linux graphical component acquisition,\nverification, staging, self-check and activation. Redeven owns authenticated product\nroutes, private state placement, localized preparation and the user's pending app\nopening. Applications execute on the host. Preparation never requires a container,\nVM, package-manager command, custom software source, or administrator password.\nOnly a verified installation whose real window, decoded pixels, fresh input and\nWebSocket disconnect/reconnect checks pass self-check becomes ready. Failure preserves an explicit retry boundary;\nclosing a pending viewer prevents its automatic application opening.",
+            "summary": "The released `floe-native-apps` library owns Linux graphical component acquisition,\nverification, staging, self-check and activation. Redeven owns authenticated product\nroutes, private state placement, localized preparation and the user's pending app\nopening. Applications execute on the host. Preparation never requires a container,\nVM, package-manager command, custom software source, or administrator password.\nRuntime updates never depend on component updates. Compatible installed components\nremain usable during an optional update and after failure or cancellation. A new\ninstallation activates only after verification and real graphical qualification.\nClosing a pending viewer prevents automatic application opening.",
             "section_count": 3
           },
           {
@@ -9654,7 +9654,7 @@
       "concept_id": "architecture.host-application-preparation",
       "type": "Runtime Contract",
       "title": "Managed host application preparation",
-      "description": "One-action acquisition, verification, cancellation, offline recovery and same-window launch continuation for native host applications.",
+      "description": "Compatible installed components, independent user-directed updates, incremental transfer and same-window first-use preparation.",
       "tags": [
         "applications",
         "desktop",
@@ -9664,7 +9664,7 @@
       ],
       "timestamp": "2026-09-22T00:00:00Z",
       "frontmatter": {
-        "description": "One-action acquisition, verification, cancellation, offline recovery and same-window launch continuation for native host applications.",
+        "description": "Compatible installed components, independent user-directed updates, incremental transfer and same-window first-use preparation.",
         "tags": [
           "applications",
           "desktop",
@@ -9676,44 +9676,56 @@
         "title": "Managed host application preparation",
         "type": "Runtime Contract"
       },
-      "body_length": 8058,
-      "summary": "The released `floe-native-apps` library owns Linux graphical component acquisition,\nverification, staging, self-check and activation. Redeven owns authenticated product\nroutes, private state placement, localized preparation and the user's pending app\nopening. Applications execute on the host. Preparation never requires a container,\nVM, package-manager command, custom software source, or administrator password.\nOnly a verified installation whose real window, decoded pixels, fresh input and\nWebSocket disconnect/reconnect checks pass self-check becomes ready. Failure preserves an explicit retry boundary;\nclosing a pending viewer prevents its automatic application opening.",
+      "body_length": 9060,
+      "summary": "The released `floe-native-apps` library owns Linux graphical component acquisition,\nverification, staging, self-check and activation. Redeven owns authenticated product\nroutes, private state placement, localized preparation and the user's pending app\nopening. Applications execute on the host. Preparation never requires a container,\nVM, package-manager command, custom software source, or administrator password.\nRuntime updates never depend on component updates. Compatible installed components\nremain usable during an optional update and after failure or cancellation. A new\ninstallation activates only after verification and real graphical qualification.\nClosing a pending viewer prevents automatic application opening.",
       "sections": [
         {
           "id": "component-ownership-and-admission",
           "title": "Component ownership and admission",
           "level": 1,
-          "body": "Redeven consumes `github.com/floegence/floe-native-apps` v0.3.1 as a published Go\nmodule, built with the same Go 1.27.1 toolchain. Its embedded catalog pins original\npublisher URLs, archive sizes, SHA-256, licenses and source references. The Runtime accepts no client-provided URL, hash,\ncatalog, executable, or install destination. The upstream acquires original Alpine\nAPK archives and Xpra HTML5 source, retaining archives in a private cache. Native\nbinaries are not added to Redeven's source or supplied by a local sibling checkout.\n\nThe complete managed toolset lives under the Runtime's\n`host-applications/native-components` state. It carries its own musl ELF loader,\nPython, GIO/GTK, Xpra, Xvfb, D-Bus, X authorization, keyboard data, image loaders and\nfonts. Private wrappers select package-relative resources without setting a global\nlibrary path. Linux amd64 and arm64 use the same acquisition contract regardless\nof whether the host uses glibc or musl. A valid managed installation takes priority;\notherwise an already compatible complete system stack remains usable. A partial\nmanaged installation is never mixed with system support components.\nThe released catalog revision invalidates the earlier prepared component identity.\nUpstream preparation corrects the pinned decoder before qualification and atomic\nactivation; original publisher archives remain unchanged and cached for reuse.\nThe same application process must survive repeated WebSocket viewer closures.\nThis qualification runs during component preparation, not on every app opening.\n\nThe GIO application launcher restores the original host tool/library environment\nfrom upstream's explicit saved map before executing user software. The session's\nprivate display and D-Bus addresses remain. Actual application metadata, binaries,\nfiles, toolkit dependencies and OS permissions remain host-owned. This is display\nisolation, not a security sandbox or an application compatibility layer.",
-          "char_count": 1958
+          "body": "Redeven consumes `github.com/floegence/floe-native-apps` v0.4.0 as a published Go\nmodule, built with the same Go 1.27.1 toolchain. Its embedded catalog pins original\npublisher URLs, archive sizes, SHA-256, licenses and source references. The Runtime accepts no client-provided URL, artifact specification,\ncatalog, executable, or install destination. The upstream acquires original Alpine\nAPK archives and Xpra HTML5 source, retaining archives in a private cache. Native\nbinaries are not added to Redeven's source or supplied by a local sibling checkout.\n\nThe complete toolset lives under `host-applications/native-components`, with its\nown loader, Python/GIO/GTK, Xpra/Xvfb, D-Bus and graphical resources. Private wrappers\nkeep support libraries out of the application's host environment. Linux amd64 and\narm64 share this contract on glibc and musl hosts. Valid managed components take\npriority; otherwise a complete compatible system stack remains usable. Partial\nmanaged components are never mixed with system support tools.\nThe upstream preserves published r1/r2 identities and their compatibility contract\nindependently of the recommended recipe. r1 remains usable but retains its known\nshort-frame decoder defect. r2 corrects that defect before qualification; update\ncopy describes the stability fix without claiming that old running apps are fixed.\nRecipe revisions are not separately hosted binary bundles: both reuse the same\noriginal publisher archives. Future SDK upgrades must preserve supported component\ncontracts rather than equating readiness with the newest digest.\n\nThe [host application contract](host-applications.md) owns restoration of the\napplication's environment, private display isolation and host-owned dependencies.",
+          "char_count": 1743
         },
         {
           "id": "preparation-execution-and-recovery",
           "title": "Preparation execution and recovery",
           "level": 1,
-          "body": "Reading preparation status and observing events requires read permission. Starting,\ntransferring or cancelling requires read/write/execute permission through the same\norigin and session gates as other Host Applications operations. Owner identity\ncomes exclusively from authenticated session metadata. The upstream serializes\nwriters with its private-root lease and enforces owner-scoped cancellation and\nidempotent request/chunk admission. Redeven does not keep a second durable\noperation store.\n\nOne explicit preparation action admits download, integrity verification, extraction\nand native qualification. Events report actual acquisition bytes and stable stages;\nthe UI does not invent percentage progress for installation or validation. The SSE\nobserver reads current authoritative snapshots. Losing the observer does not cancel\ninstallation or replay admission. Reconnection observes current state; an uncertain\nstart response reuses its request ID. A Runtime restart reports interrupted work and\nrequires explicit continuation, reusing verified archives. Invalid archives, disk\nspace, filesystem permission, network and graphical self-check failures have\nlocalized recovery copy. No failure changes SELinux, AppArmor or host privileges.\n\nThe preparation page and application dialog visibly offer host download (selected\nby default) and Desktop download-and-transfer. Desktop is disabled with an\nexplanation outside its component bridge. The selected method is shared between\nthe page and dialog; failures never switch methods automatically. The compact\npreparation surface keeps method descriptions, package size and actions together.\nUsers can select Desktop initially or explicitly after a host download fails.\nDesktop acquires the same architecture catalog through its bundled Runtime. It\ntransfers original verified archives as a bounded ZIP through the authorized host\nAPI. The host independently verifies and qualifies them. The initiating Desktop\ndocument owns this local acquisition; navigation or cancellation retires its exact\nsubprocess and temporary transfer, including cancellation before host admission.\nAcquisition byte progress is temporary presentation state; host operation status\nremains authoritative. Uncertain upload admissions reuse the same request ID.\nAn existing receiving operation can resume through an explicitly selected Desktop\ntransfer or a matching offline package. No renderer-supplied URL or filesystem path can\nreach the acquisition command. Browser users and offline deployments may explicitly\nselect an upstream-generated ZIP in the preparation panel. Uploaded chunks have a\n256 KiB bound and the complete archive has the pinned package's bounded ZIP overhead.\nThe user's local ZIP path is never sent to the host.",
-          "char_count": 2756
+          "body": "Reading status, explicitly inspecting a transfer plan and observing events requires read permission. Starting,\ntransferring or cancelling requires read/write/execute permission through the same\norigin and session gates as other Host Applications operations. Owner identity\ncomes exclusively from authenticated session metadata. The upstream serializes\nwriters with its private-root lease and enforces owner-scoped cancellation and\nidempotent request/chunk admission. Redeven does not keep a second durable\noperation store. Installed identity/readiness and operation state are separate:\nlaunch uses the former, never the update stage. Upstream atomically migrates v1\npreparation records and recognizes only known, complete historical installations.\nCorrupt or unknown records are rejected read-only; damaged installations have a\nrepair diagnosis. Startup and page/status reads do not download, hash all archives\nor run graphical qualification.\n\nOne explicit action admits cache verification, missing-file acquisition, extraction\nand native qualification in an independent staging directory. Only qualified\ncomponents atomically replace the active selection. Old directories remain for live\napps, whose binding follows the [Linux instance contract](linux-application-lifecycle.md).\nEvents report actual acquisition bytes and stable stages;\nthe UI does not invent percentage progress for installation or validation. The SSE\nobserver reads current authoritative snapshots. Losing the observer does not cancel\ninstallation or replay admission. Reconnection observes current state; an uncertain\nstart response reuses its request ID. A Runtime restart reports interrupted work and\nrequires explicit continuation, reusing verified archives. Invalid archives, disk\nspace, filesystem permission, network and graphical self-check failures have\nlocalized recovery copy. No failure changes SELinux, AppArmor or host privileges.\nFailure or cancellation preserves installed components and running applications.\n\nWith compatible components installed, the application library remains the primary\nsurface. An optional update notice opens current/recommended versions, the stability\nfix and actual missing bytes. Inspection is user-directed; dismissing or ignoring\nthe notice keeps apps usable. Complete caches use the explicit `cache` source,\nhide download choices and produce no HTTP acquisition or Desktop transfer. Cache\nchanges fail explicitly; this source cannot silently start a download.\n\nWhen files are missing, the page and application dialog offer host download (selected\nby default) and Desktop download-and-transfer. Desktop is disabled with an\nexplanation outside its component bridge. The selected method is shared between\nthe page and dialog; failures never switch methods automatically. The compact\npreparation surface keeps method descriptions, package size and actions together.\nUsers can select Desktop initially or explicitly after a host download fails.\nDesktop first proves incremental-transfer support, then delegates the exact\nreceiver digest, architecture and missing archive identities to its bundled Runtime.\nUnknown targets fail explicitly without switching source or recipe. The released\nSDK creates a bounded ZIP of only missing verified archives. The host independently\nverifies uploaded and cached files together before qualification. Full offline ZIP\nimport remains supported. The initiating Desktop\ndocument owns this local acquisition; navigation or cancellation retires its exact\nsubprocess and temporary transfer, including cancellation before host admission.\nAcquisition byte progress is temporary presentation state; host operation status\nremains authoritative. Uncertain upload admissions reuse the same request ID.\nAn existing receiving operation can resume through an explicitly selected Desktop\ntransfer or a matching offline package. No renderer-supplied URL or filesystem path can\nreach the acquisition command. Browser users and offline deployments may explicitly\nselect an upstream-generated ZIP in the preparation panel. Uploaded chunks have a\n256 KiB bound and the complete archive has the pinned package's bounded ZIP overhead.\nThe user's local ZIP path is never sent to the host.",
+          "char_count": 4212
         },
         {
           "id": "window-and-permission-interaction",
           "title": "Window and permission interaction",
           "level": 1,
-          "body": "Selecting an unavailable application presents preparation for that actual app.\nThe confirming click reserves its physical Desktop window or synchronous browser\npopup before acquisition. The view uses the original unframed icon, concise stage\ncopy, a thin progress indicator, real download progress and reduced-motion support.\nWhen qualification succeeds, the library refreshes actual metadata and opens the\napp in that same window. Closing the preparation window or leaving its originating\ndocument retires the launch intention. If a new launch response arrives after its\nwindow has closed, Redeven ends only the newly created session. Existing sessions\nare not stopped by that race. Installation may finish independently for later use.\n\nThe Desktop reservation is scoped to the exact Env App document and application.\nAnother document cannot claim it. It has no preload, application bridge, browser\naddress bar or interactive remote content. On adoption, the existing isolated\napplication viewer fills the same native window and retains the normal\n[application lifecycle](host-applications.md).\n\nmacOS already ships its native helper. Local Desktop opening continues without\ncapture permissions. Remote use guides explicit screen-recording and accessibility\nauthorization, retains the selected app and resumes after the actual host preflight\npasses. Permission grants still require the host user's macOS interaction; Redeven\ncannot silently grant them. A graphical login remains required, as defined by the\n[macOS contract](macos-host-applications.md).",
-          "char_count": 1553
+          "body": "Selecting an unavailable application presents preparation for that actual app.\nThe confirming click reserves its physical Desktop window or browser popup before\nacquisition. The inert view shows the original icon, concise stage copy, real\nprogress and reduced-motion support. Successful qualification refreshes metadata\nand opens the app in that same window. Closing the reservation or leaving its\noriginating document retires the launch intention; installation may finish for\nlater use. A late launch response cannot reopen a closed reservation or terminate\nthe surviving application. Reservations belong to the exact document/application\nand cannot be claimed by another document. The\n[Desktop window contract](../desktop/web-service-browser-window.md) owns adoption.\n\nmacOS never enters Linux component preparation. Its bundled helper, native local\nopening and explicit remote screen-recording/accessibility authorization follow the\n[macOS contract](macos-host-applications.md); a graphical login is still required.",
+          "char_count": 1018
         }
       ],
       "snippet": "The released `floe-native-apps` library owns Linux graphical component acquisition, verification, staging, self-check and activation. Redeven owns authenticated product routes, private state placement, localized preparation and the user's p",
       "links": [
         {
-          "label": "application lifecycle",
+          "label": "host application contract",
           "path": "architecture/host-applications.md",
           "concept_id": "architecture.host-applications",
           "title": "Host application catalog and owned native sessions"
+        },
+        {
+          "label": "Linux instance contract",
+          "path": "architecture/linux-application-lifecycle.md",
+          "concept_id": "architecture.linux-application-lifecycle",
+          "title": "Linux application instances and independent sharing"
         },
         {
           "label": "macOS contract",
           "path": "architecture/macos-host-applications.md",
           "concept_id": "architecture.macos-host-applications",
           "title": "Native macOS host applications"
+        },
+        {
+          "label": "Desktop window contract",
+          "path": "desktop/web-service-browser-window.md",
+          "concept_id": "desktop.web-service-browser-window",
+          "title": "Desktop Web Service browser window"
         }
       ],
       "backlinks": [
@@ -9728,6 +9740,12 @@
           "path": "architecture/host-applications.md",
           "concept_id": "architecture.host-applications",
           "title": "Host application catalog and owned native sessions"
+        },
+        {
+          "label": "Linux application instances and independent sharing",
+          "path": "architecture/linux-application-lifecycle.md",
+          "concept_id": "architecture.linux-application-lifecycle",
+          "title": "Linux application instances and independent sharing"
         },
         {
           "label": "Redeven OKF Bundle",
@@ -10156,15 +10174,15 @@
         "title": "Linux application instances and independent sharing",
         "type": "Runtime Contract"
       },
-      "body_length": 6017,
+      "body_length": 6843,
       "summary": "Redeven owns Linux application instances, caller authorization and ephemeral\nsharing; the published Floe Native Apps module owns GIO launch and process-tree\nobservation. A live application outlives its viewers and window count. Closing a\nviewer, stopping sharing or exiting Runtime never requests application termination.\nAfter Runtime restart, the same host user and private state can recover a surviving\nbackend only after matching its kernel process generation and private endpoint\nidentity. No persisted PID alone authorizes signaling. Destroying the virtual\ndisplay, a host reboot or external cgroup cleanup cannot preserve an X11 app.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Instance and sharing ownership\n\nOne instance has an opaque ID, authorized caller owner, application metadata,\nloopback address, kernel boot/PID/start identity, creation time and versioned private\nrecord. It owns one isolated Xpra/Xvfb display and D-Bus session. A private store\nlock permits one manager to admit or recover instances at a time. Unknown,\nambiguous or incomplete records fail closed without being rewritten. Dead process\ngenerations cannot be reattached. Recovery resolves only approved current native\ntools and also verifies Xpra's session name over the private control socket.\n\nA share has its own ID, route, credential and connection-tracking proxy. Stopping\nsharing closes HTTP and hijacked WebSocket connections immediately; deleting a\nroute alone is insufficient. A new share atomically rotates the backend credential\nand reconnects the same application instance. Startup never silently re-executes\na surviving windowless app. The twelve-instance limit includes detached apps.\nRunning snapshots expose only instances owned by the authorized caller, including\nthose with no viewer or no windows. Linux cannot adopt arbitrary applications\nalready attached to another display.\n\nThe backend starts in an independent POSIX session without a Runtime-bound command\ncontext. Orderly shutdown and a Runtime process exit release its proxy and store\nlock while preserving that backend. Recovery creates a fresh sharing route; old\nviewer URLs are not durable. OS service managers may still terminate a whole\ncgroup, and host policy remains authoritative. Redeven never changes that policy.\n\n## Launch and readiness\n\nThe upstream monitored GIO launcher becomes a child subreaper before launching and\nreaps both direct and adopted descendants. Its lifetime, rather than the first\nwindow or viewer, drives Xpra's child-exit policy. Viewer/client and last-window\nexit policies remain disabled. Explicit launcher termination requires Linux\npidfds (kernel 5.3 or later and a compatible Python interpreter) and fails before\nlaunch when unavailable. Applications delegating to unrelated existing services\nare outside this owned child-tree contract.\n\nA running receipt and responsive HTML endpoint admit sharing without an expensive\nwindow-inventory probe. They do not prove pixels. An unconfirmed infrastructure\nstartup fails sharing after forty seconds while preserving the application; this\ndeadline never applies to a connected viewer waiting for its first window. After the authenticated Xpra\nstartup event, an empty inventory presents Waiting for a window indefinitely;\nan actual new window starts the bounded first-paint check. Closing the final\nestablished window dismisses the viewer while the application may keep running.\nA later opening reconnects the same process and waits if it has no window.\nOnly the application can decide how to create another window; Linux has no\nuniversal AppKit-style reopen action.\n\nSilent sessions still use upstream's audio-disable policy. Application launch\nlogs measure backend readiness, not first decoded pixels. A confirmed application\nexit ends sharing normally. A backend failure retains failed sharing state and\nrecovery guidance rather than claiming a normal application exit.\n\n## Normal close and explicit force quit\n\nThe Linux ordinary operation is named Close all windows because X11 has no\nuniversal application-level graceful quit API. Both the viewer and library request\nnormal closure of current top-level windows, excluding transients, modal save\ndialogs, trays and override-redirect surfaces. Save prompts and cancellation remain\napplication-owned. A background process may survive after every window closes.\n\nA separate library Force quit action requires a second explicit confirmation\nwarning about unsaved work. It validates the caller, application and exact current\ninstance, checks the live private backend identity, then requests Xpra shutdown.\nThe monitored launcher terminates only its owned descendants using pidfds and\nverified parent relationships. This path never follows ordinary close, disconnect,\nsave cancellation or an uncertain response automatically. Stale or foreign\ninstances are rejected. An accepted request is not proof of process exit; running\nsnapshots remove the row only when the kernel confirms termination.",
-          "char_count": 4297
+          "body": "## Instance and sharing ownership\n\nOne instance has an opaque ID, authorized caller owner, application metadata,\nloopback address, kernel boot/PID/start identity, component identity, creation time and versioned private\nrecord. It owns one isolated Xpra/Xvfb display and D-Bus session. A private store\nlock permits one manager to admit or recover instances at a time. Unknown,\nambiguous or incomplete records fail closed without being rewritten. Dead process\ngenerations cannot be reattached. Recovery resolves the instance's original tools\nand also verifies Xpra's session name over the private control socket.\n\nVersion 2 records bind either the upstream component digest or a complete system\ninstallation. Updating managed components affects only newly created instances;\ncontrol commands, environment and resumed sharing retain the original binding.\nVersion 1 records migrate atomically after upstream process-to-installation\nidentification and private backend verification. Recovery never substitutes the\ncurrent recommendation. Unknown or unverifiable bindings fail explicitly without\nterminating the surviving process. Old component directories remain available;\nthe [preparation contract](host-application-preparation.md) owns their selection.\n\nA share has its own ID, route, credential and connection-tracking proxy. Stopping\nsharing closes HTTP and hijacked WebSocket connections immediately; deleting a\nroute alone is insufficient. A new share atomically rotates the backend credential\nand reconnects the same application instance. Startup never silently re-executes\na surviving windowless app. The twelve-instance limit includes detached apps.\nRunning snapshots expose only instances owned by the authorized caller, including\nthose with no viewer or no windows. Linux cannot adopt arbitrary applications\nalready attached to another display.\n\nThe backend starts in an independent POSIX session without a Runtime-bound command\ncontext. Orderly shutdown and a Runtime process exit release its proxy and store\nlock while preserving that backend. Recovery creates a fresh sharing route; old\nviewer URLs are not durable. OS service managers may still terminate a whole\ncgroup, and host policy remains authoritative. Redeven never changes that policy.\n\n## Launch and readiness\n\nThe upstream monitored GIO launcher becomes a child subreaper before launching and\nreaps both direct and adopted descendants. Its lifetime, rather than the first\nwindow or viewer, drives Xpra's child-exit policy. Viewer/client and last-window\nexit policies remain disabled. Explicit launcher termination requires Linux\npidfds (kernel 5.3 or later and a compatible Python interpreter) and fails before\nlaunch when unavailable. Applications delegating to unrelated existing services\nare outside this owned child-tree contract.\n\nA running receipt and responsive HTML endpoint admit sharing without an expensive\nwindow-inventory probe. They do not prove pixels. An unconfirmed infrastructure\nstartup fails sharing after forty seconds while preserving the application; this\ndeadline never applies to a connected viewer waiting for its first window. After the authenticated Xpra\nstartup event, an empty inventory presents Waiting for a window indefinitely;\nan actual new window starts the bounded first-paint check. Closing the final\nestablished window dismisses the viewer while the application may keep running.\nA later opening reconnects the same process and waits if it has no window.\nOnly the application can decide how to create another window; Linux has no\nuniversal AppKit-style reopen action.\n\nSilent sessions still use upstream's audio-disable policy. Application launch\nlogs measure backend readiness, not first decoded pixels. A confirmed application\nexit ends sharing normally. A backend failure retains failed sharing state and\nrecovery guidance rather than claiming a normal application exit.\n\n## Normal close and explicit force quit\n\nThe Linux ordinary operation is named Close all windows because X11 has no\nuniversal application-level graceful quit API. Both the viewer and library request\nnormal closure of current top-level windows, excluding transients, modal save\ndialogs, trays and override-redirect surfaces. Save prompts and cancellation remain\napplication-owned. A background process may survive after every window closes.\n\nA separate library Force quit action requires a second explicit confirmation\nwarning about unsaved work. It validates the caller, application and exact current\ninstance, checks the live private backend identity, then requests Xpra shutdown.\nThe monitored launcher terminates only its owned descendants using pidfds and\nverified parent relationships. This path never follows ordinary close, disconnect,\nsave cancellation or an uncertain response automatically. Stale or foreign\ninstances are rejected. An accepted request is not proof of process exit; running\nsnapshots remove the row only when the kernel confirms termination.",
+          "char_count": 4951
         },
         {
           "id": "boundaries",
@@ -10175,6 +10193,14 @@
         }
       ],
       "snippet": "Redeven owns Linux application instances, caller authorization and ephemeral sharing; the published Floe Native Apps module owns GIO launch and process-tree observation. A live application outlives its viewers and window count. Closing a",
+      "links": [
+        {
+          "label": "preparation contract",
+          "path": "architecture/host-application-preparation.md",
+          "concept_id": "architecture.host-application-preparation",
+          "title": "Managed host application preparation"
+        }
+      ],
       "backlinks": [
         {
           "label": "Cross-platform host application behavior",
@@ -10187,6 +10213,12 @@
           "path": "architecture/host-application-platforms.md",
           "concept_id": "architecture.host-application-platforms",
           "title": "Host application platforms and initialization"
+        },
+        {
+          "label": "Managed host application preparation",
+          "path": "architecture/host-application-preparation.md",
+          "concept_id": "architecture.host-application-preparation",
+          "title": "Managed host application preparation"
         },
         {
           "label": "Host application catalog and owned native sessions",
@@ -16864,6 +16896,12 @@
         }
       ],
       "backlinks": [
+        {
+          "label": "Managed host application preparation",
+          "path": "architecture/host-application-preparation.md",
+          "concept_id": "architecture.host-application-preparation",
+          "title": "Managed host application preparation"
+        },
         {
           "label": "Host application catalog and owned native sessions",
           "path": "architecture/host-applications.md",
@@ -24796,5 +24834,5 @@
       ]
     }
   ],
-  "source_sha256": "77c3a054a79231f5a05632e5d6c8ebd805f7671266aa8b41576eda4f0cb8d78d"
+  "source_sha256": "01180189d25e75fa918a20cd39ce9e4b0f0dab59ab39e2bdcbfd9775fa2638a4"
 }

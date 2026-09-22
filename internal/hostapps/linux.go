@@ -26,6 +26,7 @@ import (
 // both match before a restarted Runtime can expose it again.
 type linuxApplicationRecord struct {
 	Version     int                        `json:"version"`
+	Component   string                     `json:"component,omitempty"`
 	ID          string                     `json:"id"`
 	Owner       string                     `json:"owner"`
 	Application Application                `json:"application"`
@@ -63,9 +64,12 @@ func decodeApplicationRecord(data []byte, id string) (linuxApplicationRecord, er
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if len(data) > 1<<20 || decoder.Decode(&r) != nil || decoder.Decode(new(any)) != io.EOF ||
-		!applicationInstanceID.MatchString(id) || r.Version != 1 || r.ID != id || r.Owner == "" ||
+		!applicationInstanceID.MatchString(id) || (r.Version != 1 && r.Version != 2) || r.ID != id || r.Owner == "" ||
 		r.Application.ID == "" || r.Process.PID <= 0 || r.Process.Boot == "" || r.Process.Started == "" || r.StartedAt <= 0 {
 		return r, fmt.Errorf("unsupported or incomplete host application instance")
+	}
+	if (r.Version == 1 && r.Component != "") || (r.Version == 2 && r.Component != "system" && !applicationInstanceID.MatchString(r.Component)) {
+		return r, fmt.Errorf("invalid host application component identity")
 	}
 	host, port, err := net.SplitHostPort(r.Address)
 	p, portErr := strconv.Atoi(port)
@@ -124,14 +128,20 @@ func (m *Manager) ensureApplications(ctx context.Context) error {
 		if !r.Process.Alive() {
 			continue
 		}
-		availability, tools := m.tools(ctx)
-		if !availability.Ready {
-			return ErrUnavailable
+		legacy := r.Version == 1
+		tools, err := m.recoverApplicationTools(ctx, &r)
+		if err != nil {
+			return fmt.Errorf("host application component recovery: %w", err)
 		}
 		a := &linuxApplication{record: r, tools: tools}
 		identity, err := m.applicationCommand(ctx, a, "id")
 		if err != nil || !strings.Contains("\n"+string(identity), "\nsession-name="+r.ID+"\n") {
 			return fmt.Errorf("cannot verify surviving host application backend: %w", ErrUnavailable)
+		}
+		if legacy {
+			if err := m.writeApplication(a); err != nil {
+				return err
+			}
 		}
 		recovered = append(recovered, a)
 	}
@@ -142,6 +152,34 @@ func (m *Manager) ensureApplications(ctx context.Context) error {
 		m.watchApplication(a, nil)
 	}
 	return nil
+}
+
+// Each backend retains its own component identity across updates and Runtime
+// restarts. Legacy records are migrated only after live backend verification.
+func (m *Manager) recoverApplicationTools(ctx context.Context, r *linuxApplicationRecord) (hostTools, error) {
+	manager, err := m.setupManager()
+	if err != nil {
+		return hostTools{}, err
+	}
+	if r.Version == 1 {
+		installed, err := manager.InstallationForProcess(r.Process)
+		if err != nil {
+			return hostTools{}, err
+		}
+		r.Component = "system"
+		if installed != nil {
+			r.Component = installed.Digest
+		}
+		r.Version = 2
+	}
+	if r.Component != "system" {
+		return resolveManagedTools(manager, r.Component)
+	}
+	availability, tools := detectDependencies(ctx, "linux", os.Environ())
+	if !availability.Ready {
+		return hostTools{}, ErrUnavailable
+	}
+	return tools, nil
 }
 
 func (m *Manager) launchLinux(ctx context.Context, owner string, req LaunchRequest) (Session, error) {
@@ -274,7 +312,11 @@ func (m *Manager) startApplication(owner string, app Application, tools hostTool
 	}
 	address := listener.Addr().String()
 	_ = listener.Close()
-	a := &linuxApplication{record: linuxApplicationRecord{Version: 1, ID: id, Owner: owner, Application: app, Address: address, StartedAt: time.Now().UnixMilli()}, tools: tools}
+	component := tools.componentDigest
+	if component == "" {
+		component = "system"
+	}
+	a := &linuxApplication{record: linuxApplicationRecord{Version: 2, Component: component, ID: id, Owner: owner, Application: app, Address: address, StartedAt: time.Now().UnixMilli()}, tools: tools}
 	if err = os.WriteFile(filepath.Join(dir, "password"), []byte(randomID()+randomID()), 0600); err != nil {
 		return nil, err
 	}

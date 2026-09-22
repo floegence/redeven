@@ -6241,6 +6241,24 @@
     }
   },
   "hostApplications": {
+    "update": {
+      "unsupported": "Cet environnement d’exécution ne peut pas utiliser la version installée des composants. Leurs fichiers ont été conservés. Mettez à jour l’environnement d’exécution avant de continuer.",
+      "available": "Mise à jour des composants disponible",
+      "view": "Voir la mise à jour",
+      "title": "Mettre à jour les composants des applications de l’hôte",
+      "description": "Les composants installés restent disponibles. Vous pouvez utiliser les applications pendant la mise à jour.",
+      "start": "Mettre à jour les composants",
+      "local": "Utiliser les fichiers en cache. Aucun téléchargement ni envoi nécessaire.",
+      "installedVersion": "Installés",
+      "targetVersion": "Version recommandée",
+      "stabilityFix": "La version recommandée corrige des problèmes connus de connexion. Les applications en cours conservent leurs composants actuels jusqu’à leur redémarrage.",
+      "failedRetained": "La mise à jour n’a pas abouti. Les composants installés et les applications en cours restent disponibles.",
+      "damaged": "Les composants installés doivent être réparés. Leurs fichiers ont été conservés.",
+      "repair": "Réparer les composants",
+      "cacheChanged": "Les fichiers en cache ont changé. Vérifiez les fichiers disponibles et réessayez.",
+      "desktopMismatch": "Cette version de Desktop ne peut pas préparer les composants requis. Mettez Desktop à jour ou choisissez le téléchargement sur l’hôte.",
+      "checkingSize": "Calculé avant le téléchargement"
+    },
     "linuxRunningHint": "Les applications continuent de fonctionner après l’arrêt du partage. Reconnectez-vous depuis cette liste.",
     "stopSharingDescription": "Déconnecter cette application de Redeven. Ses fenêtres et les travaux non enregistrés restent ouverts.",
     "closeAllWindows": "Fermer toutes les fenêtres",

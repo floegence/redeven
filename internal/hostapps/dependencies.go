@@ -20,6 +20,7 @@ import (
 // between catalog discovery and the application process.
 type hostTools struct {
 	managed                        *nativeapps.Tools
+	componentDigest                string
 	xpra, python, xvfb, dbus, html string
 }
 

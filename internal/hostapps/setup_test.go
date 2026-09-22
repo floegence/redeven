@@ -29,7 +29,7 @@ func TestManagedSetupAdapterDoesNotDownloadOnRead(t *testing.T) {
 	if status.State != "available" || status.Package == nil || status.ReceivedBytes != 0 {
 		t.Fatal(status)
 	}
-	if _, err = m.StartSetup("alice", "request", "upload", status.Package.SizeBytes+1000); err != nil {
+	if _, err = m.StartSetup("alice", "request", "upload", status.Package.SizeBytes+1000, status.Package.Digest); err != nil {
 		t.Fatal(err)
 	}
 	s, err := m.SetupStatus("bob")
@@ -75,7 +75,7 @@ func TestManagedPreparationAndHostApplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	status, err := m.StartSetup("alice", "acceptance", "upload", info.Size())
+	status, err := m.StartSetup("alice", "acceptance", "upload", info.Size(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

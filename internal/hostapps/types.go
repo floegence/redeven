@@ -145,7 +145,8 @@ type AddRequest struct {
 type Backend interface {
 	SetupStatus(string) (SetupStatus, error)
 	WatchSetup() (<-chan struct{}, func(), error)
-	StartSetup(string, string, string, int64) (SetupStatus, error)
+	SetupPlan(context.Context, string) (SetupTransferPlan, error)
+	StartSetup(string, string, string, int64, string) (SetupStatus, error)
 	CancelSetup(string, string) (SetupStatus, error)
 	WriteSetup(string, string, int64, []byte) (SetupStatus, error)
 	CompleteSetup(string, string) (SetupStatus, error)
