@@ -1,3 +1,5 @@
+import { DesktopResourceCache } from './desktopResourceCache';
+import { DESKTOP_RESOURCE_CACHE_CHANNEL } from '../shared/resourceCacheIPC';
 import { ProviderCredentialRecovery, providerCredentialsNeedRenewal } from './providerCredentialRecovery';
 import { BrowserPackages, browserPackageOwner } from './browserPackage';
 import { BROWSER_PACKAGE_CHANNEL, BROWSER_PACKAGE_PROGRESS_CHANNEL, parseBrowserPackageRequest } from '../shared/browserPackageIPC';
@@ -18170,6 +18172,18 @@ if (!app.requestSingleInstanceLock()) {
     queueDesktopDeepLink(url);
   });
 
+  const resourceCache = new DesktopResourceCache(path.join(app.getPath('userData'), 'resource-cache'));
+  ipcMain.handle(DESKTOP_RESOURCE_CACHE_CHANNEL, async (event, request: unknown) => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    if (!record || record.closing || event.senderFrame !== event.sender.mainFrame || record.root_window.webContentsID !== event.sender.id) {
+      throw new Error('Resource cache requires the active environment document');
+    }
+    const target = record.target;
+    const account = target.kind === 'local_environment' && target.provider_origin
+      ? savedControlPlaneByIdentity(await loadDesktopPreferencesCached(), target.provider_origin, target.provider_id ?? '')?.account.user_public_id ?? '' : '';
+    const owner = nativeCodeSpaceIdentity(target, 'env-resource-cache', account);
+    return resourceCache.handle(owner, request);
+  });
   ipcMain.on(DESKTOP_STATE_GET_CHANNEL, (event, key) => {
     const cleanKey = normalizeDesktopStateKey(key);
     event.returnValue = cleanKey ? desktopStateStore().getRendererItem(cleanKey) : null;

@@ -6364,6 +6364,7 @@
     "macQuitDescription": "Die App wird aufgefordert, sich und alle ihre Fenster auf diesem Mac zu schließen, auch außerhalb von Redeven geöffnete Fenster. Möglicherweise fragt die App nach dem Speichern von Änderungen. Dort können Sie das Beenden abbrechen.",
     "macQuitViewerPending": "Das Beenden wurde angefordert. Beantworten Sie mögliche Speicherdialoge in der Anwendung. Wenn Sie abbrechen, bleibt sie geöffnet.",
     "macQuitPending": "Öffnen Sie die App, um einen möglichen Speicherdialog zu beantworten. Wenn Sie das Beenden abbrechen, bleibt sie geöffnet.",
+    "macQuitChanged": "Die App wurde neu gestartet. Bestätigen Sie erneut, um den aktuellen Prozess zu beenden.",
     "macQuitFailed": "Das Ergebnis der Anfrage zum Beenden konnte nicht bestätigt werden. Prüfen Sie die App, bevor Sie es erneut versuchen.",
     "macQuitRejected": "Die App hat die Anfrage zum Beenden nicht angenommen. Öffnen Sie sie, prüfen Sie mögliche Dialoge und versuchen Sie es erneut.",
     "macPicture": "Bildqualität",

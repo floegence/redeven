@@ -10,7 +10,7 @@ quality_exception: Cross-surface native container contract spanning aggregated r
 
 Containers is one native Activity and multi-instance Workbench surface over the
 targets authorized by [Native container resources](container-resources-capability.md).
-One console controller owns loading, cache identity, selection, and navigation.
+The console controller owns selection and navigation; the [resource snapshot contract](../ui/env-resource-cache.md) owns shared persisted presentation and refresh lifetime.
 The UI never exposes endpoint selection, never commits a response from an old
 target, and never creates a lifecycle path outside `containerresource`.
 
@@ -20,15 +20,14 @@ target, and never creates a lifecycle path outside `containerresource`.
 
 Each `redeven.containers` instance persists only its resource view and selected
 resource key. One discriminated controller owns runtime discovery, aggregated
-inventory, selected detail, and the cache for each exact
+inventory and selected detail, consuming shared snapshots for each exact
 `(engine, endpoint, view)` target. A resource always retains its source target;
 same-name Docker and Podman resources remain separate. Details, streams,
 preflights, mutations, Web Services navigation, and operation observation reuse
 that exact target.
 
 View changes show a valid cache while refreshing instead of remounting the whole
-surface. Runtime rediscovery clears stale ownership before a new target set may
-commit. One generation and cancellation signal fences runtime, inventory,
+surface. Runtime rediscovery keeps visible facts while checking the current target set; an authoritative target removal clears its old ownership. One generation and cancellation signal fences runtime, inventory,
 detail, log, history, file, and statistics responses. Only `ready` may render
 resource data; `loading` and `navigating` keep every available resource tab
 interactive while the toolbar, table or cards, and responsive geometry remain
@@ -50,7 +49,7 @@ replay the empty list selection captured by Back over a newly opened detail.
 Containers, Images, and Volumes aggregate every ready runtime. Compose Projects
 appears only for Docker and Pods only for Podman. With no ready runtime, the
 stable page names each concise detection result and offers retry. Partial failure
-keeps usable resources and exposes one status Dialog. New resources use the sole
+retains the failed target’s previous resources while successful targets update independently, with retry in the existing error presentation. New resources use the sole
 compatible runtime directly or ask for Docker versus Podman inside the operation
 Dialog; actions on existing resources always reuse their source target.
 

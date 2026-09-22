@@ -5,6 +5,7 @@ export type DesktopBridgeName =
   | 'redevenDesktopCodeWorkspace'
   | 'redevenDesktopSessionContext'
   | 'redevenDesktopStateStorage'
+  | 'redevenDesktopResourceCache'
   | 'redevenDesktopWindowChrome';
 
 export type DesktopHostWindow = Window;
@@ -16,6 +17,7 @@ const DESKTOP_BRIDGE_NAMES: readonly DesktopBridgeName[] = [
   'redevenDesktopCodeWorkspace',
   'redevenDesktopSessionContext',
   'redevenDesktopStateStorage',
+  'redevenDesktopResourceCache',
   'redevenDesktopWindowChrome',
 ] as const;
 

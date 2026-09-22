@@ -1,10 +1,12 @@
+import { createEnvCachedResource } from '../services/envResourceCache';
+import { forwardSnapshot, managedServiceSnapshot } from '../services/envResourceSnapshots';
 import { openWebServiceRoute, resolveWebServiceOpenRoute } from '../services/webServiceWindows';
 export { resolveWebServiceOpenRoute, type WebServiceOpenRoute } from '../services/webServiceWindows';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { createManagedServiceUpdatePreparation } from './managedServiceUpdatePreparation';
 import { GitTemplateImport } from './GitTemplateImport';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
-import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, untrack, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useNotification, useViewActivation } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
@@ -80,7 +82,7 @@ type Health = Readonly<{
 
 type WebServiceAccessMode = 'unified_proxy' | 'desktop_loopback';
 
-type PortForward = Readonly<{
+export type PortForward = Readonly<{
   forward_id: string;
   target_url: string;
   default_app_path?: string;
@@ -106,7 +108,7 @@ type ForwardMetadataTarget = Readonly<
   | { mode: 'edit'; forward: PortForward }
 >;
 
-type ManagedService = Readonly<{
+export type ManagedService = Readonly<{
  management_state?: string;
  status?: string;
  primary_action?: string;
@@ -2097,27 +2099,26 @@ export function EnvPortForwardsPage() {
     });
   });
 
-  // Web services resource
+  const forwardResource = createEnvCachedResource(ctx, () => 'web-service-forwards', forwardSnapshot);
+  const managedResource = createEnvCachedResource(ctx, () => 'managed-web-services', managedServiceSnapshot);
   const [refreshSeq, setRefreshSeq] = createSignal(0);
-  const bumpRefresh = () => setRefreshSeq((n) => n + 1);
-
-  const [forwards] = createResource<{ items: PortForward[]; loaded: boolean; checkFailed: boolean }, number | null>(
-    () => permissionReady() && canExecute() ? refreshSeq() : null,
-    async (_key, previous) => {
-      try {
-        const out = await fetchLocalApiJSON<{ forwards: PortForward[] }>('/_redeven_proxy/api/forwards', { method: 'GET' });
-        return { items: Array.isArray(out?.forwards) ? out.forwards : [], loaded: true, checkFailed: false };
-      } catch {
-        return { items: previous.value?.items ?? [], loaded: previous.value?.loaded ?? false, checkFailed: true };
-      }
-    },
-  );
-  const initialForwardsLoading = () => forwards.state === 'pending';
-  const forwardsRefreshing = () => forwards.state === 'refreshing';
-  const forwardsRenderable = () => forwards()?.loaded ?? false;
-  const forwardsCheckFailed = () => forwards()?.checkFailed ?? false;
-
-  const [managedState, setManagedState] = createSignal<ManagedService[]>([]);
+  const bumpRefresh = () => { forwardResource.invalidate(); setRefreshSeq(n => n + 1); };
+  const refreshForwards = () => forwardResource.refresh(async signal => {
+    const out = await fetchLocalApiJSON<{ forwards: PortForward[] }>('/_redeven_proxy/api/forwards', { method: 'GET', signal });
+    return Array.isArray(out?.forwards) ? out.forwards : [];
+  });
+  createEffect(() => {
+    forwardResource.identity(); refreshSeq();
+    const active = activation.active(); activation.activationSeq();
+    if (permissionReady() && canExecute() && active) void refreshForwards().catch(() => undefined);
+    if (permissionReady() && !canExecute()) forwardResource.invalidate(true);
+  });
+  const forwardsRefreshing = () => forwardResource.snapshot().refreshing;
+  const initialForwardsLoading = () => forwardsRefreshing() && forwardResource.data() === undefined;
+  const forwardsRenderable = () => forwardResource.data() !== undefined;
+  const forwardsCheckFailed = () => Boolean(forwardResource.snapshot().error);
+  const managedState = () => managedResource.data() ?? [];
+  const forwardsByID = createMemo(() => new Map((forwardResource.data() ?? []).map(forward => [forward.forward_id, forward])));
   const [managedTemplates, setManagedTemplates] = createSignal<ManagedCatalogTemplate[]>([]);
   const [managedLoading, setManagedLoading] = createSignal(false);
   const [managedLoadError, setManagedLoadError] = createSignal(false);
@@ -2266,17 +2267,18 @@ export function EnvPortForwardsPage() {
     const generation = ++managedLoadGeneration;
     setManagedLoading(true);
     try {
-      const [catalog, services] = await Promise.all([
-        refreshCatalog || managedTemplates().length === 0
-          ? fetchLocalApiJSON<{ templates: ManagedCatalogTemplate[] }>('/_redeven_proxy/api/managed-web-services/catalog', { method: 'GET' })
-          : Promise.resolve({ templates: managedTemplates() }),
-        fetchLocalApiJSON<{ services: ManagedService[] }>('/_redeven_proxy/api/managed-web-services', { method: 'GET' }),
-      ]);
+      if (refreshCatalog || untrack(managedTemplates).length === 0) {
+        // Template discovery has an independent lifetime; it must not hold the service list back.
+        void fetchLocalApiJSON<{ templates: ManagedCatalogTemplate[] }>('/_redeven_proxy/api/managed-web-services/catalog', { method: 'GET' })
+          .then(catalog => { if (generation === managedLoadGeneration) setManagedTemplates(Array.isArray(catalog.templates) ? catalog.templates : []); })
+          .catch(() => { if (generation === managedLoadGeneration) setManagedLoadError(true); });
+      }
+      if (!refreshCatalog) managedResource.invalidate();
+      const nextServices = await managedResource.refresh(async signal => {
+        const response = await fetchLocalApiJSON<{ services: ManagedService[] }>('/_redeven_proxy/api/managed-web-services', { method: 'GET', signal });
+        return Array.isArray(response.services) ? response.services : [];
+      });
       if (generation !== managedLoadGeneration) return;
-      const templates = Array.isArray(catalog.templates) ? catalog.templates : [];
-      setManagedTemplates(templates);
-      const nextServices = Array.isArray(services.services) ? services.services : [];
-      setManagedState(nextServices);
       managedOperationPresentation.pruneServices(new Set(nextServices.map((service) => service.service_id)));
       setManagedLoadError(false);
       for (const service of nextServices) {
@@ -2988,7 +2990,7 @@ export function EnvPortForwardsPage() {
   // Filtered and sorted services
   const unmanagedForwards = createMemo(() => {
     const managedForwardIDs = new Set(managedState().map((service) => service.forward_id));
-    return (forwards()?.items ?? []).filter((forward) => !managedForwardIDs.has(forward.forward_id));
+    return (forwardResource.data() ?? []).filter((forward) => !managedForwardIDs.has(forward.forward_id));
   });
 
   const filteredForwards = createMemo(() => {
@@ -3046,8 +3048,14 @@ export function EnvPortForwardsPage() {
   const [deleteID, setDeleteID] = createSignal<string | null>(null);
   const [deleting, setDeleting] = createSignal(false);
 
-  createEffect(() => { if (permissionReady() && canRead()) void loadManaged(); });
+  createEffect(() => {
+    managedResource.identity();
+    const active = activation.active(); activation.activationSeq();
+    if (permissionReady() && canRead() && active) void loadManaged();
+    if (permissionReady() && !canRead()) managedResource.invalidate(true);
+  });
   onCleanup(() => {
+    managedLoadGeneration += 1;
     managedOperations.dispose();
     managedOperationPresentation.dispose();
   });
@@ -3078,12 +3086,36 @@ export function EnvPortForwardsPage() {
     }
   };
 
+  const resolveCurrentForward = async (forward: PortForward): Promise<PortForward> => {
+    const owner = forwardResource.identity();
+    const current = (forwardResource.snapshot().stale || forwardResource.snapshot().refreshing)
+      ? (await refreshForwards()).find(item => item.forward_id === forward.forward_id) : forward;
+    if (owner !== forwardResource.identity()) throw new DOMException('Resource scope changed', 'AbortError');
+    if (!current) throw new Error(i18n.t('webServices.errors.loadFailedPrefix'));
+    return current;
+  };
+  const reviewForward = async (forward: PortForward, action: 'edit' | 'delete') => {
+    const id = forward.forward_id;
+    if (openBusy(id)) return;
+    setOpenRequests(current => ({ ...current, [id]: i18n.t('webServices.status.updating') }));
+    try {
+      const current = await resolveCurrentForward(forward);
+      if (action === 'edit') setForwardMetadataTarget({ mode: 'edit', forward: current });
+      else setDeleteID(current.forward_id);
+    } catch (error) {
+      notify.error(i18n.t('webServices.errors.loadFailedPrefix'), error instanceof Error ? error.message : String(error));
+    } finally {
+      setOpenRequests(current => Object.fromEntries(Object.entries(current).filter(([key]) => key !== id)));
+    }
+  };
+
   // Delete service handler
   const doDelete = async (id: string) => {
     const fid = String(id ?? '').trim();
     if (!fid) return;
     setDeleting(true);
     try {
+      if (forwardResource.snapshot().stale && !(await refreshForwards()).some(item => item.forward_id === fid)) return;
       await fetchLocalApiJSON(`/_redeven_proxy/api/forwards/${encodeURIComponent(fid)}`, { method: 'DELETE' });
       bumpRefresh();
       notify.success(i18n.t('webServices.notifications.serviceDeletedTitle'), i18n.t('webServices.notifications.serviceDeletedMessage'));
@@ -3175,7 +3207,10 @@ export function EnvPortForwardsPage() {
       fid,
       `redeven_web_service_${fid}`,
       i18n.t('webServices.status.opening'),
-      async () => ({ forward: f, appPath }),
+      async () => {
+        const current = await resolveCurrentForward(f);
+        return { forward: current, appPath: current.default_app_path || appPath };
+      },
     );
   };
 
@@ -3251,7 +3286,7 @@ export function EnvPortForwardsPage() {
   const deleteTarget = createMemo(() => {
     const id = deleteID();
     if (!id) return null;
-    return forwards()?.items.find((f) => f.forward_id === id) ?? null;
+    return forwardResource.data()?.find((f) => f.forward_id === id) ?? null;
   });
 
   const forwardMetadataDialog = createMemo(() => {
@@ -3464,7 +3499,7 @@ export function EnvPortForwardsPage() {
                     size="sm"
                     variant="ghost"
                     onClick={() => { bumpRefresh(); void loadManaged(true); }}
-                    disabled={forwards.loading || managedLoading()}
+                    disabled={forwardsRefreshing() || managedLoading()}
                     aria-label={i18n.t('webServices.actions.refresh')}
                     aria-busy={forwardsRefreshing() || managedLoading() ? 'true' : undefined}
                     title={i18n.t('webServices.actions.refresh')}
@@ -3488,13 +3523,10 @@ export function EnvPortForwardsPage() {
                 message={i18n.t('webServices.loadingMessage')}
                 testId="web-services-initial-loading"
               />
-              <Show when={forwardsRefreshing()}>
-                <span class="sr-only" role="status" aria-live="polite">{i18n.t('webServices.loadingMessage')}</span>
-              </Show>
 
               <Show when={forwardsCheckFailed() || managedLoadError()}><div class="web-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" /><p>{i18n.t(forwardsRenderable() || managedState().length ? 'webServices.collection.refreshFailed' : 'webServices.errors.loadFailedPrefix')}</p></div></Show>
 
-              <Show when={forwardsRenderable() || managedState().length > 0}>
+              <Show when={forwardsRenderable() || managedResource.data() !== undefined}>
                 <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !canExecute()} />}>
                   <Show when={filteredForwards().length > 0 || filteredManagedServices().length > 0} fallback={
                     <div class="flex flex-col items-center justify-center px-4 py-12">
@@ -3533,20 +3565,22 @@ export function EnvPortForwardsPage() {
                           />
                         )}</Show>
                       )}</For>
-                      <For each={filteredForwards()}>{(forward) => (
+                      <For each={filteredForwards().map(forward => forward.forward_id)}>{(forwardID) => {
+                        const forward = () => forwardsByID().get(forwardID)!;
+                        return (
                         <PortForwardRow
-                          forward={forward}
-                          busy={openBusy(forward.forward_id)}
-                          busyText={openStatus(forward.forward_id)}
-                          canOpen={forward.access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable()}
-                          openUnavailableReason={openErrors()[forward.forward_id] || (forward.access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
+                          forward={forward()}
+                          busy={openBusy(forwardID)}
+                          busyText={openStatus(forwardID)}
+                          canOpen={forward().access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable()}
+                          openUnavailableReason={openErrors()[forwardID] || (forward().access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
                             ? i18n.t('webServices.errors.desktopLoopbackRequiresDesktop')
                             : undefined)}
-                          onOpen={() => void doOpen(forward)}
-                          onEdit={() => setForwardMetadataTarget({ mode: 'edit', forward })}
-                          onDelete={() => setDeleteID(forward.forward_id)}
+                          onOpen={() => void doOpen(forward())}
+                          onEdit={() => void reviewForward(forward(), 'edit')}
+                          onDelete={() => void reviewForward(forward(), 'delete')}
                         />
-                      )}</For>
+                      ); }}</For>
                     </div>
                   </Show>
                 </Show>

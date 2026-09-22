@@ -26,7 +26,7 @@ const (
 	flowersecCorePackage    = "@floegence/flowersec-core"
 	flowersecCoreVersion    = "5.3.1"
 	flowersecCodeAppVersion = "5.2.2"
-	floeWebappVersion       = "0.63.0"
+	floeWebappVersion       = "0.66.1"
 )
 
 var flowersecNPMPackages = []string{
@@ -667,7 +667,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
-			"\"compatibility_epoch\": 29",
+			"\"compatibility_epoch\": 31",
 			"flower-title-generation-v1",
 			"title_generation",
 			"redeven-runtime-v2",

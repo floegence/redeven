@@ -512,6 +512,7 @@ vi.mock('@floegence/floe-webapp-core', async () => {
 });
 
 vi.mock('@floegence/floe-webapp-core/app', () => ({
+  createDocumentAssetRecovery: () => ({ check: async () => 'current', reason: () => null }),
   ActivityAppsMain: (props: any) => {
     const activeId = () => (typeof props.activeId === 'function' ? props.activeId() : props.activeId);
     const [mountedComponents, setMountedComponents] = createSignal<Array<{ id: string; component: () => JSX.Element }>>([]);
@@ -1372,7 +1373,8 @@ vi.mock('./utils/askFlowerPath', () => ({
 }));
 vi.mock('./utils/windowNavigation', () => ({ reopenEnvironmentPage: vi.fn(), reloadCurrentPage: reloadCurrentPageMock }));
 vi.mock('./services/localApi', () => ({
-  fetchLocalApiJSON: fetchLocalApiJSONMock,
+  fetchLocalApiJSON: (url: string, ...args: unknown[]) => url === '/_redeven_proxy/api/ui-cache-scope'
+    ? Promise.resolve({ scope_id: 'a'.repeat(64) }) : fetchLocalApiJSONMock(url, ...args),
   localApiRequestCredentials: () => 'same-origin',
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
   uploadLocalApiFile: vi.fn(),

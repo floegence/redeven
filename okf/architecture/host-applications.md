@@ -21,6 +21,8 @@ operation. Runtime shutdown preserves native macOS applications to protect
 unsaved work. Sessions are not durable across Runtime restarts. Missing dependencies,
 launch failures, and insufficient permissions fail explicitly.
 
+Local inventory continuity follows [Env App resource snapshots](../ui/env-resource-cache.md); presentation restoration grants no lifecycle or route authority.
+
 # Host and application boundary
 
 The Linux backend uses Xpra 6.x with an HTML5 v20 or v21 client, Xvfb, D-Bus,

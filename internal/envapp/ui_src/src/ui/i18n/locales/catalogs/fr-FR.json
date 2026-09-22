@@ -6364,6 +6364,7 @@
     "macQuitDescription": "L’application sera invitée à quitter et à fermer toutes ses fenêtres sur ce Mac, y compris celles ouvertes en dehors de Redeven. Elle peut vous demander d’enregistrer vos modifications ; vous pourrez alors annuler la fermeture.",
     "macQuitViewerPending": "La fermeture a été demandée. Répondez à toute demande d’enregistrement dans l’application. Si vous annulez, elle reste ouverte.",
     "macQuitPending": "Ouvrez l’application pour répondre à une éventuelle demande d’enregistrement. Si vous annulez la fermeture, elle reste ouverte.",
+    "macQuitChanged": "L’application a redémarré. Confirmez à nouveau pour quitter son processus actuel.",
     "macQuitFailed": "Le résultat de la demande de fermeture n’a pas pu être confirmé. Vérifiez l’application avant de réessayer.",
     "macQuitRejected": "L’application n’a pas accepté la demande de fermeture. Ouvrez-la pour vérifier les boîtes de dialogue, puis réessayez.",
     "macPicture": "Qualité d’image",
