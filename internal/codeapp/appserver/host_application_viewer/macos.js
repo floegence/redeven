@@ -182,7 +182,8 @@
   function positionPopover() {
     if (popover.hidden || !panelSection) return;
     const anchor = toggles[panelSection].getBoundingClientRect();
-    popover.style.left = `${Math.max(8, Math.min(anchor.left, innerWidth - popover.offsetWidth - 8))}px`;
+    const viewport = hostApplicationViewport.readViewportSnapshot(window);
+    popover.style.left = `${Math.max(viewport.visible.left + 8, Math.min(anchor.left, viewport.visible.right - popover.offsetWidth - 8)) + viewport.fixedOffset.left}px`;
   }
   function collapseControls(restoreFocus = false) {
     const toggle = toggles[panelSection];
@@ -293,6 +294,9 @@
   input.className = 'mac-app-input';
   hostApplicationAppearance.copy(input, 'input', 'aria-label');
   input.autocomplete = 'off';
+  input.autocapitalize = 'off';
+  input.setAttribute('autocorrect', 'off');
+  input.spellcheck = false;
   document.body.append(input);
   const feedback = document.createElement('div');
   feedback.className = 'mac-app-feedback';
@@ -331,7 +335,7 @@
     controls.hidden = !native && !['active', 'waiting', 'captureUnavailable'].includes(state);
     picturePanel.hidden = state !== 'active' || panelSection !== 'picture';
     syncWindowPicker();
-    input.disabled = state !== 'active' || !renderedGeneration;
+    input.disabled = state !== 'active' || !current?.window;
     if (state !== 'active') {
       feedback.hidden = true;
       collapseControls();
@@ -383,7 +387,11 @@
   let configuredGeometry;
   function viewportSize() {
     const rect = canvas.getBoundingClientRect();
-    return {width: Math.min(8192, Math.max(320, Math.round(rect.width))), height: Math.min(8192, Math.max(200, Math.round(rect.height)))};
+    const viewport = hostApplicationViewport.readViewportSnapshot(window);
+    // Restore occluded space before requesting the remote window size. Keyboard
+    // and pinch-zoom changes affect presentation without restarting capture.
+    return {width: Math.min(8192, Math.max(320, Math.round(rect.width + viewport.layout.width - viewport.visible.width))),
+      height: Math.min(8192, Math.max(200, Math.round(rect.height + viewport.layout.height - viewport.visible.height)))};
   }
   function resize() {
     positionPopover();
@@ -543,6 +551,7 @@
               present('captureUnavailable');
             }
           }, 45000);
+          const sameWindow = current?.window === message.window && document.body.dataset.state === 'active';
           invalidateCapture();
           // Keep the window picker usable while another owned window loads.
           // Retained pixels are dimmed and input stays bound to decoded frames.
@@ -550,7 +559,7 @@
           current = message;
           if (!switching) present(active ? 'reconnecting' : 'connecting');
           canvas.setAttribute('aria-busy', 'true');
-          input.disabled = true;
+          input.disabled = !sameWindow;
           syncWindowPicker();
           resize();
         } else if (message.type === 'windows') {
@@ -619,6 +628,9 @@
       ),
     };
   }
+  // Safari emits a compatibility mouse event after touch; its default focus
+  // would replace the editor with the canvas and dismiss the soft keyboard.
+  canvas.addEventListener('mousedown', event => event.preventDefault());
   canvas.addEventListener('pointerdown', (event) => {
     if (document.body.dataset.state !== 'active') return;
     input.focus({ preventScroll: true });
@@ -697,11 +709,23 @@
       key: [...modifiers, event.key === ' ' ? 'Space' : event.key].join('+'),
     });
   });
+  const editableBinding = () => current?.window && renderedGeneration === current.generation ? current : null;
   let compositionBinding;
-  input.addEventListener('compositionstart', () => { compositionBinding = current; });
+  input.addEventListener('compositionstart', () => { compositionBinding = editableBinding(); });
+  input.addEventListener('beforeinput', event => {
+    if (event.isComposing || compositionBinding !== undefined) return;
+    const key = {deleteContentBackward: 'Backspace', deleteContentForward: 'Delete',
+      insertLineBreak: 'Enter', insertParagraph: 'Enter'}[event.inputType];
+    if (!key) return;
+    event.preventDefault();
+    send({action: 'input', kind: 'key', key});
+    input.value = '';
+  });
   input.addEventListener('input', (event) => {
+    // compositionend owns the commit; a later browser tail cannot replay it.
+    if (event.inputType === 'insertFromComposition' && compositionBinding === undefined) { input.value = ''; return; }
     if (event.isComposing) {
-      if (compositionBinding === undefined) compositionBinding = current;
+      if (compositionBinding === undefined) compositionBinding = editableBinding();
       return;
     }
     if (compositionBinding !== undefined && compositionBinding !== current) { input.value = ''; return; }
@@ -720,8 +744,13 @@
     }
   });
   window.addEventListener('blur', () => send({ action: 'release' }));
-  window.addEventListener('resize', resize);
+  const stopViewport = hostApplicationViewport.observeViewport(window, viewport => {
+    Object.assign(document.body.style, hostApplicationViewport.viewportStyle(viewport));
+    for (const axis of ['left', 'top', 'width', 'height']) document.body.style.setProperty(`--mac-viewport-${axis}`, document.body.style[axis]);
+    resize();
+  });
   window.addEventListener('beforeunload', () => {
+    stopViewport();
     attempt++;
     send({ action: 'release' });
     socket?.close();

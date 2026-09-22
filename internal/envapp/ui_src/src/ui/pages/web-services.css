@@ -59,6 +59,8 @@
 .web-service-manage { grid-column: 2; }
 .web-service-more { grid-column: 3; }
 .web-service-button { min-height: 32px; height: auto; width: 100%; padding: 6px 10px; white-space: normal; line-height: 18px; box-shadow: none; overflow-wrap: anywhere; }
+.web-service-open-restricted { background: var(--muted); color: var(--muted-foreground); border-color: var(--border); cursor: not-allowed; }
+.web-service-open-restricted:hover { background: var(--muted); color: var(--muted-foreground); }
 .web-service-button > svg { flex-shrink: 0; }
 .web-service-actions button { transition: background-color 120ms, border-color 120ms, color 120ms; }
 .web-service-actions button:enabled:active { filter: brightness(.96); }

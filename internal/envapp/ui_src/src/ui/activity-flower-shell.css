@@ -135,7 +135,6 @@
   align-items: center;
   gap: 0.5rem;
   font-family: var(--font-sans);
-  transform: translateY(calc(-1 * var(--flower-visual-viewport-bottom-offset, 0px)));
 }
 
 .flower-activity-bottom-bar-height {
@@ -143,23 +142,15 @@
 }
 
 .flower-activity-mobile-companion-rail {
-  position: fixed;
-  z-index: 70;
   display: flex;
   justify-content: center;
-  visibility: hidden;
-  opacity: 0;
+  width: min(calc(100% - 1.5rem), 34rem);
+  margin: 0.5rem auto;
   pointer-events: none;
-  transition: opacity 140ms ease, visibility 0s step-end 140ms;
-}
-
-.flower-activity-mobile-companion-rail-ready {
-  visibility: visible;
-  opacity: 1;
-  transition: opacity 140ms ease, visibility 140ms step-start;
 }
 
 .flower-activity-mobile-companion-rail .flower-activity-companion-anchor {
+  width: min(100%, 34rem);
   height: 2.75rem;
 }
 

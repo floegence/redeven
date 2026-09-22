@@ -21,6 +21,12 @@ Managed and ordinary services share one neutral divided list with content-sized,
 
 Previously loaded collection facts survive an unsuccessful refresh with an explicit stale-check explanation. Forward ordering uses creation identity instead of health or last-opened time, so opening and refresh do not reorder rows. Managed snapshots retain service-ID-keyed DOM. Hover feedback is 120ms, state color feedback 180ms, and explanatory expansion 220ms; refresh never replays row entry. Reduced motion removes these transitions without removing focus, progress, or status feedback. Diagnostics and per-service operation presentation follow the [operation progress contract](managed-service-operation-progress.md).
 
+## Opening restrictions
+
+Managed and ordinary services share one Open action. Current access restrictions and backend action capability control availability; old opening errors and health-check failures do not permanently disable retries. A restricted action keeps its position and keyboard focusability, uses muted disabled styling, `aria-disabled`, and a yellow warning icon. Click, touch, Enter, or Space discloses the yellow reason tooltip without issuing an opening request. Hover and focus also expose the reason; Escape, a second activation, or outside interaction dismisses it. An associated accessible description retains the full reason independently of tooltip presence.
+
+Opening restrictions are not repeated in expanded yellow row notices. Pending configuration, blocked cleanup, and other management explanations remain in their existing support regions. The tooltip consumes the published visible viewport and `SurfaceFloatingLayer`; that layer owns Workbench projection and surface clamping. Long explanations wrap inside the visible boundary in either theme.
+
 ## Review and focus
 
 One drawer contains a current conclusion, compact resource facts, and recommended actions. Its shared Dialog footer keeps the confirmed execution and its impact visible while the body scrolls. Alternative goals change the reviewed plan inside the same drawer. Reference relations and technical identities expand in place; the workspace path remains visible and copyable. The selected service is highlighted while the drawer is open. Closing restores its surviving trigger; removing the record falls back to a neighboring service or the collection heading. Errors are readable without hover. Rechecking retains previously checked facts and their timestamp, but the previous digest cannot execute during loading or after a failed check.

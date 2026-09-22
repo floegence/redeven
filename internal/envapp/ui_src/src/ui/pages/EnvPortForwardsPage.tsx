@@ -7,7 +7,7 @@ import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { createManagedServiceUpdatePreparation } from './managedServiceUpdatePreparation';
 import { GitTemplateImport } from './GitTemplateImport';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
-import { For, Show, createEffect, createMemo, createSignal, untrack, on, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, createUniqueId, untrack, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useNotification, useViewActivation } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
@@ -720,6 +720,26 @@ function managedStatusTone(status: string): ServiceStatusTone {
   return 'neutral';
 }
 
+function ServiceOpenButton(props: { busy: boolean; busyText?: string; canOpen: boolean; reason?: string; onOpen: () => void }) {
+  const i18n = useI18n();
+  const descriptionID = createUniqueId();
+  const restricted = () => !props.canOpen;
+  const reason = () => props.reason || i18n.t('webServices.managed.actionUnavailable.SERVICE_STATE_UNAVAILABLE');
+  return <Tooltip content={restricted() ? reason() : props.busyText || props.reason || i18n.t('webServices.actions.openServiceTooltip')}
+    placement="top" anchorClass="web-service-open" delay={0} clickToToggle={restricted()} class={restricted() ? 'text-warning' : undefined}>
+    <Button size="sm" variant="default" class="web-service-button" classList={{ 'web-service-open-restricted': restricted() }}
+      disabled={props.busy} aria-disabled={restricted() || props.busy || undefined} aria-busy={props.busy || undefined}
+      aria-describedby={restricted() ? descriptionID : undefined}
+      onClick={(event) => { if (restricted() || props.busy) { event.preventDefault(); return; } props.onOpen(); }}>
+      <Show when={props.busy} fallback={<Show when={restricted()} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}>
+        <AlertTriangle class="mr-1.5 h-3.5 w-3.5 text-warning" aria-hidden="true" />
+      </Show>}><InlineButtonSnakeLoading class="mr-1.5" /></Show>
+      {i18n.t('webServices.actions.open')}
+    </Button>
+    <Show when={restricted()}><span id={descriptionID} class="sr-only">{reason()}</span></Show>
+  </Tooltip>;
+}
+
 export function PortForwardRow(props: {
   forward: PortForward;
   busy: boolean;
@@ -764,21 +784,8 @@ export function PortForwardRow(props: {
       </div>
 
       <div class={serviceRowActionsClass} data-testid="port-forward-actions">
-        <Tooltip content={props.openUnavailableReason || props.busyText || i18n.t('webServices.actions.openServiceTooltip')} placement="top" anchorClass="web-service-open">
-          <Button
-            size="sm"
-            variant="default"
-            onClick={props.onOpen}
-            disabled={props.busy || props.canOpen === false}
-            aria-busy={props.busy || undefined}
-            class="web-service-button"
-          >
-            <Show when={props.busy} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" />}>
-              <InlineButtonSnakeLoading class="mr-1.5" />
-            </Show>
-            {i18n.t('webServices.actions.open')}
-          </Button>
-        </Tooltip>
+        <ServiceOpenButton busy={props.busy} busyText={props.busyText} canOpen={props.canOpen !== false}
+          reason={props.openUnavailableReason} onOpen={props.onOpen} />
         <Tooltip content={i18n.t('webServices.actions.editServiceTooltip')} placement="top" anchorClass="web-service-manage">
           <Button
             size="sm"
@@ -804,7 +811,6 @@ export function PortForwardRow(props: {
           </Button>
         </Tooltip>
       </div>
-      <Show when={props.openUnavailableReason}><div class="web-service-notice web-service-forward-notice" role="status"><AlertTriangle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><p>{props.openUnavailableReason}</p></div></Show>
     </div>
   );
 }
@@ -1524,7 +1530,6 @@ function managedActionUnavailableReason(capability: ManagedActionCapability, i18
 export function ManagedServiceRow(props: { service: ManagedService; selected?: boolean; operation?: ManagedOperation | null; operationPhase?: ManagedOperationPresentationPhase; operationExpanded: boolean; busy: boolean; busyText?: string; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: ManagedAction) => void; onOperationExpandedChange: (operationID: string, expanded: boolean) => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onRestoreManagement?: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void; onInspect?: () => void }) {
   const i18n = useI18n();
   const presentation = () => managedServicePresentation(props.service, i18n);
-  const running = () => props.service.observed_state === 'running';
   const operation = () => props.operation ?? null;
   const activeOperation = () => managedOperationActive(props.operation) ? props.operation ?? null : null;
   const statusLabel = createMemo(() => {
@@ -1546,9 +1551,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
     const messages: string[] = [];
     if (props.service.status === 'uninstall_pending') messages.push(i18n.t('webServices.management.problems.cleanupBlocked'));
     else if (props.service.problem_code) messages.push(i18n.t(managementProblemKey(props.service.problem_code)));
-    if (running() && props.service.opening?.error_code) messages.push(`${i18n.t('webServices.managed.openingUnavailable')}: ${managedFailureMessage(props.service.opening.error_code, i18n)}`);
     if (props.service.pending_changes) messages.push(i18n.t('webServices.managed.pendingChanges'));
-    if (props.openUnavailableReason) messages.push(props.openUnavailableReason);
     return [...new Set(messages)];
   });
   const primaryCapability = (): ManagedActionCapability => primaryAction() === 'inspect' || primaryAction() === 'recover' ? props.service.actions?.inspect ?? { available: true } : actionCapability(primaryAction() as ManagedAction);
@@ -1639,21 +1642,12 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
         </div>
 
         <div class={serviceRowActionsClass} data-archived={archived() || undefined} data-testid="managed-service-actions">
-          <Show when={!archived()}><Tooltip content={props.openUnavailableReason || (props.busy ? props.busyText || i18n.t('webServices.status.opening') : i18n.t('webServices.actions.openServiceTooltip'))} placement="top" anchorClass="web-service-open">
-            <Button
-              size="sm"
-              variant="default"
-              class="web-service-button"
-              onClick={props.onOpen}
-              disabled={!props.service.actions?.open?.available || props.busy || !props.canOpen}
-              aria-busy={props.busy || undefined}
-            >
-              <Show when={props.busy} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" />}>
-                <InlineButtonSnakeLoading class="mr-1.5" />
-              </Show>
-              {i18n.t('webServices.actions.open')}
-            </Button>
-          </Tooltip></Show>
+          <Show when={!archived()}><ServiceOpenButton busy={props.busy} busyText={props.busyText}
+            canOpen={Boolean(props.service.actions?.open?.available) && props.canOpen}
+            reason={!props.canOpen ? props.openUnavailableReason : !props.service.actions?.open?.available
+              ? managedActionUnavailableReason(props.service.actions?.open ?? { available: false, reason_code: 'SERVICE_STATE_UNAVAILABLE' }, i18n)
+              : props.openUnavailableReason || (props.service.opening?.error_code ? managedFailureMessage(props.service.opening.error_code, i18n) : undefined)}
+            onOpen={props.onOpen} /></Show>
           <Tooltip content={managedActionUnavailableReason(primaryCapability(), i18n)} placement="top" anchorClass="web-service-manage" disabled={primaryCapability().available}>
             <Button data-testid="managed-service-primary" size="sm" variant="outline" class="web-service-button" aria-label={`${props.service.name}: ${primaryFullLabel()}`} onClick={executePrimary} disabled={!primaryCapability().available || ((primaryAction() === 'start' || primaryAction() === 'stop') && (busy() || !props.canManage))}>
               <Show when={primaryAction() === 'stop'}><Stop class="mr-1.5 h-3.5 w-3.5" /></Show>
@@ -3540,9 +3534,9 @@ export function EnvPortForwardsPage() {
                             busy={openBusy(`managed:${serviceID}`)}
                             busyText={openStatus(`managed:${serviceID}`)}
                             canOpen={canExecute() && (service().access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable())}
-                            openUnavailableReason={openErrors()[`managed:${serviceID}`] || (service().access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
+                            openUnavailableReason={!canExecute() ? i18n.t('webServices.permission.executeRequired') : (service().access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
                               ? i18n.t('webServices.managed.openUnavailableDesktopLoopback')
-                              : undefined)}
+                              : openErrors()[`managed:${serviceID}`])}
                             canManage={canManageManagedService()}
                             onOpen={() => void openManaged(service())}
                             onRestoreManagement={() => void reviewManagement(service())}
@@ -3567,9 +3561,9 @@ export function EnvPortForwardsPage() {
                           busy={openBusy(forwardID)}
                           busyText={openStatus(forwardID)}
                           canOpen={forward().access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable()}
-                          openUnavailableReason={openErrors()[forwardID] || (forward().access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
+                          openUnavailableReason={(forward().access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
                             ? i18n.t('webServices.errors.desktopLoopbackRequiresDesktop')
-                            : undefined)}
+                            : openErrors()[forwardID])}
                           onOpen={() => void doOpen(forward())}
                           onEdit={() => void reviewForward(forward(), 'edit')}
                           onDelete={() => void reviewForward(forward(), 'delete')}

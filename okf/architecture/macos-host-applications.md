@@ -90,7 +90,7 @@ Heartbeats detect lost peers. Reconnect refreshes capture without
 launching another process. Capture/permission failure exposes explicit recovery;
 old frames and callback generations cannot reactivate a disconnected view.
 Retired image decoders cannot delay a new connection, and pending pointer movement,
-composition text and menus are discarded when their capture binding changes.
+composition text and menus are discarded when their capture binding changes. Composition begun before a binding has decoded pixels cannot later acquire permission by waiting for a frame. The stable, in-viewport textarea uses a 16-pixel font and disables automatic capitalization and correction; Safari compatibility mouse events cannot steal its focus after a canvas touch. Soft-keyboard deletion and line breaks use the same guarded input channel as physical keys, and composed text and pasted text are committed once. Local focus during a same-window recapture grants no remote input authority.
 
 # Human control and lifecycle
 

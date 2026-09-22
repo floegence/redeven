@@ -6,14 +6,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
   JSDOM: new (html: string, options: Record<string, unknown>) => { window: Window & typeof globalThis };
 };
-const shared = ['catalog.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
+const shared = ['catalog.generated.js', 'viewport.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
 const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/toolbar.js'), 'utf8') + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/macos.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '').replace('{{.Locale}}', 'en-US');
 let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.dispatchEvent(new dom.window.Event('beforeunload')); dom?.window.close(); vi.useRealTimers(); });
 
-async function viewer(video = false, icon = '', initial?: Record<string, string>) {
+async function viewer(video = false, icon = '', initial?: Record<string, string>, setup?: (view: Window & typeof globalThis) => void) {
   dom = new JSDOM(html, { url: 'http://localhost/pf/test/_redeven_host_app/', runScripts: 'dangerously', pretendToBeVisual: true });
   const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ state: 'running', password: 'private' }) });
   const drawImage = vi.fn();
@@ -52,6 +52,7 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
   Object.assign(dom.window, { TextDecoder, TextEncoder, VideoDecoder: video ? Decoder : undefined, EncodedVideoChunk: class { constructor(public value: unknown) {} }, fetch, WebSocket: Socket, createImageBitmap: bitmap, redevenHostApplicationWindow: native });
   const statisticsTicks: (() => void)[] = [];
   vi.spyOn(dom.window, 'setInterval').mockImplementation(((callback: () => void) => { statisticsTicks.push(callback); return 1; }) as typeof dom.window.setInterval);
+  setup?.(dom.window);
   dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon, initial, copy: { permissionRequired: 'Host permission is required', permissionHint: 'Allow screen recording and accessibility, then reconnect.', sessionUnavailable: 'The graphical session is unavailable', sessionHint: 'Unlock the Mac and sign in, then reconnect.', sessionFailed: 'Application sharing has stopped', reopenHint: 'Return to Host Applications and open the app again.', captureHint: 'Reconnect or choose another window.', controls: 'Application controls', "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', quit: 'Quit application', quitTitle: 'Quit this application?', quitDescription: 'All application windows will close. You can cancel in a save dialog.', quitPending: 'Respond to any save dialog in the application.', quitFailed: 'Quit could not be confirmed.', cancel: 'Cancel', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
   await drain();
   const socket = () => Socket.instances.at(-1)!;
@@ -132,6 +133,100 @@ describe('macOS application viewer', () => {
     resolve({ok:true,json:async () => ({state:'ended'})}); await drain();
     expect(v.state()).toBe('disconnected');
     expect(v.native.request).not.toHaveBeenCalled();
+  });
+
+  it('keeps remote geometry stable through repeated local keyboard occlusion', async () => {
+    vi.useFakeTimers();
+    let viewport: EventTarget & {width: number; height: number; offsetTop: number; offsetLeft: number; scale: number};
+    const v = await viewer(false, '', undefined, view => {
+      viewport = Object.assign(new view.EventTarget(), {width: 390, height: 844, offsetTop: 0, offsetLeft: 0, scale: 1});
+      Object.defineProperty(view, 'visualViewport', {configurable: true, value: viewport});
+      Object.defineProperty(view, 'innerWidth', {configurable: true, value: 390});
+      Object.defineProperty(view, 'innerHeight', {configurable: true, value: 844});
+      vi.spyOn(view.HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+        const height = this.tagName === 'CANVAS' ? viewport.height - 46 : 844;
+        return {left: 0, top: 0, right: 390, bottom: height, width: 390, height, x: 0, y: 0, toJSON: () => ({})};
+      });
+    });
+    await v.activate(); await vi.advanceTimersByTimeAsync(220); v.socket().send.mockClear();
+    const input = dom.window.document.querySelector('textarea')!; input.focus();
+    for (const height of [420, 430, 844, 420, 844]) {
+      viewport!.height = height; viewport!.offsetTop = height < 844 ? 24 : 0;
+      viewport!.dispatchEvent(new dom.window.Event('resize'));
+      await vi.advanceTimersByTimeAsync(220);
+      expect(dom.window.document.body.style.height).toBe(`${height}px`);
+      expect(dom.window.document.activeElement).toBe(input);
+    }
+    expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => ['resize', 'configure'].includes(c.action))).toEqual([]);
+  });
+
+  it('retains local focus during same-window recapture while rejecting input before decoded pixels', async () => {
+    const v = await viewer(); await v.activate();
+    const input = dom.window.document.querySelector('textarea')!;
+    input.focus();
+    v.window(2);
+    expect(input.disabled).toBe(false);
+    expect(dom.window.document.activeElement).toBe(input);
+    input.value = 'unconfirmed';
+    input.dispatchEvent(new dom.window.InputEvent('input', { inputType: 'insertText' }));
+    expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input')).toEqual([]);
+    v.socket().frame(); await drain();
+    input.value = 'confirmed';
+    input.dispatchEvent(new dom.window.InputEvent('input', { inputType: 'insertText' }));
+    expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input')).toEqual([
+      expect.objectContaining({ generation: 2, kind: 'text', text: 'confirmed' }),
+    ]);
+  });
+
+  it('prevents Safari compatibility mouse events from stealing textarea focus', async () => {
+    const v = await viewer(); await v.activate();
+    const event = new dom.window.MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    dom.window.document.querySelector('canvas')!.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('rejects composition begun before a replacement capture is decoded', async () => {
+    const v = await viewer(); await v.activate(); v.window(2);
+    const input = dom.window.document.querySelector('textarea')!;
+    input.dispatchEvent(new dom.window.CompositionEvent('compositionstart'));
+    v.socket().frame(); await drain();
+    input.value = '未确认';
+    input.dispatchEvent(new dom.window.CompositionEvent('compositionend'));
+    expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input')).toEqual([]);
+  });
+
+  it('discards the trailing browser commit event after an invalidated composition', async () => {
+    const v = await viewer(); await v.activate();
+    const input = dom.window.document.querySelector('textarea')!;
+    input.dispatchEvent(new dom.window.CompositionEvent('compositionstart'));
+    v.window(2); v.socket().frame(); await drain();
+    input.value = '旧输入'; input.dispatchEvent(new dom.window.CompositionEvent('compositionend'));
+    input.value = '旧输入'; input.dispatchEvent(new dom.window.InputEvent('input', {inputType: 'insertFromComposition'}));
+    expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input')).toEqual([]);
+  });
+
+  it('sends soft keyboard deletion and line breaks once through beforeinput', async () => {
+    const v = await viewer(); await v.activate();
+    const input = dom.window.document.querySelector('textarea')!;
+    for (const inputType of ['deleteContentBackward', 'deleteContentForward', 'insertLineBreak']) {
+      const event = new dom.window.InputEvent('beforeinput', { inputType, cancelable: true });
+      input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    }
+    expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input').map(c => c.key))
+      .toEqual(['Backspace', 'Delete', 'Enter']);
+  });
+
+  it('keeps plain text and paste continuous across decoded frame updates', async () => {
+    const v = await viewer(); await v.activate();
+    const input = dom.window.document.querySelector('textarea')!; input.focus();
+    for (const [inputType, text] of [['insertText', 'a'], ['insertFromPaste', 'paste\ntext']]) {
+      v.socket().frame(); await drain();
+      input.value = text; input.dispatchEvent(new dom.window.InputEvent('input', { inputType }));
+      expect(dom.window.document.activeElement).toBe(input);
+    }
+    expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input').map(c => c.text))
+      .toEqual(['a', 'paste\ntext']);
   });
 
   it('discards unfinished composition when the displayed window changes', async () => {
@@ -745,7 +840,7 @@ it('sizes the host window to the content area and maps input below the toolbar',
   vi.spyOn(canvas,'getBoundingClientRect').mockReturnValue({left:0,top:46,width:640,height:480,right:640,bottom:526,x:0,y:46,toJSON(){}});
   Object.assign(canvas,{setPointerCapture:vi.fn()});
   dom.window.dispatchEvent(new dom.window.Event('resize'));
-  await vi.advanceTimersByTimeAsync(180);
+  await vi.advanceTimersByTimeAsync(220);
   expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure',width:640,height:480});
   canvas.dispatchEvent(new dom.window.MouseEvent('pointerdown',{clientX:320,clientY:286}));
   expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'input',kind:'down',x:0.5,y:0.5});
@@ -773,7 +868,7 @@ it('coalesces viewport and density changes into one generation-independent confi
   Object.defineProperty(dom.window, 'devicePixelRatio', {value:2,configurable:true});
   dom.window.dispatchEvent(new dom.window.Event('resize'));
   v.window(2);
-  await vi.advanceTimersByTimeAsync(180);
+  await vi.advanceTimersByTimeAsync(220);
   const requests = v.socket().send.mock.calls.map(([raw]) => JSON.parse(raw));
   expect(requests).toEqual([expect.objectContaining({action:'configure',width:900,height:600,pixel_ratio:2})]);
   expect(requests[0].generation).toBeUndefined();

@@ -86,6 +86,25 @@ describe('Tooltip', () => {
     }
   });
 
+  it('positions against offset visible bounds without adding Safari offsets twice', async () => {
+    anchorRect = makeRect(240, 300, 80, 32);
+    const viewport = Object.assign(new EventTarget(), { width: 390, height: 200, offsetLeft: 20, offsetTop: 180, scale: 1 });
+    vi.stubGlobal('visualViewport', viewport);
+    const host = document.createElement('div'); document.body.append(host);
+    const dispose = render(() => <Tooltip content="Open unavailable" delay={0}><button>Open</button></Tooltip>, host);
+    try {
+      host.querySelector('[data-redeven-tooltip-anchor]')!.dispatchEvent(new MouseEvent('mouseenter'));
+      await flushPositioning();
+      const tooltip = document.querySelector<HTMLElement>('[role=tooltip]')!;
+      expect(Number.parseFloat(tooltip.style.top)).toBe(252);
+      expect(Number.parseFloat(tooltip.style.left)).toBe(220);
+      viewport.offsetTop = 220; viewport.dispatchEvent(new Event('scroll'));
+      await flushPositioning();
+      expect(Number.parseFloat(tooltip.style.top)).toBeGreaterThanOrEqual(228);
+      expect(Number.parseFloat(tooltip.style.top) + 40).toBeLessThanOrEqual(412);
+    } finally { dispose(); }
+  });
+
   it('flips to the opposite side when the preferred placement does not fit', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

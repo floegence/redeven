@@ -1,4 +1,5 @@
 import { Show, createEffect, createSignal, onCleanup, createMemo, type JSX } from 'solid-js';
+import { observeViewport, readViewportSnapshot } from '@floegence/floe-webapp-core/viewport';
 import { cn } from '@floegence/floe-webapp-core';
 import { createFloatingPresence, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 import {
@@ -45,7 +46,7 @@ function tooltipArrowStyle(position: AnchoredOverlayPosition): JSX.CSSProperties
 }
 
 /**
- * Render the tooltip in a body-level portal so dialog/layout overflow rules never clip it.
+ * Delegate portal ownership and projected-surface clamping to Floe.
  */
 export function Tooltip(props: TooltipProps) {
   const [visible, setVisible] = createSignal(false);
@@ -54,6 +55,8 @@ export function Tooltip(props: TooltipProps) {
     open: visible,
     exitDurationMs: 80,
   });
+  const [size, setSize] = createSignal({ width: 0, height: 0 });
+  const [bounds, setBounds] = createSignal({ width: 384, height: 600 });
   const [position, setPosition] = createSignal<AnchoredOverlayPosition | null>(null);
   const resolvedPlacement = createMemo(() => position()?.placement ?? (props.placement ?? 'top'));
 
@@ -83,27 +86,28 @@ export function Tooltip(props: TooltipProps) {
 
     const anchorRect = anchorRef.getBoundingClientRect();
     const tooltipRect = tooltipRef.getBoundingClientRect();
-    const viewport = window.visualViewport;
-    const viewportWidth = viewport?.width ?? window.innerWidth;
-    const viewportHeight = viewport?.height ?? window.innerHeight;
-    const viewportOffsetLeft = viewport?.offsetLeft ?? 0;
-    const viewportOffsetTop = viewport?.offsetTop ?? 0;
+    const { visible: viewport, safeArea } = readViewportSnapshot(window);
+    setBounds({ width: Math.max(1, viewport.width - safeArea.left - safeArea.right - 16),
+      height: Math.max(1, viewport.height - safeArea.top - safeArea.bottom - 16) });
+    setSize({ width: tooltipRect.width, height: tooltipRect.height });
     const viewportMargin = typeof props.viewportMargin === 'function'
       ? props.viewportMargin()
       : props.viewportMargin;
 
     const nextPosition = resolveAnchoredOverlayPosition({
-      anchorRect,
+      anchorRect: { width: anchorRect.width, height: anchorRect.height,
+        left: anchorRect.left - viewport.left, right: anchorRect.right - viewport.left,
+        top: anchorRect.top - viewport.top, bottom: anchorRect.bottom - viewport.top },
       overlaySize: { width: tooltipRect.width, height: tooltipRect.height },
-      viewport: { width: viewportWidth, height: viewportHeight },
+      viewport,
       preferredPlacement: props.placement,
       margin: viewportMargin,
     });
 
     setPosition({
       ...nextPosition,
-      left: nextPosition.left + viewportOffsetLeft,
-      top: nextPosition.top + viewportOffsetTop,
+      left: nextPosition.left + viewport.left,
+      top: nextPosition.top + viewport.top,
     });
   };
 
@@ -160,9 +164,7 @@ export function Tooltip(props: TooltipProps) {
 
     const handleViewportChange = () => scheduleUpdate();
     window.addEventListener('scroll', handleViewportChange, true);
-    window.addEventListener('resize', handleViewportChange);
-    window.visualViewport?.addEventListener('resize', handleViewportChange);
-    window.visualViewport?.addEventListener('scroll', handleViewportChange);
+    const stopViewport = observeViewport(window, handleViewportChange);
     const handleOutsidePointerDown = (event: PointerEvent) => {
       if (anchorRef?.contains(event.target as Node)) return;
       pinned = false;
@@ -185,9 +187,7 @@ export function Tooltip(props: TooltipProps) {
     onCleanup(() => {
       observer?.disconnect();
       window.removeEventListener('scroll', handleViewportChange, true);
-      window.removeEventListener('resize', handleViewportChange);
-      window.visualViewport?.removeEventListener('resize', handleViewportChange);
-      window.visualViewport?.removeEventListener('scroll', handleViewportChange);
+      stopViewport();
       document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
       clearFrameHandle();
     });
@@ -270,7 +270,7 @@ export function Tooltip(props: TooltipProps) {
         <SurfaceFloatingLayer
           owner={anchorRef}
           position={{ x: position()?.left ?? 0, y: position()?.top ?? 0 }}
-          clamp={false}
+          estimatedSize={size()}
           layerRef={(element) => {
             tooltipRef = element;
           }}
@@ -287,6 +287,9 @@ export function Tooltip(props: TooltipProps) {
           )}
           style={{
             visibility: position() ? 'visible' : 'hidden',
+            'max-width': `min(24rem, ${bounds().width}px)`,
+            'max-height': `${bounds().height}px`,
+            'overflow-y': 'auto',
           }}
         >
           {props.content}

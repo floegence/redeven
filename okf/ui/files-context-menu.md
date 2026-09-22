@@ -33,7 +33,7 @@ Long labels wrap; oversized menus scroll internally with their action order,
 groups, and destructive styling intact.
 
 [Flower Activity companion](flower-activity-companion.md) owns the mobile rail
-placement. Shell exposes the client-coordinate top of its existing rail layout
+placement. Shell exposes the measured client-coordinate top of the actual accessory anchor
 through `EnvContext.activityContentBottomLimit`. Files clips its boundary to that
 limit; it does not recalculate rail position, navigation height, keyboard height,
 or safe-area insets. The shared Floe visible-viewport mechanism accounts for the

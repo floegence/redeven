@@ -173,7 +173,8 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   }),
 }));
 
-vi.mock('@floegence/floe-webapp-core/app', () => ({
+vi.mock('@floegence/floe-webapp-core/app', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/app')>(),
   ActivityAppsMain: (props: any) => {
     const env = useContext(EnvContextMock);
     const filePreview = useContext(FilePreviewContextMock);
@@ -427,9 +428,9 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
 });
 
 vi.mock('@floegence/floe-webapp-boot', () => ({
-  createArtifactDirectConnectionConfig: (config: unknown) => config,
-  createPrivateLoopbackDirectConnectionConfig: (config: unknown) => config,
-  createProxyRuntimeTunnelConnectionConfig: (config: unknown) => config,
+  createArtifactDirectConnectionConfig: (config: object) => ({ ...config, lifecycle: { dispose: () => undefined } }),
+  createPrivateLoopbackDirectConnectionConfig: (config: object) => ({ ...config, lifecycle: { dispose: () => undefined } }),
+  createProxyRuntimeTunnelConnectionConfig: (config: object) => ({ ...config, lifecycle: { dispose: () => undefined } }),
 }));
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
@@ -798,13 +799,14 @@ vi.mock('./pages/EnvAIPage', () => ({
           <button
             type="button"
             class="flower-chat-context-preview-window"
-            data-testid="activity-flower-context-preview"
+            style={{ position: 'fixed', top: '60px', 'z-index': 200 }} data-testid="activity-flower-context-preview"
           >
             Flower context preview
           </button>
           <button
             type="button"
             class="flower-provider-dialog"
+            style={{ position: 'fixed', top: '120px', 'z-index': 200 }}
             data-testid="activity-flower-provider-dialog"
           >
             Flower provider dialog
@@ -818,7 +820,7 @@ vi.mock('./pages/EnvAIPage', () => ({
 vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
   FlowerTurnLauncherWindow: (props: any) => testRealFlowerLauncher ? <SharedFlowerTurnLauncherWindow {...props} /> : (
     <Show when={props.open && props.intent}>
-      <div data-testid="flower-turn-launcher" data-placement={props.placement ?? 'window'}>
+      <div style={{ position: 'fixed', top: '100px', 'z-index': 200 }} data-testid="flower-turn-launcher" data-placement={props.placement ?? 'window'}>
         <button
           type="button"
           data-testid="flower-turn-launcher-send"
@@ -899,7 +901,7 @@ vi.mock('./services/desktopShellBridge', () => ({
 }));
 vi.mock('./services/localApi', () => ({
   fetchLocalApi: vi.fn(),
-  fetchLocalApiJSON: vi.fn(),
+  fetchLocalApiJSON: vi.fn(async () => ({ scope_id: 'a'.repeat(64) })),
   fetchLocalApiJSONResponse: vi.fn(),
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
   LocalApiError: class LocalApiError extends Error {
@@ -951,7 +953,8 @@ vi.mock('./security/localTransportSecurity', () => ({
     error: '',
   }),
 }));
-vi.mock('./services/uiStorage', () => ({
+vi.mock('./services/uiStorage', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./services/uiStorage')>(),
   readRendererScopedUIStorageJSON: vi.fn((_key: string, fallback: unknown) => fallback),
   readUIStorageJSON: vi.fn(() => null),
   readUIStorageItem: vi.fn((key: string) => (
@@ -1249,7 +1252,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     };
     const railRect = elementRect(fixture.mobileRail);
     const tabBarRect = elementRect(fixture.mobileTabBar);
-    expect(getComputedStyle(fixture.mobileRail).position).toBe('fixed');
+    expect(fixture.mobileRail.closest('[data-floe-shell-slot="mobile-accessory"]')).not.toBeNull();
     expect(railRect.width).toBeGreaterThanOrEqual(1);
     expect(railRect.width).toBeLessThan(width);
     expect(railRect.height).toBe(44);
@@ -1582,7 +1585,8 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       throw new Error('Activity page Dialog harness did not mount.');
     }
 
-    await userEvent.click(trigger);
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
     await flushAsync();
     const overlayRoot = document.querySelector('[data-floe-dialog-overlay-root]');
     if (!(overlayRoot instanceof HTMLElement)) throw new Error('Activity page Dialog did not open.');
@@ -1605,10 +1609,8 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     });
     expect(activityDialogUnderlayActionMock).not.toHaveBeenCalled();
 
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    await settleFrames(2);
-    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
-    expect(document.activeElement).toBe(trigger);
+    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(trigger);
   });
 
   it('moves the same Flower surface into and out of the Workbench host', async () => {
@@ -1676,8 +1678,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       },
     });
     expect(activityDialogUnderlayActionMock).not.toHaveBeenCalled();
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
 
     const switchWorkbench = document.querySelector('[data-testid="activity-switch-workbench"]');
     if (!(switchWorkbench instanceof HTMLButtonElement)) throw new Error('Workbench switch did not mount.');
@@ -1703,8 +1704,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     const localBackdrop = overlayRoot.querySelector('[data-floe-dialog-backdrop]');
     if (!(localBackdrop instanceof HTMLElement)) throw new Error('Workbench Dialog backdrop did not mount.');
     await userEvent.click(localBackdrop, { position: { x: 8, y: 8 } });
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
 
     await userEvent.click(trigger);
     await flushAsync();
@@ -1720,8 +1720,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(overlayRoot.style.zIndex).toBe('4000');
 
     await userEvent.keyboard('{Escape}');
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
   });
 
   it('mounts Flower directly into Workbench before Activity has rendered', async () => {
@@ -1894,6 +1893,39 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.textarea);
     expect(fixture.input.value).toBe('花');
     expect(fixture.product.dataset.presentation).toBe('expanded');
+  });
+
+  it('fits Safari visible bounds and restores navigation without remounting the editor', async () => {
+    await page.viewport(390, 844);
+    const original = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+    const matchMedia = window.matchMedia.bind(window);
+    vi.spyOn(window, 'matchMedia').mockImplementation(query => query === '(any-pointer: coarse)' ? { ...matchMedia(query), matches: true } as MediaQueryList : matchMedia(query));
+    const viewport = Object.assign(new EventTarget(), { width: 390, height: 844, offsetLeft: 0, offsetTop: 0, scale: 1 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+    try {
+      const fixture = await mountProductionMobileShell();
+      fixture.input.focus(); fixture.input.value = 'Retained draft'; fixture.input.setSelectionRange(2, 5);
+      // Focus alone and ordinary browser chrome movement are not a soft keyboard.
+      await expect.poll(() => fixture.mobileTabBar.hidden).toBe(false);
+      Object.assign(viewport, { height: 784 }); viewport.dispatchEvent(new Event('resize'));
+      await expect.poll(() => elementRect(document.querySelector('[data-floe-app-viewport]')!).height).toBe(784);
+      expect(fixture.mobileTabBar.hidden).toBe(false);
+      for (let cycle = 0; cycle < 3; cycle++) {
+        Object.assign(viewport, { height: 420, offsetTop: 24 }); viewport.dispatchEvent(new Event('resize'));
+        await expect.poll(() => document.querySelector<HTMLElement>('[data-floe-shell-slot="mobile-tab-bar"]')?.hidden).toBe(true);
+        await expect.poll(() => elementRect(fixture.panel).bottom).toBeLessThanOrEqual(444);
+        expect(document.activeElement).toBe(fixture.input);
+        expect(fixture.input.value).toBe('Retained draft');
+        expect(fixture.input.selectionStart).toBe(2);
+        Object.assign(viewport, { height: 844, offsetTop: 0 }); viewport.dispatchEvent(new Event('resize'));
+        await expect.poll(() => document.querySelector<HTMLElement>('[data-floe-shell-slot="mobile-tab-bar"]')?.hidden).toBe(false);
+      }
+      expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.textarea);
+      expect(document.documentElement.scrollHeight).toBeLessThanOrEqual(844);
+    } finally {
+      if (original) Object.defineProperty(window, 'visualViewport', original); else Reflect.deleteProperty(window, 'visualViewport');
+      vi.restoreAllMocks();
+    }
   });
 
   it('uses visualViewport keyboard offsets and overlay safe-area variables for the fixed frame', async () => {

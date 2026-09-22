@@ -25,10 +25,10 @@ main[aria-busy="false"] .progress { display:none; }
 @keyframes arrive { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; } .progress span { width:100%; opacity:.5; } }
 /* A fixed application toolbar reserves space; remote pixels never sit beneath it. */
-.mac-app-viewer { --mac-toolbar-height:46px; padding-top:var(--mac-toolbar-height); }
-#application.mac-app-canvas { top:var(--mac-toolbar-height); height:calc(100% - var(--mac-toolbar-height)); object-fit:contain; }
+.mac-app-viewer { --mac-toolbar-height:46px; --mac-viewport-left:0px; --mac-viewport-top:0px; --mac-viewport-width:100%; --mac-viewport-height:100dvh; padding-top:var(--mac-toolbar-height); }
+#application.mac-app-canvas { left:var(--mac-viewport-left); top:calc(var(--mac-viewport-top) + var(--mac-toolbar-height)); width:var(--mac-viewport-width); height:calc(var(--mac-viewport-height) - var(--mac-toolbar-height)); object-fit:contain; }
 /* The app identity and current window stay compact; spare width is not clickable. */
-.mac-app-controls { position:fixed; z-index:2; inset:0 0 auto; height:var(--mac-toolbar-height); background:var(--background); border-bottom:1px solid var(--border); text-align:left; }
+.mac-app-controls { position:fixed; z-index:2; inset:auto; left:var(--mac-viewport-left); top:var(--mac-viewport-top); width:var(--mac-viewport-width); height:var(--mac-toolbar-height); background:var(--background); border-bottom:1px solid var(--border); text-align:left; }
 .mac-app-toolbar { display:flex; align-items:center; gap:4px; height:100%; padding:0 10px; }
 .mac-app-controls button { margin:0; }
 .mac-app-toolbar>button { flex:none; min-width:32px; height:32px; min-height:32px; padding:0 8px; gap:7px; border:1px solid transparent; border-radius:var(--floe-radius-control); background:transparent; font-size:12px; color:var(--muted-foreground); }
@@ -48,7 +48,7 @@ main[aria-busy="false"] .progress { display:none; }
 .mac-app-toolbar-spacer { flex:1; min-width:8px; }
 .mac-app-toolbar-separator { width:1px; height:16px; margin:0 5px; background:var(--border); flex:none; }
 .mac-app-toolbar>.mac-app-quit:hover:not(:disabled) { color:var(--error); background:color-mix(in srgb,var(--error) 12%,var(--background)); }
-.mac-app-popover { position:fixed; top:calc(var(--mac-toolbar-height) + 6px); width:320px; max-width:calc(100vw - 16px); max-height:calc(100dvh - var(--mac-toolbar-height) - 14px); overflow:auto; overscroll-behavior:contain; padding:16px; border:1px solid var(--border); border-radius:var(--floe-radius-floating); background:var(--popover); color:var(--popover-foreground);  animation:unfold .14s ease-out; }
+.mac-app-popover { position:fixed; top:calc(var(--mac-viewport-top) + var(--mac-toolbar-height) + 6px); width:320px; max-width:calc(100vw - 16px); max-height:calc(var(--mac-viewport-height) - var(--mac-toolbar-height) - 14px); overflow:auto; overscroll-behavior:contain; padding:16px; border:1px solid var(--border); border-radius:var(--floe-radius-floating); background:var(--popover); color:var(--popover-foreground);  animation:unfold .14s ease-out; }
 .mac-app-popover[data-section="menu"] { width:280px; padding:6px; }
 .mac-app-popover[data-section="windows"] { width:360px; padding:8px; }
 .mac-app-controls select { font:inherit; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:var(--floe-radius-control); background:var(--card); color:var(--foreground); cursor:pointer; }
@@ -70,7 +70,7 @@ main[aria-busy="false"] .progress { display:none; }
 @media(max-width:680px) { .mac-app-toolbar>.mac-app-menu-toggle { max-width:160px; } }
 @media(max-width:560px) { .mac-app-toolbar { padding:0 6px; gap:2px; } .mac-app-toolbar>.mac-app-controls-toggle .mac-app-toolbar-label,.mac-app-controls-toggle .mac-app-dropdown-chevron,.mac-app-toolbar>.mac-app-windows-toggle .mac-app-toolbar-label { display:none; } .mac-app-toolbar>.mac-app-windows-toggle { min-width:32px; } .mac-app-toolbar>.mac-app-menu-toggle { max-width:120px; } .mac-app-toolbar-separator { margin:0 3px; } .mac-app-toolbar-spacer { min-width:2px; } }
 @media(max-width:360px) { .mac-app-toolbar>.mac-app-menu-toggle .mac-app-toolbar-label { display:none; } .mac-app-identity-separator { display:none; } }
-.mac-app-input { position:fixed; left:0; bottom:0; width:1px; height:1px; padding:0; border:0; opacity:0; resize:none; }
+.mac-app-input { position:absolute; left:50%; top:50%; width:16px; height:20px; margin:0; padding:0; border:0; opacity:0; resize:none; font:16px/20px sans-serif; pointer-events:none; }
 body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; opacity:.45; }
 
 .mac-app-feedback { position:fixed; z-index:3; top:calc(var(--mac-toolbar-height) + 12px); left:50%; transform:translateX(-50%); max-width:calc(100% - 32px); padding:10px 14px; border:1px solid var(--border); border-radius:var(--floe-radius-group); background:var(--card); color:var(--foreground); font-size:12px; pointer-events:none; }

@@ -66,8 +66,7 @@ and picture changes use one generation-independent configuration request, so a
 size update cannot be lost to a simultaneous picture-generation change.
 
 Changes apply to the existing application and start a new capture generation.
-Input remains disabled for new coordinates until that generation has decoded
-pixels. Browser scaling and display-density changes renegotiate the capture.
+Remote input remains rejected until that generation has decoded pixels. A same-window recapture preserves the enabled local textarea and its keyboard focus; replacement windows, disconnects, and permission failures revoke local editing. The published framework-independent Floe viewport observer owns visible bounds and unoccluded layout dimensions. Software-keyboard and pinch-zoom occlusion resize local presentation only; actual layout-size, density, and picture changes renegotiate capture.
 No option requires an application restart or changes the user's system display
 configuration. Limits are bounded and validated by the native helper.
 

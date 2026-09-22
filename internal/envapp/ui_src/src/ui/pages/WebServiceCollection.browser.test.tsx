@@ -1,4 +1,5 @@
 import '../../index.css';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
@@ -32,6 +33,60 @@ function assertContained(element: HTMLElement, parent: HTMLElement) {
 describe('Web Service collection geometry', () => {
   let dispose: (() => void) | undefined;
   afterEach(() => { dispose?.(); document.body.replaceChildren(); });
+
+  it('discloses opening restrictions on touch and keyboard without starting a request', async () => {
+    await page.viewport(390, 844);
+    const host = document.createElement('div'); host.className = 'web-services'; document.body.append(host);
+    const open = vi.fn();
+    dispose = render(() => <PortForwardRow forward={forward} busy={false} canOpen={false}
+      openUnavailableReason="Open this service in Redeven Desktop."
+      onOpen={open} onEdit={() => undefined} onDelete={() => undefined} />, host);
+    const button = host.querySelector<HTMLButtonElement>('.web-service-open button')!;
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(host.querySelector('.web-service-notice')).toBeNull();
+    await userEvent.click(button, { force: true }); await settle();
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('Redeven Desktop');
+    await userEvent.keyboard('{Escape}'); await settle();
+    button.focus(); await userEvent.keyboard('{Enter}'); await settle();
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('Redeven Desktop');
+    await userEvent.keyboard(' ');
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it.each(['light', 'dark'])('keeps long restriction explanations inside a projected %s surface and restores opening', async theme => {
+    await page.viewport(600, 700);
+    const host = document.createElement('div');
+    host.className = 'web-services';
+    host.dataset.floeDialogSurfaceHost = 'true';
+    host.dataset.floeShellTheme = `porcelain-${theme}`;
+    host.style.cssText = 'position:relative; width:400px; height:350px; margin:80px 20px; transform:scale(.8); transform-origin:top left';
+    document.body.append(host);
+    const [available, setAvailable] = createSignal(false);
+    const open = vi.fn();
+    const reason = 'Open this service in Redeven Desktop to access its private loopback address. '.repeat(3);
+    dispose = render(() => <ManagedServiceRow service={{...service, status: 'running', observed_state: 'running',
+      actions: {...service.actions, open: {available: available()}}, opening: {state: 'failed', error_code: 'OPEN_FAILED'}}}
+      busy={false} canOpen={available()} canManage openUnavailableReason={reason} operationExpanded={false}
+      onOpen={open} onOpenResource={() => undefined} onAction={() => undefined}
+      onOperationExpandedChange={() => undefined} onLogs={() => undefined} onUninstall={() => undefined} />, host);
+    const button = host.querySelector<HTMLButtonElement>('.web-service-open button')!;
+    button.focus(); await userEvent.keyboard('{Enter}'); await settle();
+    const tooltip = host.querySelector<HTMLElement>('[role=tooltip]')!;
+    expect(tooltip).toBeTruthy();
+    expect(getComputedStyle(tooltip).position).toBe('absolute');
+    expect(tooltip.hasAttribute('data-floe-local-interaction-surface')).toBe(true);
+    assertContained(tooltip, host);
+    expect(host.querySelector('.web-service-open .sr-only')?.textContent).toBe(reason);
+    await userEvent.keyboard('{Escape}'); await settle();
+    await userEvent.keyboard(' '); await settle();
+    expect(open).not.toHaveBeenCalled();
+    expect(host.querySelector('[role=tooltip]')).toBeTruthy();
+    setAvailable(true); await settle();
+    expect(button.getAttribute('aria-disabled')).toBeNull();
+    await userEvent.click(button);
+    expect(open).toHaveBeenCalledOnce();
+  });
 
   for (const width of [360, 480, 680, 1024]) it(`contains actionable cleanup details in a ${width}px surface inside a wide window`, async () => {
     await page.viewport(1440, 1000);

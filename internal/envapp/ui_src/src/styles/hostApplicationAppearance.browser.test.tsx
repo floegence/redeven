@@ -6,6 +6,7 @@ import floeCSS from '@floegence/floe-webapp-core/styles?raw';
 import viewerHTML from '../../../../codeapp/appserver/host_application_viewer/viewer.html?raw';
 import viewerCSS from '../../../../codeapp/appserver/host_application_viewer/viewer.css?raw';
 import appearanceCSS from '../../../../codeapp/appserver/host_application_viewer/appearance.generated.css?raw';
+import viewportJS from '../../../../codeapp/appserver/host_application_viewer/viewport.generated.js?raw';
 import catalogJS from '../../../../codeapp/appserver/host_application_viewer/catalog.generated.js?raw';
 import appearanceJS from '../../../../codeapp/appserver/host_application_viewer/appearance.js?raw';
 import connectionJS from '../../../../codeapp/appserver/host_application_viewer/connection.js?raw';
@@ -40,7 +41,7 @@ async function viewer(theme: string, locale = 'zh-CN', width = 420) {
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', locale).replaceAll('{{.Theme}}', theme).replaceAll('{{.Name}}', 'Text Editor')
     .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', appearanceCSS + '\n' + viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',backend:'macos',copy}))
-    .replace('{{.Script}}', [fixture, catalogJS, appearanceJS, connectionJS, toolbarJS, viewerJS].join('\n'));
+    .replace('{{.Script}}', [fixture, viewportJS, catalogJS, appearanceJS, connectionJS, toolbarJS, viewerJS].join('\n'));
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.state).toBe('active');
   const doc = frame.contentDocument!, view = frame.contentWindow!;
