@@ -171,7 +171,8 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
           if (!open) props.onClose();
         }}
         title={i18n.t('uiCopy.git.mergeBranch')}
-        description={i18n.t('uiCopy.git.mergeDescription', { branch: branchName(), target: currentRef() })}
+        bodyDescription={i18n.t('uiCopy.git.mergeDescription', { branch: branchName(), target: currentRef() })}
+        contentClass="p-0 [&>p]:px-4 [&>p]:pt-3 [&>p]:break-words"
         footer={(
           <div class={cn('border-t px-4 pt-3 pb-4 backdrop-blur', redevenDividerRoleClass('strong'), redevenSurfaceRoleClass('inset'), 'supports-[backdrop-filter]:bg-background/78')}>
             <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
@@ -210,7 +211,6 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
         class={cn(
           'flex max-w-none flex-col overflow-hidden rounded-md border border-border/60 p-0 shadow-xl',
           '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
-          '[&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:!overflow-hidden [&>div:last-child]:!p-0',
           layout.isMobile() ? 'w-[calc(100vw-0.5rem)] max-w-none' : 'w-[min(60rem,96vw)]',
         )}
       >

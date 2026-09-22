@@ -29,7 +29,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
           open={props.open}
           onOpenChange={props.onOpenChange}
           title={title()}
-          description={props.description}
+          bodyDescription={props.description}
           contentClass="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
           class={cn(
             "flex max-w-none flex-col overflow-hidden rounded-md p-0",

@@ -51,8 +51,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     props.open ? (
       <div data-testid="dialog" class={props.class}>
         <div>{props.title}</div>
-        <div>{props.description}</div>
-        <div>{props.children}</div>
+        <div class={props.contentClass}>{props.bodyDescription}{props.children}</div>
         <div>{props.footer}</div>
       </div>
     ) : null

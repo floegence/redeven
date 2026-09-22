@@ -75,7 +75,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
     <Show when={props.open}>
       <div data-testid="dialog" class={props.class}>
         <div>{props.title}</div>
-        <div>{props.description}</div>
+        <div>{props.bodyDescription}</div>
         <div>{props.children}</div>
         <div>{props.footer}</div>
       </div>

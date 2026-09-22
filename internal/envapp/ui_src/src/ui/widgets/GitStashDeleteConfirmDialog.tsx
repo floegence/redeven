@@ -82,7 +82,7 @@ export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogPr
         open={props.open}
         host={props.host ?? null}
         title={i18n.t('git.stashDelete.title')}
-        description={i18n.t('git.stashDelete.description')}
+        bodyDescription={i18n.t('git.stashDelete.description')}
         footer={footer}
         class="w-[min(28rem,calc(100%-1rem))]"
         onOpenChange={(open) => {
@@ -101,12 +101,12 @@ export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogPr
         if (!open) props.onClose();
       }}
       title={i18n.t('git.stashDelete.title')}
-      description={i18n.t('git.stashDelete.description')}
+      bodyDescription={i18n.t('git.stashDelete.description')}
+      contentClass="p-0 [&>p]:px-4 [&>p]:pt-3 [&>p]:break-words"
       footer={footer}
       class={cn(
         'flex max-w-none flex-col overflow-hidden rounded-md p-0',
         '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
-        '[&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:!overflow-hidden [&>div:last-child]:!p-0',
         layout.isMobile() ? 'w-[calc(100vw-0.5rem)] max-w-none' : 'w-[min(28rem,calc(100vw-2rem))]',
       )}
     >

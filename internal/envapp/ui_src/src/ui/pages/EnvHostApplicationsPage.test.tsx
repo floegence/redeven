@@ -296,6 +296,10 @@ it.each([true, false])('detaches sharing without quitting an existing or newly l
  const dialog = document.querySelector('[role="dialog"]')!;
  expect(dialog.textContent).toContain('Stop sharing');
  expect(dialog.textContent).toContain('Its windows and unsaved work will remain open on the Mac.');
+ const description = document.getElementById(dialog.getAttribute('aria-describedby')!)!;
+ expect(dialog.children[0].textContent).toBe('Stop sharing');
+ expect(dialog.children[1].contains(description)).toBe(true);
+ expect(dialog.children[1].children).toHaveLength(1);
  const confirm = [...dialog.querySelectorAll('button')].find(el => el.textContent === label)!;
  confirm.click(); await settle();
  expect(state.detach).toHaveBeenCalledWith('shared');

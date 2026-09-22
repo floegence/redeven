@@ -35,7 +35,7 @@ describe('EnvAppDrawer', () => {
         open
         onOpenChange={onOpenChange}
         title="Service templates"
-        description="Deploy a template"
+        bodyDescription="Deploy a template"
         footer={<button type="button">Footer action</button>}
       >
         <input aria-label="Template name" />

@@ -112,7 +112,7 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
           open={!!props.closeConfirmOpen}
           onOpenChange={(open) => props.onCloseConfirmChange?.(open)}
           title={i18n.t('filePreview.discardUnsavedTitle')}
-          description={props.closeConfirmMessage || i18n.t('filePreview.discardUnsavedDescription')}
+          bodyDescription={props.closeConfirmMessage || i18n.t('filePreview.discardUnsavedDescription')}
           confirmText={i18n.t('filePreview.discardChanges')}
           variant="destructive"
           onConfirm={() => void props.onConfirmDiscardClose?.()}
@@ -124,7 +124,7 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
           open={!!props.closeConfirmOpen}
           host={props.closeConfirmHost ?? null}
           title={i18n.t('filePreview.discardUnsavedTitle')}
-          description={props.closeConfirmMessage || i18n.t('filePreview.discardUnsavedDescription')}
+          bodyDescription={props.closeConfirmMessage || i18n.t('filePreview.discardUnsavedDescription')}
           footer={closeConfirmFooter}
           class="w-[min(30rem,calc(100%-1rem))]"
           onOpenChange={(open) => props.onCloseConfirmChange?.(open)}

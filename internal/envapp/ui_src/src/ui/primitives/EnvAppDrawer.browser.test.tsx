@@ -39,7 +39,7 @@ describe('EnvAppDrawer browser geometry', () => {
         open={open()}
         onOpenChange={setOpen}
         title="Service templates"
-        description="Deploy a service in the current Environment."
+        bodyDescription="Deploy a service in the current Environment."
       >
         <div class="p-1">
           <label class="block">
@@ -59,6 +59,9 @@ describe('EnvAppDrawer browser geometry', () => {
     expect(overlay).toBeTruthy();
     expect(boundary).toBeTruthy();
     expect(input).toBeTruthy();
+    const description = document.getElementById(panel!.getAttribute('aria-describedby')!)!;
+    expect(description.parentElement).toBe(panel!.querySelector('[data-floe-dialog-body]'));
+    expect(panel!.querySelector('[data-floe-dialog-header]')!.textContent).toBe('Service templates');
 
     const panelRect = panel!.getBoundingClientRect();
     const boundaryRect = boundary!.getBoundingClientRect();

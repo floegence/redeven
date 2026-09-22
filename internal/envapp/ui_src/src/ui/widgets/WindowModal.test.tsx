@@ -27,7 +27,7 @@ describe('WindowModal', () => {
         open
         host={host}
         title="Delete Stash"
-        description="Scoped to the current floating window."
+        bodyDescription="Scoped to the current floating window."
         onOpenChange={() => undefined}
       />
     ), document.createElement('div'));
@@ -37,6 +37,9 @@ describe('WindowModal', () => {
     const dialog = host.querySelector('[role="dialog"]') as HTMLDivElement | null;
     expect(dialog).toBeTruthy();
     expect(dialog?.textContent).toContain('Delete Stash');
+    const description = document.getElementById(dialog!.getAttribute('aria-describedby')!)!;
+    expect(dialog!.children[0].textContent).toBe('Delete Stash');
+    expect(dialog!.children[1].contains(description)).toBe(true);
     expect(document.body.querySelector('[role="dialog"]')).toBe(dialog);
   });
 
@@ -114,7 +117,7 @@ describe('WindowModal', () => {
           open={open()}
           host={host}
           title="Delete Stash"
-          description="Scoped to the current floating window."
+          bodyDescription="Scoped to the current floating window."
           onOpenChange={setHarnessOpen}
         >
           <button type="button">Confirm</button>

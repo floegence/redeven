@@ -47,6 +47,11 @@ try {
     await page.locator('#ssh-settings-label').waitFor();
     await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-floe-dialog-panel]')).opacity === '1');
     await settleMotion();
+    assert.equal(await dialog.locator('[data-floe-dialog-header] p').count(), 0);
+    assert.equal(await dialog.evaluate(panel => {
+      const description = document.getElementById(panel.getAttribute('aria-describedby'));
+      return description?.parentElement === panel.querySelector('[data-floe-dialog-body]');
+    }), true, 'environment identity stays in the body');
   }
   async function switchTab(name, { reducedMotion = false } = {}) {
     const frames = await page.evaluate(async name => {
@@ -150,7 +155,7 @@ try {
   await settleMotion();
   assert.equal(await tab('Access & security').getAttribute('aria-selected'), 'true');
   assert.equal(await tab('Access & security').evaluate(element => element === document.activeElement), true);
-  assert.equal(await page.getByRole('tabpanel').count(), 1);
+  assert.equal(await dialog.getByRole('tabpanel').count(), 1);
   assert.equal(await page.locator('#local-ui-port').inputValue(), '25000');
   assert.equal(await page.evaluate(() => window.settingsFixture.loads), 4, 'switching never reloads the access draft');
   await page.keyboard.press('Tab');

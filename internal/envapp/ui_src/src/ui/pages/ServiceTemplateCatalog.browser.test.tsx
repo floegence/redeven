@@ -138,7 +138,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
         class="service-template-explorer-drawer"
         bodyClass="h-full"
         title="Service templates"
-        description="Deploy a service in the current Environment."
+        bodyDescription="Deploy a service in the current Environment."
       >
         <div class="service-template-drawer-shell h-full min-h-0 p-1" data-view="catalog" data-testid="service-template-drawer">
           <ServiceTemplateCatalog
@@ -460,7 +460,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
           open={open()}
           onOpenChange={setOpen}
           title="Service templates"
-          description="Deploy a service in the current Environment."
+          bodyDescription="Deploy a service in the current Environment."
         >
           <ServiceTemplateCatalog
             category="host"

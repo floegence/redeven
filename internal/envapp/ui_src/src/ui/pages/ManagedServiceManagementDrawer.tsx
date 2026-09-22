@@ -271,7 +271,7 @@ export function ManagedServiceManagementDrawer(props: {
         if (!open) props.onClose();
       }}
       title={displayedService()?.name ?? text('title')}
-      description={text('title')}
+      bodyDescription={text('title')}
       class="service-management-panel"
       bodyClass="min-h-0"
       footer={<div class="service-management-footer" data-testid="service-management-footer">

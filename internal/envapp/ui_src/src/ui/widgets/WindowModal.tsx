@@ -32,7 +32,7 @@ export interface WindowModalProps {
   open: boolean;
   host?: HTMLElement | null;
   title: string;
-  description?: string;
+  bodyDescription?: string;
   footer?: JSX.Element;
   children?: JSX.Element;
   class?: string;
@@ -146,7 +146,7 @@ export function WindowModal(props: WindowModalProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            aria-describedby={props.description ? descriptionId : undefined}
+            aria-describedby={props.bodyDescription ? descriptionId : undefined}
             aria-hidden={modalPresence.exiting() ? 'true' : undefined}
             tabIndex={-1}
             data-floating-presence={modalPresence.state()}
@@ -160,13 +160,13 @@ export function WindowModal(props: WindowModalProps) {
           >
             <div data-floe-surface-divider class="border-b border-border/70 px-4 pt-4 pb-3">
               <div id={titleId} class="text-sm font-semibold text-foreground">{props.title}</div>
-              <Show when={props.description}>
-                <div id={descriptionId} class="mt-1 text-xs leading-5 text-muted-foreground">{props.description}</div>
-              </Show>
             </div>
 
-            <Show when={props.children}>
+            <Show when={props.bodyDescription || props.children}>
               <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('min-h-0 flex-1 overflow-auto', props.bodyClass)}>
+                <Show when={props.bodyDescription}>
+                  <p id={descriptionId} class="px-4 py-3 text-sm leading-5 text-muted-foreground">{props.bodyDescription}</p>
+                </Show>
                 {props.children}
               </div>
             </Show>

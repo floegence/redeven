@@ -16,6 +16,7 @@ export function EnvAppDrawer(props: EnvAppDrawerProps): JSX.Element {
     <FloeDialog
       {...props}
       class={cn('env-app-drawer-panel', props.class)}
+      contentClass={cn('flex min-h-0 flex-col', props.contentClass)}
       globalZIndex={ENV_APP_FLOATING_LAYER.productModal}
     >
       <div
@@ -27,7 +28,7 @@ export function EnvAppDrawer(props: EnvAppDrawerProps): JSX.Element {
       <div
         data-floe-dialog-surface-host="true"
         data-floe-surface-portal-layer="true"
-        class={cn('relative z-[1] min-h-0', props.bodyClass)}
+        class={cn('relative z-[1] min-h-0 flex-1', props.bodyClass)}
       >
         {props.children}
       </div>
