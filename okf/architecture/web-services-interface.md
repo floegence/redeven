@@ -9,6 +9,8 @@ timestamp: 2026-09-09T00:00:00Z
 
 The shared Web Services interface presents the service identity, current backend status, available action, and supporting facts in that order. Activity and Workbench use the same collection and management drawer. Content must remain readable and actionable at narrow surface widths, with long translations and enlarged text. Historical failures cannot replace observed state. Failed checks preserve previously loaded facts with a visible explanation; unavailable actions retain an actionable inspection path within existing permissions.
 
+Local inventory continuity follows [Env App resource snapshots](../ui/env-resource-cache.md); presentation restoration grants no lifecycle or route authority.
+
 # Contract
 
 ## Collection

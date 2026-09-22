@@ -14,6 +14,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Observation and target action events](architecture/observation-events.md) - Publish target action progress on the canonical Flower stream with target-scoped media.
 - [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.
 - [Env App session event transport](architecture/env-event-transport.md) - Shared session HTTP authority, bounded event observation, refresh availability, and cancellation.
+- [Env App resource snapshots](ui/env-resource-cache.md) - Restore authorized local inventories and refresh them without disrupting navigation or focus.
 - [Web Services interface](architecture/web-services-interface.md) - Read service status, open archives, and resolve exceptions in compact, accessible Activity and Workbench panels.
 - [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first opens, persisted proxy choice, and isolated Desktop loopback compatibility.
 - [Managed host application preparation](architecture/host-application-preparation.md) - Prepare native graphical support and recover interrupted setup without host configuration.

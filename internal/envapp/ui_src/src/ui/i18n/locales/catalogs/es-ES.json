@@ -6364,6 +6364,7 @@
     "macQuitDescription": "Se pedirá a la aplicación que cierre todas sus ventanas en este Mac y termine, incluidas las ventanas abiertas fuera de Redeven. Puede que la aplicación pida guardar los cambios; podrás cancelar la salida desde ella.",
     "macQuitViewerPending": "Se ha solicitado salir. Responde a cualquier diálogo para guardar en la aplicación. Si cancelas, permanecerá abierta.",
     "macQuitPending": "Abre la aplicación para responder a cualquier diálogo de guardado. Si cancelas la salida, seguirá abierta.",
+    "macQuitChanged": "La aplicación se ha reiniciado. Confirma de nuevo para cerrar el proceso actual.",
     "macQuitFailed": "No se ha podido confirmar el resultado de la solicitud de salida. Comprueba la aplicación antes de volver a intentarlo.",
     "macQuitRejected": "La aplicación no ha aceptado la solicitud de salida. Ábrela para comprobar si hay un diálogo pendiente y vuelve a intentarlo.",
     "macPicture": "Calidad de imagen",

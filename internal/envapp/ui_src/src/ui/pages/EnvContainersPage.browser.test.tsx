@@ -9,6 +9,7 @@ import { I18nProvider } from '../i18n';
 import { requestContainerResourceNavigation } from '../services/containerResourceNavigation';
 
 const browserHarness = vi.hoisted(() => ({
+  scope: '',
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
   listRuntimes: vi.fn(),
   listResources: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock('../widgets/ContainerExecTerminal', () => ({
 
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
+    resourceCacheScope: () => browserHarness.scope,
     env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
     goActivity: vi.fn(),
   }),
@@ -182,6 +184,7 @@ describe('native Containers responsive product surface', () => {
   let dispose: (() => void) | undefined;
 
   beforeEach(() => {
+    browserHarness.scope = '';
     document.documentElement.classList.add('dark');
     window.localStorage.clear();
     window.localStorage.setItem('redeven_ui_language_preference', 'en-US');
@@ -274,6 +277,27 @@ describe('native Containers responsive product surface', () => {
     expect(mounted.host.querySelector('[data-container-engine-state]')).toBeNull();
     expect(mounted.host.querySelector('[data-container-list-loading]')).toBeNull();
     expect(mounted.host.querySelector('[data-container-resource-table]')).not.toBeNull();
+  });
+
+  it('shares cached inventory across Activity and Workbench without losing row focus during refresh', async () => {
+    await page.viewport(1440, 900);
+    browserHarness.scope = `containers-${crypto.randomUUID()}`;
+    const first = mount('activity'); dispose = first.dispose;
+    await expect.poll(() => first.host.textContent).toContain('postgres-development');
+    await expect.poll(() => first.host.querySelector('header .animate-spin')).toBeNull();
+    first.dispose(); first.host.remove();
+    const runtimes = deferred<any[]>();
+    browserHarness.listRuntimes.mockReturnValue(runtimes.promise);
+    const second = mount('workbench'); dispose = second.dispose;
+    await expect.poll(() => second.host.textContent).toContain('postgres-development');
+    const row = [...second.host.querySelectorAll<HTMLElement>('tbody tr')].find(row => row.textContent?.includes('postgres-development'))!;
+    row.focus();
+    expect(document.activeElement).toBe(row);
+    expect(second.host.querySelector('[data-container-list-loading]')).toBeNull();
+    expect(second.host.querySelector('header .animate-spin')).not.toBeNull();
+    runtimes.resolve([{ endpoint_id: 'desktop-linux', engine: 'docker', state: 'ready' }]);
+    await expect.poll(() => second.host.querySelector('header .animate-spin')).toBeNull();
+    expect(row.isConnected).toBe(true); expect(document.activeElement).toBe(row);
   });
 
   it('keeps operation hover feedback inside the portaled drawer', async () => {
@@ -758,6 +782,7 @@ describe('native Containers responsive product surface', () => {
     expect(skeleton.querySelector('.container-detail-header')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(110);
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
 
+    await expect.poll(() => resolveImages).toBeTypeOf('function');
     resolveImages?.([{ id: 'sha256:image-1', reference: 'example/api:latest', referenced_containers: 0 }]);
     await settle();
     expect(root.querySelector('[data-container-detail-loading]')).toBeNull();

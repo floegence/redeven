@@ -3,9 +3,10 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ full: true, running: vi.fn(), quit: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
+const state = vi.hoisted(() => ({ cacheScope: '', full: true, running: vi.fn(), quit: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
+  resourceCacheScope: () => state.cacheScope,
   env_id: () => 'host', localRuntime: () => ({}),
 }) }));
 vi.mock('../services/hostApplicationsApi', async importOriginal => ({ ...await importOriginal<object>(), cancelHostApplicationSetup: state.setupCancel, uploadHostApplicationSetup: state.setupUpload, getHostApplicationSetup: state.setupStatus, startHostApplicationSetup: state.setupStart, observeHostApplicationSetup: state.setupObserve, listHostApplications: state.catalog, listRunningHostApplications: state.running, quitHostApplication: state.quit, detachHostApplication: state.detach, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, stopHostApplication: state.stop, addHostApplication: state.add, requestHostApplicationPermission: state.permission }));
@@ -20,7 +21,7 @@ let dispose: (() => void) | undefined;
 const settle = () => new Promise(resolve => setTimeout(resolve, 30));
 function button(label: string) { return [...host.querySelectorAll('button')].find(el => el.getAttribute('aria-label') === label)!; }
 beforeEach(() => {
-  vi.clearAllMocks(); state.full = true; state.localMac = false;
+  vi.clearAllMocks(); state.cacheScope = ''; state.full = true; state.localMac = false;
   state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
   state.sessions.mockResolvedValue([{ id: 'session', application: app, state: 'running', forward }]);
   state.launch.mockResolvedValue({ id: 'session', application: app, state: 'starting', forward });
@@ -40,12 +41,13 @@ describe('host application interaction', () => {
   it('opens the authorized forward in a Desktop window and resumes a running session', async () => {
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
     expect(state.catalog).toHaveBeenCalledTimes(1);
+    state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: await state.sessions() });
+    state.sessions.mockClear();
     button('Open in new window · Text Editor').click(); await settle();
     expect(state.launch).toHaveBeenCalledWith('editor.desktop', 'en-US', expect.objectContaining({ starting: 'Starting application…' }), 'stream');
     expect(state.open).toHaveBeenCalledWith(expect.anything(), 'one', 'http://127.0.0.1:40201', 'unified_proxy', '/_redeven_host_app/', true, expect.any(Function), expect.anything(), null, 'application');
     expect(host.textContent).toContain('Running applications');
-    expect(state.catalog).toHaveBeenCalledTimes(1);
-    expect(state.sessions).toHaveBeenCalledTimes(1);
+    expect(state.catalog).toHaveBeenCalledTimes(2);
     button('Resume · Text Editor').click(); await settle();
     expect(state.launch).toHaveBeenCalledTimes(2);
   });
@@ -400,7 +402,10 @@ describe('macOS running application management', () => {
     state.localMac = true;
     state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: false, native_ready: true }, applications: [app], sessions: [], running: [] });
     state.running.mockResolvedValue([instance]);
-    state.launch.mockResolvedValue({ id: 'native', application: app, state: 'opened', mode: 'native' });
+    state.launch.mockImplementation(async () => {
+      state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: false, native_ready: true }, applications: [app], sessions: [], running: [instance] });
+      return { id: 'native', application: app, state: 'opened', mode: 'native' };
+    });
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
     button('Open in new window · Text Editor').click(); await settle();
     expect(button('Quit application · Text Editor')).toBeDefined();
@@ -414,7 +419,7 @@ describe('macOS running application management', () => {
     window.dispatchEvent(new Event('focus')); await settle();
     expect(document.activeElement).toBe(quit);
   });
-  it('does not retarget an open confirmation after a process restarts', async () => {
+  it('requires another confirmation before quitting a replacement process', async () => {
     runningCatalog();
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
     button('Quit application · Text Editor').click(); await settle();
@@ -423,8 +428,10 @@ describe('macOS running application management', () => {
     state.quit.mockRejectedValue(new Error('Connection lost after dispatch'));
     const dialog = document.querySelector('[role="dialog"]')!;
     [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Quit application')!.click(); await settle();
-    expect(state.quit).toHaveBeenCalledWith(app.id, instance.instances);
-    expect(dialog.textContent).toContain('The quit request could not be confirmed.');
+    expect(state.quit).not.toHaveBeenCalled();
+    expect(dialog.textContent).toContain('The application restarted. Confirm again');
+    [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Quit application')!.click(); await settle();
+    expect(state.quit).toHaveBeenCalledWith(app.id, ['replacement']);
     expect(host.querySelector('.host-app-quit-notice')).toBeNull();
   });
   it('disables quit for read-only users', async () => {
@@ -443,4 +450,29 @@ it('does not stop a server-reused session when opening its viewer fails with a s
  expect(state.stop).not.toHaveBeenCalled();
  expect(state.detach).not.toHaveBeenCalled();
  expect(host.textContent).toContain('The application could not be opened.');
+});
+
+
+it('restores the successful application list on remount while inventory refresh is pending', async () => {
+  state.cacheScope = 'host-remount-continuity';
+  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+  expect(host.textContent).toContain('Text Editor');
+  dispose(); dispose = undefined;
+  state.catalog.mockReturnValue(new Promise(() => {}));
+  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+  expect(host.textContent).toContain('Text Editor');
+  expect(host.querySelector('.host-apps-skeleton')).toBeNull();
+  expect(host.querySelector('header button .animate-spin')).not.toBeNull();
+});
+
+it('does not launch a cached application that disappears during the current refresh', async () => {
+  state.cacheScope = 'removed-application';
+  dispose = render(() => <EnvHostApplicationsPage />, host); await settle(); dispose();
+  let resolve!: (value: unknown) => void;
+  state.catalog.mockReturnValue(new Promise(done => { resolve = done; }));
+  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+  button('Open in new window · Text Editor').click(); await settle();
+  expect(state.launch).not.toHaveBeenCalled();
+  resolve({ availability: { ready: true, supported: true }, applications: [], sessions: [] }); await settle();
+  expect(state.launch).not.toHaveBeenCalled();
 });

@@ -6364,6 +6364,7 @@
     "macQuitDescription": "Isso solicita que o aplicativo encerre e feche todas as suas janelas neste Mac, incluindo as abertas fora do Redeven. O aplicativo pode pedir para salvar as alterações; você poderá cancelar o encerramento nele.",
     "macQuitViewerPending": "A saída foi solicitada. Responda às solicitações para salvar no aplicativo. Se cancelar, ele permanecerá aberto.",
     "macQuitPending": "Abra o aplicativo para responder a qualquer diálogo de salvamento. Se você cancelar o encerramento, ele continuará aberto.",
+    "macQuitChanged": "O aplicativo foi reiniciado. Confirme novamente para encerrar o processo atual.",
     "macQuitFailed": "Não foi possível confirmar o resultado da solicitação de encerramento. Verifique o aplicativo antes de tentar novamente.",
     "macQuitRejected": "O aplicativo não aceitou a solicitação de encerramento. Abra-o para verificar se há um diálogo pendente e tente novamente.",
     "macPicture": "Qualidade de imagem",

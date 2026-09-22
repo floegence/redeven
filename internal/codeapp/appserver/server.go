@@ -2496,6 +2496,10 @@ func isRenderableMime(ct string) bool {
 }
 
 func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ui-cache-scope" {
+		g.handleUICacheScope(w, r)
+		return
+	}
 	if g.handleHostApplicationsAPI(w, r) {
 		return
 	}

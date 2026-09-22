@@ -1,3 +1,4 @@
+import { createEnvResourceCacheScope } from './services/envResourceCache';
 import { isSessionEventAuthorizationError } from './services/sessionHTTP';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
 import { ActivityPageLoading } from './primitives/ActivityPageLoading';
@@ -932,6 +933,13 @@ export function EnvAppShell() {
     environmentDetailRequest,
     (request) => (request ? getEnvironment(request) : null),
   );
+
+  const resourceCacheScope = createEnvResourceCacheScope({
+    environment: envId,
+    readable: () => Boolean(env()?.permissions?.can_read),
+    locked: accessGateVisible,
+    connection: () => protocol.status() === 'connected' ? protocol.session?.() : null,
+  });
 
   const [manualError, setManualError] = createSignal<string | null>(null);
   const [runtimeConnectionEstablished, setRuntimeConnectionEstablished] = createSignal(false);
@@ -5142,6 +5150,7 @@ export function EnvAppShell() {
   return (
     <EnvContext.Provider
       value={{
+        resourceCacheScope,
         flowerDraftCoordinator,
         aiReadinessController,
         env_id: envId,

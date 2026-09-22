@@ -28,6 +28,7 @@ const notificationMocks = vi.hoisted(() => ({
 }));
 
 const envContextMocks = vi.hoisted(() => ({
+  resourceCacheScope: (): string => '',
   env_id: () => 'env_demo',
   goActivity: vi.fn(),
   env: Object.assign(
@@ -958,6 +959,7 @@ describe('EnvPortForwardsPage', () => {
   let host: HTMLDivElement;
 
   beforeEach(() => {
+    envContextMocks.resourceCacheScope = () => '';
     vi.restoreAllMocks();
     notificationMocks.success.mockReset();
     notificationMocks.error.mockReset();
@@ -1023,6 +1025,38 @@ describe('EnvPortForwardsPage', () => {
     host.remove();
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+  });
+
+  it('restores saved services on remount while the network is pending', async () => {
+    envContextMocks.resourceCacheScope = () => 'web-services-remount';
+    let dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage();
+      expect(host.textContent).toContain('Demo Forward');
+      dispose();
+      localApiMocks.fetchLocalApiJSON.mockReturnValue(new Promise(() => {}));
+      dispose = render(() => <EnvPortForwardsPage />, host);
+      await flushPage();
+      expect(host.textContent).toContain('Demo Forward');
+      expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
+    } finally { dispose(); }
+  });
+
+  it('loads current saved configuration before editing a cached service', async () => {
+    envContextMocks.resourceCacheScope = () => 'web-edit-current';
+    let dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage();
+      dispose();
+      const refresh = deferred<{ forwards: any[] }>();
+      localApiMocks.fetchLocalApiJSON.mockImplementation((url: string) => url.endsWith('/forwards') ? refresh.promise : Promise.resolve({ services: [], templates: [] }));
+      dispose = render(() => <EnvPortForwardsPage />, host); await flushPage();
+      host.querySelector<HTMLButtonElement>('button[aria-label="Demo Forward: Edit service details"]')!.click(); await flushPage();
+      expect(document.querySelector('#web-service-metadata-target')).toBeNull();
+      refresh.resolve({ forwards: [{ forward_id: 'forward-1', name: 'Demo Forward', description: '', target_url: 'http://localhost:3000/current?token=current-value', health: { status: 'unknown' } }] });
+      await flushPage();
+      expect(document.querySelector<HTMLInputElement>('#web-service-metadata-target')?.value).toContain('?token=current-value');
+    } finally { dispose(); }
   });
 
   it('delays the quiet card skeleton for the initial web services request', async () => {

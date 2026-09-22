@@ -131,6 +131,7 @@ export const enUS = defineDictionary({
     "macQuitDescription": "This asks the application to quit and close all of its windows on this Mac, including windows opened outside Redeven. The application may ask you to save changes; you can cancel there.",
     "macQuitViewerPending": "Quit requested. Respond to any save dialog in the application. Cancelling keeps it open.",
     "macQuitPending": "Open the application to respond to any save dialog. If you cancel quitting, it stays open.",
+    "macQuitChanged": "The application restarted. Confirm again to quit its current process.",
     "macQuitFailed": "The quit request could not be confirmed. Check the application before trying again.",
     "macQuitRejected": "The application did not accept the quit request. Open it to check for a dialog, then try again.",
     "macPicture": "Picture quality",

@@ -2,11 +2,18 @@ import '../../index.css';
 
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 
-import { ForwardMetadataDialog, ManagedReleaseCandidates, ManagedServiceRow as ManagedServiceRowComponent, ManagedTemplateNotices, PortForwardRow } from './EnvPortForwardsPage';
+import { EnvPortForwardsPage, ForwardMetadataDialog, ManagedReleaseCandidates, ManagedServiceRow as ManagedServiceRowComponent, ManagedTemplateNotices, PortForwardRow } from './EnvPortForwardsPage';
 import type { ManagedOperation } from './managedServiceOperationController';
+
+const cacheBrowser = vi.hoisted(() => ({ scope: '', fetch: vi.fn() }));
+vi.mock('./EnvContext', () => ({ useEnvContext: () => ({ resourceCacheScope: () => cacheBrowser.scope, env_id: () => 'browser-web', goActivity: vi.fn(), env: Object.assign(() => ({ permissions: { can_read: true, can_write: true, can_execute: true } }), { state: 'ready' }) }) }));
+vi.mock('../services/localApi', async original => ({ ...await original<object>(), fetchLocalApiJSON: cacheBrowser.fetch }));
+vi.mock('@floegence/floe-webapp-core', async original => ({ ...await original<object>(), useNotification: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock('@floegence/floe-webapp-protocol', () => ({ useProtocol: () => ({ session: () => null }) }));
+vi.mock('../protocol/redeven_v1', () => ({ useRedevenRpc: () => ({ fs: { list: vi.fn() } }) }));
 
 function ManagedServiceRow(props: Omit<Parameters<typeof ManagedServiceRowComponent>[0], 'operationExpanded' | 'onOperationExpandedChange'>) {
   const [expanded, setExpanded] = createSignal(false);
@@ -43,6 +50,30 @@ describe('EnvPortForwardsPage browser presentation', () => {
     dispose = undefined;
     document.body.replaceChildren();
     document.documentElement.classList.remove('dark');
+  });
+
+  it('restores saved services from IndexedDB and refreshes without waiting for templates or replacing focused rows', async () => {
+    const { createResourceCache, createIndexedDBResourceCacheStorage } = await import('@floegence/floe-webapp-core/resource-cache');
+    const { forwardSnapshot } = await import('../services/envResourceSnapshots');
+    cacheBrowser.scope = `web-${crypto.randomUUID()}`;
+    const forward = { forward_id: 'cached-web', name: 'Saved web service', description: '', target_url: 'http://localhost:3000', health_path: '', insecure_skip_verify: false, health: { status: 'unknown' as const, last_checked_at_unix_ms: 0, latency_ms: 0, last_error: '' }, created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: 1 };
+    const writer = createResourceCache({ storage: createIndexedDBResourceCacheStorage('redeven-resource-cache') });
+    writer.resource({ scope: cacheBrowser.scope, key: 'web-service-forwards', version: 1, decode: forwardSnapshot }).set([forward]);
+    await writer.flush(); writer.dispose();
+    let resolve!: (value: unknown) => void;
+    const pending = new Promise(done => { resolve = done; });
+    cacheBrowser.fetch.mockImplementation((url: string) => url.endsWith('/forwards') ? pending : url.endsWith('/catalog') ? new Promise(() => {}) : Promise.resolve({ services: [] }));
+    const host = document.createElement('div'); document.body.append(host);
+    dispose = render(() => <EnvPortForwardsPage />, host);
+    await expect.poll(() => host.textContent).toContain('Saved web service');
+    expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
+    const row = host.querySelector<HTMLElement>('[data-forward-id]') ?? host.querySelector<HTMLElement>('.web-service-row');
+    expect(row).not.toBeNull();
+    const button = row!.querySelector<HTMLButtonElement>('button')!; button.focus();
+    resolve({ forwards: [{ ...forward, name: 'Updated web service' }] });
+    await expect.poll(() => row?.textContent).toContain('Updated web service');
+    expect(row!.isConnected).toBe(true); expect(document.activeElement).toBe(button);
+    expect(host.querySelector('[aria-label="Refresh"] .animate-spin')).toBeNull();
   });
 
   it('keeps the editable service URL and save action usable at narrow width', async () => {

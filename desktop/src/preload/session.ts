@@ -1,3 +1,4 @@
+import { bootstrapDesktopResourceCacheBridge } from './desktopResourceCache';
 import { bootstrapDesktopTemplateSources } from './desktopTemplateSources';
 /// <reference lib="dom" />
 
@@ -26,3 +27,5 @@ bootstrapDesktopUpdateBridge();
 bootstrapDesktopTemplateSources();
 
 bootstrapBrowserPackageBridge();
+
+bootstrapDesktopResourceCacheBridge();

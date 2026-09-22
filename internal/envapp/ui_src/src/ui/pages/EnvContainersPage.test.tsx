@@ -5,6 +5,7 @@ import { Show } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const harness = vi.hoisted(() => ({
+  cacheScope: '',
   permissions: {
     can_read: true,
     can_write: true,
@@ -177,6 +178,7 @@ vi.mock('./EnvContext', async () => {
   harness.setEnvironment = setEnvironment;
   return {
     useEnvContext: () => ({
+      resourceCacheScope: () => harness.cacheScope,
       env: environment,
       goActivity: harness.goActivity,
     }),
@@ -251,6 +253,7 @@ describe('native Containers page', () => {
   let dispose: (() => void) | undefined;
 
   beforeEach(() => {
+    harness.cacheScope = '';
     Object.assign(harness.permissions, {
       can_read: true,
       can_write: true,
@@ -341,6 +344,20 @@ describe('native Containers page', () => {
     dispose?.();
     dispose = undefined;
     document.body.textContent = '';
+  });
+
+  it('restores inventory on remount while runtime discovery is pending', async () => {
+    harness.cacheScope = 'container-remount';
+    const host = document.createElement('div'); document.body.appendChild(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+    expect(host.textContent).toContain('Managed API');
+    dispose();
+    harness.listRuntimes.mockReturnValue(new Promise(() => {}));
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+    expect(host.textContent).toContain('Managed API');
+    expect(host.querySelector('[data-icon="refresh"]')?.className).toContain('animate-spin');
   });
 
   it('renders desktop table and mobile cards from one endpoint-scoped inventory', async () => {
@@ -1787,7 +1804,38 @@ describe('native Containers page', () => {
     expect(host.querySelector('[data-container-exec-terminal]')?.getAttribute('data-session-id')).toBe('exec-session-retry');
   });
 
-  it('clears stale inventory and presents refresh failure recovery', async () => {
+  it('updates successful engines independently and retains failed target inventories', async () => {
+    harness.listRuntimes.mockResolvedValue([
+      { engine: 'docker', state: 'ready', endpoint_id: 'docker-one' },
+      { engine: 'podman', state: 'ready', endpoint_id: 'podman-one' },
+    ]);
+    harness.listResources.mockImplementation(async (_view, engine) => [{ container_id: engine, name: `${engine}-old`, state: 'running' }]);
+    const host = document.createElement('div'); document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host); await settle();
+    const delayed = deferred<any[]>();
+    harness.listResources.mockImplementation((_view, engine) => engine === 'docker'
+      ? Promise.resolve([{ container_id: 'docker', name: 'docker-new', state: 'running' }]) : delayed.promise);
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.actions.refresh"]')!.click(); await settle();
+    expect(host.textContent).toContain('docker-new'); expect(host.textContent).toContain('podman-old');
+    delayed.reject(new Error('podman offline')); await settle();
+    expect(host.textContent).toContain('docker-new'); expect(host.textContent).toContain('podman-old');
+    expect(host.textContent).toContain('podman offline');
+  });
+
+  it('clears cached inventory immediately on permission denial while another target is pending', async () => {
+    harness.cacheScope = 'container-permission-revocation';
+    harness.listRuntimes.mockResolvedValue([{ engine: 'docker', state: 'ready', endpoint_id: 'one' }, { engine: 'podman', state: 'ready', endpoint_id: 'two' }]);
+    const host = document.createElement('div'); document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host); await settle();
+    expect(host.textContent).toContain('Managed API');
+    harness.listResources.mockImplementation((_view, engine) => engine === 'docker'
+      ? Promise.reject(new LocalApiError({ status: 403, message: 'denied' })) : new Promise(() => {}));
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.actions.refresh"]')!.click(); await settle();
+    expect(host.textContent).not.toContain('Managed API');
+    expect(host.querySelector('[data-container-engine-state="permission"]')).not.toBeNull();
+  });
+
+  it('retains inventory and presents refresh failure recovery', async () => {
     const host = document.createElement('div');
     document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host);
@@ -1798,9 +1846,9 @@ describe('native Containers page', () => {
     refresh?.click();
     await settle();
 
-    expect(host.querySelector('[data-container-engine-state="unavailable"]')?.textContent).toContain('containers.runtimeStates.error');
-    expect(host.textContent).not.toContain('Managed API');
-    expect(host.querySelector('[data-container-resource-table]')).toBeNull();
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('engine temporarily unavailable');
+    expect(host.textContent).toContain('Managed API');
+    expect(host.querySelector('[data-container-resource-table]')).not.toBeNull();
   });
 
   it('shows real operation phases and errors in the Operations drawer', async () => {

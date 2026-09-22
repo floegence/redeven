@@ -4,13 +4,14 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ locale: 'en-US' as 'en-US' | 'zh-CN', detach: vi.fn() }));
+const state = vi.hoisted(() => ({ locale: 'en-US' as 'en-US' | 'zh-CN', scope: '', catalog: vi.fn(), detach: vi.fn() }));
 vi.mock('../i18n', async () => {
   const { createTestI18nHelpers } = await import('../i18n/locales/testDictionaries');
   return { useI18n: () => ({ ...createTestI18nHelpers(state.locale), locale: () => state.locale }) };
 });
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
+  resourceCacheScope: () => state.scope,
   env_id: () => 'host', localRuntime: () => ({}),
 }) }));
 vi.mock('../services/hostApplicationsApi', async importOriginal => {
@@ -18,7 +19,7 @@ vi.mock('../services/hostApplicationsApi', async importOriginal => {
   const session = { id: 'shared', application: app, state: 'running', backend: 'macos' };
   return {
     ...await importOriginal<object>(),
-    listHostApplications: async () => ({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [session], running: [{ application_id: app.id, instances: ['instance'] }] }),
+    listHostApplications: async () => state.catalog.getMockImplementation() ? state.catalog() : ({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [session], running: [{ application_id: app.id, instances: ['instance'] }] }),
     listHostApplicationSessions: async () => [session],
     listRunningHostApplications: async () => [{ application_id: app.id, instances: ['instance'] }],
     detachHostApplication: state.detach,
@@ -29,7 +30,7 @@ let dispose: (() => void) | undefined;
 afterEach(async () => {
   dispose?.();
   document.body.replaceChildren();
-  state.detach.mockClear();
+  state.detach.mockClear(); state.catalog.mockReset(); state.scope = "";
   await page.viewport(1280, 720);
 });
 
@@ -62,3 +63,28 @@ it.each([390, 1440].flatMap(width => (['en-US', 'zh-CN'] as const).map(locale =>
     expect(state.detach).not.toHaveBeenCalled();
   },
 );
+
+it('restores a persisted directory and icon before the network, preserving row focus through an update', async () => {
+  const { createResourceCache, createIndexedDBResourceCacheStorage } = await import('@floegence/floe-webapp-core/resource-cache');
+  const { hostApplicationSnapshot } = await import('../services/envResourceSnapshots');
+  state.locale = 'en-US'; state.scope = `browser-host-${crypto.randomUUID()}`;
+  const application = { id: 'persisted-editor', name: 'Persisted Editor', description: '', categories: [], icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', custom: false };
+  const snapshot = { availability: { supported: true, ready: true }, applications: [application], sessions: [] };
+  const writer = createResourceCache({ storage: createIndexedDBResourceCacheStorage('redeven-resource-cache') });
+  writer.resource({ scope: state.scope, key: 'host-applications:en-US', version: 1, decode: hostApplicationSnapshot }).set(snapshot);
+  await writer.flush(); writer.dispose();
+  let resolve!: (value: unknown) => void;
+  state.catalog.mockReturnValue(new Promise(done => { resolve = done; }));
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <EnvHostApplicationsPage />, host);
+  await expect.poll(() => host.querySelector('.host-app-tile')?.textContent).toContain('Persisted Editor');
+  expect(host.querySelector('.host-apps-skeleton')).toBeNull();
+  expect(host.querySelector('header .animate-spin')).not.toBeNull();
+  expect(host.querySelector<HTMLImageElement>('.host-app-tile img')?.src).toBe(application.icon);
+  const row = host.querySelector<HTMLButtonElement>('.host-app-tile')!; row.focus();
+  resolve({ ...snapshot, applications: [{ ...application, name: 'Updated Editor' }] });
+  await expect.poll(() => row.textContent).toContain('Updated Editor');
+  expect(host.querySelector('.host-app-tile')).toBe(row);
+  expect(document.activeElement).toBe(row);
+  expect(host.querySelector('header .animate-spin')).toBeNull();
+});
