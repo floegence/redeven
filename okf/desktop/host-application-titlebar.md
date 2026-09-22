@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Desktop host application titlebar
 description: Place host application controls alongside native window buttons without adding connection latency.
 tags: [desktop, host-applications, ui]
-timestamp: 2026-09-22T09:50:25Z
+timestamp: 2026-09-22T10:08:44Z
 ---
 # Summary
 
@@ -14,8 +14,11 @@ The Redeven bootstrap owns host application toolbar presentation; macOS capture 
 The first-party host-application bootstrap places its controls in one 40-pixel
 Desktop titlebar, alongside platform-owned traffic lights or caption buttons.
 It uses the existing Desktop chrome contract for left/right safe areas and
-fullscreen transitions. Empty header space drags the window; buttons and popovers
-explicitly reject dragging. Capture pixels begin below this row and are never
+fullscreen transitions. Empty header space drags the window when no toolbar
+popover is open; buttons and popovers explicitly reject dragging. While a popover
+is open, the header temporarily receives pointer input so an outside click can
+dismiss it instead of being consumed by native window dragging. Dismissal restores
+native dragging immediately. Capture pixels begin below this row and are never
 covered by it. Browser popups retain their browser frame and use a 46-pixel
 in-page application toolbar.
 
@@ -24,13 +27,18 @@ close-current-window and confirmed quit. Destructive controls use compact icons
 with explicit accessible names and tooltips. Labels collapse at narrow widths;
 window titles truncate without consuming space reserved for OS controls. Menus
 stay inside the viewport and support keyboard navigation. Escape dismisses the
-popover and restores focus to its trigger. Clicking application content dismisses
-any open toolbar popover without cancelling, replaying or redirecting the click,
+popover and restores focus to its trigger. Only the open popover and its own
+trigger belong to its interaction boundary, never the entire header. Clicking
+header padding, gaps, separators, a noninteractive application identity or
+application content dismisses any open toolbar popover without cancelling,
+replaying or redirecting the click,
 or restoring toolbar focus. This applies both to macOS capture content and the
 same-origin Xpra document, including after reconnection. Content input handlers
 that stop event propagation must not prevent dismissal; moving keyboard focus
-into application content also dismisses the popover. Interacting inside a popover
-retains its normal control behavior. Loading, disconnected and completed Desktop documents
+outside the popover and its trigger also dismisses it. Clicking the active trigger
+closes it once; clicking a different trigger replaces it with that trigger's
+popover. Interacting inside a popover retains its normal control behavior.
+Loading, disconnected and completed Desktop documents
 retain the titlebar with unavailable controls disabled. Preparation and local
 connection-failure documents retain a scriptless draggable title.
 

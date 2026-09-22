@@ -98,6 +98,28 @@ async function run() {
     assert(geometry.left >= (process.platform === 'darwin' ? 84 : 16));
     assert.deepEqual(geometry.bridge.sort(), ['request', 'subscribe']);
     assert.equal(geometry.childBridge, 'undefined');
+    const dragRegion = () => evaluate(`getComputedStyle(document.querySelector('.mac-app-toolbar')).getPropertyValue('app-region')`);
+    assert.equal(await dragRegion(), 'drag');
+    for (const toggle of ['.mac-app-controls-toggle', '.mac-app-windows-toggle', '.mac-app-quit']) {
+      for (const outside of ['.mac-app-toolbar-spacer', '.mac-app-toolbar-separator', '.host-app-identity']) {
+        await click(toggle);
+        await wait(`!document.querySelector('.mac-app-popover').hidden`);
+        assert.equal(await dragRegion(), 'no-drag');
+        await click(outside);
+        await wait(`document.querySelector('.mac-app-popover').hidden`);
+        assert.equal(await evaluate(`document.querySelector(${JSON.stringify(toggle)}).getAttribute('aria-expanded')`), 'false');
+        assert.equal(await dragRegion(), 'drag');
+      }
+    }
+    assert.equal(await evaluate(`document.querySelector('#application').contentWindow.operations.length`), 0);
+    await click('.mac-app-controls-toggle');
+    await wait(`!document.querySelector('.mac-app-popover').hidden`);
+    await click('.mac-app-windows-toggle');
+    await wait(`!document.querySelector('.mac-app-popover').hidden && document.querySelector('.mac-app-popover').dataset.section==='windows'`);
+    await click('.mac-app-windows-toggle');
+    await wait(`document.querySelector('.mac-app-popover').hidden`);
+    assert.equal(await dragRegion(), 'drag');
+    console.log('Titlebar header acceptance passed: outside click, trigger switching and restored native drag region');
     // Native input must cross the iframe boundary, dismiss the toolbar, and
     // still reach the application exactly once, including after reconnection.
     for (const reconnect of [false, true]) {

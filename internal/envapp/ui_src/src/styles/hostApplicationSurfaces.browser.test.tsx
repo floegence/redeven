@@ -314,11 +314,16 @@ it.each([
     expect(bounds.top).toBeGreaterThanOrEqual(0); expect(bounds.bottom).toBeLessThanOrEqual(40);
   }
   expect(doc.querySelector('#application')!.getBoundingClientRect().top).toBe(40);
+  expect(view.getComputedStyle(toolbar).getPropertyValue('app-region')).toBe('drag');
   const picture=doc.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
   picture.disabled=false; picture.click();
   const popover=doc.querySelector<HTMLElement>('.mac-app-popover')!;
   await Promise.all(popover.getAnimations().map(animation=>animation.finished));
+  expect(view.getComputedStyle(toolbar).getPropertyValue('app-region')).toBe('no-drag');
   expect(popover.getBoundingClientRect().top).toBeGreaterThanOrEqual(40);
   expect(popover.getBoundingClientRect().right).toBeLessThanOrEqual(width-8);
   expect(view.getComputedStyle(picture).cursor).toBe('pointer');
+  toolbar.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true}));
+  expect(popover.hidden).toBe(true);
+  expect(view.getComputedStyle(toolbar).getPropertyValue('app-region')).toBe('drag');
 });

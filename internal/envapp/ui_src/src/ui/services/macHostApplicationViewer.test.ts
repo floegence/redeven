@@ -546,12 +546,14 @@ it('dismisses on outside input before a target can stop event propagation', asyn
 it.each(['.mac-app-menu-toggle', '.mac-app-windows-toggle', '.mac-app-controls-toggle', '.mac-app-quit'])(
   'dismisses %s while delivering a canvas click once and keeping application focus', async selector => {
     const v = await viewer(); await v.activate();
+    v.socket().message({type:'windows', windows:[{id:'owned', title:'Document'}]});
     const doc = dom.window.document;
     const canvas = doc.querySelector('canvas')!;
     Object.assign(canvas, {setPointerCapture:vi.fn(), hasPointerCapture:() => false});
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({left:0, top:46, width:640, height:480} as DOMRect);
     const toggle = doc.querySelector<HTMLButtonElement>(selector)!;
     toggle.click();
+    expect(doc.querySelector<HTMLElement>('.mac-app-popover')!.hidden).toBe(false);
     v.socket().send.mockClear();
     for (const type of ['pointerdown', 'pointerup']) {
       canvas.dispatchEvent(new dom.window.MouseEvent(type, {bubbles:true, cancelable:true, clientX:320, clientY:286}));
@@ -568,6 +570,49 @@ it.each(['.mac-app-menu-toggle', '.mac-app-windows-toggle', '.mac-app-controls-t
 
 
 describe('fixed application toolbar', () => {
+  it.each(['.mac-app-controls', '.mac-app-toolbar', '.mac-app-toolbar-spacer', '.mac-app-toolbar-separator'])(
+    'dismisses popovers on %s input without sending an application command', async selector => {
+      const v = await viewer(); await v.activate();
+      v.socket().message({type:'windows', windows:[{id:'owned', title:'Document'}]});
+      const doc = dom.window.document;
+      const popover = doc.querySelector<HTMLElement>('.mac-app-popover')!;
+      for (const section of ['.mac-app-menu-toggle', '.mac-app-windows-toggle', '.mac-app-controls-toggle', '.mac-app-quit']) {
+        const toggle = doc.querySelector<HTMLButtonElement>(section)!;
+        toggle.click();
+        v.socket().send.mockClear();
+        expect(popover.hidden).toBe(false);
+        const event = new dom.window.Event('pointerdown', {bubbles:true, cancelable:true});
+        doc.querySelector(selector)!.dispatchEvent(event);
+        expect(popover.hidden).toBe(true);
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        expect(event.defaultPrevented).toBe(false);
+        expect(v.socket().send).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it('preserves active-trigger toggling and switches popovers on another trigger', async () => {
+    const v = await viewer(); await v.activate();
+    v.socket().message({type:'windows', windows:[{id:'owned', title:'Document'}]});
+    const doc = dom.window.document;
+    const picture = doc.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
+    const windows = doc.querySelector<HTMLButtonElement>('.mac-app-windows-toggle')!;
+    const popover = doc.querySelector<HTMLElement>('.mac-app-popover')!;
+    picture.click();
+    picture.querySelector('svg')!.dispatchEvent(new dom.window.Event('pointerdown', {bubbles:true}));
+    picture.focus(); picture.click();
+    expect(popover.hidden).toBe(true);
+    picture.click();
+    windows.dispatchEvent(new dom.window.Event('pointerdown', {bubbles:true}));
+    expect(popover.hidden).toBe(true);
+    windows.focus(); windows.click();
+    expect(popover.hidden).toBe(false);
+    expect(popover.dataset.section).toBe('windows');
+    expect(picture.getAttribute('aria-expanded')).toBe('false');
+    picture.focus();
+    expect(popover.hidden).toBe(true);
+  });
+
   it('uses the supplied icon and names the application menu without repeating an untitled window', async () => {
     const v = await viewer(false, 'data:image/png;base64,AAAA'); await v.activate();
     const doc = dom.window.document;
