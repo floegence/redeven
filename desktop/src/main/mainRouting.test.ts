@@ -20,6 +20,13 @@ function readSharedGatewaySource(): string {
 }
 
 describe('main routing', () => {
+  it('stops the exact SSH Runtime when its state and installation directories differ', () => {
+    const source = readMainSource();
+    const start = source.indexOf('const inventoryArgs = {', source.indexOf('async function executeDirectManagedEnvironmentLifecycle('));
+    const inventory = source.slice(start, source.indexOf('const processSession =', start));
+    expect(inventory).toContain('target: sshDetails');
+    expect(inventory).toContain('runtimeStateRoot: desktopRuntimePlacementStateRoot(input.placement)');
+  });
   it('keeps native Open and its cold-start recovery under one target operation', () => {
     const source = readMainSource();
     const start = source.indexOf('async function openLocalEnvironmentRecord(');
