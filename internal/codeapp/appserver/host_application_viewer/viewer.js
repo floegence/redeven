@@ -128,8 +128,8 @@
     // Ask the application's top-level windows to close normally. Do not shut
     // down Xpra or destroy a process: unsaved-work dialogs must remain operable.
     if (!client?.connected) return;
-    const top = [...windows.values()].filter(({win}) => !win.metadata['transient-for'] && !win.metadata.modal);
-    for (const {win} of top.length ? top : windows.values()) client.send_close_window(win);
+    const top = [...windows.values()].filter(({win}) => !win.metadata['transient-for'] && !win.metadata.modal && !win.has_windowtype(['DIALOG']));
+    for (const {win} of top) client.send_close_window(win);
     frame.focus();
   };
   toolbar.addEventListener('focusin', event => {
@@ -223,13 +223,18 @@
     xpra.reconnect_count = 0;
     xpra.callback_close = () => connectionLost(attempt);
     doc.addEventListener('connection-lost', () => connectionLost(attempt));
+    doc.addEventListener('connection-established', () => {
+      if (attempt !== generation || Object.keys(xpra.id_to_window).length) return;
+      clearTimeout(deadline);
+      present('waiting');
+    });
     const lastWindow = xpra.on_last_window;
     xpra.on_last_window = function() {
       lastWindow.call(this);
       // This hook is emitted for a server-confirmed window destruction, never
       // for the client's bulk cleanup on network loss. Finish after packet handling.
       queueMicrotask(() => {
-        if (attempt === generation && wasActive && Object.keys(xpra.id_to_window).length === 0) finish('ended');
+        if (attempt === generation && wasActive && Object.keys(xpra.id_to_window).length === 0) finish('windowsClosed');
       });
     };
     // Keep upstream input controls intact; application windows own all visible space.
@@ -327,6 +332,10 @@
     xpra._new_window = function(...args) {
       newWindow.apply(this, args);
       fit(this.id_to_window[args[0]]);
+      if (attempt === generation && document.body.dataset.state === 'waiting') {
+        present('connecting');
+        deadline = setTimeout(() => { if (attempt === generation) finish('failed'); }, 45000);
+      }
     };
     Object.values(xpra.id_to_window).forEach(fit);
 

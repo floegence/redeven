@@ -6240,6 +6240,17 @@
     }
   },
   "hostApplications": {
+    "linuxRunningHint": "Nach dem Beenden der Freigabe laufen die Anwendungen weiter. Verbinden Sie sich über diese Liste erneut.",
+    "stopSharingDescription": "Trennen Sie diese Anwendung von Redeven. Ihre Fenster und ungespeicherten Arbeiten bleiben geöffnet.",
+    "closeAllWindows": "Alle Fenster schließen",
+    "closeAllWindowsTitle": "Alle Fenster von {name} schließen?",
+    "closeWindowsPending": "Das Schließen wurde angefordert. Öffnen Sie die Anwendung, um mögliche Speicherdialoge zu bearbeiten. Hintergrundprozesse können weiterlaufen.",
+    "sessionWaitingHint": "Die Anwendung läuft, hat aber kein geöffnetes Fenster. Sie können diese Ansicht schließen und später erneut verbinden.",
+    "applicationChanged": "Die Anwendung wurde neu gestartet. Prüfen Sie ihren Zustand und bestätigen Sie erneut.",
+    "stopSharing": "Freigabe beenden",
+    "forceQuit": "Sofort beenden",
+    "forceQuitTitle": "{name} sofort beenden?",
+    "forceQuitDescription": "Die Anwendung sofort ohne Rückfrage zum Speichern beenden. Ungespeicherte Arbeit geht verloren.",
     "checking": "Anwendungsstatus wird geprüft…",
     "applicationExited": "Anwendung wurde beendet",
     "applicationExitedHint": "Der Host hat bestätigt, dass die Anwendung beendet wurde. Öffnen Sie sie bei Bedarf erneut unter Host-Anwendungen.",

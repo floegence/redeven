@@ -112,6 +112,23 @@ def run(helper_path):
                 assert helper.wait('error')['code'] == 'APPLICATION_NOT_FOUND'
                 results.append(dict(windowless=windowless, session_quit=session_quit, pid=pid, cancelled_quit_preserved=True,
                                     stale_selection_rejected=True, quit_confirmed=True))
+                if not session_quit:
+                    old_target = target
+                    old_pid = pid
+                    helper.send('native', application_id=app['id'], paths=[str(bundle)])
+                    helper.wait('opened')
+                    pid = eventually(lambda: receipt().get('pid') if receipt().get('pid') != old_pid else None,
+                                     'Force-quit fixture did not relaunch')
+                    target = eventually(running, 'Replacement application missing')
+                    helper.send('force_quit', **old_target)
+                    assert helper.wait('error')['code'] == 'APPLICATION_NOT_FOUND'
+                    os.kill(pid, 0)
+                    helper.send('force_quit', **target)
+                    helper.wait('quit_requested')
+                    eventually(lambda: running() is None, 'Force quit left the exact application running')
+                    assert receipt()['quit_requests'] == 0, 'Force quit unexpectedly requested graceful termination'
+                    results.append(dict(windowless=windowless, force_quit=True, stale_selection_rejected=True))
+
             finally:
                 if sharing:
                     sharing.close()

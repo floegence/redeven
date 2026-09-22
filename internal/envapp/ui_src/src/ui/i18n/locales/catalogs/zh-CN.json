@@ -6251,6 +6251,17 @@
     }
   },
   "hostApplications": {
+    "linuxRunningHint": "停止共享后，应用会继续运行。你可以从此列表重新连接。",
+    "stopSharingDescription": "断开此应用与 Redeven 的连接。应用窗口和未保存的工作会保留。",
+    "closeAllWindows": "关闭所有窗口",
+    "closeAllWindowsTitle": "关闭 {name} 的所有窗口？",
+    "closeWindowsPending": "已请求关闭窗口。请打开应用处理可能出现的保存提示。后台进程可能继续运行。",
+    "sessionWaitingHint": "应用正在运行，但没有打开的窗口。你可以关闭此查看窗口，稍后重新连接。",
+    "applicationChanged": "应用已重新启动。请检查后再次确认。",
+    "stopSharing": "停止共享",
+    "forceQuit": "强制退出",
+    "forceQuitTitle": "强制退出 {name}？",
+    "forceQuitDescription": "立即结束应用，不显示保存提示。未保存的工作将会丢失。",
     "checking": "正在确认应用状态…",
     "applicationExited": "应用已退出",
     "applicationExitedHint": "主机已确认应用退出。需要时，请从“主机应用”重新打开。",

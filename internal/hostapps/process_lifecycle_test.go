@@ -4,41 +4,21 @@ package hostapps
 
 import (
 	"context"
-	"errors"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
 
 func TestSessionLaunchDisablesAudioSubsystem(t *testing.T) {
 	m := macFixture(t)
-	dir := filepath.Join(m.state, "sessions", "silent")
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		t.Fatal(err)
-	}
-	arguments := filepath.Join(dir, "arguments")
-	launcher := filepath.Join(dir, "launcher")
-	if err := os.WriteFile(launcher, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+quoteArgv([]string{arguments})+"\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	forward, err := m.forwards.OpenOwnedForwardSession(context.Background(), "http://127.0.0.1:45534/_redeven_host_app/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := &ownedSession{view: Session{ID: "silent", State: "starting", Forward: forward}, owner: "alice", done: make(chan struct{}), tools: hostTools{dbus: launcher}}
-	m.sessions[s.view.ID] = s
-	m.run(s, dir, "127.0.0.1:45534")
-	data, err := os.ReadFile(arguments)
-	if err != nil {
-		t.Fatal(err)
-	}
+	a := &linuxApplication{record: linuxApplicationRecord{ID: strings.Repeat("a", 64)}}
+	arguments := m.applicationArgs(a)
 	options := map[string]string{}
-	for _, argument := range strings.Split(string(data), "\n") {
+	for _, argument := range arguments {
 		if name, value, ok := strings.Cut(argument, "="); ok {
 			options[name] = value
 		}
@@ -92,97 +72,13 @@ func TestWindowReadinessCancellationReapsProbeChildren(t *testing.T) {
 	}
 }
 
-func TestProcessSupervisorReclaimsDescendantsWhenLeaderExits(t *testing.T) {
-	m := macFixture(t)
-	dir := filepath.Join(m.state, "sessions", "group")
-	if err := os.MkdirAll(dir, 0700); err != nil {
+func TestIndependentBackendDoesNotShareRuntimeProcessGroup(t *testing.T) {
+	cmd := exec.Command("/bin/sh", "-c", "exit 0")
+	configureIndependentProcess(cmd)
+	if !cmd.SysProcAttr.Setsid || cmd.SysProcAttr.Setpgid {
+		t.Fatal("backend did not request an independent session")
+	}
+	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
-	}
-	// This fake launcher exits while a child remains in its owned process group.
-	launcher := filepath.Join(dir, "launcher")
-	if err := os.WriteFile(launcher, []byte("#!/bin/sh\nsleep 30 &\nexit 0\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	f, err := m.forwards.OpenOwnedForwardSession(context.Background(), "http://127.0.0.1:45531/_redeven_host_app/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := &ownedSession{view: Session{ID: "group", State: "starting", Forward: f}, owner: "alice", done: make(chan struct{}), tools: hostTools{dbus: launcher}}
-	m.sessions[s.view.ID] = s
-	m.run(s, dir, "127.0.0.1:45531")
-	// Remove a child left by the old implementation even when this assertion fails.
-	defer syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL)
-	deadline := time.Now().Add(time.Second)
-	for {
-		err = syscall.Kill(-s.cmd.Process.Pid, 0)
-		if errors.Is(err, syscall.ESRCH) {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("session completed with a live descendant process")
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
-
-func TestStopBeforeProcessAdmissionWaitsForSupervisor(t *testing.T) {
-	m := macFixture(t)
-	f, err := m.forwards.OpenOwnedForwardSession(context.Background(), "http://127.0.0.1:45532/_redeven_host_app/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := &ownedSession{view: Session{ID: "pending", State: "starting", Forward: f}, owner: "alice", done: make(chan struct{})}
-	m.sessions[s.view.ID] = s
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	err = m.Stop(ctx, "alice", s.view.ID)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("stop returned before supervisor completed: %v", err)
-	}
-	dir := filepath.Join(m.state, "sessions", s.view.ID)
-	if err = os.MkdirAll(dir, 0700); err != nil {
-		t.Fatal(err)
-	}
-	m.run(s, dir, "127.0.0.1:45532")
-	if err = m.Stop(context.Background(), "alice", s.view.ID); err != nil {
-		t.Fatal(err)
-	}
-	if s.cmd != nil || s.view.State != "ended" {
-		t.Fatal("cancelled admission launched a process")
-	}
-}
-
-func TestStopCancellationDoesNotAbandonTermination(t *testing.T) {
-	m := macFixture(t)
-	f, err := m.forwards.OpenOwnedForwardSession(context.Background(), "http://127.0.0.1:45533/_redeven_host_app/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command("/bin/sh", "-c", "trap '' TERM; printf ready; exec sleep 30")
-	configureProcess(cmd)
-	output, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	buffer := make([]byte, 5)
-	if _, err = output.Read(buffer); err != nil {
-		t.Fatal(err)
-	}
-	s := &ownedSession{view: Session{ID: "cancelled-stop", State: "running", Forward: f}, owner: "alice", done: make(chan struct{}), cmd: cmd}
-	m.sessions[s.view.ID] = s
-	go func() { _ = cmd.Wait(); m.finish(s, "", nil) }()
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	if err = m.Stop(ctx, "alice", s.view.ID); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("expected bounded caller cancellation, got %v", err)
-	}
-	select {
-	case <-s.done:
-	case <-time.After(7 * time.Second):
-		_ = cmd.Process.Kill()
-		t.Fatal("caller cancellation abandoned the process group")
 	}
 }

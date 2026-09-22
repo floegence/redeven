@@ -162,7 +162,10 @@ func (m *Manager) macCatalog(ctx context.Context, owner string) (Catalog, error)
 }
 
 // Running is a lightweight OS snapshot, independent of viewer/session lifetime.
-func (m *Manager) Running(ctx context.Context) ([]RunningApplication, error) {
+func (m *Manager) Running(ctx context.Context, owner string) ([]RunningApplication, error) {
+	if runtime.GOOS == "linux" {
+		return m.linuxRunning(ctx, owner)
+	}
 	if runtime.GOOS != "darwin" {
 		return nil, ErrUnavailable
 	}
@@ -179,6 +182,20 @@ func (m *Manager) Running(ctx context.Context) ([]RunningApplication, error) {
 }
 
 func (m *Manager) Quit(ctx context.Context, owner string, req QuitRequest) error {
+	if runtime.GOOS == "linux" {
+		return m.controlLinuxApplication(ctx, owner, req, false)
+	}
+	return m.macQuit(ctx, owner, req, "quit")
+}
+
+func (m *Manager) Terminate(ctx context.Context, owner string, req QuitRequest) error {
+	if runtime.GOOS == "linux" {
+		return m.controlLinuxApplication(ctx, owner, req, true)
+	}
+	return m.macQuit(ctx, owner, req, "force_quit")
+}
+
+func (m *Manager) macQuit(ctx context.Context, owner string, req QuitRequest, action string) error {
 	m.mu.Lock()
 	closed := m.closed
 	m.mu.Unlock()
@@ -197,7 +214,7 @@ func (m *Manager) Quit(ctx context.Context, owner string, req QuitRequest) error
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	msg, err := m.macOnce(ctx, map[string]any{"action": "quit", "application_id": req.ApplicationID, "instances": req.Instances})
+	msg, err := m.macOnce(ctx, map[string]any{"action": action, "application_id": req.ApplicationID, "instances": req.Instances})
 	switch msg.Code {
 	case "APPLICATION_NOT_FOUND":
 		return ErrNotFound
@@ -222,7 +239,7 @@ func (m *Manager) Detach(ctx context.Context, owner, id string) error {
 	if s == nil || s.owner != owner {
 		return ErrNotFound
 	}
-	if s.native == nil {
+	if s.native == nil && s.application == nil {
 		return ErrInvalid
 	}
 	return m.Stop(ctx, owner, id)

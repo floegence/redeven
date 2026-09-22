@@ -63,7 +63,7 @@ enum HostApplicationCatalog {
         }
         return groups.keys.sorted().map { ["application_id": $0, "instances": groups[$0]!.sorted()] }
     }
-    static func quit(_ request: [String: Any]) throws {
+    static func quit(_ request: [String: Any], force: Bool = false) throws {
         guard consoleAvailable else { throw NativeInput.unavailable() }
         guard let id = request["application_id"] as? String, let instances = request["instances"] as? [String],
               !instances.isEmpty, instances.count <= 64, Set(instances).count == instances.count else { throw NativeInput.invalid("An application instance is required.") }
@@ -76,9 +76,13 @@ enum HostApplicationCatalog {
         guard targets.count == instances.count else { throw HostFailure(code: "APPLICATION_NOT_FOUND", message: "The application instance is no longer running.") }
         var accepted = true
         for app in targets {
-            app.unhide()
-            _ = app.activate(options: [])
-            if !app.terminate() { accepted = false }
+            if force {
+                if !app.forceTerminate() { accepted = false }
+            } else {
+                app.unhide()
+                _ = app.activate(options: [])
+                if !app.terminate() { accepted = false }
+            }
         }
         guard accepted else { throw HostFailure(code: "QUIT_REJECTED", message: "The application did not accept the quit request.") }
     }
@@ -180,6 +184,9 @@ final class HostApplicationSession {
             case "running": self.output(["type": "running", "running": HostApplicationCatalog.running()])
             case "quit":
                 try HostApplicationCatalog.quit(request)
+                self.output(["type": "quit_requested"])
+            case "force_quit":
+                try HostApplicationCatalog.quit(request, force: true)
                 self.output(["type": "quit_requested"])
             case "detach", "stop": end(reason: "sharing_stopped")
             case "suspend":

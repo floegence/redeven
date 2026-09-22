@@ -93,44 +93,16 @@ def main():
         add_application(directory, sys.argv[3], json.load(sys.stdin))
         print("{}")
     elif action == "launch":
-        identity, receipt = sys.argv[3:5]
+        import runpy
+        identity, receipt, launcher = sys.argv[3:6]
+        platform = runpy.run_path(launcher)
         try:
             app = applications(directory).get(identity)
-            if not app or not app.should_show() or app.get_boolean("Terminal"):
-                raise ValueError("The application is no longer available.")
-            if app.get_boolean("DBusActivatable"):
-                # Desktop bus activation can delegate to the user's existing
-                # systemd session and lose this private display environment.
-                # Keep GIO's Exec semantics, but launch in our own bus/process tree.
-                entry = GLib.KeyFile.new()
-                entry.load_from_file(app.get_filename(), GLib.KeyFileFlags.NONE)
-                entry.set_boolean("Desktop Entry", "DBusActivatable", False)
-                launch_entry = pathlib.Path(receipt).with_name("launch.desktop")
-                launch_entry.write_text(entry.to_data()[0], encoding="utf-8")
-                launch_entry.chmod(0o600)
-                app = Gio.DesktopAppInfo.new_from_filename(str(launch_entry))
-            context = Gio.AppLaunchContext.new()
-            # Support components use their own loader and Python resources. Restore
-            # the host environment before GIO executes the user's application.
-            saved = json.loads(os.environ.get("FLOE_NATIVE_APPLICATION_ENV", "{}"))
-            for key, value in saved.items():
-                if value is None:
-                    context.unsetenv(key)
-                else:
-                    context.setenv(key, value)
-            context.unsetenv("FLOE_NATIVE_APPLICATION_ENV")
-            context.unsetenv("FLOE_NATIVE_ROOT")
-            if not app.launch([], context):
-                raise ValueError("The application could not be started.")
-            result = {"ok": True}
-        except Exception as error:
-            print(str(error), file=sys.stderr)
-            result = {"ok": False}
-        temporary = receipt + ".tmp"
-        pathlib.Path(temporary).write_text(json.dumps(result), encoding="utf-8")
-        os.replace(temporary, receipt)
-        if not result["ok"]:
-            sys.exit(1)
+        except Exception:
+            platform["write_receipt"](pathlib.Path(receipt), "failed")
+            raise
+        platform["launch"](app, receipt)
+
     else:
         raise ValueError("Unknown application operation")
 

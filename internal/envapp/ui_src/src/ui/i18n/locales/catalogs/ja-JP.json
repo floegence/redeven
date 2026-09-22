@@ -6236,6 +6236,17 @@
     }
   },
   "hostApplications": {
+    "linuxRunningHint": "共有を停止してもアプリは実行を続けます。この一覧から再接続できます。",
+    "stopSharingDescription": "このアプリと Redeven の接続を解除します。アプリのウィンドウと未保存の作業はそのまま残ります。",
+    "closeAllWindows": "すべてのウィンドウを閉じる",
+    "closeAllWindowsTitle": "{name} のすべてのウィンドウを閉じますか？",
+    "closeWindowsPending": "ウィンドウを閉じるよう要求しました。アプリを開き、保存ダイアログがあれば対応してください。バックグラウンドプロセスは実行を続ける場合があります。",
+    "sessionWaitingHint": "アプリは実行中ですが、開いているウィンドウがありません。このビューアーを閉じて、後で再接続できます。",
+    "applicationChanged": "アプリが再起動されました。状態を確認して、もう一度確定してください。",
+    "stopSharing": "共有を停止",
+    "forceQuit": "強制終了",
+    "forceQuitTitle": "{name} を強制終了しますか？",
+    "forceQuitDescription": "保存を確認せずにアプリを直ちに終了します。未保存の作業は失われます。",
     "checking": "アプリの状態を確認中…",
     "applicationExited": "アプリが終了しました",
     "applicationExitedHint": "ホストでアプリの終了を確認しました。必要に応じて「ホストアプリ」から再度開いてください。",

@@ -19,6 +19,9 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first opens, persisted proxy choice, and isolated Desktop loopback compatibility.
 - [Managed host application preparation](architecture/host-application-preparation.md) - Prepare native graphical support and recover interrupted setup without host configuration.
 - [Host Applications](architecture/host-applications.md) - Browse host applications and apply shared authorization and session lifecycle rules.
+- [Cross-platform application behavior](architecture/host-application-behavior.md) - Compare common operations and the OS limits that prevent identical behavior.
+- [Linux application lifecycle](architecture/linux-application-lifecycle.md) - Recover surviving application instances and separate sharing, normal window closure and explicit force quit.
+- [Host application viewer](architecture/host-application-viewer.md) - Interpret connection, waiting and terminal states and preserve application-controlled window geometry.
 - [Host Application Platforms](architecture/host-application-platforms.md) - Prepare a headless host, diagnose missing capabilities, and distinguish Linux capability requirements from native macOS initialization.
 - [macOS Application Picture](architecture/macos-application-picture.md) - Adjust Retina resolution and streaming quality, and understand actual frame rate and bandwidth.
 - [Native macOS Applications](architecture/macos-host-applications.md) - Open local Mac apps directly or operate owned remote windows with capture, input and reconnection.

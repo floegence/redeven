@@ -16,7 +16,12 @@ A missing or inaccessible surface must preserve the app and provide an accurate
 recovery path; it must never silently select an unrelated process or inject stale
 input. This matrix is not a certification of every installed application.
 
-# Startup and window transitions
+See the [cross-platform behavior contract](../architecture/host-application-behavior.md)
+for aligned operations and unavoidable OS differences.
+
+# Contract
+
+## Startup and window transitions
 
 | Scenario | Expected outcome | Evidence |
 | --- | --- | --- |
@@ -83,7 +88,7 @@ unconfirmed quit without replay. The native quit fixture runs both catalog and
 session-bound controls with visible and windowless apps, verifies cancellation,
 and rejects stale generations before any termination request.
 
-# Limits and environment evidence
+# Boundaries
 
 Screen recording and accessibility permissions remain explicit macOS grants.
 Automated acceptance does not lock the user's Mac or revoke its permissions.
@@ -104,7 +109,8 @@ constraints require separate validation. See the
 
 - `scripts/check_macos_host_application_waiting.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable lifecycle scenarios.
 - `scripts/check_macos_host_application_termination.py`: host-driven exit before/after a window, last-window closure with a live process, and explicit detachment.
-- `scripts/check_macos_host_application_quit.py`: exact-process quit, cancellation, fresh-helper inventory and detachment.
+- `scripts/check_macos_host_application_quit.py`: exact-process quit/force quit, cancellation, fresh-helper inventory and detachment.
+- `internal/hostapps/linux_lifecycle_test.go`: installed Linux windowless lifetime, real Runtime process exit, exact-instance force quit, save cancellation and rotated credentials.
 - `scripts/check_macos_host_applications.py`: real capture, input, quality and process ownership acceptance.
 - `desktop/native/computer-host/Tests/RedevenComputerHostTests/HostApplicationTests.swift`: unreadable inventory and access classification.
 - `internal/hostapps/macos_test.go`: startup, authenticated connection ownership, termination and delivery ordering.

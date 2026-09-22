@@ -137,6 +137,10 @@ export function quitHostApplication(applicationID: string, instances: string[]) 
   return fetchLocalApiJSON(`${base}/quit`, { method: 'POST', body: JSON.stringify({ application_id: applicationID, instances }) });
 }
 
+export function terminateHostApplication(applicationID: string, instances: string[]) {
+  return fetchLocalApiJSON(`${base}/terminate`, { method: 'POST', body: JSON.stringify({ application_id: applicationID, instances }) });
+}
+
 export function detachHostApplication(sessionID: string) {
   return fetchLocalApiJSON(`${base}/sessions/${encodeURIComponent(sessionID)}/detach`, { method: 'POST' });
 }

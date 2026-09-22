@@ -77,6 +77,9 @@ export function hostApplicationPresentation(
   return {
     ...copy,
     locale: i18n.locale(), shellTheme,
+    quit: i18n.t(macOS ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows'),
+    quitTitle: i18n.t(macOS ? 'hostApplications.macQuitTitle' : 'hostApplications.closeAllWindowsTitle', {name}),
+    waitingHint: i18n.t(macOS ? 'hostApplications.macWaitingHint' : 'hostApplications.sessionWaitingHint'),
     quitDescription: i18n.t(macOS ? 'hostApplications.macQuitDescription' : 'hostApplications.sessionQuitDescription'),
     pictureHint: i18n.t(macOS ? 'hostApplications.macPictureHint' : 'hostApplications.sessionPictureHint'),
   };

@@ -6240,6 +6240,17 @@
     }
   },
   "hostApplications": {
+    "linuxRunningHint": "Os aplicativos continuam em execução após interromper o compartilhamento. Reconecte pela lista.",
+    "stopSharingDescription": "Desconectar este aplicativo do Redeven. Suas janelas e o trabalho não salvo permanecem abertos.",
+    "closeAllWindows": "Fechar todas as janelas",
+    "closeAllWindowsTitle": "Fechar todas as janelas de {name}?",
+    "closeWindowsPending": "O fechamento foi solicitado. Abra o aplicativo para responder a possíveis solicitações de salvamento. Os processos em segundo plano podem continuar em execução.",
+    "sessionWaitingHint": "O aplicativo está em execução, mas não tem janelas abertas. Você pode fechar este visualizador e reconectar mais tarde.",
+    "applicationChanged": "O aplicativo foi reiniciado. Verifique o estado e confirme novamente.",
+    "stopSharing": "Parar de compartilhar",
+    "forceQuit": "Forçar encerramento",
+    "forceQuitTitle": "Forçar o encerramento de {name}?",
+    "forceQuitDescription": "Encerrar o aplicativo imediatamente, sem solicitar salvamento. O trabalho não salvo será perdido.",
     "checking": "Verificando o estado do aplicativo…",
     "applicationExited": "O aplicativo foi encerrado",
     "applicationExitedHint": "O host confirmou que o aplicativo foi encerrado. Abra-o novamente nos aplicativos do host quando precisar.",

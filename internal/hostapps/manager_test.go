@@ -272,6 +272,13 @@ func TestInstalledXpraLaunchResumeAndStop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		a := m.sessions[first.ID].application
+		if a != nil && a.record.Process.Alive() {
+			_ = m.Terminate(context.Background(), "alice", QuitRequest{ApplicationID: a.record.Application.ID, Instances: []string{a.record.ID}})
+			waitUntil(t, func() bool { return !a.record.Process.Alive() }, 8*time.Second)
+		}
+	}()
 	deadline := time.Now().Add(45 * time.Second)
 	for time.Now().Before(deadline) {
 		current := m.Sessions("alice")[0]
