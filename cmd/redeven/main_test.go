@@ -61,6 +61,8 @@ func TestRunCLIHelp(t *testing.T) {
 			"Network examples: 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998",
 			"Public pages and WS/WSS connections share the configured port.",
 			"Network binds additionally require a fixed port and password authentication.",
+			"Wildcard network binds keep localhost and available loopback IP access on the same port.",
+			"A specific IP bind listens only on that address.",
 		)
 	})
 

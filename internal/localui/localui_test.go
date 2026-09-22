@@ -262,7 +262,7 @@ func newTestServerWithAppServer(t *testing.T, gate *accessgate.Gate, appSrv *app
 		pending:            make(map[string]pendingDirect),
 		deviceCA:           testDeviceCA,
 		protocol:           "https",
-		networkAuthorities: map[string]struct{}{"localhost:23998": {}, "127.0.0.1:23998": {}, "[::1]:23998": {}},
+		publicAuthorities: map[string]struct{}{"localhost:23998": {}, "127.0.0.1:23998": {}, "[::1]:23998": {}},
 	}
 }
 
@@ -1027,7 +1027,7 @@ func TestServer_DiagnosticsConnectInfoReusesTraceID(t *testing.T) {
 		appServer:          newTestAppServer(t, cfgPath),
 		diag:               diagStore,
 		pending:            make(map[string]pendingDirect),
-		networkAuthorities: map[string]struct{}{"localhost:23998": {}},
+		publicAuthorities: map[string]struct{}{"localhost:23998": {}},
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "https://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))

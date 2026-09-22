@@ -52,6 +52,8 @@ Public Env App shell GET/HEAD requests may pass before unlock so the login page 
 
 The private listener accepts only its canonical numeric-loopback Host or a validated per-forward `.localhost` virtual Host. The canonical bridge, mint operation, embedded content, and any Desktop compatibility gateway require separate unforgeable authorities with exact scope; none can authorize another Host, port, forward, partition, or Runtime instance. Browser entries and sessions are bounded, expire in memory, and are never persisted. Runtime-control, Desktop model-source, and management sockets remain loopback or local-socket protected regardless of public exposure. The authority keyring is permission-restricted and separate from SQLite; missing keys, schema drift, future schema versions, and database errors fail closed without state reset.
 
+Network exposure keeps public local browser entry points available under the same password and second-factor rules. Actual URLs use the shared [network exposure contract](../security/local-ui-network-exposure.md); Desktop groups local URLs for open/copy and network URLs for sharing. Loopback URLs in SSH, WSL, and containers remain inside their own environment namespace. Saved next-start settings never replace the running URL list.
+
 # Evidence
 
 - `redeven:internal/localui/localui.go:50` - Local UI options require bind, agent, app server, state, runtime-control, version, diagnostics, and access gate inputs.

@@ -490,6 +490,34 @@ try {
   await video.delete();
   report.cases.push('actual-cards-clipboard-and-reopen', 'actual-cards-mutual-exclusion');
 
+  await page.goto(new URL('environment-endpoints.html?network-local=1&locale=en-US', report.url).href);
+  for (const name of ['Local Environment', 'Network']) {
+    await page.locator(`[data-environment="${name}"]`).getByLabel('View connection details').click();
+    const popup = page.locator('.redeven-endpoints-popover');
+    await popup.waitFor();
+    const network = popup.locator('[data-address-scope="network"]');
+    const local = popup.locator(`[data-address-scope="${name === 'Network' ? 'environment_only' : 'this_device'}"]`);
+    assert.equal(await network.getByLabel('Share connection', { exact: true }).count(), 1);
+    assert.equal(await local.getByLabel('Share connection', { exact: true }).count(), 0);
+    if (name === 'Local Environment') {
+      assert.equal(await local.getByLabel('Copy Environment URL', { exact: true }).count(), 3);
+      assert.equal(await local.getByLabel('Open in browser', { exact: true }).count(), 3);
+      for (const url of ['https://localhost:23998/', 'https://127.0.0.1:23998/', 'https://[::1]:23998/']) {
+        const row = local.locator(`[data-endpoint-id="address:${url}"]`);
+        await row.getByLabel('Copy Environment URL', { exact: true }).click();
+        assert.equal(await page.locator('[data-copy-result]').innerText(), url);
+      }
+    } else {
+      assert.equal(await local.locator('button').count(), 0);
+      await local.locator('summary').click();
+      assert.equal(await local.locator('[data-endpoint-kind="address"]').count(), 3);
+    }
+    await stableScreenshot(`${output}/network-local-${name.replaceAll(' ', '-')}.png`);
+    await page.keyboard.press('Escape');
+    await popup.waitFor({ state: 'detached' });
+  }
+  report.cases.push('network-mode-local-aliases-and-remote-namespace');
+
   assert.deepEqual(report.errors, []);
   report.status = 'passed';
   console.log(`Environment connections passed: ${report.cases.length} browser cases. Evidence: ${output}`);

@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
@@ -133,7 +132,7 @@ type Server struct {
 	pluginSessionReadyTimeout time.Duration
 
 	authorityMu        sync.RWMutex
-	networkAuthorities map[string]struct{}
+	publicAuthorities  map[string]struct{}
 	displayURLs        []string
 	resolveAccessHosts func(BindSpec) ([]netip.Addr, error)
 
@@ -460,7 +459,7 @@ func New(opts Options) (*Server, error) {
 		pluginSessionReadyTimeout: defaultPluginSessionReadyTimeout,
 		handlerCleanup:            make(map[string]func()),
 		authStore:                 authStore,
-		networkAuthorities:        make(map[string]struct{}),
+		publicAuthorities:         make(map[string]struct{}),
 		resolveAccessHosts:        resolveNetworkAccessHosts,
 		deviceCA:                  opts.deviceCA,
 	}, nil
@@ -496,8 +495,8 @@ func (s *Server) configureAcceptor() error {
 		return err
 	}
 	s.authorityMu.RLock()
-	origins := make([]string, 0, len(s.networkAuthorities))
-	for authority := range s.networkAuthorities {
+	origins := make([]string, 0, len(s.publicAuthorities))
+	for authority := range s.publicAuthorities {
 		origins = append(origins, s.protocol+"://"+publicURLAuthority(authority, s.protocol))
 	}
 	s.authorityMu.RUnlock()
@@ -631,19 +630,9 @@ func (s *Server) Start(ctx context.Context) error {
 	if s == nil || s.desktopBridgeServer != nil {
 		return nil
 	}
-	var listeners []net.Listener
-	for _, addr := range s.bind.ListenAddrs() {
-		listener, err := net.Listen("tcp", addr)
-		if err != nil {
-			// An unavailable address family may be omitted, but an occupied configured
-			// port must never silently select a different listener or endpoint.
-			if s.bind.localhost && (errors.Is(err, syscall.EAFNOSUPPORT) || errors.Is(err, syscall.EADDRNOTAVAIL)) {
-				continue
-			}
-			closeNetworkListeners(listeners)
-			return fmt.Errorf("listen %s: %w", addr, err)
-		}
-		listeners = append(listeners, listener)
+	listeners, err := listenPublicAddresses(s.bind, net.Listen)
+	if err != nil {
+		return err
 	}
 	return s.StartOnListeners(ctx, listeners, nil)
 }
@@ -911,7 +900,7 @@ func (s *Server) Close() error {
 	s.tlsConfig = nil
 	s.authorityMu.Lock()
 	s.displayURLs = nil
-	s.networkAuthorities = make(map[string]struct{})
+	s.publicAuthorities = make(map[string]struct{})
 	s.authorityMu.Unlock()
 	s.desktopBridgeServer = nil
 	s.desktopBridgeListener = nil
@@ -1832,7 +1821,7 @@ func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 	if err != nil {
 		return "", errors.New("invalid Local UI authority")
 	}
-	if !s.isAllowedNetworkAuthority(r.Host) {
+	if !s.isAllowedPublicAuthority(r.Host) {
 		return "", errors.New("local UI endpoint is unavailable")
 	}
 	scheme := "ws"

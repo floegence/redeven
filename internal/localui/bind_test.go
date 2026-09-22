@@ -16,9 +16,9 @@ func TestParseBind_Localhost(t *testing.T) {
 	if !bind.IsLoopbackOnly() {
 		t.Fatalf("expected localhost bind to be loopback only")
 	}
-	addrs := bind.ListenAddrs()
+	addrs := bind.listenerSpecs()
 	if len(addrs) != 2 {
-		t.Fatalf("len(ListenAddrs()) = %d, want 2", len(addrs))
+		t.Fatalf("len(listenerSpecs()) = %d, want 2", len(addrs))
 	}
 }
 
@@ -34,10 +34,6 @@ func TestParseBind_IPv4LoopbackRange(t *testing.T) {
 	}
 	if bind.ListenLabel() != "127.42.0.9:12345" {
 		t.Fatalf("ListenLabel() = %q, want %q", bind.ListenLabel(), "127.42.0.9:12345")
-	}
-	urls := bind.DisplayURLs()
-	if len(urls) != 1 || urls[0] != "https://127.42.0.9:12345/" {
-		t.Fatalf("DisplayURLs() = %#v", urls)
 	}
 }
 

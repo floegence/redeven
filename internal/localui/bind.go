@@ -109,30 +109,8 @@ func (b BindSpec) ListenLabel() string {
 	return net.JoinHostPort(host, strconv.Itoa(b.port))
 }
 
-func (b BindSpec) ListenAddrs() []string {
-	port := strconv.Itoa(b.port)
-	if b.localhost {
-		return []string{
-			net.JoinHostPort("127.0.0.1", port),
-			net.JoinHostPort("::1", port),
-		}
-	}
-	if strings.TrimSpace(b.host) == "" || b.port < 0 {
-		return nil
-	}
-	return []string{net.JoinHostPort(b.host, port)}
-}
-
-func (b BindSpec) DisplayURLs() []string {
-	return b.displayURLsForPort(b.port)
-}
-
 func (b BindSpec) ListenLabelForPort(port int) string {
 	return b.listenLabelForPort(port)
-}
-
-func (b BindSpec) DisplayURLsForPort(port int) []string {
-	return b.displayURLsForPort(port)
 }
 
 func (b BindSpec) listenLabelForPort(port int) string {
@@ -147,20 +125,6 @@ func (b BindSpec) listenLabelForPort(port int) string {
 	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
-func (b BindSpec) displayURLsForPort(port int) []string {
-	if port <= 0 {
-		return nil
-	}
-	switch {
-	case b.localhost:
-		return []string{formatHTTPSURL("localhost", port)}
-	case b.wildcard:
-		return nil
-	default:
-		return []string{formatHTTPSURL(b.host, port)}
-	}
-}
-
 type interfaceAddress struct {
 	addr     netip.Addr
 	up       bool
@@ -168,15 +132,8 @@ type interfaceAddress struct {
 }
 
 func resolveNetworkAccessHosts(bind BindSpec) ([]netip.Addr, error) {
-	if !bind.IsNetworkExposure() {
-		return nil, nil
-	}
 	if !bind.IsWildcard() {
-		addr, err := netip.ParseAddr(bind.Host())
-		if err != nil || !eligibleNetworkAccessAddress(addr) {
-			return nil, fmt.Errorf("invalid network bind host")
-		}
-		return []netip.Addr{addr}, nil
+		return nil, fmt.Errorf("network interface resolution requires a wildcard bind")
 	}
 
 	interfaces, err := net.Interfaces()
@@ -236,8 +193,4 @@ func eligibleNetworkAccessAddress(addr netip.Addr) bool {
 
 func formatHTTPURL(host string, port int) string {
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
-}
-
-func formatHTTPSURL(host string, port int) string {
-	return "https://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
 }
