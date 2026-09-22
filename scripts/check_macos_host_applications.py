@@ -26,44 +26,29 @@ def eventually(check, description, timeout=10):
     raise AssertionError(description)
 
 
-class Helper:
+class HelperHost:
+    """One native process with independently routed application channels."""
     def __init__(self, executable):
         self.process = subprocess.Popen([str(executable), '--host-applications'], stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        self.messages = queue.Queue()
         self.write_lock = threading.Lock()
-        self.frames = deque(maxlen=600)
-        self.events = deque(maxlen=600)
+        self.clients = {}
         self.closing = False
-        self.auto_ack = True
         def read():
             for line in self.process.stdout:
                 value = json.loads(line)
-                if value['type'] == 'frame':
-                    self.frames.append(dict(received_at=time.monotonic(), **{k:v for k,v in value.items() if k != 'data'}))
-                    if self.auto_ack:
-                        self.send('frame_ack', generation=value['generation'], frame_id=value['frame_id'])
-                self.events.append({k:v for k,v in value.items() if k != 'data'})
-                self.messages.put(value)
+                client = self.clients.get(value.get('session_id'))
+                if client is not None:
+                    client.receive(value)
         self.reader = threading.Thread(target=read, daemon=True)
         self.reader.start()
 
-    def send(self, action, **values):
+    def send(self, session_id, action, **values):
         with self.write_lock:
             if self.closing:
                 return
-            self.process.stdin.write(json.dumps(dict(protocol_version=1, action=action, **values)) + '\n')
+            self.process.stdin.write(json.dumps(dict(protocol_version=2, session_id=session_id, action=action, **values)) + '\n')
             self.process.stdin.flush()
-
-    def wait(self, kind, timeout=30, predicate=lambda value: True):
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            value = self.messages.get(timeout=max(0.01, deadline - time.monotonic()))
-            if value['type'] == kind and predicate(value):
-                return value
-            if value['type'] in ('error', 'operation_error', 'blocked', 'capture_error', 'ended'):
-                raise AssertionError(value)
-        raise AssertionError('Timed out waiting for ' + kind)
 
     def close(self):
         with self.write_lock:
@@ -80,6 +65,52 @@ class Helper:
         self.reader.join(timeout=5)
         self.process.stdout.close()
         self.process.stderr.close()
+
+
+class Helper:
+    def __init__(self, executable=None, *, host=None):
+        self.session_id = uuid.uuid4().hex
+        self.owns_host = host is None
+        self.host = host or HelperHost(executable)
+        self.process = self.host.process
+        self.messages = queue.Queue()
+        self.frames = deque(maxlen=600)
+        self.events = deque(maxlen=600)
+        self.closing = False
+        self.auto_ack = True
+        self.host.clients[self.session_id] = self
+
+    def receive(self, value):
+        if value['type'] == 'frame':
+            self.frames.append(dict(received_at=time.monotonic(), **{k:v for k,v in value.items() if k != 'data'}))
+            if self.auto_ack:
+                self.send('frame_ack', generation=value['generation'], frame_id=value['frame_id'])
+        self.events.append({k:v for k,v in value.items() if k not in ('data', 'applications')})
+        self.messages.put(value)
+
+    def send(self, action, **values):
+        if not self.closing:
+            self.host.send(self.session_id, action, **values)
+
+    def wait(self, kind, timeout=30, predicate=lambda value: True):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            value = self.messages.get(timeout=max(0.01, deadline - time.monotonic()))
+            if value['type'] == kind and predicate(value):
+                return value
+            if value['type'] in ('error', 'operation_error', 'blocked', 'capture_error', 'ended'):
+                raise AssertionError(value)
+        raise AssertionError('Timed out waiting for ' + kind)
+
+    def close(self):
+        if self.closing:
+            return
+        if self.process.poll() is None:
+            self.send('detach')
+        self.closing = True
+        self.host.clients.pop(self.session_id, None)
+        if self.owns_host:
+            self.host.close()
 
 
 def run(helper_path, output):

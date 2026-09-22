@@ -34,6 +34,16 @@ done
 }
 func macFixtureScript(t *testing.T, script string) *Manager {
 	t.Helper()
+	// Fixtures model the multiplexed native protocol while keeping each test's
+	// application behavior explicit. Ending one channel never exits the host.
+	script = strings.ReplaceAll(script, "printf ", "emit ")
+	script = strings.ReplaceAll(script, "; exit 0", "")
+	script = strings.ReplaceAll(script, "while IFS= read -r request; do\n", `while IFS= read -r request; do
+ session_id=$(command printf '%s' "$request" | sed -n 's/.*"session_id":"\([a-f0-9]*\)".*/\1/p')
+`)
+	script = strings.Replace(script, "#!/bin/sh\n", `#!/bin/sh
+emit() { command printf "$@" | sed 's/^{/{"session_id":"'"$session_id"'",/'; }
+`, 1)
 	root := t.TempDir()
 	helper := filepath.Join(root, "helper")
 	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
@@ -64,6 +74,50 @@ func waitMac(t *testing.T, m *Manager, id, state string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("session did not become %s: %+v", state, m.Sessions("alice"))
+}
+
+func TestMacSessionsShareNativeProcessAcrossSuspendAndStop(t *testing.T) {
+	starts := filepath.Join(t.TempDir(), "starts")
+	m := macFixtureScript(t, `#!/bin/sh
+echo $$ >> '`+starts+`'
+while IFS= read -r request; do
+ case "$request" in
+ *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"ready":true},"applications":[{"id":"macos-fixture","name":"Fixture"}]}' ;;
+ *'"action":"launch"'*|*'"action":"resume"'*) printf '%s\n' '{"type":"window","window":"one","generation":1}' '{"type":"frame","generation":1,"data":"ZnJhbWU="}' ;;
+ *'"action":"suspend"'*) printf '%s\n' '{"type":"suspended"}' ;;
+ *'"action":"detach"'*) printf '%s\n' '{"type":"ended","end_reason":"sharing_stopped"}' ;;
+ esac
+done
+`)
+	first, err := m.macLaunch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, first.ID, "running")
+	if err := m.sessions[first.ID].native.send(map[string]any{"action": "suspend"}); err != nil {
+		t.Fatal(err)
+	}
+	second, err := m.macLaunch(context.Background(), "bob", LaunchRequest{ApplicationID: "macos-fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Stop(context.Background(), "alice", first.ID); err != nil {
+		t.Fatal(err)
+	}
+	<-m.sessions[second.ID].native.ready
+	if err := m.sessions[second.ID].native.send(map[string]any{"action": "resume"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.macCatalog(context.Background(), "bob"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(starts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines := strings.Fields(string(data)); len(lines) != 1 {
+		t.Fatalf("suspended/active sessions and catalog must share one native capture owner; helper starts: %v", lines)
+	}
 }
 func TestMacNativeLaunchDoesNotCreateViewerOrOwnedSession(t *testing.T) {
 	m := macFixture(t)
@@ -312,7 +366,11 @@ done
 		if err := c.ReadJSON(&received); err != nil {
 			t.Fatal(err)
 		}
-		request["protocol_version"] = 1
+		request["protocol_version"] = 2
+		if received.Request["session_id"] == "" {
+			t.Fatal("native request lost its application channel")
+		}
+		delete(received.Request, "session_id")
 		want, _ := json.Marshal(request)
 		got, _ := json.Marshal(received.Request)
 		if string(got) != string(want) {
@@ -523,8 +581,8 @@ while IFS= read -r request; do
  case "$request" in
  *'"action":"catalog"'*) printf '%s\n' '{"type":"catalog","availability":{"ready":true},"applications":[{"id":"macos-fixture","name":"Background App"}]}' ;;
  *'"action":"launch"'*) printf '%s\n' '{"type":"launched","instance":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' '{"type":"waiting","generation":1}'
- while [ ! -f '`+marker+`' ]; do sleep 0.02; done
- printf '%s\n' '{"type":"ended","end_reason":"application_exited"}'; exit 0 ;;
+ (while [ ! -f '`+marker+`' ]; do sleep 0.02; done
+ printf '%s\n' '{"type":"ended","end_reason":"application_exited"}') & ;;
  *'"action":"quit"'*) touch '`+marker+`'; printf '%s\n' '{"type":"quit_requested"}' ;;
  esac
 done

@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Native macOS host applications
 description: Real application discovery, direct local launch, owned remote window capture and human input on macOS.
 tags: [runtime, desktop, applications, macos, security]
-timestamp: 2026-09-21T17:00:00Z
+timestamp: 2026-09-22T01:30:00Z
 ---
 # Summary
 
@@ -43,8 +43,8 @@ distinction between quitting an app and stopping its sharing session.
 
 # Remote window ownership and transport
 
-The packaged Swift helper exposes explicit host-application protocol version 1,
-separate from its unchanged Computer Use protocol. AppKit opens or activates the
+The [native capture owner](macos-application-capture-owner.md) uses one Swift process
+and host-application protocol 2, separate from Computer Use. AppKit opens or activates the
 selected catalog bundle. The helper verifies the returned canonical bundle path
 and binds its process, so single-instance applications reuse their existing
 windows. The session records whether that process existed before the request.
