@@ -75,6 +75,7 @@ for aligned operations and unavoidable OS differences.
 | Old route returns HTTP 404/410 | Explain session is unavailable; return to library; never infer app exit | Both viewer test suites |
 | Old status/decode callback arrives late | Cannot end, repaint or block a newer connection | macOS/Xpra viewer tests |
 | Window changes while text composition or pointer move is pending | Discard pending input rather than send it to a new target | macOS viewer tests |
+| Apple/system menu or stale menu item | Omit Apple and identified cross-application actions; reject container, disabled, unknown, refreshed, removed and newly global handles; preserve application window creation | Real `menu_scope` fixture |
 | Native menu belongs to retired generation | Discard it; deliver new window before its dependent menu | macOS viewer and Go ordering tests |
 | Input cannot prove foreground/window ownership | Nonblocking failure; no replay into another app | Native input fixture and viewer operation tests |
 | Video decoder unavailable or fails | Negotiate image transport for the same process | Existing picture/viewer acceptance |

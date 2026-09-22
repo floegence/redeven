@@ -19,6 +19,7 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var cancelledCloses = 0
     var quitRequests = 0
     var menuClicks = 0
+    var menuScopeMutation = ""
     var clicks = 0
     var animation: Timer?
     var replacing = false
@@ -63,6 +64,28 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let quit = NSMenuItem(title: "Quit fixture", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp; actions.addItem(quit)
+        if Bundle.main.object(forInfoDictionaryKey: "RedevenFixtureMenuScope") as? Bool == true {
+            for (title, selector) in [("Fixture global hide", #selector(hideOtherApplications(_:))), ("Fixture global reveal", #selector(unhideAllApplications(_:))), ("Apple document", #selector(recordMenu))] {
+                let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+                item.target = self; actions.addItem(item)
+            }
+            let mutable = NSMenuItem(title: "Mutable fixture action", action: #selector(recordMenu), keyEquivalent: "")
+            mutable.target = self; actions.addItem(mutable)
+            let empty = NSMenuItem(title: "Empty fixture submenu", action: nil, keyEquivalent: "")
+            empty.submenu = NSMenu(title: "Empty fixture submenu"); actions.addItem(empty)
+            // The test changes the live tree after taking a snapshot, without
+            // changing windows or activating any real system action.
+            Timer.scheduledTimer(withTimeInterval: 0.025, repeats: true) { _ in
+                let command = Bundle.main.bundleURL.appendingPathComponent("menu-scope-command")
+                guard let mutation = try? String(contentsOf: command, encoding: .utf8), mutation != self.menuScopeMutation else { return }
+                if mutation == "blocked" { mutable.action = #selector(self.hideOtherApplications(_:)) }
+                if mutation == "restored" { mutable.action = #selector(self.recordMenu) }
+                if mutation == "removed" { actions.removeItem(mutable) }
+                self.menuScopeMutation = mutation; self.save()
+            }
+            let disabled = NSMenuItem(title: "Disabled fixture action", action: #selector(recordMenu), keyEquivalent: "")
+            disabled.target = self; disabled.isEnabled = false; actions.autoenablesItems = false; actions.addItem(disabled)
+        }
         menu.addItem(root)
         let edit = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         edit.submenu = NSMenu(title: "Edit")
@@ -129,10 +152,13 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.window.backgroundColor = NSColor(hue: hue, saturation: 0.6, brightness: 0.7, alpha: 1)
         }
     }
+    // These standard action selectors are harmless sentinels in this fixture.
+    @objc func hideOtherApplications(_ sender: Any?) { recordMenu() }
+    @objc func unhideAllApplications(_ sender: Any?) { recordMenu() }
     @objc func recordMenu() { menuClicks += 1; save() }
     @objc func click() { clicks += 1; save() }
     @objc func save() {
-        let value: [String: Any] = ["menu_clicks": menuClicks, "events": events, "pid": ProcessInfo.processInfo.processIdentifier, "clicks": clicks, "text": field?.stringValue ?? "", "window": window?.windowNumber ?? 0, "width": window?.frame.width ?? 0, "height": window?.frame.height ?? 0, "reopens": reopens, "secondary": secondary?.windowNumber ?? 0, "minimized": window?.isMiniaturized ?? false, "hidden": NSApp.isHidden, "cancelled_closes": cancelledCloses, "quit_requests": quitRequests]
+        let value: [String: Any] = ["menu_scope_mutation": menuScopeMutation, "menu_clicks": menuClicks, "events": events, "pid": ProcessInfo.processInfo.processIdentifier, "clicks": clicks, "text": field?.stringValue ?? "", "window": window?.windowNumber ?? 0, "width": window?.frame.width ?? 0, "height": window?.frame.height ?? 0, "reopens": reopens, "secondary": secondary?.windowNumber ?? 0, "minimized": window?.isMiniaturized ?? false, "hidden": NSApp.isHidden, "cancelled_closes": cancelledCloses, "quit_requests": quitRequests]
         try! JSONSerialization.data(withJSONObject: value).write(to: URL(fileURLWithPath: receipt), options: .atomic)
     }
     func windowDidResize(_ notification: Notification) { if field != nil { save() } }

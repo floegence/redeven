@@ -169,7 +169,7 @@ final class HostApplicationSession {
     private var lastInventory = ""
     private var extra: [URL] = []
     private var heldButtons = Set<Int>()
-    private var menuItems: [String: AXUIElement] = [:]
+    private let menu = HostApplicationMenu()
 
     func handle(_ request: [String: Any]) {
         do {
@@ -194,7 +194,7 @@ final class HostApplicationSession {
                 generation += 1
                 releaseButtons()
                 delivery = nil
-                menuItems.removeAll()
+                menu.invalidate()
                 updateCapture()
             case "validate":
                 guard let path = request["path"] as? String, path.hasPrefix("/"), path.hasSuffix(".app") else { throw NativeInput.invalid("An absolute application bundle path is required.") }
@@ -236,7 +236,7 @@ final class HostApplicationSession {
                 // Restore through AX, then resolve a fresh owned capture source.
                 if let selected { AXUIElementSetAttributeValue(selected.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse) }
                 generation += 1
-                menuItems.removeAll()
+                menu.invalidate()
                 selected = nil
                 waiting = false
                 if app != nil { refresh() }
@@ -260,32 +260,13 @@ final class HostApplicationSession {
                 try HostApplicationCatalog.quit(["application_id": HostApplicationCatalog.identifier(url), "instances": [instance]])
             case "menu":
                 let application = AXUIElementCreateApplication(try applicationTarget(request).processIdentifier)
-                menuItems.removeAll()
-                guard let value = axValue(application, kAXMenuBarAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() else { throw NativeInput.unavailable() }
-                let root = unsafeBitCast(value, to: AXUIElement.self)
-                var count = 0
-                func items(_ node: AXUIElement, depth: Int) -> [[String: Any]] {
-                    guard depth < 6, count < 500 else { return [] }
-                    var result: [[String: Any]] = []
-                    for child in (axValue(node, kAXChildrenAttribute) as? [AXUIElement] ?? []) {
-                        count += 1
-                        if count > 500 { break }
-                        let title = axString(child, kAXTitleAttribute)
-                        let children = items(child, depth: depth + 1)
-                        if title.isEmpty { result.append(contentsOf: children); continue }
-                        let id = UUID().uuidString
-                        self.menuItems[id] = child
-                        result.append(["id": id, "title": title, "enabled": (axValue(child, kAXEnabledAttribute) as? Bool) != false, "children": children])
-                    }
-                    return result
-                }
-                self.output(["type": "menu", "generation": generation, "items": items(root, depth: 0)])
+                self.output(["type": "menu", "generation": generation, "items": try menu.snapshot(application)])
             case "menu_action":
-                _ = try applicationTarget(request)
-                guard let id = request["item"] as? String, let item = menuItems[id], (axValue(item, kAXEnabledAttribute) as? Bool) != false else { throw NativeInput.invalid("The menu item is unavailable.") }
+                let application = AXUIElementCreateApplication(try applicationTarget(request).processIdentifier)
+                guard let id = request["item"] as? String else { throw NativeInput.invalid("The menu item is unavailable.") }
+                let item = try menu.takeAction(id, application: application)
                 _ = app?.activate(options: [])
                 guard AXUIElementPerformAction(item, kAXPressAction as CFString) == .success else { throw NativeInput.unavailable() }
-                menuItems.removeAll()
             case "input": try input(request)
             case "release": releaseButtons()
             default: throw NativeInput.invalid("Unknown host application action.")
@@ -341,7 +322,7 @@ final class HostApplicationSession {
         if blockedReason != reason {
             blockedReason = reason
             generation += 1
-            menuItems.removeAll()
+            menu.invalidate()
             releaseButtons()
             selected = nil
             updateCapture()
@@ -360,7 +341,7 @@ final class HostApplicationSession {
         guard !waiting else { return }
         waiting = true
         generation += 1
-        menuItems.removeAll()
+        menu.invalidate()
         releaseButtons()
         selected = nil
         updateCapture()
@@ -412,7 +393,7 @@ final class HostApplicationSession {
         _ = resizeWindow(window)
         selected = window
         generation += 1
-        menuItems.removeAll()
+        menu.invalidate()
         releaseButtons()
         updateCapture()
     }
@@ -582,7 +563,7 @@ final class HostApplicationSession {
         app = nil
         selected = nil
         delivery = nil
-        menuItems.removeAll()
+        menu.invalidate()
         timer?.invalidate()
         timer = nil
         let previous = capture
