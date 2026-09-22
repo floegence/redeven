@@ -23,9 +23,11 @@ copy.quitDescription = enUS.hostApplications.sessionQuitDescription;
 copy.pictureHint = enUS.hostApplications.sessionPictureHint;
 const clientScript = `
 window.operations=[];
+window.contentInput=[];
 function remoteWindow(wid,title){
 const div=document.createElement('article');div.innerHTML='<small>HOST APPLICATION</small><h1></h1><p>Window content stays below the native titlebar.</p>';
 div.querySelector('h1').textContent=title;document.body.append(div);
+for(const type of ['pointerdown','pointerup','click'])div.addEventListener(type,event=>{window.contentInput.push([type,event.defaultPrevented]);event.stopPropagation()});
 return {wid,div,metadata:{title},windowtype:['NORMAL'],override_redirect:false,tray:false,
 has_windowtype:types=>types.includes('NORMAL'),screen_resized(){},set_maximized(){},set_minimized(){},initiate_moveresize(){},move_resize(){},update_metadata(value){Object.assign(this.metadata,value)},destroy(){div.remove()}};
 }
@@ -71,7 +73,9 @@ async function run() {
   };
   win.on('resize', layout);
   layout();
-  const evaluate = (expression: string) => view.webContents.executeJavaScript(expression);
+  const evaluate = (expression: string) => view.webContents.executeJavaScript(expression).catch(error => {
+    throw new Error(`Viewer evaluation failed: ${expression}: ${String(error)}`);
+  });
   const wait = async (expression: string) => {
     const until = Date.now() + 8000;
     while (Date.now() < until) {
@@ -79,6 +83,11 @@ async function run() {
       await new Promise(resolve => setTimeout(resolve, 25));
     }
     throw new Error('Timed out: ' + expression);
+  };
+  const click = async (selector: string, content = false) => {
+    const position = await evaluate(`(()=>{const frame=document.querySelector('#application');const element=${content ? 'frame.contentDocument' : 'document'}.querySelector(${JSON.stringify(selector)});const rect=element.getBoundingClientRect();const offset=${content ? 'frame.getBoundingClientRect()' : '{left:0,top:0}'};return {x:Math.round(offset.left+rect.left+rect.width/2),y:Math.round(offset.top+rect.top+Math.min(rect.height/2,100))};})()`);
+    view.webContents.sendInputEvent({ type: 'mouseDown', ...position, button: 'left', clickCount: 1 });
+    view.webContents.sendInputEvent({ type: 'mouseUp', ...position, button: 'left', clickCount: 1 });
   };
   try {
     await view.webContents.loadURL(url);
@@ -89,6 +98,36 @@ async function run() {
     assert(geometry.left >= (process.platform === 'darwin' ? 84 : 16));
     assert.deepEqual(geometry.bridge.sort(), ['request', 'subscribe']);
     assert.equal(geometry.childBridge, 'undefined');
+    // Native input must cross the iframe boundary, dismiss the toolbar, and
+    // still reach the application exactly once, including after reconnection.
+    for (const reconnect of [false, true]) {
+      if (reconnect) {
+        await evaluate(`document.querySelector('#application').contentWindow.redevenXpraClient().callback_close()`);
+        await wait(`document.body.dataset.state==='disconnected'`);
+        await click('#retry');
+        await wait(`document.body.dataset.state==='active'`);
+      }
+      for (const selector of ['.mac-app-controls-toggle', '.mac-app-windows-toggle', '.mac-app-quit']) {
+        await click(selector);
+        await wait(`!document.querySelector('.mac-app-popover').hidden`);
+        if (selector === '.mac-app-controls-toggle') {
+          await click('[data-picture-mode="clarity"]');
+          await wait(`document.querySelector('#application').contentWindow.operations.some(v=>v[0]==='quality'&&v[1]===95)`);
+          assert.equal(await evaluate(`document.querySelector('.mac-app-popover').hidden`), false);
+          await click(selector);
+          await wait(`document.querySelector('.mac-app-popover').hidden`);
+          await click(selector);
+          await wait(`!document.querySelector('.mac-app-popover').hidden`);
+        }
+        await evaluate(`document.querySelector('#application').contentWindow.contentInput=[]`);
+        await click('article:not([hidden]) p', true);
+        await wait(`document.querySelector('#application').contentWindow.contentInput.length===3`);
+        assert.equal(await evaluate(`document.querySelector('.mac-app-popover').hidden`), true);
+        assert.equal(await evaluate(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-expanded')`), 'false');
+        assert.deepEqual(await evaluate(`document.querySelector('#application').contentWindow.contentInput`), [['pointerdown', false], ['pointerup', false], ['click', false]]);
+      }
+    }
+    console.log('Titlebar outside-input acceptance passed: three popovers, preserved clicks, internal controls and reconnect');
     await evaluate(`document.querySelector('.mac-app-windows-toggle').click();document.querySelectorAll('.mac-app-window-list button')[1].click()`);
     assert.equal(await evaluate(`document.querySelector('#application').contentWindow.redevenXpraClient().focused_wid`), 2);
     await evaluate(`document.querySelector('.mac-app-controls-toggle').click();document.querySelector('[data-picture-mode="clarity"]').click()`);

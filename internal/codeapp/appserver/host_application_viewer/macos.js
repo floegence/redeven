@@ -736,7 +736,7 @@
   close.onclick = () => { collapseControls(); send({ action: 'close' }); };
   document.addEventListener('pointerdown', event => {
     if (!controls.contains(event.target)) collapseControls();
-  });
+  }, true);
   controls.addEventListener('focusout', event => {
     // WebKit may blur to the document before clicking another control.
     if (event.relatedTarget && !controls.contains(event.relatedTarget)) collapseControls();

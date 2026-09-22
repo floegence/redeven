@@ -529,6 +529,43 @@ it('keeps controls open during WebKit button blur and closes for a concrete outs
  expect(drawer.hidden).toBe(true);
 });
 
+it('dismisses on outside input before a target can stop event propagation', async () => {
+  const v = await viewer(); await v.activate();
+  const doc = dom.window.document;
+  doc.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!.click();
+  const input = vi.fn((event: Event) => event.stopPropagation());
+  doc.body.addEventListener('pointerdown', input);
+  const event = new dom.window.Event('pointerdown', {bubbles:true, cancelable:true});
+  doc.body.dispatchEvent(event);
+  expect(doc.querySelector<HTMLElement>('.mac-app-popover')!.hidden).toBe(true);
+  expect(event.defaultPrevented).toBe(false);
+  expect(input).toHaveBeenCalledOnce();
+  expect(v.socket().send).not.toHaveBeenCalled();
+});
+
+it.each(['.mac-app-menu-toggle', '.mac-app-windows-toggle', '.mac-app-controls-toggle', '.mac-app-quit'])(
+  'dismisses %s while delivering a canvas click once and keeping application focus', async selector => {
+    const v = await viewer(); await v.activate();
+    const doc = dom.window.document;
+    const canvas = doc.querySelector('canvas')!;
+    Object.assign(canvas, {setPointerCapture:vi.fn(), hasPointerCapture:() => false});
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({left:0, top:46, width:640, height:480} as DOMRect);
+    const toggle = doc.querySelector<HTMLButtonElement>(selector)!;
+    toggle.click();
+    v.socket().send.mockClear();
+    for (const type of ['pointerdown', 'pointerup']) {
+      canvas.dispatchEvent(new dom.window.MouseEvent(type, {bubbles:true, cancelable:true, clientX:320, clientY:286}));
+    }
+    expect(doc.querySelector<HTMLElement>('.mac-app-popover')!.hidden).toBe(true);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(doc.activeElement).toBe(doc.querySelector('textarea'));
+    expect(v.socket().send.mock.calls.map(([raw]) => JSON.parse(raw))).toEqual([
+      expect.objectContaining({action:'input', kind:'down', x:0.5, y:0.5}),
+      expect.objectContaining({action:'input', kind:'up', x:0.5, y:0.5}),
+    ]);
+  },
+);
+
 
 describe('fixed application toolbar', () => {
   it('uses the supplied icon and names the application menu without repeating an untitled window', async () => {
