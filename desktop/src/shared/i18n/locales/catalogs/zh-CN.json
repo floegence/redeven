@@ -2861,5 +2861,11 @@
     "expired": "连接凭据已过期",
     "requested": "已请求连接 {label}，Redeven Cloud 状态将自动更新。",
     "permissionRevoked": "Cloud 权限已撤销"
+  },
+  "windowStatus": {
+    "checkingService": "正在检查服务状态",
+    "preparingEditor": "正在连接编辑器服务",
+    "editorUnavailableDetail": "编辑器未能打开。请返回 Codespaces 后重试。",
+    "technicalDetails": "技术详情"
   }
 }

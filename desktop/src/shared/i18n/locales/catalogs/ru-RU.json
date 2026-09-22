@@ -2897,5 +2897,11 @@
     "expired": "Срок действия учётных данных истёк",
     "requested": "Запрошено подключение для {label}. Статус Redeven Cloud обновится автоматически.",
     "permissionRevoked": "Разрешение Cloud отозвано"
+  },
+  "windowStatus": {
+    "checkingService": "Проверка состояния сервиса",
+    "preparingEditor": "Подключение к сервису редактора",
+    "editorUnavailableDetail": "Не удалось открыть редактор. Вернитесь в Codespaces и повторите попытку.",
+    "technicalDetails": "Технические сведения"
   }
 }

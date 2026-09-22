@@ -13,7 +13,7 @@ Desktop owns each built-in CodeSpace window, persistent browser profile, protect
 
 ## Trusted opening requests
 
-The trusted environment root frame submits `loading` or `open` with a DNS-safe CodeSpace ID. Open may carry an ephemeral access password for the separately authorized remote Code App session. It accepts no URL, host, port, route, or legacy navigation request. Env App starts the editor first; Desktop resolves the route from the sender's existing EnvironmentSession. Loading is a scriptless local document.
+The trusted environment root frame submits `loading` or `open` with a DNS-safe CodeSpace ID. Open may carry an ephemeral access password for the separately authorized remote Code App session. It accepts no URL, host, port, route, or legacy navigation request. Env App starts the editor first; Desktop resolves the route from the sender's existing EnvironmentSession. Loading is a scriptless local document. [Whole-window status surfaces](../ui/window-status-surfaces.md) owns its shared visual treatment and progress indication.
 
 ## Window navigation and recovery
 

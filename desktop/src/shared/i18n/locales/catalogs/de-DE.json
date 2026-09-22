@@ -2866,5 +2866,11 @@
     "expired": "Zugangsdaten abgelaufen",
     "requested": "Verbindung für {label} angefordert. Der Redeven Cloud-Status wird automatisch aktualisiert.",
     "permissionRevoked": "Cloud-Berechtigung widerrufen"
+  },
+  "windowStatus": {
+    "checkingService": "Dienststatus wird geprüft",
+    "preparingEditor": "Verbindung zum Editordienst wird hergestellt",
+    "editorUnavailableDetail": "Der Editor konnte nicht geöffnet werden. Kehren Sie zu Codespaces zurück und versuchen Sie es erneut.",
+    "technicalDetails": "Technische Details"
   }
 }

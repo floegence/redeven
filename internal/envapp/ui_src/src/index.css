@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import '@floegence/floe-webapp-core/tailwind';
+@import '@floegence/floe-webapp-core/window-status.css';
 @import './styles/redeven.css';
 @import './ui/plugins/plugin-motion.css';
 @import './ui/plugins/plugin-center.css';

@@ -2867,5 +2867,11 @@
     "expired": "Identifiants de connexion expirés",
     "requested": "Connexion demandée pour {label}. L’état de Redeven Cloud sera mis à jour automatiquement.",
     "permissionRevoked": "Autorisation Cloud révoquée"
+  },
+  "windowStatus": {
+    "checkingService": "Vérification de l’état du service",
+    "preparingEditor": "Connexion au service de l’éditeur",
+    "editorUnavailableDetail": "L’éditeur n’a pas pu s’ouvrir. Revenez à Codespaces et réessayez.",
+    "technicalDetails": "Détails techniques"
   }
 }

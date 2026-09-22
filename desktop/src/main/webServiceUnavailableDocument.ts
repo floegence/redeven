@@ -1,6 +1,39 @@
+import type { WebContents } from 'electron';
+import { windowStatusIllustrationSvg, windowStatusRefreshSvg } from '@floegence/floe-webapp-core/window-status';
+import { createDesktopI18n, normalizeRedevenLocale } from '../shared/i18n';
+import { windowStatusDocumentStyleText } from './windowStatusDocument';
 import { buildDesktopWindowChromeStyleText } from '../shared/windowChromeContract';
 import { resolveDesktopWindowChromeSnapshot } from '../shared/windowChromePlatform';
 import type { DesktopThemeSnapshot } from '../shared/desktopTheme';
+
+// A scriptless data document cannot navigate its own data URL from Chromium.
+// The host intercepts this reserved intent before network access, only from its exact status document.
+export const WEB_SERVICE_RETRY_INTENT_URL = 'https://redeven.invalid/window-status/retry';
+
+export function isWebServiceUnavailableRetryIntent(targetURL: string, currentURL: string, documentURL: string): boolean {
+  return Boolean(documentURL && currentURL === documentURL && targetURL === WEB_SERVICE_RETRY_INTENT_URL);
+}
+
+const retryFeedbackCSS = `
+  .floe-window-status .retry { visibility: hidden; pointer-events: none; }
+  .floe-window-status .retrying-label { display: inline; }
+  .floe-window-status .idle-status { display: none; }
+`;
+
+/** Switch the trusted status document to working feedback without another navigation. */
+export async function showWebServiceRetryFeedback(
+  contents: Pick<WebContents, 'insertCSS' | 'removeInsertedCSS' | 'getURL' | 'isDestroyed'>,
+  documentURL: string,
+  isCurrent: () => boolean,
+): Promise<boolean> {
+  if (contents.isDestroyed() || !isCurrent() || contents.getURL() !== documentURL) return false;
+  const styleKey = await contents.insertCSS(retryFeedbackCSS);
+  await new Promise<void>((resolve) => setTimeout(resolve, 600));
+  const current = !contents.isDestroyed() && isCurrent() && contents.getURL() === documentURL;
+  // Keep working feedback until the service replaces this document; navigation discards its CSS.
+  if (!current && !contents.isDestroyed()) await contents.removeInsertedCSS(styleKey);
+  return current;
+}
 
 export type WebServiceUnavailableCopy = Readonly<{
   locale: string;
@@ -32,6 +65,7 @@ export function buildWebServiceUnavailableDocumentURL(
   presentation: 'browser' | 'application' = 'browser',
 ): string {
   const palette = theme.semantic;
+  const i18n = createDesktopI18n(normalizeRedevenLocale(copy.locale) || 'en-US');
   const document = `<!doctype html>
 <html lang="${htmlEscape(copy.locale)}" data-floe-shell-theme="${htmlEscape(theme.activeShellTheme)}" data-theme-palette-version="${palette.version}">
 <head>
@@ -42,89 +76,31 @@ export function buildWebServiceUnavailableDocumentURL(
   <style>
 ${presentation === 'application' ? buildDesktopWindowChromeStyleText(resolveDesktopWindowChromeSnapshot()) : ''}
 .host-application-loading-titlebar{position:fixed;inset:0 0 auto;display:flex;align-items:center;height:var(--redeven-desktop-titlebar-height);padding-inline:var(--redeven-desktop-titlebar-start-inset) var(--redeven-desktop-titlebar-end-inset);font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;app-region:drag;user-select:none}
-    :root {
-      color-scheme: ${theme.resolvedTheme};
-      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --background: ${palette.background};
-      --surface: ${palette.surface};
-      --foreground: ${palette.foreground};
-      --muted-foreground: ${palette.mutedForeground};
-      --border: ${palette.border};
-      --primary: ${palette.primary};
-      --primary-foreground: ${palette.primaryForeground};
-      --warning: ${palette.warning};
-      --warning-soft: color-mix(in srgb, var(--warning) 11%, var(--surface));
-      --warning-border: color-mix(in srgb, var(--warning) 38%, var(--surface));
-      --shadow: color-mix(in srgb, var(--foreground) 8%, transparent);
-      --primary-hover: color-mix(in srgb, var(--primary) 88%, var(--foreground));
-      --primary-focus: color-mix(in srgb, var(--primary) 70%, var(--foreground));
-    }
-    .application main { max-width:440px; text-align:center; }
-    .application .signal { margin:0 auto 24px; border-color:var(--border); background:var(--surface); color:var(--muted-foreground); border-radius:16px; width:64px; height:64px; }
-    .application h1 { font-size:20px; letter-spacing:-.025em; }
-    .application .summary { font-size:13px; margin:12px 0 0; }
-    .application .actions { justify-content:center; margin-top:24px; }
-    .application .retry { background:var(--surface); color:var(--foreground); border-color:var(--border); border-radius:8px; cursor:pointer; }
-    * { box-sizing: border-box; }
-    html, body { min-width: 100%; min-height: 100%; margin: 0; }
-    body { display: grid; place-items: center; background: var(--background); color: var(--foreground); }
-    main { width: min(620px, 100%); padding: 52px 36px 60px; }
-    .signal { width: 48px; height: 48px; display: grid; place-items: center; margin-bottom: 24px; border: 1px solid var(--warning-border); border-radius: 8px; background: var(--warning-soft); color: var(--warning); box-shadow: 0 1px 2px var(--shadow); }
-    .signal svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-    .eyebrow { margin: 0 0 8px; color: var(--warning); font-size: 12px; font-weight: 650; line-height: 1.4; letter-spacing: 0; text-transform: uppercase; }
-    h1 { margin: 0; max-width: 560px; font-size: 25px; font-weight: 650; line-height: 1.24; letter-spacing: 0; }
-    .summary { margin: 12px 0 28px; max-width: 560px; color: var(--muted-foreground); font-size: 15px; line-height: 1.65; }
-    .target { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 14px; padding: 13px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-    .target-label { color: var(--muted-foreground); font-size: 12px; font-weight: 600; }
-    .target code { min-width: 0; overflow: hidden; color: var(--foreground); font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-    .checks { margin: 25px 0 0; }
-    .checks h2 { margin: 0 0 11px; color: var(--foreground); font-size: 13px; font-weight: 650; line-height: 1.4; letter-spacing: 0; }
-    .checks p { position: relative; margin: 7px 0; padding-left: 18px; color: var(--muted-foreground); font-size: 13px; line-height: 1.55; }
-    .checks p::before { content: ""; position: absolute; left: 1px; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--warning); }
-    .actions { display: flex; align-items: center; margin-top: 30px; }
-    .retry { min-height: 38px; display: inline-flex; align-items: center; gap: 8px; padding: 0 15px; border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: var(--primary-foreground); font-size: 13px; font-weight: 650; line-height: 1; text-decoration: none; box-shadow: 0 1px 2px var(--shadow); }
-    .retry:hover { background: var(--primary-hover); }
-    .retry:focus-visible { outline: 2px solid var(--primary-focus); outline-offset: 3px; }
-    .retry svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    ${windowStatusDocumentStyleText(theme)}
+    .host-application-loading-titlebar { z-index: 1; }
+    .application .floe-window-status { top: var(--redeven-desktop-titlebar-height); }
     .retrying-label { display: none; }
-    .retry:target { pointer-events: none; opacity: .88; }
-    .retry:target svg { animation: spin .75s linear infinite; }
-    .retry:target .retry-label { display: none; }
-    .retry:target .retrying-label { display: inline; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) { .retry:target svg { animation: none; } }
-    @media (max-width: 520px) {
-      main { padding: 36px 24px 44px; }
-      h1 { font-size: 22px; }
-      .target { grid-template-columns: 1fr; gap: 5px; }
-      .target code { text-align: left; }
-    }
   </style>
 </head>
 <body class="${presentation}">
-${presentation === 'application' ? `<header class="host-application-loading-titlebar">${htmlEscape(copy.documentTitle)}</header>` : ''}  <main>
-    <div class="signal" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><path d="M9.5 14.5 14.5 9.5"/><path d="m7 17-1.2 1.2a3.5 3.5 0 0 1-5-5L5 9a3.5 3.5 0 0 1 5 0"/><path d="m17 7 1.2-1.2a3.5 3.5 0 0 1 5 5L19 15a3.5 3.5 0 0 1-5 0"/></svg>
-    </div>
-    ${presentation === 'browser' ? `<p class="eyebrow">${htmlEscape(copy.eyebrow)}</p>` : ''}
-    <h1>${htmlEscape(copy.title)}</h1>
-    <p class="summary">${htmlEscape(copy.summary)}</p>
-    ${presentation === 'browser' ? `<div class="target">
-      <span class="target-label">${htmlEscape(copy.targetLabel)}</span>
-      <code title="${htmlEscape(targetAddress)}">${htmlEscape(targetAddress)}</code>
-    </div>
-    <section class="checks" aria-labelledby="checks-title">
-      <h2 id="checks-title">${htmlEscape(copy.checksTitle)}</h2>
-      <p>${htmlEscape(copy.serviceCheck)}</p>
-      <p>${htmlEscape(copy.portCheck)}</p>
-    </section>` : ''}
-    <div class="actions">
-      <a id="retry" class="retry" href="#retry" aria-live="polite">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M19 11a7 7 0 1 0 1 5"/></svg>
-        <span class="retry-label">${htmlEscape(copy.retryLabel)}</span>
-        <span class="retrying-label">${htmlEscape(copy.retryingLabel)}</span>
-      </a>
-    </div>
+${presentation === 'application' ? `<header class="host-application-loading-titlebar">${htmlEscape(copy.documentTitle)}</header>` : ''}  <main class="floe-window-status">
+    <section class="floe-window-status__content" aria-labelledby="window-title">
+      ${windowStatusIllustrationSvg('service')}
+      <p class="floe-window-status__identity">${htmlEscape(copy.eyebrow)}</p>
+      <h1 id="window-title" class="floe-window-status__title">${htmlEscape(copy.title)}</h1>
+      <p class="floe-window-status__description">${htmlEscape(copy.summary)}</p>
+      <div class="floe-window-status__activity" role="status" aria-live="polite">
+        <div class="idle-status">${presentation === 'browser' ? `<p class="floe-window-status__label">${htmlEscape(copy.targetLabel)}</p><code title="${htmlEscape(targetAddress)}">${htmlEscape(targetAddress)}</code>` : htmlEscape(copy.documentTitle)}</div>
+        <div class="retrying-label"><p class="floe-window-status__label">${htmlEscape(copy.retryingLabel)}</p><span data-floe-progress-shimmer="text">${htmlEscape(i18n.t('windowStatus.checkingService'))}</span></div>
+      </div>
+      <div class="floe-window-status__actions">
+        <a id="retry" class="retry floe-window-status__button" href="${WEB_SERVICE_RETRY_INTENT_URL}">
+          ${windowStatusRefreshSvg}
+          <span class="retry-label">${htmlEscape(copy.retryLabel)}</span>
+        </a>
+      </div>
+      ${presentation === 'browser' ? `<details class="floe-window-status__details"><summary>${htmlEscape(i18n.t('windowStatus.technicalDetails'))}</summary><h2 class="floe-window-status__label">${htmlEscape(copy.checksTitle)}</h2><p>${htmlEscape(copy.serviceCheck)}</p><p>${htmlEscape(copy.portCheck)}</p></details>` : ''}
+    </section>
   </main>
 </body>
 </html>`;
