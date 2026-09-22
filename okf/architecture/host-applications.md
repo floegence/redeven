@@ -85,8 +85,11 @@ first decoded pixels; they must not be presented as end-to-end connection latenc
 The Runtime limits concurrent sessions to twelve and retains at most forty-eight
 session records per Runtime lifetime. Startup failures retain failed status so a
 failed launch cannot disappear silently from the library. A previously running
-session becomes ended when its server exits, retaining any exit diagnostic without
-mislabeling an application's closure as a failure to open.
+session becomes ended when its server exits normally. An unexpected Xpra process
+failure records `capture_failed`, logs the backend exit, and retains failed status
+so the viewer shows localized session recovery rather than dismissing itself as a
+normal application exit. Both outcomes release the private route and credentials
+and reclaim the session's owned process group.
 
 The [Web Service session owner](web-service-browser-sessions.md) provides an
 owned ephemeral route that is pinned until application termination, is absent

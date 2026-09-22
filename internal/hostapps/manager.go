@@ -329,7 +329,8 @@ func (m *Manager) run(s *ownedSession, dir, address string) {
 	<-readyDone
 	m.mu.Lock()
 	if err != nil && !s.stopping {
-		code = "application_exited"
+		code = "capture_failed"
+		slog.Warn("host application capture backend exited", "session", s.view.ID, "backend", "xpra", "error", err)
 	}
 	m.mu.Unlock()
 }
@@ -440,9 +441,9 @@ func (m *Manager) finish(s *ownedSession, code string, release func()) {
 		s.view.ErrorCode = code
 	}
 	s.view.State = "ended"
-	// Xpra cleanup errors retain its ended lifecycle. A native helper failure
-	// cannot prove the host application closed and must retain viewer recovery.
-	if s.view.ErrorCode != "" && (!wasRunning || s.native != nil) {
+	// A capture failure must remain visible for recovery instead of triggering
+	// the viewer's normal application-ended dismissal.
+	if s.view.ErrorCode != "" && (!wasRunning || s.native != nil || s.view.ErrorCode == "capture_failed") {
 		s.view.State = "failed"
 	}
 	s.stopping = true

@@ -12,13 +12,13 @@ verification, staging, self-check and activation. Redeven owns authenticated pro
 routes, private state placement, localized preparation and the user's pending app
 opening. Applications execute on the host. Preparation never requires a container,
 VM, package-manager command, custom software source, or administrator password.
-Only a verified installation whose real window, decoded pixels and input receipt
-pass self-check becomes ready. Failure preserves an explicit retry boundary;
+Only a verified installation whose real window, decoded pixels, fresh input and
+WebSocket disconnect/reconnect checks pass self-check becomes ready. Failure preserves an explicit retry boundary;
 closing a pending viewer prevents its automatic application opening.
 
 # Component ownership and admission
 
-Redeven consumes `github.com/floegence/floe-native-apps` v0.2.1 as a published Go
+Redeven consumes `github.com/floegence/floe-native-apps` v0.2.2 as a published Go
 module, built with the same Go 1.27.1 toolchain. Its embedded catalog pins original
 publisher URLs, archive sizes, SHA-256, licenses and source references. The Runtime accepts no client-provided URL, hash,
 catalog, executable, or install destination. The upstream acquires original Alpine
@@ -33,6 +33,11 @@ library path. Linux amd64 and arm64 use the same acquisition contract regardless
 of whether the host uses glibc or musl. A valid managed installation takes priority;
 otherwise an already compatible complete system stack remains usable. A partial
 managed installation is never mixed with system support components.
+The released catalog revision invalidates the earlier prepared component identity.
+Upstream preparation corrects the pinned decoder before qualification and atomic
+activation; original publisher archives remain unchanged and cached for reuse.
+The same application process must survive repeated WebSocket viewer closures.
+This qualification runs during component preparation, not on every app opening.
 
 The GIO application launcher restores the original host tool/library environment
 from upstream's explicit saved map before executing user software. The session's
@@ -113,4 +118,4 @@ cannot silently grant them. A graphical login remains required, as defined by th
 - `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx`: pending-window continuation and cancellation races.
 - `desktop/src/main/hostApplicationPreparationWindows.test.ts`: exact document ownership and inert presentation.
 - `desktop/src/main/hostApplicationComponents.test.ts` and `cmd/redeven/host_application_package.go`: Desktop relay and released acquisition delegation.
-- [Upstream v0.2.1](https://github.com/floegence/floe-native-apps/releases/tag/v0.2.1): pinned component catalog, integrity/extraction, silent-session options and native readiness qualification.
+- [Upstream v0.2.2](https://github.com/floegence/floe-native-apps/releases/tag/v0.2.2): pinned component catalog, integrity/extraction, silent-session options, safe short-frame decoding and native reconnect qualification.

@@ -132,11 +132,16 @@ describe('host application viewer', () => {
   });
 
   it('directs a failed session back to the application library instead of retrying it', async () => {
-    const v = await viewer();
-    v.fetch.mockResolvedValue({ok:true,json:async () => ({state:'failed'})});
+    const v = await viewer(false, true);
+    v.appWindow(1); v.client._new_window(1);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    expect(v.state()).toBe('active');
+    v.fetch.mockResolvedValue({ok:true,json:async () => ({state:'failed', error_code:'capture_failed'})});
     v.doc.dispatchEvent(new dom.window.Event('connection-lost')); await drain();
     expect(v.state()).toBe('sessionFailed');
     expect(dom.window.document.querySelector<HTMLButtonElement>('#retry')!.hidden).toBe(true);
+    expect(v.nativeWindow.request).not.toHaveBeenCalledWith('close');
+    expect(dom.window.document.querySelector<HTMLButtonElement>('#dismiss')!.hidden).toBe(false);
   });
 
   it('fits primary windows, preserves transient dialogs and reveals only painted content', async () => {
