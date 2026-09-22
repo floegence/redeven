@@ -10,7 +10,12 @@
     <link rel="icon" type="image/svg+xml" href="/_redeven_proxy/env/favicon.svg" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div data-env-document-loading role="status" aria-label="Redeven" style="position:fixed;inset:0;display:grid;place-content:center;gap:16px;background:Canvas;color:CanvasText;color-scheme:light dark">
+        <img src="/_redeven_proxy/env/favicon.svg" alt="Redeven" width="40" height="40" style="justify-self:center" />
+        <progress aria-label="Redeven" style="width:96px;height:4px;accent-color:currentColor"></progress>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

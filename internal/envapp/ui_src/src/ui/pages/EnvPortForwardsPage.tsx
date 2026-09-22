@@ -3349,8 +3349,8 @@ export function EnvPortForwardsPage() {
             </Button>
                 </>} />
 
-      <main {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="web-services-main min-h-0 flex-1 overflow-auto">
-        <div class="web-services-content">
+      <main {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="web-services-main min-h-0 flex-1 overflow-auto" data-floe-reload-scroll="web-services">
+        <div class="web-services-content" data-env-reload-state={collectionRenderable() ? forwardsRenderable() || managedResource.data() !== undefined ? 'content' : 'error' : forwardsCheckFailed() || managedLoadError() ? 'error' : 'pending'}>
           <section aria-label={i18n.t('webServices.address.label')}>
             <form
               class="w-full"

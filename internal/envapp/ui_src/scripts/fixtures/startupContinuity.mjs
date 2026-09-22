@@ -1,3 +1,4 @@
+import { PNG } from 'pngjs';
 import { createBuiltDistServer } from '../checkPackagedRenderer.mjs';
 
 export const navigationPages = ['terminal', 'monitor', 'files', 'codespaces', 'ports', 'applications', 'containers', 'ai', 'settings', 'plugin-center'];
@@ -15,12 +16,13 @@ export async function createContinuityServer(tls) {
   const gates = new Map();
   const requests = [];
   let empty = false;
+  let readDenied = false;
   let dataFailure = false;
   const app = { id: 'continuity-editor', name: 'Continuity Editor', description: '', categories: [], icon, custom: false };
   const catalog = () => ({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: empty ? [] : [app], sessions: [], running: empty ? [] : [{ application_id: app.id, instances: ['process-1'] }] });
   const fixtures = {
     '/api/local/runtime': () => ({ env_public_id: 'env_local', effective_run_mode: 'local' }),
-    '/api/local/environment': () => ({ public_id: 'env_local', name: 'Continuity host', namespace_public_id: 'namespace', status: 'online', lifecycle_status: 'running', permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
+    '/api/local/environment': () => ({ public_id: 'env_local', name: 'Continuity host', namespace_public_id: 'namespace', status: 'online', lifecycle_status: 'running', permissions: { can_read: !readDenied, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
     '/_redeven_proxy/api/ui-cache-scope': () => ({ scope_id: 'c'.repeat(64) }),
     '/_redeven_proxy/api/host-applications': catalog,
     '/_redeven_proxy/api/host-applications/sessions': () => [],
@@ -36,6 +38,7 @@ export async function createContinuityServer(tls) {
   };
   const group = path => path === '/api/local/environment' ? 'permissions' : path.endsWith('/ui-cache-scope') ? 'scope' : path.startsWith('/_redeven_proxy/api/') ? 'data' : 'runtime';
   const server = await createBuiltDistServer({ accessReady: true, tls, renewPeerOnConnect: true, handleRequest: async (_request, response, url) => {
+    if (/\/assets\/index-[^/]+\.js$/.test(url.pathname)) { await gates.get('entry')?.promise; return false; }
     const fixture = fixtures[url.pathname];
     if (!fixture) return false;
     requests.push(url.pathname);
@@ -45,7 +48,7 @@ export async function createContinuityServer(tls) {
     response.end(JSON.stringify(dataFailure && group(url.pathname) === 'data' ? { error: 'Fixture unavailable' } : fixture()));
     return true;
   } });
-  return { ...server, requests, setEmpty: value => { empty = value; }, setDataFailure: value => { dataFailure = value; }, hold(name) {
+  return { ...server, requests, setReadDenied: value => { readDenied = value; }, setEmpty: value => { empty = value; }, setDataFailure: value => { dataFailure = value; }, hold(name) {
     let release;
     const promise = new Promise(resolve => { release = resolve; });
     gates.set(name, { promise, release });
@@ -60,10 +63,36 @@ export function observeContinuityFrames({ row, skeleton }) {
     const visible = element => !!element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0 && globalThis.getComputedStyle(element).visibility !== 'hidden';
     const main = globalThis.document.querySelector('[data-floe-shell-slot="main"]');
     const views = [...globalThis.document.querySelectorAll('[data-floe-keep-alive-view]')].filter(visible).map(element => element.getAttribute('data-floe-keep-alive-view')).filter(id => id !== 'activity' && id !== 'workbench');
-    const value = { main: visible(main), views, row: visible(globalThis.document.querySelector(row)), skeleton: visible(globalThis.document.querySelector(skeleton)) };
+    const value = { documentLoading: visible(globalThis.document.querySelector('[data-env-document-loading]')),
+      placeholder: visible(globalThis.document.querySelector('[data-floe-reload-placeholder]')), main: visible(main), views, row: visible(globalThis.document.querySelector(row)), skeleton: visible(globalThis.document.querySelector(skeleton)) };
     const last = frames[frames.length - 1];
     if (JSON.stringify(value) !== JSON.stringify(last)) frames.push(value);
     globalThis.requestAnimationFrame(sample);
   };
   globalThis.requestAnimationFrame(sample);
+}
+
+// DOM sampling starts with JavaScript. Screencast also observes compositor paints
+// during document replacement, before the application or its observer can run.
+export async function recordDocumentPaints(cdp) {
+  const frames = [];
+  const receive = event => {
+    frames.push(Buffer.from(event.data, 'base64'));
+    void cdp.send('Page.screencastFrameAck', { sessionId: event.sessionId }).catch(() => {});
+  };
+  cdp.on('Page.screencastFrame', receive);
+  await cdp.send('Page.startScreencast', { format: 'png', maxWidth: 480, maxHeight: 300, everyNthFrame: 1 });
+  return async () => {
+    await cdp.send('Page.stopScreencast');
+    cdp.off('Page.screencastFrame', receive);
+    const blank = frames.flatMap((buffer, index) => {
+      const { data } = PNG.sync.read(buffer);
+      let varied = 0;
+      for (let offset = 0; offset < data.length; offset += 4) {
+        if (Math.abs(data[offset] - data[0]) + Math.abs(data[offset + 1] - data[1]) + Math.abs(data[offset + 2] - data[2]) > 12) ++varied;
+      }
+      return varied < 20 ? [index] : [];
+    });
+    return { count: frames.length, blank };
+  };
 }

@@ -7,7 +7,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { observeContinuityFrames, cachePages } from '../../internal/envapp/ui_src/scripts/fixtures/startupContinuity.mjs';
+import { observeContinuityFrames, cachePages, recordDocumentPaints } from '../../internal/envapp/ui_src/scripts/fixtures/startupContinuity.mjs';
 
 const desktop = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(desktop, 'package.json'));
@@ -88,8 +88,36 @@ try {
       await page.waitForFunction(() => !document.querySelector('.host-apps-header .animate-spin'));
       const assets = await page.evaluate(() => [...document.scripts].map(script => script.src).filter(Boolean));
       console.log('PASS production Welcome entry:', JSON.stringify({ phase, pid: child.pid, port, runtimePort, url: page.url(), assets, fingerprint: createHash('sha256').update(JSON.stringify(assets.map(url => new URL(url).pathname))).digest('hex') }));
+      // Reload the actual production document, holding its entry module before the Shell exists.
+      await page.addInitScript(observeContinuityFrames, cachePages.applications);
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      let releaseEntry;
+      const entryGate = new Promise(resolve => { releaseEntry = resolve; });
+      const entryURL = assets.find(url => /\/assets\/index-[^/]+\.js$/.test(new URL(url).pathname));
+      assert.ok(entryURL, 'Production entry module is identifiable');
+      await page.route(entryURL, async route => { await entryGate; await route.continue().catch(() => {}); });
+      const reloadCDP = await context.newCDPSession(page);
+      const finishPaints = await recordDocumentPaints(reloadCDP);
+      let paints;
+      try {
+        await page.reload({ waitUntil: 'commit' });
+        await page.locator('[data-floe-reload-placeholder]').waitFor();
+        assert.equal(await page.locator('[data-floe-shell]').count(), 0, 'The entry module must really be delayed');
+        releaseEntry();
+        await page.locator('button.host-app-tile').first().waitFor();
+        await page.locator('[data-floe-reload-placeholder]').waitFor({ state: 'detached' });
+        await page.waitForFunction(() => !document.querySelector('.host-apps-header .animate-spin'));
+        const frames = await page.evaluate(() => globalThis.__continuityFrames);
+        assert.ok(frames.length && frames.every(frame => frame.documentLoading || frame.placeholder || frame.row), JSON.stringify(frames));
+        const content = frames.findIndex(frame => frame.row && !frame.placeholder);
+        assert.ok(content >= 0 && frames.slice(content).every(frame => frame.row && !frame.skeleton && !frame.placeholder), JSON.stringify(frames));
+        paints = await finishPaints();
+        assert.ok(paints.count > 0);
+        assert.deepEqual(paints.blank, [], 'Production reload must not paint a blank document');
+        console.log('PASS production full document reload:', JSON.stringify({ phase, paints, frames }));
+      } finally { if (!paints) await finishPaints(); await reloadCDP.detach(); releaseEntry(); await page.unroute(entryURL); }
       if (phase === 'initial') {
-        await page.evaluate(observeContinuityFrames, cachePages.applications);
+        await page.evaluate(() => { globalThis.__continuityFrames.length = 0; });
         await page.locator('button.host-app-tile').first().evaluate(row => { globalThis.__retainedRow = row; });
         await page.evaluate(() => window.redevenDesktopShell.minimizeWindow());
         await open().click();

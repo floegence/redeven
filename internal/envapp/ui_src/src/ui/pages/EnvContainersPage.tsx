@@ -3716,7 +3716,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   );
 
   return (
-    <div class={`redeven-containers flex h-full min-h-0 flex-col ${redevenSurfaceRoleClass('main')}`} data-container-page data-variant={props.variant ?? 'activity'} data-resource-view={view()}>
+    <div class={`redeven-containers flex h-full min-h-0 flex-col ${redevenSurfaceRoleClass('main')}`} data-container-page data-env-reload-state={servicesOpen() ? servicesResource.data() !== undefined ? 'content' : containerServicesError() ? 'error' : 'pending' : readyConsole() ? 'content' : loading() ? 'pending' : 'error'} data-variant={props.variant ?? 'activity'} data-resource-view={view()}>
       <Show when={readyConsole()?.refreshError}><div class="container-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4" /><small>{readyConsole()?.refreshError}</small><Button size="sm" variant="outline" onClick={() => void reloadConsole(true)}>{i18n.t('containers.actions.retry')}</Button></div></Show>
       <ContainersHeader controls={<>
 
@@ -3745,7 +3745,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           <div class="container-list-page">
             {renderInventoryToolbar()}
             <Show when={chartsOpen() && view() === 'containers'}><div class="container-metrics-strip"><div><span>{i18n.t('containers.stats.cpu')}</span><strong>{[...collectionStats().values()].reduce((sum, item) => sum + item.cpu_percent, 0).toFixed(1)}%</strong></div><div><span>{i18n.t('containers.stats.memory')}</span><strong>{formatBytes([...collectionStats().values()].reduce((sum, item) => sum + item.memory_bytes, 0))}</strong></div><div><span>{i18n.t('containers.filters.active')}</span><strong>{activeResourceCount()}</strong></div></div></Show>
-            <div class="container-inventory-scroll" ref={(element) => { inventoryScrollElement = element; }}>
+            <div class="container-inventory-scroll" data-floe-reload-scroll="container-inventory" ref={(element) => { inventoryScrollElement = element; }}>
               <Show when={filteredInventory().length > 0} fallback={<div class="container-empty-state"><Search class="h-6 w-6" /><strong>{inventory().length ? i18n.t('containers.empty.filteredTitle') : i18n.t('containers.empty.title')}</strong></div>}>
                   <div class="container-resource-table-shell" data-container-table-shell>
                     <table class="w-full text-left text-sm" data-container-resource-table>
