@@ -1,6 +1,7 @@
 package localui
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -9,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
 	"net/http"
@@ -218,6 +220,67 @@ func TestCertificateBindPreflightAndLegacyCAImport(t *testing.T) {
 	status, err := ImportLocalUICertificate(dir, CertificateImport{CertificatePEM: string(cert), PrivateKeyPEM: string(key)})
 	if err != nil || status.Kind != "device_ca" || status.Fingerprint != original.Fingerprint {
 		t.Fatalf("legacy import: %+v %v", status, err)
+	}
+}
+
+func TestWildcardCertificatePreflightReportsAllMissingLocalAddressesReadOnly(t *testing.T) {
+	bind, _ := ParseBind("0.0.0.0:23998")
+	hosts, err := preflightPublicHosts(bind, net.Listen, resolveNetworkAccessHosts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, complete := range []bool{false, true} {
+		t.Run(fmt.Sprint(complete), func(t *testing.T) {
+			dir := t.TempDir()
+			input := importedIdentityFixture(t, func(c *x509.Certificate) {
+				c.DNSNames, c.IPAddresses = nil, []net.IP{net.ParseIP("192.0.2.10")}
+				for _, host := range hosts {
+					ip := net.ParseIP(host)
+					if !complete && (host == "localhost" || ip.IsLoopback()) {
+						continue
+					}
+					if ip == nil {
+						c.DNSNames = append(c.DNSNames, host)
+					} else {
+						c.IPAddresses = append(c.IPAddresses, ip)
+					}
+				}
+			})
+			if _, err := ImportLocalUICertificate(dir, input); err != nil {
+				t.Fatal(err)
+			}
+			certPath := localUIDeviceCACertificatePath(dir)
+			keyPath := filepath.Join(localUIDeviceCADir(dir), localUIDeviceCAKeyName)
+			beforeCert, _ := os.ReadFile(certPath)
+			beforeKey, _ := os.ReadFile(keyPath)
+			err := ValidateLocalUICertificateForBind(dir, bind.ListenLabel())
+			if complete {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if !errors.Is(err, ErrLocalUIDeviceCAInvalid) {
+					t.Fatalf("uncovered certificate accepted: %v", err)
+				}
+				for _, host := range hosts {
+					if (host == "localhost" || net.ParseIP(host).IsLoopback()) && !strings.Contains(err.Error(), host) {
+						t.Errorf("missing address %s absent from %v", host, err)
+					}
+				}
+			}
+			afterCert, _ := os.ReadFile(certPath)
+			afterKey, _ := os.ReadFile(keyPath)
+			if !bytes.Equal(beforeCert, afterCert) || !bytes.Equal(beforeKey, afterKey) {
+				t.Fatal("preflight mutated saved identity")
+			}
+		})
+	}
+	dir := t.TempDir()
+	if _, err := GenerateLocalUIDeviceCA(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateLocalUICertificateForBind(dir, bind.ListenLabel()); err != nil {
+		t.Fatal(err)
 	}
 }
 

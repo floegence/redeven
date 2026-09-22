@@ -120,6 +120,7 @@ func TestServer_E2E_HTTPSLocalhostConnectsDirectSessionOverWSS(t *testing.T) {
 	defer connectCancel()
 	current := connectDesktopBridgeArtifact(t, connectCtx, s, envelope.ConnectArtifact, localhostURL)
 	defer current.Close()
+	waitPublicSessionReady(t, client, localhostURL, envelope)
 
 	var monitorResponse map[string]any
 	if err := current.RPC().Call(connectCtx, monitor.TypeID_SYS_MONITOR, map[string]any{}, &monitorResponse); err != nil {
@@ -214,6 +215,7 @@ func TestServer_E2E_HTTPSLocalhostConnectsDirectSessionOverWSS(t *testing.T) {
 	secondEnvelope := mintPrivateDesktopBridgeArtifact(t, client, localhostURL, "")
 	second := connectDesktopBridgeArtifact(t, connectCtx, s, secondEnvelope.ConnectArtifact, localhostURL)
 	defer second.Close()
+	waitPublicSessionReady(t, client, localhostURL, secondEnvelope)
 	for range 3 {
 		for _, tab := range []flowersec.Session{current, second} {
 			if err := tab.RPC().Call(connectCtx, monitor.TypeID_SYS_MONITOR, map[string]any{}, &monitorResponse); err != nil {
@@ -336,7 +338,7 @@ func TestServer_E2E_PlaintextNetworkRejectsDirectArtifactWithoutInternalError(t 
 		t.Fatalf("ParseBind() error = %v", err)
 	}
 	s.bind = bind
-	s.networkAuthorities = map[string]struct{}{"192.0.2.10:23998": {}}
+	s.publicAuthorities = map[string]struct{}{"192.0.2.10:23998": {}}
 
 	req := httptest.NewRequest(http.MethodPost, "http://192.0.2.10:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
 	req.Host = "192.0.2.10:23998"

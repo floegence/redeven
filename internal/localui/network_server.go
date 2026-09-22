@@ -16,7 +16,7 @@ func (s *Server) prepareNetwork(listeners []net.Listener) error {
 	if s == nil {
 		return errors.New("missing Local UI server")
 	}
-	if err := s.configureNetworkAuthorities(listeners); err != nil {
+	if err := s.configurePublicAuthorities(listeners); err != nil {
 		return err
 	}
 	if err := config.ValidateLocalUIProtocol(s.protocol); err != nil {
@@ -52,8 +52,8 @@ func (s *Server) prepareNetwork(listeners []net.Listener) error {
 
 func (s *Server) secureCertificateHosts() ([]string, error) {
 	s.authorityMu.RLock()
-	authorities := make([]string, 0, len(s.networkAuthorities))
-	for authority := range s.networkAuthorities {
+	authorities := make([]string, 0, len(s.publicAuthorities))
+	for authority := range s.publicAuthorities {
 		authorities = append(authorities, authority)
 	}
 	s.authorityMu.RUnlock()
@@ -83,7 +83,7 @@ func (s *Server) createNetworkServers() error {
 		var err error
 		if s.protocol == config.LocalUIProtocolHTTP {
 			handler, handlerErr := s.acceptor.HTTPDirectHandler(flowersec.HTTPDirectHandlerOptions{
-				AuthorizeRequest: func(r *http.Request) bool { return s.isAllowedNetworkAuthority(r.Host) },
+				AuthorizeRequest: s.authorizePublicWebSocketRequest,
 			})
 			if handlerErr != nil {
 				return handlerErr
@@ -96,7 +96,8 @@ func (s *Server) createNetworkServers() error {
 		} else {
 			server, err = flowersec.NewWebSocketHTTPServer(flowersec.WebSocketHTTPServerOptions{
 				Handler: s.acceptor.Handler(), ApplicationHandler: s.networkHandler(), TLSConfig: s.tlsConfig,
-				ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 2 * time.Minute,
+				AuthorizeWebSocketRequest: s.authorizePublicWebSocketRequest,
+				ReadHeaderTimeout:         10 * time.Second, ReadTimeout: 2 * time.Minute,
 				WriteTimeout: 30 * time.Minute, IdleTimeout: 2 * time.Minute,
 			})
 		}
@@ -106,6 +107,10 @@ func (s *Server) createNetworkServers() error {
 		s.networkServers = append(s.networkServers, server)
 	}
 	return nil
+}
+
+func (s *Server) authorizePublicWebSocketRequest(r *http.Request) bool {
+	return r != nil && s.isAllowedPublicAuthority(r.Host) && strictSameOriginWSRequest(r, true)
 }
 
 func (s *Server) serveNetwork() {

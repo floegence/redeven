@@ -108,7 +108,7 @@ func TestNetworkHandlerRejectsDNSRebindingBeforeRouting(t *testing.T) {
 	t.Parallel()
 
 	s := newTestServer(t, nil)
-	s.networkAuthorities = map[string]struct{}{
+	s.publicAuthorities = map[string]struct{}{
 		"localhost:23998": {},
 		"127.0.0.1:23998": {},
 		"[::1]:23998":     {},
@@ -225,7 +225,7 @@ func TestDesktopBridgePortForwardAuthority(t *testing.T) {
 	}
 }
 
-func TestConfigureNetworkAuthoritiesUsesResolvedWildcardHosts(t *testing.T) {
+func TestConfigurePublicAuthoritiesUsesResolvedWildcardHosts(t *testing.T) {
 	t.Parallel()
 
 	bind, err := ParseBind("0.0.0.0:23998")
@@ -242,19 +242,19 @@ func TestConfigureNetworkAuthoritiesUsesResolvedWildcardHosts(t *testing.T) {
 		}, nil
 	}
 	listener := authorityTestListener{addr: &net.TCPAddr{IP: net.IPv4zero, Port: 23998}}
-	if err := s.configureNetworkAuthorities([]net.Listener{listener}); err != nil {
-		t.Fatalf("configureNetworkAuthorities() error = %v", err)
+	if err := s.configurePublicAuthorities([]net.Listener{listener}); err != nil {
+		t.Fatalf("configurePublicAuthorities() error = %v", err)
 	}
-	if got, want := s.DisplayURLs(), []string{"https://10.0.0.8:23998/", "https://192.168.1.20:23998/"}; !reflect.DeepEqual(got, want) {
+	if got, want := s.DisplayURLs(), []string{"https://10.0.0.8:23998/", "https://192.168.1.20:23998/", "https://localhost:23998/", "https://127.0.0.1:23998/"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("DisplayURLs() = %#v, want %#v", got, want)
 	}
-	for _, host := range []string{"10.0.0.8:23998", "192.168.1.20:23998"} {
-		if !s.isAllowedNetworkAuthority(host) {
+	for _, host := range []string{"10.0.0.8:23998", "192.168.1.20:23998", "localhost:23998", "127.0.0.1:23998"} {
+		if !s.isAllowedPublicAuthority(host) {
 			t.Fatalf("resolved Host %q was rejected", host)
 		}
 	}
-	for _, host := range []string{"0.0.0.0:23998", "localhost:23998", "redeven.local:23998"} {
-		if s.isAllowedNetworkAuthority(host) {
+	for _, host := range []string{"0.0.0.0:23998", "[::1]:23998", "redeven.local:23998"} {
+		if s.isAllowedPublicAuthority(host) {
 			t.Fatalf("Host %q was unexpectedly accepted", host)
 		}
 	}
@@ -274,6 +274,10 @@ func TestStrictSameOriginWSRequest(t *testing.T) {
 	req.Header.Set("Origin", "https://127.0.0.1:23998")
 	if !strictSameOriginWSRequest(req, true) {
 		t.Fatal("exact loopback Origin was rejected")
+	}
+	req.Header.Add("Origin", "https://localhost:23998")
+	if strictSameOriginWSRequest(req, true) {
+		t.Fatal("multiple Origin headers were accepted")
 	}
 	req.Header.Del("Origin")
 	if strictSameOriginWSRequest(req, true) {
@@ -298,7 +302,7 @@ func TestDirectWSURLFromRequestUsesPublicPort(t *testing.T) {
 	}
 	s := newTestServer(t, nil)
 	s.bind = bind
-	s.networkAuthorities = map[string]struct{}{
+	s.publicAuthorities = map[string]struct{}{
 		"localhost:23998": {}, "127.0.0.1:23998": {}, "[::1]:23998": {},
 	}
 

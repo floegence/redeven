@@ -20,7 +20,7 @@ const (
 	localUIMaxHeaderBytes = 32 << 10
 )
 
-func (s *Server) configureNetworkAuthorities(listeners []net.Listener) error {
+func (s *Server) configurePublicAuthorities(listeners []net.Listener) error {
 	if s == nil {
 		return nil
 	}
@@ -28,59 +28,39 @@ func (s *Server) configureNetworkAuthorities(listeners []net.Listener) error {
 	if resolver == nil {
 		resolver = resolveNetworkAccessHosts
 	}
-	accessHosts, err := resolver(s.bind)
-	if err != nil {
-		return err
-	}
-	if s.bind.IsNetworkExposure() && len(accessHosts) == 0 {
-		return fmt.Errorf("no active non-loopback unicast address is available for %s", s.bind.ListenLabel())
-	}
-
-	allowed := make(map[string]struct{}, len(listeners)+len(accessHosts))
-	displayURLs := make([]string, 0, len(accessHosts))
+	var bound []netip.Addr
+	port := 0
 	for _, listener := range listeners {
 		if listener == nil {
 			return fmt.Errorf("missing Local UI listener")
 		}
 		addr, ok := listener.Addr().(*net.TCPAddr)
 		if !ok || addr == nil || addr.IP == nil {
-			return fmt.Errorf("local UI listener must use a TCP address")
+			return fmt.Errorf("Local UI listener must use a TCP address")
 		}
-		parsedAddr, err := netip.ParseAddr(addr.IP.String())
-		if err != nil || addr.Port <= 0 || addr.Zone != "" || parsedAddr.Is4In6() {
-			return fmt.Errorf("local UI listener has an invalid TCP address")
+		parsed, err := netip.ParseAddr(addr.IP.String())
+		if err != nil || addr.Port <= 0 || addr.Port > 65535 || addr.Zone != "" || parsed.Is4In6() {
+			return fmt.Errorf("Local UI listener has an invalid TCP address")
 		}
-		if s.bind.IsLoopbackOnly() {
-			if !parsedAddr.IsLoopback() {
-				return fmt.Errorf("loopback Local UI bind resolved to a non-loopback listener")
-			}
-			host := parsedAddr.String()
-			allowed[net.JoinHostPort(host, strconv.Itoa(addr.Port))] = struct{}{}
-			if s.bind.localhost {
-				allowed[net.JoinHostPort("localhost", strconv.Itoa(addr.Port))] = struct{}{}
-				host = "localhost"
-			}
-			displayURLs = append(displayURLs, s.protocol+"://"+publicURLAuthority(net.JoinHostPort(host, strconv.Itoa(addr.Port)), s.protocol)+"/")
-			continue
+		if (s.bind.port != 0 && addr.Port != s.bind.port) || (port != 0 && addr.Port != port) {
+			return fmt.Errorf("Local UI listeners must use the configured public port")
 		}
-		if s.bind.IsWildcard() {
-			if !parsedAddr.IsUnspecified() {
-				return fmt.Errorf("wildcard Local UI bind resolved to a non-wildcard listener")
-			}
-		} else if parsedAddr.String() != s.bind.Host() {
-			return fmt.Errorf("local UI listener address %s does not match bind %s", parsedAddr, s.bind.Host())
-		}
-		for _, host := range accessHosts {
-			authority := net.JoinHostPort(host.String(), strconv.Itoa(addr.Port))
-			allowed[authority] = struct{}{}
-			displayURLs = append(displayURLs, s.protocol+"://"+publicURLAuthority(authority, s.protocol)+"/")
-		}
+		port = addr.Port
+		bound = append(bound, parsed)
 	}
-	if len(allowed) == 0 {
-		return fmt.Errorf("missing Local UI authorities")
+	hosts, err := publicAccessHosts(s.bind, bound, resolver)
+	if err != nil {
+		return err
+	}
+	allowed := make(map[string]struct{}, len(hosts))
+	displayURLs := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		authority := net.JoinHostPort(host, strconv.Itoa(port))
+		allowed[authority] = struct{}{}
+		displayURLs = append(displayURLs, s.protocol+"://"+publicURLAuthority(authority, s.protocol)+"/")
 	}
 	s.authorityMu.Lock()
-	s.networkAuthorities = allowed
+	s.publicAuthorities = allowed
 	s.displayURLs = dedupeStrings(displayURLs)
 	s.authorityMu.Unlock()
 	return nil
@@ -175,16 +155,16 @@ func requestProtocol(r *http.Request) string {
 	return "http"
 }
 
-func (s *Server) isAllowedNetworkAuthority(raw string) bool {
+func (s *Server) isAllowedPublicAuthority(raw string) bool {
 	if s == nil {
 		return false
 	}
 	canonical, err := canonicalPublicAuthority(raw, s.protocol)
-	if err != nil || s == nil {
+	if err != nil {
 		return false
 	}
 	s.authorityMu.RLock()
-	_, allowed := s.networkAuthorities[canonical]
+	_, allowed := s.publicAuthorities[canonical]
 	s.authorityMu.RUnlock()
 	return allowed
 }
@@ -209,10 +189,10 @@ func (s *Server) isTrustedOrAllowedAuthority(r *http.Request) bool {
 		return err == nil
 	}
 	s.authorityMu.RLock()
-	configured := len(s.networkAuthorities) > 0
+	configured := len(s.publicAuthorities) > 0
 	s.authorityMu.RUnlock()
 	if configured {
-		return s.isAllowedNetworkAuthority(r.Host)
+		return s.isAllowedPublicAuthority(r.Host)
 	}
 	// Direct handler use is limited to in-process tests and trusted embeddings.
 	// Public listeners always install networkHandler after configuring authorities.
@@ -223,7 +203,7 @@ func (s *Server) isTrustedOrAllowedAuthority(r *http.Request) bool {
 func (s *Server) networkHandler() http.Handler {
 	next := s.handler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r == nil || !s.isAllowedNetworkAuthority(r.Host) {
+		if r == nil || !s.isAllowedPublicAuthority(r.Host) {
 			http.Error(w, "invalid Local UI authority", http.StatusMisdirectedRequest)
 			return
 		}
@@ -335,6 +315,9 @@ func strictSameOriginWSRequest(r *http.Request, requireOrigin bool) bool {
 
 func requestOriginAuthority(r *http.Request, requireOrigin bool) (string, bool) {
 	if r == nil {
+		return "", false
+	}
+	if len(r.Header.Values("Origin")) > 1 {
 		return "", false
 	}
 	originRaw := strings.TrimSpace(r.Header.Get("Origin"))

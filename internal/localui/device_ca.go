@@ -361,10 +361,14 @@ func newLocalUIServerCertificate(ca *deviceCA, hosts []string) (tls.Certificate,
 		return tls.Certificate{}, "", fmt.Errorf("%w: missing Local UI certificate hosts", ErrLocalUIDeviceCAInvalid)
 	}
 	if ca != nil && ca.serverCertificate != nil {
+		var missing []string
 		for _, host := range hosts {
 			if err := ca.certificate.VerifyHostname(host); err != nil {
-				return tls.Certificate{}, "", fmt.Errorf("%w: server certificate does not cover %s", ErrLocalUIDeviceCAInvalid, host)
+				missing = append(missing, host)
 			}
+		}
+		if len(missing) > 0 {
+			return tls.Certificate{}, "", fmt.Errorf("%w: server certificate does not cover: %s; import a certificate covering all public addresses before restarting", ErrLocalUIDeviceCAInvalid, strings.Join(missing, ", "))
 		}
 		return *ca.serverCertificate, hosts[0], nil
 	}

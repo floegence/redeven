@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -311,9 +312,9 @@ func strictCertificatePair(certBody, keyBody []byte) (tls.Certificate, error) {
 	return tls.X509KeyPair(certBody, keyBody)
 }
 
-// ValidateLocalUICertificateForBind checks the saved identity without binding a
-// port or interrupting the current Runtime. Startup repeats the check against
-// its actual listener authorities.
+// ValidateLocalUICertificateForBind checks the saved identity without binding the
+// configured port or interrupting the current Runtime. Startup repeats the check
+// against its actual listener authorities.
 func ValidateLocalUICertificateForBind(stateDir, rawBind string) error {
 	bind, err := ParseBind(rawBind)
 	if err != nil {
@@ -323,19 +324,9 @@ func ValidateLocalUICertificateForBind(stateDir, rawBind string) error {
 	if err != nil {
 		return err
 	}
-	hosts := []string{bind.Host()}
-	if bind.localhost {
-		hosts = []string{"localhost", "127.0.0.1", "::1"}
-	}
-	if bind.IsNetworkExposure() {
-		addresses, err := resolveNetworkAccessHosts(bind)
-		if err != nil {
-			return err
-		}
-		hosts = nil
-		for _, addr := range addresses {
-			hosts = append(hosts, addr.String())
-		}
+	hosts, err := preflightPublicHosts(bind, net.Listen, resolveNetworkAccessHosts)
+	if err != nil {
+		return err
 	}
 	_, _, err = newLocalUIServerCertificate(ca, hosts)
 	return err

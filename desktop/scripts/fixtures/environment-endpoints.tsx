@@ -26,6 +26,9 @@ const context = (name: string): DesktopRuntimeConnectionContext => ({
 });
 const address = (name: string) => name === 'Network' ? 'https://192.0.2.20:23998/' : 'http://localhost:23998/';
 const addresses = (name: string): string[] => {
+  if (query.has('network-local') && (name === 'Network' || name === 'Local Environment')) {
+    return ['https://192.0.2.20:23998/', 'https://localhost:23998/', 'https://127.0.0.1:23998/', 'https://[::1]:23998/'];
+  }
   if (name === 'Network' && query.has('addresses')) {
     const count = Math.min(1000, Math.max(1, Number(query.get('addresses')) || 1));
     return [...Array.from({ length: count }, (_, index) => `https://192.0.${Math.floor(index / 250)}.${index % 250 + 1}:23998/`),
@@ -51,6 +54,7 @@ function Fixture() {
   const [settings, setSettings] = createSignal('');
   const [draft, setDraft] = createSignal(initialDraft);
   const [baseline, setBaseline] = createSignal(initialDraft);
+  const [passwordConfigured, setPasswordConfigured] = createSignal(false);
   const [pending, setPending] = createSignal(false);
   const [saveError, setSaveError] = createSignal('');
   const [copied, setCopied] = createSignal('');
@@ -58,6 +62,7 @@ function Fixture() {
   const surface = createMemo(() => ({ ...buildDesktopSettingsSurfaceSnapshot('environment_settings', baseline(), {
     environment_id: settings(), environment_label: settings(), environment_kind: settings() === 'Local Environment' ? 'local' : 'runtime_target',
     runtime_connection: context(settings()),
+    local_ui_password_configured: passwordConfigured(),
     current_runtime_running: true, current_runtime_url: address(settings()), current_runtime_urls: addresses(settings()),
   }), runtime_configuration_pending: pending() }));
   return <main style={{ padding: '32px', 'min-height': '100vh' }}>
@@ -77,21 +82,26 @@ function Fixture() {
             selectedEndpointID={selected()?.host === name ? selected()?.id : undefined}
             selectEndpointForQRCode={(id) => setSelected({ host: name, id })} openInBrowser={copy} copyEnvironmentValue={copy} />
         </div>
-        <button class="mt-6 cursor-pointer" onClick={() => { setActive(''); setDraft(initialDraft); setBaseline(initialDraft); setPending(false); setSaveError(''); setSettings(name); }}>{i18n.t('settings.settingsWindowTitle')}</button>
+        <button class="mt-6 cursor-pointer" onClick={() => { setActive(''); setDraft(initialDraft); setBaseline(initialDraft); setPasswordConfigured(false); setPending(false); setSaveError(''); setSettings(name); }}>{i18n.t('settings.settingsWindowTitle')}</button>
       </article>}</For>
     </div>
     <output data-copy-result class="mt-6 block font-mono">{copied()}</output>
     <EnvironmentSettingsDialog open={Boolean(settings())} environment={{ id: settings(), label: settings(), registration_ref: { kind: 'local_environment', id: settings() } } as DesktopEnvironmentEntry}
       tab="access" i18n={i18n} onTabChange={() => {}} onClose={() => setSettings('')} connection={null} access={<EnvironmentAccessSettingsForm open={Boolean(settings())} snapshot={surface()} baselineSnapshot={surface()} draft={draft()}
       i18n={i18n} busyState={IDLE_LAUNCHER_BUSY_STATE} settingsError={saveError()} settingsErrorRef={() => {}}
-      updateDraftField={(name, value) => setDraft(previous => ({ ...previous, [name]: value }))}
+      updateDraftField={(name, value) => setDraft(previous => ({ ...previous, [name]: value,
+        ...(name === 'local_ui_password' ? { local_ui_password_mode: value.trim() !== '' || !passwordConfigured() ? 'replace' : 'keep' } : {}),
+      }))}
       applyAccessMode={mode => setDraft(previous => applyDesktopAccessModeToDraft(previous, mode))}
       applyAccessFixedPort={port => setDraft(previous => applyDesktopAccessFixedPortToDraft(previous, port))}
       toggleAutoPort={enabled => setDraft(previous => applyDesktopAccessAutoPortToDraft(previous, enabled))}
       resetAccess={() => { setDraft(baseline()); setSaveError(''); }}
       saveSettings={async options => {
         if (query.has('save-error')) { setSaveError('Fixture: unable to save access settings.'); return; }
-        setBaseline(draft()); setPending(!options?.restartRuntime);
+        const saved = draft();
+        if (saved.local_ui_password_mode !== 'keep') setPasswordConfigured(saved.local_ui_password_mode === 'replace');
+        const clean: DesktopSettingsDraft = { ...saved, local_ui_password: '', local_ui_password_mode: 'keep' };
+        setDraft(clean); setBaseline(clean); setPending(!options?.restartRuntime);
       }}
       certificate={async () => ({ status: 'ready', code: 'local_ui_device_ca_ready', identity: 'ready', trust: 'trusted',
         can_manage: true, certificate_path: '/fixture/certificates/device-ca.pem' })}

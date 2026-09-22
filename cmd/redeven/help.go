@@ -308,6 +308,8 @@ Local UI bind rules:
   - HTTPS clients must trust the exported CA; Linux trust import is manual and never uses sudo.
   - Existing environments without a saved protocol require an explicit protocol choice once.
   - Network binds additionally require a fixed port and password authentication.
+  - Wildcard network binds keep localhost and available loopback IP access on the same port.
+  - A specific IP bind listens only on that address.
 
 Password rules:
   - Select at most one of --password-prompt, --password-stdin, or --password-file.
