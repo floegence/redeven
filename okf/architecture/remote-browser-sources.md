@@ -1,0 +1,90 @@
+---
+type: Architecture Contract
+title: Remote browser source ownership
+description: Admit native pages once and preserve directory, control and popup privacy boundaries.
+tags: [architecture, browser, privacy]
+timestamp: 2026-09-23T00:00:00Z
+---
+# Summary
+
+- Authority: ComputerUseRuntime owns native source identities, grants and target gates; FloeBrowser and Flower share one source debugger adapter.
+- Outcome: managed, CDP and extension pages use the same directory and input lifecycle while retaining their source-specific admission rules.
+- Invariants: one debugger and one ordered input path exist per page; discovery is not admission; private opener ancestry remains authoritative after intermediate pages close.
+- Failure boundary: source overflow or loss retires only affected bindings and never replays input or silently broadens grants.
+
+# Personal Chrome admission
+
+
+Native Messaging protocol 7 carries debugger commands and events for an opaque,
+current tab binding. Connecting a profile, listing tabs and creating a popup do
+not admit another source. Selection validates the current tab URL/title and
+rejects incognito and unsupported pages. The extension permits only the bound
+root and its known iframe sessions, rejects browser-wide target discovery and
+attachment, and restricts IO to download streams returned for that binding.
+
+The Runtime's existing Node source host owns the semantic controller and the
+FloeBrowser CDP source adapter together. The extension no longer executes an
+independent AI controller. Iframe attachment initializes the same observation
+and privacy owners before releasing a paused child. User browsing, Flower
+execution and private handback pass through the existing target gate.
+
+A private Unix socket per admitted extension source separates debugger traffic
+from the helper's small lifecycle pipe. Framed input is limited to 24 MiB,
+outbound native-host commands to less than 1 MiB, and pending helper commands to
+32 per source. Native delivery has a 32 MiB / 512-message per-source budget and
+a shared 64 MiB / 1,024-message budget for unacknowledged traffic. Excess traffic
+retires its producing source while preserving the profile carrier and peers.
+Credits return only after the source helper consumes a frame. The
+Runtime source queue is independently bounded to 64 MiB / 128 frames. Overflow
+or carrier loss retires affected authority; no command or tab binding is
+replayed. Retirement retains the binding reservation until its exact-generation
+detach completes, so delayed cleanup cannot revoke a later selection.
+
+Browser extension setup, status and inventory routes belong directly to the
+ComputerUseRuntime and work without an AI provider. The existing extension
+installation/connection UI and Flower use the same source setup operations.
+
+The shared FloeBrowser source adapter observes top-document title changes in an
+isolated world, independently of DOM and media projection. Runtime reads native
+target metadata after that notification and updates admitted directory titles,
+including unselected pages. Neither directory discovery nor title observation
+starts projection or executes website-provided JavaScript.
+
+# Directory lifetime
+
+The Runtime registers an observation and its initial grants under the directory lock before accepting directory updates for that view. The stream body does not hold this lock. Source closure removes the Runtime target, executor and observation grants while retaining independent sources and the base browser installation configuration. A close decision reserves only its target input gate; it must not hold the directory lock while a person answers `beforeunload`. An exact pending directory decision is separate from page input authority.
+
+Closing a view ends its carriers and input authority, not its source browser. Changing selection releases the previous input owner. Hidden navigation may continue in the source, but explicit input retirement drains the controller and its held input before a new controller is admitted.
+
+Popups from a managed source join that source's already-open managed
+workspace after Runtime validates their current native identity. They appear as
+background tabs and do not change any view selection or Flower binding. External
+popups remain subject to explicit external selection. Managed popup visibility inherits
+the source owner’s native opener ancestry: private descendants stay visible only
+to the private owner, including when an ancestor closes. The same source-owned
+privacy predicate redacts managed, CDP and extension inventory before another
+workspace or AI discovery can consume it. Chromium's native target identity is
+shared across endpoint aliases and extension bindings; a second path cannot
+admit another source owner or expose a private page. Extension inventory supplies
+native identities and retained opener ancestry, including compacted edges across
+closed intermediate pages. CDP discovery refreshes these facts before publishing
+its inventory. The graph is bounded to 1,024 native nodes and 128 directory
+observers; overflow fails closed without dropping privacy facts. Explicit private handback releases descendant visibility.
+
+An external workspace shares only pages that the user explicitly selected or
+created in its source profile. It reuses the same directory operations for live
+tab creation, ordering, pins and close decisions. Another window joins those
+existing grants without discovering or admitting ambient native tabs. Closing
+the final granted tab creates one explicitly scoped blank replacement. External
+directory order and selection remain Runtime-only, and closed-page restoration
+is disabled at both the component and Runtime boundaries.
+
+# Evidence
+
+- `redeven:internal/ai/computer_extension_source.go` - Bounded private source carrier and native binding lifetime.
+- `redeven:browser-extension/background.mjs` - Selected-tab debugger boundary and consumption credits.
+- `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.mjs` - Shared semantic/projection ownership across CDP and extension sources.
+- `redeven:internal/ai/computer_browser_privacy.go` - Native identity and opener ancestry privacy.
+- `redeven:internal/ai/computer_browser_lifecycle.go` - Source identity and grant retirement.
+- `redeven:internal/ai/computer_browser_workspace_test.go` - Directory, private descendants and source isolation.
+- `floebrowser:src/host/session.ts` - Directory observation and controller lifecycle.

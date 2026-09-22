@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/browserinstall"
+	"github.com/floegence/redeven/internal/browserstore"
 )
 
 // ComputerUseRuntime owns the adapters and the only target readiness path.
@@ -18,6 +19,11 @@ import (
 type ComputerUseRuntime struct {
 	browserInstallation    *browserinstall.Manager
 	browserInstallationErr error
+	browserStore           *browserstore.Store
+	browserStoreErr        error
+	browserHost            *browserSourceHost           // protected by connectMu
+	browserViews           map[string]*browserView      // protected by mu
+	browserWorkspaces      map[string]*browserWorkspace // protected by connectMu
 	candidates             map[string]computerCandidate
 	managedProfiles        map[string]*managedBrowserProfile
 	extension              *computerExtensionHub
@@ -84,6 +90,11 @@ func (e *TargetStartupError) Error() string { return e.Code + ": " + e.Reason }
 
 func NewComputerUseRuntime(registry *TargetRegistry, executors map[string]TargetToolExecutor, mediaDirectory string) *ComputerUseRuntime {
 	r := &ComputerUseRuntime{registry: registry, executors: executors, media: computerMediaStore{directory: mediaDirectory}}
+	for _, executor := range executors {
+		if browser, ok := executor.(*PlaywrightTargetExecutor); ok {
+			browser.runtimeManaged = true
+		}
+	}
 	if err := r.restoreComputerExtension(context.Background()); err != nil {
 		slog.Warn("browser extension registration could not be restored", "error", err)
 	}
@@ -194,6 +205,9 @@ func (r *ComputerUseRuntime) prepareInitialManagedTarget(ctx context.Context, ta
 			}
 		}
 		r.connectMu.Unlock()
+	}
+	if readinessErr == nil {
+		readinessErr = r.prepareRegisteredBrowserSource(ctx, target.ID)
 	}
 	return target, readinessErr
 }
@@ -403,6 +417,14 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			control.mu.Unlock()
 			return TargetToolResult{}, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
 		}
+		if browser, ok := executor.(interface {
+			setBrowserPrivacy(context.Context, string, bool) error
+		}); ok {
+			if err := browser.setBrowserPrivacy(ctx, call.TargetID, false); err != nil {
+				control.mu.Unlock()
+				return TargetToolResult{}, computerTargetFailure(call, "TARGET_CONNECTION_REQUIRED")
+			}
+		}
 		control.pause = nil
 		control.mu.Unlock()
 	}
@@ -412,6 +434,7 @@ func (r *ComputerUseRuntime) ResolveTargetToolAttachment(ctx context.Context, re
 	return r.media.read(ctx, ref)
 }
 func (r *ComputerUseRuntime) Close() error {
+	var failures []error
 	if r.browserInstallation != nil {
 		r.browserInstallation.Close()
 	}
@@ -419,16 +442,32 @@ func (r *ComputerUseRuntime) Close() error {
 	defer r.connectMu.Unlock()
 	r.mu.Lock()
 	r.closed = true
+	var browserViews []*browserView
+	for _, view := range r.browserViews {
+		view.cancel()
+		browserViews = append(browserViews, view)
+	}
+	var browserLeases []*browserTargetLease
+	for _, control := range r.controls {
+		control.mu.Lock()
+		if control.browser != nil {
+			control.browser.revoke()
+			browserLeases = append(browserLeases, control.browser)
+		}
+		control.mu.Unlock()
+	}
 	for _, sampler := range r.liveFrames {
 		sampler.cancel()
 	}
 	r.mu.Unlock()
+	for _, view := range browserViews {
+		failures = append(failures, view.close())
+	}
 	if r.extension != nil {
 		r.extension.close()
 	}
 	r.liveWG.Wait()
 	r.releaseScripts(func(computerScriptKey) bool { return true })
-	var failures []error
 	r.mu.RLock()
 	executors := make([]TargetToolExecutor, 0, len(r.executors))
 	for _, executor := range r.executors {
@@ -440,9 +479,20 @@ func (r *ComputerUseRuntime) Close() error {
 			failures = append(failures, closer.Close())
 		}
 	}
+	for _, lease := range browserLeases {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		failures = append(failures, lease.close(ctx))
+		cancel()
+	}
+	if r.browserHost != nil {
+		failures = append(failures, r.browserHost.Close())
+	}
 	for _, profile := range r.managedProfiles {
 		profile.close()
 	}
 	clear(r.managedProfiles)
+	if r.browserStore != nil {
+		failures = append(failures, r.browserStore.Close())
+	}
 	return errors.Join(failures...)
 }

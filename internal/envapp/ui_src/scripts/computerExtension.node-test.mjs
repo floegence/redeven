@@ -7,22 +7,33 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
-import { once } from 'node:events';
+import { once, EventEmitter } from 'node:events';
+import { BrowserProjection } from '@floegence/floebrowser';
+import { createExtensionBrowserSource } from './computerBrowserSource.mjs';
 import { spawn } from 'node:child_process';
 import { stageBrowserExtension } from '../../../../scripts/stage_browser_extension.mjs';
 
 // Native framing and Runtime authorization have independent Go coverage. This
 // fixture substitutes only the native port and uses real extension/debugger
 // APIs against a disposable Chromium profile, never the user's browser.
-test('extension binds one tab, creates background tabs, preserves login, and fails closed on detach', async (t) => {
+test('extension binds one tab, creates background tabs, preserves login, and fails closed on detach', { timeout: 60000 }, async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'flower-extension-'));
   const extension = path.join(directory, 'extension'); stageBrowserExtension(extension);
   // Attach without Playwright's page defaults: real user Chrome has no
   // pre-existing focus emulation from a second automation owner.
-  const chromeProcess = spawn(chromium.executablePath(), ['--headless=new', '--no-first-run', '--remote-debugging-port=0',
+  // Disposable fixtures must not wait for the user's macOS keychain. These
+  // storage flags do not enable Playwright focus or other page overrides.
+  const chromeProcess = spawn(chromium.executablePath(), ['--headless=new', '--no-first-run', '--remote-debugging-port=0', '--use-mock-keychain', '--password-store=basic',
     `--user-data-dir=${path.join(directory, 'profile')}`, `--disable-extensions-except=${extension}`, `--load-extension=${extension}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   const chromeExited = once(chromeProcess, 'exit');
-  t.after(async () => { chromeProcess.kill('SIGTERM'); await chromeExited; await rm(directory, { recursive: true, force: true }); });
+  t.after(async () => {
+    chromeProcess.kill('SIGTERM');
+    const kill = setTimeout(() => chromeProcess.kill('SIGKILL'), 2000);
+    try { await chromeExited; } finally { clearTimeout(kill); }
+    await rm(directory, { recursive: true, force: true });
+  });
+  let sourceDiagnostics = '';
+  chromeProcess.stderr.on('data', chunk => { sourceDiagnostics = (sourceDiagnostics + chunk).slice(-8192); });
   const endpoint = await new Promise((resolve, reject) => {
     let stderr = '';
     const timer = setTimeout(() => reject(new Error('fixture Chrome startup timeout')), 10000);
@@ -57,6 +68,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     const worker = context.serviceWorkers().find(isFlower) || await context.waitForEvent('serviceworker', { predicate: isFlower, timeout: 10000 });
     await worker.evaluate(() => {
       globalThis.fixtureResponses = [];
+      globalThis.fixtureEvents = [];
       globalThis.fixtureWaiters = new Map();
       globalThis.fixtureWait = id => {
         if (fixtureResponses.some(message => (message.id || message.type) === id)) return Promise.resolve();
@@ -68,10 +80,20 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       chrome.runtime.connectNative = () => ({
         onMessage: { addListener(fn) { globalThis.fixtureDeliver = fn; } },
         onDisconnect: { addListener(fn) { globalThis.fixtureDisconnect = fn; } },
-        postMessage(message) { globalThis.fixtureResponses.push(message); globalThis.fixtureWaiters.get(message.id || message.type)?.(); }, disconnect() {},
+        postMessage(message) {
+          if (message.type === 'cdp_event' || message.type === 'target_unavailable') { globalThis.fixtureEvents.push(message); globalThis.fixtureEventWake?.(); }
+          else { globalThis.fixtureResponses.push(message); globalThis.fixtureWaiters.get(message.id || message.type)?.(); }
+        }, disconnect() {},
       });
     });
-    const user = await context.newPage(); await user.goto(origin + '/user');
+    const user = await context.newPage();
+    const navigationEvents = [];
+    user.on('request', request => navigationEvents.push(['request', request.url()]));
+    user.on('response', response => navigationEvents.push(['response', response.status(), response.url()]));
+    user.on('domcontentloaded', () => navigationEvents.push(['domcontentloaded']));
+    user.on('load', () => navigationEvents.push(['load']));
+    try { await user.goto(origin + '/user'); }
+    catch (error) { t.diagnostic(JSON.stringify({ url: user.url(), navigationEvents })); t.diagnostic(sourceDiagnostics); throw error; }
     const task = await context.newPage(); await task.goto(origin + '/task');
     await context.addCookies([{ name: 'login', value: 'present', url: origin }]);
     const popup = await context.newPage(); await popup.goto(`chrome-extension://${extensionID}/popup.html#dev.floegence.redeven.r123456789abcdef0`);
@@ -100,14 +122,77 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     });
     await popup.locator('#connect-button').click();
     await worker.evaluate(() => fixtureWait('hello'));
-    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 6 }));
+    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 7 }));
     let sequence = 0;
-    const call = async (command, args = {}) => {
+    const nativeCall = async (command, args = {}) => {
       const id = String(++sequence);
       await worker.evaluate(message => fixtureDeliver(message), { id, command, arguments: args });
       await worker.evaluate(id => fixtureWait(id), id);
-      const response = await worker.evaluate(id => fixtureResponses.find(message => message.id === id), id);
+      const response = await worker.evaluate(id => {
+        const index = fixtureResponses.findIndex(message => message.id === id);
+        const response = fixtureResponses.splice(index, 1)[0];
+        if (response.sequence) fixtureDeliver({ type: 'cdp_ack', sequence: response.sequence });
+        return response;
+      }, id);
       if (response.error) throw new Error(response.error); return response.result;
+    };
+    const owners = new Map();
+    const transports = new Map();
+    let pumpClosed = false;
+    let withheldCredits = '';
+    const pump = (async () => {
+      while (!pumpClosed) {
+        const events = await worker.evaluate(async () => {
+          if (!globalThis.fixtureEvents.length) await new Promise(resolve => { globalThis.fixtureEventWake = resolve; });
+          globalThis.fixtureEventWake = undefined;
+          return globalThis.fixtureEvents.splice(0);
+        });
+        for (const message of events) {
+          const root = transports.get(message.tab_id);
+          if (message.type === 'target_unavailable') root?.close();
+          else if (root?.binding === message.binding) (message.session ? root.children.get(message.session) : root)?.emit(message.method, message.params);
+          if (message.sequence && message.binding !== withheldCredits) await worker.evaluate(sequence => fixtureDeliver({ type: 'cdp_ack', sequence }), message.sequence);
+        }
+      }
+    })();
+    void pump.catch(() => {});
+    t.after(async () => {
+      pumpClosed = true;
+      await worker.evaluate(() => globalThis.fixtureEventWake?.()).catch(() => {});
+      await Promise.allSettled([...owners.values()].map(owner => owner.dispose()));
+    });
+    const call = async (command, args = {}) => {
+      if (command === 'execute') {
+        const owner = owners.get(args.tab_id);
+        return owner && !owner.source.isClosed() ? owner.controller.execute(args.request) : { error: 'TARGET_CONNECTION_REQUIRED' };
+      }
+      if (command === 'unbind') {
+        await owners.get(args.tab_id)?.dispose(); owners.delete(args.tab_id);
+      }
+      const result = await nativeCall(command, args);
+      if (command === 'bind' || command === 'new_tab') {
+        if (owners.has(result.tab_id)) return result;
+        const root = new EventEmitter();
+        root.tabId = result.tab_id; root.binding = result.binding; root.children = new Map();
+        root.send = (method, params, session = '') => nativeCall('cdp', { tab_id: result.tab_id, binding: result.binding, session, method, params });
+        root.child = session => {
+          if (!root.children.has(session)) {
+            const child = new EventEmitter(); child.send = (method, params) => root.send(method, params, session);
+            root.children.set(session, child);
+          }
+          return root.children.get(session);
+        };
+        root.removeChild = session => root.children.delete(session);
+        root.close = () => {
+          if (root.closed) return;
+          root.closed = true; root.emit('close');
+          for (const child of root.children.values()) child.emit('close');
+          root.children.clear(); transports.delete(result.tab_id);
+        };
+        transports.set(result.tab_id, root);
+        owners.set(result.tab_id, await createExtensionBrowserSource(root, 'extension-' + result.tab_id));
+      }
+      return result;
     };
     const inventory = await call('inventory');
     const selected = inventory.find(tab => tab.url === origin + '/task');
@@ -136,6 +221,25 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.equal(observed.safety?.level, 'routine', JSON.stringify(observed));
     assert.equal(observed.error, undefined, JSON.stringify(observed));
     assert.equal(observed.screenshot, undefined);
+    await t.test('the admitted extension debugger also produces the DOM projection', async () => {
+      const owner = owners.get(selected.id);
+      assert.equal(owner.controller.transport, owner.source.transport);
+      const projection = await BrowserProjection.attach(owner.source, { authorize: () => false });
+      const messages = [];
+      let snapshotReady;
+      const snapshot = new Promise(resolve => { snapshotReady = resolve; });
+      const observation = await projection.observe(message => { messages.push(message); if (message.type === 'snapshot') snapshotReady(); }, { media: false });
+      try {
+        await Promise.race([snapshot, new Promise(resolve => setTimeout(resolve, 3000))]);
+        assert.ok(messages.some(message => message.type === 'snapshot'), JSON.stringify(messages));
+        assert.equal((await execute('computer.observe')).error, undefined);
+        await assert.rejects(owner.source.transport.send('Target.getTargetInfo', { targetId: 'ungranted' }), /EXTENSION_COMMAND_FAILED/);
+        await assert.rejects(owner.source.transport.send('Browser.getVersion'), /EXTENSION_COMMAND_FAILED/);
+        await assert.rejects(owner.source.transport.send('IO.read', { handle: 'ungranted' }), /EXTENSION_COMMAND_FAILED/);
+      } finally { await observation.close(); await projection.close(); }
+      assert.equal(task.isClosed(), false);
+    });
+
     await t.test('debugger inspection failure stays technical and permits a fresh observation', async () => {
       await worker.evaluate(() => {
         globalThis.fixtureSendCommand = chrome.debugger.sendCommand.bind(chrome.debugger);
@@ -186,14 +290,11 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.deepEqual(await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id)), activeBefore);
     // A slow wait on one target must not block another target or tear down the
     // profile when cancelled. The extension receives real concurrent messages.
-    const waitID = String(++sequence);
-    await worker.evaluate(message => fixtureDeliver(message), { id: waitID, command: 'execute', arguments: { tab_id: selected.id,
-      request: { tool_name: 'computer.action', script_operation: true, allowed_origins: origins, args: { action: 'wait', selector: { role: 'button', name: 'Never present' }, timeout_ms: 10000 } } } });
+    const waiting = call('execute', { tab_id: selected.id, request: { tool_name: 'computer.action', script_operation: true, allowed_origins: origins, args: { action: 'wait', selector: { role: 'button', name: 'Never present' }, timeout_ms: 10000 } } });
     const sibling = await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer.observe', args: {}, allowed_origins: [] } });
     assert.equal(sibling.safety.level, 'routine');
-    await worker.evaluate(id => fixtureDeliver({ type: 'cancel', id }), waitID);
-    await worker.evaluate(id => fixtureWait(id), waitID);
-    const cancelled = await worker.evaluate(id => fixtureResponses.find(message => message.id === id), waitID);
+    owners.get(selected.id).controller.cancel();
+    const cancelled = { result: await waiting };
     assert.equal(cancelled.result.safety.level, 'takeover');
     assert.equal((await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer.observe', args: {} } })).safety.level, 'routine');
     await call('execute', { tab_id: selected.id, request: { tool_name: 'computer.screenshot', return_control: true, allowed_origins: origins } });
@@ -225,6 +326,15 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.equal(childResult.safety.level, 'routine');
     assert.equal((await call('inventory')).filter(tab => tab.url === origin + '/popup').length, 1);
     });
+    await t.test('a native event flood retires only its producing binding', async () => {
+      const root = transports.get(selected.id);
+      withheldCredits = root.binding;
+      await root.send('Runtime.evaluate', { expression: "for(let i=0;i<1100;i++)console.log('bounded-native-event-fixture')" }).catch(() => undefined);
+      await assert.rejects(nativeCall('status', { tab_id: selected.id }), /EXTENSION_COMMAND_FAILED/);
+      assert.equal((await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer.observe', args: {} } })).safety.level, 'routine');
+      await nativeCall('status', { tab_id: created.tab_id });
+      withheldCredits = '';
+    });
     await call('unbind', { tab_id: selected.id });
     assert.equal((await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query' }, text: 'Forbidden' })).error, 'TARGET_CONNECTION_REQUIRED');
     assert.equal(await task.locator('input').inputValue(), 'Continued');
@@ -233,6 +343,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     await t.test('reconnect updates an open popup without restoring tab authority', async () => {
       const activeTabs = await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id));
       const profile = await worker.evaluate(async () => (await chrome.storage.local.get('profile')).profile);
+      for (const transport of transports.values()) transport.close();
       await worker.evaluate(() => { fixtureResponses.length = 0; fixtureDisconnect(); });
       await worker.evaluate(() => fixtureWait('hello'));
       await worker.evaluate(() => fixtureDeliver({ type: 'connection_error', code: 'extension_update_required' }));
@@ -243,7 +354,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
         await chrome.alarms.create('redeven-native-reconnect', { when: Date.now() });
       });
       await worker.evaluate(() => fixtureWait('hello'));
-      await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 6 }));
+      await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 7 }));
       await popup.locator('#disconnect').waitFor({ state: 'visible' });
       await popup.locator('#repair').waitFor({ state: 'hidden' });
       await popup.locator('#connect-button').waitFor({ state: 'hidden' });

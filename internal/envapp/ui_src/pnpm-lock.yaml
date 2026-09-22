@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': 5.3.1
+  '@floegence/flowersec-core': 5.4.1
   '@babel/core': ^7.29.7
   brace-expansion: ^5.0.9
   dompurify: ^3.4.13
@@ -41,12 +41,15 @@ importers:
       '@floegence/floe-webapp-protocol':
         specifier: 0.75.0
         version: 0.75.0(solid-js@1.9.13)
+      '@floegence/floebrowser':
+        specifier: 0.1.5
+        version: 0.1.5
       '@floegence/floeterm-terminal-web':
         specifier: 0.19.2
         version: 0.19.2
       '@floegence/flowersec-core':
-        specifier: 5.3.1
-        version: 5.3.1
+        specifier: 5.4.1
+        version: 5.4.1
       '@floegence/redeven-service-templates':
         specifier: https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz
         version: https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz
@@ -143,7 +146,7 @@ importers:
         version: 4.1.10(vite@8.0.16(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0))(vitest@4.1.10)
       '@vitest/browser-playwright':
         specifier: 4.1.10
-        version: 4.1.10(playwright@1.60.0)(vite@8.0.16(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0))(vitest@4.1.10)
+        version: 4.1.10(playwright@1.63.0)(vite@8.0.16(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0))(vitest@4.1.10)
       axe-core:
         specifier: ^4.12.1
         version: 4.12.1
@@ -166,8 +169,8 @@ importers:
         specifier: ^26.1.0
         version: 26.1.0
       playwright:
-        specifier: ^1.57.0
-        version: 1.60.0
+        specifier: ^1.63.0
+        version: 1.63.0
       pngjs:
         specifier: 7.0.0
         version: 7.0.0
@@ -550,42 +553,47 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
+  '@floegence/floebrowser@0.1.5':
+    resolution: {integrity: sha512-vHOqpxd84pyuWpImE4v0HniU7vOhMho3vdWbyYAnc4qpB0S9LQIFoD12exfWfwUyR1J7s+oO+nFVq5AqnLfLeA==}
+    engines: {node: '>=26'}
+    hasBin: true
+
   '@floegence/floeterm-terminal-web@0.19.2':
     resolution: {integrity: sha512-9XbdmAl51tos2CGTBRcvwC9dW7Qe+BXgXqKAQDYzx9G7ovjRioXUt0fVUXPKgb8q63ltmPr0rum0+EAgrTaaMA==}
 
-  '@floegence/flowersec-core@5.3.1':
-    resolution: {integrity: sha512-ziLTsSQ1GtZjpXIM7/O9FRu6qJcmWBVtegPkQ9dSWgCQDcxVamctuxaQZTY3IFfZyXfdy57y5BKFDbETRxrQUA==}
+  '@floegence/flowersec-core@5.4.1':
+    resolution: {integrity: sha512-py8Z67ythB4K57z6ryGQ5QOLgNTmfTrGP/f3cF3JCyv+JrWTLjqgot79E52AvYxVPb4r610hvj2EuJIMaOhFrw==}
     engines: {node: '>=24.20.0'}
     hasBin: true
 
-  '@floegence/flowersec-node-native-darwin-arm64@5.3.1':
-    resolution: {integrity: sha512-wlRPXqdZYFCVSmSA9hNRBzd+3nAUACGTpudLxHaPieKZJVy7kl6gFMZPl2fRHW3f//dM1UFB+e+PtDTw9tnAyg==}
+  '@floegence/flowersec-node-native-darwin-arm64@5.4.1':
+    resolution: {integrity: sha512-5ZuAGo2kCOADOn+exDdUS7mkN8QUk97Zw0GnuRgh++kMvwBc1l+NBxrOUONcAUqdrCOqTNdrj42Bdg4jiRFcwA==}
     engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-darwin-x64@5.3.1':
-    resolution: {integrity: sha512-QJ0SQmD+XCRLdXWJTb/CwQgtsICQaeFg05450rW82IuE4EV1u3ne5Vnn+53FvxPpTrmcgrLApTJ8sdGT2Jr7DQ==}
+  '@floegence/flowersec-node-native-darwin-x64@5.4.1':
+    resolution: {integrity: sha512-0k9JQ7uaS4Z0ZwZgN3Mom5T7dJ/nKKS+2YBm1QprxJBvV9EvJ3O+zTtSbpPl7/E0CNfLduniKkZFHIFm2FkIQw==}
     engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@5.3.1':
-    resolution: {integrity: sha512-CAGEzay31hptd61x6SsemcsyF2QmZuW1sX2e3YcGKNPP84gRtHwYevLokbUb80oo09U4qVik3DwZwaXxzMKYmg==}
+  '@floegence/flowersec-node-native-linux-arm64-gnu@5.4.1':
+    resolution: {integrity: sha512-J98HGK6aNRKyb2IK4hEjPFwt52+dAGCenSHnlm2CXnhzt0ppbjEJJYmCk3TD3HV/p7pPvCqqbSCtIO53c3CIzA==}
     engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@5.3.1':
-    resolution: {integrity: sha512-dELShDpW3ezdFHaxTSvaOwSJuV7Wf+KcBPeHSGYdIN7d/njKp7zAJOikIBm5lnKF7XgSTXy29rqjX9mP/DKgTg==}
+  '@floegence/flowersec-node-native-linux-x64-gnu@5.4.1':
+    resolution: {integrity: sha512-2ARBAew9hw7L6f/kFe2o4+8vosDYmxtt74lzHjwS93D5gMxf46fTwWRZEC+DJoWC7lxk46Z5BKok1kZcPYyRwQ==}
     engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@floegence/flowersec-node-native@5.3.1':
-    resolution: {integrity: sha512-kdna+zdFXWQpRngdqvcALu2lAAKaCEHCN/otUHjJPq78PEPeioRdAWRsjnraAsDqRgpTpCjN3wQ9L8OPn4aySA==}
+  '@floegence/flowersec-node-native@5.4.1':
+    resolution: {integrity: sha512-Z+b8DHrAUBdZVdcI3zHMcTg2mDEMHXIrxvLfCJ7J0LK2zA7kXV/u28XL6nvvvL2qgZ+UAm4sS5atLYJk4aGgNQ==}
     engines: {node: '>=24.20.0'}
 
   '@floegence/redeven-service-templates@https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz':
@@ -886,6 +894,18 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
+  '@rrweb/record@2.1.6':
+    resolution: {integrity: sha512-dHOrWa97l3C+BBsUd+zgLtErTZavzudJunu1HN2bV6WhTBLGk7z8BY1fWw0QerYK7qJJyrBE9D6XHcISVdVGQQ==}
+
+  '@rrweb/replay@2.1.6':
+    resolution: {integrity: sha512-Ti7zPk3Lbp33N9rKtIPCCIbUm4ctJMRRIMG5/5uI70M0efpSC1cpo/Eq8ELVW/5zWrkiElgmnPR0+h+oS79ASA==}
+
+  '@rrweb/types@2.1.6':
+    resolution: {integrity: sha512-DacFzGpPbQ91q3rRyh/AeZrtFYYonmLT+qgGlmh2iGcW2HPnrABJNgJWhpyzYwp/xed6Fbpi8yMxhRBlrOY0ZA==}
+
+  '@rrweb/utils@2.1.6':
+    resolution: {integrity: sha512-BIRXcxiytJs5Guxw0tzsnVS7ukcMqtnxixjIGvV49VdJeOEG6NJeMU7o8efbHW1D52a12Y8QsgDjgDgblg3org==}
+
   '@shikijs/core@3.23.0':
     resolution: {integrity: sha512-NSWQz0riNb67xthdm5br6lAkvpDJRTgB36fxlo37ZzM2yq0PQFFzbd8psqC2XMPgCzo1fW6cVi18+ArJ44wqgA==}
 
@@ -1047,6 +1067,9 @@ packages:
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
 
+  '@types/css-font-loading-module@0.0.7':
+    resolution: {integrity: sha512-nl09VhutdjINdWyXxHWN/w9zlNCfr60JUqJbd24YXUuCwgeL0TpFSdElCwb6cxfB6ybE19Gjj4g0jsgkXxKv1Q==}
+
   '@types/d3-array@3.2.2':
     resolution: {integrity: sha512-hOLWVbm7uRza0BYXpIIW5pxfrKe0W+D5lrFiAEYR+pb6w3N2SwSMaJbXdUfSEv+dT4MfHBLtn5js0LAWaO6otw==}
 
@@ -1167,6 +1190,9 @@ packages:
   '@types/node@26.2.0':
     resolution: {integrity: sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg==}
 
+  '@types/node@26.4.0':
+    resolution: {integrity: sha512-faiGnoIrLH/V8cibOMEAZ8pMw6oXqSukl29ra4mN8GdaB2ZewzeaLj+INpV5N+Z1eKWzY+IzaIZH2EIR6YZRNQ==}
+
   '@types/semver@7.7.1':
     resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
@@ -1281,6 +1307,9 @@ packages:
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
 
+  '@xstate/fsm@1.6.5':
+    resolution: {integrity: sha512-b5o1I6aLNeYlU/3CPlj/Z91ybk1gUsKT+5NAJI+2W4UjvS5KLG28K9v5UvNoFVjHV8PajVZ00RH3vnjyQO7ZAw==}
+
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
     peerDependencies:
@@ -1345,6 +1374,10 @@ packages:
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
+
+  base64-arraybuffer@1.0.2:
+    resolution: {integrity: sha512-I3yl4r9QB5ZRY3XuJVEPfc2XhZO6YweFPI+UovAzn+8/hb3oJ6lnysaFcjVpkCPfVWFUDvoZ8kmVDP7WyRtYtQ==}
+    engines: {node: '>= 0.6.0'}
 
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
@@ -1449,6 +1482,11 @@ packages:
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
+
+  cssesc@3.0.0:
+    resolution: {integrity: sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==}
+    engines: {node: '>=4'}
+    hasBin: true
 
   cssstyle@4.6.0:
     resolution: {integrity: sha512-2z+rWdzbbSZv6/rhtvzvqeZQHrBaqgogqt85sqFNbabZOuFbCVFb8kPeEtZjiKkbrm395irpNKiYeFeLiQnFPg==}
@@ -1802,11 +1840,6 @@ packages:
   fs-extra@11.3.5:
     resolution: {integrity: sha512-eKpRKAovdpZtR1WopLHxlBWvAgPny3c4gX1G5Jhwmmw4XJj0ifSD5qB5TOo8hmA0wlRKDAOAhEE1yVPgs6Fgcg==}
     engines: {node: '>=14.14'}
-
-  fsevents@2.3.2:
-    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
-    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
-    os: [darwin]
 
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
@@ -2213,6 +2246,9 @@ packages:
     resolution: {integrity: sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==}
     engines: {node: '>=16 || 14 >=14.17'}
 
+  mitt@3.0.1:
+    resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
+
   monaco-editor@0.55.1:
     resolution: {integrity: sha512-jz4x+TJNFHwHtwuV9vA9rMujcZRb0CEilTEwG2rRSpe/A7Jdkuj8xPKttCgOh+v/lkHy7HsZ64oj+q3xoAFl9A==}
 
@@ -2311,14 +2347,14 @@ packages:
     resolution: {integrity: sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==}
     engines: {node: '>=12'}
 
-  playwright-core@1.60.0:
-    resolution: {integrity: sha512-9bW6zvX/m0lEbgTKJ6YppOKx8H3VOPBMOCFh2irXFOT4BbHgrx5hPjwJYLT40Lu+4qtD36qKc/Hn56StUW57IA==}
-    engines: {node: '>=18'}
+  playwright-core@1.63.0:
+    resolution: {integrity: sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg==}
+    engines: {node: '>=20'}
     hasBin: true
 
-  playwright@1.60.0:
-    resolution: {integrity: sha512-hheHdokM8cdqCb0lcE3s+zT4t4W+vvjpGxsZlDnikarzx8tSzMebh3UiFtgqwFwnTnjYQcsyMF8ei2mCO/tpeA==}
-    engines: {node: '>=18'}
+  playwright@1.63.0:
+    resolution: {integrity: sha512-+7ziBLidS4NaNCdt57SUDT+wYmmd5fmiQejUic/kb+YsYSCPyOOE9sebzMjNmQrsnNpDJqd4WHvV/8lfKfUDUg==}
+    engines: {node: '>=20'}
     hasBin: true
 
   pngjs@7.0.0:
@@ -2330,6 +2366,19 @@ packages:
 
   points-on-path@0.2.1:
     resolution: {integrity: sha512-25ClnWWuw7JbWZcgqY/gJ4FQWadKxGWk+3kR/7kD0tCaDtPPMj7oHu2ToLaVhfpnHrZzYby2w6tUA0eOIuUg8g==}
+
+  postcss-safe-parser@7.1.0:
+    resolution: {integrity: sha512-1WzZxRLaAFwEh6Do+zyGpjWV3nGJNxxhuh7Ubu/q1ICImMgZJnLwhoaEpRbG4pJppp2Y1ncL9ffA2f+LhrefQg==}
+    engines: {node: '>=18.0'}
+    peerDependencies:
+      postcss: ^8.5.22
+
+  postcss-selector-parser@7.1.6:
+    resolution: {integrity: sha512-7qASPzhKF2l2KLboRZux8CCTRMdGiV08vWmyKzPz22qZ7ZjQBOeY7rNzNoCLSUiftJ7HUq0GERHmxw/t0dCdMw==}
+    engines: {node: '>=4'}
+
+  postcss-value-parser@4.2.0:
+    resolution: {integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==}
 
   postcss@8.5.23:
     resolution: {integrity: sha512-g50586zr4bZmwFiTlflMu8E0bDTb5I5gertgwAKmsdUlTQIhZtunzUlD1WSzwcVWPoAVpsrA6vlfCD7oXvRwgg==}
@@ -2400,8 +2449,17 @@ packages:
   roughjs@4.6.6:
     resolution: {integrity: sha512-ZUz/69+SYpFN/g/lUlo2FXcIjRkSu3nDarreVdGGndHEBJ6cXPdKguS8JGxwj5HA5xIbVKSmLgr5b3AWxtRfvQ==}
 
+  rrdom@2.1.6:
+    resolution: {integrity: sha512-EMRrTs1GRsmb8bNyAs107wG7eRwVEOvDUBsnCyvQnVV6elrmrua/AeS0tdcA0gLW4eptr4l6bRsS/2QRICvdqQ==}
+
   rrweb-cssom@0.8.0:
     resolution: {integrity: sha512-guoltQEx+9aMf2gDZ0s62EcV8lsXR+0w8915TC3ITdn2YueuNjdAYh/levpU9nFaoChh9RUS5ZdQMrKfVEN9tw==}
+
+  rrweb-snapshot@2.1.6:
+    resolution: {integrity: sha512-X03+x3AdWTbpD4Swb54CCJoEauYTv/O2ah0d3ZVv5rgr6bv0Ty5mxNjEyEEfNC1dQ8VdyjKKJgDG3A00FV0lNg==}
+
+  rrweb@2.1.6:
+    resolution: {integrity: sha512-OMdw4lWyfCx2fNhKCv1eZe54oVmD8r4QZsCXKY9fdt+cD/eiiupFgMHoFuwbwvltr4JH3IwWKXoadVjiMNhOZQ==}
 
   rw@1.3.3:
     resolution: {integrity: sha512-PdhdWy89SiZogBLaw42zdeqtRJ//zFd2PgQavcICDUgJT5oW10QCRKbJ6bg4r0/UY2M6BWd5tkxuGFRvCkgfHQ==}
@@ -2840,6 +2898,9 @@ packages:
     resolution: {integrity: sha512-9qv4rlDiopXg4E69k+vMHjNN63YFMe9sZMrdlvKnCjlCRWeCBswPPMPUfx+ipsAWq1LXHe70RcbaHdJJpS6hyQ==}
     engines: {node: '>= 10'}
 
+  zod@4.1.12:
+    resolution: {integrity: sha512-JInaHOamG8pt5+Ey8kGmdcAcg3OL9reK8ltczgHTAwNhMys/6ThXHityHxVV2p3fkw/c+MAvBHFVYHFZDmjMCQ==}
+
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
@@ -3158,7 +3219,7 @@ snapshots:
 
   '@floegence/floe-webapp-boot@0.75.0':
     dependencies:
-      '@floegence/flowersec-core': 5.3.1
+      '@floegence/flowersec-core': 5.4.1
       '@noble/hashes': 2.4.0
     transitivePeerDependencies:
       - bufferutil
@@ -3179,8 +3240,24 @@ snapshots:
 
   '@floegence/floe-webapp-protocol@0.75.0(solid-js@1.9.13)':
     dependencies:
-      '@floegence/flowersec-core': 5.3.1
+      '@floegence/flowersec-core': 5.4.1
       solid-js: 1.9.13
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@floegence/floebrowser@0.1.5':
+    dependencies:
+      '@rrweb/record': 2.1.6
+      '@rrweb/replay': 2.1.6
+      '@rrweb/types': 2.1.6
+      playwright: 1.63.0
+      postcss: 8.5.23
+      postcss-safe-parser: 7.1.0(postcss@8.5.23)
+      postcss-selector-parser: 7.1.6
+      postcss-value-parser: 4.2.0
+      ws: 8.21.3
+      zod: 4.1.12
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -3189,37 +3266,38 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.4.0
 
-  '@floegence/flowersec-core@5.3.1':
+  '@floegence/flowersec-core@5.4.1':
     dependencies:
       '@noble/ciphers': 2.4.0
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
+      '@types/node': 26.4.0
       tr46: 6.0.0
       ws: 8.21.3
     optionalDependencies:
-      '@floegence/flowersec-node-native': 5.3.1
+      '@floegence/flowersec-node-native': 5.4.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/flowersec-node-native-darwin-arm64@5.3.1':
+  '@floegence/flowersec-node-native-darwin-arm64@5.4.1':
     optional: true
 
-  '@floegence/flowersec-node-native-darwin-x64@5.3.1':
+  '@floegence/flowersec-node-native-darwin-x64@5.4.1':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@5.3.1':
+  '@floegence/flowersec-node-native-linux-arm64-gnu@5.4.1':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@5.3.1':
+  '@floegence/flowersec-node-native-linux-x64-gnu@5.4.1':
     optional: true
 
-  '@floegence/flowersec-node-native@5.3.1':
+  '@floegence/flowersec-node-native@5.4.1':
     optionalDependencies:
-      '@floegence/flowersec-node-native-darwin-arm64': 5.3.1
-      '@floegence/flowersec-node-native-darwin-x64': 5.3.1
-      '@floegence/flowersec-node-native-linux-arm64-gnu': 5.3.1
-      '@floegence/flowersec-node-native-linux-x64-gnu': 5.3.1
+      '@floegence/flowersec-node-native-darwin-arm64': 5.4.1
+      '@floegence/flowersec-node-native-darwin-x64': 5.4.1
+      '@floegence/flowersec-node-native-linux-arm64-gnu': 5.4.1
+      '@floegence/flowersec-node-native-linux-x64-gnu': 5.4.1
     optional: true
 
   '@floegence/redeven-service-templates@https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz': {}
@@ -3457,6 +3535,21 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
+  '@rrweb/record@2.1.6':
+    dependencies:
+      '@rrweb/types': 2.1.6
+      '@rrweb/utils': 2.1.6
+      rrweb: 2.1.6
+
+  '@rrweb/replay@2.1.6':
+    dependencies:
+      '@rrweb/types': 2.1.6
+      rrweb: 2.1.6
+
+  '@rrweb/types@2.1.6': {}
+
+  '@rrweb/utils@2.1.6': {}
+
   '@shikijs/core@3.23.0':
     dependencies:
       '@shikijs/types': 3.23.0
@@ -3613,6 +3706,8 @@ snapshots:
       '@types/deep-eql': 4.0.2
       assertion-error: 2.0.1
 
+  '@types/css-font-loading-module@0.0.7': {}
+
   '@types/d3-array@3.2.2': {}
 
   '@types/d3-axis@3.0.6':
@@ -3754,6 +3849,10 @@ snapshots:
     dependencies:
       undici-types: 8.3.0
 
+  '@types/node@26.4.0':
+    dependencies:
+      undici-types: 8.3.0
+
   '@types/semver@7.7.1': {}
 
   '@types/trusted-types@2.0.7':
@@ -3859,11 +3958,11 @@ snapshots:
       d3-selection: 3.0.0
       d3-transition: 3.0.1(d3-selection@3.0.0)
 
-  '@vitest/browser-playwright@4.1.10(playwright@1.60.0)(vite@8.0.16(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0))(vitest@4.1.10)':
+  '@vitest/browser-playwright@4.1.10(playwright@1.63.0)(vite@8.0.16(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0))(vitest@4.1.10)':
     dependencies:
       '@vitest/browser': 4.1.10(vite@8.0.16(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0))(vitest@4.1.10)
       '@vitest/mocker': 4.1.10(vite@8.0.16(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0))
-      playwright: 1.60.0
+      playwright: 1.63.0
       tinyrainbow: 3.1.0
       vitest: 4.1.10(@types/node@26.2.0)(@vitest/browser-playwright@4.1.10)(jsdom@26.1.0)(vite@8.0.16(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0))
     transitivePeerDependencies:
@@ -3929,6 +4028,8 @@ snapshots:
       '@vitest/pretty-format': 4.1.10
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
+
+  '@xstate/fsm@1.6.5': {}
 
   acorn-jsx@5.3.2(acorn@8.16.0):
     dependencies:
@@ -4010,6 +4111,8 @@ snapshots:
       solid-js: 1.9.13
 
   balanced-match@4.0.4: {}
+
+  base64-arraybuffer@1.0.2: {}
 
   base64-js@1.5.1: {}
 
@@ -4104,6 +4207,8 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
+
+  cssesc@3.0.0: {}
 
   cssstyle@4.6.0:
     dependencies:
@@ -4527,9 +4632,6 @@ snapshots:
       jsonfile: 6.2.1
       universalify: 2.0.1
 
-  fsevents@2.3.2:
-    optional: true
-
   fsevents@2.3.3:
     optional: true
 
@@ -4907,6 +5009,8 @@ snapshots:
 
   minipass@7.1.3: {}
 
+  mitt@3.0.1: {}
+
   monaco-editor@0.55.1:
     dependencies:
       dompurify: 3.4.13
@@ -4992,13 +5096,11 @@ snapshots:
 
   picomatch@4.0.4: {}
 
-  playwright-core@1.60.0: {}
+  playwright-core@1.63.0: {}
 
-  playwright@1.60.0:
+  playwright@1.63.0:
     dependencies:
-      playwright-core: 1.60.0
-    optionalDependencies:
-      fsevents: 2.3.2
+      playwright-core: 1.63.0
 
   pngjs@7.0.0: {}
 
@@ -5008,6 +5110,17 @@ snapshots:
     dependencies:
       path-data-parser: 0.1.0
       points-on-curve: 0.2.0
+
+  postcss-safe-parser@7.1.0(postcss@8.5.23):
+    dependencies:
+      postcss: 8.5.23
+
+  postcss-selector-parser@7.1.6:
+    dependencies:
+      cssesc: 3.0.0
+      util-deprecate: 1.0.2
+
+  postcss-value-parser@4.2.0: {}
 
   postcss@8.5.23:
     dependencies:
@@ -5107,7 +5220,26 @@ snapshots:
       points-on-curve: 0.2.0
       points-on-path: 0.2.1
 
+  rrdom@2.1.6:
+    dependencies:
+      rrweb-snapshot: 2.1.6
+
   rrweb-cssom@0.8.0: {}
+
+  rrweb-snapshot@2.1.6:
+    dependencies:
+      postcss: 8.5.23
+
+  rrweb@2.1.6:
+    dependencies:
+      '@rrweb/types': 2.1.6
+      '@rrweb/utils': 2.1.6
+      '@types/css-font-loading-module': 0.0.7
+      '@xstate/fsm': 1.6.5
+      base64-arraybuffer: 1.0.2
+      mitt: 3.0.1
+      rrdom: 2.1.6
+      rrweb-snapshot: 2.1.6
 
   rw@1.3.3: {}
 
@@ -5413,7 +5545,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 26.2.0
-      '@vitest/browser-playwright': 4.1.10(playwright@1.60.0)(vite@8.0.16(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0))(vitest@4.1.10)
+      '@vitest/browser-playwright': 4.1.10(playwright@1.63.0)(vite@8.0.16(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0))(vitest@4.1.10)
       jsdom: 26.1.0
     transitivePeerDependencies:
       - msw
@@ -5465,5 +5597,7 @@ snapshots:
       archiver-utils: 3.0.4
       compress-commons: 4.1.2
       readable-stream: 3.6.2
+
+  zod@4.1.12: {}
 
   zwitch@2.0.4: {}

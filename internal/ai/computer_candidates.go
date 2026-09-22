@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -106,7 +107,14 @@ func (r *ComputerUseRuntime) extensionTabs(ctx context.Context, profileID string
 	if err != nil {
 		return nil, err
 	}
-	return client.tabs(ctx)
+	tabs, err := client.tabs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.connectMu.Lock()
+	defer r.connectMu.Unlock()
+	tabs, err = r.browserInventoryPrivacy(ctx, "extension:"+profileID, tabs)
+	return slices.DeleteFunc(tabs, func(tab ComputerBrowserTab) bool { return tab.Private }), err
 }
 
 func (r *ComputerUseRuntime) computerTargetState(target TargetDescriptor, threadID string) string {
@@ -199,7 +207,11 @@ func (r *ComputerUseRuntime) candidateBrowserTabs(ctx context.Context, connectio
 			delete(r.managedProfiles, connection.ManagedProfileID)
 			return nil, nil
 		}
-		return tabs, err
+		if err != nil {
+			return nil, err
+		}
+		tabs, err = r.browserInventoryPrivacy(ctx, profile.endpoint, tabs)
+		return slices.DeleteFunc(tabs, func(tab ComputerBrowserTab) bool { return tab.Private }), err
 	}
 	tabs, err := r.BrowserTabs(ctx, connection.CDPURL)
 	result := []ComputerBrowserTab{}

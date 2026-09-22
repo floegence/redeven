@@ -9,7 +9,7 @@ import { chromeConnectionDiagnostic, chromeConnectionError } from './chromeConne
 // This guide observes Runtime connection inventory. It never binds a tab or
 // creates a conversation lifecycle; the caller resumes the original interaction.
 export function FlowerChromeConnection(props: {
-  environmentName?: string; platform?: string; reuseConnected?: boolean; management: FlowerComputerManagement; copy: FlowerComputerCopy; onConnected: () => Promise<void>;
+  environmentName?: string; platform?: string; reuseConnected?: boolean; management: Pick<FlowerComputerManagement, 'setupExtension' | 'openExtension' | 'loadExtensionStatus'>; copy: FlowerComputerCopy; onConnected: () => Promise<void>;
 }) {
   const [setup, setSetup] = createSignal<FlowerComputerExtensionSetup>();
   const [phase, setPhase] = createSignal<'preparing' | 'waiting' | 'confirming' | 'connected' | 'failed' | 'timeout'>('preparing');

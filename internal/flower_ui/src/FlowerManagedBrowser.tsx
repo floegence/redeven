@@ -7,7 +7,7 @@ import type { FlowerComputerCopy } from './computerUseCopy';
 const activeStates = new Set(['downloading', 'uploading', 'verifying', 'installing']);
 
 export function FlowerManagedBrowser(props: {
-  management: FlowerComputerManagement;
+  management: Pick<FlowerComputerManagement, 'loadBrowserInstallation' | 'saveBrowserEnabled' | 'installBrowser' | 'subscribeBrowserInstallation' | 'browserDesktopAvailable'>;
   copy: FlowerComputerCopy;
   canMutate: boolean;
   onChange?: () => void;

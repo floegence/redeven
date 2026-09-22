@@ -95,5 +95,11 @@ func (a *Agent) prepareRemoteSessionPlan(meta *session.Meta) (*remoteSessionPlan
 			return nil, err
 		}
 	}
+	cleanupBrowser, err := a.registerBrowserStreams(streams, meta)
+	cleanups = append(cleanups, cleanupBrowser)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
 	return &remoteSessionPlan{rpc: rpc, streams: streams, cleanup: cleanup}, nil
 }

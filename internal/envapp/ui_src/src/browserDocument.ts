@@ -1,0 +1,184 @@
+import type { FlowerBrowserInstallationSnapshot } from '../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { BrowserSourceService } from './ui/services/browserSourceContract';
+import { mountBrowser, projectionPortConnection, type AddressSuggestion } from '@floegence/floebrowser/viewer';
+import decoderURL from '@floegence/floebrowser/media-worker.js?url';
+import audioWorkletURL from '@floegence/floebrowser/audio-worklet.js?url';
+import '@floegence/floebrowser/viewer.css';
+import './styles/browserDocument.css';
+import { saveBrowserDownload } from './ui/services/browserDownload';
+import type { BrowserDocumentConfiguration, BrowserDocumentEvent, BrowserDocumentRequest, BrowserDocumentResult } from './ui/services/browserWindowProtocol';
+
+// This entry point deliberately imports no Env App, Desktop bridge, connection
+// owner or model service. The nested replay sandbox remains owned by FloeBrowser.
+const owner = window.opener ?? (window.parent !== window ? window.parent : null);
+const nonce = decodeURIComponent(location.hash.slice(1));
+const origin = location.origin;
+let accepted = false;
+
+function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
+  if (accepted || !owner || event.source !== owner || event.origin !== origin
+    || event.data?.type !== 'redeven-browser-ports' || event.data.nonce !== nonce || event.ports.length !== 3) return;
+  accepted = true;
+  window.removeEventListener('message', attach);
+  const configuration = event.data;
+  const [messages, media, product] = event.ports as [MessagePort, MessagePort, MessagePort];
+  document.title = configuration.title;
+  document.documentElement.lang = configuration.locale;
+  for (const [key, value] of Object.entries(configuration.theme)) {
+    if (key.startsWith('--floe-') || key === 'color-scheme') document.documentElement.style.setProperty(key, value);
+  }
+  let sequence = 0;
+  let active = '';
+  let connected = false;
+  let mounted = false;
+  const pending = new Map<number, { resolve(value: BrowserDocumentResult): void; reject(error: Error): void; dispose(): void }>();
+  const notify = (message: BrowserDocumentEvent) => product.postMessage(message);
+  const request = (operation: BrowserDocumentRequest, signal?: AbortSignal): Promise<BrowserDocumentResult> => {
+    if (pending.size >= 16 || signal?.aborted) return Promise.reject(new Error('Browser request unavailable'));
+    const id = ++sequence;
+    return new Promise((resolve, reject) => {
+      const cancel = () => {
+        const work = pending.get(id);
+        if (!work) return;
+        pending.delete(id); work.dispose();
+        product.postMessage({ type: 'cancel', id });
+        reject(new Error('Browser request canceled'));
+      };
+      const timer = setTimeout(cancel, 120000);
+      const dispose = () => { clearTimeout(timer); signal?.removeEventListener('abort', cancel); };
+      pending.set(id, { resolve, reject, dispose });
+      signal?.addEventListener('abort', cancel, { once: true });
+      product.postMessage({ type: 'request', id, operation });
+    });
+  };
+  const installationListeners = new Set<(status: FlowerBrowserInstallationSnapshot) => void>();
+  product.onmessage = ({ data }) => {
+    if (data?.type === 'source.installation') { for (const listener of installationListeners) listener(data.status); return; }
+    if (data?.type !== 'result' || !Number.isSafeInteger(data.id)) return;
+    const work = pending.get(data.id);
+    if (!work) return;
+    pending.delete(data.id); work.dispose();
+    if (data.ok === true) work.resolve(data.value);
+    else work.reject(new Error('Browser request unavailable'));
+  };
+  product.start();
+  const connection = projectionPortConnection({ messages, media }, {
+    upload: async (chooser, file, signal) => {
+      const id = await request({ method: 'upload', chooser, file }, signal);
+      if (typeof id !== 'string') throw new Error('Browser upload unavailable');
+      return id;
+    },
+    download: async (target, id, signal) => {
+      signal.throwIfAborted();
+      const view = location.pathname.split('/').filter(Boolean).at(-1)!;
+      await saveBrowserDownload(`/_redeven_proxy/api/browser/views/${encodeURIComponent(view)}/download?${new URLSearchParams({ target, id })}`, signal);
+    },
+  });
+  const acquireIdle = () => {
+    if (connected && active) void request({ method: 'control', target: active, takeover: false, private: false }).catch(() => undefined);
+  };
+  const surface = document.createElement('main'); surface.className = 'redeven-browser-document-surface'; document.body.append(surface);
+  let disposeSources: (() => void) | undefined;
+  let openingSources = false, disposed = false;
+  if (configuration.sources) {
+    const sources = configuration.sources;
+    const bar = document.createElement('nav'); bar.className = 'redeven-browser-document-bar';
+    const button = document.createElement('button'); button.type = 'button'; button.textContent = sources.messages.product.sources;
+    button.setAttribute('aria-haspopup', 'dialog');
+    const label = document.createElement('span'); label.textContent = sources.current.label;
+    const service: BrowserSourceService = {
+      profiles: async signal => await request({ method: 'source.profiles' }, signal) as Awaited<ReturnType<BrowserSourceService['profiles']>>,
+      createProfile: async (name, signal) => await request({ method: 'source.createProfile', name }, signal) as Awaited<ReturnType<BrowserSourceService['profiles']>>,
+      status: async signal => await request({ method: 'source.status' }, signal) as Awaited<ReturnType<BrowserSourceService['status']>>,
+      tabs: async (profile, signal) => await request({ method: 'source.tabs', profile }, signal) as Awaited<ReturnType<BrowserSourceService['tabs']>>,
+      discover: async (endpoint, signal) => await request({ method: 'source.discover', endpoint }, signal) as Awaited<ReturnType<BrowserSourceService['discover']>>,
+      management: {
+        browserDesktopAvailable: sources.desktop,
+        loadBrowserInstallation: async () => await request({ method: 'source.installation' }) as FlowerBrowserInstallationSnapshot,
+        saveBrowserEnabled: async enabled => await request({ method: 'source.enabled', enabled }) as FlowerBrowserInstallationSnapshot,
+        installBrowser: async input => await request({ method: 'source.install', request: input }) as FlowerBrowserInstallationSnapshot,
+        setupExtension: async () => await request({ method: 'source.setup' }) as Awaited<ReturnType<NonNullable<BrowserSourceService['management']['setupExtension']>>>,
+        openExtension: async action => { await request({ method: 'source.openExtension', action }); },
+        loadExtensionStatus: async () => await request({ method: 'source.status' }) as Awaited<ReturnType<BrowserSourceService['status']>>,
+        subscribeBrowserInstallation: listener => {
+          installationListeners.add(listener);
+          void request({ method: 'source.watch', enabled: true }).catch(() => undefined);
+          return () => { installationListeners.delete(listener); if (!installationListeners.size) void request({ method: 'source.watch', enabled: false }).catch(() => undefined); };
+        },
+      },
+    };
+    button.addEventListener('click', () => {
+      if (openingSources || disposeSources) return;
+      openingSources = true; button.disabled = true;
+      void import('./browserSources').then(({ mountBrowserSources }) => {
+        if (disposed) return;
+        disposeSources = mountBrowserSources({ service, messages: sources.messages, current: sources.current,
+          select: async (selection, signal) => { await request({ method: 'source.select', selection }, signal); },
+          close: () => { disposeSources?.(); disposeSources = undefined; button.focus(); },
+        });
+      }).catch(() => { label.textContent = sources.messages.computer.chromeContinueFailed; label.setAttribute('role', 'alert'); })
+        .finally(() => { openingSources = false; button.disabled = false; });
+    });
+    bar.append(button, label); surface.before(bar);
+  }
+  const view = mountBrowser(surface, {
+    title: configuration.title,
+    messages: configuration.messages,
+    mediaAssets: { decoderURL, audioWorkletURL },
+    connect: () => {
+      if (mounted) notify({ type: 'reconnect' });
+      mounted = true;
+      return connection;
+    },
+    suggest: async (query, { tabs, signal }) => (await request({ method: 'suggest', query, tabs }, signal)) as readonly AddressSuggestion[],
+    library: configuration.library ? {
+      list: async (kind, query, signal) => await request({ method: 'library.list', kind, query }, signal) as readonly AddressSuggestion[],
+      saveBookmark: async (entry, signal) => { await request({ method: 'library.save', ...entry }, signal); },
+      removeBookmark: async (url, signal) => { await request({ method: 'library.remove', url }, signal); },
+      clearHistory: async signal => { await request({ method: 'library.clear' }, signal); },
+    } : undefined,
+    zoomPreferences: configuration.library ? {
+      load: async (origin, signal) => await request({ method: 'zoom.load', origin }, signal) as number,
+      save: async (origin, factor, signal) => { await request({ method: 'zoom.save', origin, factor }, signal); },
+    } : undefined,
+    onRequestControl: async (target, signal) => { await request({ method: 'control', target, takeover: false, private: false }, signal); },
+    onTakeControl: async target => { await request({ method: 'control', target, takeover: true, private: false }); },
+    onTabs: state => {
+      const changed = active !== state.active;
+      active = state.active;
+      notify({ type: 'tabs', state });
+      if (changed) acquireIdle();
+    },
+    onState: state => notify({ type: 'state', state }),
+    onStatus: status => {
+      connected = status === 'live';
+      notify({ type: 'status', status });
+      if (connected) acquireIdle();
+    },
+  });
+  const chrome = document.querySelector<HTMLElement>('.floe-browser');
+  if (chrome) {
+    const palette = getComputedStyle(chrome);
+    for (const token of ['background', 'foreground', 'muted', 'line', 'accent', 'surface', 'field']) document.documentElement.style.setProperty(`--floe-${token}`, palette.getPropertyValue(`--floe-${token}`));
+  }
+  for (const [key, value] of Object.entries(configuration.theme)) {
+    if (key.startsWith('--floe-')) chrome?.style.setProperty(key, value);
+  }
+  const visibility = () => { void request({ method: 'visibility', visible: !document.hidden }).catch(() => undefined); };
+  document.addEventListener('visibilitychange', visibility);
+  visibility();
+  window.addEventListener('pagehide', () => {
+    disposed = true;
+    document.removeEventListener('visibilitychange', visibility);
+    for (const work of pending.values()) { work.dispose(); work.reject(new Error('Browser document closed')); }
+    pending.clear();
+    product.postMessage({ type: 'closed' });
+    disposeSources?.(); installationListeners.clear();
+    view.destroy(); product.close();
+  }, { once: true });
+}
+
+if (owner && /^[a-zA-Z0-9-]{16,128}$/u.test(nonce)) {
+  window.addEventListener('message', attach);
+  owner.postMessage({ type: 'redeven-browser-ready', nonce }, origin);
+}

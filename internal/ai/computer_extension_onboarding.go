@@ -17,13 +17,21 @@ import (
 // Only explicit UI commands open native applications. Neither model tools nor
 // caller-provided paths, URLs or command arguments reach this boundary.
 func (s *Service) OpenComputerExtension(ctx context.Context, meta *session.Meta, action string) error {
+	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
+	if !ok {
+		return errors.New("computer runtime unavailable")
+	}
+	return host.OpenBrowserExtension(ctx, meta, action)
+}
+
+func (host *ComputerUseRuntime) OpenBrowserExtension(ctx context.Context, meta *session.Meta, action string) error {
 	if err := requireRWX(meta); err != nil {
 		return err
 	}
 	if action != "extensions" && action != "folder" && action != "connect" {
 		return errors.New("invalid browser setup action")
 	}
-	setup, err := s.SetupComputerExtension(ctx, meta)
+	setup, err := host.BrowserExtensionSetup(ctx, meta)
 	if err != nil {
 		return err
 	}
@@ -34,7 +42,6 @@ func (s *Service) OpenComputerExtension(ctx context.Context, meta *session.Meta,
 	if err := checkComputerExtensionOpen(runtime.GOOS, action, os.Getenv, exec.LookPath); err != nil {
 		return err
 	}
-	host := s.targetToolExecutor.(*ComputerUseRuntime)
 	host.mu.RLock()
 	hub := host.extension
 	host.mu.RUnlock()

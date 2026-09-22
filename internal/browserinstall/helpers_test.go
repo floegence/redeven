@@ -17,7 +17,17 @@ func TestComputerHelperArchiveVerifiesContentsAndRepairsCorruption(t *testing.T)
 	if arch == "amd64" {
 		arch = "x64"
 	}
-	files := map[string][]byte{"node": []byte("#!/bin/sh\n"), "redevenComputerHost.mjs": []byte("host"), "redevenManagedBrowser.mjs": []byte("browser"), "node_modules/playwright/package.json": []byte(`{"version":"1.60.0"}`), "extension/manifest.json": []byte(`{}`), "extension/background.mjs": []byte("background"), "extension/popup.html": []byte("popup"), "extension/popup.mjs": []byte("popup script")}
+	files := map[string][]byte{
+		"node": []byte("#!/bin/sh\n"), "redevenComputerHost.mjs": []byte("host"), "redevenManagedBrowser.mjs": []byte("browser"),
+		"computerBrowserSource.mjs": []byte("source"), "computerBrowserViews.mjs": []byte("views"),
+		"redevenBrowserHost.mjs": []byte("host"), "computerExtensionTransport.mjs": []byte("extension transport"), "computerBrowserHost.mjs": []byte("shared source host"), "computerManagedDownloads.mjs": []byte("native downloads"), "computerBrowserLineage.mjs": []byte("source lineage"),
+		"node_modules/playwright/package.json":                                                             []byte(`{"version":"1.63.0"}`),
+		"node_modules/@floegence/floebrowser/package.json":                                                 []byte(`{"version":"0.1.2"}`),
+		"node_modules/@floegence/floebrowser/dist/host/index.js":                                           []byte("sdk"),
+		"node_modules/@floegence/floebrowser/dist/bin/manifest.json":                                       []byte(`{}`),
+		"node_modules/@floegence/floebrowser/dist/bin/" + runtime.GOOS + "-" + arch + "/floebrowser-media": []byte("media"),
+		"extension/manifest.json":                                                                          []byte(`{}`), "extension/background.mjs": []byte("background"), "extension/computerBrowserLineage.mjs": []byte("lineage"), "extension/popup.html": []byte("popup"), "extension/popup.mjs": []byte("popup script"),
+	}
 	entries := []map[string]any{}
 	archive := filepath.Join(t.TempDir(), "computer.zip")
 	f, err := os.Create(archive)

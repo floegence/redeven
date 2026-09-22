@@ -1,0 +1,19 @@
+.redeven-browser-sources-dialog { width: min(42rem, calc(100vw - 2rem)); max-width: min(42rem, calc(100vw - 2rem)); }
+.redeven-browser-source-sections { display: flex; flex-direction: column; gap: 1.5rem; }
+.redeven-browser-source-sections > section { min-width: 0; }
+.redeven-browser-source-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .375rem; }
+.redeven-browser-source-heading h3 { font-size: .875rem; font-weight: 600; }
+.redeven-browser-source-list { display: flex; flex-direction: column; gap: .25rem; margin-top: .75rem; max-height: 15rem; overflow-y: auto; }
+.redeven-browser-source-option { display: flex; align-items: center; gap: .75rem; padding: .65rem .75rem; border: 1px solid transparent; border-radius: .5rem; cursor: pointer; }
+.redeven-browser-source-option:hover { background: var(--muted); }
+.redeven-browser-source-option.is-selected { background: color-mix(in srgb, var(--primary) 7%, transparent); border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); }
+.redeven-browser-source-option > input { accent-color: var(--primary); flex-shrink: 0; }
+.redeven-browser-source-option > span { display: flex; min-width: 0; flex-direction: column; gap: .15rem; }
+.redeven-browser-source-option strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8125rem; font-weight: 500; }
+.redeven-browser-source-option small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .6875rem; color: var(--muted-foreground); }
+.redeven-browser-source-input { width: 100%; min-width: 0; height: 2rem; padding: .375rem .625rem; border: 1px solid var(--border); border-radius: .375rem; background: var(--background); color: var(--foreground); font-size: .8125rem; }
+@media (max-width: 560px) {
+  .redeven-browser-profile-bar { flex-wrap: wrap; }
+  .redeven-browser-source-heading { align-items: flex-start; }
+  .redeven-browser-source-heading > button { max-width: 65%; height: auto; white-space: normal; text-align: start; }
+}

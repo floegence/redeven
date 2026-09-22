@@ -44,8 +44,9 @@ const privacyObserverSource = `(() => {
 // Trusted page operations shared by managed Chromium and the Chrome extension.
 // Only this module speaks CDP. Guest scripts receive selectors and JSON facts.
 export class BrowserComputerPage {
-  constructor(transport, { allowedOrigins = [] } = {}) {
+  constructor(transport, { allowedOrigins = [], responseDownloads } = {}) {
     this.transport = transport;
+    this.responseDownloads = responseDownloads;
     this.allowedOrigins = new Set(allowedOrigins);
     this.fullAccess = false;
     this.references = new Map();
@@ -53,11 +54,13 @@ export class BrowserComputerPage {
     this.prefix = crypto.randomUUID();
     this.listeners = new Set();
     this.sessions = new Map();
+    this.sessionDisposers = new Map();
     this.requiredOrigin = undefined;
     this.openedPages = [];
     this.downloads = new Map();
     this.guardFailure = false;
     this.privateInput = false;
+    this.userBrowsing = false;
     this.observedFrames = new Set();
     this.stopped = false;
     this.invalid = false;
@@ -80,31 +83,42 @@ export class BrowserComputerPage {
 
   async initializeSession(session) {
     if (this.sessions.has(session)) return this.sessions.get(session);
+    const listeners = [];
+    const listen = (event, listener) => {
+      session.on(event, listener);
+      listeners.push(() => session.off(event, listener));
+    };
+    this.sessionDisposers.set(session, () => { for (const dispose of listeners) dispose(); });
     const ready = (async () => {
-      for (const event of ['Page.frameAttached', 'Page.frameDetached', 'Page.frameNavigated', 'DOM.documentUpdated']) session.on(event, () => this.invalidate());
-      for (const event of ['DOM.childNodeRemoved', 'DOM.attributeModified', 'DOM.childNodeInserted', 'Accessibility.nodesUpdated', 'Page.lifecycleEvent']) session.on(event, () => this.changed());
-      session.on('Page.windowOpen', event => {
+      for (const event of ['Page.frameAttached', 'Page.frameDetached', 'Page.frameNavigated', 'DOM.documentUpdated']) listen(event, () => this.invalidate());
+      for (const event of ['DOM.childNodeRemoved', 'DOM.attributeModified', 'DOM.childNodeInserted', 'Accessibility.nodesUpdated', 'Page.lifecycleEvent']) listen(event, () => this.changed());
+      listen('Page.windowOpen', event => {
         // Opening a page completes an action; choosing that page is the
         // agent's next decision. It does not grant control or require a user.
         if (this.openedPages.length < 16) this.openedPages.push({ url: String(event.url || '').slice(0, 8192) });
         this.invalidate();
       });
-      session.on('Page.downloadWillBegin', event => {
+      listen('Page.downloadWillBegin', event => {
         if (this.downloads.size >= 32) this.downloads.delete(this.downloads.keys().next().value);
         this.downloads.set(event.guid, { id: event.guid, filename: String(event.suggestedFilename || '').slice(0, 512), state: 'in_progress' });
         this.changed();
       });
-      session.on('Page.downloadProgress', event => {
+      listen('Page.downloadProgress', event => {
         const download = this.downloads.get(event.guid);
         if (!download || !['inProgress','completed','canceled'].includes(event.state)) return;
+        download.received_bytes = event.receivedBytes;
         if (event.state === 'completed' && this.transport.resolveDownload) {
           void this.transport.resolveDownload(event.guid).then(facts => Object.assign(download, facts, { state: 'completed' }),
             () => { download.state = 'unavailable'; }).finally(() => this.changed());
         } else { download.state = event.state === 'inProgress' ? 'in_progress' : event.state; this.changed(); }
       });
-      session.on('Fetch.requestPaused', event => {
+      listen('Fetch.requestPaused', event => {
         void (async () => {
-          let allowed = this.privateInput;
+          if (event.responseStatusCode !== undefined) {
+            if (!this.responseDownloads?.handle(session, event)) await session.send('Fetch.continueRequest', { requestId: event.requestId });
+            return;
+          }
+          let allowed = this.userBrowsing || this.privateInput;
           let origin;
           try { const url = new URL(event.request.url); origin = url.origin; allowed ||= ['http:', 'https:'].includes(url.protocol) && this.allowsOrigin(origin); }
           catch { /* Unsupported navigation has no ambient authority. */ }
@@ -114,7 +128,10 @@ export class BrowserComputerPage {
             this.stopped = true; this.invalidate();
             await session.send('Fetch.failRequest', { requestId: event.requestId, errorReason: 'BlockedByClient' });
           }
-        })().catch(() => { this.guardFailure = true; this.invalidate(); });
+        })().catch(() => {
+          if (!this.sessions.has(session)) return;
+          this.guardFailure = true; this.invalidate();
+        });
       });
       await session.send('Page.enable');
       await session.send('Runtime.enable');
@@ -122,10 +139,18 @@ export class BrowserComputerPage {
       await session.send('Accessibility.enable');
       await session.send('Page.setLifecycleEventsEnabled', { enabled: true });
       await session.send('Page.addScriptToEvaluateOnNewDocument', { source: privacyObserverSource, worldName: 'flower-observation' });
-      await session.send('Fetch.enable', { patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }] });
+      await session.send('Fetch.enable', { patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }, ...(this.responseDownloads ? [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Response' }] : [])] });
     })();
     this.sessions.set(session, ready);
     return ready;
+  }
+
+  releaseSession(session) {
+    this.sessionDisposers.get(session)?.();
+    this.sessionDisposers.delete(session);
+    this.sessions.delete(session);
+    this.focusedSessions.delete(session);
+    this.invalidate();
   }
 
   async preparePage() {
@@ -362,12 +387,15 @@ export class BrowserComputerPage {
   }
 
   async releaseInput() {
+    const failures = [];
     for (const [key, held] of this.heldInput) {
       const parameters = { ...held.parameters, type: held.method === 'Input.dispatchKeyEvent' ? 'keyUp' : 'mouseReleased' };
       delete parameters.text;
       try { await this.input(held.session, held.method, parameters, true); }
+      catch (error) { failures.push(error); }
       finally { this.heldInput.delete(key); }
     }
+    if (failures.length) throw new AggregateError(failures, 'Browser input release failed');
   }
 
   async editText(element, text, replace) {

@@ -264,6 +264,7 @@ type Agent struct {
 	mon                    *monitor.Service
 	sys                    *syssvc.Service
 	code                   *codeapp.Service
+	browserRuntime         *ai.ComputerUseRuntime
 	pluginSessionLifecycle pluginSessionLifecycle
 
 	maintenanceOp          atomic.Int32
@@ -477,6 +478,7 @@ func New(opts Options) (*Agent, error) {
 		return nil, err
 	}
 	computerExecutor, computerTargets := computerUseRuntime(stateDir)
+	a.browserRuntime, _ = computerExecutor.(*ai.ComputerUseRuntime)
 	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{
 		Logger:                 logger,
 		StateDir:               stateDir,
@@ -1631,6 +1633,12 @@ func (a *Agent) NewLocalSessionHandlers(meta *session.Meta, externalOrigin strin
 			cleanup()
 			return nil, nil, err
 		}
+	}
+	cleanupBrowser, err := a.registerBrowserStreams(handlers, meta)
+	cleanups = append(cleanups, cleanupBrowser)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
 	}
 	cleanupProxy, err := a.registerEnvSessionProxy(handlers, meta, externalOrigin)
 	if err != nil {

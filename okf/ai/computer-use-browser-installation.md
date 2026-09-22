@@ -3,7 +3,7 @@ type: Runtime and Product Contract
 title: Optional built-in browser installation
 description: Confirm browser acquisition, persist the environment capability switch, and resume through the canonical Flower input request.
 tags: [ai, computer-use, browser, installation, desktop]
-timestamp: 2026-09-21T00:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 # Summary
 
@@ -56,7 +56,11 @@ is introduced. Existing account requirements and private-control boundaries hold
 # Distribution and state
 
 Standard Runtime release suites carry `computer.zip`: official Node, published
-Playwright, QuickJS and product helpers, with a closed SHA-256 file inventory.
+Playwright, QuickJS, the published FloeBrowser SDK and its native media collector,
+and product helpers, with a closed SHA-256 file inventory. FloeBrowser's original
+compiled dependency licenses remain in the bundle and in the generated root
+notices. Relocated-resource qualification uses the public SDK to resolve and
+start the verified collector without source directories or a helper on PATH.
 Native Desktop stages the same thin resources as a directory; managed WSL keeps
 the Linux helper ZIP in its exact archive. Neither includes the optional Chromium
 archive. Runtime startup validates and extracts the release-suite helper ZIP into

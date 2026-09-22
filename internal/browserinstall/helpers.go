@@ -77,7 +77,13 @@ func validateHelpers(root string) error {
 	if json.Unmarshal(data, &manifest) != nil || manifest.Version != 1 || manifest.Platform != runtime.GOOS || manifest.Architecture != arch {
 		return errors.New("computer helper platform mismatch")
 	}
-	required := map[string]bool{"node": false, "redevenComputerHost.mjs": false, "redevenManagedBrowser.mjs": false, "node_modules/playwright/package.json": false, "extension/manifest.json": false, "extension/background.mjs": false, "extension/popup.html": false, "extension/popup.mjs": false}
+	required := map[string]bool{"node": false, "redevenComputerHost.mjs": false, "redevenManagedBrowser.mjs": false,
+		"computerBrowserSource.mjs": false, "computerBrowserViews.mjs": false, "node_modules/playwright/package.json": false,
+		"redevenBrowserHost.mjs": false, "computerBrowserHost.mjs": false, "computerManagedDownloads.mjs": false, "computerBrowserLineage.mjs": false, "computerExtensionTransport.mjs": false,
+		"node_modules/@floegence/floebrowser/package.json": false, "node_modules/@floegence/floebrowser/dist/host/index.js": false,
+		"node_modules/@floegence/floebrowser/dist/bin/manifest.json":                                       false,
+		"node_modules/@floegence/floebrowser/dist/bin/" + runtime.GOOS + "-" + arch + "/floebrowser-media": false,
+		"extension/manifest.json": false, "extension/background.mjs": false, "extension/computerBrowserLineage.mjs": false, "extension/popup.html": false, "extension/popup.mjs": false}
 	seen := map[string]bool{}
 	for _, item := range manifest.Files {
 		if !filepath.IsLocal(item.Path) || filepath.Clean(item.Path) != item.Path || seen[item.Path] {

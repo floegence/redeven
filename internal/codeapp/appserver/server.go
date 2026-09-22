@@ -64,6 +64,7 @@ type Options struct {
 	HostApplications     hostapps.Backend
 	ContainerResources   *containerresource.Service
 	AIServiceProvider    AIServiceProvider
+	BrowserRuntime       *ai.ComputerUseRuntime
 	Notes                *notes.Service
 	WorkbenchLayout      *workbenchlayout.Service
 	Terminal             *terminal.Manager
@@ -223,17 +224,18 @@ func codeRuntimeSetupChunkIndexFromPath(rawPath string) (int64, bool) {
 type Server struct {
 	log *slog.Logger
 
-	backend    Backend
-	pf         PortForwardBackend
-	managed    managedwebservice.Backend
-	hostApps   hostapps.Backend
-	containers *containerresource.Service
-	aiProvider AIServiceProvider
-	notes      *notes.Service
-	layouts    *workbenchlayout.Service
-	term       workbenchTerminalSessionManager
-	audit      *auditlog.Store
-	diag       *diagnostics.Store
+	backend        Backend
+	pf             PortForwardBackend
+	managed        managedwebservice.Backend
+	hostApps       hostapps.Backend
+	containers     *containerresource.Service
+	aiProvider     AIServiceProvider
+	browserRuntime *ai.ComputerUseRuntime
+	notes          *notes.Service
+	layouts        *workbenchlayout.Service
+	term           workbenchTerminalSessionManager
+	audit          *auditlog.Store
+	diag           *diagnostics.Store
 
 	resolveSessionMeta   func(channelID string) (*session.Meta, bool)
 	acquirePluginSession func(channelID string) (*session.Meta, func(), bool)
@@ -427,6 +429,7 @@ func New(opts Options) (*Server, error) {
 		hostApps:              opts.HostApplications,
 		containers:            opts.ContainerResources,
 		aiProvider:            opts.AIServiceProvider,
+		browserRuntime:        opts.BrowserRuntime,
 		notes:                 opts.Notes,
 		layouts:               opts.WorkbenchLayout,
 		term:                  opts.Terminal,
@@ -952,6 +955,9 @@ func (g *Server) serveEnvAppDist(w http.ResponseWriter, r *http.Request) {
 	}
 	if !isDistRequestMethod(r.Method) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if g.serveBrowserDocument(w, r) {
 		return
 	}
 
@@ -2503,6 +2509,9 @@ func isRenderableMime(ct string) bool {
 func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ui-cache-scope" {
 		g.handleUICacheScope(w, r)
+		return
+	}
+	if g.handleBrowserLibraryAPI(w, r) || g.handleBrowserViewsAPI(w, r) || g.handleBrowserWorkspaceAPI(w, r) {
 		return
 	}
 	if g.handleHostApplicationsAPI(w, r) {

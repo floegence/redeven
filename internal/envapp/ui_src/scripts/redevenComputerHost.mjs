@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { lstat, mkdir } from 'node:fs/promises';
-import { BrowserComputerController } from './computerBrowserController.mjs';
+import { createComputerBrowserSource } from './computerBrowserSource.mjs';
 
 const profileIndex = process.argv.indexOf('--profile');
 const profile = profileIndex >= 0 ? process.argv[profileIndex + 1] : undefined;
@@ -12,6 +12,8 @@ const cdpIndex = process.argv.indexOf('--cdp-url');
 const cdpURL = cdpIndex >= 0 ? process.argv[cdpIndex + 1] : undefined;
 const tabIndex = process.argv.indexOf('--tab-id');
 const tabID = tabIndex >= 0 ? process.argv[tabIndex + 1] : undefined;
+const targetIndex = process.argv.indexOf('--target-id');
+const targetID = targetIndex >= 0 ? process.argv[targetIndex + 1] : undefined;
 const contextIndex = process.argv.indexOf('--browser-context-id');
 const browserContextID = contextIndex >= 0 ? process.argv[contextIndex + 1] : undefined;
 const downloadIndex = process.argv.indexOf('--download-dir');
@@ -57,7 +59,9 @@ try {
 
 
 function response(value) { process.stdout.write(JSON.stringify(value) + '\n'); }
-const cdp = await context.newCDPSession(page);
+const sourceOwner = await createComputerBrowserSource(page, targetID);
+const { source, controller } = sourceOwner;
+const cdp = source.transport;
 if (!browser) {
   downloadDirectory = path.join(profile, 'downloads');
   await mkdir(downloadDirectory, { recursive: true, mode: 0o700 });
@@ -74,28 +78,6 @@ if (downloadDirectory) {
     return { path: file, size_bytes: stat.size };
   };
 }
-const frameSessions = new Map();
-cdp.frameSessions = async () => {
-  const sessions = [];
-  // OOP frames must be queried through their own CDP session. Query them first
-  // so their frame identity cannot be claimed by the parent session.
-  for (const frame of [...page.frames()].reverse()) {
-    if (frame === page.mainFrame()) continue;
-    let session = frameSessions.get(frame);
-    if (!session) {
-      try { session = await context.newCDPSession(frame); frameSessions.set(frame, session); }
-      catch { continue; } // In-process frames belong to the main session.
-    }
-    sessions.push(session);
-  }
-  sessions.push(cdp);
-  return sessions;
-};
-const controller = new BrowserComputerController(cdp);
-const semantic = controller.page;
-await controller.initialize();
-page.on('close', () => semantic.close());
-page.on('framedetached', frame => { frameSessions.get(frame)?.detach().catch(() => {}); frameSessions.delete(frame); });
 response({ type: 'ready', protocol_version: 6, capabilities: ['observe', 'interaction'], execution_location: executionLocation });
 const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 rl.on('close', () => controller.cancel());
@@ -106,6 +88,6 @@ for await (const line of rl) {
   const result = await controller.execute(request);
   response({ id: request.id, target_id: request.target_id, execution_location: executionLocation, ...result });
 }
-await semantic.releasePage();
+await sourceOwner.dispose();
 if (browser) await browser.close();
 else await context.close();

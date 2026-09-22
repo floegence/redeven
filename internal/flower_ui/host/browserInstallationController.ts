@@ -2,7 +2,7 @@ import type { FlowerBrowserInstallation, FlowerBrowserInstallationSnapshot, Flow
 import type { BrowserPackageBridge, BrowserPackageProgress } from '../../../desktop/src/shared/browserPackageIPC';
 
 export type ComputerRequest = <T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown) => Promise<T>;
-const path = '/_redeven_proxy/api/ai/computer/managed/browser';
+const path = '/_redeven_proxy/api/browser/installation';
 const activeStates = new Set(['downloading', 'uploading', 'verifying', 'installing']);
 type Attempt = { source: 'download' | 'upload'; id: string; cancelled: boolean; runtimeID: string; done?: Promise<void> };
 

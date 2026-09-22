@@ -1,14 +1,17 @@
 package ai
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -38,8 +41,8 @@ func extensionFixture(t *testing.T, owners ...*ComputerUseRuntime) (*computerExt
 	}
 	t.Cleanup(func() { _ = peer.Close() })
 	for _, message := range []map[string]any{
-		{"type": "native_host", "protocol_version": 6, "extension_id": browserbridge.ExtensionID},
-		{"type": "hello", "protocol_version": 6, "profile_id": "12345678-1234-1234-1234-123456789abc", "profile_name": "Work"},
+		{"type": "native_host", "protocol_version": browserbridge.ProtocolVersion, "extension_id": browserbridge.ExtensionID},
+		{"type": "hello", "protocol_version": browserbridge.ProtocolVersion, "profile_id": "12345678-1234-1234-1234-123456789abc", "profile_name": "Work"},
 	} {
 		if err := browserbridge.WriteMessage(peer, message, 1<<20); err != nil {
 			t.Fatal(err)
@@ -97,15 +100,26 @@ func TestExtensionConnectionScopesRepliesAndRemovesDisconnectedProfile(t *testin
 	}
 }
 func TestExtensionLostEffectIsTerminalAndNeverReplayed(t *testing.T) {
-	_, client, peer := extensionFixture(t)
-	done := make(chan struct{})
-	go func() { _, _ = browserbridge.ReadMessage(peer, 1<<20); _ = peer.Close(); close(done) }()
-	executor := &extensionTargetExecutor{client: client, tabID: "7"}
+	var calls atomic.Int32
+	host, _ := browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		var request struct{ ID, Method string }
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		if request.Method == "source.cancel" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": request.ID, "result": true})
+			return
+		}
+		calls.Add(1)
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	})
+	executor := &extensionTargetExecutor{sourceHost: host, targetID: "chrome-task"}
 	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "chrome-task", ToolName: "computer.click", Arguments: json.RawMessage(`{"x":1,"y":2}`)})
-	if !errors.Is(err, errComputerEffectUnknown) {
-		t.Fatalf("effect result: %v", err)
+	if !errors.Is(err, errComputerEffectUnknown) || calls.Load() != 1 {
+		t.Fatalf("effect result: %v, calls: %d", err, calls.Load())
 	}
-	<-done
+
 }
 func TestExtensionCancellationPreservesOtherTabCommands(t *testing.T) {
 	_, client, peer := extensionFixture(t)
@@ -310,6 +324,39 @@ func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *test
 	host, _, store, _ := computerBindingFixture(t)
 	hub, _, peer := extensionFixture(t, host)
 	host.extension = hub
+	sourceHost, _ := browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		var request struct{ ID, Method string }
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": request.ID, "result": map[string]any{"result": map[string]any{"selected": true}, "safety": map[string]any{"level": "routine", "safe_to_capture": false, "safe_to_send_to_model": false}}})
+	})
+	directory, err := os.MkdirTemp("/tmp", "extension-source-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceHost.directory = directory
+	listener, err := net.Listen("unix", filepath.Join(directory, "host.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				_, err := http.ReadRequest(bufio.NewReader(conn))
+				if err != nil {
+					return
+				}
+				_, _ = io.WriteString(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
+				_, _ = io.Copy(io.Discard, conn)
+			}()
+		}
+	}()
+	host.browserHost = sourceHost
 	done := make(chan struct{})
 	created := 0
 	go func() {
@@ -329,7 +376,7 @@ func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *test
 			result := map[string]any{}
 			if request.Command == "new_tab" {
 				created++
-				result = map[string]any{"tab_id": fmt.Sprint(created), "title": "Task"}
+				result = map[string]any{"tab_id": fmt.Sprint(created), "title": "Task", "binding": fmt.Sprintf("12345678-1234-1234-1234-%012d", created)}
 			}
 			if err := browserbridge.WriteMessage(peer, map[string]any{"id": request.ID, "result": result}, 1<<20); err != nil {
 				return
@@ -372,30 +419,13 @@ func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *test
 func TestExtensionObservationFailurePreservesOnlyConfirmedProgress(t *testing.T) {
 	for _, executed := range []any{false, true, "unconfirmed"} {
 		t.Run(fmt.Sprint(executed), func(t *testing.T) {
-			_, client, peer := extensionFixture(t)
-			done := make(chan error, 1)
-			go func() {
-				raw, err := browserbridge.ReadMessage(peer, 1<<20)
-				if err != nil {
-					done <- err
-					return
-				}
-				var request struct {
-					ID string `json:"id"`
-				}
-				if err = json.Unmarshal(raw, &request); err != nil {
-					done <- err
-					return
-				}
-				done <- browserbridge.WriteMessage(peer, map[string]any{"id": request.ID, "result": map[string]any{
-					"error": "TARGET_OBSERVATION_UNAVAILABLE", "result": map[string]any{"action_executed": executed, "observation_stage": "safety_scan", "observation": "private"},
-					"screenshot": map[string]any{"mime": "image/png", "data": "private"}}}, 1<<20)
-			}()
-			executor := &extensionTargetExecutor{client: client, tabID: "7"}
+			host, _ := browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {
+				var request struct{ ID string }
+				_ = json.NewDecoder(r.Body).Decode(&request)
+				_ = json.NewEncoder(w).Encode(map[string]any{"id": request.ID, "result": map[string]any{"error": "TARGET_OBSERVATION_UNAVAILABLE", "result": map[string]any{"action_executed": executed, "observation_stage": "safety_scan", "observation": "private"}, "screenshot": map[string]any{"mime": "image/png", "data": "private"}}})
+			})
+			executor := &extensionTargetExecutor{sourceHost: host, targetID: "chrome-task"}
 			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "chrome-task", ToolName: "computer.click"})
-			if peerErr := <-done; peerErr != nil {
-				t.Fatal(peerErr)
-			}
 			if _, ok := executed.(bool); !ok {
 				if !errors.Is(err, errComputerEffectUnknown) {
 					t.Fatalf("malformed progress weakened effect barrier: %v", err)

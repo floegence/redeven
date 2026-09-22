@@ -3,7 +3,7 @@ type: Browser Integration Contract
 title: Managed browsers and authorized Chrome tabs
 description: Bind an explicit profile and tab to the Runtime while preserving login state and unrelated user browsing.
 tags: [ai, browser-use, chrome, profiles]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 # Summary
 
@@ -47,6 +47,15 @@ profile metadata lives with browser profile data; it is not Agent history.
 Malformed, oversized or redirected metadata is rejected without rewriting it.
 Closing a tab helper leaves its profile and sibling tabs alive. Runtime shutdown
 closes tab helpers before their profile owners.
+
+The managed/CDP target helper borrows its root and child debugger transports
+from the released FloeBrowser source adapter. Semantic inspection and DOM
+projection can consume that same source without a second attachment or frame
+owner. Disposing a projection preserves the source and AI connection. Removing
+a child frame retires its semantic listeners, context ownership and references;
+late completion from that retired frame cannot invalidate a healthy parent.
+The extension applies the same semantic-session retirement to its own debugger
+children. Source adaptation itself grants neither observation nor user input.
 
 Managed downloads use opaque unique filenames beneath the owned profile's
 download directory. `browser.waitForDownload` waits for completion events and
@@ -159,6 +168,8 @@ public and installed-code comparison; no forced reload or CSP rewriting is used.
 - `redeven:internal/ai/computer_extension.go` - connection authorization, framing and scoped cancellation.
 - `redeven:browser-extension/background.mjs` - exact-tab debugger binding and connection lifetime.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserController.mjs` - shared action, privacy and result path.
+- `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.mjs` - one managed/CDP source and shared debugger lifecycle.
+- `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.node-test.mjs` - projection disposal and repeated cross-process frame retirement.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowser.node-test.mjs` - real frames, input, downloads and navigation.
 - `redeven:internal/envapp/ui_src/scripts/computerNativeMessaging.node-test.mjs` - real Chrome native-host launch.
 - `redeven:internal/envapp/ui_src/scripts/computerExtension.node-test.mjs` - extension actions, background editing and unbound popup targets.

@@ -19,6 +19,7 @@ test('immutable helpers exclude Chromium and use an explicitly installed browser
     const resources = path.join(root, 'relocated');
     const manifest = JSON.parse(readFileSync(path.join(resources, 'manifest.json')));
     assert.ok(manifest.files.some(file => file.path === 'node_modules/playwright/package.json'));
+    assert.ok(manifest.files.some(file => file.path === 'node_modules/@floegence/floebrowser/dist/THIRD_PARTY_LICENSES.txt'));
     assert.ok(!manifest.files.some(file => file.path.startsWith('chromium/') || file.path === 'browser.json'));
     const requireUI = createRequire(path.resolve('internal/envapp/ui_src/package.json'));
     const browser = requireUI('playwright').chromium.executablePath();
@@ -62,7 +63,16 @@ test('immutable helpers exclude Chromium and use an explicitly installed browser
       cwd: os.tmpdir(), env: { HOME: root, PATH: '/usr/bin:/bin', NODE_PATH: '', PLAYWRIGHT_BROWSERS_PATH: path.join(root, 'absent-cache') }, timeout: 10000,
     });
     assert.deepEqual(JSON.parse(script.stdout).logs, [['relocated', 'undefined', 'undefined']]);
-    for (const name of ['background.mjs', 'manifest.json', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'input-focus.css']) {
+    const media = await promisify(execFile)(path.join(resources, 'node'), ['--input-type=module', '-e', `
+      const {NativeMediaBridge, PROTOCOL_VERSION} = await import('@floegence/floebrowser');
+      const bridge = new NativeMediaBridge();
+      await bridge.close();
+      process.stdout.write(JSON.stringify({protocol: PROTOCOL_VERSION}));
+    `], {
+      cwd: resources, env: { HOME: root, PATH: '/usr/bin:/bin', NODE_PATH: '', PLAYWRIGHT_BROWSERS_PATH: path.join(root, 'absent-cache') }, timeout: 10000,
+    });
+    assert.deepEqual(JSON.parse(media.stdout), { protocol: 21 });
+    for (const name of ['background.mjs', 'manifest.json', 'input-focus.css']) {
       assert.ok(manifest.files.some(file => file.path === `extension/${name}`), `missing extension resource: ${name}`);
     }
   } finally {

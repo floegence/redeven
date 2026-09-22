@@ -850,6 +850,23 @@ function renderPdfResourceLicenses() {
   }).join('\n\n');
 }
 
+function renderBrowserMediaNotices() {
+  const root = path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floebrowser');
+  const metadata = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const licenses = fs.readFileSync(path.join(root, 'dist/THIRD_PARTY_LICENSES.txt'));
+  if (metadata.name !== '@floegence/floebrowser' || metadata.version !== '0.1.5'
+    || crypto.createHash('sha256').update(licenses).digest('hex') !== '58ae22aa8e0fc1826b9c4c42ddc7a7e4630438fcbe2e4bfbc6c9b5400bc00222') {
+    throw new Error('FloeBrowser bundled license contract changed; review the published SDK and native collector notices.');
+  }
+  return `## FloeBrowser Projection and Media Collector
+
+Redeven bundles the published \`@floegence/floebrowser@0.1.5\` SDK and its native element-media collector. The following original license texts cover its JavaScript runtime components and compiled Go dependencies, including Pion WebRTC, mediacommon, the Go runtime and platform-specific modules. They are reproduced from the SDK's verified \`dist/THIRD_PARTY_LICENSES.txt\`, which is also retained in the computer-helper resource bundle.
+
+\`\`\`\`text
+${licenses.toString('utf8').replace(/\r\n/gu, '\n').split('\n').map(line => line.trimEnd()).join('\n').trim()}
+\`\`\`\``;
+}
+
 function renderNotices(goEntries, npmEntries, terminalAgentIcons, containerServiceIcons, floetermThemeNotices) {
   return `# Third-Party Notices
 
@@ -964,6 +981,8 @@ Redeven Desktop packages Electron and Chromium runtime components. Desktop relea
 ## Optional Browser Distribution
 
 Flower's headless Chromium browser is installed separately, only after user confirmation. It is not included in the standard Redeven Runtime or Desktop computer-helper bundle. Redeven downloads an official Playwright Chromium or Chrome for Testing archive (or accepts the identical local archive) at the platform-specific version, URL, size and SHA-256 in \`internal/browserinstall/catalog.json\`. The original distribution and its license resources remain intact in the user's Runtime state directory. Chromium is available under the BSD-style license and the licenses of its included third-party components; see https://chromium.googlesource.com/chromium/src/+/main/LICENSE and the distribution's own notices.
+
+${renderBrowserMediaNotices()}
 
 ## License Policy Guard
 
