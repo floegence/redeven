@@ -49,6 +49,7 @@ import {
 import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
 import { PluginsWorkbenchIcon } from './icons/WorkbenchSoftIcons';
 import {
+  AppViewport,
   BottomBarCompanion,
   DisplayModePageShell,
   KeepAliveStack,
@@ -1059,9 +1060,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const [flowerWorkbenchHost, setFlowerWorkbenchHostElement] = createSignal<HTMLElement | null>(null);
   const [flowerProductMountHost, setFlowerProductMountHost] = createSignal<HTMLElement | null>(null);
   const [flowerProductMountContainer, setFlowerProductMountContainer] = createSignal<HTMLDivElement | null>(null);
-  const [activityFlowerMobileRailStyle, setActivityFlowerMobileRailStyle] = createSignal<Record<string, string>>({});
   const [flowerProductMountRequested, setFlowerProductMountRequested] = createSignal(false);
-  const [activityFlowerVisualViewportBottomOffset, setActivityFlowerVisualViewportBottomOffset] = createSignal(0);
   const [activityFlowerAnchor, setActivityFlowerAnchor] = createSignal<HTMLElement | null>(null);
   createEffect(() => {
     if (canUseFlower()) setFlowerProductMountRequested(true);
@@ -2243,84 +2242,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   createEffect(() => {
     const requestedHost = requestedFlowerProductHost();
     if (requestedHost?.isConnected) setFlowerProductMountHost(requestedHost);
-  });
-
-  const syncActivityFlowerAnchorPlacement = () => {
-    if (typeof window === 'undefined') return;
-    const visualViewport = window.visualViewport;
-    const viewportScale = visualViewport?.scale ?? 1;
-    const nextBottomOffset = viewportScale === 1 ? Math.max(
-      0,
-      window.innerHeight - ((visualViewport?.offsetTop ?? 0) + (visualViewport?.height ?? window.innerHeight)),
-    ) : 0;
-    const bottomOffsetChanged = nextBottomOffset !== activityFlowerVisualViewportBottomOffset();
-    setActivityFlowerVisualViewportBottomOffset(nextBottomOffset);
-    if (bottomOffsetChanged) window.requestAnimationFrame(syncActivityFlowerAnchorPlacement);
-    const overlayStyle = activityFlowerOverlayHost() ? getComputedStyle(activityFlowerOverlayHost()!) : null;
-    const safeAreaValue = (name: string) => Math.max(0, Number.parseFloat(overlayStyle?.getPropertyValue(name) ?? '') || 0);
-    const safeArea = {
-      top: safeAreaValue('--floe-bottom-bar-companion-safe-area-top'),
-      right: safeAreaValue('--floe-bottom-bar-companion-safe-area-right'),
-      bottom: safeAreaValue('--floe-bottom-bar-companion-safe-area-bottom'),
-      left: safeAreaValue('--floe-bottom-bar-companion-safe-area-left'),
-    };
-    const viewport = {
-      left: visualViewport?.offsetLeft ?? 0,
-      top: visualViewport?.offsetTop ?? 0,
-      width: visualViewport?.width ?? window.innerWidth,
-      height: visualViewport?.height ?? window.innerHeight,
-      safeArea,
-    };
-    const mobileTabBar = layout.isMobile()
-      ? document.querySelector('[data-floe-shell-slot="mobile-tab-bar"]')
-      : null;
-    if (mobileTabBar instanceof HTMLElement && mobileTabBar.isConnected) {
-      const mobileTabBarRect = mobileTabBar.getBoundingClientRect();
-      const viewportLeft = viewport.left + safeArea.left;
-      const viewportRight = viewport.left + viewport.width - safeArea.right;
-      const viewportTop = viewport.top + safeArea.top;
-      const viewportBottom = viewport.top + viewport.height - safeArea.bottom;
-      const railInset = 12;
-      const railHeight = 44;
-      const railWidth = Math.min(544, Math.max(0, viewportRight - viewportLeft - railInset * 2));
-      const railTop = Math.max(
-        viewportTop + railInset,
-        Math.min(mobileTabBarRect.top, viewportBottom) - 8 - railHeight,
-      );
-      setActivityFlowerMobileRailStyle({
-        left: `${viewportLeft + (viewportRight - viewportLeft - railWidth) / 2}px`,
-        top: `${railTop}px`,
-        width: `${railWidth}px`,
-        height: `${railHeight}px`,
-      });
-    } else {
-      setActivityFlowerMobileRailStyle({});
-    }
-  };
-
-  onMount(() => {
-    const scheduleSync = () => window.requestAnimationFrame(() => {
-      const anchor = activityFlowerAnchor();
-      if (anchor) observer?.observe(anchor);
-      const mobileTabBar = document.querySelector('[data-floe-shell-slot="mobile-tab-bar"]');
-      if (mobileTabBar instanceof HTMLElement) observer?.observe(mobileTabBar);
-      syncActivityFlowerAnchorPlacement();
-    });
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(scheduleSync);
-    window.addEventListener('resize', scheduleSync);
-    window.visualViewport?.addEventListener('resize', scheduleSync);
-    window.visualViewport?.addEventListener('scroll', scheduleSync);
-    createEffect(() => {
-      activityFlowerAnchor();
-      layout.isMobile();
-      scheduleSync();
-    });
-    onCleanup(() => {
-      observer?.disconnect();
-      window.removeEventListener('resize', scheduleSync);
-      window.visualViewport?.removeEventListener('resize', scheduleSync);
-      window.visualViewport?.removeEventListener('scroll', scheduleSync);
-    });
   });
 
   const openActivityFlowerCompanion = (options: Readonly<{ focusComposer?: boolean }> = {}) => {
@@ -4837,7 +4758,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
   const renderActivityShell = () => (
     <Shell
-      class="!h-full"
+      fillParent
+      hideMobileNavigationWhenKeyboardOpen
+      mobileAccessory={canUseFlower() && activityFlowerPlacement() !== 'full_page' ? (
+        <div class="flower-activity-mobile-companion-rail" data-activity-flower-mobile-companion>
+          {renderActivityFlowerAnchor()}
+        </div>
+      ) : undefined}
       activitySelectionMode="ui-first"
       onActivitySelectionEvent={handleActivitySelectionEvent}
       sidebarMode="auto"
@@ -4860,7 +4787,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       bottomBarItems={canUseFlower() ? (
         <div
           class="flower-activity-bottom-grid"
-          style={`--flower-visual-viewport-bottom-offset:${activityFlowerVisualViewportBottomOffset()}px`}
           data-activity-flower-bottom-bar
         >
           <div class="flower-activity-bottom-side flower-activity-bottom-side-start">
@@ -5033,56 +4959,46 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
   const renderMainShell = () => (
     <>
-      <div
-        class="flex h-screen min-h-0 flex-col"
-        inert={mobilePluginModalOpen()}
-        aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}
-        data-env-shell-background
-      >
-        <PageAssetRecoveryNotice reason={assetRecovery.reason()} ready={assetRecoveryReady()} />
-        <KeepAliveStack
-          class="redeven-env-shell-stage min-h-0 flex-1"
-          activeId={viewMode()}
-          activationMode="after-paint"
-          views={[
-            {
-              id: 'activity',
-              render: () => (
-                <DialogPlacementProvider
-                  mode="global"
-                  globalZIndex={ENV_APP_FLOATING_LAYER.productModal}
-                >
-                  {renderActivityShell()}
-                </DialogPlacementProvider>
-              ),
-            },
-            {
-              id: 'workbench',
-              render: () => (
-                <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
-                  <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
-                    <Suspense fallback={<ActivityPageLoading />}>
-                      {renderWorkbenchContent()}
-                    </Suspense>
-                  </ErrorBoundary>
-                </DisplayModePageShell>
-              ),
-            },
-          ]}
-        />
-      </div>
-      <Show when={layout.isMobile() && viewMode() === 'activity' && canUseFlower()}>
+      <AppViewport>
         <div
-          class="flower-activity-mobile-companion-rail"
-          classList={{ 'flower-activity-mobile-companion-rail-ready': Boolean(activityFlowerMobileRailStyle().width) }}
-          style={activityFlowerMobileRailStyle()}
-          data-activity-flower-mobile-companion
+          class="flex h-full min-h-0 flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
           inert={mobilePluginModalOpen()}
           aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}
+          data-env-shell-background
         >
-          {renderActivityFlowerAnchor()}
+          <PageAssetRecoveryNotice reason={assetRecovery.reason()} ready={assetRecoveryReady()} />
+          <KeepAliveStack
+            class="redeven-env-shell-stage min-h-0 flex-1"
+            activeId={viewMode()}
+            activationMode="after-paint"
+            views={[
+              {
+                id: 'activity',
+                render: () => (
+                  <DialogPlacementProvider
+                    mode="global"
+                    globalZIndex={ENV_APP_FLOATING_LAYER.productModal}
+                  >
+                    {renderActivityShell()}
+                  </DialogPlacementProvider>
+                ),
+              },
+              {
+                id: 'workbench',
+                render: () => (
+                  <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
+                    <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
+                      <Suspense fallback={<ActivityPageLoading />}>
+                        {renderWorkbenchContent()}
+                      </Suspense>
+                    </ErrorBoundary>
+                  </DisplayModePageShell>
+                ),
+              },
+            ]}
+          />
         </div>
-      </Show>
+      </AppViewport>
       <div
         ref={setActivityFlowerOverlayHost}
         class="flower-activity-overlay-host"
@@ -5151,8 +5067,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         consumeWorkbenchFilePreviewActivation,
         activityContentBottomLimit: () => {
           if (viewMode() !== 'activity' || !layout.isMobile() || !canUseFlower()) return undefined;
-          const top = Number.parseFloat(activityFlowerMobileRailStyle().top ?? '');
-          return Number.isFinite(top) ? top : undefined;
+          const anchor = activityFlowerAnchor();
+          return anchor?.isConnected && activityFlowerPlacement() !== 'full_page'
+            ? anchor.getBoundingClientRect().top
+            : undefined;
         },
         filesSidebarOpen: filesMobileSidebarOpen,
         setFilesSidebarOpen: setFilesMobileSidebarOpen,

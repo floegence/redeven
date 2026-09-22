@@ -15,9 +15,10 @@ import viewerJS from '../../../../codeapp/appserver/host_application_viewer/maco
 
 import appearanceCSS from '../../../../codeapp/appserver/host_application_viewer/appearance.generated.css?raw';
 import appearanceJS from '../../../../codeapp/appserver/host_application_viewer/appearance.js?raw';
+import viewportJS from '../../../../codeapp/appserver/host_application_viewer/viewport.generated.js?raw';
 import catalogJS from '../../../../codeapp/appserver/host_application_viewer/catalog.generated.js?raw';
 const viewerCSS = appearanceCSS + '\n' + rawViewerCSS;
-const connectionJS = catalogJS + '\n' + appearanceJS + '\n' + rawConnectionJS;
+const connectionJS = viewportJS + '\n' + catalogJS + '\n' + appearanceJS + '\n' + rawConnectionJS;
 
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); });
@@ -105,9 +106,10 @@ it.each([320, 390, 1000].flatMap(width => ['light', 'dark'].map(scheme => ({widt
   }
   // A short viewport scrolls the settings, never the host application surface.
   frame.style.height = '300px';
-  expect(drawer.getBoundingClientRect().bottom).toBeLessThanOrEqual(292);
+  await expect.poll(() => drawer.getBoundingClientRect().bottom).toBeLessThanOrEqual(292);
   expect(drawer.scrollHeight).toBeGreaterThan(drawer.clientHeight);
   frame.style.height = '660px';
+  await expect.poll(() => doc.querySelector('#application')!.getBoundingClientRect().height).toBe(614);
   const canvas = doc.querySelector('#application')!.getBoundingClientRect();
   expect(canvas.width).toBe(width);
   expect(canvas.top).toBe(46);
