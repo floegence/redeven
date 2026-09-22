@@ -371,7 +371,14 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
     noteSecureSession: (state, failure) => {
       const beforeUpdate = snapshot();
       if (beforeUpdate.state === 'idle' || beforeUpdate.state === 'paused') return;
-      if (beforeUpdate.state === 'failed' && !isRecoverableAuthenticationFailure(beforeUpdate)) return;
+      // Runtime access authority may identify revocation after the transport
+      // has already closed. Refine that opaque failure so explicit sign-in
+      // can finish recovery; identity and environment failures stay terminal.
+      const confirmedRevocation = state === 'failed'
+        && failure?.code === 'authentication_failed'
+        && beforeUpdate.failure?.code === 'transport_unavailable'
+        && !desktopTransportBlocksProtocol();
+      if (beforeUpdate.state === 'failed' && !isRecoverableAuthenticationFailure(beforeUpdate) && !confirmedRevocation) return;
       if (state === 'failed') {
         failRecovery(failure ?? {
           code: 'secure_session_failed',
