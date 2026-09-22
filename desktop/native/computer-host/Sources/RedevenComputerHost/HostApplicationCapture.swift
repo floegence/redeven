@@ -88,9 +88,10 @@ final class HostApplicationStream: NSObject, SCStreamOutput, SCStreamDelegate {
     private var videoActive = false
     let generation: Int
     let settings: HostApplicationCaptureSettings
+    private let emitFrame: ([String: Any]) -> Void
     let failed: (Error) -> Void
-    init(generation: Int, settings: HostApplicationCaptureSettings, failed: @escaping (Error) -> Void) {
-        self.generation = generation; self.settings = settings; self.failed = failed
+    init(generation: Int, settings: HostApplicationCaptureSettings, output: @escaping ([String: Any]) -> Void, failed: @escaping (Error) -> Void) {
+        self.generation = generation; self.settings = settings; self.emitFrame = output; self.failed = failed
     }
     private func failure(_ error: Error) {
         guard !stopped else { return }
@@ -275,6 +276,6 @@ final class HostApplicationStream: NSObject, SCStreamOutput, SCStreamDelegate {
         message.merge(["type": "frame", "generation": generation, "frame_id": id, "data": data.base64EncodedString(),
                        "width": Int(dimensions.width), "height": Int(dimensions.height), "frame_rate": settings.frameRate,
                        "transport": videoActive ? "video" : "images", "mode": settings.mode]) { _, new in new }
-        emit(message)
+        emitFrame(message)
     }
 }

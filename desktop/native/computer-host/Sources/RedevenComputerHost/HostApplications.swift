@@ -140,12 +140,15 @@ private final class HostApplicationDelivery {
 }
 
 final class HostApplicationSession {
+    private let output: ([String: Any]) -> Void
+    init(output: @escaping ([String: Any]) -> Void) { self.output = output }
     private var picture = try! HostApplicationCaptureSettings()
     private var app: NSRunningApplication?
     private let inventory = HostApplicationWindows()
     private var presence = HostApplicationWindowPresence()
     private var ended = false
     private var ending = false
+    private var endCallbacks: [() -> Void] = []
     private var blockedReason: String?
     private var knownWindowIDs = Set<String>()
     private var waiting = false
@@ -166,19 +169,18 @@ final class HostApplicationSession {
 
     func handle(_ request: [String: Any]) {
         do {
-            guard request["protocol_version"] as? Int == 1,
-                  let action = request["action"] as? String else { throw NativeInput.invalid("Host application protocol version 1 is required.") }
+            guard let action = request["action"] as? String else { throw NativeInput.invalid("A host application action is required.") }
             guard !ended, !ending else { return }
             switch action {
             case "catalog":
                 extra = (request["paths"] as? [String] ?? []).filter { $0.hasPrefix("/") && $0.hasSuffix(".app") }.map { URL(fileURLWithPath: $0) }
                 let id = request["application_id"] as? String
                 let applications = HostApplicationCatalog.applications(extra: extra).filter { id == nil || HostApplicationCatalog.identifier($0) == id }
-                emit(["type": "catalog", "availability": HostApplicationCatalog.availability(), "applications": applications.map(HostApplicationCatalog.describe), "running": id == nil ? HostApplicationCatalog.running() : []])
-            case "running": emit(["type": "running", "running": HostApplicationCatalog.running()])
+                self.output(["type": "catalog", "availability": HostApplicationCatalog.availability(), "applications": applications.map(HostApplicationCatalog.describe), "running": id == nil ? HostApplicationCatalog.running() : []])
+            case "running": self.output(["type": "running", "running": HostApplicationCatalog.running()])
             case "quit":
                 try HostApplicationCatalog.quit(request)
-                emit(["type": "quit_requested"])
+                self.output(["type": "quit_requested"])
             case "detach", "stop": end(reason: "sharing_stopped")
             case "suspend":
                 viewerReady = false
@@ -191,12 +193,12 @@ final class HostApplicationSession {
                 guard let path = request["path"] as? String, path.hasPrefix("/"), path.hasSuffix(".app") else { throw NativeInput.invalid("An absolute application bundle path is required.") }
                 let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
                 guard HostApplicationCatalog.applications(extra: [url]).contains(url) else { throw NativeInput.invalid("Invalid application bundle.") }
-                emit(["type": "validated"])
+                self.output(["type": "validated"])
             case "permissions":
                 if request["permission"] as? String == "screen_recording" { _ = CGRequestScreenCaptureAccess() }
                 else if request["permission"] as? String == "accessibility" { _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary) }
                 else { throw NativeInput.invalid("Unknown permission.") }
-                emit(["type": "result"])
+                self.output(["type": "result"])
             case "launch", "native": try launch(request, native: action == "native")
             case "configure":
                 let settings = try HostApplicationCaptureSettings(request: request)
@@ -270,7 +272,7 @@ final class HostApplicationSession {
                     }
                     return result
                 }
-                emit(["type": "menu", "generation": generation, "items": items(root, depth: 0)])
+                self.output(["type": "menu", "generation": generation, "items": items(root, depth: 0)])
             case "menu_action":
                 _ = try applicationTarget(request)
                 guard let id = request["item"] as? String, let item = menuItems[id], (axValue(item, kAXEnabledAttribute) as? Bool) != false else { throw NativeInput.invalid("The menu item is unavailable.") }
@@ -282,14 +284,14 @@ final class HostApplicationSession {
             default: throw NativeInput.invalid("Unknown host application action.")
             }
             if ["input", "close", "quit_application", "menu_action", "resize"].contains(action) && request["kind"] as? String != "move" {
-                emit(["type": "operation_complete", "action": action])
+                self.output(["type": "operation_complete", "action": action])
             }
         } catch {
             let failure = error as? HostFailure
             let action = request["action"] as? String ?? ""
             let operation = ["input", "close", "quit_application", "menu", "menu_action", "resize", "select", "release", "resume", "configure", "frame_ack"].contains(action)
             if operation { releaseButtons() }
-            emit(["type": operation ? "operation_error" : "error", "action": action, "code": failure?.code ?? "APPLICATION_FAILED"])
+            self.output(["type": operation ? "operation_error" : "error", "action": action, "code": failure?.code ?? "APPLICATION_FAILED"])
         }
     }
 
@@ -309,12 +311,12 @@ final class HostApplicationSession {
             DispatchQueue.main.async {
                 self.starting = false
                 guard !self.ended, !self.ending else { return }
-                guard error == nil, let application else { emit(["type": "error", "code": "LAUNCH_FAILED"]); return }
-                if native { emit(["type": "opened"]); return }
-                guard application.bundleURL?.resolvingSymlinksInPath() == url else { emit(["type": "error", "code": "APPLICATION_MISMATCH"]); return }
+                guard error == nil, let application else { self.output(["type": "error", "code": "LAUNCH_FAILED"]); return }
+                if native { self.output(["type": "opened"]); return }
+                guard application.bundleURL?.resolvingSymlinksInPath() == url else { self.output(["type": "error", "code": "APPLICATION_MISMATCH"]); return }
                 self.app = application
                 if self.viewerReady { self.delivery = HostApplicationDelivery(pid: application.processIdentifier) }
-                emit(["type": "launched", "instance": HostApplicationCatalog.instanceIdentifier(application) ?? "", "pid": application.processIdentifier, "existing_application": existing.contains(application.processIdentifier)])
+                self.output(["type": "launched", "instance": HostApplicationCatalog.instanceIdentifier(application) ?? "", "pid": application.processIdentifier, "existing_application": existing.contains(application.processIdentifier)])
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
                     guard let self else { return }
                     if application.isTerminated {
@@ -339,7 +341,7 @@ final class HostApplicationSession {
             captureFailed = false
             waiting = false
             _ = presence.observe(windowCount: nil, at: Date())
-            emit(["type": "blocked", "code": reason, "generation": generation])
+            self.output(["type": "blocked", "code": reason, "generation": generation])
         }
         return false
     }
@@ -356,8 +358,8 @@ final class HostApplicationSession {
         selected = nil
         updateCapture()
         lastInventory = ""
-        emit(["type": "windows", "windows": [[String: String]]()])
-        emit(["type": "waiting", "generation": generation])
+        self.output(["type": "windows", "windows": [[String: String]]()])
+        self.output(["type": "waiting", "generation": generation])
     }
     private func refresh() {
         let snapshot: HostApplicationWindows.Snapshot
@@ -374,7 +376,7 @@ final class HostApplicationSession {
         guard !windows.isEmpty else { suspendWindow(); return }
         let list = windows.map { ["id": $0.id, "title": axString($0.element, kAXTitleAttribute)] }
         let signature = String(data: (try? JSONSerialization.data(withJSONObject: list, options: .sortedKeys)) ?? Data(), encoding: .utf8) ?? ""
-        if signature != lastInventory { lastInventory = signature; emit(["type": "windows", "windows": list]) }
+        if signature != lastInventory { lastInventory = signature; self.output(["type": "windows", "windows": list]) }
         // Follow a newly opened focused dialog/window without overriding an
         // explicit choice among windows that were already available.
         let newlyFocused = windows.first { $0.id == snapshot.focusedID && !knownWindowIDs.contains($0.id) }
@@ -417,7 +419,7 @@ final class HostApplicationSession {
             capture = nil
             guard let window = selected, app != nil, viewerReady, blockedReason == nil else {
                 selectionInFlight = false
-                if !viewerReady && !ended { emit(["type": "suspended", "generation": generation]) }
+                if !viewerReady && !ended { self.output(["type": "suspended", "generation": generation]) }
                 return
             }
             let selectionGeneration = generation
@@ -431,11 +433,11 @@ final class HostApplicationSession {
                     guard self.app != nil, self.generation == selectionGeneration else { finish(); return }
                     guard let candidate = content?.windows.first(where: { $0.windowID == window.windowID && $0.owningApplication?.processID == self.app?.processIdentifier }), error == nil else {
                         self.captureFailed = true
-                        emit(["type": "capture_error", "code": "CAPTURE_SOURCE_UNAVAILABLE", "generation": selectionGeneration])
+                        self.output(["type": "capture_error", "code": "CAPTURE_SOURCE_UNAVAILABLE", "generation": selectionGeneration])
                         finish(); return
                     }
                     self.waiting = false
-                    let stream = HostApplicationStream(generation: selectionGeneration, settings: self.picture) { [weak self] error in
+                    let stream = HostApplicationStream(generation: selectionGeneration, settings: self.picture, output: self.output) { [weak self] error in
                         guard let self, self.app != nil, self.generation == selectionGeneration else { return }
                         let failure = error as NSError
                         if failure.domain == SCStreamErrorDomain && failure.code == SCStreamError.Code.noCaptureSource.rawValue {
@@ -443,10 +445,10 @@ final class HostApplicationSession {
                         }
                         self.captureFailed = true
                         self.capture?.stop()
-                        emit(["type": "capture_error", "code": "SC_\(failure.code)", "generation": selectionGeneration])
+                        self.output(["type": "capture_error", "code": "SC_\(failure.code)", "generation": selectionGeneration])
                     }
                     self.capture = stream
-                    emit(["type": "window", "window": window.id, "width": candidate.frame.width, "height": candidate.frame.height, "generation": selectionGeneration,
+                    self.output(["type": "window", "window": window.id, "width": candidate.frame.width, "height": candidate.frame.height, "generation": selectionGeneration,
                           "source_duration_ms": Int((ProcessInfo.processInfo.systemUptime - started) * 1000)])
                     stream.start(candidate, completion: finish)
                 }
@@ -563,7 +565,9 @@ final class HostApplicationSession {
         heldButtons.removeAll()
     }
     func end(reason: String = "sharing_stopped", completion: (() -> Void)? = nil) {
-        guard !ended, !ending else { return }
+        if ended { completion?(); return }
+        if let completion { endCallbacks.append(completion) }
+        guard !ending else { return }
         ending = true
         viewerReady = false
         generation += 1
@@ -580,8 +584,10 @@ final class HostApplicationSession {
             guard let self, !self.ended else { return }
             self.ending = false
             self.ended = true
-            emit(["type": "ended", "end_reason": reason])
-            completion?()
+            self.output(["type": "ended", "end_reason": reason])
+            let callbacks = self.endCallbacks
+            self.endCallbacks.removeAll()
+            for callback in callbacks { callback() }
         }
         if let previous {
             previous.stop(completion: complete)
@@ -595,7 +601,7 @@ enum HostApplications {
     static func run() {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
-        let host = HostApplicationSession()
+        let host = HostApplicationHost()
         DispatchQueue.global(qos: .userInitiated).async {
             var buffer = Data(), chunk = [UInt8](repeating: 0, count: 8192)
             while true {

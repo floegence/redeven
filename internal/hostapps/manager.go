@@ -53,6 +53,8 @@ type Manager struct {
 	prepareErr                  error
 	nativePrepare               sync.Once
 	nativePath                  string
+	nativeMu                    sync.Mutex
+	nativeHost                  *macHost
 }
 
 func New(state, home string, forwards *portforward.Service) *Manager {
@@ -512,6 +514,7 @@ func (m *Manager) Close() error {
 	for _, s := range all {
 		<-s.done
 	}
+	m.closeMacHost()
 	return nil
 }
 

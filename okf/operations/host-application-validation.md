@@ -3,7 +3,7 @@ type: Validation Guide
 title: Host application distribution validation
 description: Installed-stack evidence, architecture limits and repeatable native application acceptance.
 tags: [runtime, applications, linux, validation]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-09-22T01:30:00Z
 ---
 # Summary
 
@@ -133,6 +133,7 @@ Repeat on an authorized Mac with Xcode command-line tools:
 swift test --package-path desktop/native/computer-host
 python3 scripts/check_macos_host_application_quit.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host
 python3 scripts/check_macos_host_application_startup.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --output /tmp/redeven-native-startup.json
+python3 scripts/check_macos_host_application_concurrency.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --output /tmp/redeven-native-concurrency.json
 python3 scripts/check_macos_host_applications.py desktop/native/computer-host/.build/debug/redeven-computer-host --output /tmp/redeven-native-app-evidence
 python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario delayed
 python3 scripts/check_macos_host_application_waiting.py --helper desktop/native/computer-host/.build/debug/redeven-computer-host --scenario reopen
@@ -153,11 +154,20 @@ without waiting for a second frame. Native timings exclude viewer loading and
 browser decode; an end-to-end claim additionally needs a timed first decoded
 frame from the matching Runtime/helper/viewer build.
 
+The concurrency fixture retains a suspended application while opening another,
+alternates reconnects, withholds one channel's frame acknowledgement, and detaches
+one application while the other remains live. It verifies one helper process and
+unchanged native application PIDs. This covers the idle-helper replayd contention
+that single-application startup tests cannot detect; the
+[capture ownership contract](../architecture/macos-application-capture-owner.md)
+defines the required process and channel boundaries.
+
 # Evidence
 
 - `internal/hostapps/manager_test.go`: installed GIO and Xpra launch/resume/stop tests.
 - `internal/hostapps/setup_test.go`: published component preparation and responsive application window inventory.
 - `scripts/check_macos_host_application_startup.py`: native attach/reconnect and capture lifecycle measurements.
+- `scripts/check_macos_host_application_concurrency.py`: independent application channels under one native capture owner.
 - `internal/envapp/ui_src/src/styles/hostApplicationSurfaces.browser.test.tsx`: first static video frame decode and acknowledgement.
 - `internal/hostapps/desktop_test.py`: native metadata, icon and argument checks.
 - `internal/codeapp/appserver/host_application_viewer/viewer.js`: HTML client and lifecycle adapter.

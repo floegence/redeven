@@ -90,7 +90,7 @@ func macSend(input io.Writer, value map[string]any) error {
 	if pipe, ok := input.(interface{ SetWriteDeadline(time.Time) error }); ok {
 		_ = pipe.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	}
-	value["protocol_version"] = 1
+	value["protocol_version"] = 2
 	return json.NewEncoder(input).Encode(value)
 }
 func macScanner(output io.Reader) *bufio.Scanner {
@@ -98,12 +98,13 @@ func macScanner(output io.Reader) *bufio.Scanner {
 	scanner.Buffer(make([]byte, 65536), 128<<20)
 	return scanner
 }
-func macOnce(ctx context.Context, helper string, request map[string]any) (macMessage, error) {
-	cmd, input, output, err := macCommand(helper)
+func (m *Manager) macOnce(ctx context.Context, request map[string]any) (macMessage, error) {
+	client, err := m.openMacClient()
 	if err != nil {
 		return macMessage{}, err
 	}
-	defer func() { _ = input.Close(); _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	defer client.Close()
+	input, output := client, client
 	if err = macSend(input, request); err != nil {
 		return macMessage{}, err
 	}
@@ -149,7 +150,7 @@ func (m *Manager) macCatalog(ctx context.Context, owner string) (Catalog, error)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	msg, err := macOnce(ctx, helper, map[string]any{"action": "catalog", "paths": m.macPaths()})
+	msg, err := m.macOnce(ctx, map[string]any{"action": "catalog", "paths": m.macPaths()})
 	if err != nil {
 		result.Availability.Reason = "catalog_unavailable"
 		return result, nil
@@ -167,7 +168,7 @@ func (m *Manager) Running(ctx context.Context) ([]RunningApplication, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	msg, err := macOnce(ctx, m.macHelper(), map[string]any{"action": "running"})
+	msg, err := m.macOnce(ctx, map[string]any{"action": "running"})
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +197,7 @@ func (m *Manager) Quit(ctx context.Context, owner string, req QuitRequest) error
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	msg, err := macOnce(ctx, m.macHelper(), map[string]any{"action": "quit", "application_id": req.ApplicationID, "instances": req.Instances})
+	msg, err := m.macOnce(ctx, map[string]any{"action": "quit", "application_id": req.ApplicationID, "instances": req.Instances})
 	switch msg.Code {
 	case "APPLICATION_NOT_FOUND":
 		return ErrNotFound
@@ -238,7 +239,7 @@ func (m *Manager) macAdd(ctx context.Context, req AddRequest) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	msg, err := macOnce(ctx, m.macHelper(), map[string]any{"action": "validate", "path": path})
+	msg, err := m.macOnce(ctx, map[string]any{"action": "validate", "path": path})
 	if err != nil || msg.Type != "validated" {
 		return ErrInvalid
 	}
@@ -257,7 +258,7 @@ func (m *Manager) Permissions(ctx context.Context, permission string) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	_, err := macOnce(ctx, m.macHelper(), map[string]any{"action": "permissions", "permission": permission})
+	_, err := m.macOnce(ctx, map[string]any{"action": "permissions", "permission": permission})
 	return err
 }
 
@@ -338,7 +339,7 @@ func (m *Manager) macLaunch(ctx context.Context, owner string, req LaunchRequest
 	}
 	resolveCtx, cancelResolve := context.WithTimeout(ctx, 15*time.Second)
 	defer cancelResolve()
-	catalog, err := macOnce(resolveCtx, m.macHelper(), map[string]any{"action": "catalog", "application_id": req.ApplicationID, "paths": m.macPaths()})
+	catalog, err := m.macOnce(resolveCtx, map[string]any{"action": "catalog", "application_id": req.ApplicationID, "paths": m.macPaths()})
 	if err != nil {
 		return Session{}, err
 	}
@@ -358,7 +359,7 @@ func (m *Manager) macLaunch(ctx context.Context, owner string, req LaunchRequest
 	if req.Mode == "native" {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		_, err := macOnce(ctx, m.macHelper(), map[string]any{"action": "native", "application_id": app.ID, "paths": m.macPaths()})
+		_, err := m.macOnce(ctx, map[string]any{"action": "native", "application_id": app.ID, "paths": m.macPaths()})
 		return Session{ID: randomID(), Application: app, State: "opened", Backend: "macos", Mode: "native", StartedAt: time.Now().UnixMilli()}, err
 	}
 	m.mu.Lock()
@@ -401,7 +402,6 @@ func (m *Manager) macLaunch(ctx context.Context, owner string, req LaunchRequest
 func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 	n := s.native
 	code := ""
-	var cmd *exec.Cmd
 	var input io.WriteCloser
 	defer func() {
 		n.cancel()
@@ -416,10 +416,6 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 		m.finish(s, code, func() {
 			if input != nil {
 				_ = input.Close()
-			}
-			if cmd != nil {
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
 			}
 			_ = n.server.Close()
 			n.controlMu.Lock()
@@ -442,24 +438,18 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 	if ctx.Err() != nil {
 		return
 	}
-	var output io.ReadCloser
-	var err error
-	cmd, input, output, err = macCommand(m.macHelper())
+	client, err := m.openMacClient()
 	if err != nil {
 		code = "launch_failed"
 		return
 	}
+	input = client
+	var output io.Reader = client
 	go func() {
 		select {
 		case <-ctx.Done():
-			// EOF releases held input. Bound an unresponsive helper without
-			// transferring application ownership to its transport process.
+			// Detach only this application; other sessions share the native host.
 			_ = input.Close()
-			select {
-			case <-s.done:
-			case <-time.After(2 * time.Second):
-				_ = cmd.Process.Kill()
-			}
 		case <-s.done:
 		}
 	}()
