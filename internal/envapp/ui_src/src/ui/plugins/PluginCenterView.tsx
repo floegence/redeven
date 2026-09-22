@@ -971,7 +971,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           if (!open && !retainedDataRecoveryPending()) setRetainedDataRecoveryItem(undefined);
         }}
         title={i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.title')}
-        description={i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.description')}
+        bodyDescription={i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.description')}
         class="w-[min(30rem,calc(100%-1rem))] max-w-[30rem] bg-background text-foreground sm:w-[min(30rem,calc(100%-2rem))]"
         footer={(
           <div class="flex w-full flex-wrap justify-end gap-2">
@@ -1111,7 +1111,7 @@ function OfficialPluginInstallDialog(props: {
       open={Boolean(props.item)}
       onOpenChange={props.onOpenChange}
       title={title()}
-      description={props.previewLoading
+      bodyDescription={props.previewLoading
         ? i18n.t('uiCopy.plugin.external.loadingInstallDescription')
         : props.previewError
           ? undefined
@@ -1926,7 +1926,7 @@ function PluginPermissionInventory(props: {
                   open
                   onOpenChange={(open) => { if (!open) setConfirmation(null); }}
                   title={i18n.t('uiCopy.plugin.permissionConfirmationTitle')}
-                  description={pending().grant
+                  bodyDescription={pending().grant
                     ? i18n.t('uiCopy.plugin.confirmGrantPermission', { permission: permissionName(), plugin: props.item.displayName })
                     : i18n.t('uiCopy.plugin.confirmRevokePermission', { permission: permissionName(), plugin: props.item.displayName })}
                   footer={(
@@ -2355,7 +2355,7 @@ function PluginUninstallDialog(props: {
       open={props.open}
       onOpenChange={(open) => { if (!open) props.onClose(); }}
       title={i18n.t('uiCopy.plugin.uninstallTitle', { plugin: props.item.displayName })}
-      description={i18n.t('uiCopy.plugin.uninstallDescription')}
+      bodyDescription={i18n.t('uiCopy.plugin.uninstallDescription')}
       footer={(
         <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="outline" size="sm" disabled={props.pending} onClick={props.onClose}>{i18n.t('common.actions.cancel')}</Button>

@@ -298,10 +298,10 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={i18n.t('terminal.settings.title')}
-      description={i18n.t('terminal.settings.description')}
+      bodyDescription={i18n.t('terminal.settings.description')}
+      contentClass="flex min-h-0 flex-1 flex-col overflow-hidden p-0 [&>p]:px-3 [&>p]:pt-3 [&>p]:break-words"
       class={cn(
         'flex flex-col overflow-hidden rounded-md p-0',
-        '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:flex-col [&>div:nth-child(2)]:overflow-hidden [&>div:nth-child(2)]:p-0',
         isMobile()
           ? 'h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none max-w-none'
           : 'w-[min(30rem,92vw)]'

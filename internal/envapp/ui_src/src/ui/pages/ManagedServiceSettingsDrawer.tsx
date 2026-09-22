@@ -612,7 +612,7 @@ export function ManagedServiceSettingsDrawer(props: {
         class="managed-service-settings-drawer"
         bodyClass="flex min-h-0 h-full flex-col"
         title={settingText("title", { name: props.serviceName })}
-        description={settingText("description")}
+        bodyDescription={settingText("description")}
         footer={footer()}
       >
         <Show

@@ -129,16 +129,16 @@ export function PreviewWindow(props: PreviewWindowProps) {
         </PersistentFloatingWindow>
       )}
     >
-        <Dialog
-          open={props.open}
-          onOpenChange={props.onOpenChange}
-          title={props.title}
-        description={props.description}
+      <Dialog
+        open={props.open}
+        onOpenChange={props.onOpenChange}
+        title={props.title}
+        bodyDescription={props.description}
+        contentClass="flex min-h-0 flex-1 flex-col overflow-hidden p-0 [&>p]:px-4 [&>p]:pt-3 [&>p]:break-words"
         footer={props.footer}
         class={cn(
           'flex max-w-none flex-col overflow-hidden rounded-md p-0',
           '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
-          '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:flex-col [&>div:nth-child(2)]:!overflow-hidden [&>div:nth-child(2)]:!p-0',
           'h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none',
           props.mobileClass,
         )}

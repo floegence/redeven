@@ -3761,7 +3761,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         </Show>}>{renderContainerServicesPage()}</Show>
       </main>
 
-      <EnvAppDrawer open={operationsOpen()} onOpenChange={setOperationsOpen} title={i18n.t('containers.operations.title')} description={i18n.t('containers.operations.description')} bodyClass="min-h-0">
+      <EnvAppDrawer open={operationsOpen()} onOpenChange={setOperationsOpen} title={i18n.t('containers.operations.title')} bodyDescription={i18n.t('containers.operations.description')} bodyClass="min-h-0">
         <div class="container-operations-workspace" data-container-operations>
           <Show when={operations().length > 0} fallback={<div class="py-12 text-center text-sm text-muted-foreground">{i18n.t('containers.operations.empty')}</div>}>
             <div class="container-operation-list" role="listbox" aria-label={i18n.t('containers.operations.title')}>
@@ -3902,7 +3902,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         onOpenChange={(open) => { if (!open && !mutationBusy()) closeContainerRun(); }}
         class="container-run-dialog"
         title={i18n.t('containers.run.title')}
-        description={i18n.t('containers.run.description')}
+        bodyDescription={i18n.t('containers.run.description')}
         footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={closeContainerRun} disabled={mutationBusy()}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={submitContainerRun} disabled={mutationBusy() || !containerRunValid()}>{i18n.t('containers.actions.review')}</Button></div>}
       >
         <div class="container-run-form">

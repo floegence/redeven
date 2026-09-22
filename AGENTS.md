@@ -309,6 +309,12 @@ Rules:
 
 ## UI Localization Quality
 
+- Dialog headers contain identity and controls only. Use the published
+  `bodyDescription` parameter for plain-text guidance, or place rich descriptions
+  in body children. Do not recreate header subtitles through title JSX, custom
+  headers, drawers, or window-local modals; keep description spacing and overflow
+  inside the body layout.
+
 - Write unambiguous English source copy that names the product surface and user intent. Do not use context-free labels such as `Browser` when the UI means files, or share one translation key across unrelated operations.
 - Every shipped non-English locale must provide a complete explicit catalog. Do not assemble localized production dictionaries by spreading `en-US` or another locale and silently inheriting leaf messages.
 - Preserve true product names, fixed surface names, documented technical acronyms, and documented fixed English domain terms. In particular, keep the display-mode names `Activity` and `Workbench` unchanged in every locale. User-facing Welcome and README control-plane surfaces use the fixed product name `Redeven Cloud` in every locale. Use `Provider` only for RCPP, internal code, protocol fields, and engineering documentation; do not expose it as the Welcome control-plane brand. AI model providers are a separate generic concept and must be localized according to the locale terminology matrix; use `模型提供商` in `zh-CN`. Localize surrounding generic UI copy and concepts such as runtime, local environment, and control plane.

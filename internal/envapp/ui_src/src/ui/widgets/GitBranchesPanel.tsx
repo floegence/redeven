@@ -1861,11 +1861,11 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
           if (!open) props.onClose();
         }}
         title={i18n.t('uiCopy.git.compareBranches')}
-        description={i18n.t('uiCopy.git.compareDescription')}
+        bodyDescription={i18n.t('uiCopy.git.compareDescription')}
+        contentClass="flex min-h-0 flex-1 flex-col overflow-hidden p-0 [&>p]:px-4 [&>p]:pt-3 [&>p]:break-words"
         class={cn(
           "flex max-w-none flex-col overflow-hidden rounded-md border border-border/60 p-0 shadow-xl",
           "[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2",
-          "[&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:!overflow-hidden [&>div:last-child]:!p-0",
           layout.isMobile()
             ? "h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none"
             : "h-[min(760px,88vh)] w-[min(1280px,94vw)]",

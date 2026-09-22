@@ -390,7 +390,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         open={endSessionConfirmationOpen()}
         onOpenChange={setEndSessionConfirmationOpen}
         title={i18n.t('uiCopy.plugin.endPluginSessionTitle')}
-        description={i18n.t('uiCopy.plugin.endPluginSessionDescription')}
+        bodyDescription={i18n.t('uiCopy.plugin.endPluginSessionDescription')}
         footer={(
           <div class="flex w-full justify-end gap-2">
             <Button

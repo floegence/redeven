@@ -45,7 +45,7 @@ export function GitCommitMessageDialog(props: GitCommitMessageDialogProps) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={i18n.t('uiCopy.git.fullCommitMessage')}
-      description={i18n.t('uiCopy.git.fullCommitMessageDescription')}
+      bodyDescription={i18n.t('uiCopy.git.fullCommitMessageDescription')}
       class="w-[min(44rem,92vw)] border border-border/60 shadow-xl"
       footer={(
         <div class="flex justify-end">

@@ -3643,7 +3643,7 @@ export function EnvPortForwardsPage() {
           else closeTemplateDrawer();
         }}
         title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
-        description={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
+        bodyDescription={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
         footer={templateDrawerView() === 'catalog' ? undefined : (
           <div class="flex w-full items-center justify-between gap-2">
             <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setTemplateValidationVisible(false); setInstallNoticeAcceptances({}); setTemplateRecommendationUnavailable(false); }} disabled={templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>

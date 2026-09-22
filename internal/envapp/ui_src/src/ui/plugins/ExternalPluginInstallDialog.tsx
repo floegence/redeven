@@ -242,7 +242,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       open={props.open}
       onOpenChange={(open) => { if (!open) close(); }}
       title={dialogTitle()}
-      description={i18n.t('uiCopy.plugin.external.dialogDescription')}
+      bodyDescription={i18n.t('uiCopy.plugin.external.dialogDescription')}
       class={cn(
         'w-[min(54rem,calc(100%-1rem))] max-w-[54rem] max-h-[calc(100dvh-1rem)] bg-background text-foreground sm:max-h-[80vh] sm:w-[min(54rem,calc(100%-2rem))]',
         commitNeedsReconciliation() && '[&>div:first-child>button]:hidden',

@@ -42,7 +42,7 @@ export function SkillFilesDialog(props: { entry: SkillCatalogEntry | null; onClo
   const parentDirectory = () => (tree()?.dir ?? '').replace(/\/?[^/]+\/?$/, '');
   return (
     <Dialog open={Boolean(props.entry)} onOpenChange={(open) => { if (!open) props.onClose(); }} title={props.entry?.name ?? i18n.t('settingsDesign.skillFiles')}
-      description={props.entry?.description} class="redeven-settings-dialog w-[min(52rem,94vw)]"
+      bodyDescription={props.entry?.description} class="redeven-settings-dialog w-[min(52rem,94vw)]"
       footer={<Button variant="outline" onClick={props.onClose}>{i18n.t('common.actions.close')}</Button>}>
       <Show when={error()}><div class="mb-4 flex items-center justify-between gap-3"><p role="alert" class="text-sm text-destructive">{error()}</p><Button size="sm" variant="outline" disabled={loading() || !props.canInteract} onClick={() => void load(lastRequest.kind, lastRequest.path)}>{i18n.t('common.actions.retry')}</Button></div></Show>
       <Show when={loading()}><p role="status" class="mb-3 text-xs text-muted-foreground">{i18n.t('skillsSettings.loading')}</p></Show>

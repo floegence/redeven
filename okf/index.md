@@ -98,6 +98,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 - [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.
 - [Env App floating layer order](ui/env-app-floating-layer-order.md) - Order movable windows, Flower, plugin surfaces, blocking modals, and command UI through one product contract.
+- [Dialog content placement](ui/dialog-content.md) - Place instructions and consequences in the body while preserving title identity, accessible guidance, and scrollable content.
 - [File preview window actions](ui/file-preview-window-actions.md) - Read files with compact title-bar actions while preserving selection, editing, and dismissal behavior.
 - [File preview viewport and rendering](ui/file-preview-viewport-and-rendering.md) - Fit pages and images to the full reading area, float zoom controls, and prevent stale or overlapping renders.
 - [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md) - Keep Git views and background Files status consistent through capability gating and monotonic invalidation.
