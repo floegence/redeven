@@ -152,6 +152,7 @@ Gtk.main()
 		t.Fatal("host application absent")
 	}
 	req := LaunchRequest{ApplicationID: appID, Locale: "en-US", Presentation: Presentation{Locale: "en-US", Starting: "Starting", Failed: "Failed", Ended: "Ended", Retry: "Retry", Connecting: "Connecting", Reconnecting: "Reconnecting", Disconnected: "Disconnected", ConnectionHint: "Reconnect", Reconnect: "Reconnect"}}
+	started := time.Now()
 	session, err := m.Launch(context.Background(), "alice", req)
 	if err != nil {
 		t.Fatal(err)
@@ -164,6 +165,7 @@ Gtk.main()
 		}
 		current := sessions[0]
 		if current.State == "running" {
+			t.Logf("managed application launch to window readiness: %d ms", time.Since(started).Milliseconds())
 			break
 		}
 		if time.Now().After(deadline) || current.State == "failed" || current.State == "ended" {
@@ -172,6 +174,7 @@ Gtk.main()
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	assertResponsiveWindowInventory(t, m.sessions[session.ID])
 	var environment map[string]string
 	data, err := os.ReadFile(receipt)
 	if err != nil || json.Unmarshal(data, &environment) != nil {

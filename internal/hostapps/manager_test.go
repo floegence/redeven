@@ -239,9 +239,7 @@ func TestInstalledXpraLaunchResumeAndStop(t *testing.T) {
 	if m.Sessions("alice")[0].State != "running" {
 		t.Fatal("application did not start")
 	}
-	if !sessionHasWindows(context.Background(), m.sessions[first.ID].tools.xpra, m.sessions[first.ID].socketDir) {
-		t.Fatal("running session has no application windows")
-	}
+	assertResponsiveWindowInventory(t, m.sessions[first.ID])
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatal("inherited Xpra configuration started an unrelated command")
 	}
@@ -258,4 +256,15 @@ func TestInstalledXpraLaunchResumeAndStop(t *testing.T) {
 	if m.Sessions("alice")[0].State != "ended" {
 		t.Fatal("explicit stop did not finish")
 	}
+}
+
+func assertResponsiveWindowInventory(t *testing.T, session *ownedSession) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	started := time.Now()
+	if !sessionHasWindows(ctx, session.tools.xpra, session.socketDir) {
+		t.Fatal("running application window inventory did not respond within three seconds")
+	}
+	t.Logf("running application window inventory: %d ms", time.Since(started).Milliseconds())
 }

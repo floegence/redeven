@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -277,12 +278,13 @@ func (m *Manager) run(s *ownedSession, dir, address string) {
 	args := []string{s.tools.xpra, "start", "--daemon=no", "--systemd-run=no", "--attach=no", "--use-display=no", "--bind-ws=" + address,
 		"--ws-auth=file:filename=" + filepath.Join(dir, "password"), "--html=" + s.tools.html, "--sessions-dir=" + filepath.Join(s.socketDir, "sessions"), "--socket-dir=" + s.socketDir,
 		"--socket-dirs=" + s.socketDir, "--exit-with-client=no", "--exit-with-windows=yes", "--exit-with-children=no",
-		"--terminate-children=yes", "--start-new-commands=no", "--sharing=no", "--mdns=no", "--pulseaudio=no",
-		"--source=", "--source-start=", "--input-method=none", "--speaker=off", "--microphone=off", "--webcam=no", "--printing=no", "--file-transfer=no",
+		"--terminate-children=yes", "--start-new-commands=no", "--sharing=no", "--mdns=no",
+		"--source=", "--source-start=", "--input-method=none", "--webcam=no", "--printing=no", "--file-transfer=no",
 		"--notifications=no", "--dbus-launch=", "--session-name=" + s.view.Application.Name,
 		"--xvfb=" + quoteArgv([]string{s.tools.xvfb, "-screen", "0", "3840x2160x24", "-nolisten", "tcp", "-noreset", "+extension", "Composite", "-auth", "$XAUTHORITY"}),
 		"--start-child=" + quoteArgv([]string{s.tools.python, m.helper, "launch", m.custom, s.view.Application.ID, filepath.Join(dir, "launch.json")}),
 	}
+	args = append(args, nativeapps.XpraNoAudioArgs()...)
 	// Xpra clears inherited DBUS_* variables before configuring its session.
 	// Pass our newly created private bus through its explicit child environment;
 	// dbus-run-session remains the lifetime owner of both the bus and Xpra.
@@ -375,14 +377,19 @@ func (m *Manager) waitReady(ctx context.Context, s *ownedSession, dir, address s
 			}
 			// A successful GIO launch alone can still redirect a singleton to
 			// another display. Read Xpra's own inventory before reporting ready.
+			inventoryStarted := time.Now()
 			if !sessionHasWindows(ctx, s.tools.xpra, s.socketDir) {
 				continue
 			}
 			m.mu.Lock()
-			if s.view.State == "starting" && !s.stopping {
+			becameReady := s.view.State == "starting" && !s.stopping
+			if becameReady {
 				s.view.State = "running"
 			}
 			m.mu.Unlock()
+			if becameReady {
+				slog.Info("host application window ready", "session", s.view.ID, "backend", "xpra", "duration_ms", time.Now().UnixMilli()-s.view.StartedAt, "inventory_duration_ms", time.Since(inventoryStarted).Milliseconds())
+			}
 			return
 		}
 	}
@@ -397,9 +404,8 @@ func sessionHasWindows(parent context.Context, xpra, socketDir string) bool {
 		if entry.Type()&os.ModeSocket == 0 {
 			continue
 		}
-		// Xpra 6.2 can spend five seconds collecting optional codec information
-		// even on an otherwise ready server. Keep the probe bounded while allowing
-		// the supported 6.x versions to return their actual window inventory.
+		// Bound the subprocess while allowing a loaded host to report its actual
+		// window inventory. Session cancellation also terminates probe children.
 		ctx, cancel := context.WithTimeout(parent, 8*time.Second)
 		cmd := exec.CommandContext(ctx, xpra, "info", "socket://"+filepath.Join(socketDir, entry.Name()))
 		cmd.Env = xpraEnvironment(os.Environ())
