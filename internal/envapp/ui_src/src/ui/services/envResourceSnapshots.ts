@@ -1,6 +1,7 @@
 import type { HostApplication, HostApplicationCatalog, HostApplicationSession } from './hostApplicationsApi';
 import type { ContainerResourceInventoryItem, ContainerResourceView, ContainerRuntime, ContainerService } from './containerResourcesApi';
 import type { ManagedService, PortForward } from '../pages/EnvPortForwardsPage';
+import type { SpaceStatus } from '../pages/EnvCodespacesPage';
 
 // These allowlists are product presentation contracts, not general API response caching.
 function record(value: unknown): Record<string, unknown> {
@@ -132,5 +133,16 @@ export function managedServiceSnapshot(value: unknown): ManagedService[] {
       ...(service.localizations ? { localizations: Object.fromEntries(Object.entries(record(service.localizations)).map(([key, value]) => [key, fields(value, ['name', 'description'])])) } : {}),
       ...(service.container_resources ? { container_resources: list(service.container_resources).map(value => fields(value, ['kind', 'engine', 'endpoint_id', 'view', 'identity'])) } : {}),
     } as ManagedService;
+  });
+}
+
+export function codespaceSnapshot(value: unknown): SpaceStatus[] {
+  return list(value).map(value => {
+    const space = identity(value, 'code_space_id');
+    const strings = ['code_space_id', 'name', 'description', 'workspace_path'] as const;
+    const numbers = ['code_port', 'created_at_unix_ms', 'updated_at_unix_ms', 'last_opened_at_unix_ms', 'pid'] as const;
+    if (strings.some(key => typeof space[key] !== 'string') || typeof space.running !== 'boolean'
+      || numbers.some(key => typeof space[key] !== 'number' || !Number.isFinite(space[key]))) throw new Error('Invalid codespace snapshot');
+    return Object.fromEntries([...strings, ...numbers, 'running'].map(key => [key, space[key]])) as SpaceStatus;
   });
 }

@@ -5,7 +5,8 @@ import type {
 } from '@floegence/floe-webapp-core/workbench';
 import { DockCpu, DockFolder, DockTerminal, Package, Search } from '@floegence/floe-webapp-core/icons';
 import { WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
-import { Show, createEffect, createMemo, createSignal, lazy, onCleanup, type JSX } from 'solid-js';
+import { Show, Suspense, createEffect, createMemo, createSignal, lazy, onCleanup, type JSX } from 'solid-js';
+import { CodespacesPageSkeleton } from '../pages/CodespacesPresentation';
 
 import { CodespacesWorkbenchIcon } from '../icons/CodespacesIcon';
 import { ContainersWorkbenchIcon } from '../icons/ContainersIcon';
@@ -186,7 +187,7 @@ function CodespacesWidget() {
       {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}
       class="redeven-workbench-body-surface h-full min-h-0 overflow-auto"
     >
-      <EnvCodespacesPage />
+      <Suspense fallback={<CodespacesPageSkeleton />}><EnvCodespacesPage /></Suspense>
     </div>
   );
 }

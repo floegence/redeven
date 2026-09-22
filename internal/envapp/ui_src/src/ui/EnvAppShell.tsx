@@ -2,6 +2,7 @@ import { createEnvResourceCacheScope } from './services/envResourceCache';
 import { isSessionEventAuthorizationError } from './services/sessionHTTP';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
 import { ActivityPageLoading } from './primitives/ActivityPageLoading';
+import { CodespacesPageSkeleton } from './pages/CodespacesPresentation';
 import { PageAssetRecoveryNotice, PageLoadError } from './reconnect/PageAssetRecovery';
 import { createEnvAppAssetRecovery } from './reconnect/createEnvAppAssetRecovery';
 import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
@@ -4950,7 +4951,7 @@ export function EnvAppShell() {
               <ActivityAppsMain
                 activeId={() => layout.sidebarActiveTab()}
                 activationMode="after-paint"
-                renderFallback={() => <ActivityPageLoading />}
+                renderFallback={id => id === 'codespaces' ? <CodespacesPageSkeleton /> : <ActivityPageLoading />}
                 renderError={() => <PageLoadError ready={assetRecoveryReady()} />}
               />
             </Show>
