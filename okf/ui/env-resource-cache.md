@@ -47,6 +47,12 @@ re-fetchable snapshots, never user configuration. Snapshots have a version and
 validated projection, no time expiry, and least-recently-used eviction. Malformed,
 incompatible, unavailable, or quota-limited storage does not block live content.
 
+Desktop preserves the published cache module's native ESM import inside its
+CommonJS main-process output. Type checking covers both the production compiler
+configuration and the renderer configuration. Restart acceptance executes the
+production compiler's emitted cache adapter, without bundling away its package
+loading boundary.
+
 Disk restoration and network refresh run concurrently. A late disk read cannot
 replace a new response. Identical successful projections do not rewrite payloads;
 changed projections coalesce before asynchronous persistence. Failures never
@@ -87,7 +93,7 @@ requests permissions, launches processes, or starts lifecycle operations.
 - `redeven:internal/envapp/ui_src/src/ui/services/envResourceSnapshots.ts` - Explicit snapshot projections.
 - `redeven:internal/codeapp/appserver/ui_cache_scope_test.go` - Authenticated scope isolation and read permission.
 - `redeven:desktop/src/main/desktopResourceCache.ts` - Asynchronous private files and global budget adapter.
-- `redeven:desktop/scripts/check-resource-cache.mjs` - Production preload persistence across two Electron processes.
+- `redeven:desktop/scripts/check-resource-cache.mjs` - Production compiler output and preload persistence across two Electron processes.
 - `redeven:internal/envapp/ui_src/src/ui/services/envResourceCache.test.ts` - Scope races, authorization clearing, and empty-list retention.
 - `redeven:internal/envapp/ui_src/src/ui/services/envResourceSnapshots.test.ts` - Sensitive field exclusion and corrupt input rejection.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.browser.test.tsx` - IndexedDB directory/icon restore and focus continuity.

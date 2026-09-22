@@ -1,10 +1,11 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { DesktopResourceCache } from '../../src/main/desktopResourceCache';
 import { DESKTOP_RESOURCE_CACHE_CHANNEL } from '../../src/shared/resourceCacheIPC';
 
 async function run() {
+  assert.ok(process.env.REDEVEN_CACHE_MAIN);
+  const { DesktopResourceCache } = require(process.env.REDEVEN_CACHE_MAIN) as typeof import('../../src/main/desktopResourceCache');
   await app.whenReady();
   const storage = new DesktopResourceCache(path.join(app.getPath('userData'), 'resource-cache'));
   const window = new BrowserWindow({ show: false, webPreferences: {

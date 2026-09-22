@@ -7,6 +7,9 @@
     "rootDir": "src",
     "baseUrl": ".",
     "paths": {
+      "@floegence/floe-webapp-core/resource-cache": [
+        "node_modules/@floegence/floe-webapp-core/dist/resource-cache.d.ts"
+      ],
       "@floegence/floe-webapp-core/themes": [
         "node_modules/@floegence/floe-webapp-core/dist/themes.d.ts"
       ],

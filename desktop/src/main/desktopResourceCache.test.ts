@@ -1,8 +1,18 @@
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { DesktopResourceCache } from './desktopResourceCache';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+
+let DesktopResourceCache: typeof import('./desktopResourceCache').DesktopResourceCache;
+let compiled: string;
+beforeAll(async () => {
+  compiled = await mkdtemp(path.join(process.cwd(), '.resource-cache-unit-'));
+  execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json', '--outDir', compiled, '--noEmitOnError']);
+  DesktopResourceCache = createRequire(path.join(process.cwd(), 'package.json'))(path.join(compiled, 'main/desktopResourceCache.js')).DesktopResourceCache;
+}, 30_000);
+afterAll(async () => { if (compiled) await rm(compiled, { recursive: true, force: true }); });
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
