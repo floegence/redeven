@@ -3623,6 +3623,7 @@ export const enUS = defineDictionary({
       templateInstalled: 'A service from this template is installed in this Environment.',
       openUnavailableOperation: 'A service operation is in progress.',
       openUnavailableNotRunning: 'The service is not running.',
+      openUnavailableDesktopLoopback: 'This service is configured to use local compatibility mode and can only be used in Redeven Desktop. To access it in a browser, open the service settings, go to "General", change "Access mode" to "Redeven secure proxy", and save.',
       installed: 'Installed',
       duplicate: 'Duplicate',
       moreActions: 'More',

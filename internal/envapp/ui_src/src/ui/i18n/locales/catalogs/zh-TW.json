@@ -3484,6 +3484,7 @@
       "templateInstalled": "目前環境已安裝此範本對應的服務。",
       "openUnavailableOperation": "服務作業正在進行中。",
       "openUnavailableNotRunning": "服務尚未執行。",
+      "openUnavailableDesktopLoopback": "此服務已設定為「本機相容模式」，只能在 Redeven Desktop 中使用。若要透過瀏覽器存取，也可開啟服務設定，在「一般」中將「存取模式」改為「Redeven 安全代理」並儲存。",
       "installed": "已安裝",
       "duplicate": "建立副本",
       "moreActions": "更多",

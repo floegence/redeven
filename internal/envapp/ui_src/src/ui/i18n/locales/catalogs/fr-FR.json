@@ -3484,6 +3484,7 @@
       "templateInstalled": "Un service issu de ce modèle est installé dans cet environnement.",
       "openUnavailableOperation": "Une opération de service est en cours.",
       "openUnavailableNotRunning": "Le service n’est pas en cours d’exécution.",
+      "openUnavailableDesktopLoopback": "Ce service est configuré en mode de compatibilité locale et ne peut être utilisé que dans Redeven Desktop. Pour y accéder depuis un navigateur, ouvrez les paramètres du service, allez dans « Général », sélectionnez « Proxy sécurisé Redeven » pour « Mode d’accès », puis enregistrez les modifications.",
       "installed": "Installé",
       "duplicate": "Dupliquer",
       "moreActions": "Plus",

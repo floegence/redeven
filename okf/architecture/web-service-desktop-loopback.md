@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Desktop loopback Web Service access
 description: Give one HTTP Web Service an isolated numeric-loopback browser Origin without bypassing its protected Runtime route.
 tags: [architecture, desktop, port-forward, proxy, security]
-timestamp: 2026-08-30T00:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 # Summary
 
@@ -14,6 +14,8 @@ timestamp: 2026-08-30T00:00:00Z
 ## Mode and presentation
 
 `port_forwards.access_mode` is the sole decision owner. Runtime accepts `desktop_loopback` only for an HTTP target. Env App exposes the choice when a service is saved, edited, or deployed; a browser-only Env App explains that the service requires Redeven Desktop instead of trying another route. An external Managed Service template may declare this mode, while ordinary and custom services default to `unified_proxy`.
+
+For a Managed Service, the browser-only explanation also directs the user to service settings > General, where they can change Access mode to Redeven secure proxy and save. The service list and installed-template entry use the same localized guidance, matching the setting labels. This is an explicit user choice; the explanation does not change the saved mode or enable the blocked Open action.
 
 When a trusted Desktop Shell opens the service, Electron creates or reuses one gateway keyed by Environment session and forward. Its browser-visible Origin is the gateway's numeric-loopback address; the trusted toolbar continues to show the original target origin and current application path. The target `WebContentsView` keeps its dedicated non-persistent partition and receives no preload, Node access, bridge token, forward identity, or gateway credential in renderer-visible state.
 
