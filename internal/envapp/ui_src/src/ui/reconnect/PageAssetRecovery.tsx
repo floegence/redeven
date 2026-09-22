@@ -39,7 +39,7 @@ export function PageAssetRecoveryNotice(props: RecoveryActionProps & { reason: D
 export function PageLoadError(props: RecoveryActionProps) {
   const i18n = useI18n();
   return (
-    <div role="alert" class="flex h-full min-h-0 items-center justify-center overflow-auto bg-background p-6 text-foreground">
+    <div data-env-reload-state="error" role="alert" class="flex h-full min-h-0 items-center justify-center overflow-auto bg-background p-6 text-foreground">
       <div class="max-w-md space-y-3 text-center">
         <h2 class="text-base font-semibold">{i18n.t('pageAssetRecovery.pageFailed')}</h2>
         <p class="text-sm text-muted-foreground">{i18n.t('pageAssetRecovery.guidance')}</p>

@@ -8,6 +8,7 @@ import { CodespacesPageSkeleton } from './pages/CodespacesPresentation';
 import { HostApplicationsPageSkeleton } from './pages/HostApplicationsPresentation';
 import { WebServicesPageSkeleton } from './pages/WebServicesPresentation';
 import { ContainersPageSkeleton } from './pages/ContainersPresentation';
+import { createEnvReloadPresentation } from './services/envReloadPresentation';
 import { PageAssetRecoveryNotice, PageLoadError } from './reconnect/PageAssetRecovery';
 import { createEnvAppAssetRecovery } from './reconnect/createEnvAppAssetRecovery';
 import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
@@ -3019,6 +3020,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
   const assetRecoveryReady = () => protocol.status() === 'connected' && accessChannelReady();
   const assetRecovery = createEnvAppAssetRecovery(assetRecoveryReady);
+  createEnvReloadPresentation({
+    target: () => layout.sidebarActiveTab(), environment: envId, authentication: authenticationRevision,
+    activity: () => viewMode() === 'activity',
+    blocked: () => resourceCacheAccess().phase === 'denied' || accessLocked() || recoveryVisible()
+      || (accessGatePhase() !== 'ready' && accessGatePhase() !== 'checking')
+      || Boolean(env.error) || Boolean(assetRecovery.reason()),
+  });
 
   const agentVersionModel = createAgentVersionModel({
     latestVersionRequest: environmentDetailRequest,

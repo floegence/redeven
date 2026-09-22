@@ -1356,7 +1356,7 @@ export function EnvCodespacesPage() {
 
   return (
     <>
-      <CodespacesPageFrame refreshing={pageRefreshing()}
+      <CodespacesPageFrame refreshing={pageRefreshing()} reloadState={spacesRenderable() ? 'content' : inventory.snapshot().error ? 'error' : 'pending'}
         onRefresh={() => void handleRefreshAll()} onCreate={() => setCreateDialogOpen(true)}
         readiness={<Show when={showCompactRuntimeStatus()}><BrowserEditorReadinessInlineStatus
           loading={runtimeResource.loading} error={runtimeStatusError()} onRefresh={() => void refetchRuntimeStatus()} /></Show>}>

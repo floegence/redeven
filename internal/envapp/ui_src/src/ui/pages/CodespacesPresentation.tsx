@@ -11,11 +11,12 @@ export function CodespacesPageFrame(props: {
   children: JSX.Element;
   readiness?: JSX.Element;
   refreshing?: boolean;
+  reloadState?: 'pending' | 'content' | 'error';
   onRefresh?: () => void;
   onCreate?: () => void;
 }) {
   const i18n = useI18n();
-  return <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('codespaces-page h-full min-h-0 overflow-auto', redevenSurfaceRoleClass('main'))}>
+  return <div data-env-reload-state={props.reloadState ?? 'pending'} data-floe-reload-scroll="codespaces" {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('codespaces-page h-full min-h-0 overflow-auto', redevenSurfaceRoleClass('main'))}>
     <Panel class={cn('overflow-hidden', redevenSurfaceRoleClass('panelStrong'))} data-testid="codespaces-panel">
       <PanelContent class="codespaces-content p-4 space-y-4">
         <header class="flex items-start justify-between gap-4">

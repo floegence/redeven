@@ -56,7 +56,7 @@ try {
       assert.equal(await row.evaluate(element => element === globalThis.__continuityRow && globalThis.document.activeElement === element), true, `${target}: retain row and focus`);
       const frames = await page.evaluate(() => globalThis.__continuityFrames);
       assert.ok(frames.filter(frame => frame.main).every(frame => frame.views.every(id => id === target)), `${target}: wrong target ${JSON.stringify(frames)}`);
-      assert.ok(frames.filter(frame => frame.main).every(frame => frame.row || frame.skeleton), `${target}: blank frame ${JSON.stringify(frames)}`);
+      assert.ok(frames.every(frame => frame.documentLoading || frame.placeholder || (frame.main && (frame.row || frame.skeleton))), `${target}: blank frame ${JSON.stringify(frames)}`);
       const shown = frames.findIndex(frame => frame.row);
       assert.ok(shown >= 0 && frames.slice(shown).every(frame => frame.row && !frame.skeleton), `${target}: content regressed ${JSON.stringify(frames)}`);
       assert.deepEqual(errors, [], `${target}: renderer errors`);
@@ -111,8 +111,10 @@ try {
       try {
         await page.reload();
         await page.locator(selectors.skeleton).waitFor();
+        assert.equal(await page.locator('[data-floe-reload-placeholder]').count(), 1, `${target}: preserve the empty layout through identity checks`);
         releaseEmptyScope();
         await page.locator(selectors.skeleton).waitFor({ state: 'detached' });
+        await page.locator('[data-floe-reload-placeholder]').waitFor({ state: 'detached' });
         assert.equal(await page.locator(selectors.row).count(), 0, `${target}: successful empty cache`);
       } finally { releaseEmptyScope(); releaseEmpty(); }
       // Corrupt disk payloads are discarded while the current page keeps its structural placeholder.
@@ -126,6 +128,7 @@ try {
         await page.reload();
         await page.locator(selectors.skeleton).waitFor();
         assert.equal(await page.locator(selectors.row).count(), 0);
+        assert.equal(await page.locator('[data-floe-reload-placeholder]').count(), 1, `${target}: corrupt cache cannot reveal a different skeleton`);
         releaseCorrupt();
         await page.locator(selectors.row).filter({ hasText: selectors.title }).first().waitFor();
       } finally { releaseCorrupt(); }

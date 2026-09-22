@@ -2,6 +2,7 @@ import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
 import solid from 'vite-plugin-solid';
+import { createReloadPlaceholderScript } from '@floegence/floe-webapp-core/reload-placeholder';
 import { pdfAssetsPlugin } from '@floegence/floe-webapp-core/pdf-assets';
 
 import { REDEVEN_ENV_APP_BASE_PATH } from './src/build/envAppBasePath';
@@ -36,7 +37,18 @@ function chunkModuleManifest(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [solid(), tailwindcss(), chunkModuleManifest(), pdfAssetsPlugin()],
+  plugins: [{
+    name: 'redeven-document-reload-presentation',
+    transformIndexHtml: {
+      order: 'pre',
+      handler(_html, context) {
+        if (path.basename(context.filename) !== 'index.html') return;
+        return [{ tag: 'script', injectTo: 'head-prepend', children: createReloadPlaceholderScript({
+          storageKey: 'redeven-envapp:reload-layout', scopeStorageKey: 'redeven_env_public_id',
+        }) }];
+      },
+    },
+  }, solid(), tailwindcss(), chunkModuleManifest(), pdfAssetsPlugin()],
   resolve: {
     alias: [
       { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|icons|layout|loading|ui)$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },

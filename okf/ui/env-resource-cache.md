@@ -101,8 +101,11 @@ requests do not wait for template discovery.
 
 ## Startup and loading continuity
 
-The selected Activity module is preloaded. During initial access checking the
-Shell presents the target page's skeleton immediately, without extending the
+Full document reload first paint and its single handoff are owned by
+[Env App document reload presentation](document-reload-presentation.md).
+
+The selected Activity module is preloaded. Once the Shell mounts, initial access checking
+presents the target page's skeleton immediately, without extending the
 boot cover. Password and two-factor challenges retain the explicit access gate.
 The module fallback and first inventory placeholder share the real page's
 header, controls, list regions, and row geometry. Host Applications reserves its

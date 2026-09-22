@@ -583,13 +583,13 @@ export function EnvHostApplicationsPage() {
     finally { setAddBusy(false); }
   };
 
-  return <div class="host-apps h-full min-h-0 flex flex-col" data-testid="host-applications">
+  return <div class="host-apps h-full min-h-0 flex flex-col" data-testid="host-applications" data-env-reload-state={catalog() ? 'content' : displayError() ? 'error' : 'pending'}>
     <HostApplicationsHeader actions={<>
 
         <Button variant="ghost" size="sm" onClick={() => void refresh()} disabled={loading() || !canRead()} title={i18n.t('hostApplications.refresh')} aria-label={i18n.t('hostApplications.refresh')}><Refresh class={`w-4 h-4 ${loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
         <Button variant="outline" size="sm" onClick={() => setAddOpen(true)} disabled={!canLaunch() || !catalog()?.availability.supported}><Plus class="w-3.5 h-3.5" />{i18n.t('hostApplications.add')}</Button>
           </>} />
-    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="host-apps-content min-h-0 flex-1 overflow-auto">
+    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="host-apps-content min-h-0 flex-1 overflow-auto" data-floe-reload-scroll="host-applications">
       <Show when={displayError()}><div class="host-apps-notice text-destructive" role="alert">{displayError()}</div></Show>
       <Show when={ctx.env()?.permissions?.can_read === false}><div class="host-apps-empty"><ActivityBarHostApplicationsIcon class="w-9 h-9" /><h2>{i18n.t('hostApplications.permissionTitle')}</h2><p>{i18n.t('hostApplications.readPermission')}</p></div></Show>
       <Show when={ctx.env()?.permissions?.can_read !== false}>
