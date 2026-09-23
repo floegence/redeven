@@ -303,7 +303,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
       class={cn(
         'flex flex-col overflow-hidden rounded-md p-0',
         isMobile()
-          ? 'h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none max-w-none'
+          ? 'h-full w-full max-w-none'
           : 'w-[min(30rem,92vw)]'
       )}
       footer={

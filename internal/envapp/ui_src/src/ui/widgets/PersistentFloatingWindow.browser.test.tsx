@@ -179,7 +179,9 @@ describe('PersistentFloatingWindow browser behavior', () => {
     await settle();
 
     const trigger = document.querySelector('[data-testid="open-activity-dialog"]') as HTMLButtonElement;
-    await userEvent.click(trigger);
+    // Keyboard activation establishes a portable focus-return owner in Safari as well.
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
     await settle();
 
     const floatingRoot = document.querySelector(
@@ -210,13 +212,12 @@ describe('PersistentFloatingWindow browser behavior', () => {
     await new Promise((resolve) => setTimeout(resolve, 180));
     await settle();
     expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
-    expect(document.activeElement).toBe(trigger);
+    await expect.poll(() => document.activeElement).toBe(trigger);
 
     await userEvent.click(trigger);
     await settle();
     await userEvent.keyboard('{Escape}');
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
   });
 
   it('keeps desktop floating windows below the native titlebar safe area', async () => {

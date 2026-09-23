@@ -391,7 +391,7 @@ describe('FlowerSurface navigation', () => {
     await flush();
     expect(runtime.querySelector('.flower-chat-shell')).toBeNull();
 
-    const back = runtime.querySelector('button[aria-label="Back to chat"]') as HTMLButtonElement | null;
+    const back = runtime.querySelector('.flower-component-main button[aria-label="Back to chat"]') as HTMLButtonElement | null;
     expect(back).toBeTruthy();
     expect(back?.textContent?.trim()).toBe('');
 

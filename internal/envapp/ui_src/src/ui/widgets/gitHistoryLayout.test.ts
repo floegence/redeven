@@ -13,7 +13,8 @@ describe('browser workspace layout wiring', () => {
   it('shares one sidebar width state across files mode and git mode', () => {
     const src = read('./RemoteFileBrowser.tsx');
 
-    expect(src).toContain("const PAGE_SIDEBAR_WIDTH_STORAGE_KEY = 'redeven:remote-file-browser:page-sidebar-width';");
+    expect(src).toContain("PAGE_SIDEBAR_WIDTH_STORAGE_KEY, normalizePageSidebarWidth } from '../pages/FileBrowserPageLoading'");
+    expect(read('../pages/FileBrowserPageLoading.tsx')).toContain("export const PAGE_SIDEBAR_WIDTH_STORAGE_KEY = 'redeven:remote-file-browser:page-sidebar-width';");
     expect(src).toContain('const scopedStorageKey = (key: string): string => (');
     expect(src).toContain('width={browserSidebarWidth()}');
     expect(src).toContain('const commitBrowserSidebarWidth = (value: number) => {');
@@ -535,7 +536,7 @@ describe('browser workspace layout wiring', () => {
     expect(dialogSrc).toContain('flex max-w-none flex-col overflow-hidden rounded-md p-0');
     expect(dialogSrc).toContain('rounded-md p-0');
     expect(dialogSrc).toContain('contentClass="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"');
-    expect(dialogSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
+    expect(dialogSrc).toContain("h-full w-full");
     expect(panelSrc).toContain("i18n.t('uiCopy.git.fullContext')");
     expect(panelSrc).toContain("i18n.t('gitDiff.loadingFullContext')");
     expect(dialogSrc).not.toContain('border-0');

@@ -15,6 +15,7 @@ export function EnvAppDrawer(props: EnvAppDrawerProps): JSX.Element {
   return (
     <FloeDialog
       {...props}
+      presentation="side-drawer"
       class={cn('env-app-drawer-panel', props.class)}
       contentClass={cn('flex min-h-0 flex-col', props.contentClass)}
       globalZIndex={ENV_APP_FLOATING_LAYER.productModal}

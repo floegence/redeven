@@ -409,6 +409,7 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
         defaultSize={persistedRect() ? { width: persistedRect()!.width, height: persistedRect()!.height } : props.defaultSize}
         minSize={props.minSize}
         maxSize={props.maxSize}
+        compactBelow={props.compactBelow}
         resizable={props.resizable}
         draggable={props.draggable}
         class={cn(markerClass, props.class)}

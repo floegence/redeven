@@ -76,73 +76,42 @@
 }
 
 [data-floe-dialog-panel].env-app-drawer-panel {
-  position: fixed;
+  position: relative;
   app-region: no-drag;
   pointer-events: auto;
   user-select: auto;
-  left: auto;
-  top: var(--redeven-desktop-titlebar-height, 0px);
-  right: 0;
-  bottom: 0;
-  width: min(58rem, 100vw);
-  max-width: none;
-  max-height: none;
-  margin: 0;
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
+  margin-top: var(--redeven-desktop-titlebar-height, 0px);
+  height: calc(100% - var(--redeven-desktop-titlebar-height, 0px));
+  width: min(58rem, 100%);
+  max-width: 100%;
   --floe-floating-enter-duration: 240ms;
   --floe-floating-exit-duration: 180ms;
-  --floe-floating-enter-x: min(8rem, 18vw);
-  --floe-floating-exit-x: min(6rem, 14vw);
-  --floe-floating-enter-y: 0;
-  --floe-floating-exit-y: 0;
-  --floe-floating-enter-scale: 1;
-  --floe-floating-exit-scale: 1;
-  --floe-floating-origin: right center;
 }
 
 [data-floe-dialog-panel].env-app-drawer-panel.service-template-explorer-drawer {
-  width: min(68rem, calc(100vw - 4rem));
+  width: min(68rem, calc(100% - 4rem));
 }
 
 [data-floe-dialog-panel].env-app-drawer-panel.managed-service-settings-drawer {
-  width: min(72rem, calc(100vw - 4rem));
+  width: min(72rem, calc(100% - 4rem));
 }
 
 [data-floe-dialog-panel].env-app-drawer-panel.managed-service-version-drawer {
-  width: min(46rem, calc(100vw - 4rem));
+  width: min(46rem, calc(100% - 4rem));
 }
 
 [data-floe-dialog-overlay-root][data-floe-dialog-mode="surface"] [data-floe-dialog-panel].env-app-drawer-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(58rem, 100%);
-  max-width: 100%;
-}
-
-[data-floe-dialog-overlay-root]:has(.env-app-drawer-panel) > :not([data-floe-dialog-backdrop]) {
-  pointer-events: none;
+  margin-top: 0;
+  height: 100%;
 }
 
 @media (max-width: 639px) {
-  [data-floe-dialog-panel].env-app-drawer-panel {
-    top: var(--redeven-desktop-titlebar-height, 0px);
-    width: 100vw;
-    border-radius: 0;
-  }
-
-  [data-floe-dialog-panel].env-app-drawer-panel.service-template-explorer-drawer {
-    width: 100vw;
-  }
-
-  [data-floe-dialog-panel].env-app-drawer-panel.managed-service-settings-drawer {
-    width: 100vw;
-  }
-
+  [data-floe-dialog-panel].env-app-drawer-panel,
+  [data-floe-dialog-panel].env-app-drawer-panel.service-template-explorer-drawer,
+  [data-floe-dialog-panel].env-app-drawer-panel.managed-service-settings-drawer,
   [data-floe-dialog-panel].env-app-drawer-panel.managed-service-version-drawer {
-    width: 100vw;
+    width: 100%;
+    border-radius: 0;
   }
 }
 
@@ -1709,17 +1678,6 @@ html.dark .git-changes-table-pending {
 .redeven-env-shell-stage {
   position: relative;
   overflow: hidden;
-}
-
-@media (max-width: 767px) {
-  [data-floe-geometry-surface="floating-window"][data-redeven-plugin-activity-window="true"] {
-    inset: 0.25rem !important;
-    width: calc(100vw - 0.5rem) !important;
-    height: calc(100dvh - 0.5rem) !important;
-    max-width: none !important;
-    max-height: none !important;
-    transform: none !important;
-  }
 }
 
 .redeven-env-shell-stage .display-mode-page-shell {
