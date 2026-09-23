@@ -129,10 +129,10 @@ export function createEnvResourceCacheAccess(options: {
         if (connection) {
           const request = new AbortController();
           controller = request;
-          void fetchLocalApiJSON<{ scope_id: string }>('/_redeven_proxy/api/ui-cache-scope', { method: 'GET', signal: request.signal })
+          void Promise.resolve(fetchLocalApiJSON<{ scope_id: string }>('/_redeven_proxy/api/ui-cache-scope', { method: 'GET', signal: request.signal }))
             .then(result => {
               if (request.signal.aborted || generation !== requestGeneration) return;
-              if (!/^[a-f0-9]{64}$/u.test(result.scope_id)) throw new Error('Invalid resource cache scope');
+              if (!result || !/^[a-f0-9]{64}$/u.test(result.scope_id)) throw new Error('Invalid resource cache scope');
               if (confirmedScope && confirmedScope !== result.scope_id) clearOwner();
               lookup = { phase: 'ready', scope: result.scope_id };
               commit();

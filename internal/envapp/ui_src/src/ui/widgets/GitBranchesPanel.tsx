@@ -1864,7 +1864,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
         bodyDescription={i18n.t('uiCopy.git.compareDescription')}
         contentClass="flex min-h-0 flex-1 flex-col overflow-hidden p-0 [&>p]:px-4 [&>p]:pt-3 [&>p]:break-words"
         class={cn(
-          "flex max-w-none flex-col overflow-hidden rounded-md border border-border/60 p-0 shadow-xl",
+          "flex max-w-none flex-col overflow-hidden rounded-md border border-border/60 p-0 shadow-xl [&>div:last-child]:!overflow-hidden [&>div:last-child]:flex [&>div:last-child]:!p-0",
           "[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2",
           layout.isMobile()
             ? "h-full w-full"

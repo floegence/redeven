@@ -3,6 +3,6 @@ body { color: var(--floe-foreground); background: var(--floe-background); font-f
 
 body { display: flex; flex-direction: column; }
 .redeven-browser-document-surface { flex: 1; min-height: 0; }
-.redeven-browser-document-bar { display: flex; align-items: center; gap: .75rem; min-height: 2.5rem; padding: .25rem .75rem; border-bottom: 1px solid var(--floe-line, #d8dce4); font-size: .8125rem; }
-.redeven-browser-document-bar button { padding: .3rem .6rem; border: 1px solid var(--floe-line, #d8dce4); border-radius: .375rem; background: var(--floe-surface, #f3f4f6); color: inherit; cursor: pointer; }
-.redeven-browser-document-bar span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--floe-muted, #667085); }
+.redeven-browser-document-bar { display: flex; align-items: center; gap: .75rem; min-height: 2.5rem; padding: .25rem .75rem; border-bottom: 1px solid var(--floe-line); font-size: .8125rem; }
+.redeven-browser-document-bar button { padding: .3rem .6rem; border: 1px solid var(--floe-line); border-radius: .375rem; background: var(--floe-surface); color: inherit; cursor: pointer; }
+.redeven-browser-document-bar span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--floe-muted); }

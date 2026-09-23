@@ -1551,6 +1551,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
     const messages: string[] = [];
     if (props.service.status === 'uninstall_pending') messages.push(i18n.t('webServices.management.problems.cleanupBlocked'));
     else if (props.service.problem_code) messages.push(i18n.t(managementProblemKey(props.service.problem_code)));
+    else if (props.service.opening?.state === 'error' && props.service.opening.error_code) messages.push(managedFailureMessage(props.service.opening.error_code, i18n));
     if (props.service.pending_changes) messages.push(i18n.t('webServices.managed.pendingChanges'));
     return [...new Set(messages)];
   });

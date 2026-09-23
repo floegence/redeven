@@ -102,6 +102,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
+  AppViewport: (props: any) => <>{props.children}</>,
   Panel: (props: any) => <div class={props.class} data-testid={props['data-testid']}>{props.children}</div>,
   PanelContent: (props: any) => <div class={props.class}>{props.children}</div>,
 }));
