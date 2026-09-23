@@ -108,6 +108,18 @@ export async function runBrowserProjectionSoak({ popup, sourcePages, sourceOrigi
     report.result = 'passed';
   } catch (error) {
     report.result = 'failed'; report.error = error.message;
+    const media = () => [...document.querySelectorAll('video,audio')].map(element => ({
+      id: element.id, readyState: element.readyState, paused: element.paused,
+      time: element.currentTime, width: element.videoWidth, height: element.videoHeight,
+      error: element.error?.message, frames: element.getVideoPlaybackQuality?.().totalVideoFrames,
+      tracks: element.srcObject?.getTracks?.().map(track => ({ kind: track.kind, readyState: track.readyState, muted: track.muted, enabled: track.enabled })),
+    }));
+    try { report.failure = {
+      elapsed: (Date.now() - started) / 1000,
+      sources: await Promise.all(sourcePages.map(async source => ({ url: source.url(), media: await source.evaluate(media) }))),
+      viewer: await popup.frameLocator('.floe-viewport iframe').locator('body').evaluate(media),
+      controls: await popup.locator('.floe-media-controls').textContent(),
+    }; } catch (diagnosticError) { report.diagnosticError = diagnosticError.message; }
     throw error;
   }
   finally {
