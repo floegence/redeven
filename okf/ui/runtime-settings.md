@@ -22,7 +22,7 @@ The ten destinations are Config File, Connection, Runtime Status, Shell &
 Workspace, Codespaces & Tooling, Logging, Permission Policy, Flower, Skills, and
 Debug Console. Desktop navigation groups and filters these destinations. Narrow
 viewports expose the same destinations through a section picker. Related links
-connect the smaller configuration and diagnostic pages to their next actions.
+connect the smaller configuration and diagnostic pages to their next actions. On narrow viewports the picker is in the page header and the desktop breadcrumb is removed, so the settings body has no empty mobile-navigation slot or repeated section title. The native picker remains a 44px touch target with 16px text.
 
 Each page has one primary heading, a short description, and contextual actions.
 Sections use secondary headings; continuous settings use shared rows and

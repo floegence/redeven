@@ -63,6 +63,12 @@ Containers default to Active; other views default to All. Shared Dropdown and
 Dialog primitives own outside-click, Escape, focus, and Workbench-safe floating
 behavior.
 
+Below 768 CSS pixels the toolbar keeps search, the current status filter, more,
+and the primary resource action on one 44px row. Column controls and charts move
+into progressive menus while the active filter remains visible and clearable.
+Image cards show formatted capacity and a semantic reference count; missing
+capacity is an em dash and a real zero remains `0 B`.
+
 Resource identity is the first inventory column and the first reading anchor.
 Names use a moderate weight and retain the full value in their accessible text
 and title. Numeric sizes align to the right. Created dates and volume drivers

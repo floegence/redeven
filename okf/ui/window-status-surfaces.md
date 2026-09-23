@@ -25,6 +25,8 @@ Use the published `window-status.css` slots and browser-neutral `window-status` 
 
 Only active working text receives `data-floe-progress-shimmer="text"`. There is no spinning progress icon or animated progress line on these surfaces. Countdown, paused and terminal states do not shimmer. Published shimmer supports reduced motion and forced colors; long translated copy and technical details must remain readable without horizontal scrolling. Diagnostic content is collapsed initially. Existing live-region, focus and form relationships remain available.
 
+Access-gate language menus use the shared floating layer and clamp to the visible viewport or projected Workbench boundary, including short mobile viewports and safe-area offsets. Menu rows remain at least 44px and Escape or outside input restores focus to the trigger.
+
 Generic loading curtains, dialogs and local Workbench error boundaries retain their existing material. A whole-window layout must not become a shared fallback for components that can be moved onto a canvas.
 
 # Evidence
