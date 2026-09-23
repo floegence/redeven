@@ -1297,6 +1297,11 @@ html:not(.dark) .redeven-new-environment-card:hover {
 }
 .redeven-address-group:first-child { border-top: 0; }
 .redeven-address-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.redeven-address-title { display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
+.redeven-address-help-anchor { display: flex; flex-shrink: 0; }
+.redeven-address-help { width: 1.5rem; height: 1.5rem; padding: 0; color: var(--muted-foreground); }
+/* Intrinsic width stays stable while help is positioned above either surface. */
+.redeven-address-help-tooltip { z-index: 230; width: max-content; }
 .redeven-address-heading + .redeven-endpoint-scope-title { margin-top: 0.25rem; }
 .redeven-address-count {
   flex-shrink: 0;

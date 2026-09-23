@@ -42,6 +42,26 @@ afterEach(() => {
 });
 
 describe('Environment connection popover', () => {
+  it('keeps network guidance in accessible help without a visible description row', async () => {
+    const test = await mount();
+    test.setURLs(['https://192.0.2.20:23998/']); await settle();
+    const group = document.querySelector('[data-address-scope="network"]')!;
+    const help = group.querySelector<HTMLButtonElement>('.redeven-address-help')!;
+    expect(help).not.toBeNull();
+    expect(group.querySelector('.redeven-card-endpoint-detail')).toBeNull();
+    const description = document.getElementById(help.getAttribute('aria-describedby')!)!;
+    expect(description.textContent).toBe('Network address. Availability depends on your network connection.');
+    expect(description.classList.contains('sr-only')).toBe(true);
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    help.focus();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(description.textContent);
+    expect(test.open()).toBe(true);
+    group.querySelector<HTMLButtonElement>('[aria-label="Copy Environment URL"]')!.focus();
+    await settle();
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  });
+
   it('keeps multiple internal listeners in one disclosure without address actions', async () => {
     const test = await mount();
     test.setURLs(['http://localhost:23998/', 'http://[::1]:23998/']); await settle();
