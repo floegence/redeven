@@ -31,7 +31,7 @@ The page header keeps search and its action group on one aligned row. Only the s
 
 Cards retain the existing responsive column model and share a compact header, facts area, and footer. Cards in each grid have equal heights and aligned action footers. Retained perspectives contribute to the same layout cell, so switching views does not change card height; the inactive perspective is invisible, inert, and hidden from assistive technology. Long identity and address values truncate with full details available; translated controls and enlarged text wrap without overlapping or hiding actions.
 
-The retained Environment page keeps its last visible layout measurement while hidden behind Flower. A zero-width hidden element is not a one-column viewport. Returning to the page preserves card positions without replaying entrance motion. Open and equivalent health refreshes preserve card count, order, DOM identity and geometry.
+The retained Environment page keeps its last visible layout measurement while hidden behind Flower. A zero-width hidden element is not a one-column viewport. Returning to the page preserves card positions without replaying entrance motion. Open and equivalent health refreshes preserve card count, order, DOM identity and geometry. Deliberate Environment Center tab selection follows the separate [Welcome navigation presentation contract](desktop-welcome-navigation.md); its transient visual translation does not change card layout or restart on snapshots.
 
 ## Cloud sources and counts
 
