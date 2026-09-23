@@ -85,6 +85,23 @@ try {
     adapter.onError = code => { window.parent.fixtureInputError = code; previous?.(code); };
   });
   await page.mouse.click(300, 170);
+  await frame.waitForFunction(() => {
+    const cursor = window.floeXpraInput.getClient().floeCursor;
+    return cursor?.source?.width === 48 && cursor.current?.width === 24;
+  });
+  const cursor = await frame.evaluate(async () => {
+    const client = window.floeXpraInput.getClient(), owner = client.floeCursor;
+    const {width,height,xhot,yhot,url,css} = owner.current;
+    const image = new Image(); image.src=url; await image.decode();
+    return {source:[owner.source.width,owner.source.height,owner.source.xhot,owner.source.yhot],
+      logical:[width,height,xhot,yhot], backing:[image.naturalWidth,image.naturalHeight],
+      dpr:devicePixelRatio, css, sent:client.last_button_event.slice(2)};
+  });
+  assert.deepEqual(cursor.source, [48,48,22,24]);
+  assert.deepEqual(cursor.logical, [24,24,11,12]);
+  const pointer = () => JSON.parse(remote(`cat ${quote(remoteRoot + '/pointer.json')}`));
+  await waitFor(() => JSON.stringify(pointer()) === JSON.stringify(cursor.sent), 'Application click coordinates differ from the cursor hotspot');
+  cursor.received = pointer();
   await frame.waitForFunction(() => document.activeElement === document.querySelector('.floe-remote-input'));
   await page.screenshot({path:path.join(output,'before-input.png')});
   const input = frame.locator('.floe-remote-input');
@@ -116,7 +133,7 @@ try {
   assert.deepEqual(errors, []);
   remote(`printf %s ${quote(JSON.stringify(expected))} > ${quote(remoteRoot + '/done.json')}`);
   const identity = {...metadata}; delete identity.password;
-  await writeFile(path.join(output,'result.json'), JSON.stringify({passed:true,...identity,port,browserName,browser:browser.version(),expected,checks:['exact repeated Unicode','physical typing','Backspace','pointer field switch','toolbar isolation'],systemIME:false},null,2));
+  await writeFile(path.join(output,'result.json'), JSON.stringify({passed:true,...identity,port,browserName,browser:browser.version(),expected,cursor,checks:['actual remote PNG normalization','application click coordinates','exact repeated Unicode','physical typing','Backspace','pointer field switch','toolbar isolation'],actualOSCursor:false,systemIME:false},null,2));
   console.log('PASS: published controller → prepared Xpra → actual application text receipt');
 } catch (error) {
   await page?.screenshot({path:path.join(output,'failure.png')}).catch(() => {});
