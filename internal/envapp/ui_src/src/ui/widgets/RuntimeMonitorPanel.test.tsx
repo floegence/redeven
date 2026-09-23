@@ -71,7 +71,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     <div
       data-testid={props.showLegend ? 'network-chart' : 'cpu-chart'}
       data-series-colors={props.series.map((series: { color?: string }) => series.color ?? '').join(',')}
-    />
+    >{props.title}{props.headerMeta}</div>
   ),
   SurfaceFloatingLayer: (props: any) => {
     const { children, layerRef, position, class: className, style, ...rest } = props;
@@ -195,6 +195,8 @@ describe('RuntimeMonitorPanel', () => {
       await flushPanel();
       const chart = host.querySelector('[data-testid="cpu-chart"]');
       expect(chart).not.toBeNull();
+      expect(chart?.textContent).toContain('12.5%');
+      expect(chart?.textContent).toContain('8 cores');
       await vi.advanceTimersByTimeAsync(2000);
       expect(host.querySelector('[data-testid="cpu-chart"]')).toBe(chart);
       expect(host.querySelector('[role="status"]')).toBeNull();

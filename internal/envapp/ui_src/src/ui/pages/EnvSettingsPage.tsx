@@ -1,3 +1,4 @@
+import './runtime-settings-compact.css';
 import { For, Show, createMemo, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { ChevronLeft, ChevronRight, Search, X, RefreshIcon } from '@floegence/floe-webapp-core/icons';
@@ -138,9 +139,17 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
               <ChevronLeft class="h-4 w-4" />
             </button>
           </Show>
+          <div class="redeven-settings-breadcrumb flex min-w-0 items-center gap-3">
           <span class="text-xs font-medium text-muted-foreground truncate">{i18n.t('settings.runtimeTitle')}</span>
           <ChevronRight class="h-3 w-3 shrink-0 text-muted-foreground" />
           <span class="truncate text-xs text-foreground">{navLabel(sectionSelection.visual(), '', i18n.t)}</span>
+          </div>
+          <div class="redeven-settings-mobile-nav min-w-0 flex-1"><Select
+          value={sectionSelection.visual()}
+          onChange={(v) => v && sectionSelection.request(v as EnvSettingsSection)}
+          options={localizedItems().map((it) => ({ value: it.id, label: it.label }))}
+          aria-label={i18n.t('settings.runtimeTitle')} class="w-full"
+        /></div>
         </div>
         <Button size="sm" variant="outline" onClick={() => void ctx.refreshSettingsPage()} disabled={ctx.settings.loading} aria-label={i18n.t('common.actions.refresh')} class="gap-1.5 shrink-0">
           <RefreshIcon class="w-3.5 h-3.5" />
@@ -171,12 +180,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
           </div>}
           empty={<p role="status" class="px-3 py-5 text-xs text-muted-foreground">{i18n.t('settings.filteredSections', { visible: 0, total: SETTINGS_NAV_ITEMS.length })}</p>}
         />}
-        mobileNavigation={<Select
-          value={sectionSelection.visual()}
-          onChange={(v) => v && sectionSelection.request(v as EnvSettingsSection)}
-          options={localizedItems().map((it) => ({ value: it.id, label: it.label }))}
-          aria-label={i18n.t('settings.runtimeTitle')} class="w-full"
-        />}
+
       >
         <div class="redeven-settings-content absolute inset-0">
           <For each={SETTINGS_NAV_ITEMS}>

@@ -1,3 +1,4 @@
+import './file-workspace-header.css';
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useFileBrowserDrag, useResizeObserver } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core/icons';
@@ -122,7 +123,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
   );
 
   return (
-    <div class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
+    <div class={cn('file-workspace-header shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
       <div
         ref={toolbarLayoutRef}
         data-toolbar-layout={toolbarLayout()}
@@ -174,7 +175,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
             'flex min-w-0 items-center gap-1.5',
             toolbarLayout() === 'inline'
               ? 'justify-self-end'
-              : 'col-span-2 flex-wrap'
+              : 'col-span-2'
           )}
         >
           <label
@@ -184,7 +185,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               FILE_WORKSPACE_TOOLBAR_FILTER_CLASS,
               toolbarLayout() === 'inline'
                 ? 'w-[15rem] min-w-[200px]'
-                : 'min-w-[220px] flex-1 basis-[220px]'
+                : 'min-w-[128px] flex-1'
             )}
           >
             <Search class="size-3.5 shrink-0" />
@@ -200,7 +201,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
           </label>
 
           <div class="flex shrink-0 items-center gap-1.5">
-            <SegmentedControl
+            <div class="file-workspace-view-segmented"><SegmentedControl
               size="sm"
               class={FILE_WORKSPACE_TOOLBAR_SEGMENTED_CLASS}
               value={browser.viewMode()}
@@ -210,7 +211,12 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
                 { value: 'list', label: i18n.t('files.viewList') },
                 { value: 'grid', label: i18n.t('files.viewGrid') },
               ]}
-            />
+            /></div>
+            <Button class="file-workspace-view-toggle" size="sm" variant="ghost" aria-label={i18n.t(browser.viewMode() === 'list' ? 'files.viewGrid' : 'files.viewList')}
+              title={i18n.t(browser.viewMode() === 'list' ? 'files.viewGrid' : 'files.viewList')}
+              onClick={() => browser.setViewMode(browser.viewMode() === 'list' ? 'grid' : 'list')}>
+              <FilesIcon class="h-4 w-4" />
+            </Button>
 
             <Show when={props.toolbarEndActions}>
               <div class="flex items-center gap-1">{props.toolbarEndActions}</div>

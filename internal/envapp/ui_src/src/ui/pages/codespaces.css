@@ -8,3 +8,20 @@
   border-color: var(--redeven-stroke-panel-strong) !important;
   background: var(--redeven-surface-panel-elevated) !important;
 }
+
+.codespaces-page { container: codespaces / inline-size; }
+.codespace-details-toggle { display: none; }
+@container codespaces (width < 768px) {
+  .codespaces-content { padding: 0 12px 12px; }
+  .codespaces-header { align-items: center; gap: 8px; min-height: 56px; }
+  .codespaces-description { display: none; }
+  .codespaces-header button { min-width: 44px; min-height: 44px; }
+  .codespaces-header button > span { display: none; }
+  .codespaces-header button > svg { margin: 0; }
+  .codespaces-grid { grid-template-columns: minmax(0, 1fr); }
+  .codespace-details-toggle { display: flex; align-items: center; min-height: 44px; }
+  .codespace-details-toggle::before { content: '›'; margin-right: 8px; }
+  .codespace-card details[open] > summary::before { transform: rotate(90deg); }
+  .codespace-card button { min-height: 44px; min-width: 44px; }
+  .codespace-card .codespace-skeleton-bar.h-7 { height: 44px; }
+}

@@ -417,6 +417,8 @@ export const flowerSurfaceEnUS = {
     groupOlder: 'Older',
   },
   emptyState: {
+    moreSuggestions: 'More suggestions',
+    fewerSuggestions: 'Fewer suggestions',
     title: 'Ask Flower',
     description: 'Flower uses your Local AI Profile, inspects remembered environments, and prepares actions before runtimes do any read or write.',
     exploreTitle: "Explore this folder",

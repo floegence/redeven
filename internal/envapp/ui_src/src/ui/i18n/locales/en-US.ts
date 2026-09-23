@@ -7,6 +7,8 @@ import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
   hostApplications: {
+    filterApplications: 'Filter applications',
+    clearFilters: 'Clear filters',
     update: {
       "available": "Component update available",
       "view": "View update",
@@ -648,6 +650,7 @@ export const enUS = defineDictionary({
       launcherResultCount: '{count} results',
       launcherNoResults: 'No applications match these filters.',
       categories: 'Plugin categories',
+      filterPlugins: 'Filter plugins',
       clearFilters: 'Clear filters',
       filterSelection: '{dimension}: {value}',
       categoryAll: 'All',
@@ -3031,6 +3034,7 @@ export const enUS = defineDictionary({
       failedDetail: 'Return to Redeven and try again. {message}',
     },
     fields: {
+      details: 'Details',
       id: 'ID',
       path: 'Path',
       port: 'Port',

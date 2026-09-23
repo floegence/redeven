@@ -631,6 +631,8 @@
       "pinRefreshFailed": "置頂對話已儲存，但清單重新整理失敗。請重新整理以查看最新順序。"
     },
     "emptyState": {
+      "moreSuggestions": "更多建議",
+      "fewerSuggestions": "收起建議",
       "title": "詢問 Flower",
       "description": "Flower 使用您的本機 AI 設定檔、檢查已記錄的環境，並在執行環境進行任何讀寫前準備好相關操作。",
       "exploreTitle": "了解這裡有什麼",

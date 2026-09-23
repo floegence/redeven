@@ -10426,3 +10426,16 @@ button.flower-attachment-preview-trigger:disabled {
     background: Highlight;
   }
 }
+
+.flower-empty-expand { display: none; }
+@container flower-chat (width < 768px) {
+  .flower-empty-state { justify-content: center; padding: 12px; }
+  .flower-empty-hero, .flower-empty-hint { display: none; }
+  .flower-empty-suggestions { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .flower-empty-suggestion { padding: 8px 12px; align-items: center; min-height: 44px; }
+  .flower-empty-suggestion > div:first-child { width: 28px; height: 28px; }
+  .flower-empty-suggestion > div:last-child > div:last-child { display: none; }
+  .flower-empty-state:not([data-suggestions-expanded="true"]) .flower-empty-suggestion:nth-child(n+3) { display: none; }
+  .flower-empty-expand { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; margin-top: 8px; padding-inline: 12px; font-size: 12px; color: var(--muted-foreground); cursor: pointer; border-radius: 6px; }
+  .flower-empty-expand:hover { background: var(--muted); }
+}

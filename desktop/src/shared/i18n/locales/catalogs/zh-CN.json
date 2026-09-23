@@ -631,6 +631,8 @@
       "pinRefreshFailed": "置顶对话已保存，但列表刷新失败。请刷新以查看最新顺序。"
     },
     "emptyState": {
+      "moreSuggestions": "更多建议",
+      "fewerSuggestions": "收起建议",
       "title": "询问 Flower",
       "description": "Flower 使用您的本地 AI 配置文件，检查已记录的环境，并在各运行时执行任何读写操作前准备相应操作。",
       "exploreTitle": "了解这里有什么",

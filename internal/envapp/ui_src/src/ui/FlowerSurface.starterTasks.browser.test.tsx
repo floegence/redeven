@@ -29,6 +29,12 @@ describe('Flower starter task interaction', () => {
     surface.style.cssText = `width:${width}px;height:950px;position:relative;`;
     await waitFor(() => surface.querySelectorAll('.flower-empty-suggestions button').length === 4);
 
+    if (width < 768) {
+      const visible = () => [...surface.querySelectorAll('.flower-empty-suggestions button')].filter(button => button.getBoundingClientRect().height > 0);
+      expect(visible()).toHaveLength(2);
+      await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-empty-expand')!);
+      expect(visible()).toHaveLength(4);
+    }
     const composer = surface.querySelector<HTMLTextAreaElement>('textarea')!;
     const cards = Array.from(surface.querySelectorAll<HTMLButtonElement>('.flower-empty-suggestions button'));
     for (const [index, card] of cards.entries()) {

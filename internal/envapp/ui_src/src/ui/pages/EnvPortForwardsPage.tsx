@@ -9,7 +9,7 @@ import { GitTemplateImport } from './GitTemplateImport';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, untrack, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useNotification, useViewActivation } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, ExternalLink, Filter, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
   Button,
@@ -3325,6 +3325,8 @@ export function EnvPortForwardsPage() {
               onClick={openTemplateCatalog}
               disabled={managedLoading() || (permissionReady() && !canRead())}
               class={cn('h-8', outlineControlClass)}
+              aria-label={i18n.t('webServices.managed.serviceTemplates')}
+              title={i18n.t('webServices.managed.serviceTemplates')}
               data-testid="service-templates-button"
             >
               <FileText class="mr-1.5 h-3.5 w-3.5" />
@@ -3399,11 +3401,14 @@ export function EnvPortForwardsPage() {
                     </Show>
                   </Button>
                 </div>
+                <Tooltip clickToToggle content={i18n.t('webServices.address.scopeDescription')} anchorClass="web-services-address-help">
+                  <Button type="button" variant="ghost" size="sm" class="h-11 w-11 p-0" aria-label={i18n.t('webServices.address.scopeTitle')}><Globe class="h-4 w-4" /></Button>
+                </Tooltip>
               </div>
               <div
                 id="web-service-address-guidance"
                 class={cn(
-                  'mt-2 text-xs',
+                  'web-services-address-guidance mt-2 text-xs',
                   addressValidationVisible()
                     ? 'flex items-start gap-2.5 rounded-md border border-warning/25 bg-warning/[0.06] px-3 py-2.5 text-foreground'
                     : 'flex items-center gap-2 px-0.5 leading-5 text-muted-foreground',
@@ -3463,11 +3468,11 @@ export function EnvPortForwardsPage() {
           <section class="space-y-3" data-testid="web-services-collection" aria-labelledby="web-services-collection-title">
               <div class="web-services-toolbar">
                 <div class="web-services-toolbar-heading">
-                  <Show when={archiveView() !== 'active'}><Button variant="ghost" size="sm" class="h-8 w-8 px-0" onClick={() => setArchiveView('active')} aria-label={i18n.t('webServices.collection.back')}><ArrowLeft class="h-4 w-4" /></Button></Show>
-                  <h2 id="web-services-collection-title" tabindex="-1">{archiveView() === 'active' ? i18n.t('webServices.collection.title') : i18n.t(`webServices.management.archive.${archiveView()}` as EnvAppTranslationKey)}</h2>
+                  <h2 id="web-services-collection-title" tabindex="-1" title={archiveView() === 'active' ? i18n.t('webServices.collection.title') : i18n.t(`webServices.management.archive.${archiveView()}` as EnvAppTranslationKey)}>{archiveView() === 'active' ? i18n.t('webServices.collection.title') : i18n.t(`webServices.management.archive.${archiveView()}` as EnvAppTranslationKey)}</h2>
                   <Show when={forwardResource.data() !== undefined || managedResource.data() !== undefined}><span class="text-xs tabular-nums text-muted-foreground">{filteredForwards().length + filteredManagedServices().length}</span></Show>
                 </div>
                 <div class="web-services-toolbar-actions" data-testid="web-services-toolbar-actions">
+                  <Show when={archiveView() !== 'active'}><Button variant="ghost" size="sm" class="h-8 w-8 px-0" onClick={() => setArchiveView('active')} aria-label={i18n.t('webServices.collection.back')}><ArrowLeft class="h-4 w-4" /></Button></Show>
                   <div class="web-services-search" data-testid="web-services-search">
                     <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                     <Input
@@ -3488,7 +3493,7 @@ export function EnvPortForwardsPage() {
                   <Dropdown align="end" triggerAriaLabel={i18n.t('webServices.collection.archives')}
                     items={(['detached', 'uninstalled'] as const).map((state) => ({ id: state, label: i18n.t('webServices.collection.archiveCount', { name: i18n.t(`webServices.management.archive.${state}`), count: managedState().filter((service) => service.management_state === state).length }) }))}
                     onSelect={(id) => setArchiveView(id)}
-                    triggerClass="web-services-menu-trigger" trigger={<span>{i18n.t('webServices.collection.archives')}<ChevronDown class="ml-1.5 h-3.5 w-3.5" aria-hidden="true" /></span>} />
+                    triggerClass="web-services-menu-trigger" trigger={<span><Filter class="web-services-archive-icon h-4 w-4" aria-hidden="true" /><span class="web-services-archive-label">{i18n.t('webServices.collection.archives')}</span><ChevronDown class="web-services-archive-label ml-1.5 h-3.5 w-3.5" aria-hidden="true" /></span>} />
                   <Button
                     size="sm"
                     variant="ghost"

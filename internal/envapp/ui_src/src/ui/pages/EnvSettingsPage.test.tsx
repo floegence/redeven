@@ -609,7 +609,8 @@ describe('EnvSettingsPage', () => {
 
     const responsiveBody = host.querySelector('.redeven-settings-body');
     expect(responsiveBody?.classList.contains('floe-settings-layout')).toBe(true);
-    expect(responsiveBody?.querySelector('.floe-settings-layout__mobile')).not.toBeNull();
+    expect(responsiveBody?.querySelector('.floe-settings-layout__mobile')).toBeNull();
+    expect(host.querySelector('.redeven-settings-header select')).not.toBeNull();
     expect(runtimeGroup?.querySelector('[data-settings-nav-item="logging"]')).not.toBeNull();
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');

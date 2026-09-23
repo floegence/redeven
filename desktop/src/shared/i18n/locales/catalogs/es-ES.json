@@ -631,6 +631,8 @@
       "pinRefreshFailed": "Las conversaciones fijadas se guardaron, pero no se pudo actualizar la lista. Actualízala para ver el orden más reciente."
     },
     "emptyState": {
+      "moreSuggestions": "Más sugerencias",
+      "fewerSuggestions": "Menos sugerencias",
       "title": "Pregunta a Flower",
       "description": "Flower usa tu perfil de IA local, consulta tus entornos guardados y prepara las acciones antes de que los entornos de ejecución lean o escriban datos.",
       "exploreTitle": "Explorar esta carpeta",

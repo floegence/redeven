@@ -2966,6 +2966,7 @@
       "failedDetail": "Redeven으로 돌아가 다시 시도하세요. {message}"
     },
     "fields": {
+      "details": "상세 정보",
       "id": "ID",
       "path": "경로",
       "port": "포트",
@@ -5541,6 +5542,8 @@
       "groupOlder": "이전"
     },
     "emptyState": {
+      "moreSuggestions": "제안 더 보기",
+      "fewerSuggestions": "제안 접기",
       "title": "Flower에게 묻기",
       "description": "Flower는 로컬 AI 프로필을 사용하고 기억된 환경을 검사하며 런타임이 읽기 또는 쓰기를 수행하기 전에 작업을 준비합니다.",
       "exploreTitle": "이 폴더 알아보기",
@@ -6036,6 +6039,7 @@
   },
   "uiCopy": {
     "plugin": {
+      "filterPlugins": "플러그인 필터링",
       "continuity": {
         "ready": "준비됨",
         "pending": "플러그인을 업데이트하고 있습니다. 캔버스 배치는 유지됩니다.",
@@ -6845,6 +6849,8 @@
     }
   },
   "hostApplications": {
+    "filterApplications": "앱 필터링",
+    "clearFilters": "필터 지우기",
     "update": {
       "unsupported": "이 런타임에서는 설치된 구성 요소 버전을 사용할 수 없습니다. 기존 파일은 보존되었습니다. 런타임을 업데이트한 후 계속하세요.",
       "available": "구성 요소 업데이트 사용 가능",

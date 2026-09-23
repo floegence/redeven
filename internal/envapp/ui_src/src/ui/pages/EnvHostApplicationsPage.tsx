@@ -1,9 +1,9 @@
 import { createEnvCachedResource } from '../services/envResourceCache';
 import { hostApplicationSnapshot } from '../services/envResourceSnapshots';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
-import { useViewActivation } from '@floegence/floe-webapp-core';
-import { ExternalLink, Plus, Refresh, Search, Stop } from '@floegence/floe-webapp-core/icons';
-import { Button, Input } from '@floegence/floe-webapp-core/ui';
+import { useViewActivation, useResizeObserver } from '@floegence/floe-webapp-core';
+import { Check, Filter, MoreHorizontal, ExternalLink, Plus, Refresh, Search, Stop } from '@floegence/floe-webapp-core/icons';
+import { Button, Dropdown, Input } from '@floegence/floe-webapp-core/ui';
 import { hostApplicationPresentation } from '../services/hostApplicationPresentation';
 import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
@@ -35,6 +35,10 @@ function ApplicationIcon(props: { app: HostApplication }) {
 export function EnvHostApplicationsPage() {
   const ctx = useEnvContext();
   const i18n = useI18n();
+  let pageRoot: HTMLDivElement | undefined;
+  const pageSize = useResizeObserver(() => pageRoot, { preserveWhenHidden: true });
+  const compactLayout = () => (pageSize()?.width ?? 768) < 768;
+  const [runningOnly, setRunningOnly] = createSignal(false);
   const activation = (() => { try { return useViewActivation(); } catch { return null; } })();
   const canRead = () => Boolean(ctx.env()?.permissions?.can_read);
   const canLaunch = () => Boolean(applicationResource.ready() && canRead() && ctx.env()?.permissions?.can_write && ctx.env()?.permissions?.can_execute);
@@ -477,9 +481,11 @@ export function EnvHostApplicationsPage() {
   createEffect(() => { if (category() && !categories().includes(category())) setCategory(''); });
   const apps = createMemo(() => {
     const needle = query().trim().toLocaleLowerCase();
-    return (catalog()?.applications ?? []).filter(app =>
+    const filtered = [...new Map((catalog()?.applications ?? []).map(app => [app.id, app])).values()].filter(app =>
       (!category() || app.categories.includes(category()))
+      && (!compactLayout() || !runningOnly() || starting(app.id) || runningByApp().has(app.id) || runningApplicationIDs().has(app.id))
       && (!needle || `${app.name} ${app.description}`.toLocaleLowerCase().includes(needle)));
+    return compactLayout() ? filtered.sort((a, b) => Number(starting(b.id) || runningByApp().has(b.id) || runningApplicationIDs().has(b.id)) - Number(starting(a.id) || runningByApp().has(a.id) || runningApplicationIDs().has(a.id)) || a.name.localeCompare(b.name, i18n.locale()) || a.id.localeCompare(b.id)) : filtered;
   });
 
   const applicationsByID = createMemo(() => new Map((catalog()?.applications ?? []).map(app => [app.id, app])));
@@ -583,11 +589,11 @@ export function EnvHostApplicationsPage() {
     finally { setAddBusy(false); }
   };
 
-  return <div class="host-apps h-full min-h-0 flex flex-col" data-testid="host-applications" data-env-reload-state={catalog() ? 'content' : displayError() ? 'error' : 'pending'}>
+  return <div ref={pageRoot} class="host-apps h-full min-h-0 flex flex-col" data-testid="host-applications" data-env-reload-state={catalog() ? 'content' : displayError() ? 'error' : 'pending'}>
     <HostApplicationsHeader actions={<>
 
         <Button variant="ghost" size="sm" onClick={() => void refresh()} disabled={loading() || !canRead()} title={i18n.t('hostApplications.refresh')} aria-label={i18n.t('hostApplications.refresh')}><Refresh class={`w-4 h-4 ${loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
-        <Button variant="outline" size="sm" onClick={() => setAddOpen(true)} disabled={!canLaunch() || !catalog()?.availability.supported}><Plus class="w-3.5 h-3.5" />{i18n.t('hostApplications.add')}</Button>
+        <Button aria-label={i18n.t('hostApplications.add')} title={i18n.t('hostApplications.add')} variant="outline" size="sm" onClick={() => setAddOpen(true)} disabled={!canLaunch() || !catalog()?.availability.supported}><Plus class="w-3.5 h-3.5" /><span>{i18n.t('hostApplications.add')}</span></Button>
           </>} />
     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="host-apps-content min-h-0 flex-1 overflow-auto" data-floe-reload-scroll="host-applications">
       <Show when={displayError()}><div class="host-apps-notice text-destructive" role="alert">{displayError()}</div></Show>
@@ -637,6 +643,14 @@ export function EnvHostApplicationsPage() {
                   </select>
                 </Show>
                 <div class="host-apps-search"><Search class="w-3.5 h-3.5" /><Input value={query()} onInput={e => setQuery(e.currentTarget.value)} placeholder={i18n.t('hostApplications.search')} aria-label={i18n.t('hostApplications.search')} /></div>
+                <div class="host-apps-mobile-filters"><Dropdown align="end" triggerAriaLabel={i18n.t('hostApplications.filterApplications')}
+                  triggerClass="host-apps-filter-button" trigger={<><Filter class="h-4 w-4" /><Show when={category() || runningOnly()}><span class="host-apps-filter-count">{Number(Boolean(category())) + Number(runningOnly())}</span></Show></>}
+                  items={[
+                    { id: 'running', label: i18n.t('hostApplications.running'), keepOpen: true, icon: () => runningOnly() ? <Check class="h-4 w-4" /> : <span class="h-4 w-4" /> },
+                    { id: 'category', label: i18n.t('hostApplications.category'), children: [{ id: 'category:', label: i18n.t('hostApplications.allApplications') }, ...categories().map(value => ({ id: `category:${value}`, label: value, icon: () => category() === value ? <Check class="h-4 w-4" /> : <span class="h-4 w-4" /> }))] },
+                    { id: 'clear', label: i18n.t('hostApplications.clearFilters'), disabled: !category() && !runningOnly() },
+                  ]}
+                  onSelect={id => { if (id === 'running') setRunningOnly(value => !value); else if (id === 'clear') { setCategory(''); setRunningOnly(false); } else if (id.startsWith('category:')) setCategory(id.slice(9)); }} /></div>
               </div>
             </div>
             <Show when={apps().length} fallback={<Show when={ready()}><div class="host-apps-empty"><Search class="w-8 h-8" /><h2>{i18n.t(query() ? 'hostApplications.noResults' : 'hostApplications.emptyTitle')}</h2><p>{i18n.t(query() ? 'hostApplications.noResultsDescription' : 'hostApplications.emptyDescription')}</p></div></Show>}>
@@ -655,6 +669,20 @@ export function EnvHostApplicationsPage() {
                   </span>
                   <Show when={starting(app().id)}><span class="sr-only" role="status">{i18n.t('hostApplications.starting')}</span></Show>
                 </button>
+                <div class="host-app-mobile-actions">
+                  <Show when={runningByApp().has(appID) || processesByID().has(appID)}>
+                    <span class="host-app-status">{i18n.t(starting(appID) ? 'hostApplications.starting' : runningByApp().has(appID) ? 'hostApplications.macSharing' : 'hostApplications.macAppRunning')}</span>
+                    <Dropdown align="end" triggerAriaLabel={`${i18n.t('hostApplications.macControls')} · ${app().name}`} triggerClass="host-apps-filter-button" trigger={<MoreHorizontal class="h-4 w-4" />}
+                      items={[
+                        ...(runningByApp().has(appID) ? [{ id: 'stop', label: i18n.t('hostApplications.stopSharing'), disabled: !canLaunch() }] : []),
+                        ...(processesByID().has(appID) ? [{ id: 'quit', label: i18n.t(isMac() ? 'hostApplications.macQuit' : 'hostApplications.closeAllWindows'), disabled: !canLaunch() || !(isMac() ? catalog()?.availability.native_ready : ready()) }] : []),
+                      ]} onSelect={id => {
+                        if (id === 'stop') setEnding(runningByApp().get(appID)!);
+                        if (id === 'quit') { setQuitError(''); setQuitting({ app: app(), instances: [...processesByID().get(appID)!.instances] }); }
+                      }} />
+                  </Show>
+                  <Show when={processesByID().get(appID) && quitNotice(processesByID().get(appID)!)}><p class="host-app-quit-notice" role="status">{i18n.t(isMac() ? 'hostApplications.macQuitPending' : 'hostApplications.closeWindowsPending')}</p></Show>
+                </div>
                 <Show when={appErrors()[app().id] || catalog()?.sessions.find(s => s.application.id === app().id)?.state === 'failed'}><p class="host-app-error" role="alert">{appErrors()[app().id] || i18n.t('hostApplications.errors.failed')}</p></Show>
               </div>; }}</For></div>
             </Show>

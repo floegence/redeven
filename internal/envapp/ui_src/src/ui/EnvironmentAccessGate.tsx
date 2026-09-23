@@ -201,7 +201,7 @@ export function EnvironmentAccessGate(props: EnvironmentAccessGateProps) {
                 disabled={props.pending || props.unlocking}
                 aria-describedby={accessGatePasswordDescribedBy()}
                 aria-invalid={props.feedback?.invalidInput ?? false}
-                class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                class="h-10 w-full rounded-md border border-border bg-background px-3 text-base md:text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
               />
               <p
                 id={ACCESS_GATE_IDS.passwordHelp}

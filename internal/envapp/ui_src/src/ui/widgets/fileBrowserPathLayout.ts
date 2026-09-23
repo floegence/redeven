@@ -19,7 +19,7 @@ export interface FileBrowserPathLayoutResult {
 }
 
 export const FILE_BROWSER_PATH_CURRENT_MIN_WIDTH = 96;
-export const FILE_BROWSER_WORKSPACE_INLINE_MIN_WIDTH = 640;
+export const FILE_BROWSER_WORKSPACE_INLINE_MIN_WIDTH = 768;
 
 export function buildFileBrowserPathSegments(path: string, rootLabel: string): FileBrowserPathSegment[] {
   if (path === '/' || path === '') {

@@ -1,5 +1,6 @@
-import { For, type JSX } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
+import './codespaces.css';
+import { For, Show, createSignal, type JSX } from 'solid-js';
+import { cn, useResizeObserver } from '@floegence/floe-webapp-core';
 import { RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@floegence/floe-webapp-core/ui';
@@ -19,10 +20,10 @@ export function CodespacesPageFrame(props: {
   return <div data-env-reload-state={props.reloadState ?? 'pending'} data-floe-reload-scroll="codespaces" {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('codespaces-page h-full min-h-0 overflow-auto', redevenSurfaceRoleClass('main'))}>
     <Panel class={cn('overflow-hidden', redevenSurfaceRoleClass('panelStrong'))} data-testid="codespaces-panel">
       <PanelContent class="codespaces-content p-4 space-y-4">
-        <header class="flex items-start justify-between gap-4">
+        <header class="codespaces-header flex items-start justify-between gap-4">
           <div class="space-y-1">
             <div class="text-sm font-semibold">{i18n.t('codespaces.title')}</div>
-            <div class="text-xs text-muted-foreground">{i18n.t('codespaces.description')}</div>
+            <div class="codespaces-description text-xs text-muted-foreground">{i18n.t('codespaces.description')}</div>
           </div>
           <div class="flex items-center gap-2 flex-shrink-0">
             {props.readiness}
@@ -54,22 +55,31 @@ export function CodespacesGrid(props: { children: JSX.Element; hidden?: boolean 
 /** Loading and loaded cards share every layout boundary. */
 export function CodespaceCardFrame(props: {
   title: JSX.Element; description: JSX.Element; descriptionTitle?: string; status: JSX.Element;
-  details: JSX.Element; actions: JSX.Element; class?: string; skeleton?: boolean;
+  path?: JSX.Element; details: JSX.Element; actions: JSX.Element; class?: string; skeleton?: boolean;
   onContextMenu?: (event: MouseEvent) => void;
 }) {
-  return <Card class={cn('codespace-card border transition-colors duration-200', props.class)} onContextMenu={props.onContextMenu}
+  const i18n = useI18n();
+  let card: HTMLDivElement | undefined;
+  const size = useResizeObserver(() => card?.closest('.codespaces-page') as HTMLElement | undefined);
+  const compact = () => (size()?.width ?? 768) < 768;
+  const [expanded, setExpanded] = createSignal(false);
+  return <Card ref={card} class={cn('codespace-card border transition-colors duration-200', props.class)} onContextMenu={props.onContextMenu}
     data-codespace-skeleton={props.skeleton ? 'true' : undefined}>
     <CardHeader class="pb-2">
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
           <CardTitle class="text-sm leading-5 truncate">{props.title}</CardTitle>
-          <CardDescription class="text-xs leading-4 min-h-4 truncate mt-0.5" title={props.descriptionTitle}>{props.description}</CardDescription>
+          <Show when={props.description}><CardDescription class="text-xs leading-4 truncate mt-0.5" title={props.descriptionTitle}>{props.description}</CardDescription></Show>
         </div>
         <div class="codespace-card-status flex h-5 shrink-0 items-center">{props.status}</div>
       </div>
     </CardHeader>
     <CardContent class="pb-2">
-      <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] leading-4">{props.details}</div>
+      <Show when={props.path}><div class="codespace-path text-xs font-mono truncate mb-1">{props.path}</div></Show>
+      <details open={!compact() || expanded()} onToggle={event => { if (compact()) setExpanded(event.currentTarget.open); }}>
+        <summary class="codespace-details-toggle cursor-pointer text-xs text-muted-foreground">{i18n.t('codespaces.fields.details')}</summary>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] leading-4">{props.details}</div>
+      </details>
     </CardContent>
     <CardFooter class={cn('pt-2 flex items-center justify-between gap-2 border-t', redevenDividerRoleClass())}>{props.actions}</CardFooter>
   </Card>;
@@ -86,7 +96,8 @@ export function CodespacesListSkeleton() {
         class={cn(redevenSurfaceRoleClass('panelInteractive'), visibility)}
         title={<Bar class="h-3 w-28 max-w-full" />} description={<Bar class="h-2 w-36 max-w-full" />}
         status={<Bar class="h-4 w-14" />}
-        details={<For each={[0, 1, 2, 3]}>{() => <><div class="h-4"><Bar class="h-2 w-12" /></div><div class="h-4 text-right"><Bar class="h-2 w-20 max-w-full" /></div></>}</For>}
+        path={<Bar class="h-2 w-36 max-w-full" />}
+        details={<For each={[0, 1, 2]}>{() => <><div class="h-4"><Bar class="h-2 w-12" /></div><div class="h-4 text-right"><Bar class="h-2 w-20 max-w-full" /></div></>}</For>}
         actions={<><Bar class="h-7 flex-1" /><Bar class="h-7 w-8 shrink-0" /><Bar class="h-7 w-8 shrink-0" /></>}
       />}</For>
     </CodespacesGrid>

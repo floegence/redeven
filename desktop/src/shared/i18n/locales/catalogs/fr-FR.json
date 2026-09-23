@@ -631,6 +631,8 @@
       "pinRefreshFailed": "Les conversations épinglées ont été enregistrées, mais la liste n’a pas pu être actualisée. Actualisez-la pour voir le nouvel ordre."
     },
     "emptyState": {
+      "moreSuggestions": "Plus de suggestions",
+      "fewerSuggestions": "Moins de suggestions",
       "title": "Demander à Flower",
       "description": "Flower utilise votre profil d’IA local, inspecte les environnements mémorisés et prépare les actions avant que les environnements d’exécution effectuent une lecture ou une écriture.",
       "exploreTitle": "Explorer ce dossier",

@@ -631,6 +631,8 @@
       "pinRefreshFailed": "As conversas fixadas foram salvas, mas não foi possível atualizar a lista. Atualize-a para ver a ordem mais recente."
     },
     "emptyState": {
+      "moreSuggestions": "Mais sugestões",
+      "fewerSuggestions": "Menos sugestões",
       "title": "Perguntar ao Flower",
       "description": "Flower usa seu perfil de IA local, inspeciona ambientes lembrados e prepara ações antes que os tempos de execução façam qualquer leitura ou gravação.",
       "exploreTitle": "Explorar esta pasta",

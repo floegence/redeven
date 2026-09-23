@@ -631,6 +631,8 @@
       "pinRefreshFailed": "Angeheftete Unterhaltungen wurden gespeichert, aber die Liste konnte nicht aktualisiert werden. Aktualisieren Sie die Liste, um die aktuelle Reihenfolge zu sehen."
     },
     "emptyState": {
+      "moreSuggestions": "Mehr Vorschläge",
+      "fewerSuggestions": "Weniger Vorschläge",
       "title": "Flower fragen",
       "description": "Flower verwendet Ihr lokales KI-Profil, überprüft gespeicherte Umgebungen und bereitet Aktionen vor, bevor Laufzeiten Lese- oder Schreibvorgänge ausführen.",
       "exploreTitle": "Diesen Ordner erkunden",

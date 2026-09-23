@@ -2966,6 +2966,7 @@
       "failedDetail": "请返回 Redeven 后重试。{message}"
     },
     "fields": {
+      "details": "详细信息",
       "id": "ID",
       "path": "路径",
       "port": "端口",
@@ -5541,6 +5542,8 @@
       "groupOlder": "更早"
     },
     "emptyState": {
+      "moreSuggestions": "更多建议",
+      "fewerSuggestions": "收起建议",
       "title": "询问 Flower",
       "description": "Flower 使用您的本地 AI 配置文件，检查已记录的环境，并在各运行时执行任何读写操作前准备相应操作。",
       "exploreTitle": "了解这里有什么",
@@ -6036,6 +6039,7 @@
   },
   "uiCopy": {
     "plugin": {
+      "filterPlugins": "筛选插件",
       "continuity": {
         "ready": "已就绪",
         "pending": "正在更新插件，画布布局会保留。",
@@ -6845,6 +6849,8 @@
     }
   },
   "hostApplications": {
+    "filterApplications": "筛选应用",
+    "clearFilters": "清除筛选",
     "update": {
       "unsupported": "此运行时无法使用已安装的组件版本，原有文件已保留。请先更新运行时再继续。",
       "available": "组件有更新",

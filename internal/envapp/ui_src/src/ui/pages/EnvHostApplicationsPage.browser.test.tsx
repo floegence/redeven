@@ -42,7 +42,12 @@ it.each([390, 1440].flatMap(width => (['en-US', 'zh-CN'] as const).map(locale =>
     document.body.append(host);
     dispose = render(() => <EnvHostApplicationsPage />, host);
     const title = locale === 'zh-CN' ? '停止共享' : 'Stop sharing';
+    if (width < 768) {
+      await userEvent.click(page.getByRole('button', { name: `${locale === 'zh-CN' ? '应用控制' : 'Application controls'} · Text Editor`, exact: true }));
+      await userEvent.click(page.getByRole('menuitem', { name: title, exact: true }));
+    } else {
     await userEvent.click(page.getByRole('button', { name: `${title} · Text Editor`, exact: true }));
+    }
     await expect.poll(() => document.querySelector('[role="dialog"]')).toBeTruthy();
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     await expect.poll(() => getComputedStyle(dialog).opacity).toBe('1');
@@ -112,4 +117,41 @@ it.each([390, 1440])('uses the same host header and tile geometry for module and
   finishData({ availability: { backend: 'macos', native_ready: true, supported: true, ready: true }, applications: apps, sessions: [], running: apps.slice(0, 3).map(app => ({ application_id: app.id, instances: ['process'] })) });
   await expect.poll(() => host.querySelector('button.host-app-tile')).toBeTruthy();
   expect(geometry()).toEqual(before);
+});
+
+it('keeps one searchable mobile catalog with running applications first and preserves the search node across resizing', async () => {
+  state.locale = 'en-US'; state.scope = `mobile-host-${crypto.randomUUID()}`;
+  await page.viewport(1200, 800);
+  const apps = Array.from({ length: 100 }, (_, index) => ({ id: `app-${index}`, name: `Application ${String(index).padStart(3, '0')}`, description: '', categories: ['Development'], icon: '', custom: false }));
+  state.catalog.mockResolvedValue({ availability: { backend: 'macos', native_ready: true, supported: true, ready: true }, applications: [...apps, apps[0]], sessions: [{ id: 'starting', application: apps[70], state: 'starting' }], running: [{ application_id: apps[50].id, instances: ['process'] }] });
+  const host = document.createElement('div'); host.style.cssText = 'width:393px;height:650px;'; document.body.append(host);
+  dispose = render(() => <EnvHostApplicationsPage />, host);
+  await expect.poll(() => host.querySelectorAll('button.host-app-tile').length).toBe(100);
+  await expect.poll(() => host.querySelector('button.host-app-tile')?.textContent).toContain('Application 050');
+  const tiles = [...host.querySelectorAll('button.host-app-tile')];
+  expect(tiles[1].textContent).toContain('Application 070');
+  expect(host.querySelector<HTMLElement>('.host-apps-running')?.getBoundingClientRect().height).toBe(0);
+  const search = host.querySelector<HTMLInputElement>('.host-apps-search input')!;
+  expect(search.getBoundingClientRect().top).toBeLessThan(70);
+  expect(search.getBoundingClientRect().width).toBeGreaterThanOrEqual(128);
+  expect(host.querySelector('.host-apps-header')!.getBoundingClientRect().height).toBeLessThanOrEqual(56);
+  search.focus();
+  search.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
+  search.value = 'Application'; search.setSelectionRange(3, 5);
+  search.dispatchEvent(new InputEvent('input', { data: 'Application', isComposing: true }));
+  host.style.width = '767px'; await new Promise(resolve => requestAnimationFrame(resolve));
+  host.style.width = '768px'; await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(host.querySelector('.host-apps-search input')).toBe(search);
+  expect(document.activeElement).toBe(search);
+  expect(search.selectionStart).toBe(3); expect(search.selectionEnd).toBe(5);
+  search.dispatchEvent(new CompositionEvent('compositionend', { data: 'Application' }));
+  host.style.width = '320px'; await new Promise(resolve => requestAnimationFrame(resolve));
+  await userEvent.click(page.getByRole('button', { name: 'Filter applications', exact: true }));
+  await userEvent.click(page.getByRole('menuitem', { name: 'Running applications', exact: true }));
+  await expect.poll(() => host.querySelectorAll('button.host-app-tile').length).toBe(2);
+  await userEvent.keyboard('{Escape}');
+  expect(host.querySelector('.host-apps-filter-count')?.textContent).toBe('1');
+  await userEvent.click(page.getByRole('button', { name: 'Filter applications', exact: true }));
+  await userEvent.click(page.getByRole('menuitem', { name: 'Clear filters', exact: true }));
+  await expect.poll(() => host.querySelectorAll('button.host-app-tile').length).toBe(100);
 });
