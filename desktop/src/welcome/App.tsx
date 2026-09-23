@@ -7270,19 +7270,43 @@ function ConnectEnvironmentSurface(props: Readonly<{
   deleteGateway: (gateway: DesktopGatewaySource) => void;
 }>) {
   let tabContent!: HTMLDivElement;
-  let tabEntrance: Animation | undefined;
+  const tabEntrances = new Set<Animation>();
+  let tabEntranceRevision = 0;
+  const cancelTabEntrance = () => {
+    tabEntranceRevision += 1;
+    for (const animation of tabEntrances) animation.cancel();
+    tabEntrances.clear();
+  };
   const selectTab = (tab: EnvironmentCenterTab) => {
     if (tab === props.activeTab) return;
-    tabEntrance?.cancel();
+    cancelTabEntrance();
     props.setActiveTab(tab);
-    if (!props.visible || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    // Explicit tab selection owns the fade; snapshots never replay it or move cards.
-    tabEntrance = tabContent.animate([{ opacity: 0.4 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
+    const revision = tabEntranceRevision;
+    // Wait for Solid's event batch to render the destination, before its first paint.
+    // Explicit selection owns motion; refreshes and retained-page returns never replay it.
+    queueMicrotask(() => {
+      if (revision !== tabEntranceRevision || tab !== props.activeTab || !props.visible
+        || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const targets = [...tabContent.querySelectorAll<HTMLElement>(
+        '.redeven-environment-card, .redeven-cloud-source-header, .redeven-empty-panel, .redeven-console-empty',
+      )].filter(element => !element.closest('[hidden]'));
+      targets.forEach((element, index) => {
+        const animation = element.animate(
+          [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)' }],
+          { duration: 350, delay: Math.min(index * 30, 150), easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' },
+        );
+        tabEntrances.add(animation);
+        animation.onfinish = () => {
+          animation.cancel();
+          tabEntrances.delete(animation);
+        };
+      });
+    });
   };
   createEffect(() => {
-    if (!props.visible) tabEntrance?.cancel();
+    if (!props.visible) cancelTabEntrance();
   });
-  onCleanup(() => tabEntrance?.cancel());
+  onCleanup(cancelTabEntrance);
 
   const visibleEnvironmentCount = createMemo(() => (
     environmentLibraryCount(

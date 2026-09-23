@@ -1,5 +1,4 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
-import { Motion } from 'solid-motionone';
 import { cn } from '@floegence/floe-webapp-core';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Tag, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { AlertTriangle, Clock, Cloud, MonitorPointer, Pin, Refresh, Search, Settings, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
@@ -557,19 +556,17 @@ export function EnvironmentCardsPanel(
       <Show
         when={props.groups.length > 0 || props.showQuickAddCards}
         fallback={
-          <Motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-lg px-6 py-8 text-center">
-              <Search class="h-8 w-8 text-muted-foreground/50" />
-              <div class="space-y-1">
-                <div class="text-sm font-medium text-foreground">
-                  {props.i18n.t('environmentCenter.noMatchingEnvironmentsTitle')}
-                </div>
-                <div class="text-xs text-muted-foreground">
-                  {props.i18n.t('environmentCenter.noMatchingEnvironmentsDescription')}
-                </div>
+          <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-lg px-6 py-8 text-center">
+            <Search class="h-8 w-8 text-muted-foreground/50" />
+            <div class="space-y-1">
+              <div class="text-sm font-medium text-foreground">
+                {props.i18n.t('environmentCenter.noMatchingEnvironmentsTitle')}
+              </div>
+              <div class="text-xs text-muted-foreground">
+                {props.i18n.t('environmentCenter.noMatchingEnvironmentsDescription')}
               </div>
             </div>
-          </Motion.div>
+          </div>
         }
       >
         <div

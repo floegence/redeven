@@ -38,7 +38,7 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
   } }} />, host));
   await settle();
   // jsdom has no Web Animations; the browser acceptance checks real tab motion.
-  document.querySelector<HTMLElement>('.redeven-center-content')!.animate = vi.fn(() => ({ cancel: vi.fn() }) as unknown as Animation);
+  Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, writable: true, value: vi.fn(() => ({ cancel: vi.fn() }) as unknown as Animation) });
   const owner = (role: string) => document.querySelector<HTMLElement>(`[data-owner-role="${role}"]`)!;
   const select = async (role: 'runtime' | 'cloud') => {
     const entry = role === 'cloud' ? fixture.cloud : fixture.runtime;
@@ -50,7 +50,7 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
   };
   return { ...fixture, owner, select, settings, performAction, publish: (value: DesktopWelcomeSnapshot) => { snapshot = value; receive?.(value); } };
 }
-afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('linked environment owner interactions', () => {
   it('uses one visible owner and owner tabs instead of stacked action surfaces', async () => {
