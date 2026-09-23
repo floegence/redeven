@@ -74,6 +74,17 @@ applications can still constrain their own layout. The
 [client input contract](host-application-input.md) owns keyboard/composition and
 painted-window binding; Xpra retains pointer and clipboard transport. This path does not create a native OS window per X11 child window.
 
+The released `remote-pointer` controller owns every event in remote pixels. It
+maps a touch tap to a click, a CSS-pixel drag beyond its fixed threshold to
+vertical/horizontal/diagonal scroll, and a long press to right click or a later
+left-button drag. It batches scroll deltas per animation frame and locks each
+sequence to a connection-generation/window token. Pointer capture loss,
+`pointercancel`, focus or viewport changes, canvas replacement, disconnect and
+window destruction reset the controller and release only its held buttons.
+Pinch zoom remains a browser gesture; toolbar, window lists and the keyboard
+control remain local owners. The Xpra adapter receives only normalized pointer,
+button and wheel commands and never runs a second touch recognizer.
+
 After Xpra confirms destruction of the final application window, or an established
 application session is confirmed ended, the viewer closes its
 native window or script-opened browser popup. A close request alone, removal of one
@@ -160,7 +171,7 @@ and browser dismissal permissions remain authoritative.
 # Evidence
 
 - `internal/codeapp/appserver/host_application_viewer/`: connection reconciliation, first-frame, terminal and geometry adapters.
-- `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts` and `macHostApplicationViewer.test.ts`: backend events, stale callbacks, first-pixel and reconnect acceptance.
+- `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts` and `macHostApplicationViewer.test.ts`: backend events, stale callbacks, first-pixel, pointer gestures and reconnect acceptance.
 - `internal/codeapp/appserver/host_applications_test.go`: owner-authorized terminal snapshots and retained state routes.
 - `scripts/check_host_application_input.mjs` and `internal/hostapps/client_input_test.go`: released PNG preparation, hotspot coordinates and real application input receipts.
 

@@ -6,7 +6,7 @@ const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
 };
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const shared = ['catalog.generated.js', 'remote-input.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
+const shared = ['catalog.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
 const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/toolbar.js'), 'utf8') + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '').replace('{{.Locale}}', 'en-US');
 const copy = {videoDecoding:'Video decoding', videoAvailable:'Available', videoUnavailable:'Unavailable', httpsPerformanceHint:'Enable HTTPS', starting:'Starting', connecting:'Connecting', reconnecting:'Reconnecting', disconnected:'Disconnected', failed:'Failed', ended:'Ended', retry:'Retry', reconnect:'Reconnect', connectionHint:'Return to your application'};
@@ -14,7 +14,7 @@ let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.close(); });
 
-async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }, savedPicture?: string) {
+async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }, savedPicture?: string, pointerVersion = 1) {
   dom = new JSDOM(html, { url:'http://localhost/pf/test/_redeven_host_app/', runScripts:'dangerously', pretendToBeVisual:true });
   const fetch = vi.fn().mockResolvedValue({ok:true, json:async () => ({state:'running', password:'private'})});
   dom.window.fetch = fetch;
@@ -35,6 +35,8 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
   const doc = frame.contentDocument!;
   doc.open(); doc.write('<html><head></head><body></body></html>'); doc.close();
   const windows: Record<number, ReturnType<typeof appWindow>> = {};
+  const painted = new Set<number>();
+  const pointerTargets = new Map<number, {wid:number; window: ReturnType<typeof appWindow>}>();
   function appWindow(id: number, metadata: Record<string, unknown> = {}, type = 'NORMAL') {
     const metadataUpdated = vi.fn();
     const win = {
@@ -45,15 +47,26 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
       leftoffset:1, rightoffset:1, topoffset:30, bottomoffset:1,
     };
     windows[id] = win;
+    pointerTargets.set(id, {wid:id, window:win});
     return win;
   }
+  const floePointer = {
+    version: pointerVersion,
+    targetForWindow: (win: {wid:number}) => painted.has(win.wid) ? pointerTargets.get(win.wid) ?? null : null,
+    resolveTarget: (event: {target?: EventTarget | null}) => [...pointerTargets.values()].find(target => target.window.div.contains(event.target as Node)) ?? null,
+    isTargetValid: (target: {wid:number; window: unknown} | null) => Boolean(target && painted.has(target.wid) && pointerTargets.get(target.wid)?.window === target.window),
+    sendPointer: vi.fn().mockReturnValue(true),
+    release: vi.fn(),
+    onInvalidate: undefined as undefined | (() => void),
+  };
   const client = {
     supported_encodings: video?.encodings ?? ['webp'],
     floeInput: {version:1, target:null as {wid:number} | null,
       bindTarget(wid: number | null) { if (this.target?.wid !== wid) this.target = wid ? {wid} : null; return this.target; },
       commitText:vi.fn(), sendKey:vi.fn(), release:vi.fn(), clipboard:vi.fn(), paste:vi.fn(), onError:undefined as undefined | (() => void)},
     _get_desktop_size:() => [1000, 680], id_to_window:windows, connected:true, reconnect:true, reconnect_count:5,
-    _new_window:vi.fn(), do_send_damage_sequence:vi.fn(), send_configure_window:vi.fn(),
+    floePointer,
+    _new_window:vi.fn(), do_send_damage_sequence:vi.fn((...args: [number, number, number, number, number, string]) => { painted.add(args[1]); }), send_configure_window:vi.fn(),
     set_display_density:vi.fn().mockReturnValue(true), scale:1,
     send_control_refresh:vi.fn(), send:vi.fn(), send_close_window:vi.fn(), focused_wid:1, set_focus:vi.fn((win: {wid:number}) => { client.focused_wid = win.wid; }), close:vi.fn(), callback_close:() => {}, on_last_window:vi.fn(),
   };
@@ -463,8 +476,8 @@ describe('host application viewer', () => {
   });
 });
 
-async function inputViewer() {
-  const v = await viewer();
+async function inputViewer(pointerVersion = 1) {
+  const v = await viewer(false, false, false, undefined, undefined, undefined, pointerVersion);
   const win = v.appWindow(1); v.doc.body.append(win.div); v.client._new_window(1);
   const input = v.doc.querySelector<HTMLTextAreaElement>('textarea')!;
   const commit = (text: string) => {
@@ -520,10 +533,26 @@ it('requires an explicit touch keyboard action and retains the editor across vie
   keyboard.click(); expect(v.doc.activeElement).not.toBe(v.input);
 });
 
+it('routes an Xpra touch drag to the shared pointer adapter as scroll', async () => {
+  const v = await inputViewer(); v.paint();
+  const target = v.doc.querySelector('div')!;
+  const event = (type: string, x: number, y: number) => Object.assign(new dom.window.Event(type, {bubbles:true, cancelable:true}), {
+    pointerType: 'touch', pointerId: 1, clientX: x, clientY: y, button: 0, detail: 1,
+  });
+  target.dispatchEvent(event('pointerdown', 320, 286));
+  target.dispatchEvent(event('pointermove', 300, 206));
+  await drain();
+  target.dispatchEvent(event('pointerup', 300, 206));
+  await drain();
+  expect(v.client.floePointer.sendPointer.mock.calls.some(([command]) => command.kind === 'scroll' && command.dx === 20 && command.dy === 80)).toBe(true);
+  expect(v.client.floePointer.sendPointer.mock.calls.some(([command]) => command.kind === 'down' || command.kind === 'up')).toBe(false);
+});
+
 it('restores editor focus even when the Xpra pointer target stops propagation', async () => {
   const v = await inputViewer(); v.paint();
   const target = v.doc.querySelector('div')!;
   target.addEventListener('pointerup', event => event.stopPropagation());
+  target.dispatchEvent(Object.assign(new dom.window.Event('pointerdown', {bubbles:true, cancelable:true}), {pointerType:'mouse', button:0, clientX:40, clientY:40}));
   target.dispatchEvent(Object.assign(new dom.window.Event('pointerup', {bubbles:true}), {pointerType:'mouse'}));
   expect(v.doc.activeElement).toBe(v.input);
 });
@@ -554,6 +583,13 @@ it('releases held keys on toolbar focus and never replays text after input failu
 
 it('requires reopening an old input protocol without closing the host application', async () => {
   const v = await inputViewer(); v.client.floeInput.version = 0; v.paint();
+  expect(v.state()).toBe('inputVersionUnsupported');
+  expect(v.client.send_close_window).not.toHaveBeenCalled();
+  expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(true);
+});
+
+it('requires reopening an old pointer protocol without closing the host application', async () => {
+  const v = await inputViewer(0); v.paint();
   expect(v.state()).toBe('inputVersionUnsupported');
   expect(v.client.send_close_window).not.toHaveBeenCalled();
   expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(true);

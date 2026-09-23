@@ -7049,7 +7049,10 @@
     "macCaptureHint": "Reconnectez-vous ou choisissez une autre fenêtre dans les commandes de l’application. L’application reste ouverte.",
     "macCaptureUnavailable": "La capture de la fenêtre est indisponible. Reconnectez-vous pour réessayer.",
     "macAddDescription": "Indiquez le chemin absolu d’un paquet .app installé. Son nom et son icône sont lus depuis macOS.",
-    "macBundlePath": "Chemin du paquet d’application"
+    "macBundlePath": "Chemin du paquet d’application",
+    "touchHelp": "Guide tactile",
+    "touchHelpTitle": "Commandes tactiles",
+    "touchHelpDescription": "Touchez pour cliquer. Faites glisser un doigt pour faire défiler. Maintenez puis déplacez pour faire glisser ; relâchez sans bouger pour un clic droit. Pincez avec deux doigts pour zoomer la page."
   },
   "settingsDesign": {
     "startPort": "Port de début",

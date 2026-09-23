@@ -7049,7 +7049,10 @@
     "macCaptureHint": "Verbinde dich erneut oder wähle in der Anwendungssteuerung ein anderes Fenster. Die App bleibt geöffnet.",
     "macCaptureUnavailable": "Das Fenster kann nicht erfasst werden. Verbinde dich erneut und versuche es noch einmal.",
     "macAddDescription": "Gib den absoluten Pfad eines installierten .app-Pakets an. Name und Symbol werden aus macOS gelesen.",
-    "macBundlePath": "Pfad zum App-Paket"
+    "macBundlePath": "Pfad zum App-Paket",
+    "touchHelp": "Touchhilfe",
+    "touchHelpTitle": "Touchsteuerung",
+    "touchHelpDescription": "Tippen klickt. Mit einem Finger wischen scrollt. Nach langem Drücken bewegen Sie zum Ziehen; ohne Bewegung loslassen öffnet das Kontextmenü. Mit zwei Fingern zoomen Sie die Seite."
   },
   "settingsDesign": {
     "startPort": "Startport",

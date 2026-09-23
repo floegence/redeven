@@ -12,15 +12,17 @@ import rawViewerCSS from '../../../../codeapp/appserver/host_application_viewer/
 import toolbarJS from '../../../../codeapp/appserver/host_application_viewer/toolbar.js?raw';
 import rawConnectionJS from '../../../../codeapp/appserver/host_application_viewer/connection.js?raw';
 import inputJS from '../../../../codeapp/appserver/host_application_viewer/remote-input.generated.js?raw';
+import pointerJS from '../../../../codeapp/appserver/host_application_viewer/remote-pointer.generated.js?raw';
 import inputCSS from '../../../../codeapp/appserver/host_application_viewer/remote-input.generated.css?raw';
+import pointerCSS from '../../../../codeapp/appserver/host_application_viewer/remote-pointer.generated.css?raw';
 import viewerJS from '../../../../codeapp/appserver/host_application_viewer/macos.js?raw';
 
 import appearanceCSS from '../../../../codeapp/appserver/host_application_viewer/appearance.generated.css?raw';
 import appearanceJS from '../../../../codeapp/appserver/host_application_viewer/appearance.js?raw';
 import viewportJS from '../../../../codeapp/appserver/host_application_viewer/viewport.generated.js?raw';
 import catalogJS from '../../../../codeapp/appserver/host_application_viewer/catalog.generated.js?raw';
-const viewerCSS = inputCSS + '\n' + appearanceCSS + '\n' + rawViewerCSS;
-const connectionJS = inputJS + '\n' + viewportJS + '\n' + catalogJS + '\n' + appearanceJS + '\n' + rawConnectionJS;
+const viewerCSS = inputCSS + '\n' + pointerCSS + '\n' + appearanceCSS + '\n' + rawViewerCSS;
+const connectionJS = inputJS + '\n' + pointerJS + '\n' + viewportJS + '\n' + catalogJS + '\n' + appearanceJS + '\n' + rawConnectionJS;
 
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); });

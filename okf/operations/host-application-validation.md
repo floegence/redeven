@@ -49,10 +49,10 @@ host application execution.
 
 # Client input qualification
 
-The current client-input contract consumes published Floe webapp core 0.72.0
-(including remote-input introduced in 0.71.0) and native apps v0.5.1. Upstream's
-immutable v0.5.1 qualification passed on native amd64 and arm64 with managed
-Xpra 6.2.2 and complete system Xpra 6.5.3. GTK3, Qt5, Qt6, Chromium 145 and xterm
+The current client-input contract consumes published Floe webapp core 0.77.1
+(including the released remote-input and remote-pointer controllers) and native
+apps v0.7.10. Upstream's immutable release qualification passed on native amd64
+and arm64 with managed Xpra 6.2.2 and complete system Xpra 6.5.3. GTK3, Qt5, Qt6, Chromium 145 and xterm
 received exact Unicode strings, including 40 ordered commit/Enter pairs, a 15 KB
 commit, selection replacement, deletion, alternating focus and clipboard operations.
 The bridge is not a GTK4 qualification. Earlier distribution tables below are
@@ -74,7 +74,15 @@ The September 23 check passed repeated identical CJK/emoji/non-BMP/combining/ZWJ
 commits, physical typing, Backspace, pointer focus between two fields and toolbar
 isolation in Chromium 145, Firefox 146.0.1 and WebKit 26.0. The installed launch/resume/stop regression also passed.
 Browser events in this driver are synthetic: it establishes controller-to-app
-delivery, not a native input-method candidate workflow.
+delivery, not a native input-method candidate workflow or physical touch behavior.
+
+The same released stack now exposes one `remote-pointer` owner for Linux/Xpra and
+macOS viewers. The published controller's deterministic suite covers CSS-pixel
+vertical, horizontal and diagonal scroll, long-press right click and drag,
+double-click classification, pointer cancellation, capture loss, stale target
+rejection and wheel normalization. Redeven viewer tests cover scroll without a
+click, canvas-generation gating and toolbar isolation. These checks do not qualify
+a physical mobile browser or a system pointer image.
 
 Native macOS checks passed Unicode and ordinary `abc` key delivery into a disposable
 AppKit text field with both ABC and Simplified Pinyin selected on the host. The
@@ -89,8 +97,9 @@ generated assets, Go hostapps/appserver tests and their race checks passed.
 Actual desktop OS candidate selection has not been qualified: the available UI
 automation attempt produced direct Latin text, without an observable native
 composition transaction. Real iOS/iPadOS Safari and Android Chrome soft keyboards
-were unavailable and remain unpassed. A simulated mobile viewport does not replace
-these checks. The user owns the remaining real input-method operation acceptance.
+and the mobile pointer matrix were unavailable and remain unpassed. A simulated
+mobile viewport or synthetic pointer sequence does not replace these checks. The
+user owns the remaining real input-method and physical mobile interaction acceptance.
 
 The follow-up authenticated `udesk26` check passed actual GTK3 input using private
 state, released components and the production viewer. Its installed Firefox 155.0.1

@@ -12,7 +12,9 @@ import appearanceJS from '../../../../codeapp/appserver/host_application_viewer/
 import connectionJS from '../../../../codeapp/appserver/host_application_viewer/connection.js?raw';
 import toolbarJS from '../../../../codeapp/appserver/host_application_viewer/toolbar.js?raw';
 import inputJS from '../../../../codeapp/appserver/host_application_viewer/remote-input.generated.js?raw';
+import pointerJS from '../../../../codeapp/appserver/host_application_viewer/remote-pointer.generated.js?raw';
 import inputCSS from '../../../../codeapp/appserver/host_application_viewer/remote-input.generated.css?raw';
+import pointerCSS from '../../../../codeapp/appserver/host_application_viewer/remote-pointer.generated.css?raw';
 import viewerJS from '../../../../codeapp/appserver/host_application_viewer/macos.js?raw';
 
 const catalog = JSON.parse(catalogJS.slice(catalogJS.indexOf(' = ') + 3).trim().slice(0, -1)) as {
@@ -41,9 +43,9 @@ async function viewer(theme: string, locale = 'zh-CN', width = 420) {
       send(value){window.sent.push(JSON.parse(value))}close(){}
     };`;
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', locale).replaceAll('{{.Theme}}', theme).replaceAll('{{.Name}}', 'Text Editor')
-    .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', appearanceCSS + '\n' + inputCSS + '\n' + viewerCSS)
+    .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', appearanceCSS + '\n' + inputCSS + '\n' + pointerCSS + '\n' + viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',backend:'macos',copy}))
-    .replace('{{.Script}}', [fixture, inputJS, viewportJS, catalogJS, appearanceJS, connectionJS, toolbarJS, viewerJS].join('\n'));
+    .replace('{{.Script}}', [fixture, inputJS, pointerJS, viewportJS, catalogJS, appearanceJS, connectionJS, toolbarJS, viewerJS].join('\n'));
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.state).toBe('active');
   const doc = frame.contentDocument!, view = frame.contentWindow!;

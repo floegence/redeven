@@ -106,8 +106,12 @@ instead of sending pointer input into another application. A process-scoped even
 tap acknowledges only Redeven-marked input; the next event waits for that receipt,
 without inspecting unmarked key contents or monitoring other applications. A
 missing receipt fails without replaying the action. The viewer supports
-mouse, wheel, versioned key transitions and confirmed Unicode text. This is human control,
-not a Flower automation or model-observation path. Password/privileged system
+mouse, wheel, versioned key transitions and confirmed Unicode text. Its remote pixels use
+one published pointer controller for mouse, trackpad, pen and touch: touch scrolls in
+CSS pixels, long press can produce a right click or a later drag, and pinch zoom stays
+with the browser. The controller locks a capture-generation/window token and cancels
+on focus, viewport or capture changes, while toolbar and keyboard controls remain local.
+This is human control, not a Flower automation or model-observation path. Password/privileged system
 dialogs and OS-reserved shortcuts remain subject to macOS policy.
 
 The [native application menu contract](macos-application-menus.md) owns scoped
@@ -171,6 +175,6 @@ Intel host or third-party application.
 - `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplications.swift`: bundle discovery, owned capture and input, menu and graceful window lifecycle.
 - `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplicationWindows.swift` and `desktop/native/computer-host/Tests/RedevenComputerHostTests/HostApplicationTests.swift`: authoritative inventory and transient window lifecycle.
 - `internal/hostapps/macos.go` and `macos_test.go`: helper resolution, stream credentials, connection ownership, native launch and cleanup.
-- `internal/codeapp/appserver/host_application_viewer/macos.js` and `internal/envapp/ui_src/src/ui/services/macHostApplicationViewer.test.ts`: first frame, generation, IME, recovery and physical viewer closure.
+- `internal/codeapp/appserver/host_application_viewer/macos.js` and `internal/envapp/ui_src/src/ui/services/macHostApplicationViewer.test.ts`: first frame, generation, shared pointer gestures, IME, recovery and physical viewer closure.
 - `scripts/check_macos_host_applications.py`, `scripts/check_macos_host_application_waiting.py`, `scripts/check_macos_host_application_quit.py`, `scripts/check_macos_host_application_termination.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable real-app pixel/input/menu/lifecycle acceptance.
 - `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx`: trusted local launch and remote permission presentation.

@@ -24,25 +24,28 @@ copy.pictureHint = enUS.hostApplications.sessionPictureHint;
 const clientScript = `
 window.operations=[];
 window.contentInput=[];
+const pointerTargets=new Map();const painted=new Set();
 function remoteWindow(wid,title){
 const div=document.createElement('article');div.innerHTML='<small>HOST APPLICATION</small><h1></h1><p>Window content stays below the native titlebar.</p>';
 div.querySelector('h1').textContent=title;document.body.append(div);
+const target={wid,window:{wid,div}};pointerTargets.set(wid,target);
 for(const type of ['pointerdown','pointerup','click'])div.addEventListener(type,event=>{window.contentInput.push([type,event.defaultPrevented]);event.stopPropagation()});
 return {wid,div,metadata:{title},windowtype:['NORMAL'],override_redirect:false,tray:false,
 has_windowtype:types=>types.includes('NORMAL'),screen_resized(){},set_maximized(){},set_minimized(){},initiate_moveresize(){},move_resize(){},update_metadata(value){Object.assign(this.metadata,value)},destroy(){div.remove()}};
 }
+const floePointer={version:1,targetForWindow:win=>painted.has(win.wid)?pointerTargets.get(win.wid):null,resolveTarget:event=>[...pointerTargets.values()].find(target=>target.window.div.contains(event.target)),isTargetValid:target=>Boolean(target&&painted.has(target.wid)&&pointerTargets.get(target.wid)===target),sendPointer(command,target){window.operations.push(['pointer',target.wid,command]);return true},release(target){window.operations.push(['pointer-release',target?.wid])}};
 const client={floeInput:{version:1,target:null,bindTarget(wid){if(this.target?.wid!==wid)this.target=wid?{wid}:null;return this.target},commitText(text,target){window.operations.push(['text',target.wid,text])},sendKey(key,target){window.operations.push(['key',target.wid,key])},release(){},clipboard(){return false},paste(){}},connected:true,focused_wid:1,id_to_window:{1:remoteWindow(1,'Research notes'),2:remoteWindow(2,'Project brief')},
-_new_window(){},do_send_damage_sequence(){},send_configure_window(){},send_control_refresh(){},on_last_window(){},callback_close(){},
+_new_window(){},do_send_damage_sequence(_sequence,wid){painted.add(wid)},send_configure_window(){},send_control_refresh(){},on_last_window(){},callback_close(){},
 set_focus(win){this.focused_wid=win.wid;Object.values(this.id_to_window).forEach(w=>w.div.hidden=w!==win)},
 send(packet){window.operations.push(packet)},send_close_window(win){window.operations.push(['close-window',win.wid])},close(){}};
-window.floeXpraInput={version:1,getClient:()=>client};
+client.floePointer=floePointer;window.floeXpraInput={version:1,getClient:()=>client};
 client.set_focus(client.id_to_window[1]);
 addEventListener('load',()=>setTimeout(()=>client.do_send_damage_sequence(1,1,800,600,1,''),80));`;
 const catalogSource = readFileSync(path.join(source, 'catalog.generated.js'), 'utf8');
 const catalog = JSON.parse(catalogSource.slice(catalogSource.indexOf(' = ') + 3).trim().slice(0, -1));
 const html = readFileSync(path.join(source, 'viewer.html'), 'utf8').replaceAll('{{.Name}}', 'Text Editor').replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Nonce}}', 'fixture')
-  .replace('{{.Style}}', ['appearance.generated.css', 'remote-input.generated.css', 'viewer.css'].map(file => readFileSync(path.join(source, file), 'utf8')).join('\n')).replace('{{.Config}}', JSON.stringify({ base: '/fixture', copy, icon: '' }))
-  .replace('{{.Script}}', ['catalog.generated.js', 'remote-input.generated.js', 'appearance.js', 'connection.js', 'toolbar.js', 'viewer.js'].map(file => readFileSync(path.join(source, file), 'utf8')).join('\n'));
+  .replace('{{.Style}}', ['appearance.generated.css', 'remote-input.generated.css', 'remote-pointer.generated.css', 'viewer.css'].map(file => readFileSync(path.join(source, file), 'utf8')).join('\n')).replace('{{.Config}}', JSON.stringify({ base: '/fixture', copy, icon: '' }))
+  .replace('{{.Script}}', ['catalog.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'appearance.js', 'connection.js', 'toolbar.js', 'viewer.js'].map(file => readFileSync(path.join(source, file), 'utf8')).join('\n'));
 const server = createServer((request, response) => {
   response.setHeader('Content-Type', 'text/html; charset=utf-8');
   if (request.url?.endsWith('/state')) {

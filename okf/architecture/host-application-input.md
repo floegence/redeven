@@ -44,6 +44,34 @@ local geometry, never connection identity or the input element. Toolbar focus, p
 blur, window replacement, disposal and reconnect cancel pending composition. A late
 browser commit cannot acquire the next window's token.
 
+## Remote pointer ownership
+
+The published `remote-pointer` controller is the sole owner of pointer events,
+wheel input, touch gestures and compatibility mouse suppression inside remote
+pixels. It emits only pointer movement, button transitions or scroll deltas to
+the platform adapter; the platform adapter performs coordinate mapping and
+protocol encoding. The keyboard controller remains independent, and pointer
+reset never releases its composition or held keys.
+
+Touch starts in a pending state without sending a button. A move beyond 8 CSS
+pixels becomes scroll; a 450 ms hold becomes long-press feedback, then a later
+move begins a left-button drag at the original point. A stationary long press
+releases as one right click. A light tap sends one click immediately, and a
+second tap on the same target within 350 ms and 16 CSS pixels is marked as a
+double click. A second touch, pointer cancellation, capture loss, focus or
+viewport change cancels the gesture and releases only buttons owned by this
+controller. Scroll deltas are CSS pixels and retain both axes; cancellation
+discards unsent remainder.
+
+The remote content surface allows browser pinch zoom while preventing browser
+single-finger panning. Local toolbar, lists and text controls keep their normal
+browser interaction. A gesture locks its target token (connection generation
+and window instance), so crossing a popup or reused window number cannot retarget
+the stream. First decoded pixels gate input; stale generations, hidden windows,
+reconnects and canvas replacement invalidate the token. A local help panel
+describes touch actions without becoming an input overlay, and the keyboard
+button remains the explicit way to open a mobile soft keyboard.
+
 # Linux delivery
 
 Released `floe-native-apps` owns the capability probe, private input environment,
@@ -53,11 +81,14 @@ a new application. The same implementation serves managed and supported system X
 The exact Xpra Python interpreter is probed; the catalog's host GIO interpreter remains
 independent. IBus/Fcitx configuration from the host desktop does not select input.
 
-The prepared HTML v20/v21 client exposes `floeXpraInput.getClient()` and `floeInput`.
-Original keyboard, tablet, virtual-keyboard and clipboard-focus listeners are absent.
-Xpra retains graphics, window stacking, pointer and clipboard transport. The published
-adapter consumes the controller's keys, clipboard gestures and commits; no global
-listener suppresses a competing input owner. Redeven binds only a painted, live,
+The prepared HTML v20/v21 client exposes `floeXpraInput.getClient()`, `floeInput`
+and versioned `floePointer`. The pointer adapter reuses Xpra's existing pointer,
+button and fine/discrete wheel transport, owns per-connection scroll remainder,
+and clears it on cancellation or target change. Canvas, screen, touch, wheel,
+tablet and virtual-keyboard listeners from the old path are absent. Xpra retains
+graphics, window stacking and clipboard transport. The published adapter consumes
+the controller's pointer, keys, clipboard gestures and commits; no global listener
+suppresses a competing input owner. Redeven binds only a painted, live,
 focused window and invalidates that token on destruction or reconnection.
 
 Version 1 confirmed text travels over the existing authenticated Xpra connection.
@@ -84,8 +115,10 @@ The helper tracks native key identities and releases them on ownership loss toge
 with held mouse buttons. Production code never switches the host's global input source.
 
 The [native macOS owner](macos-host-applications.md) retains foreground/window/permission
-checks and event delivery receipts. A recoverable operation failure clears composition
-and held keys, keeps the stream and pixels, and permits a new deliberate action.
+checks and event delivery receipts. The same `remote-pointer` controller feeds the
+existing `down`/`up`/`move`/`scroll` packets, so macOS has no independent touch or
+wheel gesture recognizer. A recoverable operation failure clears composition,
+pointer state and held keys, keeps the stream and pixels, and permits a new deliberate action.
 It never retries the failed action. Same-window recapture can retain local focus but
 rejects input until the replacement frame is decoded.
 

@@ -233,7 +233,7 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, _ *http.Request
 		Name, Nonce, Locale, Theme string
 		Config, Script             template.JS
 		Style                      template.CSS
-	}{s.Application.Name, nonce, s.Presentation.Locale, s.Presentation.ShellTheme, template.JS(config), template.JS(hostApplicationCatalogJS + "\n" + hostApplicationViewportJS + "\n" + hostApplicationInputJS + "\n" + hostApplicationAppearanceJS + "\n" + hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + script), template.CSS(hostApplicationAppearanceCSS + "\n" + hostApplicationInputCSS + "\n" + hostApplicationCSS)})
+	}{s.Application.Name, nonce, s.Presentation.Locale, s.Presentation.ShellTheme, template.JS(config), template.JS(hostApplicationCatalogJS + "\n" + hostApplicationViewportJS + "\n" + hostApplicationInputJS + "\n" + hostApplicationPointerJS + "\n" + hostApplicationAppearanceJS + "\n" + hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + script), template.CSS(hostApplicationAppearanceCSS + "\n" + hostApplicationInputCSS + "\n" + hostApplicationPointerCSS + "\n" + hostApplicationCSS)})
 }
 
 //go:embed host_application_viewer/viewer.html
@@ -253,6 +253,12 @@ var hostApplicationInputJS string
 
 //go:embed host_application_viewer/remote-input.generated.css
 var hostApplicationInputCSS string
+
+//go:embed host_application_viewer/remote-pointer.generated.js
+var hostApplicationPointerJS string
+
+//go:embed host_application_viewer/remote-pointer.generated.css
+var hostApplicationPointerCSS string
 
 //go:embed host_application_viewer/appearance.js
 var hostApplicationAppearanceJS string

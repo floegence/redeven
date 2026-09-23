@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
   JSDOM: new (html: string, options: Record<string, unknown>) => { window: Window & typeof globalThis };
 };
-const shared = ['catalog.generated.js', 'remote-input.generated.js', 'viewport.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
+const shared = ['catalog.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'viewport.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
 const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/toolbar.js'), 'utf8') + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/macos.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '').replace('{{.Locale}}', 'en-US');
 let dom: InstanceType<typeof JSDOM>;
@@ -812,8 +812,10 @@ it('navigates toolbar and nested native menus with arrow keys and restores focus
   menu.focus(); key('ArrowRight');
   expect(doc.activeElement).toBe(doc.querySelector('.mac-app-keyboard'));
   key('ArrowRight');
+  expect(doc.activeElement).toBe(doc.querySelector('.mac-app-help'));
+  key('ArrowRight');
   expect(doc.activeElement).toBe(doc.querySelector('.mac-app-controls-toggle'));
-  key('ArrowLeft'); key('ArrowLeft'); key('ArrowDown');
+  key('ArrowLeft'); key('ArrowLeft'); key('ArrowLeft'); key('ArrowDown');
   expect(JSON.parse(v.socket().send.mock.lastCall![0]).action).toBe('menu');
   v.socket().message({type:'menu',generation:1,items:[
     {id:'file',title:'File',enabled:true,children:[{id:'save',title:'Save',enabled:true,children:[]}]},
@@ -862,6 +864,23 @@ it('sizes the host window to the content area and maps input below the toolbar',
   expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure',width:640,height:480});
   canvas.dispatchEvent(new dom.window.MouseEvent('pointerdown',{clientX:320,clientY:286}));
   expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'input',kind:'down',x:0.5,y:0.5});
+});
+
+it('turns a mobile single-finger drag into CSS-pixel scroll without a click', async () => {
+  const v = await viewer(); await v.activate();
+  const canvas = dom.window.document.querySelector('canvas')!;
+  vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({left:0, top:46, width:640, height:480, right:640, bottom:526, x:0, y:46, toJSON(){}});
+  const event = (type: string, x: number, y: number) => Object.assign(new dom.window.Event(type, {bubbles:true, cancelable:true}), {
+    pointerType: 'touch', pointerId: 1, clientX: x, clientY: y, button: 0, detail: 1,
+  });
+  canvas.dispatchEvent(event('pointerdown', 320, 286));
+  canvas.dispatchEvent(event('pointermove', 300, 206));
+  await drain();
+  canvas.dispatchEvent(event('pointerup', 300, 206));
+  await drain();
+  const input = v.socket().send.mock.calls.map(([raw]) => JSON.parse(raw)).filter(value => value.action === 'input');
+  expect(input.some(value => value.kind === 'scroll' && value.dx === 20 && value.dy === 80)).toBe(true);
+  expect(input.some(value => value.kind === 'down' || value.kind === 'up')).toBe(false);
 });
 
 it('negotiates initial capture once and does not resize again for its first window', async () => {

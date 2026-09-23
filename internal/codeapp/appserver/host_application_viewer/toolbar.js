@@ -23,6 +23,7 @@ function createHostApplicationToolbar() {
   const close = toolbarButton('mac-app-close', 'closeWindow', '<rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M3 7h14m-9 3 4 4m0-4-4 4"/>');
   const keyboard = toolbarButton('mac-app-keyboard', 'keyboard', '<rect x="2" y="4" width="16" height="12" rx="2"/><path d="M5 8h1m3 0h1m3 0h1m-9 4h1m3 0h5"/>');
   keyboard.setAttribute('aria-pressed', 'false');
+  const help = toolbarButton('mac-app-help', 'touchHelp', '<circle cx="10" cy="10" r="7"/><path d="M8.6 8a1.6 1.6 0 1 1 2.6 1.2c-.8.6-1.2 1-1.2 2"/><path d="M10 14h.01"/>');
   const quit = toolbarButton('mac-app-quit', 'quit', '<path d="M10 2v8m-4-6a7 7 0 1 0 8 0"/>');
   const menu = toolbarButton('mac-app-menu-toggle', 'menu', '<rect x="3" y="3" width="14" height="14" rx="3"/><path d="M3 7h14M7 7v10"/>');
   menu.removeAttribute('data-app-copy-title');
@@ -82,6 +83,14 @@ function createHostApplicationToolbar() {
   confirmQuit.className = 'mac-app-confirm-quit';
   quitActions.append(cancelQuit, confirmQuit);
   quitPanel.append(quitTitle, quitDescription, quitActions);
+  const helpPanel = document.createElement('section');
+  helpPanel.className = 'mac-app-touch-help';
+  helpPanel.tabIndex = -1;
+  const helpTitle = document.createElement('strong');
+  hostApplicationAppearance.copy(helpTitle, 'touchHelpTitle');
+  const helpDescription = document.createElement('p');
+  hostApplicationAppearance.copy(helpDescription, 'touchHelpDescription');
+  helpPanel.append(helpTitle, helpDescription);
   const separator = document.createElement('span');
   separator.className = 'mac-app-toolbar-separator';
   separator.setAttribute('aria-hidden', 'true');
@@ -90,10 +99,28 @@ function createHostApplicationToolbar() {
   const spacer = document.createElement('span');
   spacer.className = 'mac-app-toolbar-spacer';
   spacer.setAttribute('aria-hidden', 'true');
-  toolbar.append(menu, identitySeparator, windowToggle, spacer, keyboard, controlsButton, separator, close, quit);
+  toolbar.append(menu, identitySeparator, windowToggle, spacer, keyboard, help, controlsButton, separator, close, quit);
   controls.append(toolbar, popover);
   document.body.append(controls);
-  return { controls, toolbar, menu, windowToggle, windowCount, controlsButton, keyboard, close, quit, popover, menuPanel, windowPanel, windowList, quitPanel, cancelQuit, confirmQuit, chevron };
+  return { controls, toolbar, menu, windowToggle, windowCount, controlsButton, keyboard, help, close, quit, popover, menuPanel, windowPanel, windowList, helpPanel, quitPanel, cancelQuit, confirmQuit, chevron };
+}
+
+// A hold indicator is local feedback only. It never participates in hit
+// testing or transport, and each viewer owns its element and lifecycle.
+function createHostApplicationHoldFeedback(ownerDocument) {
+  const element = ownerDocument.createElement('span');
+  element.className = 'floe-remote-pointer-hold';
+  element.hidden = true;
+  ownerDocument.body.append(element);
+  return {
+    update(position) {
+      if (!position) { element.hidden = true; return; }
+      element.hidden = false;
+      element.style.left = `${position.clientX}px`;
+      element.style.top = `${position.clientY}px`;
+    },
+    dispose() { element.remove(); },
+  };
 }
 
 function createHostApplicationPictureModes(picture, changed) {
