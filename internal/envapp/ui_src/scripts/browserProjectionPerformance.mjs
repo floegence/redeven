@@ -71,11 +71,20 @@ export async function runBrowserProjectionPerformance({ popup, sourcePages, evid
     });
     await until(() => {
       const video = document.querySelector('.floe-viewport iframe')?.contentDocument?.querySelector('#clip');
-      return video?.videoWidth === 640 && video.readyState >= 2;
+      if (!video?.videoWidth || !video.videoHeight || video.readyState < 2) return false;
+      // The source may reduce encoded resolution under load. Require newly
+      // decoded noise in the source's CSS-sized player, independent of bitrate
+      // adaptation, rather than waiting for one fixed encoded pixel width.
+      const pixels = document.createElement('canvas'); pixels.width = pixels.height = 8;
+      const context = pixels.getContext('2d'); context.drawImage(video, 0, 0, 8, 8);
+      const rgba = context.getImageData(0, 0, 8, 8).data;
+      const colors = new Set();
+      for (let index = 0; index < rgba.length; index += 4) colors.add(`${rgba[index] >> 4}:${rgba[index + 1] >> 4}:${rgba[index + 2] >> 4}`);
+      return colors.size > 4 && video.style.width === '320px' && video.style.height === '180px';
     });
     report.loadedMedia = await popup.evaluate(() => {
       const replay = document.querySelector('.floe-viewport iframe')?.contentDocument, video = replay?.querySelector('#clip');
-      return { videoWidth: video.videoWidth, canvasWidth: replay?.querySelector('#scene')?.naturalWidth, decodedVideoFrames: video.getVideoPlaybackQuality().totalVideoFrames };
+      return { videoWidth: video.videoWidth, videoHeight: video.videoHeight, cssWidth: video.style.width, cssHeight: video.style.height, canvasWidth: replay?.querySelector('#scene')?.naturalWidth, decodedVideoFrames: video.getVideoPlaybackQuality().totalVideoFrames };
     });
     await sample(report.loaded);
     report.loadedMedia.finalDecodedVideoFrames = await popup.evaluate(() => document.querySelector('.floe-viewport iframe')?.contentDocument?.querySelector('#clip')?.getVideoPlaybackQuality().totalVideoFrames);
