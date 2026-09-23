@@ -1603,6 +1603,7 @@
     "searchPlaceholder": "Umgebungen durchsuchen...",
     "refreshRuntimeStatuses": "Laufzeitstatus aktualisieren",
     "connectProvider": "Redeven Cloud verbinden",
+    "connectCloudShort": "Verbinden",
     "newEnvironmentShort": "Neu",
     "gatewaySearchPlaceholder": "Gateways suchen...",
     "addGateway": "Netzwerk-Gateway hinzufügen",

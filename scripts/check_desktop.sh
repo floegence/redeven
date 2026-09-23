@@ -76,6 +76,7 @@ main() {
       node scripts/check-environment-endpoints.mjs
       node scripts/check-welcome-cards.mjs
       node scripts/check-welcome-tab-motion.mjs
+      node scripts/check-welcome-toolbar.mjs
       node scripts/check-appearance-electron.mjs
       node scripts/check-window-status-electron.mjs
     fi

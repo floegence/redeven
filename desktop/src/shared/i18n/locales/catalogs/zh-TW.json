@@ -1603,6 +1603,7 @@
     "searchPlaceholder": "搜尋 environments...",
     "refreshRuntimeStatuses": "刷新運行時狀態",
     "connectProvider": "連接 Redeven Cloud",
+    "connectCloudShort": "連線",
     "newEnvironmentShort": "新增",
     "gatewaySearchPlaceholder": "搜尋網關...",
     "addGateway": "新增網關",

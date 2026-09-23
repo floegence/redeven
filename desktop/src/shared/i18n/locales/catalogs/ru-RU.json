@@ -1612,6 +1612,7 @@
     "searchPlaceholder": "Искать environments...",
     "refreshRuntimeStatuses": "Обновить статусы выполнения",
     "connectProvider": "Подключить Redeven Cloud",
+    "connectCloudShort": "Подключить",
     "newEnvironmentShort": "Новый",
     "gatewaySearchPlaceholder": "Поиск шлюзов...",
     "addGateway": "Добавить шлюз",

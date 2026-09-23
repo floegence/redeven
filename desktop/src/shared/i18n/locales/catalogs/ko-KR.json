@@ -1603,6 +1603,7 @@
     "searchPlaceholder": "environments 검색...",
     "refreshRuntimeStatuses": "런타임 상태 새로 고침",
     "connectProvider": "Redeven Cloud 연결",
+    "connectCloudShort": "연결",
     "newEnvironmentShort": "새로 만들기",
     "gatewaySearchPlaceholder": "게이트웨이 검색...",
     "addGateway": "게이트웨이 추가",

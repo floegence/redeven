@@ -30,6 +30,7 @@ import {
   Copy,
   ExternalLink,
   Globe,
+  Link,
   Lock,
   Highlighter,
   Play,
@@ -7447,16 +7448,15 @@ function ConnectEnvironmentSurface(props: Readonly<{
       <main id="redeven-desktop-main" class="w-full px-4 py-5 sm:px-6 lg:px-8">
         <div class="mx-auto w-full redeven-welcome-shell">
           <header class="redeven-header-separator mb-5 space-y-4">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div class="space-y-1">
+            <div class="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div class="min-w-0 space-y-1">
                 <h1 class="text-lg font-semibold tracking-tight text-foreground">{props.i18n.t(headerCopy().titleKey)}</h1>
                 <p class="text-xs text-muted-foreground">
                   {props.i18n.t(headerCopy().descriptionKey)}
                 </p>
               </div>
-              <div class="redeven-center-actions flex min-w-0 flex-wrap items-center gap-2">
-                <div class="redeven-center-search relative w-full sm:w-[14.5rem]">
-                  <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <div class="redeven-center-actions flex min-w-0 items-center gap-2">
+                <div class="redeven-center-search">
                   <Show
                     when={props.activeTab === 'gateways'}
                     fallback={(
@@ -7464,8 +7464,9 @@ function ConnectEnvironmentSurface(props: Readonly<{
                         value={props.activeTab === 'control_planes' ? props.cloudQuery : props.libraryQuery}
                         onInput={(event) => (props.activeTab === 'control_planes' ? props.setCloudQuery : props.setLibraryQuery)(event.currentTarget.value)}
                         placeholder={props.i18n.t(props.activeTab === 'control_planes' ? 'environmentCenter.cloudSearchPlaceholder' : 'environmentCenter.searchPlaceholder')}
+                        aria-label={props.i18n.t(props.activeTab === 'control_planes' ? 'environmentCenter.cloudSearchPlaceholder' : 'environmentCenter.searchPlaceholder')}
+                        leftIcon={<Search class="h-4 w-4" aria-hidden="true" />}
                         size="sm"
-                        class="w-full pl-9"
                       />
                     )}
                   >
@@ -7473,53 +7474,55 @@ function ConnectEnvironmentSurface(props: Readonly<{
                       value={props.gatewayQuery}
                       onInput={(event) => props.setGatewayQuery(event.currentTarget.value)}
                       placeholder={props.i18n.t('environmentCenter.gatewaySearchPlaceholder')}
+                      aria-label={props.i18n.t('environmentCenter.gatewaySearchPlaceholder')}
+                      leftIcon={<Search class="h-4 w-4" aria-hidden="true" />}
                       size="sm"
-                      class="w-full pl-9"
                     />
                   </Show>
                 </div>
                 <div class="redeven-center-action-group flex min-w-0 max-w-full items-center gap-2">
                   <Show when={props.activeTab === 'environments'}>
                     <DesktopTooltip content={props.i18n.t('environmentCenter.refreshRuntimeStatuses')} placement="top">
-                      <span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          class="px-2.5"
-                          aria-label={props.i18n.t('environmentCenter.refreshRuntimeStatuses')}
-                          disabled={busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')}
-                          onClick={() => {
-                            void props.refreshAllEnvironmentRuntimes();
-                          }}
-                        >
-                          <Refresh class="h-3.5 w-3.5" />
-                        </Button>
-                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        class="px-2.5"
+                        aria-label={props.i18n.t('environmentCenter.refreshRuntimeStatuses')}
+                        disabled={busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')}
+                        onClick={() => {
+                          void props.refreshAllEnvironmentRuntimes();
+                        }}
+                      >
+                        <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
+                      </Button>
                     </DesktopTooltip>
                   </Show>
                   <Show when={props.activeTab === 'environments'}>
-                    <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
-                      <Plus class="mr-1 h-3.5 w-3.5" />
-                      {props.i18n.t('environmentCenter.newEnvironmentShort')}
-                    </Button>
+                    <DesktopTooltip content={props.i18n.t('environmentCenter.newEnvironmentTitle')} placement="top">
+                      <Button size="sm" variant="default" aria-label={props.i18n.t('environmentCenter.newEnvironmentTitle')}
+                        onClick={() => props.openCreateConnectionDialog()}>
+                        <Plus class="h-3.5 w-3.5" aria-hidden="true" />
+                        <span class="redeven-center-action-label">{props.i18n.t('environmentCenter.newEnvironmentShort')}</span>
+                      </Button>
+                    </DesktopTooltip>
                   </Show>
                   <Show when={props.activeTab === 'control_planes'}>
-                    <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
-                      <Plus class="mr-1 h-3.5 w-3.5" />
-                      {props.i18n.t('environmentCenter.connectProvider')}
-                    </Button>
+                    <DesktopTooltip content={props.i18n.t('environmentCenter.connectProvider')} placement="top">
+                      <Button size="sm" variant="default" aria-label={props.i18n.t('environmentCenter.connectProvider')}
+                        onClick={() => props.openCreateControlPlaneDialog()}>
+                        <Link class="h-3.5 w-3.5" aria-hidden="true" />
+                        <span class="redeven-center-action-label">{props.i18n.t('environmentCenter.connectCloudShort')}</span>
+                      </Button>
+                    </DesktopTooltip>
                   </Show>
                   <Show when={props.activeTab === 'gateways'}>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      title={props.i18n.t('environmentCenter.addGateway')}
-                      aria-label={props.i18n.t('environmentCenter.addGateway')}
-                      onClick={() => props.openCreateGatewaySetup()}
-                    >
-                      <Plus class="mr-1 h-3.5 w-3.5" />
-                      {props.i18n.t('environmentCenter.addGatewayShort')}
-                    </Button>
+                    <DesktopTooltip content={props.i18n.t('environmentCenter.addGateway')} placement="top">
+                      <Button size="sm" variant="default" aria-label={props.i18n.t('environmentCenter.addGateway')}
+                        onClick={() => props.openCreateGatewaySetup()}>
+                        <Plus class="h-3.5 w-3.5" aria-hidden="true" />
+                        <span class="redeven-center-action-label">{props.i18n.t('environmentCenter.addGatewayShort')}</span>
+                      </Button>
+                    </DesktopTooltip>
                   </Show>
                 </div>
               </div>

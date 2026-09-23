@@ -1603,6 +1603,7 @@
     "searchPlaceholder": "Buscar environments...",
     "refreshRuntimeStatuses": "Actualizar estados de tiempo de ejecución",
     "connectProvider": "Conectar Redeven Cloud",
+    "connectCloudShort": "Conectar",
     "newEnvironmentShort": "Nuevo",
     "gatewaySearchPlaceholder": "Buscar puertas de enlace...",
     "addGateway": "Agregar puerta de enlace",

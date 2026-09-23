@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop Environment library
 description: Browse one relationship card through independent Runtime and Cloud access perspectives, including Cloud source grids.
 tags: [desktop, environment, cloud, welcome]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 # Summary
 
@@ -27,7 +27,7 @@ Tab selection switches the name, status, facts, primary action, refresh, pin, se
 
 Selection belongs to the page session. Search and equivalent snapshots preserve it, including search temporarily hiding a card. Changing source filters resets to that scope's default, after which users can select either perspective. Switching tabs closes old menus and endpoint popovers without cancelling work. Already-open settings and Flower contexts remain bound to their original owner. Popovers, QR, focus, and progress use real owner IDs; perspective selection uses group IDs. Removing an owner prunes its selection and interactive surfaces. Stable owner and tab nodes preserve focus and selection across snapshot replacement.
 
-The page header keeps refresh and creation controls together in a compact action group. Only the search field grows to fill available toolbar space; narrow layouts wrap the action group as a unit and keep it aligned to the right. Tooltip anchors never inherit search-field sizing.
+The page header keeps search and its action group on one aligned row. Only the search field grows or shrinks; tooltip anchors and action buttons retain their size. Below 640px, actions use clear icons in 44px minimum touch targets: a link for connecting Redeven Cloud, a plus for creating an Environment or adding a Gateway, and circular arrows for refreshing runtime status. Full localized action names remain available through accessible labels and focus/hover tooltips. Wider layouts use concise action text (New, Connect, Add); they do not repeat the Cloud product name inside the button. The search field uses the published Input icon slot and keeps the upstream focus treatment.
 
 Cards retain the existing responsive column model and share a compact header, facts area, and footer. Cards in each grid have equal heights and aligned action footers. Retained perspectives contribute to the same layout cell, so switching views does not change card height; the inactive perspective is invisible, inert, and hidden from assistive technology. Long identity and address values truncate with full details available; translated controls and enlarged text wrap without overlapping or hiding actions.
 
@@ -61,3 +61,4 @@ Overview counts do not depend on the selected tab. Count each group once and sum
 - `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Owner action isolation, source search, pin scope and refresh continuity.
 - `redeven:desktop/scripts/check-environment-relations.mjs` - Mixed grids, real browser actions, tab focus and ten-locale narrow/dark/enlarged-text acceptance.
 - `redeven:desktop/scripts/check-welcome-card-stability.mjs` - Normal-motion per-frame Open, checking snapshots and retained-page return geometry in English and Simplified Chinese.
+- `redeven:desktop/scripts/check-welcome-toolbar.mjs` - Single-row toolbar alignment, touch targets, concise labels, tooltips, and keyboard-activated creation workflows across every locale and narrow, wide, and enlarged-text layouts.
