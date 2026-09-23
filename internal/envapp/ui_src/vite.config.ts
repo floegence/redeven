@@ -44,7 +44,7 @@ export default defineConfig({
       handler(_html, context) {
         if (path.basename(context.filename) !== 'index.html') return;
         return [{ tag: 'script', injectTo: 'head-prepend', children: createReloadPlaceholderScript({
-          storageKey: 'redeven-envapp:reload-layout', scopeStorageKey: 'redeven_env_public_id',
+          storageKey: 'redeven-envapp:reload-layout-v2', scopeStorageKey: 'redeven_env_public_id',
         }) }];
       },
     },

@@ -6,7 +6,7 @@ const surfaces = [
   '[data-floe-shell-slot]', '.host-apps', '.web-services', '.codespaces-page', '.redeven-containers', '.host-apps-header', '.host-app-session', '.host-app-tile',
   '.web-services-header', '.web-service-row', '.codespace-card', '.container-header',
   '.container-resource-table-shell', '.container-service-card', 'thead', 'tbody tr',
-  '[data-browser-workspace]', '[data-toolbar-layout]', '[data-file-browser-item-id]',
+  '[data-browser-workspace]', '[data-toolbar-layout]',
 ].join(',');
 
 /** One document handoff; inventory and authorization remain owned by their existing services. */

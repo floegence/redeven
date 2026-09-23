@@ -12,7 +12,7 @@ const paint = () => new Promise<void>((resolve) => requestAnimationFrame(() => r
 afterEach(() => { cleanups.splice(0).forEach((cleanup) => cleanup()); document.body.replaceChildren(); });
 
 describe('Files Activity navigation continuity', () => {
-  it.each(['Grid', 'List'])('matches the %s content geometry before the first directory arrives', async mode => {
+  it.each(['Grid', 'List'])('leaves %s content blank until the first directory arrives without shifting workspace chrome', async mode => {
     const host = document.createElement('div');
     document.body.append(host);
     const [initializing, setInitializing] = createSignal(true);
@@ -28,27 +28,27 @@ describe('Files Activity navigation continuity', () => {
     Array.from(host.querySelectorAll('button')).find(button => button.textContent === mode)!.click();
     await paint();
     expect(host.textContent).not.toContain('Loading files...');
-    const placeholder = host.querySelector<HTMLElement>('[data-file-browser-placeholder]');
-    expect(placeholder).not.toBeNull();
-    const geometry = (element: HTMLElement) => ({
-      box: element.getBoundingClientRect().toJSON(),
-      cells: [...element.children].slice(0, mode === 'List' ? 3 : 2).map(child => child.getBoundingClientRect().toJSON()),
-    });
-    const before = geometry(placeholder!);
-    const treeRow = host.querySelector('[data-file-tree-skeleton-row]')!.getBoundingClientRect().toJSON();
-    const rootRow = host.querySelector('[data-file-tree-root-row]')!.getBoundingClientRect().toJSON();
-    const path = host.querySelector('[data-file-path-skeleton]')!.getBoundingClientRect().toJSON();
-    const status = host.querySelector('[data-file-browser-status-bar]')!.getBoundingClientRect().toJSON();
+    expect(host.querySelector('[data-file-browser-placeholder], [data-file-tree-skeleton], [data-file-path-skeleton], .floe-skeleton')).toBeNull();
+    const content = host.querySelector<HTMLElement>('[data-testid="file-browser-content-scroll-region"]')!;
+    const tree = host.querySelector<HTMLElement>('[data-testid="file-tree-scroll-region"]')!;
+    expect(content.textContent).toBe('');
+    expect(content.children).toHaveLength(0);
+    expect(tree.children).toHaveLength(0);
+    expect(host.querySelector('nav[aria-label="Breadcrumb"]')).toBeNull();
+    expect(host.querySelector('[data-file-browser-status-bar]')!.checkVisibility({ visibilityProperty: true })).toBe(false);
+    const geometry = () => [content, tree, host.querySelector('[data-toolbar-layout]')!, host.querySelector('[data-file-browser-status-bar]')!]
+      .map(element => element.getBoundingClientRect().toJSON());
+    const before = geometry();
     batch(() => {
       setFiles([{ id: '/workspace', name: 'workspace', path: '/workspace', type: 'folder', children: [{ id: 'alpha', name: 'alpha.txt', path: '/workspace/alpha.txt', type: 'file', size: 2048, modifiedAt: new Date(0) }] }]);
       setInitializing(false);
     });
     await paint();
-    expect(geometry(host.querySelector<HTMLElement>('[data-file-browser-item-id="alpha"]')!)).toEqual(before);
-    expect(host.querySelector('[data-file-browser-status-bar]')!.getBoundingClientRect().toJSON()).toEqual(status);
-    expect(host.querySelector('[data-tree-row-path="/workspace"]')!.parentElement!.getBoundingClientRect().toJSON()).toEqual(treeRow);
-    expect(host.querySelector('[data-file-tree-root-row]')!.getBoundingClientRect().toJSON()).toEqual(rootRow);
-    expect(host.querySelector('nav[aria-label="Breadcrumb"]')!.getBoundingClientRect().toJSON()).toEqual(path);
+    expect(host.querySelector('[data-file-browser-item-id="alpha"]')).not.toBeNull();
+    expect(host.querySelector('[data-tree-row-path="/workspace"]')).not.toBeNull();
+    expect(host.querySelector('[data-file-browser-status-bar]')!.checkVisibility({ visibilityProperty: true })).toBe(true);
+    expect(geometry()).toEqual(before);
+
   });
 
   it('keeps the real workspace chrome while waiting for the first directory and only then shows an empty result', async () => {

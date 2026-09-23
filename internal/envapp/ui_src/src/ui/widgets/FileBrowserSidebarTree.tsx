@@ -1,6 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
-import { Skeleton } from '@floegence/floe-webapp-core/loading';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon, createLongPressContextMenuHandlers, useFileBrowser, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { ConfirmDialog } from '../primitives/EnvAppModal';
@@ -18,34 +17,6 @@ const FILE_TREE_ROOT_ROW_CLASS = 'group flex min-w-0 items-center gap-1 rounded-
 const FILE_TREE_ROOT_SECTION_CLASS = 'mb-1 flex flex-col border-b border-sidebar-border/70 pb-1';
 const FILE_TREE_ROOT_LABEL_CLASS = 'px-0.5 pb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60';
 const treeRowPadding = (depth: number) => `${TREE_ROW_BASE_PADDING + Math.min(depth, MAX_VISIBLE_DEPTH) * TREE_ROW_DEPTH_STEP}px`;
-
-/** Use the real root rows, icon slots, indentation, and directory row heights. */
-export function FileBrowserSidebarTreeSkeleton() {
-  const i18n = useI18n();
-  return <div aria-hidden="true" data-file-tree-skeleton class="flex min-h-full flex-col">
-    <div class={FILE_TREE_ROOT_SECTION_CLASS}>
-      <div class={FILE_TREE_ROOT_LABEL_CLASS}>{i18n.t('files.roots')}</div>
-      <div data-file-tree-root-row class={FILE_TREE_ROOT_ROW_CLASS}>
-        <span class="flex min-w-0 flex-1 items-center gap-1">
-          <span class="flex h-4 w-4 shrink-0 items-center justify-center"><Skeleton class="h-3.5 w-3.5" /></span>
-          <Skeleton class="h-3 w-20" />
-        </span>
-        <Skeleton class="h-5 w-7 shrink-0" />
-      </div>
-    </div>
-    <div class="flex flex-col pb-0.5">
-      <For each={[0, 1, 2, 2, 1, 0, 1]}>{depth => (
-        <div data-file-tree-skeleton-row class={FILE_TREE_ROW_CLASS} style={{ 'padding-left': treeRowPadding(depth) }}>
-          <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center"><ChevronRight class="h-3 w-3 text-muted-foreground/30" /></span>
-          <div class={FILE_TREE_ITEM_CLASS}>
-            <span class="flex h-4 w-4 shrink-0 items-center justify-center"><Skeleton class="h-3.5 w-3.5" /></span>
-            <Skeleton class="h-3 w-24 max-w-full" />
-          </div>
-        </div>
-      )}</For>
-    </div>
-  </div>;
-}
 
 const FILE_TREE_TINY_BADGE_CLASS = 'rounded-full border border-border/40 bg-background/80 px-1 py-0 text-[8px] font-medium leading-4 text-muted-foreground';
 const FILE_TREE_TINY_ACCENT_BADGE_CLASS = 'rounded-full border border-primary/20 bg-primary/[0.05] px-1 py-0 text-[8px] font-medium leading-4 text-primary/80';
@@ -442,7 +413,6 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                 return (
                   <div
                     {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
-                    data-file-tree-root-row
                     data-filesystem-root-id={root.id}
                     data-filesystem-root-path={root.pathAbs}
                     class={cn(
