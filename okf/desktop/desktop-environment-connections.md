@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop Environment connections
 description: Explain each Environment connection and apply one address namespace policy to Welcome and settings.
 tags: [desktop, environment, connection, settings]
-timestamp: 2026-09-19T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 # Summary
 
@@ -39,7 +39,7 @@ Address presentation groups this-device, network and internal listeners by their
 
 Public Runtime addresses are independent from Desktop's private management connection. Other Desktops and browsers may connect concurrently within their own reachable namespace. Saved bind, protocol, port, password, and certificate changes apply on the next Runtime start; drafts never synthesize or replace the current reported URL. Pending changes remain visible across settings reopenings and belong to one process start identity, including password-only changes.
 
-Settings show connection identity and access actions before configuration. Narrow windows wrap full URLs and retain trailing icon actions; address groups scroll independently while the footer stays visible. Live snapshots preserve expanded sections, scroll, focus, selection, and drafts. Certificate checks and pending operations bind to the real Environment ID; responses from an old target or closed section are ignored. Refreshing a snapshot does not restart a certificate check.
+Settings show connection identity and access actions before configuration. Narrow windows wrap full URLs and retain trailing icon actions. Overflowing address groups scroll internally; when a group has no scroll range or reaches its upper or lower boundary, vertical wheel input continues into the settings body, including over address actions and filtered or empty results. The window and footer stay fixed, and the modal prevents scrolling the Welcome background. Live snapshots preserve expanded sections, scroll, focus, selection, and drafts. Certificate checks and pending operations bind to the real Environment ID; responses from an old target or closed section are ignored. Refreshing a snapshot does not restart a certificate check.
 
 Managed settings use the selected Runtime's private control channel, or its authorized host CLI while stopped. Browser access and listening-port controls configure the Environment, not Desktop's managed connection. Remote loopback is labeled Environment only and cannot open in the client browser. SSH connection details remain available if access settings fail; the failure has an explicit Retry. URL registrations edit connection information only.
 
@@ -55,4 +55,4 @@ Managed settings use the selected Runtime's private control channel, or its auth
 - `redeven:desktop/src/welcome/EnvironmentSettingsEntry.client.test.tsx` - Verifies the actual card subscription preserves endpoint nodes, focus, selection and QR while applying new snapshots and removing invalid targets.
 - `redeven:desktop/src/welcome/EnvironmentAccessSettingsForm.client.test.tsx` - Verifies live snapshot updates preserve expanded sections, scroll, focused input selection, and drafts without restarting certificate checks.
 - `redeven:desktop/src/main/desktopPreferences.test.ts` - Loads existing catalogs without a protocol into HTTP startup while preserving the saved port, password, and explicit HTTPS choice.
-- `redeven:desktop/scripts/check-environment-endpoints.mjs` - Isolated browser acceptance for the actual product popover and settings components, including narrow and dark surfaces.
+- `redeven:desktop/scripts/check-environment-endpoints.mjs` - Isolated browser acceptance for the actual product popover and settings components, including narrow and dark surfaces, native wheel chaining through short, long and filtered address lists, fixed footer geometry and modal scroll isolation.
