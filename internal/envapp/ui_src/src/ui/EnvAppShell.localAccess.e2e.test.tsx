@@ -4194,12 +4194,10 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
 
       const background = host.querySelector('[data-env-shell-background]') as HTMLElement;
-      const flowerRail = host.querySelector('[data-activity-flower-mobile-companion]') as HTMLElement;
+      expect(host.querySelector('[data-activity-flower-mobile-companion]')).toBeNull();
       const flowerOverlay = host.querySelector('[data-activity-flower-overlay-host]') as HTMLElement;
       expect(background.inert).toBe(true);
       expect(background.getAttribute('aria-hidden')).toBe('true');
-      expect(background.contains(flowerRail)).toBe(true);
-      expect(flowerRail.closest('[aria-hidden="true"]')).toBe(background);
       expect(flowerOverlay.inert).toBe(true);
       expect(flowerOverlay.getAttribute('aria-hidden')).toBe('true');
 
@@ -4207,8 +4205,6 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => !document.querySelector('[data-plugin-surface-host]'));
       expect(background.inert).toBe(false);
       expect(background.hasAttribute('aria-hidden')).toBe(false);
-      expect(background.contains(flowerRail)).toBe(true);
-      expect(flowerRail.hasAttribute('aria-hidden')).toBe(false);
       expect(flowerOverlay.inert).toBe(false);
       expect(flowerOverlay.hasAttribute('aria-hidden')).toBe(false);
     } finally {

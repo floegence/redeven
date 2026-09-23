@@ -103,6 +103,7 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => {
   return {
     ...actual,
     cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
+    useMediaQuery: (query: string) => typeof window.matchMedia === 'function' ? actual.useMediaQuery(query) : () => false,
   };
 });
 
@@ -167,7 +168,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   RadioGroup: actual.RadioGroup,
   RadioOption: actual.RadioOption,
   Button: (props: any) => {
-    if (props.class?.includes('flower-composer-approval-decision') || props['data-computer-control-action']) return <Dynamic component={actual.Button} {...props} />;
+    if (props.class?.includes('flower-composer-approval-decision') || props.class?.includes('flower-composer-submit') || props['data-computer-control-action']) return <Dynamic component={actual.Button} {...props} />;
     return (
       <button
         type={props.type ?? "button"}

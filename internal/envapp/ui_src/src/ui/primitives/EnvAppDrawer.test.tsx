@@ -13,7 +13,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Dialog: (props: any) => props.open ? (
-    <section role="dialog" data-floe-dialog-panel="test" class={props.class}>
+    <section role="dialog" data-floe-dialog-panel="test" data-presentation={props.presentation} class={props.class}>
       <button type="button" aria-label="Close" onClick={() => props.onOpenChange(false)}>Close</button>
       {props.children}
       {props.footer}
@@ -46,6 +46,7 @@ describe('EnvAppDrawer', () => {
       const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]');
       expect(panel?.getAttribute('role')).toBe('dialog');
       expect(panel?.className).toContain('env-app-drawer-panel');
+      expect(panel?.getAttribute('data-presentation')).toBe('side-drawer');
       expect(panel?.querySelector('[data-redeven-desktop-titlebar-no-drag="true"]')).toBeTruthy();
 
       const close = document.querySelector<HTMLButtonElement>('button[aria-label="Close"]');
@@ -57,16 +58,13 @@ describe('EnvAppDrawer', () => {
     }
   });
 
-  it('uses horizontal drawer presence without scale and reserves the Desktop title bar', () => {
+  it('reserves the Desktop title bar inside the shared drawer boundary', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/styles/redeven.css'), 'utf8');
     const rule = css.match(/\[data-floe-dialog-panel\]\.env-app-drawer-panel\s*\{(?<body>[\s\S]*?)\n\}/u)?.groups?.body ?? '';
     expect(rule).toContain('app-region: no-drag');
-    expect(rule).toContain('top: var(--redeven-desktop-titlebar-height, 0px)');
-    expect(rule).toContain('--floe-floating-enter-x:');
-    expect(rule).toContain('--floe-floating-exit-x:');
-    expect(rule).toContain('--floe-floating-enter-y: 0');
-    expect(rule).toContain('--floe-floating-enter-scale: 1');
-    expect(rule).toContain('--floe-floating-exit-scale: 1');
+    expect(rule).toContain('margin-top: var(--redeven-desktop-titlebar-height, 0px)');
+    expect(rule).toContain('height: calc(100% - var(--redeven-desktop-titlebar-height, 0px))');
+    expect(rule).not.toContain('position: fixed');
   });
 
   it('keeps the Desktop titlebar drag region outside the drawer overlay no-drag area', () => {
@@ -74,6 +72,6 @@ describe('EnvAppDrawer', () => {
     const overlayRule = css.match(/\[data-floe-dialog-overlay-root\]:has\(\.env-app-drawer-panel\)\s*\{(?<body>[\s\S]*?)\n\}/u)?.groups?.body ?? '';
     const interactionRule = css.match(/\[data-floe-dialog-overlay-root\]:has\(\.env-app-drawer-panel\) > :not\(\[data-floe-dialog-backdrop\]\)\s*\{(?<body>[\s\S]*?)\n\}/u)?.groups?.body ?? '';
     expect(overlayRule).toBe('');
-    expect(interactionRule).toContain('pointer-events: none');
+    expect(interactionRule).toBe('');
   });
 });

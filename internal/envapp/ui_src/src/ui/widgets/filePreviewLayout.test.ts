@@ -140,7 +140,7 @@ describe('file preview wiring', () => {
     expect(previewWindowSrc).toContain('<Dialog');
     expect(previewWindowSrc).toContain('<PersistentFloatingWindow');
     expect(previewWindowSrc).toContain('surfaceRef={props.surfaceRef}');
-    expect(previewWindowSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
+    expect(previewWindowSrc).toContain("h-full w-full");
     expect(previewWindowSrc).toContain('file-preview-floating-window');
     expect(previewWindowSrc).toContain('stackId={props.stackId}');
     expect(flowerTurnLauncherSrc).toContain("const FLOWER_TURN_LAUNCHER_STACK_ID = 'flower-turn-launcher';");

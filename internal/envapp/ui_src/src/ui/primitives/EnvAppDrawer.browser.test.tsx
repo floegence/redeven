@@ -67,9 +67,12 @@ describe('EnvAppDrawer browser geometry', () => {
     const boundaryRect = boundary!.getBoundingClientRect();
     const panelStyle = getComputedStyle(panel!);
     const overlayStyle = getComputedStyle(overlay!);
-    expect(panelStyle.position).toBe('fixed');
-    expect(panelStyle.getPropertyValue('app-region').trim()).toBe('no-drag');
-    expect(overlayStyle.getPropertyValue('app-region').trim()).not.toBe('no-drag');
+    expect(panelStyle.position).toBe('relative');
+    expect(overlay?.getAttribute('data-floe-dialog-presentation')).toBe('side-drawer');
+    if (CSS.supports('app-region', 'no-drag')) {
+      expect(panelStyle.getPropertyValue('app-region').trim()).toBe('no-drag');
+      expect(overlayStyle.getPropertyValue('app-region').trim()).not.toBe('no-drag');
+    }
     expect(panelStyle.getPropertyValue('--floe-floating-enter-y').trim()).toBe('0');
     expect(panelStyle.getPropertyValue('--floe-floating-enter-scale').trim()).toBe('1');
     expect(panelStyle.getPropertyValue('--floe-floating-origin').trim()).toBe('right center');

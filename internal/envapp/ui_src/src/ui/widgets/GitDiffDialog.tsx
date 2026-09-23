@@ -35,7 +35,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
             "flex max-w-none flex-col overflow-hidden rounded-md p-0",
             "[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2",
             layout.isMobile()
-              ? "h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none"
+              ? "h-full w-full"
               : "h-[88vh] max-h-[88vh] w-[min(1100px,94vw)]",
             props.class,
           )}

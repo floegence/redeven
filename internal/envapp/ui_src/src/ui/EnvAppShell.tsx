@@ -2234,7 +2234,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       ? flowerWorkbenchHost()
       : flowerProductPlacement() === 'full_page'
         ? activityFlowerFullPageHost()
-        : activityFlowerCompanionContentHost()
+        : layout.isMobile() ? activityFlowerOverlayHost() : activityFlowerCompanionContentHost()
   ));
   createEffect(() => {
     const requestedHost = requestedFlowerProductHost();
@@ -2244,7 +2244,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const openActivityFlowerCompanion = (options: Readonly<{ focusComposer?: boolean }> = {}) => {
     if (!canUseFlower()) return;
     activityFlowerCompletionController.clear();
-    if (activityFlowerPlacement() !== 'full_page') setActivityFlowerPresentation('expanded');
+    if (layout.isMobile()) openSurface('ai', { reason: 'direct_navigation', focus: false, ensureVisible: true });
+    else if (activityFlowerPlacement() !== 'full_page') setActivityFlowerPresentation('expanded');
     if (options.focusComposer) {
       setActivityFlowerComposerFocusRequest((request) => request + 1);
     }
@@ -3120,6 +3121,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const activityFlowerExpanded = createMemo(() => activityFlowerPlacement() !== 'collapsed');
   const activityFlowerCompanionVisible = createMemo(() => (
     viewMode() === 'activity'
+    && !layout.isMobile()
     && activityFlowerPlacement() !== 'full_page'
     && !activityFlowerLauncherVisible()
     && !accessGateVisible()
@@ -3164,7 +3166,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       : viewMode() === 'activity'
         && (activityFlowerPlacement() === 'full_page'
           ? activityFlowerResidentInFullPageHost()
-          : activityFlowerResidentInCompanionHost()))
+          : !layout.isMobile() && activityFlowerResidentInCompanionHost()))
     && !activityFlowerLauncherVisible()
     && !accessGateVisible()
     && !recoveryVisible()
@@ -4749,11 +4751,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     <Shell
       fillParent
       hideMobileNavigationWhenKeyboardOpen
-      mobileAccessory={canUseFlower() && activityFlowerPlacement() !== 'full_page' ? (
-        <div class="flower-activity-mobile-companion-rail" data-activity-flower-mobile-companion>
-          {renderActivityFlowerAnchor()}
-        </div>
-      ) : undefined}
       activitySelectionMode="ui-first"
       onActivitySelectionEvent={handleActivitySelectionEvent}
       sidebarMode="auto"
@@ -5054,13 +5051,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         workbenchFilePreviewActivationSeq,
         workbenchFilePreviewActivation,
         consumeWorkbenchFilePreviewActivation,
-        activityContentBottomLimit: () => {
-          if (viewMode() !== 'activity' || !layout.isMobile() || !canUseFlower()) return undefined;
-          const anchor = activityFlowerAnchor();
-          return anchor?.isConnected && activityFlowerPlacement() !== 'full_page'
-            ? anchor.getBoundingClientRect().top
-            : undefined;
-        },
         filesSidebarOpen: filesMobileSidebarOpen,
         setFilesSidebarOpen: setFilesMobileSidebarOpen,
         toggleFilesSidebar: toggleFilesMobileSidebar,

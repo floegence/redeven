@@ -320,8 +320,8 @@ describe('TerminalSettingsDialog', () => {
 
     const dialog = host.querySelector('[data-testid="dialog"]');
     expect(dialog).toBeTruthy();
-    expect(dialog?.className).toContain('h-[calc(100dvh-0.5rem)]');
-    expect(dialog?.className).toContain('w-[calc(100vw-0.5rem)]');
+    expect(dialog?.className).toContain('h-full');
+    expect(dialog?.className).toContain('w-full');
     expect(host.textContent).toContain('Mobile input');
     expect(host.textContent).toContain('Only one mode can be active at a time.');
     expect(host.textContent).toContain('Floe suggestions');

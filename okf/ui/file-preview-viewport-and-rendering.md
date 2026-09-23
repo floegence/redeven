@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview viewport and rendering
 description: Fit documents and images to their actual reading area and isolate asynchronous renderer work.
 tags: [ui, files, preview, viewport, rendering]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 # Summary
 
@@ -16,9 +16,18 @@ manual zoom keeps its chosen scale. Each PDF page has one rendering owner and
 old document work cannot replace the current document. Normal cancellation is not
 an error. A genuine PDF page failure stays local to that page and can be retried.
 Markdown enhancement work follows document content: previews without Mermaid
-diagrams do not sample diagram theme colors, including after theme changes.
+skip diagram theme sampling across theme changes.
 
 # Contract
+
+## Window boundary
+
+The [floating layer contract](env-app-floating-layer-order.md) owns window
+placement and visible viewport constraints. Mobile previews fill the available
+Dialog content region rather than requesting an independent `100dvh` height.
+Desktop previews delegate preferred size, minimum size and edge margins to the
+published FloatingWindow. The preview title, close action and document toolbar
+remain reachable while the document scrolls in its own reading area.
 
 ## Reading area and zoom
 

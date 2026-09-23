@@ -26,6 +26,35 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
+.flower-component-shell .flower-mobile-navigation-button {
+  display: none;
+}
+
+.flower-component-shell[data-flower-mobile-pane] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.flower-component-shell[data-flower-mobile-pane] .flower-mobile-navigation-button {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.flower-component-shell[data-flower-mobile-pane] > .flower-component-rail-resizer,
+.flower-component-shell[data-flower-mobile-pane='detail'] > .flower-component-thread-rail,
+.flower-component-shell[data-flower-mobile-pane='threads'] > .flower-component-main {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .flower-component-shell .flower-composer textarea,
+  .flower-component-shell .flower-composer input[type='password'],
+  .flower-turn-launcher-textarea {
+    /* iOS Safari zooms focused text controls below 16 CSS pixels. */
+    font-size: max(16px, 1rem);
+  }
+}
+
 .flower-surface-companion > .flower-component-thread-rail,
 .flower-surface-companion > .flower-component-rail-resizer {
   display: none;
@@ -2606,11 +2635,6 @@
   .flower-composer-actions {
     flex: 0 0 auto;
     justify-content: flex-end;
-  }
-
-  .flower-composer-actions > .button,
-  .flower-composer-actions > button {
-    width: auto;
   }
 
   .flower-model-stack {
@@ -8070,6 +8094,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-composer-submit {
   width: 2.25rem;
   height: 2.25rem;
+  flex: 0 0 2.25rem;
   padding: 0;
 }
 
@@ -9980,18 +10005,8 @@ button.flower-attachment-preview-trigger:disabled {
     width: auto;
   }
 
-  .flower-component-shell {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(9.5rem, 30vh) minmax(0, 1fr);
-  }
-
   .flower-component-rail-resizer {
     display: none;
-  }
-
-  .flower-component-thread-rail {
-    border-right: 0;
-    border-bottom: 1px solid var(--flower-thread-rail-border);
   }
 
   .flower-chat-header {

@@ -177,7 +177,7 @@ describe('FilePreviewSurface', () => {
     const dialog = host.querySelector('[data-testid="dialog"]');
     expect(dialog).toBeTruthy();
     expect(host.querySelector('[data-surface="main"]')).toBeTruthy();
-    expect(dialog?.className).toContain('h-[calc(100dvh-0.5rem)]');
+    expect(dialog?.className).toContain('h-full');
     expect(dialog?.className).not.toContain('[&>div:last-child]');
     expect(host.textContent).toContain('/workspace/demo.pdf');
     expect(host.querySelector('[data-testid="file-preview-footer"]')).toBeNull();

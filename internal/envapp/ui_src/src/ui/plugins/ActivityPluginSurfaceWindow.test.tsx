@@ -184,13 +184,11 @@ describe('ActivityPluginSurfaceWindow', () => {
     expect(preExistingInert.inert).toBe(true);
   });
 
-  it('targets the marked geometry root for the mobile full-screen contract', () => {
+  it('delegates mobile geometry to the published floating window boundary', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/ui/plugins/ActivityPluginSurfaceWindow.tsx'), 'utf8');
     const styles = readFileSync(resolve(process.cwd(), 'src/styles/redeven.css'), 'utf8');
-
-    expect(styles).toContain(
-      '[data-floe-geometry-surface="floating-window"][data-redeven-plugin-activity-window="true"]',
-    );
-    expect(styles).toContain('height: calc(100dvh - 0.5rem) !important;');
+    expect(source).toContain('compactBelow={768}');
+    expect(styles).not.toContain('height: calc(100dvh - 0.5rem) !important;');
   });
 
   it('waits for an opening slot to retire before closing the window', async () => {

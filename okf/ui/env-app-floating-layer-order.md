@@ -3,11 +3,16 @@ type: UI Contract
 title: Env App floating layer order
 description: One product-owned stacking contract orders movable windows, Flower, plugin surfaces, blocking modals, and command UI.
 tags: [ui, floating-windows, flower, plugins, dialogs, focus]
-timestamp: 2026-07-30T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 # Summary
 
 Env App owns one global stacking contract for cross-surface UI. Movable product and plugin windows share a compact most-recently-used band from 1000 through 1099; the expanded Flower companion is 2000, the plugin launcher Panel is 3000, blocking product modals are 4000, and the command palette is 5000. No surface may escape its assigned band through an ad hoc `z-index`. A window interaction changes only the movable-window order, while higher product layers remain stable and operable.
+
+Published Floe Webapp constrains dialogs and floating windows to the visible
+viewport or owning projected surface. Toolbar and keyboard changes preserve
+reachable window controls and local content scrolling; temporary bounds do not
+replace the live preferred geometry.
 
 # Contract
 
@@ -25,6 +30,24 @@ Workbench selects automatic placement. A Dialog opened from a widget or projecte
 
 Desktop drawers retain the global Dialog backdrop and focus boundary, but their interactive panel begins below the native titlebar safe area. The panel is a no-drag region; the full-window overlay must not become one, so the unobstructed titlebar remains available for native window movement while the backdrop still owns outside-click dismissal. Interactive titlebar controls retain their existing no-drag exclusions.
 
+## Visible viewport boundaries
+
+Published Floe Webapp owns the visible viewport, safe areas, Safari fixed-origin
+conversion, and projected surface intersection for Dialog and FloatingWindow.
+Browser toolbar, soft-keyboard, and orientation changes constrain window geometry;
+headers, close controls, and footer actions remain inside the visible boundary,
+while long content scrolls locally. Geometry changes retain the live content and
+input owner. Product CSS must not bypass this boundary with fixed panel positions,
+viewport-unit heights plus removed maximums, or forced transforms.
+
+EnvAppDrawer selects the published side-drawer presentation. Redeven supplies its
+business width and the Desktop titlebar gap inside the available region. Preview
+windows supply preferred sizes and a desktop edge margin rather than subscribing
+to window resize or computing a second viewport. Mobile Activity plugin windows
+use the upstream compact boundary, and keep their existing modal and retirement
+lifecycle. Temporary viewport constraints do not replace upstream's live preferred
+window size.
+
 ## Movable window order
 
 One Shell-lifetime provider registers every open movable window under a stable identifier. Registration order establishes the initial order. Captured pointer input, focus entering the surface, and plugin bridge activation, focus, or action events move the interacted window to the top of the movable band. Product and plugin windows participate in the same order; the plugin window controller retains only its nine-window capacity and LRU eviction responsibility.
@@ -41,6 +64,7 @@ This contract governs cross-surface Env App stacking and the Activity-versus-Wor
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/widgets/OverlayViewport.browser.test.tsx` - Checks mobile preview, editor, drawer, and plugin boundaries with retained content in light and dark themes.
 - `redeven:internal/envapp/ui_src/src/ui/utils/envAppLayers.ts` - Defines the five product bands.
 - `redeven:internal/envapp/ui_src/src/ui/utils/envAppFloatingWindowStack.ts` - Maintains compact shared movable-window ordering.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/PersistentFloatingWindow.tsx` - Registers product windows, activates them from pointer and focus input, and supplies their global Dialog placement.

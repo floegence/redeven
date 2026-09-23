@@ -3,7 +3,7 @@ type: UI Contract
 title: Files context menus
 description: Keep file operations reachable inside the complete Files workspace across Activity, floating windows, Workbench, and touch layouts.
 tags: [ui, files, menus, mobile, workbench]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 # Summary
 
@@ -11,17 +11,16 @@ Published Floe Webapp owns file-menu placement, visible-viewport intersection,
 measurement, scrolling, submenu navigation, gesture handling, and dismissal.
 Redeven supplies the complete Files workspace boundary, product actions, and
 localized labels. Menus stay at least 8 CSS px inside the usable intersection of
-Files, the owning surface, and the visible viewport, with mobile Flower chrome
-excluded. Invalid or unavailable explicit boundaries close the menu. Files does
+Files, the owning surface, and the visible viewport. Invalid or unavailable explicit boundaries close the menu. Files does
 not raise its global layer or duplicate Workbench coordinate conversion to make
 an obscured action reachable.
 
-Files diff inspection uses a nonmodal desktop Activity window, a normal saved
-Workbench canvas component, or the shared mobile modal. Every presentation has
-a constrained patch viewport, so users can reach the last diff line. Missing
-files or diffs keep a stable empty/error state with explicit refresh.
-
 # Contract
+
+Files diff inspection uses a nonmodal desktop Activity window, a saved Workbench
+component, or the shared mobile modal. Every presentation has a constrained
+patch viewport with access to the last diff line. Missing files or diffs keep
+a stable empty/error state with explicit refresh.
 
 ## Layout ownership
 
@@ -32,13 +31,10 @@ showing it, moves it left or up when necessary, and constrains width and height.
 Long labels wrap; oversized menus scroll internally with their action order,
 groups, and destructive styling intact.
 
-[Flower Activity companion](flower-activity-companion.md) owns the mobile rail
-placement. Shell exposes the measured client-coordinate top of the actual accessory anchor
-through `EnvContext.activityContentBottomLimit`. Files clips its boundary to that
-limit; it does not recalculate rail position, navigation height, keyboard height,
-or safe-area insets. The shared Floe visible-viewport mechanism accounts for the
-browser viewport and screen safe areas. Files measures its root on resize and
-before input triggers so a later open uses current client geometry.
+Mobile has no persistent Flower accessory rail, so Files needs no product-specific
+bottom cutout. The shared Floe visible-viewport mechanism accounts for browser
+chrome and screen safe areas. Files measures its root on resize and before input
+triggers so a later open uses current client geometry.
 
 ## Input and navigation
 

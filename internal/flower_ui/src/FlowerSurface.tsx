@@ -12,7 +12,7 @@ import { FlowerProviderBrandIcon } from './settings/FlowerProviderBrandIcon';
 import { WebSearchActivity } from './WebSearchActivity';
 import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
+import { cn, useMediaQuery } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, Link, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
@@ -712,10 +712,14 @@ const FlowerCompanionLiveTailText: Component<Readonly<{
 
 export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const presentation = () => props.presentation ?? 'full';
+  const mobileViewport = useMediaQuery('(max-width: 767px)');
+  const mobileNavigation = () => presentation() === 'full' && mobileViewport();
+  const [mobileThreadsOpen, setMobileThreadsOpen] = createSignal(false);
+  const mobileThreadListVisible = () => mobileNavigation() && mobileThreadsOpen();
   const companionCollapsed = () => presentation() === 'companion' && !(props.companionOpen ?? true);
   const surfaceEngaged = () => props.engaged ?? true;
   const transcriptVisible = () => props.transcriptVisible ?? true;
-  const foregroundEngagementRequested = () => surfaceEngaged() && transcriptVisible() && documentVisible();
+  const foregroundEngagementRequested = () => surfaceEngaged() && transcriptVisible() && !mobileThreadListVisible() && documentVisible();
   const effectiveEngagement = () => foregroundEngagementRequested() && engagementBootstrapReady();
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY;
   const attachmentCopy = () => copy().attachments;
@@ -979,6 +983,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let companionActionRef: HTMLButtonElement | undefined;
   let companionSummaryRef: HTMLButtonElement | undefined;
   let surfaceRef: HTMLElement | undefined;
+  let mobileThreadsTrigger: HTMLButtonElement | undefined;
+  let mobileChatTrigger: HTMLButtonElement | undefined;
   let composerSurfaceRef: HTMLDivElement | undefined;
   let restoringCompanionFocus = false;
   let companionActivationToken = 0;
@@ -4000,6 +4006,7 @@ webSearch: model.web_search,
       return;
     }
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
+    setMobileThreadsOpen(false);
     cancelDeferredThreadSelection();
     closeSubagentOverlays();
     const sequence = claimedSequence ?? ++threadLoadSequence;
@@ -4700,6 +4707,7 @@ webSearch: model.web_search,
   };
 
   const openSettings = () => {
+    setMobileThreadsOpen(false);
     closeSubagentOverlays();
     setSidePanel('settings');
     setSettingsOpened(true);
@@ -5431,6 +5439,7 @@ webSearch: model.web_search,
   };
 
   const startCompose = () => {
+    setMobileThreadsOpen(false);
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     cancelDeferredThreadSelection();
@@ -5554,6 +5563,7 @@ webSearch: model.web_search,
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     const tid = trimString(threadID);
     if (!tid) return;
+    setMobileThreadsOpen(false);
     cancelThreadSelectionTransaction();
     if (props.onThreadSelectionEvent) {
       const startedAt = typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -11141,6 +11151,19 @@ webSearch: model.web_search,
             when={presentation() === 'companion'}
             fallback={(
               <div class="flex min-w-0 items-center gap-3">
+                <button
+                  type="button"
+                  class="flower-mobile-navigation-button flower-header-icon-button"
+                  ref={mobileThreadsTrigger}
+                  aria-label={copy().chat.conversationsAria}
+                  title={copy().chat.conversationsAria}
+                  onClick={() => {
+                    setMobileThreadsOpen(true);
+                    queueMicrotask(() => mobileChatTrigger?.focus({ preventScroll: true }));
+                  }}
+                >
+                  <ChevronLeft class="h-4 w-4" />
+                </button>
                 <FlowerIcon class="h-5 w-5 text-primary" />
                 <div class="flower-chat-header-identity min-w-0">
 				  <div class="flower-chat-header-title truncate">{selectedThreadTitle()}</div>
@@ -11931,6 +11954,7 @@ webSearch: model.web_search,
         props.class,
       )}
       data-flower-presentation={presentation()}
+      data-flower-mobile-pane={mobileNavigation() ? (mobileThreadsOpen() ? 'threads' : 'detail') : undefined}
       data-flower-companion-open={presentation() === 'companion' ? (!companionCollapsed() ? 'true' : 'false') : undefined}
       data-flower-engaged={surfaceEngaged() ? 'true' : 'false'}
       data-flower-transcript-visible={transcriptVisible() ? 'true' : 'false'}
@@ -11941,8 +11965,23 @@ webSearch: model.web_search,
       data-flower-side-panel={sidePanel()}
       style={{ '--flower-thread-rail-width': `${threadRailWidth()}px` }}
     >
-      <aside class="flower-component-thread-rail" aria-label={copy().chat.conversationsAria}>
+      <aside class="flower-component-thread-rail" aria-label={copy().chat.conversationsAria}
+        inert={mobileNavigation() && !mobileThreadsOpen()}
+        aria-hidden={mobileNavigation() && !mobileThreadsOpen() ? 'true' : undefined}>
         <div class="flower-sidebar-actions">
+          <button
+            ref={mobileChatTrigger}
+            type="button"
+            class="flower-mobile-navigation-button flower-header-icon-button"
+            aria-label={copy().settings.backToChat}
+            title={copy().settings.backToChat}
+            onClick={() => {
+              setMobileThreadsOpen(false);
+              queueMicrotask(() => mobileThreadsTrigger?.focus({ preventScroll: true }));
+            }}
+          >
+            <ChevronRight class="h-4 w-4" />
+          </button>
           {props.sidebarLeadingAction}
           <button
             type="button"
@@ -12145,7 +12184,8 @@ webSearch: model.web_search,
       >
         <GripVertical class="h-3.5 w-3.5" />
       </button>
-      <section class="flower-component-main">
+      <section class="flower-component-main" inert={mobileThreadListVisible()}
+        aria-hidden={mobileThreadListVisible() ? 'true' : undefined}>
         <Show when={sidePanel() === 'chat'}>{chatPanel()}</Show>
         <div class={cn('h-full min-h-0', sidePanel() !== 'settings' && 'hidden')} aria-hidden={sidePanel() !== 'settings'}>
           <Show when={settingsOpened()}>

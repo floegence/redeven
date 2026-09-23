@@ -1867,7 +1867,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
           "flex max-w-none flex-col overflow-hidden rounded-md border border-border/60 p-0 shadow-xl",
           "[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2",
           layout.isMobile()
-            ? "h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none"
+            ? "h-full w-full"
             : "h-[min(760px,88vh)] w-[min(1280px,94vw)]",
         )}
       >

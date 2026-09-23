@@ -298,6 +298,8 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
       persistenceKey={`plugin-surface:${props.target.pluginInstanceID}:${props.target.surfaceID}:activity`}
       defaultSize={{ width: 920, height: 680 }}
       minSize={{ width: 460, height: 360 }}
+      compactBelow={768}
+      viewportInsets={layout.isMobile() ? { top: 4, right: 4, bottom: 4, left: 4 } : undefined}
       surfaceRef={bindSurface}
       class="redeven-plugin-activity-window overflow-hidden rounded-md"
       contentClass="min-h-0 flex flex-1 flex-col !overflow-hidden !p-0"

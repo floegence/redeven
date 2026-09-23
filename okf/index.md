@@ -139,6 +139,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower input history](ui/flower-input-history.md) - Recall previous user text with arrow keys while preserving drafts, input methods and completion ownership.
 - [Absolute filesystem directory selection](ui/filesystem-picker-navigation.md) - Select runtime-authorized absolute paths with shared navigation and independent product forms.
 - [Flower working directory navigation](ui/flower-working-directory-navigation.md) - Open a conversation directory in Files or a new Terminal through consistent Activity and Workbench menus.
+- [Flower mobile navigation](ui/flower-mobile-navigation.md) - Switch between full-height conversations and chat while retaining drafts, readable content, and circular send actions.
 - [Flower Activity companion](ui/flower-activity-companion.md) - Expand a compact bottom-bar field into the same retained Flower surface and preserve placement, composer identity, focus, and read ownership.
 - [Ask Flower window boundaries](ui/ask-flower-window.md) - Keep contextual launchers below headers and preserve manual resizing without maximization.
 - [Flower companion presence](ui/flower-companion-presence.md) - Present live work, pending actions, and new completion feedback without displacing drafts or creating a second observation stream.
