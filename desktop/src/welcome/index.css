@@ -1317,6 +1317,8 @@ html:not(.dark) .redeven-new-environment-card:hover {
   scrollbar-gutter: stable;
   overflow-anchor: none;
 }
+/* Exhausted address lists continue scrolling the settings body inside its modal. */
+.redeven-environment-settings-dialog .redeven-address-viewport { overscroll-behavior-y: auto; }
 .redeven-address-viewport:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 0.25rem; }
 .redeven-address-group .redeven-card-endpoint-row {
   grid-template-columns: minmax(0, 1fr) auto;

@@ -45,6 +45,95 @@ try {
       .every(element => getComputedStyle(element).opacity === '1'));
     await page.screenshot({ path, animations: 'disabled' });
   }
+
+  // Native wheel input must reach the settings body through an exhausted address list.
+  // Assigning scrollTop alone cannot detect a broken browser scroll chain.
+  for (const [width, height] of [[1440, 900], [480, 640]]) {
+    await page.setViewportSize({ width, height });
+    for (const inventory of ['short', 'long']) {
+      await page.goto(new URL(`environment-endpoints.html?locale=en-US&${inventory === 'short' ? 'network-local=1' : 'addresses=40'}`, report.url).href);
+      await page.addStyleTag({ content: 'main { min-height: 200vh !important; }' });
+      const name = inventory === 'short' ? 'Local Environment' : 'Network';
+      await page.locator(`[data-environment="${name}"]`).getByRole('button', { name: 'Environment settings', exact: true }).click();
+      const dialog = page.getByRole('dialog');
+      const body = dialog.locator('.environment-settings-scroll:visible');
+      await body.waitFor();
+      await settleDisclosure();
+      const backgroundTop = await page.evaluate(() => document.scrollingElement.scrollTop);
+      assert.ok(await page.evaluate(() => document.scrollingElement.scrollHeight > innerHeight), 'background can reveal scroll bleed');
+      const geometry = async () => dialog.evaluate(panel => {
+        const rect = panel.getBoundingClientRect();
+        const footer = panel.querySelector('.environment-settings-actions').getBoundingClientRect();
+        return { top: rect.top, height: rect.height, footerTop: footer.top, footerBottom: footer.bottom };
+      });
+      const initialGeometry = await geometry();
+      const top = locator => locator.evaluate(element => element.scrollTop);
+      async function wheel(target, deltaY) {
+        // Expose the target before measuring, then send a fresh native gesture.
+        await target.scrollIntoViewIfNeeded();
+        const point = await target.evaluate(element => {
+          const rect = element.getBoundingClientRect();
+          const body = element.closest('.environment-settings-scroll').getBoundingClientRect();
+          const visibleTop = Math.max(rect.top, body.top);
+          const visibleBottom = Math.min(rect.bottom, body.bottom);
+          return { x: rect.left + Math.min(24, rect.width / 2), y: (visibleTop + visibleBottom) / 2 };
+        });
+        await page.mouse.move(point.x, point.y);
+        await page.waitForTimeout(250);
+        const before = await top(body);
+        await page.mouse.wheel(0, deltaY);
+        // Chromium's compositor finishes scrolling asynchronously, including no-op gestures.
+        await page.waitForTimeout(300);
+        assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), backgroundTop, 'settings wheel input never scrolls Welcome');
+        assert.deepEqual(await geometry(), initialGeometry, 'window and footer stay fixed during scrolling');
+        return { before, after: await top(body) };
+      }
+      if (inventory === 'short') {
+        for (const scope of ['this_device', 'network']) {
+          const list = dialog.locator(`[data-address-scope="${scope}"] .redeven-address-viewport`);
+          assert.equal(await list.evaluate(element => element.scrollHeight - element.clientHeight), 0, 'short addresses have no internal scroll range');
+          for (const target of [list.locator('.redeven-card-endpoint-value').first(), list.getByLabel('Copy Environment URL', { exact: true }).first()]) {
+            await body.evaluate(element => { element.scrollTop = 0; });
+            const movement = await wheel(target, 120);
+            assert.ok(movement.after > movement.before, `${width}px ${scope}: wheel over a short address or its action scrolls settings`);
+          }
+        }
+      } else {
+        const group = dialog.locator('[data-address-scope="network"]');
+        const list = group.locator('.redeven-address-viewport');
+        assert.ok(await list.evaluate(element => element.scrollHeight > element.clientHeight * 5), 'long addresses retain a bounded viewport');
+        let movement = await wheel(list, 120);
+        assert.ok(await top(list) > 0, 'long address lists scroll internally');
+        assert.equal(movement.after, movement.before, 'internal scrolling keeps the settings body still');
+
+        await list.evaluate(element => { element.scrollTop = element.scrollHeight; });
+        movement = await wheel(list, 120);
+        assert.ok(movement.after > movement.before, 'the lower list boundary continues into settings');
+        await list.evaluate(element => { element.scrollTop = 0; });
+        movement = await wheel(list, -80);
+        assert.ok(movement.after < movement.before, 'the upper list boundary continues into settings');
+
+        for (const query of ['2001:db8', 'no-matching-address']) {
+          await group.getByRole('searchbox', { name: 'Filter addresses' }).fill(query);
+          await body.evaluate(element => { element.scrollTop = 0; });
+          assert.equal(await list.evaluate(element => element.scrollHeight - element.clientHeight), 0, 'filtered addresses have no internal scroll range');
+          movement = await wheel(list, 120);
+          assert.ok(movement.after > movement.before, 'a filtered or empty list continues into settings');
+        }
+      }
+      // Neither exhausted settings nor the backdrop may move the underlying page.
+      for (const deltaY of [-120, 120]) {
+        await body.evaluate((element, delta) => { element.scrollTop = delta < 0 ? 0 : element.scrollHeight; }, deltaY);
+        await wheel(body, deltaY);
+        await page.mouse.move(4, height / 2);
+        await page.mouse.wheel(0, deltaY);
+        await page.waitForTimeout(300);
+        assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), backgroundTop, 'backdrop wheel input never scrolls Welcome');
+      }
+      report.cases.push(`settings-address-wheel:${width}:${inventory}`);
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(new URL('environment-endpoints.html', report.url).href);
   for (const name of ['Local Environment', 'gzcom', 'gzlight', 'Network']) {
     const card = page.locator(`[data-environment="${name}"]`);

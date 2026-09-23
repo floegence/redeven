@@ -14843,7 +14843,7 @@
         "environment",
         "settings"
       ],
-      "timestamp": "2026-09-19T00:00:00Z",
+      "timestamp": "2026-09-23T00:00:00Z",
       "frontmatter": {
         "description": "Explain each Environment connection and apply one address namespace policy to Welcome and settings.",
         "tags": [
@@ -14852,11 +14852,11 @@
           "environment",
           "settings"
         ],
-        "timestamp": "2026-09-19T00:00:00Z",
+        "timestamp": "2026-09-23T00:00:00Z",
         "title": "Desktop Environment connections",
         "type": "Desktop Contract"
       },
-      "body_length": 9881,
+      "body_length": 10260,
       "summary": "Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure connection model; presentation never chooses or changes a transport. An exactly linked Runtime and Cloud Environment share one visual card while retaining independent action owners. Every address retains its host or container namespace. An absent address does not prove the Runtime stopped, and private bridge authorities never become browser, clipboard, or QR targets. Missing or failed observations remain visibly unconfirmed; explicit Stop clears current addresses even while an old window remains.",
       "sections": [
         {
@@ -14870,8 +14870,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "## Environment library presentation\n\n[Environment library](desktop-environment-library.md) owns relationship cards, Runtime/Cloud access perspectives, source grids, searching, counts, and owner-scoped pin presentation. A selected perspective supplies the original owner to this connection model. Switching perspectives closes the previous owner's endpoint popover; it does not change address validity, cancel work, or rebind open settings. Standalone Runtime metadata retains startup age and one Cloud affiliation, while Cloud perspectives show only source, ENV ID and remote entry facts. Unsupported legacy links retain their recovery fact.\n\n## Access settings and independent clients\n\nPublic Runtime addresses are independent from Desktop's private management connection. Other Desktops and browsers may connect concurrently within their own reachable namespace. Saved bind, protocol, port, password, and certificate changes apply on the next Runtime start; drafts never synthesize or replace the current reported URL. Pending changes remain visible across settings reopenings and belong to one process start identity, including password-only changes.\n\nSettings show connection identity and access actions before configuration. Narrow windows wrap full URLs and retain trailing icon actions; address groups scroll independently while the footer stays visible. Live snapshots preserve expanded sections, scroll, focus, selection, and drafts. Certificate checks and pending operations bind to the real Environment ID; responses from an old target or closed section are ignored. Refreshing a snapshot does not restart a certificate check.\n\nManaged settings use the selected Runtime's private control channel, or its authorized host CLI while stopped. Browser access and listening-port controls configure the Environment, not Desktop's managed connection. Remote loopback is labeled Environment only and cannot open in the client browser. SSH connection details remain available if access settings fail; the failure has an explicit Retry. URL registrations edit connection information only.\n\n[Environment settings](desktop-environment-settings.md) owns section layout, draft/session identity, validation, and committed rebinding. [Local UI certificates](../security/local-ui-certificates.md) owns explicit HTTPS, certificate validity and client trust, maintenance confirmation, and restart blocking. [Local UI network exposure](../security/local-ui-network-exposure.md) owns bind, public-address, and password authority. Missing saved protocols retain HTTP; explicit HTTPS is preserved. Native settings remain readable for older Runtimes, while unsupported management requires an update or stop before saving. Failed writes preserve the prior password verifier and report failure rather than claiming success.",
-          "char_count": 2807
+          "body": "## Environment library presentation\n\n[Environment library](desktop-environment-library.md) owns relationship cards, Runtime/Cloud access perspectives, source grids, searching, counts, and owner-scoped pin presentation. A selected perspective supplies the original owner to this connection model. Switching perspectives closes the previous owner's endpoint popover; it does not change address validity, cancel work, or rebind open settings. Standalone Runtime metadata retains startup age and one Cloud affiliation, while Cloud perspectives show only source, ENV ID and remote entry facts. Unsupported legacy links retain their recovery fact.\n\n## Access settings and independent clients\n\nPublic Runtime addresses are independent from Desktop's private management connection. Other Desktops and browsers may connect concurrently within their own reachable namespace. Saved bind, protocol, port, password, and certificate changes apply on the next Runtime start; drafts never synthesize or replace the current reported URL. Pending changes remain visible across settings reopenings and belong to one process start identity, including password-only changes.\n\nSettings show connection identity and access actions before configuration. Narrow windows wrap full URLs and retain trailing icon actions. Overflowing address groups scroll internally; when a group has no scroll range or reaches its upper or lower boundary, vertical wheel input continues into the settings body, including over address actions and filtered or empty results. The window and footer stay fixed, and the modal prevents scrolling the Welcome background. Live snapshots preserve expanded sections, scroll, focus, selection, and drafts. Certificate checks and pending operations bind to the real Environment ID; responses from an old target or closed section are ignored. Refreshing a snapshot does not restart a certificate check.\n\nManaged settings use the selected Runtime's private control channel, or its authorized host CLI while stopped. Browser access and listening-port controls configure the Environment, not Desktop's managed connection. Remote loopback is labeled Environment only and cannot open in the client browser. SSH connection details remain available if access settings fail; the failure has an explicit Retry. URL registrations edit connection information only.\n\n[Environment settings](desktop-environment-settings.md) owns section layout, draft/session identity, validation, and committed rebinding. [Local UI certificates](../security/local-ui-certificates.md) owns explicit HTTPS, certificate validity and client trust, maintenance confirmation, and restart blocking. [Local UI network exposure](../security/local-ui-network-exposure.md) owns bind, public-address, and password authority. Missing saved protocols retain HTTP; explicit HTTPS is preserved. Native settings remain readable for older Runtimes, while unsupported management requires an update or stop before saving. Failed writes preserve the prior password verifier and report failure rather than claiming success.",
+          "char_count": 3066
         }
       ],
       "evidence": [
@@ -14916,9 +14916,9 @@
           "description": "Loads existing catalogs without a protocol into HTTP startup while preserving the saved port, password, and explicit HTTPS choice."
         },
         {
-          "id": "redeven:desktop/scripts/check-environment-endpoints.mjs:0:isolated browser acceptance for the actual product popover and settings components, including narrow and dark surfaces.",
+          "id": "redeven:desktop/scripts/check-environment-endpoints.mjs:0:isolated browser acceptance for the actual product popover and settings components, including narrow and dark surfaces, native wheel chaining through short, long and filtered address lists, fixed footer geometry and modal scroll isolation.",
           "source": "redeven:desktop/scripts/check-environment-endpoints.mjs",
-          "description": "Isolated browser acceptance for the actual product popover and settings components, including narrow and dark surfaces."
+          "description": "Isolated browser acceptance for the actual product popover and settings components, including narrow and dark surfaces, native wheel chaining through short, long and filtered address lists, fixed footer geometry and modal scroll isolation."
         }
       ],
       "snippet": "Desktop derives connection presentation from the registered host access, process placement, current Runtime-reported public addresses, and existing Runtime health. Welcome cards and settings share one pure connection model; presentation nev",
@@ -25545,5 +25545,5 @@
       ]
     }
   ],
-  "source_sha256": "c08c288b9890aa60366a5eec73c5758f456f1ecd63dbb2205140de2c280d4fc5"
+  "source_sha256": "9f36f06efcf3ca6f6006236826d13dd08d38f4143b091723d691a1889c07c925"
 }
