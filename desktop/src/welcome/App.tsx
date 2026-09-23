@@ -6305,6 +6305,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             data-desktop-page="environments" aria-hidden={flowerVisible() ? 'true' : undefined} inert={flowerVisible()}>
             <ConnectEnvironmentSurface
               i18n={i18n()}
+              visible={!flowerVisible()}
               snapshot={snapshot()}
               busyState={busyState()}
               actionProgress={activeActionProgress()}
@@ -7188,6 +7189,7 @@ type EnvironmentGridProps = { groups: readonly EnvironmentLibraryDisplayGroup[];
 
 function ConnectEnvironmentSurface(props: Readonly<{
   i18n: DesktopI18n;
+  visible: boolean;
   snapshot: DesktopWelcomeSnapshot;
   busyState: DesktopLauncherBusyState;
   actionProgress: readonly DesktopLauncherActionProgress[];
@@ -7266,6 +7268,21 @@ function ConnectEnvironmentSurface(props: Readonly<{
   signOutControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
   deleteGateway: (gateway: DesktopGatewaySource) => void;
 }>) {
+  let tabContent!: HTMLDivElement;
+  let tabEntrance: Animation | undefined;
+  const selectTab = (tab: EnvironmentCenterTab) => {
+    if (tab === props.activeTab) return;
+    tabEntrance?.cancel();
+    props.setActiveTab(tab);
+    if (!props.visible || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // Explicit tab selection owns the fade; snapshots never replay it or move cards.
+    tabEntrance = tabContent.animate([{ opacity: 0.4 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
+  };
+  createEffect(() => {
+    if (!props.visible) tabEntrance?.cancel();
+  });
+  onCleanup(() => tabEntrance?.cancel());
+
   const visibleEnvironmentCount = createMemo(() => (
     environmentLibraryCount(
       props.allLibraryGroups,
@@ -7517,7 +7534,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                       class="redeven-console-tab"
                       data-active={props.activeTab === tab.value}
                       aria-pressed={props.activeTab === tab.value}
-                      onClick={() => props.setActiveTab(tab.value)}
+                      onClick={() => selectTab(tab.value)}
                   >
                       {props.i18n.t(tab.labelKey)}
                     </button>
@@ -7612,7 +7629,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
             </div>
           </header>
 
-          <div class="space-y-3">
+          <div ref={tabContent} class="redeven-center-content space-y-3">
             <Show when={props.activeTab === 'environments'}>
               <>
                 <Show when={props.snapshot.platform_capabilities.wsl_environment}>

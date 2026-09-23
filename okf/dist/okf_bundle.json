@@ -1075,15 +1075,15 @@
             "path": "desktop/desktop-welcome-navigation.md",
             "type": "UI Contract",
             "title": "Desktop Welcome navigation",
-            "description": "Switch between Environments and Flower immediately while retaining their page state.",
+            "description": "Switch Welcome pages immediately, retain page state, and present explicitly selected Environment Center tabs.",
             "tags": [
               "desktop",
               "flower",
               "navigation",
               "welcome"
             ],
-            "summary": "The Desktop Welcome renderer owns navigation inside its existing window. Opening\nFlower or returning to Environments changes the visible page on the click without\nwaiting for Launcher IPC, an environment snapshot, or runtime preparation. Visited\npages retain their state. Runtime readiness and compatibility still determine\nwhether Flower can use its runtime; a blocked or loading runtime never prevents\nreturning to Environments.",
-            "section_count": 3
+            "summary": "The Desktop Welcome renderer owns navigation inside its existing window. Opening\nFlower or returning to Environments changes the visible page on the click without\nwaiting for Launcher IPC, an environment snapshot, or runtime preparation. Visited\npages retain their state. Runtime readiness and compatibility still determine\nwhether Flower can use its runtime; a blocked or loading runtime never prevents\nreturning to Environments. Explicit Environment Center tab selection presents the\nnew content with a brief fade when motion is allowed, without moving controls or\nreplaying card entrance animations during refresh or retained-page return.",
+            "section_count": 4
           },
           {
             "concept_id": "desktop.desktop-environment-connections",
@@ -15135,6 +15135,12 @@
           "title": "Desktop Environment registration ownership"
         },
         {
+          "label": "Desktop Welcome navigation",
+          "path": "desktop/desktop-welcome-navigation.md",
+          "concept_id": "desktop.desktop-welcome-navigation",
+          "title": "Desktop Welcome navigation"
+        },
+        {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
@@ -16726,28 +16732,28 @@
       "concept_id": "desktop.desktop-welcome-navigation",
       "type": "UI Contract",
       "title": "Desktop Welcome navigation",
-      "description": "Switch between Environments and Flower immediately while retaining their page state.",
+      "description": "Switch Welcome pages immediately, retain page state, and present explicitly selected Environment Center tabs.",
       "tags": [
         "desktop",
         "flower",
         "navigation",
         "welcome"
       ],
-      "timestamp": "2026-09-21T00:00:00Z",
+      "timestamp": "2026-09-23T00:00:00Z",
       "frontmatter": {
-        "description": "Switch between Environments and Flower immediately while retaining their page state.",
+        "description": "Switch Welcome pages immediately, retain page state, and present explicitly selected Environment Center tabs.",
         "tags": [
           "desktop",
           "flower",
           "navigation",
           "welcome"
         ],
-        "timestamp": "2026-09-21T00:00:00Z",
+        "timestamp": "2026-09-23T00:00:00Z",
         "title": "Desktop Welcome navigation",
         "type": "UI Contract"
       },
-      "body_length": 3780,
-      "summary": "The Desktop Welcome renderer owns navigation inside its existing window. Opening\nFlower or returning to Environments changes the visible page on the click without\nwaiting for Launcher IPC, an environment snapshot, or runtime preparation. Visited\npages retain their state. Runtime readiness and compatibility still determine\nwhether Flower can use its runtime; a blocked or loading runtime never prevents\nreturning to Environments.",
+      "body_length": 5246,
+      "summary": "The Desktop Welcome renderer owns navigation inside its existing window. Opening\nFlower or returning to Environments changes the visible page on the click without\nwaiting for Launcher IPC, an environment snapshot, or runtime preparation. Visited\npages retain their state. Runtime readiness and compatibility still determine\nwhether Flower can use its runtime; a blocked or loading runtime never prevents\nreturning to Environments. Explicit Environment Center tab selection presents the\nnew content with a brief fade when motion is allowed, without moving controls or\nreplaying card entrance animations during refresh or retained-page return.",
       "sections": [
         {
           "id": "navigation-ownership",
@@ -16755,6 +16761,13 @@
           "level": 1,
           "body": "Local header, logo, sidebar, and contextual Flower handoff actions select the\nrenderer page directly. They do not reopen the utility window, start environment\ndiscovery, or acquire the general Launcher busy state.\n\nMain-process window opening and settings requests increment `navigation_revision`\nin the Welcome snapshot, including repeated requests for the same destination.\nThe renderer consumes each newer request once. Environment health, operation\nprogress, issue clearing, and ordinary snapshot refreshes retain that revision and\ncannot override local navigation. Snapshot ordering remains authoritative for\naccepting data; navigation revision identifies an explicit destination request,\nnot another snapshot sequence. Main captures the navigation state after its\nasynchronous snapshot reads so an older captured destination cannot be published\nas a later request.",
           "char_count": 870
+        },
+        {
+          "id": "environment-center-tab-presentation",
+          "title": "Environment Center tab presentation",
+          "level": 1,
+          "body": "Activating a different Environments, Redeven Cloud, or Gateways tab immediately\nselects and renders its content. Pointer and keyboard activation share one path.\nOnly that explicit selection starts a short opacity fade on the content area;\nthe header and navigation stay steady, and content geometry, scroll position,\noverlay coordinates, and keyboard focus are not animated. The content remains\ninteractive throughout; there is no outgoing-content delay or animation queue.\n\nSelecting the active tab, refreshing snapshots, searching, and updating operation\nprogress do not start or restart this fade. A rapid selection cancels the previous\nfade and presents the latest selection. Hiding the Environment page or disposing\nWelcome cancels unfinished tab motion, so returning from Flower never replays it.\nThe system reduced-motion preference skips the fade. This presentation does not\nchange tab state ownership or the [Environment library](desktop-environment-library.md)\ncard stability contract.",
+          "char_count": 995
         },
         {
           "id": "retained-pages",
@@ -16796,10 +16809,21 @@
           "id": "redeven:desktop/scripts/check-flower-navigation.mjs:0:browser paint timing, delayed ai admission, draft and selection retention, inert pages, and workspace stream lifetime using a fixture that rejects premature ai requests.",
           "source": "redeven:desktop/scripts/check-flower-navigation.mjs",
           "description": "Browser paint timing, delayed AI admission, draft and selection retention, inert pages, and workspace stream lifetime using a fixture that rejects premature AI requests."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-welcome-tab-motion.mjs:0:real-browser tab entry, rapid and repeated selection, snapshot continuity, keyboard focus, reduced motion, and retained-page return on wide and narrow layouts.",
+          "source": "redeven:desktop/scripts/check-welcome-tab-motion.mjs",
+          "description": "Real-browser tab entry, rapid and repeated selection, snapshot continuity, keyboard focus, reduced motion, and retained-page return on wide and narrow layouts."
         }
       ],
       "snippet": "The Desktop Welcome renderer owns navigation inside its existing window. Opening Flower or returning to Environments changes the visible page on the click without waiting for Launcher IPC, an environment snapshot, or runtime preparation. Vi",
       "links": [
+        {
+          "label": "Environment library",
+          "path": "desktop/desktop-environment-library.md",
+          "concept_id": "desktop.desktop-environment-library",
+          "title": "Desktop Environment library"
+        },
         {
           "label": "Desktop readiness boundary",
           "path": "desktop/desktop-runtime-readiness.md",
@@ -25758,5 +25782,5 @@
       ]
     }
   ],
-  "source_sha256": "04c9f09446e53fa56ef630aa7af121d56cc1ec9f344cad4cfe0ccdce8157115f"
+  "source_sha256": "81670b398f0feff1f319a2e721e3d685b3a914660c80e011a317d711e8aae13b"
 }

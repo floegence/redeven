@@ -1,9 +1,9 @@
 ---
 type: UI Contract
 title: Desktop Welcome navigation
-description: Switch between Environments and Flower immediately while retaining their page state.
+description: Switch Welcome pages immediately, retain page state, and present explicitly selected Environment Center tabs.
 tags: [desktop, welcome, flower, navigation]
-timestamp: 2026-09-21T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 # Summary
 
@@ -12,7 +12,9 @@ Flower or returning to Environments changes the visible page on the click withou
 waiting for Launcher IPC, an environment snapshot, or runtime preparation. Visited
 pages retain their state. Runtime readiness and compatibility still determine
 whether Flower can use its runtime; a blocked or loading runtime never prevents
-returning to Environments.
+returning to Environments. Explicit Environment Center tab selection presents the
+new content with a brief fade when motion is allowed, without moving controls or
+replaying card entrance animations during refresh or retained-page return.
 
 # Navigation ownership
 
@@ -29,6 +31,23 @@ accepting data; navigation revision identifies an explicit destination request,
 not another snapshot sequence. Main captures the navigation state after its
 asynchronous snapshot reads so an older captured destination cannot be published
 as a later request.
+
+# Environment Center tab presentation
+
+Activating a different Environments, Redeven Cloud, or Gateways tab immediately
+selects and renders its content. Pointer and keyboard activation share one path.
+Only that explicit selection starts a short opacity fade on the content area;
+the header and navigation stay steady, and content geometry, scroll position,
+overlay coordinates, and keyboard focus are not animated. The content remains
+interactive throughout; there is no outgoing-content delay or animation queue.
+
+Selecting the active tab, refreshing snapshots, searching, and updating operation
+progress do not start or restart this fade. A rapid selection cancels the previous
+fade and presents the latest selection. Hiding the Environment page or disposing
+Welcome cancels unfinished tab motion, so returning from Flower never replays it.
+The system reduced-motion preference skips the fade. This presentation does not
+change tab state ownership or the [Environment library](desktop-environment-library.md)
+card stability contract.
 
 # Retained pages
 
@@ -68,3 +87,4 @@ page; contextual window placement remains in
 - `redeven:desktop/src/main/desktopWelcomeState.ts` - Welcome snapshot projection.
 - `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Pending IPC, immediate return, retained instances, and explicit host requests.
 - `redeven:desktop/scripts/check-flower-navigation.mjs` - Browser paint timing, delayed AI admission, draft and selection retention, inert pages, and workspace stream lifetime using a fixture that rejects premature AI requests.
+- `redeven:desktop/scripts/check-welcome-tab-motion.mjs` - Real-browser tab entry, rapid and repeated selection, snapshot continuity, keyboard focus, reduced motion, and retained-page return on wide and narrow layouts.
