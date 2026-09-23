@@ -12998,7 +12998,7 @@
         "title": "Remote browser transport and media",
         "type": "Architecture Contract"
       },
-      "body_length": 4809,
+      "body_length": 5035,
       "summary": "- Authority: the Runtime authorizes view carriers; FloeBrowser owns element capture, media identities, encoding feedback and client decoding.\n- Outcome: clients receive source DOM, resources and element media through Flowersec without directly contacting websites or source media ports.\n- Invariants: viewing, input and media subscriptions are separate; source tracks remain website-owned; bounded media credit includes partial frames; clients never establish WebRTC.\n- Failure boundary: retired source/subscription identities are rejected, media loss stays scoped to its lane, and navigation never revives stale media or input.",
       "sections": [
         {
@@ -13019,8 +13019,8 @@
           "id": "presentation-timing",
           "title": "Presentation timing",
           "level": 1,
-          "body": "The upstream collector maps audio and video RTP clocks onto one source timeline.\nClient decoding and presentation preserve their relative timestamps even if the\nfirst video frame arrives late. Neither track is rebased to its first arrival.\nAudio scheduling accounts for the output device clock after the worklet has\nconsumed its first samples. Device-clock queries must not block audio startup;\nvideo presentation retains its deadline while other tracks update.\n\nNormal-media acceptance compares visible flashes with audible pulses at the\naudio device timeline and requires at most 100 ms of skew. The source fixture\nmust contain simultaneous pulses. Decoder callback timing alone does not prove\npresentation synchronization, and comparison-window edges must retain both halves\nof each measured pulse. Local overlays provide debugging evidence only; release\nacceptance uses the published dependency and built product assets.",
-          "char_count": 924
+          "body": "The upstream collector maps audio and video RTP clocks onto one source timeline.\nClient decoding and presentation preserve their relative timestamps even if the\nfirst video frame arrives late. Neither track is rebased to its first arrival.\nThe shared clock is anchored before synchronous audio-device initialization, so\nstartup cannot shift later video deadlines. Audio scheduling accounts for the\noutput device clock after the worklet has consumed its first samples.\nDevice-clock queries must not block audio startup;\nvideo presentation retains its deadline while other tracks update.\n\nNormal-media acceptance compares visible flashes with audible pulses at the\naudio device timeline and requires at most 100 ms of skew. The source fixture\nmust contain simultaneous pulses. Decoder callback timing alone does not prove\npresentation synchronization. Stable Firefox uses native WebDriver to run the\nsame audible/presented measurement as Chrome and Desktop. Comparison-window\nedges must retain both halves of each measured pulse. Local overlays provide\ndebugging evidence only; release acceptance uses the published dependency and\nbuilt product assets.",
+          "char_count": 1150
         }
       ],
       "evidence": [
@@ -26910,5 +26910,5 @@
       ]
     }
   ],
-  "source_sha256": "39ce9d3d66562300ff8db9c8363fc035ad46d0070d7c6e8aa0e667d901c5f171"
+  "source_sha256": "7749cb6b20b39e5d38a0f43eca53f03110d872b7cb87d68fda6d5ab2bd2e0155"
 }

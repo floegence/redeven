@@ -61,7 +61,7 @@
     "solid-js": "^1.9.3",
     "solid-motionone": "^1.0.4",
     "thinking-orbs": "0.3.1",
-    "@floegence/floebrowser": "0.1.5"
+    "@floegence/floebrowser": "https://github.com/floegence/floebrowser/releases/download/v0.1.6/floegence-floebrowser-0.1.6.tgz"
   },
   "overrides": {
     "@floegence/flowersec-core": "5.4.1",

@@ -51,16 +51,20 @@ a fresh keyframe and does not replay queued old pictures.
 The upstream collector maps audio and video RTP clocks onto one source timeline.
 Client decoding and presentation preserve their relative timestamps even if the
 first video frame arrives late. Neither track is rebased to its first arrival.
-Audio scheduling accounts for the output device clock after the worklet has
-consumed its first samples. Device-clock queries must not block audio startup;
+The shared clock is anchored before synchronous audio-device initialization, so
+startup cannot shift later video deadlines. Audio scheduling accounts for the
+output device clock after the worklet has consumed its first samples.
+Device-clock queries must not block audio startup;
 video presentation retains its deadline while other tracks update.
 
 Normal-media acceptance compares visible flashes with audible pulses at the
 audio device timeline and requires at most 100 ms of skew. The source fixture
 must contain simultaneous pulses. Decoder callback timing alone does not prove
-presentation synchronization, and comparison-window edges must retain both halves
-of each measured pulse. Local overlays provide debugging evidence only; release
-acceptance uses the published dependency and built product assets.
+presentation synchronization. Stable Firefox uses native WebDriver to run the
+same audible/presented measurement as Chrome and Desktop. Comparison-window
+edges must retain both halves of each measured pulse. Local overlays provide
+debugging evidence only; release acceptance uses the published dependency and
+built product assets.
 
 # Evidence
 
