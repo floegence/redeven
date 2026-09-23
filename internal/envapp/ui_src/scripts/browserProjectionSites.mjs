@@ -1,6 +1,22 @@
-/* global document, window, location, innerHeight, game */
+/* global document, window, location, innerHeight, innerWidth, game */
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
+import { PNG } from "pngjs";
+
+// Compare the rendered element, including WebGL pixels whose drawing buffer
+// has already been discarded. Coarse cell averages tolerate compression and
+// animation between the two captures but reject a blank or displaced scene.
+function pixelGrid(buffer) {
+  const { width, height, data } = PNG.sync.read(buffer);
+  const cells = Array.from({ length: 256 }, () => [0, 0, 0, 0]);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const cell = cells[Math.floor(y * 16 / height) * 16 + Math.floor(x * 16 / width)];
+    const offset = (y * width + x) * 4;
+    for (let channel = 0; channel < 3; channel++) cell[channel] += data[offset + channel];
+    cell[3]++;
+  }
+  return cells.flatMap(cell => cell.slice(0, 3).map(value => value / cell[3]));
+}
 
 const sites = [
   ["Tencent News", "https://news.qq.com/"],
@@ -49,6 +65,30 @@ export async function runBrowserProjectionSites({ popup, source, evidence }) {
     /captcha|verify (?:that )?you are human|access denied|unusual traffic|人机验证|安全验证|访问异常|网络异常/iu.test(
       `${value.title}\n${value.text}`,
     );
+  const canvasEvidence = async (index, phase) => {
+    const native = source.locator('canvas').nth(index);
+    const image = popup.frameLocator('.floe-viewport iframe').locator('[data-floebrowser-canvas]').nth(index);
+    const dimensions = await native.evaluate(canvas => ({ width: canvas.width, height: canvas.height }));
+    await until(({ index, width, height }) => {
+      const image = document.querySelector('.floe-viewport iframe')?.contentDocument?.querySelectorAll('[data-floebrowser-canvas]')[index];
+      return image?.src.startsWith('blob:') && image.complete && image.naturalWidth === width && image.naturalHeight === height && !image.hasAttribute('data-floebrowser-unsupported');
+    }, { index, ...dimensions });
+    let measured, sourcePixels, projectedPixels;
+    const deadline = Date.now() + 5000;
+    do {
+      sourcePixels = await native.screenshot({ scale: 'css' });
+      projectedPixels = await image.screenshot({ scale: 'css' });
+      const expected = pixelGrid(sourcePixels), actual = pixelGrid(projectedPixels);
+      measured = { index, ...dimensions, meanPixelError: expected.reduce((sum, value, i) => sum + Math.abs(value - actual[i]), 0) / expected.length };
+      if (measured.meanPixelError <= 20) break;
+      await new Promise(resolve => setTimeout(resolve, 200));
+    } while (Date.now() < deadline);
+    const prefix = evidence.replace(/\.json$/u, `-${report.sites.length}-canvas-${phase}`);
+    await writeFile(`${prefix}-source.png`, sourcePixels);
+    await writeFile(`${prefix}-projected.png`, projectedPixels);
+    assert.ok(measured.meanPixelError <= 20, `The displayed Canvas must match the actual source scene: ${JSON.stringify(measured)}`);
+    return measured;
+  };
   try {
     for (const [name, url, canvas] of sites) {
       const result = { name, requested: url };
@@ -173,11 +213,20 @@ export async function runBrowserProjectionSites({ popup, source, evidence }) {
           result.projected.elements > 0,
           "The source page has a rendered DOM projection",
         );
+        let canvasIndex;
         if (canvas) {
+          await source.waitForFunction(() => [...document.querySelectorAll('canvas')].some(canvas => {
+            const box = canvas.getBoundingClientRect();
+            return canvas.checkVisibility() && box.width >= 40 && box.height >= 40;
+          }));
+          canvasIndex = await source.evaluate(() => [...document.querySelectorAll('canvas')].map((canvas, index) => {
+            const box = canvas.getBoundingClientRect();
+            return { index, area: canvas.checkVisibility() ? box.width * box.height : 0 };
+          }).sort((a, b) => b.area - a.area)[0].index);
           const image = popup
             .frameLocator(".floe-viewport iframe")
             .locator("[data-floebrowser-canvas]")
-            .first();
+            .nth(canvasIndex);
           await image.waitFor({ state: "visible" });
           await image.evaluate((image) => image.decode());
           result.canvas = await image.evaluate((image) => ({
@@ -189,10 +238,12 @@ export async function runBrowserProjectionSites({ popup, source, evidence }) {
             result.canvas.width > 0 && !result.canvas.unavailable,
             "The native Canvas has decoded projected pixels",
           );
+          result.canvas.beforeInput = await canvasEvidence(canvasIndex, 'before');
           await source.evaluate(() => {
             window.fixtureSiteKeys = [];
             document.addEventListener("keydown", (event) =>
-              window.fixtureSiteKeys.push(event.key),
+              { if (event.isTrusted) window.fixtureSiteKeys.push(event.key); },
+              { capture: true },
             );
           });
           await image.click();
@@ -258,6 +309,19 @@ export async function runBrowserProjectionSites({ popup, source, evidence }) {
             document: document.scrollingElement?.scrollTop ?? 0,
           }));
         }
+        if (canvas) result.canvas.afterInput = await canvasEvidence(canvasIndex, 'after');
+        const visibleImages = await source.evaluate(() => [...document.images].flatMap((image, index) => {
+          const box = image.getBoundingClientRect();
+          return image.checkVisibility() && box.width > 0 && box.height > 0 && box.bottom > 0 && box.right > 0 && box.top < innerHeight && box.left < innerWidth && image.complete && image.naturalWidth > 0 ? [index] : [];
+        }));
+        await until(indexes => {
+          const images = document.querySelector('.floe-viewport iframe')?.contentDocument?.querySelectorAll('img:not([data-floebrowser-canvas])');
+          return images && indexes.every(index => images[index]?.complete && images[index].naturalWidth > 0);
+        }, visibleImages);
+        result.visibleSourceImages = visibleImages.length;
+        // Retain the same source state as the projection, after scroll and
+        // input. The independent native probe above only classifies blockers.
+        await source.screenshot({ path: evidence.replace(/\.json$/u, `-${report.sites.length}-source.png`) });
         await popup.screenshot({
           path: evidence.replace(/\.json$/u, `-${report.sites.length}.png`),
         });

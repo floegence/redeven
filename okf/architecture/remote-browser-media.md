@@ -98,6 +98,17 @@ The presentation canvas captures changed pictures without a second frame-rate
 timer; source encoding and the bounded presentation queue already limit delivery.
 Identical retransmitted Canvas pixels reuse their existing decoded resource;
 changed pixels and dimensions still update.
+Canvas hover, focus and style mutations preserve the media-owned image and
+intrinsic dimensions. Placeholders belong only to new projected nodes; input
+feedback cannot replace delivered graphics or reset their size. Real-site
+qualification compares the largest visible Canvas with the same source scene
+before and after interaction, including the TSL preview rather than an editor
+scrollbar. A decoded placeholder alone is not visual acceptance evidence.
+Main-thread WebGPU canvases use the same bounded element-image path as Canvas
+2D and WebGL. Native texture acquisition and queue submission update the current
+source-local bitmap before presentation discards it, without recording commands,
+changing rendering options or executing website code in the viewer. Worker-owned
+OffscreenCanvas and protected or origin-tainted graphics remain unsupported.
 
 Normal-media acceptance compares visible flashes with audible pulses at the
 audio device timeline and requires at most 100 ms of skew. The source fixture
@@ -122,3 +133,4 @@ built product assets.
 - `floebrowser:test/audio-timestamps.e2e.ts` - Opus packet gaps and source-clock corrections across decoder implementations.
 - `floebrowser:test/media-sync.e2e.ts` - Displayed and audible pulse synchronization, including delayed initial video.
 - `redeven:internal/envapp/ui_src/scripts/browserProjectionMediaSync.mjs` - Product presentation timing through Flowersec.
+- `redeven:internal/envapp/ui_src/scripts/browserProjectionSites.mjs` - Same-source Canvas pixel comparisons and paired site screenshots after input.
