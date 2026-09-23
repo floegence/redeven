@@ -1744,7 +1744,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const blockedPrimaryActionDisabled = createMemo(');
     expect(appSrc).toContain('redeven-split-action-trigger__content');
     expect(appSrc).toContain('<Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />');
-    expect(appSrc).toContain('fallback={props.presentation.primary_action.label}');
     expect(appSrc).toContain("'redeven-split-action-trigger--blocked'");
     expect(appSrc).toContain('aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}');
     expect(appSrc).toContain("return i18n.t('environmentAction.unavailableTrigger', { label });");
@@ -1904,7 +1903,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("if (failure.code === 'runtime_lifecycle_in_progress' && activeOperationKey !== '') {");
     expect(appSrc).toContain("subject_kind: 'environment',");
     expect(appSrc).toContain('started_at_unix_ms: activeProgress.started_at_unix_ms ?? 0,');
-    expect(appSrc).toContain('(progress?.started_at_unix_ms ?? 0) !== request.started_at_unix_ms');
     expect(appSrc).toContain('setLifecycleProgressOpen(environment.id, true);');
     expect(appSrc).toContain('props.consumeLifecycleProgressFocusRequest(request.request_id);');
     expect(appSrc).toContain('...snapshot().action_progress,');
@@ -1917,7 +1915,6 @@ describe('DesktopWelcomeShell', () => {
       'setBusyState((busy) => reconcileBusyStateWithActionProgressSnapshot(busy, acceptedSnapshot.action_progress));',
     );
     expect(appSrc).toContain('actionProgress={props.actionProgress}');
-    expect(appSrc).toMatch(/const operationState = createMemo\(\(\) =>\s*environmentOperationState\(/u);
     expect(appSrc).toContain('operationState={operationState()}');
     expect(appSrc).toContain('disabled={operationState().actionsDisabled}');
     expect(appSrc).toContain('props.operationState.actionsDisabled');
@@ -1933,8 +1930,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('runtimeLifecycleProgress() !== null && !runtimeOpenable()');
     expect(appSrc).not.toContain('runtimeLifecycleProgress={visibleRuntimeLifecycleProgress()}');
     expect(appSrc).not.toContain('openConnectionProgress={visibleOpenConnectionProgress()}');
-    expect(appSrc).not.toContain('visibleEnvironmentLifecycleProgress({');
-    expect(appSrc).not.toContain('disclosure: props.lifecycleDisclosure,');
     expect(appSrc).not.toContain('const disclosureRuntimeLifecycleProgress = createMemo');
     expect(appSrc).toContain('environmentLifecycleDisclosureHasPendingRequest(lifecycleDisclosure, props.busyState)');
     expect(appSrc).toContain('progressOpen={props.lifecycleProgressOpen}');
@@ -2162,7 +2157,6 @@ describe('DesktopWelcomeShell', () => {
     );
     expect(appSrc).not.toContain('disabled={props.loading && popoverPrimaryRunsAction()}');
     expect(appSrc).not.toContain('disabled={props.loading && !primaryProgressPresentation()}');
-    expect(appSrc).toContain('disabled={props.operationState.actionsDisabled && primaryFallbackRunsAction()}');
     expect(appSrc).toContain("props.i18n.t('environmentAction.blockedByActiveOperation'");
     expect(appSrc).toContain('const disabled = () => !item.action.enabled || disabledByOperation();');
     expect(appSrc).toContain('environmentActionStartsLifecycleDisclosure(action)');
@@ -2511,18 +2505,6 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).not.toContain("props.i18n.t('settings.languageTitle')");
   });
 
-  it('keeps settings open after saving and reports a saved but unapplied restart', () => {
-    const appSrc = readWelcomeSource();
-    const saveStart = appSrc.indexOf('async function saveSettings(options: Readonly<{');
-    const saveEnd = appSrc.indexOf('function cancelSettings()', saveStart);
-    const saveSrc = appSrc.slice(saveStart, saveEnd);
-    expect(saveSrc).toContain('await settingsController.saveAccess()');
-    expect(saveSrc).not.toContain('cancelSettings();');
-    expect(saveSrc).toContain("i18n().t('settings.savedNotApplied')");
-    expect(saveSrc).toContain('await restartEnvironmentRuntime(environment,');
-    expect(saveSrc.indexOf('await settingsController.saveAccess()')).toBeLessThan(saveSrc.indexOf('await restartEnvironmentRuntime'));
-  });
-
   it('exposes auto status detection only on non-provider runtime forms', () => {
     const appSrc = readWelcomeSource();
 
@@ -2581,7 +2563,6 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toContain('data-floe-dialog-panel');
     expect(dialogSrc).toMatch(/flex flex-col.*e\.class/u);
     expect(dialogSrc).toMatch(/return \w+\(\) \? void 0 : "true";/);
-    expect(dialogSrc).toContain('return e.children ??');
     expect(dialogSrc).toContain('as ConfirmDialog');
     expect(chromeSrc).toContain("'--redeven-desktop-titlebar-height': `${snapshot.titleBarHeight}px`");
     expect(chromeSrc).toContain("[data-floe-shell-slot='top-bar']");
@@ -2651,7 +2632,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('bindOperation?.({');
     expect(appSrc).toContain('started_at_unix_ms: result.operation_started_at_unix_ms');
     expect(appSrc).toContain('environmentActionStartsLifecycleDisclosure(action)');
-    expect(appSrc).toContain('focusEnvironmentLifecycleDisclosure(current, environment.id, progress)');
+    expect(appSrc).toContain('focusEnvironmentLifecycleDisclosure(null, environment.id, progress)');
     expect(appSrc).toContain('progressForEnvironmentFocusRequest(environment, props.actionProgress, request)');
     expect(appSrc).toContain('props.abandonLifecycleDisclosure(lifecycleAttempt);');
     expect(appSrc).toContain('function clearOperationProgressFocus(operationKey: string)');

@@ -4329,6 +4329,7 @@ pre,
   line-height: 1.6;
 }
 .environment-access-pending > svg { margin-top: .125rem; }
+.environment-settings-draft-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding-bottom: .75rem; color: var(--muted-foreground); font-size: .75rem; }
 .environment-access-actions { display: flex; width: 100%; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; }
 .environment-access-actions .environment-access-close { margin-inline-end: auto; }
 

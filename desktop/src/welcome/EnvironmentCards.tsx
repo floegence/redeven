@@ -19,8 +19,8 @@ import { guidanceSessionKeepsPopoverOpen, guidanceSessionShouldAutoDismiss, isEn
   reconcileEnvironmentGuidanceSession, startEnvironmentGuidanceIntent, type EnvironmentGuidanceSessionState } from './environmentGuidanceSession';
 import { abandonEnvironmentLifecycleDisclosureAttempt, beginEnvironmentLifecycleDisclosure, bindEnvironmentLifecycleDisclosureOperation, closeEnvironmentLifecycleDisclosure,
   isEnvironmentLifecycleDisclosureIntent, createEnvironmentLifecycleAttempt, environmentActionStartsLifecycleDisclosure, environmentLifecycleDisclosureHasPendingRequest, focusEnvironmentLifecycleDisclosure,
-  reconcileEnvironmentLifecycleDisclosure, reopenEnvironmentLifecycleDisclosure, type EnvironmentLifecycleDisclosureIntent,
-  type EnvironmentLifecycleDisclosureState, type EnvironmentLifecycleAttempt } from './environmentLifecycleDisclosure';
+  reconcileEnvironmentLifecycleDisclosure, reopenEnvironmentLifecycleDisclosure, visibleEnvironmentLifecycleProgress, type EnvironmentLifecycleDisclosureIntent,
+  type EnvironmentLifecycleDisclosureState, type EnvironmentLifecycleAttempt, type EnvironmentSettingsRestartSource } from './environmentLifecycleDisclosure';
 
 export type EnvironmentGuidanceActionResolution = Readonly<{ close_panel: boolean; next_session: EnvironmentGuidanceSessionState }>;
 
@@ -30,8 +30,11 @@ export type EnvironmentOwnerPresentation = Readonly<{
   actions: (model: Extract<EnvironmentActionPresentation, { kind: 'split_button' }>) => Extract<EnvironmentActionPresentation, { kind: 'split_button' }>;
 }>;
 export type LifecycleProgressFocusRequest = Readonly<{
-  request_id: number; operation_key: string; started_at_unix_ms: number;
+  request_id: number; operation_key: string; started_at_unix_ms?: number;
   subject_kind: 'environment' | 'gateway'; subject_id: string;
+  intent?: EnvironmentLifecycleDisclosureIntent;
+  canReveal?: () => boolean;
+  settingsRestart?: EnvironmentSettingsRestartSource;
 }>;
 const GUIDANCE_SUCCESS_DISMISS_MS = 720;
 const GUIDANCE_SESSION_CLEAR_MS = 220;
@@ -188,7 +191,9 @@ export function EnvironmentCardsPanel(
         const operationState = environment
           ? environmentOperationState(environment, props.actionProgress, props.busyState)
           : null;
-        const progressStillVisible = Boolean(operationState?.panelProgress) || operationState?.isSubmitting === true;
+        const progressStillVisible = Boolean(operationState?.panelProgress) || operationState?.isSubmitting === true
+          || (lifecycleDisclosure?.environment_id === current.environment_id
+            && Boolean(lifecycleDisclosure.settings_restart));
         const pendingDisclosureVisible =
           lifecycleDisclosure?.environment_id === current.environment_id &&
           lifecycleDisclosure.visibility === 'open' &&
@@ -261,6 +266,10 @@ export function EnvironmentCardsPanel(
   };
 
   const setLifecycleProgressOpen = (environmentID: string, open: boolean) => {
+    const focusRequest = props.lifecycleProgressFocusRequest;
+    if (!open && focusRequest?.subject_kind === 'environment' && focusRequest.subject_id === environmentID) {
+      props.consumeLifecycleProgressFocusRequest(focusRequest.request_id);
+    }
     setActiveEnvironmentOverlayState((current) =>
       open
         ? openEnvironmentLibraryOverlayState('lifecycle_progress', environmentID)
@@ -296,6 +305,7 @@ export function EnvironmentCardsPanel(
   };
 
   let handledLifecycleProgressFocusRequestID = 0;
+  let preparedLifecycleProgressFocusRequestID = 0;
   createEffect(() => {
     const request = props.lifecycleProgressFocusRequest;
     if (
@@ -310,18 +320,28 @@ export function EnvironmentCardsPanel(
       return;
     }
     const progress = progressForEnvironmentFocusRequest(environment, props.actionProgress, request);
-    if (
-      !progress ||
-      progress.operation_key?.trim() !== request.operation_key ||
-      (progress?.started_at_unix_ms ?? 0) !== request.started_at_unix_ms
-    ) {
-      return;
+    if (request.intent && request.started_at_unix_ms !== undefined && preparedLifecycleProgressFocusRequestID !== request.request_id) {
+      preparedLifecycleProgressFocusRequestID = request.request_id;
+      setLifecycleDisclosureState({
+        ...beginEnvironmentLifecycleDisclosure(null, environment.id, request.intent, {
+          operation_key: request.operation_key, started_at_unix_ms: request.started_at_unix_ms,
+        })!,
+        visibility: 'open', settings_restart: request.settingsRestart,
+        ...(progress ? { last_progress: progress } : {}),
+      });
     }
+    if (request.canReveal && !request.canReveal()) return;
+    if (!request.intent && !progress) return;
     const group = props.groups.find(group => group.member_ids.includes(environment.id));
     if (group) selectOwner(group, environment.id);
     handledLifecycleProgressFocusRequestID = request.request_id;
-    setLifecycleDisclosureState((current) => focusEnvironmentLifecycleDisclosure(current, environment.id, progress));
+    if (progress) {
+      const disclosure = focusEnvironmentLifecycleDisclosure(null, environment.id, progress);
+      setLifecycleDisclosureState(disclosure ? { ...disclosure, settings_restart: request.settingsRestart } : null);
+    }
     setLifecycleProgressOpen(environment.id, true);
+    const owner = environmentLibraryElement()?.querySelector<HTMLElement>(`[data-owner-id="${CSS.escape(environment.id)}"]`);
+    owner?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     props.consumeLifecycleProgressFocusRequest(request.request_id);
   });
 
@@ -387,6 +407,10 @@ export function EnvironmentCardsPanel(
     });
   });
 
+  const disclosureForEnvironment = (environmentID: string) => {
+    const disclosure = lifecycleDisclosureState();
+    return disclosure?.environment_id === environmentID ? disclosure : null;
+  };
   const renderOwner = (environmentID: string, groupID: string) => (
     <EnvironmentOwnerSurface
       i18n={props.i18n}
@@ -399,6 +423,7 @@ export function EnvironmentCardsPanel(
       otherPinnedOwner={projectedGroup(groupID).member_entries.find(entry => entry.id !== environmentID && entry.pinned)}
       busyState={props.busyState}
       actionProgress={props.actionProgress}
+      lifecycleDisclosure={disclosureForEnvironment(environmentID)}
       runtimeMenuOpen={environmentLibraryOverlayOpenFor(
         activeEnvironmentOverlayState(),
         'runtime_menu',
@@ -618,6 +643,7 @@ function EnvironmentOwnerSurface(
     otherPinnedOwner?: DesktopEnvironmentEntry;
     busyState: DesktopLauncherBusyState;
     actionProgress: readonly DesktopLauncherActionProgress[];
+    lifecycleDisclosure: EnvironmentLifecycleDisclosureState;
     runtimeMenuOpen: boolean;
     onRuntimeMenuOpenChange: (open: boolean) => void;
     primaryActionGuidanceOpen: boolean;
@@ -686,9 +712,12 @@ function EnvironmentOwnerSurface(
       ) },
     } : presentation;
   });
-  const operationState = createMemo(() =>
-    environmentOperationState(props.environment, props.actionProgress, props.busyState),
-  );
+  const operationState = createMemo(() => {
+    const state = environmentOperationState(props.environment, props.actionProgress, props.busyState);
+    if (!props.lifecycleDisclosure?.settings_restart) return state;
+    return { ...state, panelProgress: visibleEnvironmentLifecycleProgress({ environment: props.environment,
+      selectedProgress: state.panelProgress, disclosure: props.lifecycleDisclosure, busyState: props.busyState }) };
+  });
   const isPinBusy = createMemo(() =>
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
       'set_provider_environment_pinned',
@@ -824,6 +853,7 @@ function EnvironmentOwnerSurface(
           guidanceSession={props.guidanceSession}
           busyState={props.busyState}
           operationState={operationState()}
+          settingsRestart={props.lifecycleDisclosure?.settings_restart}
           cancelOperation={props.cancelOperation}
           dismissOperation={props.dismissOperation}
           copyOperationDiagnostics={props.copyOperationDiagnostics}

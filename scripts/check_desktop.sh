@@ -72,6 +72,7 @@ main() {
       npm run test
       node scripts/run-ssh-settings-check.mjs
       node scripts/check-environment-settings.mjs
+      node scripts/check-settings-restart.mjs
       node scripts/check-environment-endpoints.mjs
       node scripts/check-welcome-cards.mjs
       node scripts/check-appearance-electron.mjs

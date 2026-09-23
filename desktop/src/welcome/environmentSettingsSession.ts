@@ -28,6 +28,8 @@ export type EnvironmentSettingsSession<C> = Readonly<{
   access_state: 'idle' | 'loading' | 'ready' | 'error';
   access_error: Extract<DesktopSettingsResult, { ok: false }> | null;
   saving: 'connection' | 'access' | null;
+  access_save_intent?: 'save' | 'restart';
+  focus_two_factor?: boolean;
 }>;
 
 /** One opening owns both drafts. Remote completions never choose or reopen a surface. */
@@ -63,16 +65,16 @@ export function createEnvironmentSettingsController<C>(io: {
       } : accessDraft(result.snapshot),
     });
   }
-  async function saveAccess(): Promise<boolean> {
+  async function saveAccess(intent: 'save' | 'restart' = 'save'): Promise<boolean> {
     const opening = session();
     if (!opening?.access || opening.saving) return false;
     ++readSequence;
-    update({ saving: 'access', access_error: null });
+    update({ saving: 'access', access_save_intent: intent, access_error: null });
     let result: DesktopSettingsResult;
     try { result = await io.save({ environment_id: opening.environment.id, dialog_token: opening.token, draft: opening.access.draft }); }
     catch (error) { result = { ok: false, error: error instanceof Error ? error.message : String(error) }; }
     if (!current(opening)) { if (!result.ok) io.lateError(result); return result.ok; }
-    update({ saving: null, access_state: 'ready' });
+    update({ saving: null, access_save_intent: undefined, access_state: 'ready' });
     if (!result.ok) { update({ access_error: result }); return false; }
     ++readSequence;
     update({ access: accessDraft(result.snapshot), access_state: 'ready' });
@@ -103,6 +105,10 @@ export function createEnvironmentSettingsController<C>(io: {
     resetAccess() {
       const access = session()?.access;
       if (access && !session()?.saving) update({ access: accessDraft(access.baseline_surface), access_error: null });
+    },
+    resetConnection() {
+      const opening = session();
+      if (opening && !opening.saving) update({ connection: opening.connection_baseline, metadata_label: opening.environment.label });
     },
     savedConnection(environment: DesktopEnvironmentEntry, connection: C) {
       const changed = session()?.environment.id !== environment.id;

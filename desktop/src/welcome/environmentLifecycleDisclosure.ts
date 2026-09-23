@@ -9,6 +9,7 @@ import type {
 } from './viewModel';
 import {
   environmentMatchesRuntimeLifecycleProgress,
+  environmentMatchesOpenConnectionProgress,
   runtimeLifecycleOperationForActionProgress,
   selectedSnapshotReinstallTargetProgressForEnvironment,
   type DesktopLauncherBusyState,
@@ -26,6 +27,15 @@ export type EnvironmentLifecycleAttempt = Readonly<{
   started_at_unix_ms: number;
 }>;
 
+/** Product navigation and admission feedback only; Launcher owns restart progress. */
+export type EnvironmentSettingsRestartSource = Readonly<{
+  returnTo: 'access' | 'two_factor';
+  returnToSettings: () => void;
+  retry: () => void;
+  submissionError: () => string;
+  visibilityChanged: (visible: boolean) => void;
+}>;
+
 export type EnvironmentLifecycleDisclosureState = Readonly<{
   environment_id: string;
   intent: EnvironmentLifecycleDisclosureIntent;
@@ -34,6 +44,7 @@ export type EnvironmentLifecycleDisclosureState = Readonly<{
   operation_key: string;
   operation_binding: 'exact' | 'next_reinstall';
   last_progress?: DesktopLauncherActionProgress;
+  settings_restart?: EnvironmentSettingsRestartSource;
 }> | null;
 
 function compact(value: unknown): string {
@@ -208,7 +219,7 @@ export function closeEnvironmentLifecycleDisclosure(
   if (!state || state.environment_id !== environmentID) {
     return state;
   }
-  if (state.last_progress && progressIsTerminal(state.last_progress)) {
+  if (state.last_progress && progressIsTerminal(state.last_progress) && !state.settings_restart) {
     return null;
   }
   return {
@@ -312,6 +323,14 @@ export function reconcileEnvironmentLifecycleDisclosure(
   if (!environment) {
     return null;
   }
+  if (state.settings_restart && state.last_progress && progressIsTerminal(state.last_progress)
+    && progressItems.some(candidate => compact(candidate.operation_key) !== state.operation_key
+      && progressStartedAt(candidate) >= state.started_at_unix_ms
+      && (environmentMatchesRuntimeLifecycleProgress(environment, candidate)
+        || environmentMatchesOpenConnectionProgress(environment, candidate)
+        || selectedSnapshotReinstallTargetProgressForEnvironment(environment, [candidate]) === candidate))) {
+    return null;
+  }
   const progress = state.operation_binding === 'next_reinstall'
     ? nextReinstallProgressForDisclosure(environment, progressItems, state)
     : progressItems.find((candidate) => (
@@ -332,7 +351,7 @@ export function reconcileEnvironmentLifecycleDisclosure(
     };
   }
   if (state.last_progress && progressIsTerminal(state.last_progress)) {
-    return state.visibility === 'open' ? state : null;
+    return state.visibility === 'open' || state.settings_restart ? state : null;
   }
   return state;
 }

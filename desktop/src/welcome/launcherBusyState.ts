@@ -517,13 +517,14 @@ export function environmentOperationState(
 export function progressForEnvironmentFocusRequest(
   environment: DesktopEnvironmentEntry,
   progressItems: readonly DesktopLauncherActionProgress[],
-  identity: Readonly<{ operation_key: string; started_at_unix_ms: number }>,
+  identity: Readonly<{ operation_key: string; started_at_unix_ms?: number }>,
 ): DesktopLauncherActionProgress | null {
+  // Conflict admission can name the owner before its first snapshot supplies a start time.
   return (
     progressItems.find((candidate) => {
       if (
         String(candidate.operation_key ?? '').trim() !== identity.operation_key ||
-        (candidate.started_at_unix_ms ?? 0) !== identity.started_at_unix_ms
+        (identity.started_at_unix_ms !== undefined && (candidate.started_at_unix_ms ?? 0) !== identity.started_at_unix_ms)
       ) {
         return false;
       }

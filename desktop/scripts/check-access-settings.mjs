@@ -44,7 +44,13 @@ try {
   assert.ok(initial.portWidth <= 128, 'port is a compact numeric field, not a full-width text field');
   assert.ok(initial.passwordWidth <= 320, 'password has a comfortable reading width');
   assert.ok(Math.abs(initial.portRight - initial.passwordRight) < 1, 'controls share one trailing alignment');
-  assert.ok(initial.scroll <= 1, 'default Local access settings fit at a standard desktop height');
+  // Settings use a fixed viewport, including Local; the body may scroll as security sections grow.
+  const initialFooter = await page.locator('.environment-settings-actions').boundingBox();
+  assert.equal(await dialog.evaluate(panel => panel.scrollHeight > panel.clientHeight), false, 'only the settings body may scroll');
+  assert.ok(initial.bottom <= 900 && initial.left >= 0 && initial.right <= 1280, 'the complete settings window fits the viewport');
+  await page.locator('.environment-settings-scroll').evaluate(body => { body.scrollTop = body.scrollHeight; });
+  assert.equal((await page.locator('.environment-settings-actions').boundingBox()).y, initialFooter.y, 'save actions remain visible while reading the complete body');
+  assert.equal(await page.locator('.environment-settings-scroll').evaluate(body => body.scrollHeight - body.clientHeight - body.scrollTop <= 1), true, 'all access settings remain reachable');
   report.cases.push('local-control-proportions-and-alignment');
 
   const locales = ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'];
