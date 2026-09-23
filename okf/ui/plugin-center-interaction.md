@@ -54,7 +54,7 @@ Local filters combine
 source (official catalog or external), trust, and lifecycle without rebuilding
 identity. Every filter trigger permanently names its dimension and current
 value, exposes a dropdown affordance, and keeps one clear-all action visible
-whenever search, category, source, trust, or lifecycle filtering is active.
+whenever search, category, source, trust, or lifecycle filtering is active. Below 768 CSS pixels the directory uses three compact rows: title and management actions, search and one filter trigger, then the Discover/Installed/Updates tabs. Filter dimensions and clear remain in the menu, with an active count on the trigger; search and cards retain their DOM identity across layout changes.
 The title, search, refresh, administrative menu, and close action form a compact primary
 toolbar; tabs, categories, and filters form a second scroll-contained band
 without page-level horizontal overflow. Discover, Installed, and Updates use
