@@ -10,3 +10,26 @@
 
 .file-workspace-header [data-toolbar-layout="stacked"] .file-workspace-refresh-label { display: none; }
 .file-workspace-header [data-toolbar-layout="stacked"] .file-workspace-view-toggle { padding-inline: 0; }
+
+/* The path remains on its own row; the filter and every file action share the
+ * next row so the content viewport starts as high as possible on phones. */
+.file-workspace-header [data-toolbar-layout="stacked"] > div:last-child {
+  min-width: 0;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+.file-workspace-header [data-toolbar-layout="stacked"] > div:last-child > label {
+  min-width: 128px;
+  flex: 1 1 auto;
+}
+.file-workspace-header [data-toolbar-layout="stacked"] > div:last-child > div,
+.file-workspace-header [data-toolbar-layout="stacked"] > div:last-child > div > div {
+  flex-shrink: 0;
+  gap: 4px;
+}
+.file-workspace-header [data-toolbar-layout="stacked"] > div:last-child button {
+  flex: 0 0 44px;
+  width: 44px;
+  min-width: 44px;
+  padding-inline: 0;
+}

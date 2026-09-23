@@ -83,7 +83,7 @@
   .host-apps-eyebrow, .host-apps-header p { display: none; }
   .host-apps-header button { min-height: 44px; min-width: 44px; }
   .host-apps-content { padding: 12px; }
-  .host-apps-running, .host-apps-library-heading > .host-apps-section-title, .host-apps-category { display: none; }
+  .host-apps-library-heading > .host-apps-section-title, .host-apps-category { display: none; }
   .host-apps-library-heading { margin-bottom: 12px; }
   .host-apps-filters { width: 100%; gap: 8px; flex-wrap: nowrap; }
   .host-apps-search { width: auto; flex: 1; min-width: 128px; }
@@ -97,3 +97,18 @@
   .host-app-quit-notice { flex-basis: 100%; padding-inline: 0; }
 }
 @container host-apps (width < 360px) { .host-apps-header button > span { display: none; } }
+
+@container host-apps (max-width: 768px) {
+  .host-apps-header { padding: 5px 12px; gap: 8px; align-items: center; flex-wrap: nowrap; }
+  .host-apps-header h1 { min-width: 0; overflow: hidden; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+  .host-apps-eyebrow, .host-apps-header p { display: none; }
+  .host-apps-header > div:last-child { flex: 0 0 auto; gap: 4px; }
+  .host-apps-header button { width: 44px; min-width: 44px; min-height: 44px; padding: 0; justify-content: center; }
+  .host-apps-header button > span { display: none; }
+  .host-apps-header button > svg { margin: 0; }
+  .host-apps-content { padding: 12px; }
+  .host-apps-running { display: block; padding-bottom: 12px; margin-bottom: 12px; }
+  .host-apps-running .host-apps-hint { display: none; }
+  .host-apps-running .host-apps-session-grid { margin-top: 8px; }
+  .host-apps-library-heading { margin-bottom: 12px; }
+}

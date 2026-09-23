@@ -1073,3 +1073,35 @@
   .container-detail-header { min-height: 0; gap: 8px; }
   .container-detail-identity > span, .container-detail-identity > small { display: none; }
 }
+
+/* Keep the inventory controls in one touch-sized row in narrow Activity and
+ * Workbench surfaces. The max-width form also covers browsers that do not
+ * parse the range syntax used by the surrounding container rules. */
+@container containers (max-width: 768px) {
+  .container-resource-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) repeat(3, 44px);
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+  }
+  .container-resource-toolbar .container-search-control {
+    width: auto;
+    min-width: 0;
+    flex: none;
+  }
+  .container-resource-toolbar .container-filter-switch,
+  .container-resource-toolbar .container-column-picker,
+  .container-resource-toolbar .container-charts-toggle { display: none; }
+  .container-resource-toolbar .container-compact-filter,
+  .container-resource-toolbar .container-compact-more,
+  .container-resource-toolbar .container-toolbar-actions { min-width: 0; }
+  .container-resource-toolbar .container-toolbar-actions {
+    display: contents;
+    margin: 0;
+  }
+  .container-resource-toolbar .container-toolbar-actions > * { min-width: 44px; }
+  .container-resource-toolbar button { min-width: 44px; height: 44px; padding: 0; }
+  .container-resource-toolbar button > svg { margin: 0; }
+  .container-create-label { display: none; }
+}

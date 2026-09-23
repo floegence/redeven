@@ -161,3 +161,17 @@
   .web-services-header-actions button > span { display: none; }
   .web-services-header-actions button > svg { margin: 0; }
 }
+
+/* Keep the page chrome stable when the surface is hosted in a narrow
+ * Workbench widget as well as a phone viewport. */
+@container web-services (max-width: 768px) {
+  .web-services-header { padding: 5px 12px; }
+  .web-services-header-inner { flex-wrap: nowrap; gap: 8px; }
+  .web-services-heading { min-width: 0; flex: 1 1 auto; }
+  .web-services-heading h1 { min-width: 0; overflow: hidden; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+  .web-services-description { display: none; }
+  .web-services-header-actions { width: auto; flex: 0 0 auto; flex-wrap: nowrap; gap: 4px; }
+  .web-services-header-actions button { width: 44px; min-width: 44px; min-height: 44px; padding: 0; justify-content: center; }
+  .web-services-header-actions button > span { display: none; }
+  .web-services-header-actions button > svg { margin: 0; }
+}
