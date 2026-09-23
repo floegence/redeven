@@ -11,6 +11,35 @@ const paint = () => new Promise<void>((resolve) => requestAnimationFrame(() => r
 afterEach(() => { cleanups.splice(0).forEach((cleanup) => cleanup()); document.body.replaceChildren(); });
 
 describe('Files Activity navigation continuity', () => {
+  it('keeps the real workspace chrome while waiting for the first directory and only then shows an empty result', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const [initializing, setInitializing] = createSignal(true);
+    const pending = { get initializing() { return initializing(); } };
+    cleanups.push(render(() => <FloeConfigProvider><LayoutProvider>
+      <div style={{ width: '1000px', height: '560px' }}>
+        <FileBrowserWorkspace mode="files" onModeChange={() => {}} files={[]} currentPath="" initialPath=""
+          instanceId="pending-files" resetKey={0} width={240} open {...pending} />
+      </div>
+    </LayoutProvider></FloeConfigProvider>, host));
+    await paint();
+    expect(host.textContent).not.toContain('This folder is empty');
+    expect(host.textContent).not.toContain('No folders in this location');
+    expect(host.textContent).not.toContain('Root');
+    const toolbar = host.querySelector('[data-toolbar-layout]');
+    const input = host.querySelector('input');
+    const workspace = host.querySelector('[data-browser-workspace]');
+    const bounds = workspace!.getBoundingClientRect().toJSON();
+    expect(host.querySelector('[data-file-browser-initial-loading]')).toBeTruthy();
+    setInitializing(false);
+    await paint();
+    expect(host.textContent).toContain('This folder is empty');
+    expect(host.querySelector('[data-file-browser-initial-loading]')).toBeNull();
+    expect(host.querySelector('[data-toolbar-layout]')).toBe(toolbar);
+    expect(host.querySelector('input')).toBe(input);
+    expect(workspace!.getBoundingClientRect().toJSON()).toEqual(bounds);
+  });
+
   it.each(['Grid', 'List'])('retains the narrow toolbar, scroll and virtual rows in %s', async (mode) => {
     const host = document.createElement('div');
     document.body.append(host);

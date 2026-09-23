@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -37,17 +38,18 @@ func main() {
 	certificatePath := flag.String("certificate", "", "PEM certificate path")
 	privateKeyPath := flag.String("private-key", "", "PEM private key path")
 	nativeCode := flag.Bool("native-codespace", false, "serve the native CodeSpace HTTP fixture")
+	fileContinuity := flag.Bool("file-continuity", false, "forward file RPCs to the controlled continuity fixture")
 	visualGit := flag.Bool("visual-git", false, "serve read-only Git appearance fixtures")
 	allowedOrigin := flag.String("allowed-origin", "", "exact browser origin")
 	httpUpstream := flag.String("http-upstream", "", "fixture HTTP upstream for session requests")
 	flag.Parse()
-	if err := run(*certificatePath, *privateKeyPath, *allowedOrigin, *httpUpstream, *nativeCode, *visualGit); err != nil {
+	if err := run(*certificatePath, *privateKeyPath, *allowedOrigin, *httpUpstream, *nativeCode, *visualGit, *fileContinuity); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(certificatePath, privateKeyPath, allowedOrigin, httpUpstream string, nativeCode, visualGit bool) error {
+func run(certificatePath, privateKeyPath, allowedOrigin, httpUpstream string, nativeCode, visualGit, fileContinuity bool) error {
 	if strings.TrimSpace(certificatePath) == "" || strings.TrimSpace(privateKeyPath) == "" || strings.TrimSpace(allowedOrigin) == "" {
 		return errors.New("certificate, private key, and allowed origin are required")
 	}
@@ -93,7 +95,7 @@ func run(certificatePath, privateKeyPath, allowedOrigin, httpUpstream string, na
 		return fmt.Errorf("issue direct artifact: %w", err)
 	}
 
-	handlers, err := newHandlers(nativeCode, visualGit)
+	handlers, err := newHandlers(nativeCode, visualGit, fileContinuity, httpUpstream)
 	if err != nil {
 		return err
 	}
@@ -191,7 +193,7 @@ func run(certificatePath, privateKeyPath, allowedOrigin, httpUpstream string, na
 	return nil
 }
 
-func newHandlers(nativeCode, visualGit bool) (*flowersec.SessionHandlers, error) {
+func newHandlers(nativeCode, visualGit, fileContinuity bool, httpUpstream string) (*flowersec.SessionHandlers, error) {
 	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{})
 	if err != nil {
 		return nil, err
@@ -235,6 +237,32 @@ func newHandlers(nativeCode, visualGit bool) (*flowersec.SessionHandlers, error)
 		2002: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
 			return map[string]any{"sessions": []any{}}, nil
 		},
+	}
+	if fileContinuity {
+		if httpUpstream == "" {
+			return nil, errors.New("file continuity requires a fixture upstream")
+		}
+		for _, typeID := range []uint32{1001, 1010} {
+			registrations[typeID] = func(ctx context.Context, body json.RawMessage) (any, *flowersec.RPCError) {
+				request, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/__fixture/files/%d", httpUpstream, typeID), bytes.NewReader(body))
+				if err != nil {
+					return nil, &flowersec.RPCError{Code: 503, Message: err.Error()}
+				}
+				response, err := http.DefaultClient.Do(request)
+				if err != nil {
+					return nil, &flowersec.RPCError{Code: 503, Message: err.Error()}
+				}
+				defer response.Body.Close()
+				if response.StatusCode != 200 {
+					return nil, &flowersec.RPCError{Code: uint32(response.StatusCode), Message: "File fixture unavailable"}
+				}
+				var data any
+				if err := json.NewDecoder(response.Body).Decode(&data); err != nil {
+					return nil, &flowersec.RPCError{Code: 500, Message: err.Error()}
+				}
+				return data, nil
+			}
+		}
 	}
 	if visualGit {
 		// This fixture exposes reads only; mutation RPCs remain unregistered.

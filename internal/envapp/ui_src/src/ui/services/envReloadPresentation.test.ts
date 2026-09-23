@@ -13,8 +13,8 @@ beforeEach(() => {
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
 });
 afterEach(() => { cleanups.splice(0).forEach(cleanup => cleanup()); vi.restoreAllMocks(); document.body.replaceChildren(); });
-function mount() {
-  const [target, setTarget] = createSignal('codespaces');
+function mount(page = 'codespaces') {
+  const [target, setTarget] = createSignal(page);
   const [environment, setEnvironment] = createSignal('host');
   const [authentication, setAuthentication] = createSignal(0);
   const [blocked, setBlocked] = createSignal(false);
@@ -23,8 +23,8 @@ function mount() {
   return { setTarget, setEnvironment, setAuthentication, setBlocked, setActivity };
 }
 describe('document presentation ownership', () => {
-  it('keeps one placeholder until current content, including an empty result, is renderable', async () => {
-    mount(); await settle();
+  it.each(['codespaces', 'files'])('keeps one placeholder until %s content, including an empty result, is renderable', async page => {
+    mount(page); await settle();
     expect(controller.restrictTo).toHaveBeenCalled();
     expect(controller.finish).not.toHaveBeenCalled();
     expect(controller.clear).not.toHaveBeenCalled();

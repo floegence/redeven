@@ -12,6 +12,13 @@ import { observeContinuityFrames, cachePages, recordDocumentPaints } from '../..
 const desktop = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(desktop, 'package.json'));
 const { chromium } = createRequire(path.join(desktop, '../internal/envapp/ui_src/package.json'))('playwright');
+const target = process.env.REDEVEN_CONTINUITY_PAGE ?? 'applications';
+assert.ok(['applications', 'files'].includes(target), 'Unsupported continuity page');
+const presentation = target === 'files'
+  ? { row: '[data-file-browser-item-id]', skeleton: '[data-file-browser-initial-loading]' }
+  : cachePages.applications;
+const navigationLabel = target === 'files' ? /^(File Browser|文件浏览器)$/ : /^(Host Applications|主机应用)$/;
+const busySelector = target === 'files' ? '[aria-label="Refresh current directory"]:disabled' : '.host-apps-header .animate-spin';
 const bundle = process.env.REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT;
 assert.ok(bundle, 'Build a task-owned Runtime and set REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT');
 const manifest = JSON.parse(await readFile(path.join(bundle, 'desktop-bundle-manifest.json'), 'utf8'));
@@ -82,14 +89,14 @@ try {
       page.setDefaultTimeout(30000);
       if (phase === 'initial') {
         await page.getByText('Activity', { exact: true }).click();
-        await page.getByRole('button', { name: /^(Host Applications|主机应用)$/ }).click();
+        await page.getByRole('button', { name: navigationLabel, exact: true }).click();
       }
-      await page.locator('button.host-app-tile').first().waitFor();
-      await page.waitForFunction(() => !document.querySelector('.host-apps-header .animate-spin'));
+      await page.locator(presentation.row).first().waitFor();
+      await page.waitForFunction(selector => !document.querySelector(selector), busySelector);
       const assets = await page.evaluate(() => [...document.scripts].map(script => script.src).filter(Boolean));
-      console.log('PASS production Welcome entry:', JSON.stringify({ phase, pid: child.pid, port, runtimePort, url: page.url(), assets, fingerprint: createHash('sha256').update(JSON.stringify(assets.map(url => new URL(url).pathname))).digest('hex') }));
+      console.log('PASS production Welcome entry:', JSON.stringify({ target, phase, pid: child.pid, port, runtimePort, url: page.url(), assets, fingerprint: createHash('sha256').update(JSON.stringify(assets.map(url => new URL(url).pathname))).digest('hex') }));
       // Reload the actual production document, holding its entry module before the Shell exists.
-      await page.addInitScript(observeContinuityFrames, cachePages.applications);
+      await page.addInitScript(observeContinuityFrames, presentation);
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       let releaseEntry;
       const entryGate = new Promise(resolve => { releaseEntry = resolve; });
@@ -104,9 +111,9 @@ try {
         await page.locator('[data-floe-reload-placeholder]').waitFor();
         assert.equal(await page.locator('[data-floe-shell]').count(), 0, 'The entry module must really be delayed');
         releaseEntry();
-        await page.locator('button.host-app-tile').first().waitFor();
+        await page.locator(presentation.row).first().waitFor();
         await page.locator('[data-floe-reload-placeholder]').waitFor({ state: 'detached' });
-        await page.waitForFunction(() => !document.querySelector('.host-apps-header .animate-spin'));
+        await page.waitForFunction(selector => !document.querySelector(selector), busySelector);
         const frames = await page.evaluate(() => globalThis.__continuityFrames);
         assert.ok(frames.length && frames.every(frame => frame.documentLoading || frame.placeholder || frame.row), JSON.stringify(frames));
         const content = frames.findIndex(frame => frame.row && !frame.placeholder);
@@ -118,10 +125,10 @@ try {
       } finally { if (!paints) await finishPaints(); await reloadCDP.detach(); releaseEntry(); await page.unroute(entryURL); }
       if (phase === 'initial') {
         await page.evaluate(() => { globalThis.__continuityFrames.length = 0; });
-        await page.locator('button.host-app-tile').first().evaluate(row => { globalThis.__retainedRow = row; });
+        await page.locator(presentation.row).first().evaluate(row => { globalThis.__retainedRow = row; });
         await page.evaluate(() => window.redevenDesktopShell.minimizeWindow());
         await open().click();
-        assert.equal(await page.locator('button.host-app-tile').first().evaluate(row => row === globalThis.__retainedRow), true);
+        assert.equal(await page.locator(presentation.row).first().evaluate(row => row === globalThis.__retainedRow), true);
         const reconfirmed = page.waitForResponse(response => response.url().endsWith('/ui-cache-scope') && response.status() === 200);
         const closed = await page.evaluate(() => {
           const sockets = globalThis.__continuitySockets.filter(socket => socket.readyState === WebSocket.OPEN);
@@ -131,8 +138,8 @@ try {
         assert.ok(closed > 0, 'The production connection must actually be interrupted');
         await reconfirmed;
         await page.getByRole('button', { name: /^(Reconnect|重新连接|重连)$/ }).waitFor({ timeout: 60000 });
-        await page.waitForFunction(() => !document.querySelector('.host-apps-header .animate-spin'));
-        assert.equal(await page.locator('button.host-app-tile').first().evaluate(row => row === globalThis.__retainedRow), true);
+        await page.waitForFunction(selector => !document.querySelector(selector), busySelector);
+        assert.equal(await page.locator(presentation.row).first().evaluate(row => row === globalThis.__retainedRow), true);
         const frames = await page.evaluate(() => globalThis.__continuityFrames);
         assert.ok(frames.length && frames.every(frame => frame.row && !frame.skeleton), JSON.stringify(frames));
         console.log('PASS production hide/show and reconnect:', JSON.stringify({ interruptedSockets: closed, reconfirmed: true, frames }));
@@ -141,11 +148,11 @@ try {
         await eventually(() => page.isClosed(), 'Env App close did not destroy its window');
         await open().click();
         page = await eventually(() => context.pages().find(candidate => candidate.url().includes('/_redeven_proxy/env/')), 'Env App did not reopen');
-        await page.locator('button.host-app-tile').first().waitFor();
+        await page.locator(presentation.row).first().waitFor();
         console.log('PASS production close/reopen retains Activity target and inventory');
       }
       await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
-      await eventually(async () => (await page.evaluate(() => window.redevenDesktopResourceCache.list())).length > 0, 'Desktop cache did not persist');
+      if (target === 'applications') await eventually(async () => (await page.evaluate(() => window.redevenDesktopResourceCache.list())).length > 0, 'Desktop cache did not persist');
     } catch (error) {
       console.error('Production Desktop failure:', error, log.slice(-16000));
       if (browser) for (const page of browser.contexts()[0].pages()) console.error('Window:', page.url(), await page.locator('body').innerText().catch(() => 'unavailable'));
