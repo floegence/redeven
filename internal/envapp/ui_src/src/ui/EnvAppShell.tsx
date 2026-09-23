@@ -4,11 +4,7 @@ import { createEnvResourceCacheAccess, isResourceAuthorizationError } from './se
 import { isSessionEventAuthorizationError } from './services/sessionHTTP';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
 import { ActivityPageLoading } from './primitives/ActivityPageLoading';
-import { CodespacesPageSkeleton } from './pages/CodespacesPresentation';
-import { HostApplicationsPageSkeleton } from './pages/HostApplicationsPresentation';
-import { WebServicesPageSkeleton } from './pages/WebServicesPresentation';
-import { ContainersPageSkeleton } from './pages/ContainersPresentation';
-import { FileBrowserPageLoading } from './pages/FileBrowserPageLoading';
+import { EnvPageLoading } from './pages/EnvPageLoading';
 import { createEnvReloadPresentation } from './services/envReloadPresentation';
 import { PageAssetRecoveryNotice, PageLoadError } from './reconnect/PageAssetRecovery';
 import { createEnvAppAssetRecovery } from './reconnect/createEnvAppAssetRecovery';
@@ -4747,16 +4743,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     />
   );
 
-  const renderActivityPageSkeleton = (id: string) => {
-    switch (id) {
-      case 'files': return <FileBrowserPageLoading environment={envId()} />;
-      case 'codespaces': return <CodespacesPageSkeleton />;
-      case 'applications': return <HostApplicationsPageSkeleton />;
-      case 'ports': return <WebServicesPageSkeleton />;
-      case 'containers': return <ContainersPageSkeleton />;
-      default: return <ActivityPageLoading />;
-    }
-  };
+  const renderActivityPageLoading = (page: string) => <EnvPageLoading page={page} environment={envId()} />;
 
   const renderActivityShell = () => (
     <Shell
@@ -4851,12 +4838,12 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
               <ActivityAppsMain
                 activeId={() => layout.sidebarActiveTab()}
                 activationMode="after-paint"
-                renderFallback={renderActivityPageSkeleton}
+                renderFallback={renderActivityPageLoading}
                 renderError={() => <PageLoadError ready={assetRecoveryReady()} />}
               />
             </Show>
             <Show when={viewMode() === 'activity' && !activityContentAvailable()}>
-              <Show when={accessGatePhase() === 'checking'} fallback={accessGatePanel()}>{renderActivityPageSkeleton(layout.sidebarActiveTab())}</Show>
+              <Show when={accessGatePhase() === 'checking'} fallback={accessGatePanel()}>{renderActivityPageLoading(layout.sidebarActiveTab())}</Show>
             </Show>
           </div>
           <Show when={viewMode() === 'activity' && recoveryVisible()}>
@@ -4871,7 +4858,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
                 />
               )}
             >
-              <Show when={accessGatePhase() === 'checking'} fallback={accessGatePanel()}>{renderActivityPageSkeleton(layout.sidebarActiveTab())}</Show>
+              <Show when={accessGatePhase() === 'checking'} fallback={accessGatePanel()}>{renderActivityPageLoading(layout.sidebarActiveTab())}</Show>
             </Show>
           </Show>
         </div>

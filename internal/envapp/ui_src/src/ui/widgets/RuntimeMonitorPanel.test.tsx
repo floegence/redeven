@@ -180,6 +180,29 @@ describe('RuntimeMonitorPanel', () => {
     vi.useRealTimers();
   });
 
+  it('uses one initial loading surface and retains charts while refreshing', async () => {
+    const initial = createDeferred<ReturnType<typeof makeSnapshot>>();
+    const refresh = createDeferred<ReturnType<typeof makeSnapshot>>();
+    rpcMocks.monitor.getSysMonitor.mockReturnValueOnce(initial.promise).mockReturnValue(refresh.promise);
+    const dispose = render(() => <RuntimeMonitorPanel variant="workbench" />, host);
+    try {
+      await flushPanel();
+      expect(host.querySelector('[role="status"]')).not.toBeNull();
+      expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
+      expect(host.querySelector('[data-testid="cpu-chart"]')).toBeNull();
+      initial.resolve(makeSnapshot(1));
+      await flushPanel();
+      const chart = host.querySelector('[data-testid="cpu-chart"]');
+      expect(chart).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(host.querySelector('[data-testid="cpu-chart"]')).toBe(chart);
+      expect(host.querySelector('[role="status"]')).toBeNull();
+      refresh.resolve(makeSnapshot(2));
+      await flushPanel();
+      expect(host.querySelector('[data-testid="cpu-chart"]')).toBe(chart);
+    } finally { dispose(); }
+  });
+
   it('scopes runtime monitor styles on the panel root', async () => {
     rpcMocks.monitor.getSysMonitor.mockResolvedValue(makeSnapshot(1));
 

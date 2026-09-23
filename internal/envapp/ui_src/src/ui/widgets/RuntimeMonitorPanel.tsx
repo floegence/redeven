@@ -23,7 +23,7 @@ import { isInternalEnvAppSessionKind } from '../services/floeproxyContract';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { PermissionEmptyState } from './PermissionEmptyState';
-import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
+import { ActivityPageLoading } from '../primitives/ActivityPageLoading';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { useI18n } from '../i18n';
 
@@ -524,6 +524,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
           />
         }
       >
+        <Show when={data() || error()} fallback={<ActivityPageLoading />}>
         <div class="max-w-7xl mx-auto space-y-3 h-full flex flex-col">
           <Show when={error()}>
             <Panel class="border-error/40">
@@ -763,9 +764,9 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
             </PanelContent>
           </Panel>
         </div>
-          <RedevenLoadingCurtain visible={loading() && !data()} eyebrow={i18n.t('runtimeMonitor.loadingEyebrow')} message={i18n.t('runtimeMonitor.loadingMessage')} />
         </div>
 
+        </Show>
         <Show when={processContextMenu()} keyed>
           {(menu) => (
             <FloatingContextMenu

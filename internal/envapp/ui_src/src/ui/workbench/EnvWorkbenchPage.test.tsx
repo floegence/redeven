@@ -1365,7 +1365,7 @@ describe('EnvWorkbenchPage', () => {
     expect(layoutApiMocks.lastStreamArgs?.signal.aborted).toBe(false);
   });
 
-  it('uses a full-screen progress curtain until the runtime layout is ready', async () => {
+  it('uses the shared initial presentation until the runtime layout is ready', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const layout = deferred<any>();
@@ -1374,12 +1374,11 @@ describe('EnvWorkbenchPage', () => {
     mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
-    const curtain = host.querySelector('.redeven-workbench-progress-curtain') as HTMLElement | null;
-    expect(curtain).toBeTruthy();
-    expect(curtain?.getAttribute('data-redeven-loading-curtain-stage')).toBe('layout');
+    expect(host.querySelector('[data-env-page-loading]')).not.toBeNull();
+    expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
     expect(host.querySelector('.workbench-entry-intro')).toBeNull();
     expect(host.querySelector('.redeven-workbench-intro-preparing')).toBeNull();
-    expect(host.textContent).toContain('Loading layout');
+    expect(host.textContent).not.toContain('Loading layout');
 
     layout.resolve({
       seq: 0,
@@ -1390,7 +1389,7 @@ describe('EnvWorkbenchPage', () => {
     });
     await flushMicrotasks();
 
-    expect(host.querySelector('.redeven-workbench-progress-curtain')).toBeNull();
+    expect(host.querySelector('[data-env-page-loading]')).toBeNull();
     expect(host.textContent).not.toContain('Loading workbench');
   });
 

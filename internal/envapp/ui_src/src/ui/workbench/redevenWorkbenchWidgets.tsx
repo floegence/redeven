@@ -6,7 +6,7 @@ import type {
 import { DockCpu, DockFolder, DockTerminal, Package, Search } from '@floegence/floe-webapp-core/icons';
 import { WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 import { Show, Suspense, createEffect, createMemo, createSignal, lazy, onCleanup, type JSX } from 'solid-js';
-import { CodespacesPageSkeleton } from '../pages/CodespacesPresentation';
+import { EnvPageLoading } from '../pages/EnvPageLoading';
 
 import { CodespacesWorkbenchIcon } from '../icons/CodespacesIcon';
 import { ContainersWorkbenchIcon } from '../icons/ContainersIcon';
@@ -60,22 +60,25 @@ function WorkbenchBodyNotice(props: {
 }
 
 function FilesWidget(props: RedevenWorkbenchWidgetBodyProps) {
+  const env = useEnvContext();
   const workbench = useEnvWorkbenchInstancesContext();
   return (
     <div class="redeven-workbench-body-surface h-full min-h-0">
-      <RemoteFileBrowser
-        widgetId={props.widgetId}
-        persistenceTarget="workbench"
-        stateScope={buildWorkbenchFileBrowserStateScope(props.widgetId)}
-        openPathRequest={workbench.fileBrowserOpenRequest(props.widgetId)}
-        onOpenPathRequestHandled={workbench.consumeFileBrowserOpenRequest}
-        onTitleChange={(title) => {
-          workbench.updateWidgetTitle(props.widgetId, title);
-        }}
-        onCommittedPathChange={(path, rootId) => {
-          workbench.updateFileBrowserPath(props.widgetId, path, rootId);
-        }}
-      />
+      <Suspense fallback={<EnvPageLoading page="files" environment={env.env_id()} stateScope={buildWorkbenchFileBrowserStateScope(props.widgetId)} />}>
+        <RemoteFileBrowser
+          widgetId={props.widgetId}
+          persistenceTarget="workbench"
+          stateScope={buildWorkbenchFileBrowserStateScope(props.widgetId)}
+          openPathRequest={workbench.fileBrowserOpenRequest(props.widgetId)}
+          onOpenPathRequestHandled={workbench.consumeFileBrowserOpenRequest}
+          onTitleChange={(title) => {
+            workbench.updateWidgetTitle(props.widgetId, title);
+          }}
+          onCommittedPathChange={(path, rootId) => {
+            workbench.updateFileBrowserPath(props.widgetId, path, rootId);
+          }}
+        />
+      </Suspense>
     </div>
   );
 }
@@ -86,51 +89,57 @@ function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const geometryPreferences = () => workbench.terminalGeometryPreferences(props.widgetId);
 
   return (
-    <TerminalPanel
-      variant="workbench"
-      openSessionRequest={workbench.terminalOpenRequest(props.widgetId)}
-      onOpenSessionRequestHandled={workbench.consumeTerminalOpenRequest}
-      sessionPlacementState={panelState()}
-      terminalGeometryPreferences={{
-        fontSize: geometryPreferences().fontSize,
-        fontFamilyId: geometryPreferences().fontFamilyId,
-        onFontSizeChange: (fontSize) => {
-          return workbench.updateTerminalGeometryPreferences(props.widgetId, (previous) => ({
-            ...previous,
-            fontSize,
-          }));
-        },
-        onFontFamilyChange: (fontFamilyId) => {
-          return workbench.updateTerminalGeometryPreferences(props.widgetId, (previous) => ({
-            ...previous,
-            fontFamilyId,
-          }));
-        },
-      }}
-      onSessionPlacementStateChange={(next) => {
-        workbench.updateTerminalPanelState(props.widgetId, () => next);
-      }}
-      sessionOperations={{
-        createSession: (name, workingDir, groupId) => workbench.createTerminalSession(props.widgetId, name, workingDir, groupId),
-        deleteSession: (sessionId) => workbench.deleteTerminalSession(props.widgetId, sessionId),
-      }}
-      workbenchSelected={props.selected}
-      workbenchActivationSeq={props.activation?.seq}
-      onWorkbenchTerminalViewportChange={(sessionId, viewport) => {
-        workbench.registerTerminalViewport(props.widgetId, sessionId, viewport);
-      }}
-      onWorkbenchTerminalSurfaceChange={(sessionId, surface) => {
-        workbench.registerTerminalSurface(props.widgetId, sessionId, surface);
-      }}
-      onTitleChange={(title) => {
-        workbench.updateWidgetTitle(props.widgetId, title);
-      }}
-    />
+    <Suspense fallback={<EnvPageLoading page="terminal" />}>
+      <TerminalPanel
+        variant="workbench"
+        openSessionRequest={workbench.terminalOpenRequest(props.widgetId)}
+        onOpenSessionRequestHandled={workbench.consumeTerminalOpenRequest}
+        sessionPlacementState={panelState()}
+        terminalGeometryPreferences={{
+          fontSize: geometryPreferences().fontSize,
+          fontFamilyId: geometryPreferences().fontFamilyId,
+          onFontSizeChange: (fontSize) => {
+            return workbench.updateTerminalGeometryPreferences(props.widgetId, (previous) => ({
+              ...previous,
+              fontSize,
+            }));
+          },
+          onFontFamilyChange: (fontFamilyId) => {
+            return workbench.updateTerminalGeometryPreferences(props.widgetId, (previous) => ({
+              ...previous,
+              fontFamilyId,
+            }));
+          },
+        }}
+        onSessionPlacementStateChange={(next) => {
+          workbench.updateTerminalPanelState(props.widgetId, () => next);
+        }}
+        sessionOperations={{
+          createSession: (name, workingDir, groupId) => workbench.createTerminalSession(props.widgetId, name, workingDir, groupId),
+          deleteSession: (sessionId) => workbench.deleteTerminalSession(props.widgetId, sessionId),
+        }}
+        workbenchSelected={props.selected}
+        workbenchActivationSeq={props.activation?.seq}
+        onWorkbenchTerminalViewportChange={(sessionId, viewport) => {
+          workbench.registerTerminalViewport(props.widgetId, sessionId, viewport);
+        }}
+        onWorkbenchTerminalSurfaceChange={(sessionId, surface) => {
+          workbench.registerTerminalSurface(props.widgetId, sessionId, surface);
+        }}
+        onTitleChange={(title) => {
+          workbench.updateWidgetTitle(props.widgetId, title);
+        }}
+      />
+    </Suspense>
   );
 }
 
 function MonitorWidget() {
-  return <RuntimeMonitorPanel variant="workbench" />;
+  return (
+    <Suspense fallback={<EnvPageLoading page="monitor" />}>
+      <RuntimeMonitorPanel variant="workbench" />
+    </Suspense>
+  );
 }
 
 function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
@@ -187,13 +196,21 @@ function CodespacesWidget() {
       {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}
       class="redeven-workbench-body-surface h-full min-h-0 overflow-auto"
     >
-      <Suspense fallback={<CodespacesPageSkeleton />}><EnvCodespacesPage /></Suspense>
+      <Suspense fallback={<EnvPageLoading page="codespaces" />}>
+        <EnvCodespacesPage />
+      </Suspense>
     </div>
   );
 }
 
 function HostApplicationsWidget() {
-  return <div {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS} class="redeven-workbench-body-surface h-full min-h-0 overflow-hidden"><EnvHostApplicationsPage /></div>;
+  return (
+    <div {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS} class="redeven-workbench-body-surface h-full min-h-0 overflow-hidden">
+      <Suspense fallback={<EnvPageLoading page="applications" />}>
+        <EnvHostApplicationsPage />
+      </Suspense>
+    </div>
+  );
 }
 
 function PortsWidget() {
@@ -202,7 +219,9 @@ function PortsWidget() {
       {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}
       class="redeven-workbench-body-surface h-full min-h-0 overflow-auto"
     >
-      <EnvPortForwardsPage />
+      <Suspense fallback={<EnvPageLoading page="ports" />}>
+        <EnvPortForwardsPage />
+      </Suspense>
     </div>
   );
 }
@@ -213,7 +232,9 @@ function ContainersWidget(props: RedevenWorkbenchWidgetBodyProps) {
       {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}
       class="redeven-workbench-body-surface h-full min-h-0 overflow-hidden"
     >
-      <EnvContainersPage stateScope={`workbench:${props.widgetId}`} variant="workbench" />
+      <Suspense fallback={<EnvPageLoading page="containers" variant="workbench" stateScope={`workbench:${props.widgetId}`} />}>
+        <EnvContainersPage stateScope={`workbench:${props.widgetId}`} variant="workbench" />
+      </Suspense>
     </div>
   );
 }

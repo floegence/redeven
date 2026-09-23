@@ -1,7 +1,7 @@
 import { createEffect, onCleanup, onMount, type Accessor } from 'solid-js';
 import { getReloadPlaceholder } from '@floegence/floe-webapp-core/reload-placeholder';
 
-const reloadPages = new Set(['applications', 'ports', 'containers', 'codespaces', 'files']);
+import { envPagePresentation } from '../pages/EnvPageLoading';
 const surfaces = [
   '[data-floe-shell-slot]', '.host-apps', '.web-services', '.codespaces-page', '.redeven-containers', '.host-apps-header', '.host-app-session', '.host-app-tile',
   '.web-services-header', '.web-service-row', '.codespace-card', '.container-header',
@@ -27,7 +27,7 @@ export function createEnvReloadPresentation(options: {
   let observer: MutationObserver | undefined;
   const inspect = () => {
     frame = undefined;
-    if (!options.activity() || !reloadPages.has(options.target()) || options.blocked()) {
+    if (!options.activity() || !envPagePresentation(options.target()).restoreGeometry || options.blocked()) {
       placeholder.clear();
       observer?.disconnect();
       return;

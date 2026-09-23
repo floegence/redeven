@@ -35,6 +35,9 @@ this pre-module surface.
 
 # One handoff
 
+[Page loading continuity](page-loading-continuity.md) owns the shared page registry
+used by Activity, Workbench, and reload eligibility.
+
 The Shell restricts restored geometry to its main region once live navigation is
 mounted. Inventory pages expose a presentation attribute derived from their
 existing successful data, successful empty result, or error. They do not own a

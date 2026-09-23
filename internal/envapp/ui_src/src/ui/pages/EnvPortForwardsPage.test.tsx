@@ -126,6 +126,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       disabled={props.disabled}
       aria-label={props['aria-label']}
       aria-busy={props['aria-busy']}
+      aria-disabled={props['aria-disabled']}
       title={props.title}
       data-testid={props['data-testid']}
     >
@@ -595,7 +596,7 @@ describe('web service metadata and template validation', () => {
     />, host);
     try {
       expect(host.textContent).toContain('Running');
-      expect(host.textContent).toContain('Opening needs attention');
+      expect(host.querySelector('[data-testid="managed-service-status"]')?.textContent).toBe('Running');
       expect(host.textContent).toContain('Changes pending');
       expect(host.textContent).toContain('Apply and restart');
       const button = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((item) => item.textContent?.trim() === 'Open');
@@ -1518,7 +1519,10 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-row"]')).toBeTruthy());
 
     const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-row"] button'));
-    expect(buttons.find((button) => button.textContent?.trim() === 'Open')?.disabled).toBe(true);
+    const open = buttons.find((button) => button.textContent?.trim() === 'Open');
+    expect(open?.getAttribute('aria-disabled')).toBe('true');
+    open?.click();
+    expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([url]) => String(url).endsWith('/open-session'))).toBe(false);
     expect(buttons.find((button) => button.textContent?.trim() === 'Stop')?.disabled).toBe(true);
     expect(buttons.find((button) => button.title === 'View logs')?.disabled).toBe(false);
     expect(buttons.find((button) => button.title === 'Uninstall')?.disabled).toBe(true);
