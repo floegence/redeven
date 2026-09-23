@@ -1005,3 +1005,40 @@ export function arrangeWorkbenchWidgetsByType(
     };
   });
 }
+
+/**
+ * Find a nearby world-space origin for a newly created widget without covering
+ * existing widgets. The search stays centered on the current viewport and
+ * expands in rings so a new surface remains easy to find after creation.
+ */
+export function resolveFreeWorkbenchWidgetOrigin(
+  widgets: readonly WorkbenchWidgetItem[],
+  width: number,
+  height: number,
+  center: Readonly<{ x: number; y: number }>,
+): { x: number; y: number } {
+  const gap = 24;
+  const step = Math.max(width, height) + gap;
+  const candidates: Array<{ x: number; y: number }> = [
+    { x: center.x - width / 2, y: center.y - height / 2 },
+  ];
+  for (let ring = 1; ring <= 8; ring += 1) {
+    for (const [column, row] of [
+      [ring, 0], [-ring, 0], [0, ring], [0, -ring],
+      [ring, ring], [ring, -ring], [-ring, ring], [-ring, -ring],
+    ] as const) {
+      candidates.push({
+        x: center.x - width / 2 + column * step,
+        y: center.y - height / 2 + row * step,
+      });
+    }
+  }
+
+  for (const candidate of candidates) {
+    const next = { ...candidate, width, height };
+    if (widgets.every((widget) => !rectsOverlap(next, widget, gap))) {
+      return candidate;
+    }
+  }
+  return candidates[0]!;
+}

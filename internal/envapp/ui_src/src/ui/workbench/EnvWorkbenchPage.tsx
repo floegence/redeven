@@ -63,7 +63,7 @@ import {
   redevenWorkbenchFilterBarWidgetTypes,
   redevenWorkbenchInitialCanvasWidgetTypes,
 } from './redevenWorkbenchWidgets';
-import { arrangeWorkbenchWidgetsByType } from './workbenchAutoArrange';
+import { arrangeWorkbenchWidgetsByType, resolveFreeWorkbenchWidgetOrigin } from './workbenchAutoArrange';
 import { mergeWorkbenchLayoutChanges } from './workbenchLayoutMerge';
 import { createRedevenWorkbenchInitialLayout } from './workbenchInitialCanvas';
 import {
@@ -306,7 +306,6 @@ function resolveViewportWorldCenter(
     y: (frameHeight / 2 - Number(viewport.y)) / scale,
   };
 }
-
 function easeOutCubic(progress: number): number {
   const clamped = Math.min(1, Math.max(0, progress));
   return 1 - ((1 - clamped) ** 3);
@@ -1281,6 +1280,39 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
         widgets: arrangedWidgets,
       };
     });
+  };
+
+  const handleWorkbenchDockItemClick = (item: WorkbenchDockItemActivation): boolean | void => {
+    if (props.onDockItemClick?.(item)) {
+      return true;
+    }
+    if (item.kind !== 'widget' || workbenchState().widgets.some((widget) => widget.type === item.id)) {
+      return undefined;
+    }
+
+    const api = surfaceApi();
+    const definition = localizedWorkbenchWidgetDefinitions().find((entry) => entry.type === item.id);
+    const frameSize = resolveCanvasFrameSize();
+    const center = resolveViewportWorldCenter(workbenchState().viewport, frameSize);
+    const width = Number(definition?.defaultSize?.width);
+    const height = Number(definition?.defaultSize?.height);
+    if (!api || !center || !Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+      return undefined;
+    }
+
+    const origin = resolveFreeWorkbenchWidgetOrigin(workbenchState().widgets, width, height, center);
+    const widget = api.createWidget(item.id, {
+      // WorkbenchSurface.createWidget interprets worldX/worldY as the widget
+      // center. The placement helper returns a collision-free top-left origin.
+      worldX: origin.x + width / 2,
+      worldY: origin.y + height / 2,
+      centerViewport: false,
+    });
+    if (!widget) {
+      return undefined;
+    }
+    api.focusWidget(widget, { centerViewport: true });
+    return true;
   };
 
   const resolveWorkbenchContextMenuItems: RedevenWorkbenchContextMenuItemsResolver = (context) => {
@@ -2977,7 +3009,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
             filterBarWidgetTypes={redevenWorkbenchFilterBarWidgetTypes}
             resolveContextMenuItems={resolveWorkbenchContextMenuItems}
             onApiReady={setSurfaceApi}
-            onDockItemClick={props.onDockItemClick}
+            onDockItemClick={handleWorkbenchDockItemClick}
             dockActions={props.dockActions}
             dockItems={props.dockItems}
             registerExternalDockDragController={props.registerExternalDockDragController}

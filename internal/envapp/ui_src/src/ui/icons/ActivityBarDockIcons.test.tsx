@@ -4,7 +4,7 @@ import type { JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ActivityBarSettingsIcon, ActivityBarSwitchIcon } from './ActivityBarDockIcons';
+import { ActivityBarPortsIcon, ActivityBarSettingsIcon, ActivityBarSwitchIcon } from './ActivityBarDockIcons';
 
 function renderIcon(Icon: (props: { class?: string }) => JSX.Element): SVGSVGElement {
   const host = document.createElement('div');
@@ -37,5 +37,15 @@ describe('Activity Bar bottom icons', () => {
     expect(icon.getAttribute('stroke-linejoin')).toBe('round');
     expect(icon.querySelector('[fill], [fill-opacity], [stroke-opacity]')).toBeNull();
     expect(icon.querySelector('title, [tabindex]')).toBeNull();
+  });
+
+  it('uses a server and port glyph for Web Services instead of the browser globe', () => {
+    const icon = renderIcon(ActivityBarPortsIcon);
+
+    expect(icon.getAttribute('data-activity-bar-icon')).toBe('web-services');
+    expect(icon.querySelector('rect')).not.toBeNull();
+    expect(icon.querySelectorAll('circle')).toHaveLength(3);
+    expect(icon.querySelector('ellipse')).toBeNull();
+    expect(icon.getAttribute('aria-hidden')).toBe('true');
   });
 });
