@@ -118,6 +118,19 @@ test('fails closed when a static manifest edge is missing', () => {
   }), /manifest import is missing/u);
 });
 
+test('loads the browser engine only in its document or behind an optional import', () => {
+  const moduleID = '@floegence/floebrowser/dist/viewer/browser.js';
+  const chunks = { chunks: { 'assets/index.js': chunk(['src/index.ts']), 'assets/browser.js': chunk([moduleID]) } };
+  const manifest = {
+    'index.html': entry('assets/index.js', { dynamicImports: ['browser.html'] }),
+    'browser.html': entry('assets/browser.js'),
+  };
+  assert.deepEqual(analyzeInitialBuildGraph(manifest, chunks).forbiddenModules, []);
+  assert.deepEqual(analyzeInitialBuildGraph(manifest, chunks, 'browser.html').forbiddenModules, []);
+  manifest['index.html'].imports = ['browser.html'];
+  assert.deepEqual(analyzeInitialBuildGraph(manifest, chunks).forbiddenModules.map(item => item.moduleId), [moduleID]);
+});
+
 test('loads generated model metadata through a dynamic settings boundary', () => {
   const catalog = '/workspace/redeven/internal/config/model_catalog.generated.json';
   const chunks = { chunks: { 'assets/index.js': chunk(['src/index.ts']), 'assets/models.js': chunk([catalog]) } };

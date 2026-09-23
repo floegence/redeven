@@ -20,6 +20,10 @@ Source admission, popup privacy and directory retirement belong to [browser sour
 
 
 The Browser page opens the default managed profile without AI configuration.
+The environment shell loads the window adapter only when a browser window is
+requested. The full viewer engine belongs to the browser document, outside the
+environment and access documents' initial asset graphs. Locale keys come from
+the maintained product catalog and are checked against the released engine.
 Its source dialog edits a draft and applies it only on Open; profile creation,
 Chrome setup and browser installation reuse the same operations as Flower.
 Independent windows reuse the admitted source identity, so reopening a window
