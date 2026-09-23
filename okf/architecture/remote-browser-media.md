@@ -46,9 +46,13 @@ website-owned stream audio bypasses this adapter. Native helper diagnostics must
 never enter its structured reply pipe, including RTCP interceptor shutdown logs.
 Library loggers share the collector's silent logger.
 
-The loopback collector requests an immediate RTCP sender report for each new
-track and waits for that source-clock mapping before forwarding encoded frames.
-It retains initial packets in the bounded receiver, including an isolated paused
+Source Chromium negotiates RTP absolute capture time. The loopback collector
+applies capture timestamps and optional clock offsets in complete-sample order,
+so device-clock changes take effect without waiting for periodic sender reports.
+Omitted extensions interpolate from the last capture mapping and RTP sample rate;
+reports never overwrite a negotiated capture clock. Standard RTP senders without
+the extension establish their mapping through an immediate sender report and
+retain initial packets in the bounded receiver, including an isolated paused
 picture. Audio and video must not invent separate clocks from packet arrival.
 
 DOM checkpoints preserve valid streams. Navigation, element removal and revoked
@@ -68,6 +72,17 @@ output device clock after the worklet has consumed its first samples.
 Device-clock queries must not block audio startup;
 video presentation retains its deadline while other tracks update.
 
+Opus output retains the timestamp of each corresponding source packet, including
+gaps and later clock corrections. A decoder's inferred continuous sample timeline
+must not replace that authority. At most twelve pending packet timestamps are
+retained, and decoder failure clears them.
+
+Audio lookahead must fit the existing 12,000-frame PCM budget at 48 kHz. The
+shared clock accounts for device presentation latency, the current block size,
+and the 50 ms dispatch margin before admitting future audio. An older retained
+picture cannot extend audio waiting beyond that capacity and cause normal pulses
+to be dropped. The decoder and output worklet keep the same hard bound.
+
 File-backed Chromium capture timestamps upcoming audio behind the native output
 device delay. The upstream adapter estimates this delay from a bounded lower
 delivery-age envelope and restores presentation timestamps before encoding,
@@ -79,6 +94,8 @@ Decoded video lends at most six pictures to the presentation queue and retains
 only one additional latest picture under backpressure. One animation callback
 preserves future deadlines and consumes obsolete due pictures without replaying
 them. Selection clears queued pictures and rejects old decoder generations.
+The presentation canvas captures changed pictures without a second frame-rate
+timer; source encoding and the bounded presentation queue already limit delivery.
 Identical retransmitted Canvas pixels reuse their existing decoded resource;
 changed pixels and dimensions still update.
 
@@ -102,5 +119,6 @@ built product assets.
 - `floebrowser:test/media-source-lifetime.e2e.ts` - Source playback survives collection and observation disposal.
 - `floebrowser:src/viewer/media.ts` - Identity-fenced decoding and element composition.
 - `floebrowser:test/media-presentation.e2e.ts` - Future picture deadlines, credit return and selection cleanup.
+- `floebrowser:test/audio-timestamps.e2e.ts` - Opus packet gaps and source-clock corrections across decoder implementations.
 - `floebrowser:test/media-sync.e2e.ts` - Displayed and audible pulse synchronization, including delayed initial video.
 - `redeven:internal/envapp/ui_src/scripts/browserProjectionMediaSync.mjs` - Product presentation timing through Flowersec.
