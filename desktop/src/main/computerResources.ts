@@ -19,7 +19,7 @@ export async function validateComputerResources(root: string, expectedDigest: un
     throw new Error('Computer resource manifest target mismatch.');
   }
   const declared = new Map(manifest.files.map(file => [file.path, file]));
-  const required = ['node', 'NODE_LICENSE', 'redevenComputerHost.mjs', 'redevenComputerScript.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'node_modules/quickjs-emscripten/package.json', 'extension/manifest.json', 'extension/background.mjs', 'extension/computerBrowserController.mjs', 'extension/computerBrowserPage.mjs', 'extension/computerBrowserKeys.mjs', 'extension/popup.html', 'extension/popup.css', 'extension/popup.mjs', 'extension/messages.mjs', 'extension/input-focus.css', 'node_modules/playwright/package.json', 'node_modules/playwright-core/package.json'];
+  const required = ['node', 'NODE_LICENSE', 'redevenComputerHost.mjs', 'redevenComputerScript.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'node_modules/quickjs-emscripten/package.json', 'extension/manifest.json', 'extension/background.mjs', 'extension/popup.html', 'extension/popup.css', 'extension/popup.mjs', 'extension/messages.mjs', 'extension/input-focus.css', 'node_modules/playwright/package.json', 'node_modules/playwright-core/package.json'];
   if (platform === 'darwin') required.push('redeven-computer-host');
   if (declared.size !== manifest.files.length || required.some(name => !declared.has(name))) throw new Error('Computer resource inventory is incomplete.');
   const seen = new Set<string>();
