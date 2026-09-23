@@ -53,6 +53,7 @@
     "scan": "Mit Ihrer Authentifizierungs-App scannen.",
     "manual": "Scannen nicht möglich?",
     "code": "Authentifizierungscode",
+    "codeHint": "Geben Sie die 6 Ziffern aus Ihrer Authentifizierungs-App ein.",
     "password": "Umgebungspasswort",
     "continue": "Weiter",
     "recoveryTitle": "Wiederherstellungscodes speichern",

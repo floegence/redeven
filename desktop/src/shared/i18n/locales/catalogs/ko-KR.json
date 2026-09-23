@@ -53,6 +53,7 @@
     "scan": "인증 앱으로 스캔하세요.",
     "manual": "스캔할 수 없나요?",
     "code": "인증 코드",
+    "codeHint": "인증 앱에 표시된 6자리 숫자를 입력하세요.",
     "password": "환경 비밀번호",
     "continue": "계속",
     "recoveryTitle": "복구 코드 저장",

@@ -112,6 +112,65 @@ try {
   await button('common.cancel').click(); await dialog.getByText(t('accessFlow.securityDisabled'), { exact: true }).waitFor();
   report.cases.push('protected-http-explicit-identity-commit-and-cancel');
 
+  for (const preset of ['classic-light', 'ocean']) for (const locale of locales) {
+    await open(locale, preset, 'Local Environment', '&secure=enabled');
+    await button('accessFlow.manageProtection').click(); await button('security.manage').click(); await button('security.disable').click();
+    await layout(`${preset}/${locale}/authenticator-code`);
+    const code = dialog.getByLabel(t('security.code'), { exact: true });
+    const password = dialog.getByLabel(t('security.password'), { exact: true });
+    assert.ok((await code.locator('..').locator('..').boundingBox()).width < (await password.boundingBox()).width);
+    assert.equal(await code.getAttribute('autocomplete'), 'one-time-code');
+    assert.equal(await code.getAttribute('inputmode'), 'numeric');
+    await password.fill('test-only-owner'); await code.fill('12345');
+    assert.equal(await button('security.continue').isEnabled(), false);
+    await code.press('Enter');
+    assert.equal(await page.evaluate(() => window.accessFixture.requests.filter(r => r.action === 'disable').length), 0);
+    await code.fill('012 345'); assert.equal(await code.inputValue(), '012345');
+    await code.press('End'); await code.press('ArrowLeft'); await code.press('Backspace');
+    assert.equal(await code.inputValue(), '01235');
+    await code.press('4'); assert.equal(await code.inputValue(), '012345');
+    for (let step = 0; step < 6; step++) await code.press('ArrowLeft');
+    await code.press('Shift+ArrowRight'); await code.press('9');
+    assert.equal(await code.inputValue(), '912345');
+    await code.fill('012345'); await code.press('End');
+    const codeFocus = await code.evaluate(async input => {
+      const surface = input.closest('[data-floe-input-surface]');
+      const read = () => { const s = getComputedStyle(surface), b = surface.getBoundingClientRect(); return { width: b.width, height: b.height, border: s.borderWidth, background: s.background, shadow: s.boxShadow, color: s.borderColor }; };
+      input.blur(); await Promise.all(input.getAnimations().map(a => a.finished.catch(() => {}))); const before = read();
+      input.focus(); await Promise.all(input.getAnimations().map(a => a.finished.catch(() => {})));
+      return { before, after: read(), inputScroll: input.scrollLeft, surfaceScroll: surface.scrollLeft, outline: getComputedStyle(input).outlineStyle };
+    });
+    for (const key of ['width', 'height', 'border', 'background', 'shadow']) assert.equal(codeFocus.before[key], codeFocus.after[key]);
+    assert.notEqual(codeFocus.before.color, codeFocus.after.color);
+    assert.equal(codeFocus.outline, 'none'); assert.equal(codeFocus.inputScroll, 0); assert.equal(codeFocus.surfaceScroll, 0);
+    if (locale === 'zh-CN') { await capture(`six-digit-code-${preset}`); await assertA11y(); }
+    await button('security.useRecovery').click();
+    const recovery = dialog.getByLabel(t('security.recoveryCode'), { exact: true });
+    assert.equal(await recovery.inputValue(), '');
+    assert.equal(await recovery.getAttribute('inputmode'), 'text');
+    await recovery.fill('recovery-abcd-1234');
+    await button('security.useAuthenticator').click(); assert.equal(await code.inputValue(), '');
+    assert.equal(await code.evaluate(input => input === document.activeElement), true);
+  }
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  const ownerCode = dialog.getByLabel(t('security.code'), { exact: true });
+  await page.evaluate(() => navigator.clipboard.writeText('123 456'));
+  await ownerCode.press('ControlOrMeta+V'); assert.equal(await ownerCode.inputValue(), '123456');
+  await ownerCode.fill('000000'); await button('security.continue').click(); await footer().getByRole('alert').waitFor();
+  assert.equal(await ownerCode.getAttribute('aria-invalid'), 'true');
+  await ownerCode.fill('123456'); await button('security.continue').click();
+  await dialog.getByText(t('security.disableHelp'), { exact: true }).waitFor();
+  await button('security.disable').click();
+  assert.equal(await page.evaluate(() => window.accessFixture.security.enabled), false);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open('zh-CN', 'ocean', 'Local Environment', '&secure=enabled');
+  await button('accessFlow.manageProtection').click(); await button('security.manage').click(); await button('security.disable').click();
+  await dialog.getByLabel(t('security.code'), { exact: true }).fill('012345'); await layout('six-digit-code-narrow'); await capture('six-digit-code-narrow');
+  await page.addStyleTag({ content: 'html { font-size: 24px !important; }' });
+  await layout('six-digit-code-enlarged'); await capture('six-digit-code-enlarged');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  report.cases.push('six-digit-code-editing-paste-recovery-focus-and-20-localized-layouts');
+
   await open('en-US', 'ocean', 'Local Environment', '&secure=ready');
   await button('accessFlow.manageProtection').click(); await button('security.setup').click();
   await capture('authenticator-ocean');

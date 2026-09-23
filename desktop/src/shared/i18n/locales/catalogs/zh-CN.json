@@ -53,6 +53,7 @@
     "scan": "使用身份验证器扫描二维码。",
     "manual": "无法扫描？",
     "code": "身份验证码",
+    "codeHint": "输入身份验证器中的 6 位数字。",
     "password": "环境密码",
     "continue": "继续",
     "recoveryTitle": "保存恢复码",

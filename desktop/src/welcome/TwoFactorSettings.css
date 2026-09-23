@@ -207,16 +207,46 @@
 .two-factor-verify .two-factor-field {
   text-align: center;
 }
-.two-factor-flow input.two-factor-code-input {
-  height: 48px;
-  font-family: var(--font-mono);
-  font-size: 24px;
-  text-align: center;
-  letter-spacing: 0.22em;
-  font-weight: 400;
+.two-factor-code-width {
+  width: min(100%, 17.25rem);
+  container-type: inline-size;
 }
-.two-factor-code-input::placeholder {
-  opacity: 0.35;
+.two-factor-verify .two-factor-code-width {
+  align-self: center;
+}
+.two-factor-code-surface {
+  --code-slot-width: calc((100cqw - 2px) / 6);
+  overflow: clip;
+  border: 1px solid var(--input);
+  border-radius: 8px;
+  background-color: var(--background);
+  background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(var(--code-slot-width) - 1px), var(--border) calc(var(--code-slot-width) - 1px), var(--border) var(--code-slot-width));
+}
+.two-factor-code-surface[aria-disabled='true'] { opacity: 0.5; }
+.two-factor-flow input.two-factor-code-input {
+  /* Reserve the final letter spacing so native editing never scrolls the digits. */
+  width: calc(100% + (var(--code-slot-width) - 1ch) / 2 + 1px);
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  height: 3.25rem;
+  padding: 0;
+  padding-inline-start: calc((var(--code-slot-width) - 1ch) / 2);
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  text-align: left;
+  direction: ltr;
+  letter-spacing: calc(var(--code-slot-width) - 1ch);
+  font-weight: 500;
+}
+.two-factor-flow input.two-factor-code-input:disabled { opacity: 1; }
+.two-factor-code-hint {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.6;
 }
 .two-factor-text-action {
   color: var(--muted-foreground);
@@ -224,6 +254,7 @@
   text-align: left;
   cursor: pointer;
 }
+.two-factor-text-action:disabled { cursor: not-allowed; opacity: 0.5; }
 .two-factor-recovery-sheet {
   border: 1px solid var(--border);
   border-radius: 12px;

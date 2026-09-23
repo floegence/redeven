@@ -53,6 +53,7 @@
     "scan": "Escanea con tu aplicación de autenticación.",
     "manual": "¿No puedes escanear?",
     "code": "Código de autenticación",
+    "codeHint": "Introduce los 6 dígitos de tu aplicación de autenticación.",
     "password": "Contraseña del entorno",
     "continue": "Continuar",
     "recoveryTitle": "Guardar los códigos de recuperación",

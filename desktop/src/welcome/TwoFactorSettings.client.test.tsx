@@ -95,7 +95,7 @@ it('confirms enrollment before showing codes and commits only after they are sav
   expect(manage).toHaveBeenCalledWith({
     action: 'verify',
     operation_id: 'operation',
-    code: '012 345',
+    code: '012345',
   });
   const enable = [...document.querySelectorAll('button')].find(
     (item) => item.textContent === 'Enable two-factor',
@@ -251,4 +251,40 @@ it('keeps the authenticator step and gives code-specific feedback after an inval
   expect(document.querySelector('.two-factor-qr')).not.toBeNull();
   expect(input.value).toBe('000000');
   expect(document.querySelector('[role="alert"] svg')).not.toBeNull();
+});
+
+it('requires six authenticator digits for owner verification and keeps recovery codes separate', async () => {
+  const base: SecurityResult = { https_ready: true, enabled: true, password_configured: true, recovery_pending: false, recovery_codes_remaining: 8, revision: 1 };
+  const manage = vi.fn(async () => base);
+  dispose = render(() => <TwoFactorSettings environmentID="environment" i18n={createDesktopI18n('en-US')} manage={manage} configureHTTPS={() => {}} />, document.body);
+  await settle(); click('Manage'); click('Turn off two-factor');
+  const password = document.querySelector<HTMLInputElement>('input[type="password"]')!;
+  password.value = 'test-password'; password.dispatchEvent(new Event('input', { bubbles: true }));
+  const code = document.querySelector<HTMLInputElement>('input[autocomplete="one-time-code"]')!;
+  const submit = () => code.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  const input = (value: string) => { code.value = value; code.dispatchEvent(new Event('input', { bubbles: true })); };
+  input('12345'); submit(); await settle();
+  expect(manage).toHaveBeenCalledTimes(1);
+  expect([...document.querySelectorAll('button')].find(button => button.textContent === 'Continue')!.disabled).toBe(true);
+  input('12a345');
+  expect(code.value).toBe('12345');
+  input('012 345');
+  expect(code.value).toBe('012345');
+  input('01234567');
+  expect(code.value).toBe('012345');
+  expect(code.type).toBe('text');
+  expect(code.inputMode).toBe('numeric');
+  expect(document.getElementById(code.getAttribute('aria-describedby')!)?.textContent).toContain('6 digits');
+  click('Use a recovery code');
+  const recovery = document.querySelector<HTMLInputElement>('input[type="text"]')!;
+  expect(recovery.value).toBe('');
+  expect(recovery.inputMode).toBe('text');
+  recovery.value = 'recovery-abcd-1234'; recovery.dispatchEvent(new Event('input', { bubbles: true }));
+  click('Use an authenticator code');
+  expect(document.querySelector<HTMLInputElement>('input[autocomplete="one-time-code"]')!.value).toBe('');
+  click('Use a recovery code');
+  const currentRecovery = document.querySelector<HTMLInputElement>('input[type="text"]')!;
+  currentRecovery.value = 'recovery-abcd-1234'; currentRecovery.dispatchEvent(new Event('input', { bubbles: true }));
+  click('Continue'); await settle();
+  expect(manage).toHaveBeenLastCalledWith({ action: 'disable', password: 'test-password', recovery_code: 'recovery-abcd-1234' });
 });
