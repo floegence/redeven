@@ -39,6 +39,7 @@ test('Chrome installs and replaces an old extension from another visible folder'
   let context;
   try {
     stageBrowserExtension(extension); stageBrowserExtension(outdated);
+    const currentManifest = JSON.parse(await readFile(path.join(extension, 'manifest.json'), 'utf8'));
     const previousManifest = JSON.parse(await readFile(path.join(outdated, 'manifest.json'), 'utf8'));
     previousManifest.version = '1.0.0';
     await writeFile(path.join(outdated, 'manifest.json'), JSON.stringify(previousManifest));
@@ -48,7 +49,7 @@ test('Chrome installs and replaces an old extension from another visible folder'
     await installChromeExtensionThroughUI(context, outdated, 'mgfbpkkmocckooenpdfpefknffjanjce', ['Redeven', path.basename(outdated)]);
     const page = await installChromeExtensionThroughUI(context, extension, 'mgfbpkkmocckooenpdfpefknffjanjce', homePath, '1.0.0');
     const popup = await context.newPage(); await popup.goto('chrome-extension://mgfbpkkmocckooenpdfpefknffjanjce/popup.html');
-    assert.equal(await popup.evaluate(() => chrome.runtime.getManifest().version), '1.0.2');
+    assert.equal(await popup.evaluate(() => chrome.runtime.getManifest().version), currentManifest.version);
     assert.equal(await page.locator('extensions-item[id="mgfbpkkmocckooenpdfpefknffjanjce"]').count(), 1);
     process.stdout.write(`Chrome Load unpacked label: ${await page.locator('extensions-toolbar #loadUnpacked').textContent()}\n`);
   } finally {
