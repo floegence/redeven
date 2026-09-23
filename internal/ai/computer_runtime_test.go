@@ -33,15 +33,21 @@ func runtimeFixture(t *testing.T) (*ComputerUseRuntime, *PlaywrightTargetExecuto
 	runtime.browserHost, _ = browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
 			ID, Method string
-			Params     struct{ ID, Endpoint string }
+			Params     struct {
+				ID, Endpoint string
+				Tabs         []ComputerBrowserTab `json:"tabs"`
+			}
 		}
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Error(err)
 			return
 		}
 		reply := map[string]any{"id": request.ID}
-		if request.Method == "source.admit" {
+		switch request.Method {
+		case "source.admit":
 			reply["result"] = request.Params.ID
+		case "source.inventory":
+			reply["result"] = request.Params.Tabs
 		}
 		_ = json.NewEncoder(w).Encode(reply)
 	})

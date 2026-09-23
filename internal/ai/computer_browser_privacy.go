@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"strings"
 )
 
@@ -33,12 +34,18 @@ func (r *ComputerUseRuntime) browserInventoryPrivacy(ctx context.Context, endpoi
 				return nil, err
 			}
 			if err := r.browserHost.call(ctx, "source.inventory", map[string]any{"endpoint": "extension:" + client.profile.ID, "tabs": inventory}, nil); err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return nil, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_failed"}
+				}
 				return nil, err
 			}
 		}
 	}
 	var filtered []ComputerBrowserTab
 	if err := r.browserHost.call(ctx, "source.inventory", map[string]any{"endpoint": endpoint, "tabs": tabs}, &filtered); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_failed"}
+		}
 		return nil, err
 	}
 	return filtered, nil
