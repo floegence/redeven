@@ -37,6 +37,8 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
     getSnapshot: async () => snapshot, performAction, subscribeSnapshot: listener => { receive = listener; return () => {}; },
   } }} />, host));
   await settle();
+  // jsdom has no Web Animations; the browser acceptance checks real tab motion.
+  document.querySelector<HTMLElement>('.redeven-center-content')!.animate = vi.fn(() => ({ cancel: vi.fn() }) as unknown as Animation);
   const owner = (role: string) => document.querySelector<HTMLElement>(`[data-owner-role="${role}"]`)!;
   const select = async (role: 'runtime' | 'cloud') => {
     const entry = role === 'cloud' ? fixture.cloud : fixture.runtime;
