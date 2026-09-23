@@ -53,6 +53,7 @@
     "scan": "Scannez avec votre application d’authentification.",
     "manual": "Impossible de scanner ?",
     "code": "Code d’authentification",
+    "codeHint": "Saisissez les 6 chiffres de votre application d’authentification.",
     "password": "Mot de passe de l’environnement",
     "continue": "Continuer",
     "recoveryTitle": "Enregistrer vos codes de récupération",

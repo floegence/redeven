@@ -82,6 +82,7 @@ function Fixture() {
       return { ...securityState, operation_id: 'fixture-operation', recovery_codes: Array.from({ length: 8 }, (_, i) => `fixture-recovery-${i + 1}`) };
     }
     if (request.password === 'wrong') throw new Error('ACCESS_PASSWORD_INVALID');
+    if (securityState.enabled && !securityState.recovery_pending && request.code !== '123456' && request.recovery_code !== 'fixture-recovery-1') throw new Error('ACCESS_FACTOR_INVALID');
     securityAction = request.action;
     return { ...securityState, operation_id: 'fixture-operation', secret: 'JBSWY3DPEHPK3PXP', qr_image: enrollmentQR.createDataURL(6, 0), recovery_codes: Array.from({ length: 8 }, (_, i) => `fixture-recovery-${i + 1}`) };
   };

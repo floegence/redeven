@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createEffect, createMemo, on, onCleanup } from 'solid-js';
+import { Show, For, createSignal, createEffect, createMemo, createUniqueId, on, onCleanup } from 'solid-js';
 import {
   Button,
   Checkbox,
@@ -71,6 +71,7 @@ export function createTwoFactorSettings(props: TwoFactorSettingsProps) {
       | 'scan'
       | 'manual'
       | 'code'
+      | 'codeHint'
       | 'password'
       | 'continue'
       | 'recoveryTitle'
@@ -233,9 +234,12 @@ export function createTwoFactorSettings(props: TwoFactorSettingsProps) {
       void run({ action: selected }, 'scan');
     else setView('verifyOwner');
   };
+  const codeValid = () => /^\d{6}$/.test(code());
+  const ownerReady = () => !!password() && (needsPassword()
+    ? password() === confirmPassword()
+    : useRecovery() ? !!code().trim() : codeValid());
   const confirmOwner = () => {
-    if (!password() || (needsPassword() && password() !== confirmPassword()))
-      return;
+    if (!ownerReady()) return;
     return run(
       {
         action: action(),
@@ -282,7 +286,7 @@ export function createTwoFactorSettings(props: TwoFactorSettingsProps) {
   const isEnrollment = () => action() === 'setup' || action() === 'replace';
   return { status, view, setView, action, operation, password, setPassword, confirmPassword, setConfirmPassword,
     needsPassword, code, setCode, useRecovery, setUseRecovery, copied, keyCopied, saved, setSaved, busy, error,
-    requiresHTTPS, text, close, run, begin, confirmOwner, copy, download, copyKey, isEnrollment };
+    requiresHTTPS, text, close, run, begin, confirmOwner, codeValid, ownerReady, copy, download, copyKey, isEnrollment };
 }
 
 export function TwoFactorSettings(props: TwoFactorSettingsProps & {
@@ -292,13 +296,46 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
   const controller = props.controller ?? createTwoFactorSettings(props);
   const { status, view, setView, action, operation, password, setPassword, confirmPassword, setConfirmPassword,
     needsPassword, code, setCode, useRecovery, setUseRecovery, copied, keyCopied, saved, setSaved, busy, error,
-    requiresHTTPS, text, close, run, begin, confirmOwner, copy, download, copyKey, isEnrollment } = controller;
+    requiresHTTPS, text, close, run, begin, confirmOwner, codeValid, ownerReady, copy, download, copyKey, isEnrollment } = controller;
   let flow: HTMLDivElement | undefined;
   createEffect(on(view, () => {
     queueMicrotask(() => flow?.querySelector<HTMLElement>('h3')?.focus({ preventScroll: true }));
   }));
   const cancel = () => { close(); props.onClose?.(); };
-  const ownerDisabled = () => busy() || !password() || (needsPassword() && password() !== confirmPassword()) || (!needsPassword() && !code());
+  const codeInputID = createUniqueId();
+  const authenticatorField = () => (
+    <div class="two-factor-field">
+      <label for={codeInputID}>{text('code')}</label>
+      <div class="two-factor-code-width">
+        <div class="two-factor-code-surface" data-floe-input-surface data-floe-surface="inset" aria-disabled={busy()} aria-invalid={error() === text('invalidCode')}>
+          <Input
+            id={codeInputID}
+            class="two-factor-code-input"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            pattern="[0-9]{6}"
+            spellcheck={false}
+            value={code()}
+            disabled={busy()}
+            aria-invalid={error() === text('invalidCode')}
+            aria-describedby={`${codeInputID}-hint`}
+            onInput={(event) => {
+              const input = event.currentTarget;
+              const caret = input.value.slice(0, input.selectionStart ?? input.value.length).replace(/\D/g, '').length;
+              const digits = input.value.replace(/\D/g, '').slice(0, 6);
+              if (input.value !== digits) {
+                input.value = digits;
+                input.setSelectionRange(Math.min(caret, 6), Math.min(caret, 6));
+              }
+              setCode(digits);
+            }}
+          />
+        </div>
+      </div>
+      <p id={`${codeInputID}-hint`} class="two-factor-code-hint">{text('codeHint')}</p>
+    </div>
+  );
   const commit = () => void run({ action: 'commit', operation_id: operation()?.operation_id, saved: saved() }, 'closed');
 
   return (
@@ -373,8 +410,8 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
         <Show when={error()}><div role="alert" class="environment-access-save-error"><AlertCircle size={18} aria-hidden="true" /><span>{error()}</span></div></Show>
         <div class="environment-access-actions">
         <Button size="sm" variant="ghost" class="environment-access-close" disabled={busy()} onClick={cancel}>{text('cancel')}</Button>
-        <Show when={view() === 'verifyOwner'}><Button size="sm" type="submit" form="two-factor-owner" disabled={ownerDisabled()} loading={busy()}>{text('continue')}</Button></Show>
-        <Show when={view() === 'scan'}><Button size="sm" type="submit" form="two-factor-verify" disabled={busy() || !/^\d{6}$/.test(code().replaceAll(' ', ''))} loading={busy()}>{text('continue')}</Button></Show>
+        <Show when={view() === 'verifyOwner'}><Button size="sm" type="submit" form="two-factor-owner" disabled={busy() || !ownerReady()} loading={busy()}>{text('continue')}</Button></Show>
+        <Show when={view() === 'scan'}><Button size="sm" type="submit" form="two-factor-verify" disabled={busy() || !codeValid()} loading={busy()}>{text('continue')}</Button></Show>
         <Show when={view() === 'recovery'}><Button size="sm" disabled={busy() || (action() !== 'disable' && !saved())} loading={busy()} onClick={commit}>
           {text(action() === 'setup' ? 'enable' : action() === 'disable' ? 'disable' : 'confirm')}
         </Button></Show>
@@ -489,22 +526,21 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
                 </label>
               </Show>
               <Show when={status()?.enabled && !status()?.recovery_pending}>
-                <label class="two-factor-field">
-                  <span>{text(useRecovery() ? 'recoveryCode' : 'code')}</span>
-                  <Input
-                    type="text"
-                    inputmode={useRecovery() ? 'text' : 'numeric'}
-                    autocomplete="one-time-code"
-                    value={code()}
-                    onInput={(event) => setCode(event.currentTarget.value)}
-                  />
-                </label>
+                <Show when={useRecovery()} fallback={authenticatorField()}>
+                  <label class="two-factor-field">
+                    <span>{text('recoveryCode')}</span>
+                    <Input type="text" inputmode="text" autocomplete="off" value={code()} disabled={busy()}
+                      onInput={(event) => setCode(event.currentTarget.value)} />
+                  </label>
+                </Show>
                 <button
                   class="two-factor-text-action"
                   type="button"
+                  disabled={busy()}
                   onClick={() => {
                     setUseRecovery(!useRecovery());
                     setCode('');
+                    queueMicrotask(() => flow?.querySelector<HTMLInputElement>('#two-factor-owner input[type="text"]')?.focus());
                   }}
                 >
                   {text(useRecovery() ? 'useAuthenticator' : 'useRecovery')}
@@ -551,6 +587,7 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
               id="two-factor-verify" class="two-factor-form two-factor-verify"
               onSubmit={(event) => {
                 event.preventDefault();
+                if (!codeValid()) return;
                 void run(
                   {
                     action: 'verify',
@@ -561,19 +598,7 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
                 );
               }}
             >
-              <label class="two-factor-field">
-                <span>{text('code')}</span>
-                <Input
-                  class="two-factor-code-input"
-                  type="text"
-                  inputmode="numeric"
-                  autocomplete="one-time-code"
-                  placeholder="000 000"
-                  value={code()}
-                  aria-invalid={!!error()}
-                  onInput={(event) => setCode(event.currentTarget.value)}
-                />
-              </label>
+              {authenticatorField()}
 
             </form>
           </Show>

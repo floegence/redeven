@@ -53,6 +53,7 @@
     "scan": "Leia o código com seu aplicativo autenticador.",
     "manual": "Não consegue ler o código?",
     "code": "Código do autenticador",
+    "codeHint": "Digite os 6 dígitos do seu aplicativo autenticador.",
     "password": "Senha do ambiente",
     "continue": "Continuar",
     "recoveryTitle": "Salvar seus códigos de recuperação",

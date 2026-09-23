@@ -127,6 +127,15 @@ refresh retains the mounted task and pending draft. HTTPS preparation for
 enrollment preserves the existing restart handoff and requires an explicit
 return and setup action after restart; it never enrolls automatically.
 
+Authenticator entry uses a compact six-position numeric field in both owner
+verification and enrollment, with nearby guidance naming the authenticator app.
+One native text input owns selection, keyboard editing, paste and one-time-code
+autofill; the positions are visual separators, not six independent inputs.
+Input keeps at most six digits, removes pasted separators, and preserves leading
+zeroes. Continue and form submission require all six digits. Recovery-code entry
+remains an ordinary text field; switching methods clears the old code and focuses
+the new field. Floe owns the composite field's single focus border.
+
 The footer stays visible while the task body scrolls. Validation focuses the
 related field; save and security errors appear beside the action. Disabled saves
 have keyboard-accessible contextual explanations. Review contains no password

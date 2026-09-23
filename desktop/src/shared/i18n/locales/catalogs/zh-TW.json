@@ -53,6 +53,7 @@
     "scan": "使用驗證器掃描 QR 碼。",
     "manual": "無法掃描？",
     "code": "驗證器代碼",
+    "codeHint": "輸入驗證器中的 6 位數字。",
     "password": "環境密碼",
     "continue": "繼續",
     "recoveryTitle": "儲存復原碼",

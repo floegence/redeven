@@ -71,6 +71,7 @@ export const enUS = {
     "scan": "Scan with your authenticator app.",
     "manual": "Can’t scan?",
     "code": "Authenticator code",
+    "codeHint": "Enter the 6 digits from your authenticator app.",
     "password": "Environment password",
     "continue": "Continue",
     "recoveryTitle": "Save your recovery codes",
