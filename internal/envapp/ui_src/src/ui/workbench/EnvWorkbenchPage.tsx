@@ -118,10 +118,7 @@ import {
   type RuntimeWorkbenchWidgetState,
   type RuntimeWorkbenchWidgetStateData,
 } from './runtimeWorkbenchLayout';
-import {
-  WorkbenchProgressCurtain,
-  type WorkbenchProgressCurtainStage,
-} from './WorkbenchProgressCurtain';
+import { ActivityPageLoading } from '../primitives/ActivityPageLoading';
 import {
   subscribeWorkbenchRenderTransactions,
   type WorkbenchRenderTransactionReason,
@@ -816,19 +813,6 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
         (state.state as Extract<RuntimeWorkbenchWidgetStateData, { kind: 'preview' }>).item as RuntimeWorkbenchPreviewItem,
         fileFallbackName(),
       )]),
-  ));
-  const workbenchCurtainStage = createMemo<WorkbenchProgressCurtainStage>(() => {
-    if (!runtimeLayoutReady()) {
-      return 'layout';
-    }
-    if (!surfaceApi()) {
-      return 'canvas';
-    }
-    return 'ready';
-  });
-  const workbenchCurtainVisible = createMemo(() => (
-    !runtimeLayoutReady()
-    || !surfaceApi()
   ));
   const selectedWidget = createMemo(() => {
     const selectedWidgetId = compact(workbenchState().selectedWidgetId);
@@ -3026,10 +3010,9 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
           onMinimizeCanvasScale={minimizeCanvasScale}
           onFitSelectedWidget={fitSelectedWidgetToViewport}
         />
-        <WorkbenchProgressCurtain
-          visible={workbenchCurtainVisible() && layoutError() !== 'load'}
-          stage={workbenchCurtainStage()}
-        />
+        <Show when={(!runtimeLayoutReady() || !surfaceApi()) && layoutError() !== 'load'}>
+          <div class="absolute inset-0"><ActivityPageLoading /></div>
+        </Show>
         </div>
       </EnvWorkbenchInstancesContext.Provider>
     </WorkbenchPluginSurfaceContext.Provider>

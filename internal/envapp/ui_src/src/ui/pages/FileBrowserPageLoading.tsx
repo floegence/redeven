@@ -14,16 +14,18 @@ export function normalizePageSidebarWidth(width: unknown): number {
 }
 
 /** The module fallback uses the same pending workspace as directory discovery. */
-export function FileBrowserPageLoading(props: { environment?: string }) {
+export function FileBrowserPageLoading(props: { environment?: string; stateScope?: string }) {
   const floe = useResolvedFloeConfig();
   const layout = useLayout();
   const i18n = useI18n();
   const scope = () => resolveRendererStorageScopeID(props.environment ?? '');
-  const savedWidth = floe.persist.load<number>(PAGE_SIDEBAR_WIDTH_STORAGE_KEY, PAGE_SIDEBAR_DEFAULT_WIDTH);
+  const stateScope = props.stateScope?.trim() || 'page';
+  const scopedKey = (key: string) => stateScope === 'page' ? key : `${key}:${stateScope}`;
+  const savedWidth = floe.persist.load<number>(scopedKey(PAGE_SIDEBAR_WIDTH_STORAGE_KEY), PAGE_SIDEBAR_DEFAULT_WIDTH);
   const width = normalizePageSidebarWidth(savedWidth);
   return <FileBrowserWorkspace mode="files" onModeChange={() => {}} gitHistoryDisabled initializing
     files={[]} currentPath="" initialPath="" resetKey={0} instanceId="files-module-loading"
-    persistenceKey={scope() ? `files:${scope()}` : undefined} width={width} open={!layout.isMobile()}
+    persistenceKey={scope() ? stateScope === 'page' ? `files:${scope()}` : `files:${stateScope}:${scope()}` : undefined} width={width} open={!layout.isMobile()}
     toolbarEndActions={<>
       <Button size="sm" variant="ghost" icon={Refresh} disabled aria-label={i18n.t('files.refreshCurrentDirectory')}>
         {i18n.t('common.actions.refresh')}

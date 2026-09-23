@@ -120,7 +120,7 @@ describe('EnvTerminalPage', () => {
     }
   });
 
-  it('shows a debounced catalog loading curtain instead of leaving a long wait blank', async () => {
+  it('keeps one immediate loading surface while the first catalog is pending', async () => {
     vi.useFakeTimers();
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -146,11 +146,12 @@ describe('EnvTerminalPage', () => {
     ), host);
 
     try {
-      expect(host.querySelector('[data-testid="terminal-catalog-loading-curtain"]')).toBeNull();
-      await vi.advanceTimersByTimeAsync(149);
-      expect(host.querySelector('[data-testid="terminal-catalog-loading-curtain"]')).toBeNull();
-      await vi.advanceTimersByTimeAsync(1);
-      expect(host.querySelector('[data-testid="terminal-catalog-loading-curtain"]')).not.toBeNull();
+      const pending = host.querySelector('[role="status"]');
+      expect(pending).not.toBeNull();
+      expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(host.querySelector('[role="status"]')).toBe(pending);
+      expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
     } finally {
       dispose();
       host.remove();

@@ -1,9 +1,9 @@
-import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { Show } from 'solid-js';
 import { AlertTriangle, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { useEnvContext } from './EnvContext';
-import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
+import { ActivityPageLoading } from '../primitives/ActivityPageLoading';
 import { useI18n } from '../i18n';
 import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
 import { canLaunchProcess } from '../utils/permission';
@@ -13,22 +13,12 @@ export function EnvTerminalPage() {
   const env = useEnvContext();
   const i18n = useI18n();
   const terminalCatalog = useTerminalSessionCatalog();
-  const [catalogWaitVisible, setCatalogWaitVisible] = createSignal(false);
   const permissionDenied = () => (
     terminalCatalog?.permissionDenied?.()
     || (env.env.state === 'ready' && !canLaunchProcess(env.env()?.permissions))
   );
   const catalogReady = () => !terminalCatalog || terminalCatalog.hydrated() || permissionDenied();
   const catalogError = () => terminalCatalog?.error?.() ?? null;
-
-  createEffect(() => {
-    if (catalogReady()) {
-      setCatalogWaitVisible(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setCatalogWaitVisible(true), 150);
-    onCleanup(() => window.clearTimeout(timer));
-  });
 
   return (
     <div class="h-full min-h-0 overflow-hidden relative">
@@ -38,17 +28,7 @@ export function EnvTerminalPage() {
           <div class="h-full min-h-0" data-terminal-catalog-gate="pending">
             <Show
               when={catalogError()}
-              fallback={
-                <RedevenLoadingCurtain
-                  visible={catalogWaitVisible()}
-                  surface="page"
-                  eyebrow={i18n.t('shell.nav.terminal')}
-                  message={i18n.t('terminal.loadingSessions')}
-                  progressLabel={i18n.t('terminal.loadingSessions')}
-                  testId="terminal-catalog-loading-curtain"
-                  dataStage="sessions"
-                />
-              }
+              fallback={<ActivityPageLoading />}
             >
               {(error) => (
                 <div
