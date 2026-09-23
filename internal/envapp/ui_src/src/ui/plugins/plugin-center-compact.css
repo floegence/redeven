@@ -1,0 +1,17 @@
+[data-plugin-center-view] { container: plugin-center / inline-size; }
+.plugin-center-compact-filter { display: none; }
+@container plugin-center (width < 768px) {
+  [data-plugin-center-toolbar-primary] { display: grid; grid-template-columns: minmax(128px, 1fr) auto; gap: 8px; padding: 4px 12px; }
+  [data-plugin-center-toolbar-primary] > label { grid-column: 1; grid-row: 2; order: 0; width: auto; max-width: none; margin: 0; }
+  [data-plugin-center-search] { height: 44px; font-size: 16px; }
+  .plugin-center-management { grid-column: 2; grid-row: 1; gap: 8px; }
+  .plugin-center-management button, .plugin-center-management button > span { min-width: 44px; height: 44px; }
+  .plugin-center-management [data-plugin-center-clear-filters] { display: none; }
+  .plugin-center-compact-filter { display: block; grid-column: 2; grid-row: 2; justify-self: end; }
+  .plugin-center-filter-trigger { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 44px; height: 44px; border-radius: 6px; cursor: pointer; }
+  .plugin-center-filter-trigger:hover { background: var(--muted); }
+  .plugin-center-filter-trigger > span { font-size: 11px; color: var(--primary); }
+  [data-plugin-center-filter-scroll] { display: none; }
+  [data-plugin-center-toolbar-secondary] { padding: 0 12px; }
+  [data-plugin-center-toolbar-secondary] [role="tab"] { min-height: 44px; }
+}

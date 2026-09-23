@@ -557,10 +557,30 @@ describe('native Containers responsive product surface', () => {
       expect(table.querySelector('tbody td .container-name-cell'), label).not.toBeNull();
       const viewport = root.querySelector<HTMLElement>('.container-inventory-scroll')!;
       expect(viewport.scrollWidth, label).toBeLessThanOrEqual(viewport.clientWidth + 1);
-      const name = table.querySelector<HTMLElement>('.container-name-cell')!;
+      const name = root.querySelector<HTMLElement>('.container-mobile-card strong')!;
       expect(name.getBoundingClientRect().width, label).toBeGreaterThan(180);
       expect(table.querySelectorAll('tbody tr').length, label).toBeGreaterThan(0);
     }
+  });
+
+  it('shows actual image capacity and reference counts without treating unknown capacity as zero', async () => {
+    await page.viewport(393, 700);
+    browserHarness.listResources.mockImplementation((view: string) => Promise.resolve(view === 'images' ? [
+      { id: 'known', reference: 'known:latest', size_bytes: 8 * 1024 * 1024, referenced_containers: 1 },
+      { id: 'unknown', reference: 'unknown:latest', referenced_containers: 2 },
+      { id: 'empty', reference: 'empty:latest', size_bytes: 0, referenced_containers: 0 },
+    ] : []));
+    const mounted = mount();
+    dispose = mounted.dispose;
+    await settle();
+    await page.getByRole('tab', { name: 'Images', exact: true }).click();
+    await expect.poll(() => mounted.host.querySelectorAll('.container-mobile-card').length).toBe(3);
+    const metadata = (name: string) => [...mounted.host.querySelectorAll('.container-mobile-card')]
+      .find(card => card.querySelector('strong')?.textContent === name)?.querySelector('small')?.textContent;
+    expect(metadata('known:latest')).toBe('8.0 MB · Containers: 1');
+    expect(metadata('unknown:latest')).toBe('— · Containers: 2');
+    expect(metadata('empty:latest')).toBe('0 B · Containers: 0');
+    expect(metadata('known:latest')).not.toContain('Size');
   });
 
   it('keeps reduced-motion detail navigation immediate', async () => {
@@ -803,7 +823,9 @@ describe('native Containers responsive product surface', () => {
     expect(skeleton).not.toBeNull();
     expect(root.querySelector('[data-container-list-loading]')).toBeNull();
     expect(root.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent).toContain('Images');
-    expect(skeleton.querySelector('.container-detail-header')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(110);
+    const detailHeader = skeleton.querySelector('.container-detail-header')!.getBoundingClientRect();
+    expect(detailHeader.height).toBeGreaterThanOrEqual(44);
+    expect(detailHeader.height).toBeLessThanOrEqual(112);
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
 
     await expect.poll(() => resolveImages).toBeTypeOf('function');

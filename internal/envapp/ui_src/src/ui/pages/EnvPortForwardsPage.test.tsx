@@ -75,6 +75,7 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  Filter: (props: any) => <span class={props.class} data-testid="filter-icon" />,
   ArrowLeft: (props: any) => <span class={props.class} data-testid="arrow-left-icon" />,
   AlertTriangle: (props: any) => <span class={props.class} data-testid="alert-triangle-icon" />,
   ExternalLink: (props: any) => <span class={props.class} data-testid="external-link-icon" />,

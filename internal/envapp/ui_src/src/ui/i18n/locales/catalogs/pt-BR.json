@@ -2966,6 +2966,7 @@
       "failedDetail": "Volte ao Redeven e tente novamente. {message}"
     },
     "fields": {
+      "details": "Detalhes",
       "id": "ID",
       "path": "Caminho",
       "port": "Porta",
@@ -5541,6 +5542,8 @@
       "groupOlder": "Antigas"
     },
     "emptyState": {
+      "moreSuggestions": "Mais sugestões",
+      "fewerSuggestions": "Menos sugestões",
       "title": "Perguntar ao Flower",
       "description": "Flower usa seu perfil de IA local, inspeciona ambientes lembrados e prepara ações antes que os tempos de execução façam qualquer leitura ou gravação.",
       "exploreTitle": "Explorar esta pasta",
@@ -6036,6 +6039,7 @@
   },
   "uiCopy": {
     "plugin": {
+      "filterPlugins": "Filtrar plugins",
       "continuity": {
         "ready": "Pronto",
         "pending": "Atualizando o plugin. A disposição será mantida.",
@@ -6849,6 +6853,8 @@
     }
   },
   "hostApplications": {
+    "filterApplications": "Filtrar aplicativos",
+    "clearFilters": "Limpar filtros",
     "update": {
       "unsupported": "Este ambiente de execução não pode usar a versão instalada dos componentes. Os arquivos foram preservados. Atualize o ambiente de execução antes de continuar.",
       "available": "Atualização de componentes disponível",

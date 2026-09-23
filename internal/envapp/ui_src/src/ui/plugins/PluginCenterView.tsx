@@ -1,7 +1,8 @@
+import './plugin-center-compact.css';
 import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowLeft, Check, Filter, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
@@ -1357,6 +1358,42 @@ export function PluginCenterShell(props: {
     handledFocusRequest = request;
     queueMicrotask(() => searchRef?.focus({ preventScroll: true }));
   });
+  const filterGroups = [
+{ id: 'category' as const, get dimension() { return i18n.t('uiCopy.plugin.categories'); }, get value() { return props.category; }, onSelect: (value: string) => props.onCategorySelect(value as PluginPresentationCategory | 'all'), get items() { return [
+                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
+                { id: 'development', label: i18n.t('uiCopy.plugin.categoryDevelopment') },
+                { id: 'infrastructure', label: i18n.t('uiCopy.plugin.categoryInfrastructure') },
+                { id: 'utilities', label: i18n.t('uiCopy.plugin.categoryUtilities') },
+                { id: 'data', label: i18n.t('uiCopy.plugin.categoryData') },
+                { id: 'collaboration', label: i18n.t('uiCopy.plugin.categoryCollaboration') },
+                { id: 'productivity', label: i18n.t('uiCopy.plugin.categoryProductivity') },
+                { id: 'other', label: i18n.t('uiCopy.plugin.categoryOther') },
+              ]; } },
+{ id: 'source' as const, get dimension() { return i18n.t('uiCopy.plugin.external.source'); }, get value() { return props.sourceFilter; }, onSelect: (value: string) => props.onSourceFilter(value as PluginSourceFilter), get items() { return [
+                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
+                { id: 'official', label: i18n.t('uiCopy.plugin.officialSource') },
+                { id: 'external', label: i18n.t('uiCopy.plugin.externalPlugin') },
+              ]; } },
+{ id: 'trust' as const, get dimension() { return i18n.t('uiCopy.plugin.trust'); }, get value() { return props.trustFilter; }, onSelect: (value: string) => props.onTrustFilter(value as PluginTrustFilter), get items() { return [
+                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
+                { id: 'official', label: i18n.t('uiCopy.plugin.official') },
+                { id: 'verified', label: i18n.t('uiCopy.plugin.verified') },
+                { id: 'community', label: i18n.t('uiCopy.plugin.community') },
+                { id: 'unsigned', label: i18n.t('uiCopy.plugin.unsigned') },
+                { id: 'blocked', label: i18n.t('uiCopy.plugin.blocked') },
+                { id: 'revoked', label: i18n.t('uiCopy.plugin.revoked') },
+                { id: 'unavailable', label: i18n.t('uiCopy.plugin.unavailable') },
+              ]; } },
+{ id: 'lifecycle' as const, get dimension() { return i18n.t('uiCopy.plugin.lifecycle'); }, get value() { return props.lifecycleFilter; }, onSelect: (value: string) => props.onLifecycleFilter(value as PluginLifecycleFilter), get items() { return [
+                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
+                { id: 'enabled', label: i18n.t('uiCopy.plugin.enabled') },
+                { id: 'disabled', label: i18n.t('uiCopy.plugin.disabled') },
+                { id: 'needs_attention', label: i18n.t('uiCopy.plugin.needsAttention') },
+                { id: 'update_available', label: i18n.t('uiCopy.plugin.updateAvailable') },
+                { id: 'not_installed', label: i18n.t('uiCopy.plugin.notInstalled') },
+              ]; } }
+  ];
+  const activeFilterCount = () => filterGroups.filter(group => group.value !== 'all').length;
   const administrationItems = (): DropdownItem[] => [{
     id: 'install-external',
     label: i18n.t('uiCopy.plugin.installFromSource'),
@@ -1383,7 +1420,11 @@ export function PluginCenterShell(props: {
                 class="h-[44px] w-full rounded-md border bg-muted/30 pl-8 pr-2 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 sm:h-9 motion-reduce:transition-none"
               />
           </label>
-          <div class="ml-auto flex shrink-0 items-center gap-1.5">
+          <div class="plugin-center-compact-filter"><Dropdown align="end" triggerAriaLabel={i18n.t('uiCopy.plugin.filterPlugins')}
+            triggerClass="plugin-center-filter-trigger" trigger={<><Filter class="h-4 w-4" /><Show when={activeFilterCount()}><span>{activeFilterCount()}</span></Show></>}
+            items={[...filterGroups.map(group => ({ id: group.id, label: i18n.t('uiCopy.plugin.filterSelection', { dimension: group.dimension, value: group.items.find(item => item.id === group.value)?.label ?? '' }), children: group.items.map(item => ({ ...item, id: `${group.id}:${item.id}`, icon: () => item.id === group.value ? <Check class="h-4 w-4" /> : <span class="h-4 w-4" /> })) })), { id: 'clear', label: i18n.t('uiCopy.plugin.clearFilters'), disabled: !props.filtersActive }]}
+            onSelect={id => { if (id === 'clear') props.onClearFilters(); else { const [groupID, value] = id.split(':'); filterGroups.find(group => group.id === groupID)?.onSelect(value); } }} /></div>
+          <div class="plugin-center-management ml-auto flex shrink-0 items-center gap-1.5">
             <Show when={props.filtersActive}>
               <button
                 type="button"
@@ -1445,63 +1486,7 @@ export function PluginCenterShell(props: {
           </div>
           <div class="flex min-w-0 flex-1 basis-[560px] items-center gap-2 overflow-x-auto" data-plugin-center-filter-scroll>
           <div class="flex items-center gap-2" data-plugin-center-filters>
-            <CenterFilterMenu
-              id="category"
-              dimension={i18n.t('uiCopy.plugin.categories')}
-              value={props.category}
-              onSelect={(value) => props.onCategorySelect(value as PluginPresentationCategory | 'all')}
-              items={[
-                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
-                { id: 'development', label: i18n.t('uiCopy.plugin.categoryDevelopment') },
-                { id: 'infrastructure', label: i18n.t('uiCopy.plugin.categoryInfrastructure') },
-                { id: 'utilities', label: i18n.t('uiCopy.plugin.categoryUtilities') },
-                { id: 'data', label: i18n.t('uiCopy.plugin.categoryData') },
-                { id: 'collaboration', label: i18n.t('uiCopy.plugin.categoryCollaboration') },
-                { id: 'productivity', label: i18n.t('uiCopy.plugin.categoryProductivity') },
-                { id: 'other', label: i18n.t('uiCopy.plugin.categoryOther') },
-              ]}
-            />
-            <CenterFilterMenu
-              id="source"
-              dimension={i18n.t('uiCopy.plugin.external.source')}
-              value={props.sourceFilter}
-              onSelect={(value) => props.onSourceFilter(value as PluginSourceFilter)}
-              items={[
-                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
-                { id: 'official', label: i18n.t('uiCopy.plugin.officialSource') },
-                { id: 'external', label: i18n.t('uiCopy.plugin.externalPlugin') },
-              ]}
-            />
-            <CenterFilterMenu
-              id="trust"
-              dimension={i18n.t('uiCopy.plugin.trust')}
-              value={props.trustFilter}
-              onSelect={(value) => props.onTrustFilter(value as PluginTrustFilter)}
-              items={[
-                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
-                { id: 'official', label: i18n.t('uiCopy.plugin.official') },
-                { id: 'verified', label: i18n.t('uiCopy.plugin.verified') },
-                { id: 'community', label: i18n.t('uiCopy.plugin.community') },
-                { id: 'unsigned', label: i18n.t('uiCopy.plugin.unsigned') },
-                { id: 'blocked', label: i18n.t('uiCopy.plugin.blocked') },
-                { id: 'revoked', label: i18n.t('uiCopy.plugin.revoked') },
-                { id: 'unavailable', label: i18n.t('uiCopy.plugin.unavailable') },
-              ]}
-            />
-            <CenterFilterMenu
-              id="lifecycle"
-              dimension={i18n.t('uiCopy.plugin.lifecycle')}
-              value={props.lifecycleFilter}
-              onSelect={(value) => props.onLifecycleFilter(value as PluginLifecycleFilter)}
-              items={[
-                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
-                { id: 'enabled', label: i18n.t('uiCopy.plugin.enabled') },
-                { id: 'disabled', label: i18n.t('uiCopy.plugin.disabled') },
-                { id: 'needs_attention', label: i18n.t('uiCopy.plugin.needsAttention') },
-                { id: 'update_available', label: i18n.t('uiCopy.plugin.updateAvailable') },
-                { id: 'not_installed', label: i18n.t('uiCopy.plugin.notInstalled') },
-              ]}
-            />
+            <For each={filterGroups}>{group => <CenterFilterMenu {...group} />}</For>
           </div>
           </div>
         </div>

@@ -538,13 +538,11 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-shrink-0">
           <Panel class="overflow-hidden">
             <PanelContent class="p-3 space-y-2">
-              <div class="flex items-center justify-between gap-3">
-                <div class="text-xs font-medium">{i18n.t('runtimeMonitor.cpuUsage')}</div>
-                <div class="text-[11px] text-muted-foreground tabular-nums">{cpuSummary()}</div>
-              </div>
               <For each={[chartToken()]}>
                 {() => (
                   <MonitoringChart
+                    title={i18n.t('runtimeMonitor.cpuUsage')}
+                    headerMeta={<span class="text-[11px] text-muted-foreground tabular-nums">{cpuSummary()}</span>}
                     series={cpuSeries()}
                     labels={[]}
                     height={140}
@@ -567,13 +565,11 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
 
           <Panel class="overflow-hidden">
             <PanelContent class="p-3 space-y-2">
-              <div class="flex items-center justify-between gap-3">
-                <div class="text-xs font-medium">{i18n.t('runtimeMonitor.networkTraffic')}</div>
-                <div class="text-[11px] text-muted-foreground tabular-nums">{netSummary()}</div>
-              </div>
               <For each={[chartToken()]}>
                 {() => (
                   <MonitoringChart
+                    title={i18n.t('runtimeMonitor.networkTraffic')}
+                    headerMeta={<span class="text-[11px] text-muted-foreground tabular-nums">{netSummary()}</span>}
                     series={networkSeries()}
                     labels={[]}
                     height={140}

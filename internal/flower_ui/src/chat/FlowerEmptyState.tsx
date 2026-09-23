@@ -1,5 +1,5 @@
 import type { Component, JSX } from 'solid-js';
-import { For, Show } from 'solid-js';
+import { For, Show, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Files, FolderOpen, Grid, MonitorPointer, Sparkles } from '@floegence/floe-webapp-core/icons';
 
@@ -41,12 +41,14 @@ export const FlowerHeroBadge: Component<{ class?: string }> = (props) => (
 );
 
 export const FlowerEmptyState: Component<FlowerEmptyStateProps> = (props) => {
+  const [expanded, setExpanded] = createSignal(false);
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.emptyState;
   const suggestionsVisible = () => props.showSuggestions ?? true;
 
   return (
     <div
       class="flower-empty-state"
+      data-suggestions-expanded={expanded()}
       data-flower-empty-suggestions={suggestionsVisible() ? 'visible' : 'hidden'}
     >
       <div class="flower-empty-hero">
@@ -84,6 +86,7 @@ export const FlowerEmptyState: Component<FlowerEmptyStateProps> = (props) => {
             }}
           </For>
         </div>
+        <button type="button" class="flower-empty-expand" aria-expanded={expanded()} onClick={() => setExpanded(value => !value)}>{expanded() ? copy().fewerSuggestions : copy().moreSuggestions}</button>
       </Show>
 
       <div class="flower-empty-hint">

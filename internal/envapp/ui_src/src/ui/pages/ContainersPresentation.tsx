@@ -1,5 +1,5 @@
 import { For, Show, type JSX } from 'solid-js';
-import { Activity, Database, FileText, Filter, Layers, Package, Plus, Refresh, Search, Settings } from '@floegence/floe-webapp-core/icons';
+import { Activity, Database, FileText, Filter, Layers, MoreHorizontal, Package, Plus, Refresh, Search, Settings } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Tabs } from '@floegence/floe-webapp-core/ui';
 import { useI18n } from '../i18n';
 import type { ContainerResourceView } from '../services/containerResourcesApi';
@@ -31,9 +31,11 @@ export function ContainerInventoryToolbarSkeleton(props: { view: ContainerResour
   return <section class="container-resource-toolbar" data-container-summary data-loading="true">
     <div class="container-search-control"><Search class="h-4 w-4" /><Input disabled aria-label={i18n.t('containers.search.label')} placeholder={i18n.t('containers.search.label')} /></div>
     <div class="container-filter-switch" role="group" aria-label={i18n.t('containers.filters.label')}><button disabled aria-pressed={storageView()}>{i18n.t('containers.filters.all')}</button><button disabled aria-pressed={!storageView()}>{i18n.t(storageView() ? 'containers.filters.inUse' : 'containers.filters.active')}</button><button disabled>{i18n.t(storageView() ? 'containers.filters.unused' : 'containers.filters.inactive')}</button></div>
+    <div class="container-compact-filter"><button disabled class="container-compact-filter-trigger" aria-label={i18n.t('containers.filters.label')}><Filter class="h-4 w-4" /></button></div>
     <div class="container-toolbar-actions"><div class="container-column-picker"><button disabled class="container-icon-action inline-flex items-center justify-center" aria-label={i18n.t('containers.columns.filter')}><Filter class="h-4 w-4" /></button></div>
-      <Show when={props.view === 'containers'}><Button size="sm" variant="ghost" disabled><Activity class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.detail.showCharts')}</Button></Show>
-      <Button size="sm" disabled><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t(createLabel())}</Button>
+      <Show when={props.view === 'containers'}><Button class="container-charts-toggle" size="sm" variant="ghost" disabled><Activity class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.detail.showCharts')}</Button></Show>
+      <Show when={props.view === 'containers' || storageView()}><button disabled class={props.view === 'containers' ? 'container-compact-more' : 'container-icon-action'} aria-label={i18n.t('containers.prune.moreActions')}><MoreHorizontal class="h-4 w-4" /></button></Show>
+      <Button size="sm" disabled aria-label={i18n.t(createLabel())}><Plus class="mr-1.5 h-3.5 w-3.5" /><span class="container-create-label">{i18n.t(createLabel())}</span></Button>
     </div>
   </section>;
 }

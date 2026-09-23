@@ -511,6 +511,8 @@
     "pinRefreshFailed": "Pinned conversations were saved, but the list could not refresh. Refresh to see the latest order."
   },
   "emptyState": {
+    "moreSuggestions": "More suggestions",
+    "fewerSuggestions": "Fewer suggestions",
     "title": "Ask Flower",
     "description": "Flower uses your Local AI Profile, inspects remembered environments, and prepares actions before runtimes do any read or write.",
     "exploreTitle": "Explore this folder",

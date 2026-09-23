@@ -3590,7 +3590,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         onClick={() => { void refreshCurrentDirectory({ forceReload: true }); }}
         disabled={!activeDirectoryPath().trim() || directoryBlocking() || !!pendingDirectoryPath().trim()}
       >
-        {i18n.t('common.actions.refresh')}
+        <span class="file-workspace-refresh-label">{i18n.t('common.actions.refresh')}</span>
       </Button>
       <Dropdown
         trigger={(

@@ -2966,6 +2966,7 @@
       "failedDetail": "請返回 Redeven 後重試。{message}"
     },
     "fields": {
+      "details": "詳細資訊",
       "id": "ID",
       "path": "路徑",
       "port": "連接埠",
@@ -5541,6 +5542,8 @@
       "groupOlder": "更早"
     },
     "emptyState": {
+      "moreSuggestions": "更多建議",
+      "fewerSuggestions": "收起建議",
       "title": "詢問 Flower",
       "description": "Flower 使用您的本機 AI 設定檔、檢查已記錄的環境，並在執行環境進行任何讀寫前準備好相關操作。",
       "exploreTitle": "了解這裡有什麼",
@@ -6036,6 +6039,7 @@
   },
   "uiCopy": {
     "plugin": {
+      "filterPlugins": "篩選外掛",
       "continuity": {
         "ready": "已就緒",
         "pending": "正在更新外掛，畫布配置會保留。",
@@ -6845,6 +6849,8 @@
     }
   },
   "hostApplications": {
+    "filterApplications": "篩選應用程式",
+    "clearFilters": "清除篩選",
     "update": {
       "unsupported": "此執行階段無法使用已安裝的元件版本，原有檔案已保留。請先更新執行階段再繼續。",
       "available": "元件有更新",

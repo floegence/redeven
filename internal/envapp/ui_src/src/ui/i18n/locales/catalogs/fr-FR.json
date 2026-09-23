@@ -2966,6 +2966,7 @@
       "failedDetail": "Retournez dans Redeven et réessayez. {message}"
     },
     "fields": {
+      "details": "Détails",
       "id": "ID",
       "path": "Chemin",
       "port": "Port",
@@ -5541,6 +5542,8 @@
       "groupOlder": "Plus anciennes"
     },
     "emptyState": {
+      "moreSuggestions": "Plus de suggestions",
+      "fewerSuggestions": "Moins de suggestions",
       "title": "Demander à Flower",
       "description": "Flower utilise votre profil d’IA local, inspecte les environnements mémorisés et prépare les actions avant que les environnements d’exécution effectuent une lecture ou une écriture.",
       "exploreTitle": "Explorer ce dossier",
@@ -6036,6 +6039,7 @@
   },
   "uiCopy": {
     "plugin": {
+      "filterPlugins": "Filtrer les plugins",
       "continuity": {
         "ready": "Prêt",
         "pending": "Mise à jour du plugin. Votre disposition est conservée.",
@@ -6849,6 +6853,8 @@
     }
   },
   "hostApplications": {
+    "filterApplications": "Filtrer les applications",
+    "clearFilters": "Effacer les filtres",
     "update": {
       "unsupported": "Cet environnement d’exécution ne peut pas utiliser la version installée des composants. Leurs fichiers ont été conservés. Mettez à jour l’environnement d’exécution avant de continuer.",
       "available": "Mise à jour des composants disponible",

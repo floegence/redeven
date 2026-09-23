@@ -2966,6 +2966,7 @@
       "failedDetail": "Kehre zu Redeven zurück und versuche es erneut. {message}"
     },
     "fields": {
+      "details": "Details",
       "id": "ID",
       "path": "Pfad",
       "port": "Port",
@@ -5541,6 +5542,8 @@
       "groupOlder": "Älter"
     },
     "emptyState": {
+      "moreSuggestions": "Mehr Vorschläge",
+      "fewerSuggestions": "Weniger Vorschläge",
       "title": "Flower fragen",
       "description": "Flower verwendet Ihr lokales KI-Profil, überprüft gespeicherte Umgebungen und bereitet Aktionen vor, bevor Laufzeiten Lese- oder Schreibvorgänge ausführen.",
       "exploreTitle": "Diesen Ordner erkunden",
@@ -6036,6 +6039,7 @@
   },
   "uiCopy": {
     "plugin": {
+      "filterPlugins": "Plugins filtern",
       "continuity": {
         "ready": "Bereit",
         "pending": "Das Plugin wird aktualisiert. Die Anordnung bleibt erhalten.",
@@ -6849,6 +6853,8 @@
     }
   },
   "hostApplications": {
+    "filterApplications": "Anwendungen filtern",
+    "clearFilters": "Filter zurücksetzen",
     "update": {
       "unsupported": "Diese Laufzeitumgebung kann die installierte Komponentenversion nicht verwenden. Die Dateien bleiben erhalten. Aktualisieren Sie die Laufzeitumgebung, bevor Sie fortfahren.",
       "available": "Komponentenupdate verfügbar",

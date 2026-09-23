@@ -481,14 +481,11 @@ function CodespaceCard(props: {
       description={props.space.description}
       descriptionTitle={props.space.description}
       status={<StatusBadge running={props.space.running} pid={props.space.pid} />}
+      path={<span title={props.space.workspace_path}>{props.space.workspace_path}</span>}
       details={<>
           <div class="text-muted-foreground">{i18n.t("codespaces.fields.id")}</div>
           <div class="font-mono truncate text-right" title={props.space.code_space_id}>
             {props.space.code_space_id}
-          </div>
-          <div class="text-muted-foreground">{i18n.t("codespaces.fields.path")}</div>
-          <div class="font-mono truncate text-right" title={props.space.workspace_path}>
-            {props.space.workspace_path}
           </div>
           <div class="text-muted-foreground">{i18n.t("codespaces.fields.port")}</div>
           <div class="font-mono text-right">{props.space.code_port || "-"}</div>

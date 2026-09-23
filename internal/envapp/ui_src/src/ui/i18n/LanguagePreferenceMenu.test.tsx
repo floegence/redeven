@@ -10,7 +10,8 @@ import { LanguagePreferenceMenu } from './LanguagePreferenceMenu';
 import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from './storageKey';
 import type { RedevenLanguageSnapshot } from './resolveLocale';
 
-vi.mock('@floegence/floe-webapp-core', () => ({
+vi.mock('@floegence/floe-webapp-core', async original => ({
+  ...await original<object>(),
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
 }));
 
@@ -33,6 +34,7 @@ function CurrentFilesTitle() {
 
 describe('LanguagePreferenceMenu', () => {
   let host: HTMLDivElement;
+  let dispose: () => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -43,6 +45,7 @@ describe('LanguagePreferenceMenu', () => {
   });
 
   afterEach(() => {
+    dispose?.();
     host.remove();
     document.documentElement.lang = '';
     document.documentElement.dir = '';
@@ -53,7 +56,7 @@ describe('LanguagePreferenceMenu', () => {
   it('renders the browser-owned language menu and persists the selected locale locally', async () => {
     const notify = { success: vi.fn() };
 
-    render(() => (
+    dispose = render(() => (
       <I18nProvider>
         <LanguagePreferenceMenu variant="topbar" notify={notify} />
       </I18nProvider>
@@ -68,34 +71,34 @@ describe('LanguagePreferenceMenu', () => {
     trigger?.click();
     await flushAsync();
 
-    const options = Array.from(host.querySelectorAll('[data-envapp-language-option]')) as HTMLButtonElement[];
-    expect(host.querySelector('[data-envapp-language-menu="topbar"]')).toBeTruthy();
+    const options = Array.from(document.querySelectorAll('[data-envapp-language-option]')) as HTMLButtonElement[];
+    expect(document.querySelector('[data-envapp-language-menu="topbar"]')).toBeTruthy();
     expect(options).toHaveLength(LOCALE_OPTIONS.length + 1);
-    expect(host.querySelector('[data-envapp-language-option="system"]')?.textContent).toContain('System default');
-    expect(host.querySelector('[data-envapp-language-option="zh-CN"]')?.textContent).toContain('简体中文 / Simplified Chinese');
-    expect(host.querySelector('[data-envapp-language-option="system"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(document.querySelector('[data-envapp-language-option="system"]')?.textContent).toContain('System default');
+    expect(document.querySelector('[data-envapp-language-option="zh-CN"]')?.textContent).toContain('简体中文 / Simplified Chinese');
+    expect(document.querySelector('[data-envapp-language-option="system"]')?.getAttribute('aria-checked')).toBe('true');
 
-    (host.querySelector('[data-envapp-language-option="zh-CN"]') as HTMLButtonElement | null)?.click();
+    (document.querySelector('[data-envapp-language-option="zh-CN"]') as HTMLButtonElement | null)?.click();
     await vi.waitFor(() => {
       expect(document.documentElement.lang).toBe('zh-CN');
     });
 
     expect(window.localStorage.getItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY)).toBe('zh-CN');
     expect(document.documentElement.lang).toBe('zh-CN');
-    expect(host.querySelector('[data-envapp-language-menu="topbar"]')).toBeNull();
+    expect(document.querySelector('[data-envapp-language-menu="topbar"]')).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(notify.success).toHaveBeenCalledTimes(1);
     expect(`${notify.success.mock.calls[0]?.[0] ?? ''} ${notify.success.mock.calls[0]?.[1] ?? ''}`).toContain('简体中文');
 
     trigger?.click();
     await flushAsync();
-    expect(host.querySelector('[data-envapp-language-option="zh-CN"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(document.querySelector('[data-envapp-language-option="zh-CN"]')?.getAttribute('aria-checked')).toBe('true');
   });
 
   it('opens from shell requests and closes with Escape while returning focus', async () => {
     const [openSeq, setOpenSeq] = createSignal(0);
 
-    render(() => (
+    dispose = render(() => (
       <I18nProvider>
         <LanguagePreferenceMenu variant="access_gate" openRequestSeq={openSeq} />
       </I18nProvider>
@@ -107,10 +110,10 @@ describe('LanguagePreferenceMenu', () => {
 
     const trigger = host.querySelector('[data-envapp-language-trigger="access_gate"]') as HTMLButtonElement | null;
     expect(trigger).toBeTruthy();
-    expect(host.querySelector('[data-envapp-language-menu="access_gate"]')).toBeTruthy();
+    expect(document.querySelector('[data-envapp-language-menu="access_gate"]')).toBeTruthy();
     expect(document.activeElement?.getAttribute('data-envapp-language-option')).toBe('system');
 
-    const menu = host.querySelector('[data-envapp-language-menu="access_gate"]') as HTMLDivElement | null;
+    const menu = document.querySelector('[data-envapp-language-menu="access_gate"]') as HTMLDivElement | null;
     expect(menu).toBeTruthy();
 
     menu?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
@@ -120,14 +123,14 @@ describe('LanguagePreferenceMenu', () => {
     menu?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await flushAsync();
 
-    expect(host.querySelector('[data-envapp-language-menu="access_gate"]')).toBeNull();
+    expect(document.querySelector('[data-envapp-language-menu="access_gate"]')).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
 
   it('does not mount English UI while an initial non-English catalog is loading', async () => {
     window.localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, 'zh-CN');
 
-    render(() => (
+    dispose = render(() => (
       <I18nProvider>
         <CurrentFilesTitle />
       </I18nProvider>
@@ -156,7 +159,7 @@ describe('LanguagePreferenceMenu', () => {
       subscribe: () => () => undefined,
     };
 
-    render(() => (
+    dispose = render(() => (
       <I18nProvider>
         <LanguagePreferenceMenu variant="topbar" />
       </I18nProvider>

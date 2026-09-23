@@ -1,4 +1,4 @@
-.host-apps { color: var(--foreground); container-type: inline-size; }
+.host-apps { color: var(--foreground); container: host-apps / inline-size; }
 .host-apps-header { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:28px 32px 22px; border-bottom:1px solid var(--border); }
 .host-apps-eyebrow { color:var(--muted-foreground); font-size:10px; font-weight:600; letter-spacing:.13em; text-transform:uppercase; margin-bottom:7px; }
 .host-apps-header h1 { font-size:23px; font-weight:600; letter-spacing:-.035em; line-height:1.25; }
@@ -75,3 +75,25 @@
 .host-app-quit:focus-visible, .host-app-session-open:focus-visible, .host-app-stop:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
 .host-app-quit-notice { padding:0 12px 12px; font-size:11px; line-height:1.6; color:var(--muted-foreground); }
 .host-app-quit-description { font-size:13px; line-height:1.8; color:var(--muted-foreground); }
+
+.host-apps-mobile-filters, .host-app-mobile-actions { display: none; }
+@container host-apps (width < 768px) {
+  .host-apps-header { padding: 5px 12px; gap: 8px; align-items: center; flex-wrap: nowrap; }
+  .host-apps-header h1 { font-size: 16px; }
+  .host-apps-eyebrow, .host-apps-header p { display: none; }
+  .host-apps-header button { min-height: 44px; min-width: 44px; }
+  .host-apps-content { padding: 12px; }
+  .host-apps-running, .host-apps-library-heading > .host-apps-section-title, .host-apps-category { display: none; }
+  .host-apps-library-heading { margin-bottom: 12px; }
+  .host-apps-filters { width: 100%; gap: 8px; flex-wrap: nowrap; }
+  .host-apps-search { width: auto; flex: 1; min-width: 128px; }
+  .host-apps-search input { height: 44px; font-size: 16px; }
+  .host-apps-mobile-filters { display: flex; }
+  .host-apps-filter-button { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 6px; cursor: pointer; }
+  .host-apps-filter-button:hover { background: var(--muted); }
+  .host-apps-filter-count { position: absolute; top: 0; right: 0; color: var(--primary); font-size: 11px; }
+  .host-app-mobile-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; padding-inline: 12px; }
+  .host-app-mobile-actions:empty { display: none; }
+  .host-app-quit-notice { flex-basis: 100%; padding-inline: 0; }
+}
+@container host-apps (width < 360px) { .host-apps-header button > span { display: none; } }

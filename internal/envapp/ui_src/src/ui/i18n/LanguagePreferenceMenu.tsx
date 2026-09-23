@@ -1,6 +1,8 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { Check, Globe } from '@floegence/floe-webapp-core/icons';
-import { cn } from '@floegence/floe-webapp-core';
+import { SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { observeViewport, readViewportSnapshot } from '@floegence/floe-webapp-core/viewport';
+import { cn, useResizeObserver } from '@floegence/floe-webapp-core';
 
 import {
   LOCALE_OPTIONS,
@@ -39,6 +41,8 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
   let rootEl: HTMLDivElement | undefined;
   let triggerEl: HTMLButtonElement | undefined;
   let menuEl: HTMLDivElement | undefined;
+  const [placement, setPlacement] = createSignal({ x: 0, y: 0, width: 256, height: 480 });
+  const surfaceSize = useResizeObserver(() => triggerEl?.closest<HTMLElement>('[data-floe-surface-portal-layer]') ?? undefined);
   let lastOpenRequestSeq = props.openRequestSeq?.() ?? 0;
 
   const options = createMemo<readonly LanguagePreferenceOption[]>(() => [
@@ -103,11 +107,42 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
       return;
     }
 
+    void surfaceSize();
+    const place = () => {
+      const anchor = triggerEl?.getBoundingClientRect();
+      if (!anchor) return;
+      const { visible, safeArea } = readViewportSnapshot(window);
+      const ownerBoundary = triggerEl?.closest<HTMLElement>('[data-floe-surface-portal-layer]')?.getBoundingClientRect();
+      const boundary = ownerBoundary ? {
+        left: ownerBoundary.left,
+        top: ownerBoundary.top,
+        right: ownerBoundary.right,
+        bottom: ownerBoundary.bottom,
+        width: ownerBoundary.width,
+        height: ownerBoundary.height,
+      } : {
+        left: 0,
+        top: 0,
+        right: window.innerWidth,
+        bottom: window.innerHeight,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      };
+      const width = Math.min(256, Math.max(1, Math.min(boundary.width, visible.width - safeArea.left - safeArea.right) - 16));
+      const height = Math.min(560, Math.max(1, Math.min(boundary.height, visible.height - safeArea.top - safeArea.bottom) - 16));
+      setPlacement({ x: anchor.right - width, y: anchor.bottom + 8, width, height });
+    };
+    onCleanup(observeViewport(window, place));
+    place();
+  });
+
+  createEffect(() => {
+    if (!open()) return;
     queueMicrotask(() => focusSelectedOption());
 
     const closeOnPointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (target instanceof Node && rootEl?.contains(target)) {
+      if (target instanceof Node && (rootEl?.contains(target) || menuEl?.contains(target))) {
         return;
       }
       closeMenu();
@@ -156,7 +191,7 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
             'hover:border-border/70 hover:bg-accent hover:text-foreground',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset',
             open() && 'border-border/70 bg-accent text-foreground',
-            props.variant === 'topbar' ? 'h-8 w-8' : 'h-8 gap-1.5 px-2 text-xs',
+            props.variant === 'topbar' ? 'h-8 w-8 max-md:h-11 max-md:w-11' : 'h-11 gap-1.5 px-2 text-xs',
             props.class,
           )}
           aria-label={i18n.t('language.label')}
@@ -170,17 +205,19 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
         </button>
 
         <Show when={open()}>
+          <SurfaceFloatingLayer owner={triggerEl} position={placement()} estimatedSize={placement()} class="z-[90]">
           <div
             ref={(el) => { menuEl = el; }}
             data-envapp-language-menu={props.variant}
             role="menu"
             aria-label={i18n.t('language.optionsLabel')}
             class={cn(
-              'absolute top-[calc(100%+0.5rem)] z-[90] w-64 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md',
-              'animate-in fade-in zoom-in-95 duration-150',
-              props.variant === 'topbar' ? 'right-0 max-sm:fixed max-sm:left-2 max-sm:right-2 max-sm:top-12 max-sm:w-auto' : 'left-0',
+              'overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md',
+              'animate-in fade-in [animation-duration:150ms] transition-none',
             )}
+            style={{ width: `${placement().width}px`, 'max-height': `${placement().height}px` }}
             onKeyDown={(event) => {
+              if (event.key === 'Tab') closeMenu();
               if (event.key === 'ArrowDown') {
                 event.preventDefault();
                 moveFocus(1);
@@ -216,7 +253,7 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
                     aria-checked={selected()}
                     data-envapp-language-option={option.value}
                     class={cn(
-                      'flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors duration-75',
+                      'flex min-h-[44px] w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors duration-75',
                       'hover:bg-accent focus:bg-accent focus:outline-none',
                       selected() && 'font-medium text-foreground',
                     )}
@@ -231,6 +268,7 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
               }}
             </For>
           </div>
+          </SurfaceFloatingLayer>
         </Show>
       </div>
     </Show>

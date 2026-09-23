@@ -530,6 +530,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       },
     },
     emptyState: {
+      moreSuggestions: t(i18n, k('emptyState.moreSuggestions')),
+      fewerSuggestions: t(i18n, k('emptyState.fewerSuggestions')),
       title: t(i18n, k('emptyState.title')),
       description: t(i18n, k('emptyState.description')),
       suggestions: [
