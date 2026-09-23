@@ -11,6 +11,8 @@ const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.len
 // projection fixture. No production diagnostics or retained website content.
 export async function runBrowserProjectionSoak({ popup, sourcePages, sourceOrigin, runtimePID, seconds, evidence }) {
   assert.ok(Number.isInteger(seconds) && seconds >= 60 && seconds <= 3600);
+  const navigationEvery = Number(process.env.REDEVEN_BROWSER_SOAK_NAVIGATION_EVERY ?? 5);
+  assert.ok(Number.isInteger(navigationEvery) && navigationEvery >= 1 && navigationEvery <= 5);
   assert.ok(evidence, 'A soak run must retain its measurements');
   assert.equal(typeof globalThis.gc, 'function', 'Measure retained fixture heap with Node --expose-gc');
   // Playwright 1.63 intentionally retains 10,000 old protocol objects per kind.
@@ -47,7 +49,7 @@ export async function runBrowserProjectionSoak({ popup, sourcePages, sourceOrigi
     return { rss: processMemory.reduce((total, value) => total + value.rss, 0), processes: processMemory.length, processMemory,
       sourceHeap: await heap(sourceMetrics), viewerHeap: await heap(viewerMetrics), sourceDOM: await sourceMetrics.send('Memory.getDOMCounters'), viewerDOM: await viewerMetrics.send('Memory.getDOMCounters'), fixtureAllocatedHeap, fixtureHeap: process.memoryUsage().heapUsed, fixtureProtocolObjects };
   };
-  const report = { mode: seconds >= 1800 ? 'Product browser acceptance' : 'Product browser diagnostic', qualificationManifest: process.env.REDEVEN_BROWSER_RUN_MANIFEST ?? null, seconds, network: 'loopback, unthrottled', started: new Date(started).toISOString(), runtimePID, fixturePID: process.pid, samples, iterations, navigations, inputP95: 0 };
+  const report = { mode: seconds >= 1800 && navigationEvery === 5 ? 'Product browser acceptance' : 'Product browser diagnostic', qualificationManifest: process.env.REDEVEN_BROWSER_RUN_MANIFEST ?? null, seconds, navigationEvery, network: 'loopback, unthrottled', started: new Date(started).toISOString(), runtimePID, fixturePID: process.pid, samples, iterations, navigations, inputP95: 0 };
   const save = async () => {
     report.iterations = iterations; report.navigations = navigations;
     report.inputP95 = [...latencies].sort((a, b) => a - b)[Math.floor(latencies.length * .95)] ?? 0;
@@ -72,7 +74,7 @@ export async function runBrowserProjectionSoak({ popup, sourcePages, sourceOrigi
       await counter.getByText(`Count ${next}`, { exact: true }).waitFor();
       latencies.push(performance.now() - before);
       assert.equal(await source.evaluate(() => window.count), next, 'Each input executes once on the selected native source');
-      if (iterations % 5 === 0) {
+      if (iterations % navigationEvery === 0) {
         const url = `${sourceOrigin}/${index ? 'popup-' : ''}soak-${iterations}`;
         const address = popup.getByRole('combobox', { name: 'Website address' });
         await address.fill(url); await address.press('Enter');
