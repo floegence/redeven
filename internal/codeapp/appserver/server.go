@@ -586,7 +586,8 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// No caching: UI + inject are agent-versioned and delivered over E2EE.
+	// Dynamic documents and control remain uncached. The authorized public
+	// Host Applications resource route explicitly selects immutable caching.
 	w.Header().Set("Cache-Control", "no-store")
 
 	if isPluginPlatformAPIPath(r) {
@@ -602,6 +603,10 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.HasPrefix(p, hostapps.ClientAssetsPath) {
+		g.serveHostApplicationAssets(w, r, originRole)
+		return
+	}
 	if strings.HasPrefix(p, "/_redeven_proxy/api/") {
 		// Hardening: only allow management APIs from the Env App trusted launcher origin
 		// (env-<env_id>.<region>.<base-sandbox-domain>).

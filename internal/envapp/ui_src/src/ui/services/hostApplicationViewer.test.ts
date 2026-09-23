@@ -9,16 +9,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const shared = ['catalog.generated.js', 'remote-input.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
 const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/toolbar.js'), 'utf8') + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '').replace('{{.Locale}}', 'en-US');
-const copy = {starting:'Starting', connecting:'Connecting', reconnecting:'Reconnecting', disconnected:'Disconnected', failed:'Failed', ended:'Ended', retry:'Retry', reconnect:'Reconnect', connectionHint:'Return to your application'};
+const copy = {videoDecoding:'Video decoding', videoAvailable:'Available', videoUnavailable:'Unavailable', httpsPerformanceHint:'Enable HTTPS', starting:'Starting', connecting:'Connecting', reconnecting:'Reconnecting', disconnected:'Disconnected', failed:'Failed', ended:'Ended', retry:'Retry', reconnect:'Reconnect', connectionHint:'Return to your application'};
 let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.close(); });
 
-async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>) {
+async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }) {
   dom = new JSDOM(html, { url:'http://localhost/pf/test/_redeven_host_app/', runScripts:'dangerously', pretendToBeVisual:true });
   const fetch = vi.fn().mockResolvedValue({ok:true, json:async () => ({state:'running', password:'private'})});
   dom.window.fetch = fetch;
   Object.assign(dom.window, {matchMedia: () => ({matches:false})});
+  Object.defineProperty(dom.window, 'isSecureContext', {value:video?.secure ?? true});
   dom.window.requestAnimationFrame = cb => { cb(0); return 1; };
   let windowStateChanged: (state: { maximized: boolean; minimized: boolean }) => void = () => {};
   const nativeWindow = { request: vi.fn(), subscribe: vi.fn((listener: typeof windowStateChanged) => {
@@ -46,6 +47,7 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
     return win;
   }
   const client = {
+    supported_encodings: video?.encodings ?? ['webp'],
     floeInput: {version:1, target:null as {wid:number} | null,
       bindTarget(wid: number | null) { if (this.target?.wid !== wid) this.target = wid ? {wid} : null; return this.target; },
       commitText:vi.fn(), sendKey:vi.fn(), release:vi.fn(), clipboard:vi.fn(), paste:vi.fn(), onError:undefined as undefined | (() => void)},
@@ -63,6 +65,19 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
 }
 
 describe('host application viewer', () => {
+  it.each([
+    {secure:false, encodings:['webp'], available:false, guidance:true},
+    {secure:true, encodings:['webp'], available:false, guidance:false},
+    {secure:true, encodings:['webp', 'h264'], available:true, guidance:false},
+  ])('reports negotiated decoding capability without promising video from HTTPS alone: %j', async sample => {
+    const v = await viewer(false, false, false, undefined, sample);
+    const status = dom.window.document.querySelector<HTMLElement>('.host-app-video-status')!;
+    expect(status).not.toBeNull();
+    expect(status.textContent).toBe(sample.available ? 'Available' : 'Unavailable');
+    expect(dom.window.document.querySelector<HTMLElement>('.host-app-https-hint')!.hidden).toBe(!sample.guidance);
+    expect(v.client.send).not.toHaveBeenCalled();
+  });
+
   it.each(['.mac-app-controls', '.mac-app-toolbar', '.mac-app-toolbar-spacer', '.mac-app-toolbar-separator', '.host-app-identity'])(
     'dismisses toolbar popovers on %s input without acting on the application', async selector => {
       const v = await viewer(false, true);

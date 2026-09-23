@@ -40,7 +40,7 @@ func TestStopSharingClosesUpgradedConnectionsWithoutStoppingApplication(t *testi
 		}
 	}))
 	defer backend.Close()
-	proxy, address, err := newApplicationProxy(backend.URL)
+	proxy, address, err := newApplicationProxy(backend.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +356,12 @@ func TestWindowCloseRequestsPreserveSaveDialogs(t *testing.T) {
 
 func TestShutdownWaitsForAdmittedApplicationShare(t *testing.T) {
 	m := macFixture(t)
-	a := &linuxApplication{record: linuxApplicationRecord{ID: strings.Repeat("a", 64), Owner: "alice", Address: "127.0.0.1:9"}, ready: true}
+	root, _ := filepath.Abs("testdata/client")
+	assets, err := nativeapps.OpenClientAssets(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &linuxApplication{record: linuxApplicationRecord{ID: strings.Repeat("a", 64), Owner: "alice", Address: "127.0.0.1:9"}, ready: true, assets: assets}
 	if err := os.MkdirAll(m.applicationDir(a.record.ID), 0700); err != nil {
 		t.Fatal(err)
 	}

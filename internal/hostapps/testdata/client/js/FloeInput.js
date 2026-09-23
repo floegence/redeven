@@ -1,0 +1,1 @@
+// Public input adapter fixture.

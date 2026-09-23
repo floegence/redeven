@@ -8,12 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	nativeapps "github.com/floegence/floe-native-apps"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/hostapps"
 	"github.com/floegence/redeven/internal/session"
 )
 
 type hostAppsStub struct {
+	assets      *nativeapps.ClientAssets
 	owner       string
 	calls       int
 	state       string
@@ -276,4 +278,11 @@ func TestHostApplicationSetupRejectsUnboundedTransferBeforeAdmission(t *testing.
 			t.Fatalf("invalid transfer admitted: status=%d calls=%d", response.Code, backend.calls)
 		}
 	}
+}
+
+func (s *hostAppsStub) ClientAssets(owner, digest string) *nativeapps.ClientAssets {
+	if owner == s.owner && s.assets != nil && s.assets.Digest() == digest {
+		return s.assets
+	}
+	return nil
 }

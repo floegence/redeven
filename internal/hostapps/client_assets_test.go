@@ -1,0 +1,57 @@
+package hostapps
+
+import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	nativeapps "github.com/floegence/floe-native-apps"
+)
+
+func TestApplicationSharesReuseAssetsWithoutCachingSessionDocuments(t *testing.T) {
+	root, _ := filepath.Abs("testdata/client")
+	assets, err := nativeapps.OpenClientAssets(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Header().Set("ETag", `"private-document"`)
+		_, _ = io.WriteString(w, `<script src="js/Client.js"></script><script src="default-settings.txt"></script>`)
+	}))
+	defer upstream.Close()
+	for range 2 {
+		proxy, address, err := newApplicationProxy(upstream.URL, assets)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := http.Get("http://" + address + "/index.html")
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		proxy.Close()
+		expected := ClientAssetsPath + assets.Digest() + "/js/Client.js"
+		if !strings.Contains(string(body), expected) || !strings.Contains(string(body), `src="default-settings.txt"`) {
+			t.Fatalf("incorrect resource routing: %s", body)
+		}
+		if res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("ETag") != "" {
+			t.Fatalf("private document cacheable: %v", res.Header)
+		}
+	}
+	m := New(t.TempDir(), t.TempDir(), nil)
+	app := &linuxApplication{record: linuxApplicationRecord{Owner: "alice"}, assets: assets}
+	m.applications["instance"] = app
+	if m.ClientAssets("alice", assets.Digest()) != assets || m.ClientAssets("bob", assets.Digest()) != nil || m.ClientAssets("alice", strings.Repeat("0", 64)) != nil {
+		t.Fatal("resource lookup lost owner or version binding")
+	}
+	app.ended = true
+	if m.ClientAssets("alice", assets.Digest()) != nil {
+		t.Fatal("ended application still exposes assets")
+	}
+}

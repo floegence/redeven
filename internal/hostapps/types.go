@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 
+	nativeapps "github.com/floegence/floe-native-apps"
 	"github.com/floegence/redeven/internal/portforward"
 )
 
@@ -97,22 +98,26 @@ type Presentation struct {
 	ReopenHint         string `json:"reopenHint,omitempty"`
 	CaptureHint        string `json:"captureHint,omitempty"`
 
-	Controls          string `json:"controls,omitempty"`
-	PicturePixels     string `json:"picturePixels,omitempty"`
-	Picture           string `json:"picture,omitempty"`
-	PictureAuto       string `json:"pictureAuto,omitempty"`
-	PictureClarity    string `json:"pictureClarity,omitempty"`
-	PictureSmooth     string `json:"pictureSmooth,omitempty"`
-	PictureData       string `json:"pictureData,omitempty"`
-	PictureHint       string `json:"pictureHint,omitempty"`
-	PictureAdvanced   string `json:"pictureAdvanced,omitempty"`
-	PictureResolution string `json:"pictureResolution,omitempty"`
-	PictureFrameRate  string `json:"pictureFrameRate,omitempty"`
-	PictureActualRate string `json:"pictureActualRate,omitempty"`
-	PictureBandwidth  string `json:"pictureBandwidth,omitempty"`
-	PictureTransport  string `json:"pictureTransport,omitempty"`
-	PictureVideo      string `json:"pictureVideo,omitempty"`
-	PictureImages     string `json:"pictureImages,omitempty"`
+	Controls             string `json:"controls,omitempty"`
+	PicturePixels        string `json:"picturePixels,omitempty"`
+	Picture              string `json:"picture,omitempty"`
+	PictureAuto          string `json:"pictureAuto,omitempty"`
+	PictureClarity       string `json:"pictureClarity,omitempty"`
+	PictureSmooth        string `json:"pictureSmooth,omitempty"`
+	PictureData          string `json:"pictureData,omitempty"`
+	PictureHint          string `json:"pictureHint,omitempty"`
+	PictureAdvanced      string `json:"pictureAdvanced,omitempty"`
+	PictureResolution    string `json:"pictureResolution,omitempty"`
+	PictureFrameRate     string `json:"pictureFrameRate,omitempty"`
+	PictureActualRate    string `json:"pictureActualRate,omitempty"`
+	PictureBandwidth     string `json:"pictureBandwidth,omitempty"`
+	PictureTransport     string `json:"pictureTransport,omitempty"`
+	PictureVideo         string `json:"pictureVideo,omitempty"`
+	PictureImages        string `json:"pictureImages,omitempty"`
+	VideoDecoding        string `json:"videoDecoding,omitempty"`
+	VideoAvailable       string `json:"videoAvailable,omitempty"`
+	VideoUnavailable     string `json:"videoUnavailable,omitempty"`
+	HttpsPerformanceHint string `json:"httpsPerformanceHint,omitempty"`
 
 	OperationFailed    string `json:"operationFailed,omitempty"`
 	WaitingHint        string `json:"waitingHint,omitempty"`
@@ -149,6 +154,7 @@ type AddRequest struct {
 }
 
 type Backend interface {
+	ClientAssets(string, string) *nativeapps.ClientAssets
 	SetupStatus(string) (SetupStatus, error)
 	WatchSetup() (<-chan struct{}, func(), error)
 	SetupPlan(context.Context, string) (SetupTransferPlan, error)
