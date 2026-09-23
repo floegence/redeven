@@ -1,7 +1,8 @@
 import '../../index.css';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
-import { createSignal } from 'solid-js';
+import { batch, createSignal } from 'solid-js';
+import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
@@ -11,6 +12,45 @@ const paint = () => new Promise<void>((resolve) => requestAnimationFrame(() => r
 afterEach(() => { cleanups.splice(0).forEach((cleanup) => cleanup()); document.body.replaceChildren(); });
 
 describe('Files Activity navigation continuity', () => {
+  it.each(['Grid', 'List'])('matches the %s content geometry before the first directory arrives', async mode => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const [initializing, setInitializing] = createSignal(true);
+    const [files, setFiles] = createSignal<FileItem[]>([]);
+    cleanups.push(render(() => <FloeConfigProvider><LayoutProvider>
+      <div style={{ width: '1100px', height: '560px' }}>
+        <FileBrowserWorkspace mode="files" onModeChange={() => {}} files={files()} currentPath="/workspace" initialPath="/workspace"
+          roots={[{ id: 'home', pathAbs: '/', label: 'Home', kind: 'home', permissions: { read: true, write: true }, system: true }]}
+          instanceId="file-geometry" resetKey={0} width={240} open initializing={initializing()} />
+      </div>
+    </LayoutProvider></FloeConfigProvider>, host));
+    await paint();
+    Array.from(host.querySelectorAll('button')).find(button => button.textContent === mode)!.click();
+    await paint();
+    expect(host.textContent).not.toContain('Loading files...');
+    const placeholder = host.querySelector<HTMLElement>('[data-file-browser-placeholder]');
+    expect(placeholder).not.toBeNull();
+    const geometry = (element: HTMLElement) => ({
+      box: element.getBoundingClientRect().toJSON(),
+      cells: [...element.children].slice(0, mode === 'List' ? 3 : 2).map(child => child.getBoundingClientRect().toJSON()),
+    });
+    const before = geometry(placeholder!);
+    const treeRow = host.querySelector('[data-file-tree-skeleton-row]')!.getBoundingClientRect().toJSON();
+    const rootRow = host.querySelector('[data-file-tree-root-row]')!.getBoundingClientRect().toJSON();
+    const path = host.querySelector('[data-file-path-skeleton]')!.getBoundingClientRect().toJSON();
+    const status = host.querySelector('[data-file-browser-status-bar]')!.getBoundingClientRect().toJSON();
+    batch(() => {
+      setFiles([{ id: '/workspace', name: 'workspace', path: '/workspace', type: 'folder', children: [{ id: 'alpha', name: 'alpha.txt', path: '/workspace/alpha.txt', type: 'file', size: 2048, modifiedAt: new Date(0) }] }]);
+      setInitializing(false);
+    });
+    await paint();
+    expect(geometry(host.querySelector<HTMLElement>('[data-file-browser-item-id="alpha"]')!)).toEqual(before);
+    expect(host.querySelector('[data-file-browser-status-bar]')!.getBoundingClientRect().toJSON()).toEqual(status);
+    expect(host.querySelector('[data-tree-row-path="/workspace"]')!.parentElement!.getBoundingClientRect().toJSON()).toEqual(treeRow);
+    expect(host.querySelector('[data-file-tree-root-row]')!.getBoundingClientRect().toJSON()).toEqual(rootRow);
+    expect(host.querySelector('nav[aria-label="Breadcrumb"]')!.getBoundingClientRect().toJSON()).toEqual(path);
+  });
+
   it('keeps the real workspace chrome while waiting for the first directory and only then shows an empty result', async () => {
     const host = document.createElement('div');
     document.body.append(host);
@@ -25,7 +65,7 @@ describe('Files Activity navigation continuity', () => {
     await paint();
     expect(host.textContent).not.toContain('This folder is empty');
     expect(host.textContent).not.toContain('No folders in this location');
-    expect(host.textContent).not.toContain('Root');
+    expect(host.querySelector('nav[aria-label="Breadcrumb"]')).toBeNull();
     const toolbar = host.querySelector('[data-toolbar-layout]');
     const input = host.querySelector('input');
     const workspace = host.querySelector('[data-browser-workspace]');

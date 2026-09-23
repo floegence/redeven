@@ -45,7 +45,8 @@ installDesktopWindowChromeDocumentSync();
 
 const envID = readSessionStorage('redeven_env_public_id');
 const persistenceBinding = resolveEnvAppStorageBinding({
-  envID,
+  // Match navigation's stable local identity before the runtime request resolves.
+  envID: envID || 'env_local',
   desktopStateStorageAvailable: isDesktopStateStorageAvailable(),
 });
 
@@ -210,7 +211,7 @@ function DesktopThemeSync() {
 
 function EnvAppProviders() {
   const i18n = useI18n();
-  const navigation = createActivityNavigation({ envID, namespace: persistenceBinding.namespace });
+  const navigation = createActivityNavigation({ envID });
   const floeConfig = createMemo(() => buildFloeConfig(i18n.t, navigation));
 
   return (

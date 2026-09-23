@@ -36,7 +36,7 @@ progress and confirmation contracts; they are not directory or inventory loads.
 | Surface | Initial presentation and data authority |
 | --- | --- |
 | Host Applications, Web Services, Containers, Codespaces | Shared page frames and list skeletons; the resource cache owns restoration, successful snapshots, refresh, and request fencing. |
-| Files | Actual workspace chrome and a single pending directory body; the directory owner commits valid snapshots and rejects stale responses. |
+| Files | Actual workspace chrome and the published list/grid structural placeholders; the directory owner commits valid snapshots and rejects stale responses. |
 | Terminal | Shared initial status until the session catalog resolves; the terminal runtime owns subsequent creation and attachment. |
 | Monitoring | Shared initial status until the first live sample or error; subsequent polling preserves charts and current content. Metrics are not persisted as inventory snapshots. |
 | Settings | Shared module status; existing settings resources retain values during refresh and each section owns its form. |

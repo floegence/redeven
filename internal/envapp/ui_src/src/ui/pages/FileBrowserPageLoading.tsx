@@ -18,7 +18,7 @@ export function FileBrowserPageLoading(props: { environment?: string; stateScope
   const floe = useResolvedFloeConfig();
   const layout = useLayout();
   const i18n = useI18n();
-  const scope = () => resolveRendererStorageScopeID(props.environment ?? '');
+  const scope = () => resolveRendererStorageScopeID(props.environment || 'env_local');
   const stateScope = props.stateScope?.trim() || 'page';
   const scopedKey = (key: string) => stateScope === 'page' ? key : `${key}:${stateScope}`;
   const savedWidth = floe.persist.load<number>(scopedKey(PAGE_SIDEBAR_WIDTH_STORAGE_KEY), PAGE_SIDEBAR_DEFAULT_WIDTH);

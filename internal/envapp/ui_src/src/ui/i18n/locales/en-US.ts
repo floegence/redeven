@@ -1881,12 +1881,6 @@ export const enUS = defineDictionary({
       addWidget: 'Add {label}',
       goToWidget: 'Go to {label}',
     },
-    progress: {
-      connecting: 'Connecting workspace',
-      layout: 'Loading layout',
-      canvas: 'Preparing canvas',
-      ready: 'Ready',
-    },
     widgets: {
       files: { label: 'Files', defaultTitle: 'Files' },
       terminal: { label: 'Terminal', defaultTitle: 'Terminal' },
@@ -2022,8 +2016,6 @@ export const enUS = defineDictionary({
     showInternalSessions: 'Show internal sessions',
     hideInternal: 'Hide internal',
     showInternal: 'Show internal',
-    loadingEyebrow: 'Monitoring',
-    loadingMessage: 'Loading monitoring data...',
     runtimeApp: 'Runtime',
     codeApp: 'Code',
     portForwardApp: 'Port Forward',

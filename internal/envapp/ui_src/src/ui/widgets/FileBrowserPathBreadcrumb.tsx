@@ -1,4 +1,5 @@
 import { cn } from '@floegence/floe-webapp-core'
+import { Skeleton } from '@floegence/floe-webapp-core/loading'
 import { ChevronRight } from '@floegence/floe-webapp-core/icons'
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui'
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js'
@@ -25,6 +26,16 @@ const PATH_BREADCRUMB_CURRENT_CLASS =
   'min-w-0 flex-1 cursor-default justify-start font-medium text-foreground'
 const PATH_BREADCRUMB_ANCESTOR_TEXT_CLASS = 'block max-w-[8rem] truncate'
 const PATH_BREADCRUMB_CURRENT_TEXT_CLASS = 'block min-w-0 truncate'
+
+const PATH_BREADCRUMB_CONTAINER_CLASS = 'relative flex min-w-0 items-center gap-1 overflow-hidden'
+
+export function FileBrowserPathBreadcrumbSkeleton(props: { class?: string }) {
+  return <div aria-hidden="true" data-file-path-skeleton class={cn(PATH_BREADCRUMB_CONTAINER_CLASS, props.class)}>
+    <span class={cn(PATH_BREADCRUMB_ITEM_BASE_CLASS, 'shrink-0')}><Skeleton class="h-4 w-9" /></span>
+    <ChevronRight class="h-3 w-3 shrink-0 text-muted-foreground/50" />
+    <span class={cn(PATH_BREADCRUMB_ITEM_BASE_CLASS, PATH_BREADCRUMB_CURRENT_CLASS)}><Skeleton class="h-4 w-24 max-w-full" /></span>
+  </div>
+}
 
 export function FileBrowserPathBreadcrumb(props: FileBrowserPathBreadcrumbProps) {
   const i18n = useI18n()
@@ -103,7 +114,7 @@ export function FileBrowserPathBreadcrumb(props: FileBrowserPathBreadcrumbProps)
   return (
     <nav
       ref={containerRef}
-      class={cn('relative flex min-w-0 items-center gap-1 overflow-hidden', props.class)}
+      class={cn(PATH_BREADCRUMB_CONTAINER_CLASS, props.class)}
       aria-label={i18n.t('files.breadcrumbLabel')}
     >
       <For each={layout().visible}>

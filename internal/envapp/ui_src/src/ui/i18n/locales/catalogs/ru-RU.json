@@ -848,12 +848,6 @@
       "addWidget": "Добавить {label}",
       "goToWidget": "Перейти к {label}"
     },
-    "progress": {
-      "connecting": "Подключение рабочего пространства",
-      "layout": "Загрузка макета",
-      "canvas": "Подготовка canvas",
-      "ready": "Готово"
-    },
     "widgets": {
       "files": {
         "label": "Файлы",
@@ -1017,8 +1011,6 @@
     "showInternalSessions": "Показать внутренние сеансы",
     "hideInternal": "Скрыть внутренние",
     "showInternal": "Показать внутренние",
-    "loadingEyebrow": "Мониторинг",
-    "loadingMessage": "Загрузка данных Monitoring...",
     "runtimeApp": "Время выполнения Код",
     "codeApp": "Редактор кода",
     "portForwardApp": "Переадресация портов",

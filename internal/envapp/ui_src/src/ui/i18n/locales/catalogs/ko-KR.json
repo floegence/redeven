@@ -832,12 +832,6 @@
       "addWidget": "{label} 추가",
       "goToWidget": "{label}로 이동"
     },
-    "progress": {
-      "connecting": "연결 작업공간",
-      "layout": "레이아웃 로딩 중",
-      "canvas": "캔버스 준비 중",
-      "ready": "준비됨"
-    },
     "widgets": {
       "files": {
         "label": "파일",
@@ -1001,8 +995,6 @@
     "showInternalSessions": "내부 세션 표시",
     "hideInternal": "내부 숨기기",
     "showInternal": "내부 표시",
-    "loadingEyebrow": "모니터링",
-    "loadingMessage": "Monitoring 데이터 로딩 중...",
     "runtimeApp": "런타임",
     "codeApp": "코드",
     "portForwardApp": "포트 전달",
