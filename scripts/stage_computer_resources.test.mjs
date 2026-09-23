@@ -71,7 +71,7 @@ test('immutable helpers exclude Chromium and use an explicitly installed browser
     `], {
       cwd: resources, env: { HOME: root, PATH: '/usr/bin:/bin', NODE_PATH: '', PLAYWRIGHT_BROWSERS_PATH: path.join(root, 'absent-cache') }, timeout: 10000,
     });
-    assert.deepEqual(JSON.parse(media.stdout), { protocol: 21 });
+    assert.deepEqual(JSON.parse(media.stdout), { protocol: 22 });
     for (const name of ['background.mjs', 'manifest.json', 'input-focus.css']) {
       assert.ok(manifest.files.some(file => file.path === `extension/${name}`), `missing extension resource: ${name}`);
     }

@@ -37,10 +37,6 @@ for (const requiredPath of [manifestPath, chunkModulesPath]) {
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const chunkModules = JSON.parse(fs.readFileSync(chunkModulesPath, 'utf8'));
-const graph = analyzeInitialBuildGraph(manifest, chunkModules);
-const javascriptAssets = [...new Set(graph.javascriptAssets)];
-const cssAssets = [...new Set(graph.cssAssets)];
-
 const compressedBytes = (relativePath) => {
   const filePath = path.join(outputDir, relativePath);
   if (!fs.existsSync(filePath)) throw new Error(`Initial build asset is missing: ${relativePath}`);
@@ -49,29 +45,43 @@ const compressedBytes = (relativePath) => {
   }).byteLength;
 };
 
-const javascriptBytes = javascriptAssets.reduce((total, asset) => total + compressedBytes(asset), 0);
-const cssBytes = cssAssets.reduce((total, asset) => total + compressedBytes(asset), 0);
-const totalBytes = javascriptBytes + cssBytes;
-const initialAssets = [...javascriptAssets, ...cssAssets];
-const forbiddenNames = findForbiddenInitialAssetNames(initialAssets, forbiddenInitialAssets);
-const forbiddenModules = graph.forbiddenModules.map((item) => (
-  `forbidden initial module: ${item.path.join(' -> ')} -> ${item.moduleId}`
-));
-const failures = [
-  javascriptBytes > budgets.javascript ? `initial JS ${javascriptBytes} > ${budgets.javascript}` : '',
-  cssBytes > budgets.css ? `critical CSS ${cssBytes} > ${budgets.css}` : '',
-  totalBytes > budgets.total ? `initial total ${totalBytes} > ${budgets.total}` : '',
-  forbiddenNames.length > 0 ? `forbidden initial assets: ${forbiddenNames.join(', ')}` : '',
-  ...forbiddenModules,
-].filter(Boolean);
-
-if (failures.length > 0) {
-  throw new Error(`Env App initial build budget failed:\n${failures.join('\n')}`);
+// Each document loads its own static graph. Shared assets count against every
+// document that imports them; independent windows never share one size budget.
+for (const required of ['index.html', 'access.html', 'browser.html']) {
+  if (manifest[required]?.isEntry !== true || !fs.existsSync(path.join(outputDir, required))) {
+    throw new Error(`Env App build output is missing document: ${required}`);
+  }
 }
+for (const [entry, item] of Object.entries(manifest)) {
+  if (!item.isEntry) continue;
+  const graph = analyzeInitialBuildGraph(manifest, chunkModules, entry);
+  const javascriptAssets = [...new Set(graph.javascriptAssets)];
+  const cssAssets = [...new Set(graph.cssAssets)];
+  const javascriptBytes = javascriptAssets.reduce((total, asset) => total + compressedBytes(asset), 0);
+  const cssBytes = cssAssets.reduce((total, asset) => total + compressedBytes(asset), 0);
+  const totalBytes = javascriptBytes + cssBytes;
+  const initialAssets = [...javascriptAssets, ...cssAssets];
+  const forbiddenNames = findForbiddenInitialAssetNames(initialAssets, forbiddenInitialAssets);
+  const forbiddenModules = graph.forbiddenModules.map((item) => (
+    `forbidden initial module: ${item.path.join(' -> ')} -> ${item.moduleId}`
+  ));
+  const failures = [
+    javascriptBytes > budgets.javascript ? `initial JS ${javascriptBytes} > ${budgets.javascript}` : '',
+    cssBytes > budgets.css ? `critical CSS ${cssBytes} > ${budgets.css}` : '',
+    totalBytes > budgets.total ? `initial total ${totalBytes} > ${budgets.total}` : '',
+    forbiddenNames.length > 0 ? `forbidden initial assets: ${forbiddenNames.join(', ')}` : '',
+    ...forbiddenModules,
+  ].filter(Boolean);
 
-console.log(JSON.stringify({
-  initial_javascript_gzip_bytes: javascriptBytes,
-  critical_css_gzip_bytes: cssBytes,
-  initial_total_gzip_bytes: totalBytes,
-  initial_asset_count: initialAssets.length,
-}));
+  if (failures.length > 0) {
+    throw new Error(`Env App ${entry} initial build budget failed:\n${failures.join('\n')}`);
+  }
+
+  console.log(JSON.stringify({
+    entry,
+    initial_javascript_gzip_bytes: javascriptBytes,
+    critical_css_gzip_bytes: cssBytes,
+    initial_total_gzip_bytes: totalBytes,
+    initial_asset_count: initialAssets.length,
+  }));
+}

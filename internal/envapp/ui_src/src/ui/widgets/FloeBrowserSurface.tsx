@@ -1,3 +1,4 @@
+import '../../styles/browserWorkspace.css';
 import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
 import type { Session } from '@floegence/flowersec-core';
 import type { BrowserMessages } from '@floegence/floebrowser/viewer';

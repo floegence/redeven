@@ -9,6 +9,26 @@ import {
 const entry = (file, options = {}) => ({ file, isEntry: true, ...options });
 const chunk = (modules) => ({ modules });
 
+test('measures each document with all its static shared imports and its own CSS', () => {
+  const manifest = {
+    'index.html': entry('assets/index.js', { imports: ['shared'], css: ['assets/shell.css'] }),
+    'browser.html': entry('assets/browser.js', { imports: ['shared'], css: ['assets/browser.css'] }),
+    shared: { file: 'assets/shared.js', css: ['assets/shared.css'] },
+  };
+  const modules = { chunks: {
+    'assets/index.js': chunk(['src/index.ts']),
+    'assets/browser.js': chunk(['src/browserDocument.ts']),
+    'assets/shared.js': chunk(['ghostty-web/dist/index.js']),
+  } };
+  for (const document of ['index', 'browser']) {
+    const graph = analyzeInitialBuildGraph(manifest, modules, `${document}.html`);
+    assert.deepEqual(graph.javascriptAssets, [`assets/${document}.js`, 'assets/shared.js']);
+    assert.deepEqual(graph.cssAssets, [`assets/${document === 'index' ? 'shell' : 'browser'}.css`, 'assets/shared.css']);
+    assert.equal(graph.forbiddenModules.length, 1, 'Each document independently enforces forbidden shared modules');
+  }
+  assert.throws(() => analyzeInitialBuildGraph(manifest, modules, 'missing.html'), /does not contain an entry chunk/u);
+});
+
 test('allows the lightweight sessions facade while ignoring dynamic terminal imports', () => {
   const result = analyzeInitialBuildGraph({
     'index.html': entry('assets/index.js', {

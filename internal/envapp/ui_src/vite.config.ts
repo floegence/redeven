@@ -69,13 +69,10 @@ export default defineConfig({
   base: REDEVEN_ENV_APP_BASE_PATH,
   build: {
     target: 'esnext',
-    rolldownOptions: {
-      input: { index: path.resolve(__dirname, 'index.html'), browser: path.resolve(__dirname, 'browser.html') },
-    },
     outDir: path.resolve(__dirname, '../ui/dist/env'),
     emptyOutDir: true,
     manifest: true,
-    rolldownOptions: { input: { index: path.resolve(__dirname, 'index.html'), access: path.resolve(__dirname, 'access.html') } },
+    rolldownOptions: { input: { index: path.resolve(__dirname, 'index.html'), access: path.resolve(__dirname, 'access.html'), browser: path.resolve(__dirname, 'browser.html') } },
   },
   server: {
     host: true,
