@@ -213,6 +213,7 @@ vi.mock('@floegence/floe-webapp-core/app', async original => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
+  AppViewport: (props: any) => <>{props.children}</>,
   ...await importOriginal<typeof import('@floegence/floe-webapp-core/layout')>(),
   BottomBarCompanion: (props: any) => {
     createEffect(() => props.onPhaseChange?.(props.open ? 'expanded' : 'collapsed'));

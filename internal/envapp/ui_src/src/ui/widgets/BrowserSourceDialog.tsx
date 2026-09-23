@@ -96,7 +96,7 @@ export function BrowserSourceDialog(props: {
     <span><strong>{option.label}</strong><small title={option.detail}>{option.detail}</small></span>
   </label>;
   return <Dialog open onOpenChange={open => { if (!open) props.onClose(); }} title={props.messages.product.sources} closeLabel={copy().close}
-    description={props.messages.product.sourceHint} class="redeven-browser-sources-dialog" footer={<div class="flex w-full flex-wrap items-center justify-between gap-3">
+    bodyDescription={props.messages.product.sourceHint} class="redeven-browser-sources-dialog" footer={<div class="flex w-full flex-wrap items-center justify-between gap-3">
       <Show when={page() === 'sources'} fallback={<Button variant="outline" onClick={() => setPage('sources')}>{copy().back}</Button>}>
         <Button variant="ghost" size="sm" disabled={busy()} onClick={() => void refresh()}><Refresh class="size-3.5" />{copy().refresh}</Button>
       </Show>

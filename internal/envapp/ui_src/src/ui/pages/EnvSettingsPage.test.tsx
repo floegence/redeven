@@ -164,6 +164,7 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
+  AppViewport: (props: any) => <>{props.children}</>,
   Sidebar: (props: any) => <aside>{props.children}</aside>,
   SidebarContent: (props: any) => <div>{props.children}</div>,
   SidebarItem: (props: any) => (

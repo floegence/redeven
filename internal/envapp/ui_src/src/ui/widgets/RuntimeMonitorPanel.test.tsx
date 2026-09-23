@@ -56,6 +56,7 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
+  AppViewport: (props: any) => <>{props.children}</>,
   Panel: (props: any) => <div>{props.children}</div>,
   PanelContent: (props: any) => <div>{props.children}</div>,
 }));
