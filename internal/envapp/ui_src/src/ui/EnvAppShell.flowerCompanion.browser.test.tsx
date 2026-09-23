@@ -1179,9 +1179,12 @@ beforeEach(() => {
 describe('EnvAppShell Activity Flower browser integration', () => {
   it('reserves mobile space for the active page without a persistent Ask Flower entry', async () => {
     await page.viewport(390, 844);
-    await mountProductionMobileShell();
+    const fixture = await mountProductionMobileShell();
     expect(document.querySelector('[data-activity-flower-mobile-companion]')).toBeNull();
     expect(document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-visibility') ?? 'hidden').toBe('hidden');
+    expect(fixture.product.getAttribute('aria-hidden')).toBe('true');
+    expect(fixture.product.getClientRects()).toHaveLength(0);
+    expect(fixture.textarea.getClientRects()).toHaveLength(0);
   });
   it('preserves the Ask Flower window and draft when clicking the shell mode tabs', async () => {
     await page.viewport(1440, 900);

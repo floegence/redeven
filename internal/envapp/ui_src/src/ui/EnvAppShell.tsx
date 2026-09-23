@@ -4689,6 +4689,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
           classList={{ 'flower-activity-product-root-full-page': flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' }}
           data-floe-dialog-surface-host="true"
           data-presentation={flowerProductPlacement()}
+          hidden={!flowerSurfaceVisible()}
           aria-hidden={!flowerSurfaceVisible() ? 'true' : undefined}
           inert={!flowerSurfaceVisible()}
         >
