@@ -42,8 +42,8 @@ importers:
         specifier: 0.75.0
         version: 0.75.0(solid-js@1.9.13)
       '@floegence/floebrowser':
-        specifier: 0.1.10
-        version: 0.1.10
+        specifier: 0.1.11
+        version: 0.1.11
       '@floegence/floeterm-terminal-web':
         specifier: 0.19.2
         version: 0.19.2
@@ -553,8 +553,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floebrowser@0.1.10':
-    resolution: {integrity: sha512-jac29YAu+3ynNRsBqTdoJC8fzY9jZechgNGjaxRpUHTvaG0z9is1L+Nm4mCnBqT+oDAwfsMtnjNZvfaB3QHD4w==}
+  '@floegence/floebrowser@0.1.11':
+    resolution: {integrity: sha512-KGhwvznBaBfvFCzrfRWwV3isc34PWXgroKYRjcYdcP4PoRgEFVHsnvm4blWbNemGe/SPCUHKjb++R+k9l4h8KQ==}
     engines: {node: '>=26'}
     hasBin: true
 
@@ -3246,7 +3246,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floebrowser@0.1.10':
+  '@floegence/floebrowser@0.1.11':
     dependencies:
       '@rrweb/record': 2.1.6
       '@rrweb/replay': 2.1.6
