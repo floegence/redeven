@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop environment settings
 description: Open one target-bound settings session, preserve independent drafts, and save through the registered owner.
 tags: [desktop, environments, settings, interaction]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 # Summary
 
@@ -54,9 +54,9 @@ manually restoring the baseline clears the dirty state.
 Switching tabs keeps both forms mounted, preserving drafts, expanded controls and
 scroll positions. Ordinary Save submits only the active tab and stays in the
 window. Submitted forms reject further edits and duplicate saves; only the chosen
-save action shows its pending label. Failure retains the draft. Close, Cancel,
-Escape and backdrop dismissal discard unsaved changes directly; they do not
-cancel an already submitted save.
+save action shows its pending label. Failure retains the draft. Closing the window, Escape and backdrop dismissal
+discard unsaved changes; they do not cancel an already submitted save. Returning
+to the access overview keeps the draft for explicit review or discard.
 
 Save and restart persists access settings first. Failure stays in the editor;
 success closes that exact opening and reveals the Environment card's existing
@@ -109,17 +109,30 @@ its action baseline. Viewport resizing may change the cap. A stable native
 scrollbar gutter prevents horizontal field shifts when content becomes
 scrollable; automatic scroll anchoring cannot move the body during expansion.
 
-Access settings distinguish live connection facts from editable next-start
-preferences. A lightly tinted overview groups the Runtime status, actual
-addresses and Env App action. Preferences share one bordered group and one
-trailing control alignment: explanations stay beside their controls, the password
-field has a bounded reading width, and the numeric port stays compact. Narrow
-panels stack labels and controls without horizontal scrolling. Colors follow the
-active Floe theme, the window title establishes the primary hierarchy, and Close
-is separated from the save actions. Certificate details and pending-application
-feedback remain in the scrolling body; the action footer stays fixed.
-Action buttons grow with wrapped text so enlarged fonts and long translations
-never overlap adjacent actions.
+Access opens a task overview: current connection, browser access, sign-in
+protection and HTTPS certificate. Choosing a task presents only its relevant
+configuration. Access changes proceed through scope/protocol, required password
+or certificate preparation, and one next-start review. Advanced bind and port
+controls remain available in that task. The same session owns every draft;
+task navigation adds no configuration copy or alternate save path.
+
+A protected HTTP or password change first explains the dependency, verifies
+identity and explicitly commits disabling two-factor, then resumes the original
+task. Recovery-pending protection must be restored before that change. Password
+removal also selects local-only access and reviews both changes together.
+Authenticator enrollment, recovery-code confirmation and management use the same
+window body and fixed actions, never a nested dialog. Committed security changes
+are immediate and survive canceling later access edits. Their authoritative
+refresh retains the mounted task and pending draft. HTTPS preparation for
+enrollment preserves the existing restart handoff and requires an explicit
+return and setup action after restart; it never enrolls automatically.
+
+The footer stays visible while the task body scrolls. Validation focuses the
+related field; save and security errors appear beside the action. Disabled saves
+have keyboard-accessible contextual explanations. Review contains no password
+value. Password fields have bounded width and ports stay compact. Narrow panels
+stack controls without horizontal scrolling. Theme colors, wrapped action labels
+and enlarged text preserve the hierarchy and reachable actions.
 
 The released Floe slider provides the active tab's 200ms underline transition.
 Product styling uses a restrained 160ms opacity entrance for section content and
@@ -167,6 +180,7 @@ SSH field and secret details are owned by
 
 - `redeven:desktop/scripts/check-settings-expansion.mjs` - Per-frame window, footer and disclosure measurements, rapid reversals, immediate focus exclusion and reduced motion.
 - `redeven:desktop/scripts/check-access-settings.mjs` - Browser evidence for control proportions, all shipped themes and locales, narrow panels, enlarged text, real scrolling, certificate presentation and save recovery.
+- `redeven:desktop/src/welcome/EnvironmentAccessWorkflow.tsx` - Task navigation, prerequisite continuation and contextual review/save feedback.
 - `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - Published modal and tabs with retained, independently scrolling panels.
 - `redeven:desktop/src/welcome/environmentSettingsSession.ts` - Opening identity, independent drafts and asynchronous result isolation.
 - `redeven:desktop/src/welcome/EnvironmentSettingsEntry.client.test.tsx` - Actual card entry, read failures, reopening, deletion and late save behavior.

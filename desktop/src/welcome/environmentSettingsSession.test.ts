@@ -112,3 +112,14 @@ describe('unified environment settings session', () => {
   });
 
 });
+
+it('refreshes committed password metadata without replacing a pending access draft', async () => {
+  const updated = result();
+  if (!updated.ok) throw new Error('Fixture requires a snapshot');
+  const h = harness(vi.fn().mockResolvedValueOnce(result()).mockResolvedValue({ ...updated, snapshot: { ...updated.snapshot, local_ui_password_configured: true } }));
+  h.open(environment(), {}); h.selectTab('access'); await settle();
+  h.updateDraft(draft => ({ ...draft, local_ui_bind: '0.0.0.0:25000' }));
+  await h.loadAccess();
+  expect(h.session()?.access?.draft.local_ui_bind).toBe('0.0.0.0:25000');
+  expect(h.session()?.access?.baseline_surface.local_ui_password_configured).toBe(true);
+});

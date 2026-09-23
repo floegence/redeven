@@ -52,7 +52,10 @@ try {
     if (await dialog.getByRole('tab', { name: t('settings.accessTab'), exact: true }).count()) {
       await dialog.getByRole('tab', { name: t('settings.accessTab'), exact: true }).click();
     }
+    await dialog.getByRole('button', { name: t('accessFlow.changeAccess'), exact: true }).click();
+    await dialog.locator('.environment-access-advanced summary').click();
     await page.locator('#local-ui-port').fill('25000');
+    await dialog.getByRole('button', { name: t('accessFlow.checkChanges'), exact: true }).click();
     await page.evaluate(() => {
       window.restartFrames = [];
       const record = () => {
@@ -93,6 +96,8 @@ try {
     await page.locator(`[data-owner-id="${snapshot.environments.find(entry => entry.label === config.label).id}"] .redeven-split-action-primary button`).click();
     await panel.getByText(t('settings.restartApplied'), { exact: true }).waitFor();
     await panel.getByRole('button', { name: t('settings.returnToSettings'), exact: true }).click(); await dialog.waitFor();
+    await dialog.getByRole('button', { name: t('accessFlow.changeAccess'), exact: true }).click();
+    await dialog.locator('.environment-access-advanced summary').click();
     await page.locator('#local-ui-port').waitFor();
     assert.equal(await page.locator('#local-ui-port').inputValue(), '25000');
     report.cases.push({ ...config, frames }); await page.close();

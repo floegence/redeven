@@ -2,7 +2,6 @@ import { Show, For, createSignal, createEffect, createMemo, on, onCleanup } from
 import {
   Button,
   Checkbox,
-  Dialog,
   Input,
 } from '@floegence/floe-webapp-core/ui';
 import {
@@ -17,6 +16,7 @@ import {
   AlertCircle,
 } from '@floegence/floe-webapp-core/icons';
 import './TwoFactorSettings.css';
+import { EnvironmentSettingsPanel } from './EnvironmentSettingsDialog';
 import type { DesktopI18n } from '../shared/i18n';
 import type {
   SecurityAction,
@@ -24,14 +24,17 @@ import type {
   SecurityResult,
 } from '../shared/runtimeSecurity';
 
-export function TwoFactorSettings(props: {
+export type TwoFactorSettingsProps = {
   environmentID: string;
   runtimeStartedAt?: number;
   configureHTTPS: () => void;
-  onHTTPSReady?: () => void;
+  onCompleted?: (action: SecurityAction, status: SecurityResult) => void;
+  open?: boolean;
   i18n: DesktopI18n;
   manage: (request: SecurityRequest) => Promise<SecurityResult>;
-}) {
+};
+
+export function createTwoFactorSettings(props: TwoFactorSettingsProps) {
   const [status, setStatus] = createSignal<SecurityResult>();
   const [view, setView] = createSignal<
     'closed' | 'manage' | 'verifyOwner' | 'scan' | 'recovery'
@@ -50,10 +53,6 @@ export function TwoFactorSettings(props: {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   const requiresHTTPS = () => status()?.https_ready === false;
-  let errorNotice: HTMLDivElement | undefined;
-  createEffect(() => {
-    if (error()) queueMicrotask(() => errorNotice?.scrollIntoView({ block: 'nearest' }));
-  });
   let generation = 0;
   const text = (
     key:
@@ -133,7 +132,9 @@ export function TwoFactorSettings(props: {
       else if (next === 'closed') {
         setStatus(result);
         setOperation(undefined);
+        const completedAction = action();
         close();
+        props.onCompleted?.(completedAction, result);
       } else {
         setOperation(result);
         if (next) setView(next);
@@ -184,7 +185,6 @@ export function TwoFactorSettings(props: {
     } finally {
       if (current === generation) {
         setBusy(false);
-        if (request.action === 'status' && status()?.https_ready) props.onHTTPSReady?.();
       }
     }
   };
@@ -194,7 +194,7 @@ export function TwoFactorSettings(props: {
     environmentID: props.environmentID,
     startedAt: props.runtimeStartedAt ?? (previous?.environmentID === props.environmentID ? previous.startedAt : 0),
   }));
-  const environmentID = createMemo(() => `${runtimeIdentity().environmentID}:${runtimeIdentity().startedAt}`);
+  const environmentID = createMemo(() => `${props.open !== false}:${runtimeIdentity().environmentID}:${runtimeIdentity().startedAt}`);
   createEffect(
     on(
       environmentID,
@@ -203,6 +203,7 @@ export function TwoFactorSettings(props: {
         close();
         const current = generation;
         setStatus(undefined);
+        if (props.open === false) return;
         void run({ action: 'status' }).then(() => {
           if (generation === current && interrupted && !error()) setError(props.i18n.t('security.runtimeChanged'));
         });
@@ -211,6 +212,7 @@ export function TwoFactorSettings(props: {
   );
   onCleanup(close);
   const begin = (selected: SecurityAction) => {
+    if (busy() || !status()) return;
     if ((selected === 'setup' || selected === 'replace') && requiresHTTPS()) {
       close();
       props.configureHTTPS();
@@ -278,15 +280,36 @@ export function TwoFactorSettings(props: {
     }
   };
   const isEnrollment = () => action() === 'setup' || action() === 'replace';
+  return { status, view, setView, action, operation, password, setPassword, confirmPassword, setConfirmPassword,
+    needsPassword, code, setCode, useRecovery, setUseRecovery, copied, keyCopied, saved, setSaved, busy, error,
+    requiresHTTPS, text, close, run, begin, confirmOwner, copy, download, copyKey, isEnrollment };
+}
+
+export function TwoFactorSettings(props: TwoFactorSettingsProps & {
+  controller?: ReturnType<typeof createTwoFactorSettings>;
+  onClose?: () => void;
+}) {
+  const controller = props.controller ?? createTwoFactorSettings(props);
+  const { status, view, setView, action, operation, password, setPassword, confirmPassword, setConfirmPassword,
+    needsPassword, code, setCode, useRecovery, setUseRecovery, copied, keyCopied, saved, setSaved, busy, error,
+    requiresHTTPS, text, close, run, begin, confirmOwner, copy, download, copyKey, isEnrollment } = controller;
+  let flow: HTMLDivElement | undefined;
+  createEffect(on(view, () => {
+    queueMicrotask(() => flow?.querySelector<HTMLElement>('h3')?.focus({ preventScroll: true }));
+  }));
+  const cancel = () => { close(); props.onClose?.(); };
+  const ownerDisabled = () => busy() || !password() || (needsPassword() && password() !== confirmPassword()) || (!needsPassword() && !code());
+  const commit = () => void run({ action: 'commit', operation_id: operation()?.operation_id, saved: saved() }, 'closed');
+
   return (
     <>
-      <section class="two-factor-setting">
+      <Show when={view() === 'closed'}><section class="two-factor-setting">
         <div class="two-factor-setting-identity">
           <span class="two-factor-setting-icon" aria-hidden="true">
             <Shield size={19} />
           </span>
           <div class="two-factor-setting-copy">
-            <h3>{text('title')}</h3>
+            <h3 tabindex="-1">{text('title')}</h3>
             <p>{text('scope')}</p>
           </div>
         </div>
@@ -332,36 +355,31 @@ export function TwoFactorSettings(props: {
               <h4>{props.i18n.t('security.httpsTitle')}</h4>
               <p>{props.i18n.t('security.httpsHelp')}</p>
             </div>
-            <Button size="sm" variant="outline" class="two-factor-notice-action" onClick={props.configureHTTPS}>
+            <Button size="sm" variant="outline" class="two-factor-notice-action" onClick={() => begin('setup')}>
               {props.i18n.t('security.configureHTTPS')}<ChevronRight size={14} aria-hidden="true" />
             </Button>
           </div>
         </Show>
         <Show when={view() === 'closed' && error()}>
-          <div ref={errorNotice} role="alert" class="two-factor-notice two-factor-error">
+          <div role="alert" class="two-factor-notice two-factor-error">
             <AlertCircle size={18} aria-hidden="true" />
             <p class="two-factor-notice-copy">{error()}</p>
             <Button size="sm" variant="ghost" disabled={busy()} onClick={() => void run({ action: 'status' })}>{props.i18n.t('common.retry')}</Button>
           </div>
         </Show>
-      </section>
-      <Dialog
-        open={view() !== 'closed'}
-        onOpenChange={(open) => {
-          if (!open) close();
-        }}
-        title={text('title')}
-        closeLabel={text('cancel')}
-        class="two-factor-dialog"
-        contentClass="two-factor-dialog-body"
-      >
-        <div class="two-factor-flow">
-          <Show when={error()}>
-            <div ref={errorNotice} role="alert" class="two-factor-notice two-factor-error">
-              <AlertCircle size={18} aria-hidden="true" />
-              <p class="two-factor-notice-copy">{error()}</p>
-            </div>
-          </Show>
+      </section></Show>
+      <Show when={view() !== 'closed'}>
+      <EnvironmentSettingsPanel footer={<>
+        <Show when={error()}><div role="alert" class="environment-access-save-error"><AlertCircle size={18} aria-hidden="true" /><span>{error()}</span></div></Show>
+        <div class="environment-access-actions">
+        <Button size="sm" variant="ghost" class="environment-access-close" disabled={busy()} onClick={cancel}>{text('cancel')}</Button>
+        <Show when={view() === 'verifyOwner'}><Button size="sm" type="submit" form="two-factor-owner" disabled={ownerDisabled()} loading={busy()}>{text('continue')}</Button></Show>
+        <Show when={view() === 'scan'}><Button size="sm" type="submit" form="two-factor-verify" disabled={busy() || !/^\d{6}$/.test(code().replaceAll(' ', ''))} loading={busy()}>{text('continue')}</Button></Show>
+        <Show when={view() === 'recovery'}><Button size="sm" disabled={busy() || (action() !== 'disable' && !saved())} loading={busy()} onClick={commit}>
+          {text(action() === 'setup' ? 'enable' : action() === 'disable' ? 'disable' : 'confirm')}
+        </Button></Show>
+      </div></>}>
+        <div ref={flow} class="two-factor-flow">
           <Show
             when={
               isEnrollment() && (view() === 'scan' || view() === 'recovery')
@@ -392,7 +410,7 @@ export function TwoFactorSettings(props: {
               <span class="two-factor-emblem" aria-hidden="true">
                 <ShieldCheck size={24} />
               </span>
-              <h3>{text('on')}</h3>
+              <h3 tabindex="-1">{text('on')}</h3>
               <p>
                 {props.i18n.t('security.remaining', {
                   count: status()?.recovery_codes_remaining ?? 0,
@@ -424,7 +442,7 @@ export function TwoFactorSettings(props: {
               <span class="two-factor-emblem" aria-hidden="true">
                 <Shield size={24} />
               </span>
-              <h3>
+              <h3 tabindex="-1">
                 {text(
                   needsPassword()
                     ? 'newPassword'
@@ -438,7 +456,7 @@ export function TwoFactorSettings(props: {
               <p>{text(needsPassword() ? 'setupPassword' : 'ownerHelp')}</p>
             </div>
             <form
-              class="two-factor-form"
+              id="two-factor-owner" class="two-factor-form"
               onSubmit={(event) => {
                 event.preventDefault();
                 void confirmOwner();
@@ -492,24 +510,12 @@ export function TwoFactorSettings(props: {
                   {text(useRecovery() ? 'useAuthenticator' : 'useRecovery')}
                 </button>
               </Show>
-              <Button
-                class="two-factor-primary"
-                type="submit"
-                disabled={
-                  busy() ||
-                  !password() ||
-                  (needsPassword() && password() !== confirmPassword()) ||
-                  (!needsPassword() && !code())
-                }
-                loading={busy()}
-              >
-                {text('continue')}
-              </Button>
+
             </form>
           </Show>
           <Show when={view() === 'scan'}>
             <div class="two-factor-heading">
-              <h3>{text('connectTitle')}</h3>
+              <h3 tabindex="-1">{text('connectTitle')}</h3>
               <p>{text('scan')}</p>
             </div>
             <div class="two-factor-pairing">
@@ -542,7 +548,7 @@ export function TwoFactorSettings(props: {
               </details>
             </div>
             <form
-              class="two-factor-form two-factor-verify"
+              id="two-factor-verify" class="two-factor-form two-factor-verify"
               onSubmit={(event) => {
                 event.preventDefault();
                 void run(
@@ -568,14 +574,7 @@ export function TwoFactorSettings(props: {
                   onInput={(event) => setCode(event.currentTarget.value)}
                 />
               </label>
-              <Button
-                class="two-factor-primary"
-                type="submit"
-                disabled={busy() || !/^\d{6}$/.test(code().replaceAll(' ', ''))}
-                loading={busy()}
-              >
-                {text('continue')}
-              </Button>
+
             </form>
           </Show>
           <Show when={view() === 'recovery'}>
@@ -584,13 +583,13 @@ export function TwoFactorSettings(props: {
                 <span class="two-factor-emblem" aria-hidden="true">
                   <Shield size={24} />
                 </span>
-                <h3>{text('disable')}</h3>
+                <h3 tabindex="-1">{text('disable')}</h3>
                 <p>{text('disableHelp')}</p>
               </div>
             </Show>
             <Show when={action() !== 'disable'}>
               <div class="two-factor-heading">
-                <h3>{text('recoveryTitle')}</h3>
+                <h3 tabindex="-1">{text('recoveryTitle')}</h3>
                 <p>{text('recoveryHelp')}</p>
               </div>
               <div class="two-factor-recovery-sheet">
@@ -627,32 +626,11 @@ export function TwoFactorSettings(props: {
                 />
               </div>
             </Show>
-            <Button
-              class="two-factor-primary"
-              disabled={busy() || (action() !== 'disable' && !saved())}
-              loading={busy()}
-              onClick={() =>
-                void run(
-                  {
-                    action: 'commit',
-                    operation_id: operation()?.operation_id,
-                    saved: saved(),
-                  },
-                  'closed',
-                )
-              }
-            >
-              {text(
-                action() === 'setup'
-                  ? 'enable'
-                  : action() === 'disable'
-                    ? 'disable'
-                    : 'confirm',
-              )}
-            </Button>
+
           </Show>
         </div>
-      </Dialog>
+      </EnvironmentSettingsPanel>
+      </Show>
     </>
   );
 }

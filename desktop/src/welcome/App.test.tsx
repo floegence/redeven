@@ -833,7 +833,9 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain("import { DesktopTooltip } from './DesktopTooltip';");
-    expect(appSrc).toContain('data-redeven-settings-help=""');
+    const workflow = fs.readFileSync(path.join(__dirname, 'EnvironmentAccessWorkflow.tsx'), 'utf8');
+    expect(workflow).toContain("import { DesktopTooltip } from './DesktopTooltip';");
+    expect(workflow).toContain('anchorTabIndex={0}');
     expect(appSrc).not.toContain('title={tooltip()}');
     expect(appSrc).toContain('redeven-console-tab');
     expect(appSrc).toContain('redeven-provider-pill');

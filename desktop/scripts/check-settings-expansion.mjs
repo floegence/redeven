@@ -83,6 +83,7 @@ try {
   for (const [locale, preset, width, height] of [['en-US', 'classic-light', 1280, 900], ['zh-CN', 'ocean', 390, 700]]) {
     await page.setViewportSize({ width, height });
     await open(locale, preset);
+    await dialog.getByRole('button', { name: locale === 'zh-CN' ? '修改访问方式' : 'Change access', exact: true }).click();
     const advanced = '.environment-access-advanced';
     await transition(`${locale}-network-open`, `${advanced} summary`, advanced);
     await page.locator('#local-ui-bind').fill('localhost:25000');
@@ -98,7 +99,7 @@ try {
   }
   await page.setViewportSize({ width: 1280, height: 900 });
   await open();
-  await transition('https-setup', '.environment-access-row [aria-label="Connection security"] [role="radio"]:last-child', '.environment-access-full', { animated: false });
+  await dialog.getByRole('button', { name: 'Manage certificate', exact: true }).click();
   await dialog.getByText('Ready', { exact: true }).waitFor();
   const certificate = 'section[aria-label="HTTPS setup"]';
   await transition('certificate-details-open', `${certificate} summary`, `${certificate} details`);
@@ -110,11 +111,11 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await dialog.count(), 1, 'nested Escape leaves settings open');
   assert.equal(await page.locator(`${certificate} button[aria-controls]`).getAttribute('aria-expanded'), 'false');
-  await page.getByRole('radio', { name: 'HTTP', exact: true }).click();
-  await page.getByRole('radio', { name: 'HTTPS · Recommended', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Back to overview', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Manage certificate', exact: true }).click();
   await dialog.getByText('Ready', { exact: true }).waitFor();
   assert.equal(await page.locator(`${certificate} button[aria-controls]`).getAttribute('aria-expanded'), 'false');
-  report.cases.push('certificate-keyboard-and-fresh-protocol-visit');
+  report.cases.push('certificate-keyboard-and-task-return');
 
   await open('en-US', 'classic-light', true);
   await transition('ssh-advanced-open', '.ssh-settings-disclosure', '[data-settings-reveal]');

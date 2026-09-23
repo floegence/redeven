@@ -3,7 +3,7 @@ type: Security Contract
 title: Local UI certificates
 description: Manage saved HTTPS identities, explicit file imports and replacements, and independent client trust without interrupting a running Runtime.
 tags: [security, local-ui, desktop, certificates]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 # Summary
 
@@ -15,7 +15,7 @@ Runtime owns the saved HTTPS identity and validates it before serving. Desktop e
 
 The user explicitly creates a device CA with `local-authority device-ca generate` and inspects it with `status`. Generation refuses an existing identity, including an invalid one. Runtime startup never generates, replaces, or repairs certificate material. The device CA is a self-signed P-256 certificate with a matching PKCS#8 key. Each HTTPS start creates an in-memory leaf for the exact configured DNS and IP SANs; that leaf is not persisted.
 
-A valid untrusted identity is a successful status query with `identity: ready`, not a damaged certificate. Expired, not-yet-valid, incomplete, and malformed identities remain separate from permission, timeout, and inspection failures. Reports carry only public metadata, certificate kind, SHA-256 fingerprint, and operation capabilities. The maintenance report schema remains `redeven.local_authority_maintenance.v1`; older runtimes without lifecycle capabilities require an update before new management actions are offered.
+A valid untrusted identity is a successful status query with `identity: ready`, not a damaged certificate. Expired, not-yet-valid, incomplete, and malformed identities remain separate from permission, timeout, and inspection failures. Status reports carry public metadata, certificate kind, SHA-256 fingerprint, and operation capabilities. The maintenance report schema remains `redeven.local_authority_maintenance.v1`; older runtimes without lifecycle capabilities require an update before new management actions are offered.
 
 For a device CA, macOS and Windows support explicit current-user `install --scope user`. Linux requires manual trust configuration after public export. Redeven never modifies system-wide trust, invokes sudo, or silently elevates privileges. Installation success requires a fresh trust check. Cancellation and failure retain the certificate and allow retry without regeneration. macOS authorization-sheet cancellation is recognized even when its diagnostic omits the numeric OSStatus. Trust on one OS user does not establish trust on other devices or in browsers with separate stores.
 
@@ -35,11 +35,19 @@ Readers and writers share the state-scoped certificate maintenance lock. A repla
 
 The compact HTTPS panel presents certificate validity, expiry, and system trust separately. The certificate row offers “Manage certificate”; import, regeneration, and removal each have an inline explanation and explicit confirmation. Cancellation has neutral feedback. Pending operations disable duplicate actions and HTTPS restart. Completed changes update the panel in place and return keyboard focus to management. Public path, fingerprint, and bounded selectable diagnostics live in the expandable details section.
 
-“Create and trust on this device” checks, creates only when missing, requests current-user trust, and verifies. Retrying reuses a valid certificate. The epoch 18 legacy `failed + ready + untrusted` report still means an intact identity awaiting trust.
+“Create certificate” creates only a missing identity. “Trust on this device” is a separate explicit current-user operation that verifies trust afterward. Retrying trust reuses the valid certificate. The epoch 18 legacy `failed + ready + untrusted` report still means an intact identity awaiting trust.
 
 Every certificate IPC request names the registered Environment management target. Main validates its authority before opening native certificate and key file pickers, reads bounded files privately, and sends PEM only over maintenance stdin or the existing authorized remote execution channel. Renderer requests cannot supply filesystem paths or PEM; renderer reports, clipboard, and diagnostics contain no private key. Canceling either picker does not mutate the store. Imported input is never placed in process arguments.
 
-Changing the selected Environment or closing the section invalidates outstanding UI results. Background snapshots preserve management confirmation, expanded details, scroll, and drafts. Certificate changes are saved immediately and survive canceling the settings dialog; restart is the separate step that applies them to Runtime. Saving next-start HTTPS settings remains possible with an unusable certificate, with an explicit startup warning.
+Public export is offered only when status advertises `certificate_export: true`.
+The maintenance command `device-ca export --output -` returns a validated public
+CA or server chain in `public_certificate_pem`. Desktop main opens a native Save
+picker, validates certificate-only PEM blocks, writes the chosen file and returns
+only the public operation report to the renderer. Canceling the picker does not
+export. Export neither changes the identity nor installs trust. The existing
+CLI file export still refuses to overwrite an existing file.
+
+Changing the selected Environment or closing the settings window invalidates outstanding UI results. Task navigation retains certificate state and readiness. Background snapshots preserve management confirmation, expanded details, scroll, and drafts. Certificate changes are saved immediately and survive canceling the settings dialog; restart is the separate step that applies them to Runtime. Saving next-start HTTPS settings remains possible with an unusable certificate, with an explicit startup warning.
 
 # Boundaries
 

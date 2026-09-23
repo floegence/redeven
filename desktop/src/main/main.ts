@@ -13,7 +13,7 @@ import { desktopEnvironmentID } from './desktopPreferences';
 import { environmentSettingsFailure, withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, requireEnvironmentManagementAvailable, type EnvironmentAccessOwner } from './environmentAccessSettings';
 import { assertRuntimeFlowerCompatible } from '../shared/runtimeFlowerAccess';
 import { runtimeFlowerPath, runtimeFlowerMethod, runtimeFlowerMethodAllowed } from './runtimeFlowerRoutes';
-import { certificateCommandArguments, selectDesktopCertificateImport, runDesktopCertificateCommand, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart, type CertificateImport } from './desktopCertificate';
+import { certificateCommandArguments, selectDesktopCertificateExport, parseCertificateCommandReport, selectDesktopCertificateImport, runDesktopCertificateCommand, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart, type CertificateImport } from './desktopCertificate';
 import { DESKTOP_CERTIFICATE_CHANNEL, parseDesktopCertificateRequest, parseDesktopCertificateReport, type DesktopCertificateRequest, type DesktopCertificateReport } from '../shared/desktopCertificate';
 import { DesktopTemplateSources } from './templateSources';
 import { TEMPLATE_SOURCE_ACQUIRE_CHANNEL, TEMPLATE_SOURCE_CANCEL_CHANNEL } from '../shared/desktopTemplateSources';
@@ -5065,8 +5065,19 @@ async function manageEnvironmentCertificate(request: DesktopCertificateRequest, 
       if (!input || parent.isDestroyed()) return { status: 'canceled', code: 'local_ui_certificate_selection_canceled' };
     }
     const run = async (verifyBind?: string) => managed
-      ? parseDesktopCertificateReport(await runManagedRuntimeAuthority(request.environment_id, certificateCommandArguments(command, verifyBind), input))
+      ? parseCertificateCommandReport(await runManagedRuntimeAuthority(request.environment_id, certificateCommandArguments(command, verifyBind), input), command)
       : runDesktopCertificateCommand(bundledRuntimeExecutablePath(), localEnvironmentStateRoot(), command, input, verifyBind);
+    if (command === 'export') {
+      if (!parent || parent.isDestroyed()) throw new Error('Certificate export requires an open settings window.');
+      const i18n = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale);
+      return selectDesktopCertificateExport(async () => {
+        const result = await dialog.showSaveDialog(parent, {
+          title: i18n.t('accessFlow.exportCertificate'), defaultPath: 'redeven-public-certificate.pem',
+          filters: [{ name: 'PEM', extensions: ['pem'] }],
+        });
+        return result.canceled || parent.isDestroyed() ? undefined : result.filePath;
+      }, run);
+    }
     const report = await run();
     // Older epoch 18 runtimes support only generated CAs and have no --bind flag.
     // Explicit server imports and bind verification ship as one advertised capability.

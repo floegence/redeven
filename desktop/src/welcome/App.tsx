@@ -1,4 +1,4 @@
-import { TwoFactorSettings } from './TwoFactorSettings';
+import { EnvironmentAccessWorkflow } from './EnvironmentAccessWorkflow';
 import type { SecurityRequest, SecurityResult } from '../shared/runtimeSecurity';
 import { CloudAccountOverview } from './CloudAccountOverview';
 import { EnvironmentCardsPanel, environmentActionUsesLifecycleOwner, type EnvironmentOwnerPresentation, type EnvironmentGuidanceActionResolution, type LifecycleProgressFocusRequest } from './EnvironmentCards';
@@ -6,7 +6,7 @@ import { ConsoleActionIconButton, EnvironmentStatusIndicator } from './environme
 import { EnvironmentConnectionRows } from './EnvironmentConnectionRows';
 import { DesktopFlowerRuntimeBoundary } from './flower/DesktopFlowerRuntimeBoundary';
 import { runtimeFlowerBlocker } from '../shared/runtimeFlowerAccess';
-import { buildRuntimeConnectionRows, runtimeConnectionIsOnThisDevice, isShareableConnectionAddress, type DesktopShareableConnectionAddress } from '../shared/desktopEnvironmentConnection';
+import { buildRuntimeConnectionRows, isShareableConnectionAddress, type DesktopShareableConnectionAddress } from '../shared/desktopEnvironmentConnection';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../shared/desktopCertificate';
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
@@ -27,7 +27,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Clock,
   Copy,
   ExternalLink,
   Globe,
@@ -63,7 +62,6 @@ import {
   Tag,
 } from '@floegence/floe-webapp-core/ui';
 
-import { LocalCertificateSettings } from './LocalCertificateSettings';
 import { SSHEnvironmentSettingsForm } from './SSHEnvironmentSettingsForm';
 import { EnvironmentSettingsDialog, EnvironmentSettingsPanel } from './EnvironmentSettingsDialog';
 import { createEnvironmentSettingsController } from './environmentSettingsSession';
@@ -194,10 +192,6 @@ import {
   applyDesktopAccessAutoPortToDraft,
   applyDesktopAccessFixedPortToDraft,
   applyDesktopAccessModeToDraft,
-  desktopPasswordStateTranslationKey,
-  desktopSettingsDraftRequiresRuntimeRestart,
-  deriveDesktopAccessDraftModel,
-  validateDesktopAccessDraft,
 } from '../shared/desktopAccessModel';
 import {
   buildEnvironmentLibrarySummaryModel,
@@ -2128,19 +2122,6 @@ function createControlPlaneDialogState(
 }
 
 
-function passwordStateTagVariant(
-  tone: DesktopSettingsSurfaceSnapshot['password_state_tone'],
-): 'neutral' | 'warning' | 'success' {
-  switch (tone) {
-    case 'warning':
-      return 'warning';
-    case 'success':
-      return 'success';
-    default:
-      return 'neutral';
-  }
-}
-
 function localizedCloseActionLabel(i18n: DesktopI18n, action: DesktopLauncherCloseAction): string {
   return action === 'quit' ? i18n.t('launcher.quit') : i18n.t('launcher.closeLauncher');
 }
@@ -2162,34 +2143,6 @@ function localizedWindowsLabel(i18n: DesktopI18n, count: number): string {
 
 function localizedVisibleLabel(i18n: DesktopI18n, count: number): string {
   return i18n.t('launcher.visibleCount', { count });
-}
-
-function compactLocalizedPasswordStateTagLabel(
-  i18n: DesktopI18n,
-  stateID: DesktopSettingsSurfaceSnapshot['password_state_id'],
-): string {
-  return i18n.t(desktopPasswordStateTranslationKey(stateID));
-}
-
-function compactLocalizedSettingsFieldLabel(
-  i18n: DesktopI18n,
-  field: DesktopSettingsSurfaceSnapshot['host_fields'][number],
-): string {
-  return i18n.t(field.label_key);
-}
-
-function localizedSettingsFieldHelp(
-  i18n: DesktopI18n,
-  field: DesktopSettingsSurfaceSnapshot['host_fields'][number],
-): string {
-  return field.help_key ? i18n.t(field.help_key) : '';
-}
-
-function localizedSettingsFieldPlaceholder(
-  i18n: DesktopI18n,
-  field: DesktopSettingsSurfaceSnapshot['host_fields'][number],
-): string | undefined {
-  return field.placeholder_key ? i18n.t(field.placeholder_key) : undefined;
 }
 
 async function copyToClipboard(text: string): Promise<void> {
@@ -5840,6 +5793,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return fields.some(key => Reflect.get(session.connection!, key) !== Reflect.get(session.connection_baseline!, key));
   }
   function settingsAccessErrorMessage(error = settingsPresentation()?.access_error): string {
+    if (error?.code === 'SECURITY_POLICY_ACTIVE') return i18n().t('security.accessPolicyActive');
     if (error?.status_code === 401 || error?.status_code === 403) return i18n().t('settings.accessAuthorizationFailed');
     if (error?.code === 'SETTINGS_RUNTIME_PREPARING') return i18n().t('environmentStatus.runtimePreparing');
     if (error?.code === 'SETTINGS_RUNTIME_INCOMPATIBLE') return i18n().t('environmentStatus.runtimeNeedsUpdate');
@@ -12057,62 +12011,6 @@ const CONNECTION_DIALOG_CLASS = cn(
   'redeven-welcome-dialog-panel--connection',
 );
 
-function SettingsHelpBadge(props: Readonly<{
-  label: string;
-  content?: string | JSX.Element;
-  i18n: DesktopI18n;
-}>) {
-  const tooltip = createMemo<JSX.Element | undefined>(() => {
-    if (typeof props.content === 'string') {
-      const content = trimString(props.content);
-      return content === '' ? undefined : <div class="max-w-xs">{content}</div>;
-    }
-    return props.content;
-  });
-
-  return (
-    <Show when={tooltip()}>
-      <DesktopTooltip content={tooltip()!} placement="top" delay={0}>
-        <span
-          data-redeven-settings-help=""
-          role="img"
-          aria-label={`${props.label}: ${props.i18n.t('common.moreInformation')}`}
-          tabIndex={0}
-          class="inline-flex h-[1.125rem] w-[1.125rem] shrink-0 cursor-help items-center justify-center rounded-full border border-border/70 bg-muted/35 text-[10px] font-semibold leading-none text-muted-foreground transition-colors hover:border-border hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        >
-          ?
-        </span>
-      </DesktopTooltip>
-    </Show>
-  );
-}
-
-function SettingsFormRow(props: Readonly<{
-  controlID: string;
-  label: string;
-  help?: string;
-  required?: boolean;
-  accessory?: JSX.Element;
-  i18n: DesktopI18n;
-  children: JSX.Element;
-}>) {
-  return (
-    <div class="redeven-settings-form-row grid gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-start sm:gap-x-4">
-      <div class="flex min-h-8 flex-wrap items-center gap-1.5">
-        <label for={props.controlID} class="text-xs font-medium text-foreground">
-          {props.label}
-          <Show when={props.required}>
-            <span aria-hidden="true" class="ml-0.5 text-destructive">*</span>
-          </Show>
-        </label>
-        <SettingsHelpBadge label={props.label} content={props.help} i18n={props.i18n} />
-        {props.accessory}
-      </div>
-      <div class="min-w-0">{props.children}</div>
-    </div>
-  );
-}
-
 function desktopUpdateStatusLabel(i18n: DesktopI18n, snapshot: DesktopUpdateSnapshot): string {
   switch (snapshot.state) {
     case 'checking':
@@ -12330,90 +12228,16 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
   cancelSettings: () => void;
   clearStoredLocalUIPassword: () => void;
 }>) {
+
   const [sharedAddress, setSharedAddress] = createSignal<{ environment_id: string; id: string } | null>(null);
-  const accessOptions = createMemo(() => ({
-    local_ui_password_configured: props.baselineSnapshot.local_ui_password_configured,
-    runtime_password_required: props.baselineSnapshot.runtime_password_required,
-  }));
-  const access = createMemo(() => deriveDesktopAccessDraftModel(props.draft, accessOptions()));
-  const validation = createMemo(() => validateDesktopAccessDraft(props.draft, accessOptions()));
-  const pending = createMemo(() => desktopSettingsDraftRequiresRuntimeRestart(props.baselineSnapshot.draft, props.draft));
-  const saving = () => busyStateMatchesAction(props.busyState, 'save_settings');
-  const canSave = () => pending() && validation().valid && !saving();
-  const [certificateReady, setCertificateReady] = createSignal(false);
-  const [configuringHTTPS, setConfiguringHTTPS] = createSignal(false);
-  let twoFactorFocusHandled = false;
-  let connectionSecurityHeading: HTMLHeadingElement | undefined;
-  let twoFactorArea: HTMLElement | undefined;
-  function revealAccessSetting(element: HTMLElement | undefined): void {
-    const viewport = element?.closest<HTMLElement>('.environment-settings-scroll');
-    if (!viewport || !element) return;
-    // Scroll only the body; scrollIntoView can displace the fixed dialog header and footer.
-    viewport.scrollTop += element.getBoundingClientRect().top - viewport.getBoundingClientRect().top - 20;
-  }
-  function configureHTTPS(): void {
-    setConfiguringHTTPS(true);
-    props.updateDraftField('local_ui_protocol', 'https');
-    queueMicrotask(() => {
-      revealAccessSetting(connectionSecurityHeading);
-      connectionSecurityHeading?.focus({ preventScroll: true });
-    });
-  }
-  function finishHTTPS(): void {
-    if (!configuringHTTPS() && (!props.focusTwoFactor || twoFactorFocusHandled)) return;
-    twoFactorFocusHandled = true;
-    setConfiguringHTTPS(false);
-    queueMicrotask(() => {
-      revealAccessSetting(twoFactorArea);
-      twoFactorArea?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
-    });
-  }
-  const accessSettingsIdentity = createMemo(() => `${props.open}:${props.snapshot.environment_id}`);
-  createEffect(on(accessSettingsIdentity, () => { setConfiguringHTTPS(false); twoFactorFocusHandled = false; }));
-  const canApply = () => (pending() || props.snapshot.runtime_configuration_pending) && validation().valid && !saving()
-    && !props.connectionDirty && (props.draft.local_ui_protocol !== 'https' || certificateReady());
   const connectionRows = createMemo(() => buildRuntimeConnectionRows({
-    context: props.snapshot.runtime_connection,
-    urls: props.snapshot.current_runtime_urls,
-    health: props.snapshot.runtime_health,
+    context: props.snapshot.runtime_connection, urls: props.snapshot.current_runtime_urls, health: props.snapshot.runtime_health,
   }));
   const selectedShareAddress = createMemo(() => sharedAddress()?.environment_id === props.snapshot.environment_id
-    ? connectionRows().filter(isShareableConnectionAddress).find((row) => row.id === sharedAddress()?.id) : undefined);
-  const remote = () => !runtimeConnectionIsOnThisDevice(props.snapshot.runtime_connection);
-  const canClearPassword = () => props.baselineSnapshot.local_ui_password_configured
-    && props.draft.local_ui_password_mode !== 'clear' && !access().password_required;
-
-  createEffect(() => {
-    if (!props.open || (sharedAddress() && !selectedShareAddress())) setSharedAddress(null);
-  });
-
-  return (
-    <EnvironmentSettingsPanel
-      footer={(
-        <>
-        <Show when={props.connectionDirty}><div class="environment-settings-draft-notice" role="status">
-          <span>{props.i18n.t('settings.resolveConnectionDraft')}</span>
-          <Button size="sm" variant="ghost" onClick={props.showConnectionSettings}>{props.i18n.t('settings.goToConnection')}</Button>
-        </div></Show>
-        <div class="environment-access-actions">
-          <Button class="environment-access-close" size="sm" variant="ghost" onClick={props.cancelSettings}>{props.i18n.t('common.close')}</Button>
-          <Show when={pending() && props.resetAccess}><Button disabled={saving()} size="sm" variant="ghost" onClick={props.resetAccess}>{props.i18n.t('settings.discardChanges')}</Button></Show>
-          <Button size="sm" variant={props.runtimeRestartAvailable ? 'outline' : 'default'}
-            disabled={!canSave()} loading={saving() && props.saveIntent !== 'restart'}
-            onClick={() => void props.saveSettings()}>
-            {props.i18n.t(saving() && props.saveIntent !== 'restart' ? 'settings.savingSettings' : 'settings.saveForNextRestart')}
-          </Button>
-          <Show when={props.runtimeRestartAvailable}>
-            <Button size="sm" disabled={!canApply()} loading={saving() && props.saveIntent === 'restart'}
-              onClick={() => void props.saveSettings({ restartRuntime: true, ...(configuringHTTPS() ? { continueTwoFactor: true } : {}) })}>
-              <Refresh class="mr-1.5 h-3.5 w-3.5" />{props.i18n.t(saving() && props.saveIntent === 'restart' ? 'settings.savingSettings' : 'settings.saveAndRestart')}
-            </Button>
-          </Show>
-        </div>
-        </>
-      )}
-    >
-      <div class="environment-access-form" inert={saving()}>
+    ? connectionRows().filter(isShareableConnectionAddress).find(row => row.id === sharedAddress()?.id) : undefined);
+  createEffect(() => { if (!props.open || (sharedAddress() && !selectedShareAddress())) setSharedAddress(null); });
+  const saving = () => busyStateMatchesAction(props.busyState, 'save_settings');
+  return <EnvironmentAccessWorkflow {...props} connection={(
         <section aria-label={props.i18n.t('settings.currentConnection')} class="environment-access-overview">
           <div class="environment-access-overview-header">
             <div class="environment-access-overview-heading">
@@ -12439,106 +12263,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
             <EndpointQRCodePanel i18n={props.i18n} endpoint={address()} copyEnvironmentValue={props.copyEnvironmentValue} />
           )}</Show>
         </section>
-
-        <div class="environment-access-preferences">
-          <Show when={props.open && props.security}><section ref={twoFactorArea}><TwoFactorSettings environmentID={props.snapshot.environment_id} runtimeStartedAt={props.snapshot.runtime_started_at_unix_ms} i18n={props.i18n} manage={props.security!} configureHTTPS={configureHTTPS} onHTTPSReady={finishHTTPS} /></section></Show>
-          <section class="environment-access-row">
-            <div class="environment-access-description">
-              <h3>{props.i18n.t('settings.visibilityTitle')}</h3>
-              <p>{props.i18n.t(access().network_exposure ? 'settings.sharedLocalNetworkDescription' : remote() ? 'settings.environmentOnlyDescription' : 'settings.localOnlyDescription')}</p>
-            </div>
-            <div class="environment-access-control">
-              <SegmentedControl size="sm" aria-label={props.i18n.t('settings.visibilityTitle')} value={access().network_exposure ? 'shared_local_network' : 'local_only'}
-                options={[
-                  { value: 'local_only', label: props.i18n.t(remote() ? 'settings.environmentOnlyLabel' : 'settings.localOnlyLabel') },
-                  { value: 'shared_local_network', label: props.i18n.t('settings.sharedLocalNetworkLabel') },
-                ]}
-                onChange={(value) => props.applyAccessMode(value as DesktopAccessMode)} />
-            </div>
-          </section>
-
-          <section class="environment-access-password">
-            <LocalUIPasswordField snapshot={props.baselineSnapshot} draft={props.draft} i18n={props.i18n}
-              passwordStateID={access().password_state_id} passwordStateTone={access().password_state_tone}
-              passwordRequired={access().password_required} passwordInvalid={Boolean(validation().password_error_key)}
-              passwordErrorKey={validation().password_error_key}
-              localUIPasswordCanClear={canClearPassword()} updateDraftField={props.updateDraftField}
-              clearStoredLocalUIPassword={props.clearStoredLocalUIPassword} />
-          </section>
-
-          <section class="environment-access-row">
-            <div class="environment-access-description">
-              <h3 ref={connectionSecurityHeading} tabIndex={-1} class="environment-access-security-heading">{props.i18n.t('settings.connectionSecurity')}</h3>
-              <p>{props.i18n.t(props.draft.local_ui_protocol === 'https' ? 'settings.httpsHelp' : 'settings.httpNotice')}</p>
-            </div>
-            <div class="environment-access-control">
-              <SegmentedControl size="sm" aria-label={props.i18n.t('settings.connectionSecurity')} value={props.draft.local_ui_protocol ?? 'http'}
-                options={[
-                  { value: 'http', label: props.i18n.t('settings.httpLabel') },
-                  { value: 'https', label: props.i18n.t('settings.httpsLabel') },
-                ]}
-                onChange={(value) => props.updateDraftField('local_ui_protocol', value)} />
-            </div>
-            <Show when={configuringHTTPS() && props.draft.local_ui_protocol === 'https'}>
-              <div class="two-factor-notice two-factor-https-guide environment-access-full" role="status">
-                <Shield class="h-4 w-4 shrink-0" aria-hidden="true" />
-                <div class="two-factor-notice-copy">
-                  <h4>{props.i18n.t('security.httpsSetupTitle')}</h4>
-                  <p>{props.i18n.t(!props.runtimeRestartAvailable ? 'security.httpsManualRestartStep' : certificateReady() ? 'security.httpsRestartStep' : 'security.httpsCertificateStep', { restart: props.i18n.t('settings.saveAndRestart') })}</p>
-                </div>
-              </div>
-            </Show>
-            <Show when={validation().protocol_error_key}>
-              <p role="alert" class="environment-access-full text-xs text-destructive">{props.i18n.t('settings.protocolRequired')}</p>
-            </Show>
-            <Show when={props.open && props.draft.local_ui_protocol === 'https' && props.certificate}>
-              <div class="environment-access-full">
-                <LocalCertificateSettings environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.certificate!} remote={remote()} onReadiness={setCertificateReady} copyText={props.copyEnvironmentValue} />
-              </div>
-            </Show>
-          </section>
-
-          <section class="environment-access-network">
-            <SettingsFormRow controlID="local-ui-port" label={props.i18n.t('settings.portTitle')} i18n={props.i18n}>
-              <Input id="local-ui-port" value={access().bind_port_text} inputMode="numeric" size="sm"
-                disabled={access().port_mode === 'auto'} aria-invalid={Boolean(validation().address_error_key)}
-                aria-describedby={validation().address_error_key ? 'local-ui-bind-error' : undefined}
-                onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)} />
-            </SettingsFormRow>
-            <details class="environment-access-advanced" open={access().access_mode === 'custom_exposure' || access().port_mode === 'auto'}>
-              <summary><ChevronRight class="h-3.5 w-3.5" aria-hidden="true" />{props.i18n.t('settings.advancedNetwork')}</summary>
-              <div class="environment-access-advanced-content">
-                <SettingsFieldInput field={props.baselineSnapshot.host_fields[0]!} value={props.draft.local_ui_bind}
-                  updateDraftField={props.updateDraftField} i18n={props.i18n} />
-                <Show when={!access().network_exposure}>
-                  <Checkbox checked={access().port_mode === 'auto'} onChange={props.toggleAutoPort}
-                    label={props.i18n.t('settings.autoSelectPort')} size="sm" />
-                </Show>
-                <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t('settings.listenAddressHelp')}</p>
-              </div>
-            </details>
-            <Show when={validation().address_error_key}>
-              <p id="local-ui-bind-error" role="alert" class="text-xs text-destructive">{props.i18n.t(validation().address_error_key!)}</p>
-            </Show>
-          </section>
-        </div>
-
-        <Show when={pending() || props.snapshot.runtime_configuration_pending}>
-          <div role="status" class="environment-access-pending">
-            <Clock class="h-4 w-4 shrink-0" aria-hidden="true" />
-            <div>
-              <p class="font-medium text-foreground">{props.i18n.t('settings.pendingChanges')}</p>
-              <p class="mt-1">{props.i18n.t(props.runtimeRestartAvailable ? 'settings.applyTimingHelp' : 'settings.applyNextStartHelp')}</p>
-            </div>
-          </div>
-        </Show>
-        <Show when={props.settingsError}>
-          <div ref={props.settingsErrorRef} tabIndex={-1} id="settings-error" role="alert"
-            class="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive outline-none">{props.settingsError}</div>
-        </Show>
-      </div>
-    </EnvironmentSettingsPanel>
-  );
+  )} />;
 }
 
 function runtimeContainerSearchText(container: DesktopRuntimeContainerOption): string {
@@ -14474,136 +14199,6 @@ function ControlPlaneDialog(props: Readonly<{
   );
 }
 
-function LocalUIPasswordField(props: Readonly<{
-  snapshot: DesktopSettingsSurfaceSnapshot;
-  draft: DesktopSettingsDraft;
-  i18n: DesktopI18n;
-  passwordStateID: DesktopSettingsSurfaceSnapshot['password_state_id'];
-  passwordStateTone: DesktopSettingsSurfaceSnapshot['password_state_tone'];
-  passwordRequired: boolean;
-  passwordInvalid: boolean;
-  passwordErrorKey?: 'settings.sharedPasswordRequired' | 'settings.passwordTooLong';
-  localUIPasswordCanClear: boolean;
-  updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
-  clearStoredLocalUIPassword: () => void;
-  inputRef?: (value: HTMLInputElement) => void;
-  supportingContent?: JSX.Element;
-}>) {
-  const statusTag = (
-    <Tag
-      variant={passwordStateTagVariant(props.passwordStateTone)}
-      tone="soft"
-      size="sm"
-      class="cursor-default whitespace-nowrap"
-    >
-      {compactLocalizedPasswordStateTagLabel(props.i18n, props.passwordStateID)}
-    </Tag>
-  );
-  return (
-    <SettingsFieldInput
-      field={props.snapshot.host_fields[1]!}
-      value={props.draft.local_ui_password}
-      updateDraftField={props.updateDraftField}
-      i18n={props.i18n}
-      required={props.passwordRequired}
-      invalid={props.passwordInvalid}
-      errorId="local-ui-password-required-error"
-      errorMessage={props.passwordInvalid ? props.i18n.t(props.passwordErrorKey ?? 'settings.sharedPasswordRequired') : ''}
-      inputRef={props.inputRef}
-      accessory={statusTag}
-      supportingContent={props.supportingContent}
-      trailing={props.localUIPasswordCanClear ? (
-        <div class="flex justify-end">
-          <button
-            type="button"
-            class="inline-flex cursor-pointer items-center justify-start rounded-md text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-            onClick={props.clearStoredLocalUIPassword}
-          >
-            {props.i18n.t('settings.removeStoredPassword')}
-          </button>
-        </div>
-      ) : undefined}
-    />
-  );
-}
-
-function SettingsFieldInput(props: Readonly<{
-  field: DesktopSettingsSurfaceSnapshot['host_fields'][number];
-  value: string;
-  updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
-  i18n: DesktopI18n;
-  required?: boolean;
-  invalid?: boolean;
-  errorId?: string;
-  errorMessage?: string;
-  inputRef?: (value: HTMLInputElement) => void;
-  accessory?: JSX.Element;
-  trailing?: JSX.Element;
-  supportingContent?: JSX.Element;
-}>) {
-  const compactLabel = createMemo(() => compactLocalizedSettingsFieldLabel(props.i18n, props.field));
-  const helpText = createMemo(() => localizedSettingsFieldHelp(props.i18n, props.field));
-  const placeholderText = createMemo(() => localizedSettingsFieldPlaceholder(props.i18n, props.field));
-  const describedBy = createMemo(() => {
-    const values = (props.field.describedBy ?? []).filter((value) => {
-      if (value === props.field.helpId) {
-        return helpText() !== '';
-      }
-      return true;
-    });
-    if (props.errorId && trimString(props.errorMessage) !== '') {
-      values.push(props.errorId);
-    }
-    return values.length > 0 ? values.join(' ') : undefined;
-  });
-
-  return (
-    <Show when={!props.field.hidden}>
-      <SettingsFormRow
-        controlID={props.field.id}
-        label={compactLabel()}
-        help={helpText()}
-        required={props.required}
-        accessory={props.accessory}
-        i18n={props.i18n}
-      >
-        <div class="space-y-2">
-          <Input
-            ref={(element) => props.inputRef?.(element)}
-            id={props.field.id}
-            name={props.field.name}
-            value={props.value}
-            type={props.field.type ?? 'text'}
-            autocomplete={props.field.autocomplete}
-            inputMode={props.field.inputMode}
-            placeholder={placeholderText()}
-            spellcheck={false}
-            aria-describedby={describedBy()}
-            aria-invalid={props.invalid || undefined}
-            required={props.required}
-            size="sm"
-            class={cn(
-              'w-full',
-              props.invalid && 'border-destructive',
-            )}
-            onInput={(event) => props.updateDraftField(props.field.name, event.currentTarget.value)}
-          />
-          <Show when={props.errorId && trimString(props.errorMessage) !== ''}>
-            <div id={props.errorId} role="alert" class="flex items-start gap-1.5 text-[11px] leading-5 text-destructive">
-              <AlertCircle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{props.errorMessage}</span>
-            </div>
-          </Show>
-          {props.trailing}
-          {props.supportingContent}
-          <Show when={helpText() !== '' && props.field.helpId}>
-            <div id={props.field.helpId!} class="sr-only">{helpText()}</div>
-          </Show>
-        </div>
-      </SettingsFormRow>
-    </Show>
-  );
-}
 
 export function DesktopWelcomeShell(props: DesktopWelcomeShellProps) {
   const shellLanguage = desktopLanguageBridge();

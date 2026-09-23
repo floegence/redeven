@@ -214,19 +214,28 @@ func inspectLocalUIDeviceCAUnlocked(stateDir string, checkTrust bool) (DeviceCAS
 	return status, nil
 }
 
-// ExportLocalUIDeviceCA writes only the public CA certificate.
-func ExportLocalUIDeviceCA(stateDir, outputPath string) error {
+// LocalUIPublicCertificatePEM returns the validated public CA or server chain.
+// Private key material never enters the export payload.
+func LocalUIPublicCertificatePEM(stateDir string) ([]byte, error) {
 	ca, err := loadLocalUIDeviceCA(stateDir)
+	if err != nil {
+		return nil, err
+	}
+	if ca.serverCertificate != nil {
+		return ca.certificatePEM, nil
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.certificate.Raw}), nil
+}
+
+// ExportLocalUIDeviceCA writes only the public CA certificate or server chain.
+func ExportLocalUIDeviceCA(stateDir, outputPath string) error {
+	body, err := LocalUIPublicCertificatePEM(stateDir)
 	if err != nil {
 		return err
 	}
 	outputPath = filepath.Clean(strings.TrimSpace(outputPath))
 	if outputPath == "" || outputPath == "." {
 		return fmt.Errorf("missing Local UI device CA export path")
-	}
-	body := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.certificate.Raw})
-	if ca.serverCertificate != nil {
-		body = ca.certificatePEM
 	}
 	file, err := os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {

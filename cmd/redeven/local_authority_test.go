@@ -165,3 +165,31 @@ func TestDeviceCAImportFailurePreservesCurrentIdentityAndSecrets(t *testing.T) {
 		t.Fatal("private input leaked in report")
 	}
 }
+
+func TestDeviceCAExportJSONContainsOnlyPublicCertificate(t *testing.T) {
+	root := t.TempDir()
+	if code, _, stderr := runCLITest(t, "local-authority", "device-ca", "generate", "--state-root", root); code != 0 {
+		t.Fatal(stderr)
+	}
+	code, stdout, stderr := runCLITest(t, "local-authority", "device-ca", "status", "--state-root", root)
+	var status localAuthorityReport
+	if code != 0 || json.Unmarshal([]byte(stdout), &status) != nil || !status.CertificateExport {
+		t.Fatalf("export capability missing: %s %s", stdout, stderr)
+	}
+	before, err := os.ReadFile(status.CertificatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr = runCLITest(t, "local-authority", "device-ca", "export", "--state-root", root, "--output", "-")
+	var exported localAuthorityReport
+	if code != 0 || json.Unmarshal([]byte(stdout), &exported) != nil {
+		t.Fatalf("export failed: %s %s", stdout, stderr)
+	}
+	if exported.PublicCertificatePEM != string(before) || exported.OutputPath != "" || strings.Contains(stdout, "PRIVATE KEY") {
+		t.Fatal("export must contain exactly the public certificate")
+	}
+	after, err := os.ReadFile(status.CertificatePath)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("export changed the identity")
+	}
+}

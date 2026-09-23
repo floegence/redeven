@@ -1,5 +1,6 @@
 import { For, createMemo, createSignal, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
+import qrcode from 'qrcode-generator';
 import { FloeProvider, useTheme, builtInShellThemePresets } from '@floegence/floe-webapp-core';
 import { EndpointsPopover, EnvironmentAccessSettingsForm } from '../../src/welcome/App';
 import { EnvironmentSettingsDialog } from '../../src/welcome/EnvironmentSettingsDialog';
@@ -8,6 +9,8 @@ import { buildRuntimeConnectionRows, type DesktopRuntimeConnectionContext } from
 import { createDesktopI18n, type RedevenLocale } from '../../src/shared/i18n';
 import { buildDesktopSettingsSurfaceSnapshot } from '../../src/main/settingsPageContent';
 import { applyDesktopAccessModeToDraft, applyDesktopAccessFixedPortToDraft, applyDesktopAccessAutoPortToDraft } from '../../src/shared/desktopAccessModel';
+import type { SecurityRequest, SecurityResult, SecurityAction } from '../../src/shared/runtimeSecurity';
+import type { DesktopCertificateReport, DesktopCertificateRequest } from '../../src/shared/desktopCertificate';
 import type { DesktopSettingsDraft } from '../../src/shared/settingsIPC';
 import { IDLE_LAUNCHER_BUSY_STATE } from '../../src/welcome/launcherBusyState';
 import '../../src/welcome/index.css';
@@ -37,7 +40,7 @@ const addresses = (name: string): string[] => {
   return name === 'Network' && query.has('multiple')
     ? ['https://development.environment.example.invalid:23998/a-long-environment-path?workspace=shared', 'https://192.0.2.20:23998/', 'http://[::1]:23998/'] : [address(name)];
 };
-const initialDraft: DesktopSettingsDraft = { local_ui_bind: 'localhost:23998', local_ui_protocol: 'http', local_ui_password: '', local_ui_password_mode: 'keep', auto_runtime_probe_enabled: true };
+const initialDraft: DesktopSettingsDraft = { local_ui_bind: 'localhost:23998', local_ui_protocol: query.has('secure') ? 'https' : 'http', local_ui_password: '', local_ui_password_mode: 'keep', auto_runtime_probe_enabled: true };
 
 function Fixture() {
   // Chinese copy exercises the shipped localized connection surface.
@@ -54,11 +57,45 @@ function Fixture() {
   const [settings, setSettings] = createSignal('');
   const [draft, setDraft] = createSignal(initialDraft);
   const [baseline, setBaseline] = createSignal(initialDraft);
-  const [passwordConfigured, setPasswordConfigured] = createSignal(false);
+  const [passwordConfigured, setPasswordConfigured] = createSignal(query.has('secure'));
   const [pending, setPending] = createSignal(false);
   const [saveError, setSaveError] = createSignal('');
   const [copied, setCopied] = createSignal('');
   const copy = async (value: string) => { setCopied(value); };
+  const requests: Array<SecurityRequest | DesktopCertificateRequest> = [];
+  let securityState: SecurityResult = { https_ready: query.has('secure'), enabled: query.get('secure') === 'enabled', password_configured: query.has('secure'), recovery_pending: query.has('recovery'), recovery_codes_remaining: 8, revision: 1 };
+  let securityAction: SecurityAction = 'setup';
+  const enrollmentQR = qrcode(0, 'M');
+  enrollmentQR.addData('otpauth://totp/Redeven%20Acceptance?secret=JBSWY3DPEHPK3PXP&issuer=Redeven');
+  enrollmentQR.make();
+  let certificateState: DesktopCertificateReport = { status: 'ready', code: 'local_ui_device_ca_ready', identity: query.has('missing-certificate') ? 'missing' : 'ready', trust: 'untrusted', can_install: true, can_manage: true, can_export: true, certificate_path: '/fixture/certificates/device-ca.pem' };
+  const security = async (request: SecurityRequest): Promise<SecurityResult> => {
+    requests.push(request);
+    if (request.action === 'status' || request.action === 'cancel') return securityState;
+    if (request.action === 'commit') {
+      securityState = { ...securityState, enabled: securityAction !== 'disable', password_configured: true, recovery_pending: false, revision: securityState.revision + 1 };
+      setPasswordConfigured(true);
+      return securityState;
+    }
+    if (request.action === 'verify') {
+      if (request.code !== '123456') throw new Error('ACCESS_FACTOR_INVALID');
+      return { ...securityState, operation_id: 'fixture-operation', recovery_codes: Array.from({ length: 8 }, (_, i) => `fixture-recovery-${i + 1}`) };
+    }
+    if (request.password === 'wrong') throw new Error('ACCESS_PASSWORD_INVALID');
+    securityAction = request.action;
+    return { ...securityState, operation_id: 'fixture-operation', secret: 'JBSWY3DPEHPK3PXP', qr_image: enrollmentQR.createDataURL(6, 0), recovery_codes: Array.from({ length: 8 }, (_, i) => `fixture-recovery-${i + 1}`) };
+  };
+  const certificate = async (request: DesktopCertificateRequest): Promise<DesktopCertificateReport> => {
+    requests.push(request);
+    if (query.has('certificate-error') && request.operation !== 'status') return { ...certificateState, status: 'failed', code: 'local_ui_device_ca_operation_failed', failure_stage: request.operation === 'setup' ? 'generate' : request.operation };
+    if (request.operation === 'generate' || request.operation === 'regenerate' || request.operation === 'import') certificateState = { ...certificateState, status: 'updated', identity: 'ready', trust: 'untrusted' };
+    if (request.operation === 'install') certificateState = { ...certificateState, status: 'ready', trust: 'trusted' };
+    if (request.operation === 'remove') certificateState = { ...certificateState, status: 'updated', identity: 'missing', code: 'local_ui_device_ca_missing' };
+    if (request.operation === 'export') return { ...certificateState, status: 'exported', code: 'local_ui_device_ca_exported' };
+    return certificateState;
+  };
+  Object.assign(window, { accessFixture: { requests, get draft() { return draft(); }, get security() { return securityState; } } });
+
   const surface = createMemo(() => ({ ...buildDesktopSettingsSurfaceSnapshot('environment_settings', baseline(), {
     environment_id: settings(), environment_label: settings(), environment_kind: settings() === 'Local Environment' ? 'local' : 'runtime_target',
     runtime_connection: context(settings()),
@@ -82,7 +119,7 @@ function Fixture() {
             selectedEndpointID={selected()?.host === name ? selected()?.id : undefined}
             selectEndpointForQRCode={(id) => setSelected({ host: name, id })} openInBrowser={copy} copyEnvironmentValue={copy} />
         </div>
-        <button class="mt-6 cursor-pointer" onClick={() => { setActive(''); setDraft(initialDraft); setBaseline(initialDraft); setPasswordConfigured(false); setPending(false); setSaveError(''); setSettings(name); }}>{i18n.t('settings.settingsWindowTitle')}</button>
+        <button class="mt-6 cursor-pointer" onClick={() => { setActive(''); setDraft(initialDraft); setBaseline(initialDraft); setPasswordConfigured(query.has('secure')); setPending(false); setSaveError(''); setSettings(name); }}>{i18n.t('settings.settingsWindowTitle')}</button>
       </article>}</For>
     </div>
     <output data-copy-result class="mt-6 block font-mono">{copied()}</output>
@@ -103,8 +140,7 @@ function Fixture() {
         const clean: DesktopSettingsDraft = { ...saved, local_ui_password: '', local_ui_password_mode: 'keep' };
         setDraft(clean); setBaseline(clean); setPending(!options?.restartRuntime);
       }}
-      certificate={async () => ({ status: 'ready', code: 'local_ui_device_ca_ready', identity: 'ready', trust: 'trusted',
-        can_manage: true, certificate_path: '/fixture/certificates/device-ca.pem' })}
+      certificate={certificate} security={security}
       runtimeRestartAvailable runtimeRunning runtimeStatusLabel={i18n.t('environmentStatus.open')} runtimeStatusTone="success" dark={theme.resolvedTheme() === 'dark'}
       desktopOpenLabel={i18n.t('environmentAction.open')} openInDesktop={() => {}} openInBrowser={copy} copyEnvironmentValue={copy}
       cancelSettings={() => setSettings('')} clearStoredLocalUIPassword={() => setDraft(previous => ({ ...previous, local_ui_password: '', local_ui_password_mode: 'clear' }))} />} />

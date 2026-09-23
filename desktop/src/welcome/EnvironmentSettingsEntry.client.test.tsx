@@ -13,7 +13,10 @@ import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress'
 const disposers: Array<() => void> = [];
 const settle = () => new Promise(resolve => setTimeout(resolve, 40));
 function button(label: string) {
-  const found = [...document.querySelectorAll<HTMLElement>('button, [role=tab]')].find(el => el.textContent?.trim() === label || el.getAttribute('aria-label') === label || el.title === label);
+  const find = () => [...document.querySelectorAll<HTMLElement>('button, [role=tab]')].find(el => !el.closest('[hidden], [aria-hidden="true"]') && (el.textContent?.trim() === label || el.getAttribute('aria-label') === label || el.title === label));
+  if (!find() && ['Save and restart', 'Save for next restart'].includes(label)) button('Review changes').click();
+  if (!find() && label === 'Configure HTTPS') button('Manage protection').click();
+  const found = find();
   if (!found) throw new Error(`Missing button: ${label}`);
   return found;
 }
@@ -111,7 +114,15 @@ function deferred<T>() {
   const promise = new Promise<T>(done => { resolve = done; });
   return { promise, resolve };
 }
+function accessEditor() {
+  if (!document.getElementById('local-ui-port')) {
+    const label = document.querySelector('.access-flow-review') ? 'Edit changes' : 'Change access';
+    button(label).click();
+  }
+  return document.getElementById('local-ui-port') as HTMLInputElement;
+}
 function input(id: string, value: string) {
+  if (id === 'local-ui-port') accessEditor();
   const field = document.getElementById(id) as HTMLInputElement;
   field.value = value; field.dispatchEvent(new Event('input', { bubbles: true }));
 }
@@ -193,7 +204,7 @@ describe('settings restart handoff', () => {
     expect(h.jobs).toHaveLength(0);
     saved.resolve({ ok: false, error: 'Fixture save denied' }); await settle();
     expect(document.querySelector('.redeven-environment-settings-dialog')?.textContent).toContain('Fixture save denied');
-    expect((document.getElementById('local-ui-port') as HTMLInputElement).value).toBe('25000');
+    expect(accessEditor().value).toBe('25000');
     expect(h.jobs).toHaveLength(0);
   });
   it('shows admission honestly, ignores old progress, and never reopens after Escape', async () => {
@@ -317,7 +328,7 @@ describe('settings restart handoff', () => {
     button('Discard connection changes').click(); await settle();
     expect((document.getElementById('ssh-settings-label') as HTMLInputElement).value).toBe('Fixture SSH');
     button('Access & security').click(); await settle();
-    expect((document.getElementById('local-ui-port') as HTMLInputElement).value).toBe('25000');
+    expect(accessEditor().value).toBe('25000');
     expect((button('Save and restart') as HTMLButtonElement).disabled).toBe(false);
     button('Save for next restart').click(); await settle();
     expect(h.jobs).toHaveLength(0);
@@ -424,7 +435,7 @@ describe('settings entry asynchronous isolation', () => {
       return { ok: true, outcome: 'saved_environment', environment_id: id };
     });
     button('Save changes').click(); await settle(); button('Access & security').click(); await settle();
-    expect((document.getElementById('local-ui-port') as HTMLInputElement).value).toBe('25000');
+    expect(accessEditor().value).toBe('25000');
     expect(h.settings.save).not.toHaveBeenCalled(); expect(h.settings.load).toHaveBeenCalledTimes(1);
   });
   it('uses the shared SSH form and validation for creation', async () => {
@@ -441,7 +452,7 @@ describe('settings entry asynchronous isolation', () => {
     button(`Settings for ${local.label}`).click(); await settle();
     expect(h.settings.load).toHaveBeenCalledWith({ environment_id: local.id, dialog_token: expect.any(Number) });
     expect(document.querySelector('[role="dialog"] [role="tablist"]')).toBeNull();
-    expect(document.getElementById('local-ui-port')).not.toBeNull();
+    expect(button('Change access')).not.toBeNull();
   });
   it.each(['wsl', 'container', 'url', 'gateway'] as const)('opens the %s connection section without access I/O', async kind => {
     const h = await mount(async () => ({ ok: false, code: 'SETTINGS_WSL_STOPPED', error: 'WSL stopped' }));
@@ -569,4 +580,32 @@ describe('environment card refresh continuity', () => {
     await settle();
     expect(document.querySelector('.redeven-endpoints-popover')).toBeNull();
   });
+});
+
+it('continues a protected access task after the committed security refresh without remounting the editor', async () => {
+  if (!success.ok) throw new Error('Fixture requires an access snapshot');
+  const secure = { ...success, snapshot: { ...success.snapshot, local_ui_password_configured: true,
+    draft: { ...success.snapshot.draft, local_ui_protocol: 'https' as const } } };
+  const refreshed = deferred<DesktopSettingsResult>();
+  const load = vi.fn().mockResolvedValueOnce(secure).mockReturnValueOnce(refreshed.promise);
+  const h = await mount(load);
+  let enabled = true;
+  const security = vi.fn(async (request: { action: string }) => {
+    if (request.action === 'commit') enabled = false;
+    return { https_ready: true, enabled, password_configured: true, recovery_pending: false, recovery_codes_remaining: 8, revision: enabled ? 1 : 2,
+      ...(request.action === 'disable' ? { operation_id: 'disable-operation' } : {}) };
+  });
+  vi.stubGlobal('redevenDesktopSettings', { ...h.settings, security });
+  button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await settle();
+  button('Change access').click(); button('HTTP').click(); button('Verify and continue').click(); button('Verify and continue').click(); await settle();
+  const fields = [...document.querySelectorAll<HTMLInputElement>('#two-factor-owner input')];
+  fields.forEach((field, index) => { field.value = index ? '123456' : 'test-only-owner'; field.dispatchEvent(new Event('input', { bubbles: true })); });
+  button('Continue').click(); await settle();
+  const workflow = document.querySelector('.access-workflow');
+  button('Turn off two-factor').click(); await settle();
+  expect(document.querySelector('.access-workflow')).toBe(workflow);
+  refreshed.resolve(secure); await settle();
+  expect(document.querySelector('.access-flow-review')?.textContent).toContain('HTTP');
+  expect(document.querySelector('.access-flow-review')?.textContent).not.toContain('HTTPS');
+  expect(document.body.textContent).toContain('Two-factor is now off');
 });

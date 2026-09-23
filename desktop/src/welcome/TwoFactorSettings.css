@@ -62,14 +62,6 @@
 .two-factor-status[data-enabled='true'] > span {
   opacity: 1;
 }
-.two-factor-dialog {
-  width: calc(100% - 32px);
-  max-width: 440px;
-  border-radius: 16px;
-}
-.two-factor-dialog-body {
-  padding: 24px 28px 28px;
-}
 .two-factor-flow {
   display: flex;
   flex-direction: column;
@@ -208,14 +200,14 @@
   font-size: 12px;
   font-weight: 500;
 }
-.two-factor-dialog .two-factor-field input {
+.two-factor-flow .two-factor-field input {
   min-height: 40px;
   border-radius: 8px;
 }
 .two-factor-verify .two-factor-field {
   text-align: center;
 }
-.two-factor-dialog input.two-factor-code-input {
+.two-factor-flow input.two-factor-code-input {
   height: 48px;
   font-family: var(--font-mono);
   font-size: 24px;
@@ -225,12 +217,6 @@
 }
 .two-factor-code-input::placeholder {
   opacity: 0.35;
-}
-.two-factor-primary {
-  min-height: 40px;
-  width: 100%;
-  border-radius: 8px;
-  font-size: 12px;
 }
 .two-factor-text-action {
   color: var(--muted-foreground);
@@ -325,14 +311,6 @@
   color: var(--error);
 }
 @media (max-width: 420px) {
-  .two-factor-dialog {
-    width: calc(100% - 24px);
-    border-radius: 12px;
-    max-height: calc(100dvh - 24px);
-  }
-  .two-factor-dialog-body {
-    padding: 20px 16px;
-  }
   .two-factor-flow {
     gap: 20px;
   }

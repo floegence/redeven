@@ -3,15 +3,15 @@ import { isDesktopCertificateOperation, parseDesktopCertificateReport, parseDesk
 
 describe('Desktop certificate boundary', () => {
   it('accepts only the explicit maintenance operations', () => {
-    for (const operation of ['status', 'generate', 'install', 'setup', 'import', 'regenerate', 'remove']) expect(isDesktopCertificateOperation(operation)).toBe(true);
-    for (const operation of ['export', 'delete', '', null, { operation: 'install' }]) expect(isDesktopCertificateOperation(operation)).toBe(false);
+    for (const operation of ['status', 'generate', 'install', 'setup', 'import', 'regenerate', 'remove', 'export']) expect(isDesktopCertificateOperation(operation)).toBe(true);
+    for (const operation of ['delete', '', null, { operation: 'install' }]) expect(isDesktopCertificateOperation(operation)).toBe(false);
   });
 
   it('projects public certificate metadata without private material', () => {
     const report = parseDesktopCertificateReport({
       schema_version: 'redeven.local_authority_maintenance.v1', status: 'ready', code: 'local_ui_device_ca_ready',
       identity: 'ready', trust: 'untrusted', certificate_path: '/runtime/device-ca.pem',
-      private_key: 'must not reach renderer', token: 'must not reach renderer',
+      public_certificate_pem: 'must not reach renderer', private_key: 'must not reach renderer', token: 'must not reach renderer',
     });
     expect(report).toMatchObject({ identity: 'ready', trust: 'untrusted', certificate_path: '/runtime/device-ca.pem' });
     expect(JSON.stringify(report)).not.toContain('must not reach renderer');

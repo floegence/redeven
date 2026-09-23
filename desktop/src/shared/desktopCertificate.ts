@@ -1,5 +1,5 @@
 export const DESKTOP_CERTIFICATE_CHANNEL = 'redeven-desktop:local-certificate';
-export type DesktopCertificateOperation = 'status' | 'generate' | 'install' | 'setup' | 'import' | 'regenerate' | 'remove';
+export type DesktopCertificateOperation = 'status' | 'generate' | 'install' | 'setup' | 'import' | 'regenerate' | 'remove' | 'export';
 export type DesktopCertificateRequest = Readonly<{ environment_id: string; operation: DesktopCertificateOperation; confirmed?: true }>;
 export type DesktopCertificateIdentity = 'ready' | 'missing' | 'expired' | 'not_yet_valid' | 'invalid' | 'unknown';
 export type DesktopCertificateReport = Readonly<{
@@ -12,13 +12,14 @@ export type DesktopCertificateReport = Readonly<{
   certificate_path?: string;
   can_install?: boolean;
   can_manage?: boolean;
+  can_export?: boolean;
   certificate_kind?: string;
   fingerprint?: string;
-  failure_stage?: 'status' | 'generate' | 'install' | 'verify' | 'import' | 'regenerate' | 'remove';
+  failure_stage?: 'status' | 'generate' | 'install' | 'verify' | 'import' | 'regenerate' | 'remove' | 'export';
 }>;
 
 export function isDesktopCertificateOperation(value: unknown): value is DesktopCertificateOperation {
-  return value === 'status' || value === 'generate' || value === 'install' || value === 'setup' || isCertificateReplacement(value);
+  return value === 'status' || value === 'generate' || value === 'install' || value === 'setup' || value === 'export' || isCertificateReplacement(value);
 }
 
 export function isCertificateReplacement(value: unknown): value is 'import' | 'regenerate' | 'remove' {
@@ -64,6 +65,6 @@ export function parseDesktopCertificateReport(value: unknown): DesktopCertificat
     status: legacyUntrusted ? 'ready' : report.status, code: report.code, message: text('message'),
     identity: text('identity'), trust: text('trust'), not_after: text('not_after'),
     certificate_path: text('certificate_path'), certificate_kind: text('certificate_kind'), fingerprint: text('fingerprint'),
-    can_manage: report.certificate_management === true,
+    can_manage: report.certificate_management === true, can_export: report.certificate_export === true,
   };
 }

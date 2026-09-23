@@ -1,8 +1,9 @@
 import fs from 'node:fs/promises';
+import { rootCertificates } from 'node:tls';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { selectDesktopCertificateImport, certificateCommandArguments, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart, type CertificateRunner } from './desktopCertificate';
+import { parseCertificateCommandReport, selectDesktopCertificateExport, selectDesktopCertificateImport, certificateCommandArguments, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart, type CertificateRunner } from './desktopCertificate';
 import type { DesktopCertificateReport } from '../shared/desktopCertificate';
 
 const missing: DesktopCertificateReport = { status: 'failed', code: 'local_ui_device_ca_missing', identity: 'missing', trust: 'unknown' };
@@ -135,4 +136,41 @@ describe('main process certificate file selection', () => {
     expect(certificateCommandArguments('import')).toEqual(['device-ca', 'import', '--confirm']);
     expect(certificateCommandArguments('status', 'localhost:23998')).toEqual(['device-ca', 'status', '--bind', 'localhost:23998']);
   });
+});
+
+
+describe('public certificate export', () => {
+  it('uses a native-selected path and writes only valid public certificate blocks', async () => {
+    const select = vi.fn().mockResolvedValue('/chosen/certificate.pem');
+    const write = vi.fn().mockResolvedValue(undefined);
+    const report = { status: 'exported', code: 'local_ui_device_ca_exported' };
+    const run = vi.fn().mockResolvedValue({ ...report, public_certificate_pem: '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----' });
+    await expect(selectDesktopCertificateExport(select, run, write)).rejects.toThrow('public certificate');
+    expect(write).not.toHaveBeenCalled();
+    run.mockResolvedValue({ ...report, public_certificate_pem: rootCertificates[0] });
+    expect(await selectDesktopCertificateExport(select, run, write)).toEqual(report);
+    expect(write).toHaveBeenCalledWith('/chosen/certificate.pem', rootCertificates[0].trim() + '\n');
+    write.mockRejectedValueOnce(new Error('disk full'));
+    await expect(selectDesktopCertificateExport(select, run, write)).rejects.toThrow('disk full');
+    select.mockResolvedValue(undefined);
+    expect(await selectDesktopCertificateExport(select, run, write)).toMatchObject({ status: 'canceled' });
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+  it('does not export from a runtime without the explicit public export capability', async () => {
+    const run = runner(ready);
+    expect(await performDesktopCertificateOperation(run, 'export', true)).toMatchObject({ status: 'failed', code: 'local_ui_certificate_upgrade_required' });
+    expect(run.mock.calls.flat()).toEqual(['status']);
+  });
+});
+
+it('preserves identity and trust after a public export without mutating either', async () => {
+  const run = runner({ ...ready, can_export: true }, { status: 'exported', code: 'local_ui_device_ca_exported' });
+  expect(await performDesktopCertificateOperation(run, 'export', false)).toMatchObject({ identity: 'ready', trust: 'untrusted', status: 'exported' });
+  expect(run.mock.calls.flat()).toEqual(['status', 'export']);
+  expect(certificateCommandArguments('export')).toEqual(['device-ca', 'export', '--output', '-']);
+});
+
+it('keeps export data out of ordinary certificate reports', () => {
+  const raw = { schema_version: 'redeven.local_authority_maintenance.v1', status: 'ready', code: 'ready', public_certificate_pem: 'unexpected payload' };
+  expect(parseCertificateCommandReport(raw, 'status')).not.toHaveProperty('public_certificate_pem');
 });

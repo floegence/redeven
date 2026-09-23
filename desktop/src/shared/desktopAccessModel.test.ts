@@ -237,3 +237,16 @@ describe('desktopAccessModel', () => {
     }))).toBe(false);
   });
 });
+
+
+it.each([{ enabled: true, recovery_pending: false }, { enabled: false, recovery_pending: true }])(
+  'keeps HTTPS and the current password until protected access is explicitly changed: %o', security => {
+    const options = { security, local_ui_password_configured: true };
+    expect(validateDesktopAccessDraft(draft({ local_ui_protocol: 'http', local_ui_password_mode: 'keep' }), options).protocol_error_key).toBe('security.accessHTTPSRequired');
+    for (const mode of ['replace', 'clear'] as const) {
+      expect(validateDesktopAccessDraft(draft({ local_ui_protocol: 'https', local_ui_password_mode: mode, local_ui_password: mode === 'replace' ? 'replacement' : '' }), options).password_error_key).toBe('security.accessPasswordRequired');
+    }
+    expect(validateDesktopAccessDraft(draft({ local_ui_protocol: 'https', local_ui_password_mode: 'keep' }), options).valid).toBe(true);
+    expect(validateDesktopAccessDraft(draft({ local_ui_protocol: 'http', local_ui_password_mode: 'clear' }), { ...options, security: { enabled: false, recovery_pending: false } }).valid).toBe(true);
+  },
+);
