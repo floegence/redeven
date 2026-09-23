@@ -12998,7 +12998,7 @@
         "title": "Remote browser transport and media",
         "type": "Architecture Contract"
       },
-      "body_length": 6527,
+      "body_length": 6844,
       "summary": "- Authority: the Runtime authorizes view carriers; FloeBrowser owns element capture, media identities, encoding feedback and client decoding.\n- Outcome: clients receive source DOM, resources and element media through Flowersec without directly contacting websites or source media ports.\n- Invariants: viewing, input and media subscriptions are separate; source tracks remain website-owned; bounded media credit includes partial frames; clients never establish WebRTC.\n- Failure boundary: retired source/subscription identities are rejected, media loss stays scoped to its lane, and navigation never revives stale media or input.",
       "sections": [
         {
@@ -13012,8 +13012,8 @@
           "id": "element-capture-ownership",
           "title": "Element capture ownership",
           "level": 1,
-          "body": "Websites execute and play media at the source. The upstream collector accepts\nonly source-host loopback WebRTC and emits encoded element frames through the\nRuntime's authorized media lane. It has no STUN/TURN configuration. The client\nuses WebCodecs and AudioWorklet; it receives no source media endpoint.\n\nA video or audio element backed by an existing `srcObject` stream is observed\nthrough that stream with owned track clones. It is not recaptured: Chromium can\nreplace an original Canvas track wrapper and stop its producer after collection.\nClosing observation stops only owned tracks, preserving website playback even\nafter garbage collection. Other media elements use native element capture.\n\nThe released source adapter owns native file-capture audio and its generated\nprojection track. It cancels both stream endpoints on retirement or failure;\nwebsite-owned stream audio bypasses this adapter. Native helper diagnostics must\nnever enter its structured reply pipe, including RTCP interceptor shutdown logs.\nLibrary loggers share the collector's silent logger.\n\nDOM checkpoints preserve valid streams. Navigation, element removal and revoked\nviewing retire corresponding streams and decoders. Hidden video picture delivery\nmay pause while authorized background audio remains active. Playback commands act\non the source element and admission never starts playback. Returned video requests\na fresh keyframe and does not replay queued old pictures.",
-          "char_count": 1453
+          "body": "Websites execute and play media at the source. The upstream collector accepts\nonly source-host loopback WebRTC and emits encoded element frames through the\nRuntime's authorized media lane. It has no STUN/TURN configuration. The client\nuses WebCodecs and AudioWorklet; it receives no source media endpoint.\n\nA video or audio element backed by an existing `srcObject` stream is observed\nthrough that stream with owned track clones. It is not recaptured: Chromium can\nreplace an original Canvas track wrapper and stop its producer after collection.\nClosing observation stops only owned tracks, preserving website playback even\nafter garbage collection. Other media elements use native element capture.\n\nThe released source adapter owns native file-capture audio and its generated\nprojection track. It cancels both stream endpoints on retirement or failure;\nwebsite-owned stream audio bypasses this adapter. Native helper diagnostics must\nnever enter its structured reply pipe, including RTCP interceptor shutdown logs.\nLibrary loggers share the collector's silent logger.\n\nThe loopback collector requests an immediate RTCP sender report for each new\ntrack and waits for that source-clock mapping before forwarding encoded frames.\nIt retains initial packets in the bounded receiver, including an isolated paused\npicture. Audio and video must not invent separate clocks from packet arrival.\n\nDOM checkpoints preserve valid streams. Navigation, element removal and revoked\nviewing retire corresponding streams and decoders. Hidden video picture delivery\nmay pause while authorized background audio remains active. Playback commands act\non the source element and admission never starts playback. Returned video requests\na fresh keyframe and does not replay queued old pictures.",
+          "char_count": 1770
         },
         {
           "id": "presentation-timing",
@@ -26920,5 +26920,5 @@
       ]
     }
   ],
-  "source_sha256": "495275be7a862ff332a771c81c8c8b5d341fd974fbdfd99ba242e9196175dae9"
+  "source_sha256": "48604c9366497b8e5420465743c1e561ce7ba8fea3c129773d7e9eef8135c44b"
 }
