@@ -136,7 +136,11 @@
   function applyPicture() {
     if (!client?.connected) return;
     const [quality, speed] = {auto:[-1,-1], clarity:[95,-1], smooth:[65,90], data:[40,75]}[picture.mode];
+    const clarity = picture.mode === 'clarity';
+    const densityAvailable = client.set_display_density?.(clarity ? 'native' : 'logical');
+    hostApplicationAppearance.copy(pictureHint, clarity && devicePixelRatio > 1 && !densityAvailable ? 'pictureReopenHint' : 'pictureHint');
     client.send(['quality', quality]); client.send(['speed', speed]);
+    client.send_control_refresh(100, {'refresh-now':true});
   }
   for (const [section, toggle] of Object.entries(toggles)) {
     toggle.setAttribute('aria-controls', popover.id); toggle.setAttribute('aria-expanded', 'false');
@@ -361,12 +365,13 @@
         win.screen_resized = function() {
           resized.call(this);
           const [width, height] = xpra._get_desktop_size();
-          const maxWidth = Math.max(1, width - this.leftoffset - this.rightoffset - 24);
-          const maxHeight = Math.max(1, height - this.topoffset - this.bottomoffset - 24);
+          const margin = 12 * (xpra.scale || 1);
+          const maxWidth = Math.max(1, width - this.leftoffset - this.rightoffset - 2 * margin);
+          const maxHeight = Math.max(1, height - this.topoffset - this.bottomoffset - 2 * margin);
           this.w = Math.min(this.w, maxWidth);
           this.h = Math.min(this.h, maxHeight);
-          this.x = Math.max(this.leftoffset + 12, Math.min(this.x, width - this.w - this.rightoffset - 12));
-          this.y = Math.max(this.topoffset + 12, Math.min(this.y, height - this.h - this.bottomoffset - 12));
+          this.x = Math.max(this.leftoffset + margin, Math.min(this.x, width - this.w - this.rightoffset - margin));
+          this.y = Math.max(this.topoffset + margin, Math.min(this.y, height - this.h - this.bottomoffset - margin));
           this.handle_resized();
         };
         win.screen_resized();
@@ -430,7 +435,7 @@
       });
     };
     if (picture.mode !== 'auto') applyPicture();
-    if (xpra.connected && checkInputVersion()) xpra.send_control_refresh(100, {'refresh-now':true});
+    else if (xpra.connected && checkInputVersion()) xpra.send_control_refresh(100, {'refresh-now':true});
   }
 
   frame.addEventListener('load', () => {
