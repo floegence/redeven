@@ -12,7 +12,7 @@
   const retry = document.getElementById('retry');
   const native = window.redevenHostApplicationWindow;
   document.body.classList.add('mac-app-viewer');
-  const { controls, toolbar, menu, windowToggle, windowCount, controlsButton, keyboard, close, quit, popover, menuPanel, windowPanel, windowList, quitPanel, cancelQuit, confirmQuit, chevron } = createHostApplicationToolbar();
+  const { controls, toolbar, menu, windowToggle, windowCount, controlsButton, keyboard, help, helpPanel, close, quit, popover, menuPanel, windowPanel, windowList, quitPanel, cancelQuit, confirmQuit, chevron } = createHostApplicationToolbar();
   const windowEntries = new Map();
   let panelSection = null;
   let quitTimer;
@@ -26,6 +26,7 @@
     menu.setAttribute('aria-label', menu.title);
     quit.disabled = !available || quitPending;
     controlsButton.disabled = document.body.dataset.state !== 'active';
+    help.disabled = !available;
     keyboard.disabled = document.body.dataset.state !== 'active' || !current?.window || renderedGeneration !== current.generation;
     windowCount.textContent = hostApplicationAppearance.number(windowEntries.size);
     windowCount.hidden = windowEntries.size < 2;
@@ -132,7 +133,7 @@
     statisticValues[key] = value; row.append(label, value); statistics.append(row);
   }
   picturePanel.append(statistics);
-  popover.append(windowPanel, picturePanel, menuPanel, quitPanel);
+  popover.append(windowPanel, picturePanel, helpPanel, menuPanel, quitPanel);
   let receivedBytes = 0, paintedFrames = 0, measuredAt = performance.now();
   const statisticsTimer = setInterval(() => {
     const now = performance.now(), elapsed = (now - measuredAt) / 1000;
@@ -151,8 +152,8 @@
       pixel_ratio: Math.min(4, Math.max(0.5, devicePixelRatio || 1)), video: videoSupported}));
   }
   hostApplicationAppearance.subscribe(() => { syncWindowPicker(); positionPopover(); });
-  const panels = { windows: windowPanel, picture: picturePanel, menu: menuPanel, quit: quitPanel };
-  const toggles = { windows: windowToggle, picture: controlsButton, menu, quit };
+  const panels = { windows: windowPanel, picture: picturePanel, help: helpPanel, menu: menuPanel, quit: quitPanel };
+  const toggles = { windows: windowToggle, picture: controlsButton, help, menu, quit };
   let menuTimer;
   let menuPath = [];
   for (const [section, toggle] of Object.entries(toggles)) {
@@ -197,7 +198,7 @@
     if (restoreFocus && toggle && !toggle.disabled) toggle.focus({preventScroll:true});
   }
   function toggleControls(section) {
-    inputController.reset();
+    pointerController.reset(); inputController.reset();
     const opening = panelSection !== section;
     collapseControls();
     if (!opening || toggles[section].disabled) return;
@@ -217,7 +218,7 @@
       send({action:'menu'});
     } else {
       const selected = windowEntries.get(current?.window)?.button;
-      (section === 'windows' ? selected || windowList.querySelector('button') : section === 'quit' ? cancelQuit : modeButtons.get(picture.mode))?.focus();
+      (section === 'help' ? helpPanel : section === 'windows' ? selected || windowList.querySelector('button') : section === 'quit' ? cancelQuit : modeButtons.get(picture.mode))?.focus();
     }
   }
   function parentMenu() {
@@ -295,8 +296,8 @@
   let keyboardVisible = false;
   const inputController = hostApplicationInput.createRemoteInput({
     surface: canvas, label: config.copy.input,
-    commitText(text, target) { if (target === current) send({action:'input', kind:'text', text}); },
-    sendKey(key, target) { if (target === current) send({action:'input', kind:'key', ...key}); },
+    commitText(text, target) { pointerController.flush(); if (target === current) send({action:'input', kind:'text', text}); },
+    sendKey(key, target) { pointerController.flush(); if (target === current) send({action:'input', kind:'key', ...key}); },
     release(target) { if (target === current) send({action:'release'}); },
     onKeyboardVisibilityChange(visible) { keyboardVisible = visible; keyboard.setAttribute('aria-pressed', String(visible)); },
   });
@@ -304,12 +305,13 @@
   hostApplicationAppearance.copy(input, 'input', 'aria-label');
   keyboard.onclick = () => {
     const visible = !keyboardVisible;
-    collapseControls(); inputController.reset();
+    collapseControls(); pointerController.reset(); inputController.reset();
     inputController.setKeyboardVisible(visible);
   };
   // Keep the editor's focus until click toggles it, including Safari touch.
   keyboard.addEventListener('mousedown', event => event.preventDefault());
   controls.addEventListener('pointerdown', event => {
+    pointerController.reset();
     if (!keyboard.contains(event.target)) inputController.reset();
   }, true);
   const feedback = document.createElement('div');
@@ -372,14 +374,13 @@
       );
   }
   function invalidateCapture(keepFocus = false) {
+    pointerController.reset();
     if (keepFocus) inputController.reset();
     else inputController.bindTarget(null);
     renderedGeneration = 0;
     pending = null;
     drawing = null;
     resetDecoder();
-    if (move) cancelAnimationFrame(move);
-    move = null;
     if (panelSection === 'menu') collapseControls();
     menuPanel.replaceChildren();
   }
@@ -390,6 +391,7 @@
     clearTimeout(quitTimer);
     quitPending = false;
     abort?.abort();
+    pointerController.reset();
     inputController.bindTarget(null);
     socket?.close();
     socket = null;
@@ -462,7 +464,7 @@
           : await createImageBitmap(new Blob([next.bytes], {type: next.meta.codec === 'png' ? 'image/png' : 'image/jpeg'}));
         if (drawing === job && next.attempt === attempt && current && next.generation === current.generation && socket?.readyState === WebSocket.OPEN) {
           const width = image.displayWidth || image.width, height = image.displayHeight || image.height;
-          if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+          if (canvas.width !== width || canvas.height !== height) { pointerController.reset(); canvas.width = width; canvas.height = height; }
           context.drawImage(image, 0, 0);
           renderedGeneration = current.generation;
           inputController.bindTarget(current);
@@ -556,7 +558,7 @@
           if (message.action === 'quit_application') {
             clearTimeout(quitTimer); quitPending = false; syncWindowPicker(); showFeedback('quitFailed');
           } else if (message.code !== 'STALE_WINDOW') {
-            if (message.action === 'input') inputController.reset();
+            if (message.action === 'input') { pointerController.reset(); inputController.reset(); }
             showFeedback('operationFailed');
           }
           if (message.action === 'menu' && panelSection === 'menu') collapseControls(true);
@@ -649,62 +651,31 @@
       ),
     };
   }
-  // Safari emits a compatibility mouse event after touch; its default focus
-  // would replace the editor with the canvas and dismiss the soft keyboard.
-  canvas.addEventListener('mousedown', event => event.preventDefault());
-  canvas.addEventListener('pointerdown', (event) => {
-    if (document.body.dataset.state !== 'active') return;
-    inputController.setAnchor(event.clientX, event.clientY);
-    if (event.pointerType !== 'touch' || keyboardVisible) inputController.focus();
-    canvas.setPointerCapture(event.pointerId);
-    send({
-      action: 'input',
-      kind: 'down',
-      button: event.button,
-      clicks: event.detail,
-      ...point(event),
-    });
-    event.preventDefault();
-  });
-  canvas.addEventListener('pointerup', (event) => {
-    send({
-      action: 'input',
-      kind: 'up',
-      button: event.button,
-      ...point(event),
-    });
-    if (canvas.hasPointerCapture(event.pointerId))
-      canvas.releasePointerCapture(event.pointerId);
-  });
-  let move;
-  canvas.addEventListener('pointermove', (event) => {
-    if (move) return;
-    const position = point(event), binding = current;
-    move = requestAnimationFrame(() => {
-      move = null;
-      if (current !== binding) return;
-      send({ action: 'input', kind: 'move', ...position });
-    });
-  });
-  canvas.addEventListener('pointercancel', () => send({ action: 'release' }));
-  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
-  canvas.addEventListener(
-    'wheel',
-    (event) => {
-      event.preventDefault();
-      const scale =
-        event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1;
-      send({
-        action: 'input',
-        kind: 'scroll',
-        dx: Math.max(-10000, Math.min(10000, event.deltaX * scale)),
-        dy: Math.max(-10000, Math.min(10000, event.deltaY * scale)),
-        ...point(event),
-      });
+  canvas.setAttribute('data-floe-remote-pointer', '');
+  const pointerFeedback = createHostApplicationHoldFeedback(document);
+  function validPointerTarget(target) {
+    return target === current && Boolean(target?.window) && renderedGeneration === target.generation
+      && socket?.readyState === WebSocket.OPEN && document.body.dataset.state === 'active';
+  }
+  const pointerController = hostApplicationPointer.createRemotePointer({
+    surface: canvas,
+    resolveTarget: () => validPointerTarget(current) ? current : null,
+    isTargetValid: validPointerTarget,
+    sendPointer(command, target) {
+      if (!validPointerTarget(target)) return false;
+      const {kind, button, clicks, dx, dy} = command;
+      send({action:'input', kind, button, clicks, dx, dy, ...point(command)});
     },
-    { passive: false },
-  );
-  window.addEventListener('blur', () => send({ action: 'release' }));
+    // The controller sends individual ups for its held buttons. There is no
+    // platform wheel remainder; a pointer cancel must not release keyboard input.
+    release() {},
+    onActivate(position) {
+      collapseControls();
+      inputController.setAnchor(position.clientX, position.clientY);
+      if (position.pointerType !== 'touch' || keyboardVisible) inputController.focus();
+    },
+    onHoldChange: pointerFeedback.update,
+  });
   const stopViewport = hostApplicationViewport.observeViewport(window, viewport => {
     Object.assign(document.body.style, hostApplicationViewport.viewportStyle(viewport));
     for (const axis of ['left', 'top', 'width', 'height']) document.body.style.setProperty(`--mac-viewport-${axis}`, document.body.style[axis]);
@@ -712,6 +683,7 @@
   });
   window.addEventListener('beforeunload', () => {
     stopViewport();
+    pointerController.dispose(); pointerFeedback.dispose();
     inputController.dispose();
     attempt++;
     send({ action: 'release' });

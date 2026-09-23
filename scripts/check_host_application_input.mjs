@@ -42,8 +42,8 @@ const source = path.join(repository, 'internal/codeapp/appserver/host_applicatio
 const asset = name => readFile(path.join(source, name), 'utf8');
 const catalogSource = await asset('catalog.generated.js');
 const catalog = JSON.parse(catalogSource.slice(catalogSource.indexOf(' = ') + 3).trim().slice(0, -1));
-const css = (await Promise.all(['appearance.generated.css', 'remote-input.generated.css', 'viewer.css'].map(asset))).join('\n');
-const js = (await Promise.all(['catalog.generated.js', 'remote-input.generated.js', 'appearance.js', 'connection.js', 'toolbar.js', 'viewer.js'].map(asset))).join('\n');
+const css = (await Promise.all(['appearance.generated.css', 'remote-input.generated.css', 'remote-pointer.generated.css', 'viewer.css'].map(asset))).join('\n');
+const js = (await Promise.all(['catalog.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'appearance.js', 'connection.js', 'toolbar.js', 'viewer.js'].map(asset))).join('\n');
 const html = (await asset('viewer.html')).replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Theme}}', 'porcelain-light')
   .replaceAll('{{.Name}}', 'Client input acceptance').replaceAll('{{.Nonce}}', 'fixture')
   .replace('{{.Style}}', css).replace('{{.Config}}', JSON.stringify({base:'/fixture',icon:'',copy:catalog.locales['en-US']})).replace('{{.Script}}', js);

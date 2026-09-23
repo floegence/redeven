@@ -7045,7 +7045,10 @@
     "macCaptureHint": "再接続するか、「アプリ操作」から別のウィンドウを選択してください。アプリは開いたままです。",
     "macCaptureUnavailable": "ウインドウをキャプチャできません。再接続してお試しください。",
     "macAddDescription": "インストール済みの .app バンドルの絶対パスを入力してください。名前とアイコンは macOS から取得します。",
-    "macBundlePath": "アプリバンドルのパス"
+    "macBundlePath": "アプリバンドルのパス",
+    "touchHelp": "タッチガイド",
+    "touchHelpTitle": "タッチ操作",
+    "touchHelpDescription": "タップでクリックします。1本指でスワイプするとスクロールします。長押ししてから動かすとドラッグ、動かさずに離すと右クリックです。2本指でページを拡大縮小できます。"
   },
   "settingsDesign": {
     "startPort": "開始ポート",

@@ -7045,7 +7045,10 @@
     "macCaptureHint": "다시 연결하거나 앱 제어에서 다른 창을 선택하세요. 앱은 열린 상태로 유지됩니다.",
     "macCaptureUnavailable": "창을 캡처할 수 없습니다. 다시 연결한 후 시도하세요.",
     "macAddDescription": "설치된 .app 번들의 절대 경로를 입력하세요. 이름과 아이콘은 macOS에서 가져옵니다.",
-    "macBundlePath": "앱 번들 경로"
+    "macBundlePath": "앱 번들 경로",
+    "touchHelp": "터치 안내",
+    "touchHelpTitle": "터치 조작",
+    "touchHelpDescription": "탭하면 클릭합니다. 한 손가락으로 쓸어 넘기면 스크롤합니다. 길게 누른 뒤 움직이면 드래그하고, 움직이지 않고 놓으면 오른쪽 클릭입니다. 두 손가락으로 페이지를 확대하거나 축소할 수 있습니다."
   },
   "settingsDesign": {
     "startPort": "시작 포트",

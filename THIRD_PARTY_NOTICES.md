@@ -1395,7 +1395,7 @@ SOFTWARE.
 | github.com/dunglas/httpsfv | v1.1.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.1 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
-| github.com/floegence/floe-native-apps | v0.7.9 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.7.9 | Detected from LICENSE. |
+| github.com/floegence/floe-native-apps | v0.7.10 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.7.10 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.18.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.18.2 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.4.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.4.1 | Floegence first-party dependency. |
@@ -1595,7 +1595,8 @@ SOFTWARE.
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
 | @floegence/floe-webapp-boot | 0.76.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.76.0 |  |
-| @floegence/floe-webapp-core | 0.76.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.76.0 |  |
+| @floegence/floe-webapp-core | 0.76.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.76.0 |  |
+| @floegence/floe-webapp-core | 0.77.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.77.1 |  |
 | @floegence/floe-webapp-protocol | 0.76.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.76.0 |  |
 | @floegence/floebrowser | 0.1.11 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.11 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |

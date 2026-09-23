@@ -68,12 +68,15 @@ main[aria-busy="false"] .progress { display:none; }
 .mac-app-confirm-quit:hover { border-color:transparent; background:color-mix(in srgb,var(--error) 88%,var(--foreground)); }
 @media(max-width:1000px) { .mac-app-toolbar>.mac-app-close .mac-app-toolbar-label,.mac-app-toolbar>.mac-app-quit .mac-app-toolbar-label { display:none; } }
 @media(max-width:680px) { .mac-app-toolbar>.mac-app-menu-toggle { max-width:160px; } }
-@media(max-width:560px) { .mac-app-toolbar { padding:0 6px; gap:2px; } .mac-app-toolbar>.mac-app-controls-toggle .mac-app-toolbar-label,.mac-app-controls-toggle .mac-app-dropdown-chevron,.mac-app-toolbar>.mac-app-windows-toggle .mac-app-toolbar-label { display:none; } .mac-app-toolbar>.mac-app-windows-toggle { min-width:32px; } .mac-app-toolbar>.mac-app-menu-toggle { max-width:120px; } .mac-app-toolbar-separator { margin:0 3px; } .mac-app-toolbar-spacer { min-width:2px; } }
+@media(max-width:560px) { .mac-app-toolbar { padding:0 6px; gap:2px; } .mac-app-toolbar>.mac-app-controls-toggle .mac-app-toolbar-label,.mac-app-controls-toggle .mac-app-dropdown-chevron,.mac-app-toolbar>.mac-app-windows-toggle .mac-app-toolbar-label,.mac-app-toolbar>.mac-app-keyboard .mac-app-toolbar-label,.mac-app-toolbar>.mac-app-help .mac-app-toolbar-label { display:none; } .mac-app-toolbar>.mac-app-windows-toggle { min-width:32px; } .mac-app-toolbar>.mac-app-menu-toggle { max-width:120px; } .mac-app-toolbar-separator { margin:0 3px; } .mac-app-toolbar-spacer { min-width:2px; } }
 @media(max-width:360px) { .mac-app-toolbar>.mac-app-menu-toggle .mac-app-toolbar-label { display:none; } .mac-app-identity-separator { display:none; } }
 body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; opacity:.45; }
 
 .mac-app-feedback { position:fixed; z-index:3; top:calc(var(--mac-toolbar-height) + 12px); left:50%; transform:translateX(-50%); max-width:calc(100% - 32px); padding:10px 14px; border:1px solid var(--border); border-radius:var(--floe-radius-group); background:var(--card); color:var(--foreground); font-size:12px; pointer-events:none; }
 .mac-app-picture { text-align:left; }
+.mac-app-touch-help { text-align:left; }
+.mac-app-touch-help>strong { display:block; font-size:13px; font-weight:600; }
+.mac-app-touch-help>p { margin:10px 0 0; color:var(--muted-foreground); font-size:12px; line-height:1.7; white-space:pre-line; }
 .mac-app-picture>strong { font-size:13px; font-weight:600; }
 .mac-app-picture-modes { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:4px; margin-top:12px; padding:4px; border-radius:var(--floe-radius-group); background:color-mix(in srgb,var(--card) 65%,var(--muted)); }
 .mac-app-picture-modes button { justify-content:space-between; gap:5px; padding:8px; min-height:34px; font-size:12px; border:1px solid transparent; border-radius:var(--floe-radius-control); background:transparent; text-align:left; }

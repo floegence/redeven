@@ -7045,7 +7045,10 @@
     "macCaptureHint": "請重新連線，或在「應用程式控制」中選擇其他視窗。應用程式會保持開啟。",
     "macCaptureUnavailable": "暫時無法擷取應用程式畫面，請重新連線後重試。",
     "macAddDescription": "填寫已安裝 .app 應用程式套件的絕對路徑。名稱和圖示將從 macOS 讀取。",
-    "macBundlePath": "應用程式套件路徑"
+    "macBundlePath": "應用程式套件路徑",
+    "touchHelp": "觸控說明",
+    "touchHelpTitle": "觸控操作",
+    "touchHelpDescription": "點一下即可單擊。單指滑動可捲動。長按後移動可拖曳；長按不移動後放開可按右鍵。雙指可縮放頁面。"
   },
   "settingsDesign": {
     "startPort": "起始連接埠",

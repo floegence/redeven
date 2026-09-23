@@ -7045,7 +7045,10 @@
     "macCaptureHint": "请重新连接，或在“应用控制”中选择其他窗口。应用会继续保持打开。",
     "macCaptureUnavailable": "暂时无法采集应用画面，请重新连接后重试。",
     "macAddDescription": "填写已安装 .app 应用包的绝对路径。名称和图标将从 macOS 读取。",
-    "macBundlePath": "应用包路径"
+    "macBundlePath": "应用包路径",
+    "touchHelp": "触摸说明",
+    "touchHelpTitle": "触摸操作",
+    "touchHelpDescription": "轻点即可单击。单指滑动可滚动。长按后移动可拖拽；长按不移动后松开可右键。双指可缩放页面。"
   },
   "settingsDesign": {
     "startPort": "起始端口",

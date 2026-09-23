@@ -7049,7 +7049,10 @@
     "macCaptureHint": "Conecte-se novamente ou escolha outra janela nos controles do aplicativo. O aplicativo permanece aberto.",
     "macCaptureUnavailable": "Não foi possível capturar a janela. Reconecte-se para tentar novamente.",
     "macAddDescription": "Informe o caminho absoluto de um pacote .app instalado. O nome e o ícone são obtidos do macOS.",
-    "macBundlePath": "Caminho do pacote do aplicativo"
+    "macBundlePath": "Caminho do pacote do aplicativo",
+    "touchHelp": "Guia de toque",
+    "touchHelpTitle": "Controles de toque",
+    "touchHelpDescription": "Toque para clicar. Deslize um dedo para rolar. Pressione e mova para arrastar; solte sem mover para clicar com o botão direito. Use dois dedos para ampliar a página."
   },
   "settingsDesign": {
     "startPort": "Porta inicial",

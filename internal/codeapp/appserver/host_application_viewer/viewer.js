@@ -1,4 +1,5 @@
-// Xpra owns rendering, pointer input, clipboard and transient-window stacking.
+// Xpra owns rendering, pointer transport, clipboard and transient-window stacking.
+// Published Floe remote-pointer exclusively owns remote content gestures.
 // Published Floe remote-input exclusively owns local keyboard and composition.
 // This adapter owns the application's viewport and one reconnectable viewer.
 (() => {
@@ -10,6 +11,8 @@
   let request;
   let client;
   let inputController;
+  let pointerController;
+  let pointerFeedback;
   let keyboardVisible = false;
   let attached = false;
   let wasActive = false;
@@ -31,15 +34,16 @@
 
   document.body.classList.add('mac-app-viewer');
   frame.classList.add('host-app-frame');
-  const {controls, toolbar, menu, windowToggle, windowCount, controlsButton, keyboard, close, quit,
+  const {controls, toolbar, menu, windowToggle, windowCount, controlsButton, keyboard, help, helpPanel, close, quit,
     popover, windowPanel, windowList, quitPanel, cancelQuit, confirmQuit} = createHostApplicationToolbar();
   keyboard.onclick = () => {
     const visible = !keyboardVisible;
-    collapseControls(); inputController?.reset();
+    collapseControls(); pointerController?.reset(); inputController?.reset();
     inputController?.setKeyboardVisible(visible);
   };
   keyboard.addEventListener('mousedown', event => event.preventDefault());
   controls.addEventListener('pointerdown', event => {
+    pointerController?.reset();
     if (!keyboard.contains(event.target)) inputController?.reset();
   }, true);
   // Linux applications expose their own menus inside their rendered windows.
@@ -77,9 +81,9 @@
   hostApplicationAppearance.copy(httpsHint, 'httpsPerformanceHint');
   httpsHint.hidden = window.isSecureContext;
   picturePanel.append(pictureTitle, modes, pictureHint, decoding, httpsHint);
-  popover.append(windowPanel, picturePanel, quitPanel);
-  const panels = {windows:windowPanel, picture:picturePanel, quit:quitPanel};
-  const toggles = {windows:windowToggle, picture:controlsButton, quit};
+  popover.append(windowPanel, picturePanel, helpPanel, quitPanel);
+  const panels = {windows:windowPanel, picture:picturePanel, help:helpPanel, quit:quitPanel};
+  const toggles = {windows:windowToggle, picture:controlsButton, help, quit};
   let panelSection;
   function positionPopover() {
     if (!panelSection) return;
@@ -94,14 +98,14 @@
     if (restore && toggle && !toggle.disabled) toggle.focus({preventScroll:true});
   }
   function toggleControls(section) {
-    inputController?.reset();
+    pointerController?.reset(); inputController?.reset();
     const opening = panelSection !== section;
     collapseControls();
     if (!opening || toggles[section].disabled) return;
     panelSection = section; popover.dataset.section = section;
     popover.hidden = false; panels[section].hidden = false;
     toggles[section].setAttribute('aria-expanded', 'true'); positionPopover();
-    (section === 'quit' ? cancelQuit : section === 'picture' ? modeButtons.get(picture.mode)
+    (section === 'help' ? helpPanel : section === 'quit' ? cancelQuit : section === 'picture' ? modeButtons.get(picture.mode)
       : windowList.querySelector('[aria-pressed="true"]') || windowList.querySelector('button'))?.focus();
   }
   function currentWindow() {
@@ -194,6 +198,9 @@
   }, true);
   frame.addEventListener('focus', () => collapseControls());
   window.addEventListener('resize', positionPopover);
+  for (const type of ['blur', 'pagehide', 'resize', 'orientationchange']) window.addEventListener(type, () => pointerController?.reset());
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pointerController?.reset(); });
+  for (const type of ['resize', 'scroll']) window.visualViewport?.addEventListener(type, () => pointerController?.reset());
 
   function present(state) {
     hostApplicationConnection.present(state);
@@ -206,6 +213,8 @@
 
   function stopClient() {
     const previous = client;
+    pointerController?.dispose(); pointerController = null;
+    pointerFeedback?.dispose(); pointerFeedback = null;
     inputController?.dispose(); inputController = null;
     client = null;
     windows.clear(); windowList.replaceChildren(); syncToolbar();
@@ -254,43 +263,58 @@
     if (xpra && client === xpra) return;
     if (!xpra || typeof xpra._new_window !== 'function' || typeof xpra.do_send_damage_sequence !== 'function') throw new Error('Unsupported Xpra HTML5 client');
     if (!xpra.floeInput) { finish('inputVersionUnsupported'); return; }
+    if (xpra.floePointer?.version !== 1) { finish('inputVersionUnsupported'); return; }
     client = xpra;
     // The negotiated decoder list is authoritative; HTTPS alone is insufficient.
     const videoAvailable = xpra.supported_encodings?.some(codec => ['h264', 'vp8', 'vp9', 'av1'].includes(codec));
     hostApplicationAppearance.copy(decodingStatus, videoAvailable ? 'videoAvailable' : 'videoUnavailable');
-    const paintedWindows = new Set();
     const adapter = xpra.floeInput;
+    const pointer = xpra.floePointer;
+    const surface = doc.getElementById('screen') || doc.body;
+    surface.setAttribute('data-floe-remote-pointer', '');
     inputController = hostApplicationInput.createRemoteInput({
-      surface: doc.getElementById('screen') || doc.body, label: config.copy.input,
-      commitText: (text, target) => adapter.commitText(text, target),
-      sendKey: (key, target) => adapter.sendKey(key, target),
+      surface, label: config.copy.input,
+      commitText(text, target) { pointerController.flush(); adapter.commitText(text, target); },
+      sendKey(key, target) { pointerController.flush(); adapter.sendKey(key, target); },
       release: target => adapter.release(target),
-      clipboard: (event, target) => adapter.clipboard(event, target),
+      clipboard(event, target) { pointerController.flush(); return adapter.clipboard(event, target); },
       onKeyboardVisibilityChange(visible) { keyboardVisible = visible; keyboard.setAttribute('aria-pressed', String(visible)); },
     });
     const controller = inputController;
-    controller.element.addEventListener('paste', event => adapter.paste(event, adapter.target));
+    controller.element.addEventListener('paste', event => { pointerController.flush(); adapter.paste(event, adapter.target); });
     adapter.onError = () => { if (attempt === generation) finish('inputUnavailable'); };
     function syncInput() {
       if (attempt !== generation) return;
       const wid = xpra.focused_wid;
-      controller.bindTarget(adapter.bindTarget(paintedWindows.has(wid) && xpra.id_to_window[wid] ? wid : null));
+      const win = xpra.id_to_window[wid];
+      controller.bindTarget(adapter.bindTarget(win && pointer.targetForWindow(win) ? wid : null));
       syncToolbar();
     }
     function checkInputVersion() {
       if (adapter.version !== 1) { finish('inputVersionUnsupported'); return false; }
       return true;
     }
-    doc.addEventListener('pointerdown', event => {
-      controller.setAnchor(event.clientX, event.clientY);
-      if (event.pointerType !== 'touch' || keyboardVisible) controller.focus();
-    }, true);
-    // Xpra's window handler can change its target during this same pointer event.
-    doc.addEventListener('pointerup', event => {
-      if (event.pointerType !== 'touch' || keyboardVisible) controller.focus();
-    }, true);
-    // Input inside the same-origin application document does not bubble to the
-    // toolbar document. Observe it before Xpra handles it, without consuming it.
+    pointerFeedback = createHostApplicationHoldFeedback(doc);
+    pointerController = hostApplicationPointer.createRemotePointer({
+      surface,
+      resolveTarget: event => pointer.resolveTarget(event),
+      isTargetValid: target => attempt === generation && client === xpra && pointer.isTargetValid(target),
+      sendPointer: (command, target) => pointer.sendPointer(command, target),
+      release: target => pointer.release(target),
+      onActivate(position, target) {
+        collapseControls();
+        if (xpra.focused_wid !== target.wid) xpra.set_focus(target.window);
+        syncInput();
+        controller.setAnchor(position.clientX, position.clientY);
+        if (position.pointerType !== 'touch' || keyboardVisible) controller.focus();
+      },
+      onHoldChange: pointerFeedback.update,
+    });
+    const gestures = pointerController;
+    pointer.onInvalidate = () => gestures.reset();
+    // The embedded Xpra document does not bubble through the toolbar document.
+    // Capture only dismisses local chrome; the pointer controller remains the
+    // sole owner of remote content events.
     const dismissControls = () => { if (attempt === generation && client === xpra) collapseControls(); };
     doc.addEventListener('pointerdown', dismissControls, true);
     doc.addEventListener('focusin', dismissControls, true);
@@ -315,7 +339,7 @@
     // The prepared upstream page has no local keyboard owners. Application windows own all visible space.
     const style = doc.createElement('style');
     style.textContent = 'html,body,#screen{background:transparent!important;background-image:none!important}#float_menu,#toolbar,#progress,#notifications,.spinneroverlay{display:none!important}.redeven-primary{border:0!important;border-radius:0!important;box-shadow:none!important}.redeven-primary>.windowhead,.redeven-primary>.ui-resizable-handle{display:none!important}';
-    style.textContent += hostApplicationInput.style;
+    style.textContent += hostApplicationInput.style + hostApplicationPointer.style;
     doc.head.append(style);
     doc.documentElement.style.backgroundColor = getComputedStyle(document.body).backgroundColor;
 
@@ -328,7 +352,7 @@
       button.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8"/></svg>');
       button.onclick = () => {
         if (attempt !== generation || xpra.id_to_window[win.wid] !== win) return;
-        xpra.set_focus(win); collapseControls(); frame.focus();
+        gestures.reset(); xpra.set_focus(win); collapseControls(); frame.focus();
       };
       windows.set(win.wid, {win, button, label}); windowList.append(button);
       const metadata = win.update_metadata, destroy = win.destroy;
@@ -336,7 +360,6 @@
       win.destroy = function() {
         destroy.call(this);
         if (attempt !== generation) return;
-        paintedWindows.delete(win.wid);
         windows.delete(win.wid); button.remove(); syncInput();
       };
       syncToolbar();
@@ -421,7 +444,6 @@
     xpra.do_send_damage_sequence = function(sequence, wid, width, height, decodeTime, message) {
       damage.call(this, sequence, wid, width, height, decodeTime, message);
       if (attempt !== generation || !paintableWindows.has(wid) || !xpra.id_to_window[wid] || decodeTime < 0 || message) return;
-      paintedWindows.add(wid);
       syncInput();
       if (document.body.dataset.state === 'active') return;
       // Reveal only after the server has painted, including the offscreen-worker path.

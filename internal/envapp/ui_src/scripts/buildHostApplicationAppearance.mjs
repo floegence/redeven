@@ -26,10 +26,14 @@ const style = await build({ entryPoints: [require.resolve('@floegence/floe-webap
 const viewport = await build({ entryPoints: [fileURLToPath(import.meta.resolve('@floegence/floe-webapp-core/viewport'))], bundle: true, write: false, minify: true, format: 'iife', globalName: 'hostApplicationViewport', platform: 'browser' });
 const inputStyle = readFileSync(require.resolve('@floegence/floe-webapp-core/remote-input.css'), 'utf8');
 const input = await build({ stdin: {contents: `export {createRemoteInput} from '@floegence/floe-webapp-core/remote-input'; export const style = ${JSON.stringify(inputStyle)};`, resolveDir: root}, bundle: true, write: false, minify: true, format: 'iife', globalName: 'hostApplicationInput', platform: 'browser' });
+const pointerStyle = readFileSync(require.resolve('@floegence/floe-webapp-core/remote-pointer.css'), 'utf8');
+const pointer = await build({ stdin: {contents: `export {createRemotePointer} from '@floegence/floe-webapp-core/remote-pointer'; export const style = ${JSON.stringify(pointerStyle)};`, resolveDir: root}, bundle: true, write: false, minify: true, format: 'iife', globalName: 'hostApplicationPointer', platform: 'browser' });
 const catalog = { defaults: BUILT_IN_SHELL_THEME_DEFAULTS, themes: Object.fromEntries(builtInShellThemePresets.map(p => [p.name, p.mode])), locales };
 const artifacts = {
   'remote-input.generated.js': `// Generated from published Floe remote-input; run buildHostApplicationAppearance.mjs.\n${input.outputFiles[0].text}`,
   'remote-input.generated.css': `/* Generated from published Floe remote-input.css; run buildHostApplicationAppearance.mjs. */\n${inputStyle}`,
+  'remote-pointer.generated.js': `// Generated from published Floe remote-pointer; run buildHostApplicationAppearance.mjs.\n${pointer.outputFiles[0].text}`,
+  'remote-pointer.generated.css': `/* Generated from published Floe remote-pointer.css; run buildHostApplicationAppearance.mjs. */\n${pointerStyle}`,
   'viewport.generated.js': `// Generated from published Floe viewport; run buildHostApplicationAppearance.mjs.\n${viewport.outputFiles[0].text}`,
   'appearance.generated.css': `/* Generated from published Floe standalone.css; run buildHostApplicationAppearance.mjs. */\n${style.outputFiles[0].text}`,
   'catalog.generated.js': `// Generated from explicit Env App catalogs and published Floe presets.\nconst hostApplicationCatalog = ${JSON.stringify(catalog).replaceAll('<', '\\u003c')};\n`,
