@@ -1,3 +1,4 @@
+vi.mock('./pages/FileBrowserPageLoading', () => ({ FileBrowserPageLoading: () => <div>Files loading</div> }));
 vi.mock('./pages/ContainersPresentation', () => ({ ContainersPageSkeleton: () => <div>Containers skeleton</div> }));
 vi.mock('./pages/WebServicesPresentation', () => ({ WebServicesPageSkeleton: () => <div>WebServices skeleton</div> }));
 vi.mock('./pages/HostApplicationsPresentation', () => ({ HostApplicationsPageSkeleton: () => <div>HostApplications skeleton</div> }));
@@ -595,6 +596,7 @@ vi.mock('./services/terminalSessionCatalog', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
+  AppViewport: (props: any) => <div>{props.children}</div>,
   BottomBarCompanion: (props: any) => {
     createEffect(() => props.onPhaseChange?.(props.open ? 'expanded' : 'collapsed'));
     return (
@@ -738,6 +740,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
           </For>
         </div>
         {props.bottomBarItems}
+        {layoutIsMobile && props.mobileAccessory}
         <div
           data-testid="mock-env-context-state"
           data-active-surface={env?.activeSurface?.() ?? ''}
@@ -4195,8 +4198,8 @@ describe('EnvAppShell environment entry affordances', () => {
       const flowerOverlay = host.querySelector('[data-activity-flower-overlay-host]') as HTMLElement;
       expect(background.inert).toBe(true);
       expect(background.getAttribute('aria-hidden')).toBe('true');
-      expect(flowerRail.inert).toBe(true);
-      expect(flowerRail.getAttribute('aria-hidden')).toBe('true');
+      expect(background.contains(flowerRail)).toBe(true);
+      expect(flowerRail.closest('[aria-hidden="true"]')).toBe(background);
       expect(flowerOverlay.inert).toBe(true);
       expect(flowerOverlay.getAttribute('aria-hidden')).toBe('true');
 
@@ -4204,7 +4207,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => !document.querySelector('[data-plugin-surface-host]'));
       expect(background.inert).toBe(false);
       expect(background.hasAttribute('aria-hidden')).toBe(false);
-      expect(flowerRail.inert).toBe(false);
+      expect(background.contains(flowerRail)).toBe(true);
       expect(flowerRail.hasAttribute('aria-hidden')).toBe(false);
       expect(flowerOverlay.inert).toBe(false);
       expect(flowerOverlay.hasAttribute('aria-hidden')).toBe(false);

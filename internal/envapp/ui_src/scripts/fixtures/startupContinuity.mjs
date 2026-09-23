@@ -12,15 +12,18 @@ export const icon = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAA
 export const navigationKey = 'redeven-envapp:env_local-activity-navigation';
 export const navigationRecord = page => ({ version: 1, target: { kind: 'builtin', page }, recentBuiltins: [page, 'terminal'] });
 
-export async function createContinuityServer(tls) {
+export async function createContinuityServer(tls, { fileContinuity = false } = {}) {
   const gates = new Map();
   const requests = [];
   let empty = false;
   let readDenied = false;
   let dataFailure = false;
+  let filesFailure = 0;
   const app = { id: 'continuity-editor', name: 'Continuity Editor', description: '', categories: [], icon, custom: false };
   const catalog = () => ({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: empty ? [] : [app], sessions: [], running: empty ? [] : [{ application_id: app.id, instances: ['process-1'] }] });
   const fixtures = {
+    '/__fixture/files/1010': () => ({ agent_home_path_abs: '/workspace', home_path_abs: '/workspace', default_root_id: 'home', roots: [{ id: 'home', label: 'Home', kind: 'home', path_abs: '/workspace', permissions: { read: true, write: true } }] }),
+    '/__fixture/files/1001': () => ({ entries: empty ? [] : [{ name: 'continuity-file.txt', path: '/workspace/continuity-file.txt', is_directory: false, entry_type: 'file', resolved_type: 'file', size: 2048, modified_at: 1, created_at: 1 }] }),
     '/api/local/runtime': () => ({ env_public_id: 'env_local', effective_run_mode: 'local' }),
     '/api/local/environment': () => ({ public_id: 'env_local', name: 'Continuity host', namespace_public_id: 'namespace', status: 'online', lifecycle_status: 'running', permissions: { can_read: !readDenied, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
     '/_redeven_proxy/api/ui-cache-scope': () => ({ scope_id: 'c'.repeat(64) }),
@@ -36,19 +39,20 @@ export async function createContinuityServer(tls) {
     '/_redeven_proxy/api/spaces': () => ({ spaces: empty ? [] : [{ code_space_id: 'continuity-space', name: 'Continuity Workspace', description: 'Workspace description', workspace_path: '/workspace', running: true, pid: 42, code_port: 13337, created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: 1 }] }),
     '/_redeven_proxy/api/code-runtime/status': () => ({ active_runtime: { detection_state: 'ready', present: true }, operation: { state: 'idle' } }),
   };
-  const group = path => path === '/api/local/environment' ? 'permissions' : path.endsWith('/ui-cache-scope') ? 'scope' : path.startsWith('/_redeven_proxy/api/') ? 'data' : 'runtime';
-  const server = await createBuiltDistServer({ accessReady: true, tls, renewPeerOnConnect: true, handleRequest: async (_request, response, url) => {
+  const group = path => path === '/__fixture/files/1010' ? 'file-context' : path === '/__fixture/files/1001' ? 'file-list' : path === '/api/local/environment' ? 'permissions' : path.endsWith('/ui-cache-scope') ? 'scope' : path.startsWith('/_redeven_proxy/api/') ? 'data' : 'runtime';
+  const server = await createBuiltDistServer({ accessReady: true, fileContinuity, tls, renewPeerOnConnect: true, handleRequest: async (_request, response, url) => {
     if (/\/assets\/index-[^/]+\.js$/.test(url.pathname)) { await gates.get('entry')?.promise; return false; }
+    if (/\/assets\/EnvFileBrowserPage-[^/]+\.js$/.test(url.pathname)) { await gates.get('files-module')?.promise; return false; }
     const fixture = fixtures[url.pathname];
     if (!fixture) return false;
     requests.push(url.pathname);
     const gate = gates.get(group(url.pathname));
     if (gate) await gate.promise;
-    response.writeHead(dataFailure && group(url.pathname) === 'data' ? 503 : 200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    response.writeHead(url.pathname.startsWith('/__fixture/files/') && filesFailure ? filesFailure : dataFailure && group(url.pathname) === 'data' ? 503 : 200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     response.end(JSON.stringify(dataFailure && group(url.pathname) === 'data' ? { error: 'Fixture unavailable' } : fixture()));
     return true;
   } });
-  return { ...server, requests, setReadDenied: value => { readDenied = value; }, setEmpty: value => { empty = value; }, setDataFailure: value => { dataFailure = value; }, hold(name) {
+  return { ...server, requests, setFilesFailure: value => { filesFailure = value; }, setReadDenied: value => { readDenied = value; }, setEmpty: value => { empty = value; }, setDataFailure: value => { dataFailure = value; }, hold(name) {
     let release;
     const promise = new Promise(resolve => { release = resolve; });
     gates.set(name, { promise, release });

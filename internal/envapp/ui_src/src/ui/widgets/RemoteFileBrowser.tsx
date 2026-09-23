@@ -1,6 +1,7 @@
 import { classifyFilesystemPathError } from '../../../../../flower_ui/src/filePicker/filesystemPicker';
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import { Show, batch, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { cn, createUIFirstSelection, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import {
@@ -84,6 +85,7 @@ import { useFilePreviewContext } from './FilePreviewContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace, type FileBrowserPathSubmitResult } from './FileBrowserWorkspace';
+import { FileBrowserPageLoading, PAGE_SIDEBAR_DEFAULT_WIDTH, PAGE_SIDEBAR_WIDTH_STORAGE_KEY, normalizePageSidebarWidth } from '../pages/FileBrowserPageLoading';
 import { FileBrowserRecoveryView } from './FileBrowserRecoveryView';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { GitStashWindow } from './GitStashWindow';
@@ -252,10 +254,6 @@ let entryRevealSeq = 0;
 const GIT_COMMIT_PAGE_SIZE = 50;
 const GIT_WORKSPACE_PAGE_SIZE = 200;
 const FILES_GIT_WORKSPACE_SECTION_ORDER: GitWorkspaceSection[] = ['unstaged', 'untracked', 'staged', 'conflicted'];
-const PAGE_SIDEBAR_DEFAULT_WIDTH = 240;
-const PAGE_SIDEBAR_MIN_WIDTH = 180;
-const PAGE_SIDEBAR_MAX_WIDTH = 520;
-const PAGE_SIDEBAR_WIDTH_STORAGE_KEY = 'redeven:remote-file-browser:page-sidebar-width';
 const PAGE_MODE_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:page-mode:';
 const GIT_SUBVIEW_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:git-subview:';
 const SHOW_HIDDEN_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:show-hidden:';
@@ -392,10 +390,6 @@ type GitBranchDetailState =
   | { kind: 'missing'; requestedKey: string; title: string; detail: string }
   | { kind: 'error'; requestedKey: string; message: string };
 
-function normalizePageSidebarWidth(width: unknown): number {
-  const raw = typeof width === 'number' && Number.isFinite(width) ? width : PAGE_SIDEBAR_DEFAULT_WIDTH;
-  return Math.max(PAGE_SIDEBAR_MIN_WIDTH, Math.min(PAGE_SIDEBAR_MAX_WIDTH, Math.round(raw)));
-}
 
 function normalizeBrowserPageMode(value: unknown): BrowserPageMode {
   return value === 'git' ? 'git' : 'files';
@@ -673,7 +667,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [files, setFiles] = createSignal<FileItem[]>([]);
   const [filesGitDecorationIndex, setFilesGitDecorationIndex] = createSignal<FileBrowserGitDecorationIndex | null>(null);
   const [gitCapabilityMode, setGitCapabilityMode] = createSignal<GitCapabilityMode>('unknown');
-  const decoratedFiles = createMemo(() => applyFileBrowserGitDecorations(files(), filesGitDecorationIndex()));
+  const [displayFiles, setDisplayFiles] = createStore<{ items: FileItem[] }>({ items: [] });
+  createEffect(() => {
+    setDisplayFiles('items', reconcile(applyFileBrowserGitDecorations(files(), filesGitDecorationIndex()), { key: 'id' }));
+  });
   const [directoryView, setDirectoryView] = createSignal<DirectoryViewState>({
     activePath: '',
     committedPath: '',
@@ -685,6 +682,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const activeDirectorySnapshotReady = () => directoryView().snapshotReady;
   const pendingDirectoryPath = () => directoryView().pending?.targetPath ?? '';
   const directoryBlocking = () => Boolean(directoryView().pending && !directoryView().snapshotReady);
+  const directoryInitializing = () => !directoryView().snapshotReady && !directoryView().failure;
 
   let directoryCache = new DirectorySnapshotCache();
 
@@ -1168,8 +1166,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return refreshFilesystemPathContext();
   };
 
+  let pathContextRevision = 0;
   const refreshFilesystemPathContext = async (): Promise<string> => {
+    const revision = ++pathContextRevision;
+    const client = protocol.session?.();
+    const environment = envId();
     const resp = await rpc.fs.getPathContext();
+    if (revision !== pathContextRevision || client !== protocol.session?.() || environment !== envId()) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
     const ctx = normalizeFilesystemContext(resp);
     const home = normalizeAbsolutePath(ctx.homePathAbs);
     const root = normalizeAbsolutePath(defaultFilesystemPath(ctx));
@@ -3575,15 +3580,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const fileBrowserToolbarEndActions = () => (
     <>
-      <Show when={fileBrowserNavigationMessage()}>
-        <span class="shrink-0 text-[10px] text-muted-foreground">{fileBrowserNavigationMessage()}</span>
-      </Show>
       <Button
         size="sm"
         variant="ghost"
         icon={Refresh}
         {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
-        class="cursor-pointer"
+        class={cn('cursor-pointer', Boolean(pendingDirectoryPath()) && '[&_svg]:animate-spin motion-reduce:[&_svg]:animate-none')}
         aria-label={i18n.t('files.refreshCurrentDirectory')}
         onClick={() => { void refreshCurrentDirectory({ forceReload: true }); }}
         disabled={!activeDirectoryPath().trim() || directoryBlocking() || !!pendingDirectoryPath().trim()}
@@ -3622,6 +3624,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }));
 
     clearDirectoryState();
+    pathContextRevision += 1;
+    setFilesystemContext(normalizeFilesystemContext(undefined));
     directoryModeHydrated = false;
     setAgentHomePathAbs('');
     setShowHidden(restored.nextShowHidden);
@@ -3650,7 +3654,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const showPathLoadFailure = (result: PathLoadResult) => {
     if (result.status === 'canceled') return;
-    const requestedPath = activeDirectoryPath() || initialPathOverride() || readPersistedLastPath(envId()) || defaultRootPath();
+    const requestedPath = activeDirectoryPath() || initialPathOverride() || readPersistedLastPath(envId()) || (filesystemRoots().length ? defaultRootPath() : '');
     setDirectoryView((current) => ({ ...current, failure: { requestedPath, result } }));
   };
 
@@ -3839,7 +3843,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     queuedDirectoryRequest = null;
   };
 
-  onCleanup(() => resetDirectoryRequestQueue());
+  onCleanup(() => { pathContextRevision += 1; resetDirectoryRequestQueue(); });
 
   const currentDirectoryResult = (): DirectoryNavigationResult => ({
     status: 'ready',
@@ -4004,13 +4008,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       intent: options.forceReload ? 'refresh' : 'browse',
     });
   };
-
-  const fileBrowserNavigationMessage = createMemo(() => {
-    const pendingPath = normalizeAbsolutePath(pendingDirectoryPath());
-    if (!pendingPath) return '';
-    const currentPath = normalizeAbsolutePath(activeDirectoryPath());
-    return normalizePath(pendingPath) === normalizePath(currentPath) ? i18n.t('files.refreshing') : i18n.t('files.opening');
-  });
 
   const canManageFilesystemAccess = createMemo(() => Boolean(
     ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner,
@@ -4420,8 +4417,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   createEffect(on(
     [() => protocol.session?.(), envId, filesystemScopeRefreshKey, initialPathOverride],
     ([client, id, scopeRefreshKey]) => {
-      if (!client) return;
-      if (!id) return;
+      let current = true;
+      onCleanup(() => { current = false; resetDirectoryRequestQueue(); });
+      if (!client || !id) return;
       void (async () => {
         const persistedPath = normalizeAbsolutePath(untrack(() => readPersistedLastPath(id)));
         const directedInitialPath = initialPathOverride();
@@ -4436,25 +4434,24 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
               intent: 'verify',
               refreshPathContext: true,
             });
-          } else if (scopeRefreshKey > 0) {
-            try {
-              await refreshFilesystemPathContext();
-            } catch {
-              showPathLoadFailure({ status: 'transport_error' });
-            }
+          } else {
+            await requestDirectoryNavigation(untrack(activeDirectoryPath) || directedInitialPath, {
+              persistEnvId: id,
+              intent: scopeRefreshKey > 0 ? 'scope-change' : 'refresh',
+              refreshPathContext: true,
+            });
           }
           return;
         }
 
         let rootPath = '';
         try {
-          rootPath = normalizePath(scopeRefreshKey > 0 ? await refreshFilesystemPathContext() : await resolveFsRootAbs());
+          rootPath = normalizePath(await refreshFilesystemPathContext());
         } catch {
-          showPathLoadFailure({
-            status: 'transport_error',
-          });
+          if (current) showPathLoadFailure({ status: 'transport_error' });
           return;
         }
+        if (!current) return;
 
         const rememberedPath = untrack(() => normalizeAbsolutePath(activeDirectoryPath()));
         const showHiddenEnabled = untrack(() => showHidden());
@@ -4465,13 +4462,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         if (startPath !== requestedStartPath) {
           writePersistedLastPath(id, startPath);
         }
-        setDirectoryView((current) => ({
-          ...current,
-          activePath: startPath,
-          snapshotReady: false,
-          failure: null,
-          pending: null,
-        }));
+        if (activeDirectorySnapshotReady()) {
+          await requestDirectoryNavigation(startPath, {
+            persistEnvId: id,
+            intent: scopeRefreshKey > 0 ? 'scope-change' : 'refresh',
+          });
+        } else {
+          setDirectoryView((view) => ({ ...view, activePath: startPath, failure: null, pending: null }));
+        }
       })();
     },
   ));
@@ -5517,11 +5515,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   return (
-    <div class="h-full relative">
+    <div class="h-full relative" data-env-reload-state={pageMode() !== 'files' ? 'error' : activeDirectorySnapshotReady() ? 'content' : directoryNavigationFailure() ? 'error' : 'pending'}>
       <Show
         when={envId()}
         keyed
-        fallback={<div class="h-full" />}
+        fallback={<FileBrowserPageLoading />}
       >
         {(id) => (
           <div class="flex h-full min-h-0 flex-col">
@@ -5538,9 +5536,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       gitHistoryDisabled={!canEnterGitHistory()}
                       gitHistoryDisabledReason={gitModeDisabledReason() || undefined}
                       captureTypingFromPage={!hasEmbeddedWidget()}
-                      files={decoratedFiles()}
+                      files={displayFiles.items}
                       contentNotice={directoryNavigationFailurePanel()}
                       contentUnavailable={directoryContentUnavailable()}
+                      initializing={directoryInitializing()}
                       currentPath={activeDirectoryPath()}
                       pendingNavigationPath={pendingDirectoryPath()}
                       initialPath={readPersistedLastPath(id)}
@@ -5727,7 +5726,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         )}
       </Show>
 
-      <RedevenLoadingCurtain visible={pageMode() === 'files' && directoryBlocking() && !directoryNavigationFailure()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.loadingFiles')} />
       <RedevenLoadingCurtain visible={dragMoveLoading()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.moving')} />
 
       <ArchiveExtractionDialog

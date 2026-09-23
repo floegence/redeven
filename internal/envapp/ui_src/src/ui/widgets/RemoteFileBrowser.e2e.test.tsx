@@ -507,6 +507,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     toolbarEndActions?: JSX.Element;
     contentNotice?: JSX.Element;
     contentUnavailable?: boolean;
+    initializing?: boolean;
     onModeChange?: (mode: string) => void;
     onPreviewGitMode?: () => void;
     onResize?: (delta: number) => void;
@@ -659,7 +660,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     });
 
     return (
-      <div data-testid="files-workspace">
+      <div data-testid="files-workspace" data-initializing={String(props.initializing)}>
         <div>files:{props.mode}:{props.currentPath}:{props.width ?? 0}:{localCount()}:{props.captureTypingFromPage ? 'page' : 'scoped'}</div>
         <div data-testid="mock-path-edit-request-key">{props.pathEditRequestKey ?? 0}</div>
         <div>{props.toolbarEndActions}</div>
@@ -2940,6 +2941,102 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('ignores an old environment path response after switching environments', async () => {
+    widgetStateStore.values['widget-1'] = { pageModeByEnv: { 'env-1': 'files', 'env-2': 'files' } };
+    const [environment, setEnvironment] = createSignal('env-1');
+    const stale = deferred<{ agentHomePathAbs: string }>();
+    mockRpc.fs.getPathContext.mockReturnValueOnce(stale.promise).mockResolvedValue({ agentHomePathAbs: '/new-home' });
+    mockRpc.fs.list.mockResolvedValue({ entries: [] });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={{ ...createEnvContext(), env_id: environment }}>
+      <RemoteFileBrowser widgetId="widget-1" />
+    </EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush();
+      setEnvironment('env-2');
+      await flush();
+      expect(host.querySelector('[data-testid="mock-current-path"]')!.textContent).toBe('/new-home');
+      stale.resolve({ agentHomePathAbs: '/old-home' });
+      await flush();
+      expect(host.querySelector('[data-testid="mock-current-path"]')!.textContent).toBe('/new-home');
+      expect(host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+      expect(mockRpc.fs.list.mock.calls.every(call => call[0].path === '/new-home')).toBe(true);
+    } finally { dispose(); }
+  });
+
+  it('retries failed initial path discovery at the confirmed home instead of a synthetic root', async () => {
+    widgetStateStore.values['widget-1'] = { pageModeByEnv: { 'env-1': 'files' } };
+    mockRpc.fs.getPathContext.mockRejectedValue(new Error('offline'));
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}>
+      <RemoteFileBrowser widgetId="widget-1" />
+    </EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush();
+      expect(host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeTruthy();
+      mockRpc.fs.getPathContext.mockResolvedValue({ agentHomePathAbs: '/workspace' });
+      Array.from(host.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Retry')!.click();
+      await flush();
+      expect(host.querySelector('[data-testid="mock-current-path"]')!.textContent).toBe('/workspace');
+      expect(host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+      expect(mockRpc.fs.list.mock.calls.every(call => call[0].path === '/workspace')).toBe(true);
+    } finally { dispose(); }
+  });
+
+  it('stays pending through path discovery and the first listing without a blocking curtain', async () => {
+    widgetStateStore.values['widget-1'] = { pageModeByEnv: { 'env-1': 'files' } };
+    const context = deferred<{ agentHomePathAbs: string }>();
+    const listing = deferred<{ entries: never[] }>();
+    mockRpc.fs.getPathContext.mockReturnValue(context.promise);
+    mockRpc.fs.list.mockReturnValue(listing.promise);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}>
+      <RemoteFileBrowser widgetId="widget-1" />
+    </EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush();
+      const workspace = host.querySelector('[data-testid="files-workspace"]')!;
+      expect(workspace.getAttribute('data-initializing')).toBe('true');
+      context.resolve({ agentHomePathAbs: '/workspace' });
+      await flush();
+      expect(workspace.getAttribute('data-initializing')).toBe('true');
+      expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
+      listing.resolve({ entries: [] });
+      await flush();
+      expect(workspace.getAttribute('data-initializing')).toBe('false');
+      expect(host.querySelector('[data-testid="files-workspace"]')).toBe(workspace);
+    } finally { dispose(); }
+  });
+
+  it('retains a successful directory while a replacement connection revalidates it', async () => {
+    widgetStateStore.values['widget-1'] = { pageModeByEnv: { 'env-1': 'files' } };
+    const [client, setClient] = createSignal<object>({ id: 'first' });
+    protocolClientStore.read = client;
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}>
+      <RemoteFileBrowser widgetId="widget-1" />
+    </EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush();
+      const workspace = host.querySelector('[data-testid="files-workspace"]')!;
+      const tree = host.querySelector('[data-testid="mock-files-tree"]')!.textContent;
+      const listing = deferred<{ entries: never[] }>();
+      mockRpc.fs.list.mockReturnValue(listing.promise);
+      setClient({ id: 'replacement' });
+      await flush();
+      expect(workspace.getAttribute('data-initializing')).toBe('false');
+      expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
+      expect(host.querySelector('[data-testid="files-workspace"]')).toBe(workspace);
+      expect(host.querySelector('[data-testid="mock-files-tree"]')!.textContent).toBe(tree);
+      listing.resolve({ entries: [] });
+      await flush();
+    } finally { dispose(); }
+  });
+
   it('revalidates a cached directory when navigating back into it', async () => {
     widgetStateStore.values['widget-1'] = {
       browserSidebarWidth: 312,
@@ -3074,7 +3171,7 @@ describe('RemoteFileBrowser persistence', () => {
       await Promise.resolve();
 
       expect(host.textContent).toContain('files:files:/workspace/repo:312:0');
-      expect(host.textContent).toContain('Opening...');
+      expect(host.querySelector('[aria-label="Refresh current directory"]')?.className).toContain('animate-spin');
       expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
 
       srcLoad.resolve({
@@ -3086,7 +3183,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.textContent).toContain('files:files:/workspace/repo/src:312:0');
-      expect(host.textContent).not.toContain('Opening...');
+      expect(host.querySelector('[aria-label="Refresh current directory"]')?.className).not.toContain('animate-spin');
       expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
     } finally {
       dispose();
@@ -3131,12 +3228,12 @@ describe('RemoteFileBrowser persistence', () => {
       navSrc.click();
       await Promise.resolve();
       await Promise.resolve();
-      expect(host.textContent).toContain('Opening...');
+      expect(host.querySelector('[aria-label="Refresh current directory"]')?.className).toContain('animate-spin');
 
       navRepo.click();
       await flush();
       expect(host.textContent).toContain('files:files:/workspace/repo:');
-      expect(host.textContent).not.toContain('Opening...');
+      expect(host.querySelector('[aria-label="Refresh current directory"]')?.className).not.toContain('animate-spin');
       expect(mockRpc.fs.list.mock.calls.filter(([request]) => request?.path === '/workspace/repo')).toHaveLength(0);
 
       srcLoad.resolve({ entries: [{ name: 'late.txt', path: '/workspace/repo/src/late.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' }] });
@@ -3369,7 +3466,7 @@ describe('RemoteFileBrowser persistence', () => {
       await Promise.resolve();
 
       expect(host.textContent).toContain('files:files:/workspace/repo/missing:312:0');
-      expect(host.textContent).toContain('Refreshing...');
+      expect(host.querySelector('[aria-label="Refresh current directory"]')?.className).toContain('animate-spin');
       expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
 
       await flush();
@@ -3389,7 +3486,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.textContent).toContain('files:files:/workspace/repo:312:0');
-      expect(host.textContent).not.toContain('Refreshing...');
+      expect(host.querySelector('[aria-label="Refresh current directory"]')?.className).not.toContain('animate-spin');
       expect(widgetStateStore.updateCalls).toContainEqual({
         widgetId: 'widget-1',
         key: 'lastPathByEnv',
@@ -3514,7 +3611,7 @@ describe('RemoteFileBrowser persistence', () => {
       await Promise.resolve();
 
       expect(host.textContent).toContain('files:files:/workspace/repo:312:0');
-      expect(host.textContent).toContain('Opening...');
+      expect(host.querySelector('[aria-label="Refresh current directory"]')?.className).toContain('animate-spin');
 
       srcLoad.resolve({
         entries: [
@@ -3525,7 +3622,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.textContent).toContain('files:files:/workspace/repo/src:312:0');
-      expect(host.textContent).not.toContain('Opening...');
+      expect(host.querySelector('[aria-label="Refresh current directory"]')?.className).not.toContain('animate-spin');
     } finally {
       dispose();
     }

@@ -15,6 +15,7 @@ import {
   type ContextMenuItem,
   type FileItem,
 } from '@floegence/floe-webapp-core/file-browser';
+import { Skeleton } from '@floegence/floe-webapp-core/loading';
 import { Button, SegmentedControl, formatPickerPath, parsePickerPath, type SurfaceFloatingBoundary } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { FileBrowserPathControl, type FileBrowserPathControlMode } from './FileBrowserPathControl';
@@ -77,6 +78,8 @@ export interface FileBrowserWorkspaceProps {
   toolbarEndActions?: JSX.Element;
   contentNotice?: JSX.Element;
   contentUnavailable?: boolean;
+  /** No directory response exists yet; an empty array is not an empty result. */
+  initializing?: boolean;
   /** Client-coordinate limit supplied by shell overlays, when present. */
   contextMenuBottomLimit?: number;
   contextMenuCallbacks?: ContextMenuCallbacks;
@@ -86,6 +89,7 @@ export interface FileBrowserWorkspaceProps {
 }
 
 interface FileWorkspaceHeaderProps {
+  initializing?: boolean;
   showMobileSidebarButton?: boolean;
   onToggleSidebar?: () => void;
   toolbarEndActions?: JSX.Element;
@@ -144,24 +148,26 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
             </Button>
           </Show>
 
-          <Button size="sm" variant="ghost" icon={ArrowUp} {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} onClick={browser.navigateUp} disabled={!canNavigateUp()}>
+          <Button size="sm" variant="ghost" icon={ArrowUp} {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} onClick={browser.navigateUp} disabled={props.initializing || !canNavigateUp()}>
             {i18n.t('files.up')}
           </Button>
         </div>
 
         <div data-floe-surface={props.pathControlMode === 'edit' ? 'inset' : undefined} data-floe-input-surface={props.pathControlMode === 'edit' ? '' : undefined} aria-invalid={Boolean(props.pathError) || undefined} class={cn(FILE_WORKSPACE_TOOLBAR_PATH_CLASS, props.pathControlMode === 'edit' && redevenSurfaceRoleClass('controlMuted'))}>
-          <FileBrowserPathControl
-            class="min-w-0 flex-1"
-            mode={props.pathControlMode}
-            draft={props.pathDraft}
-            error={props.pathError}
-            submitting={props.pathSubmitting}
-            inputRef={props.pathInputRef}
-            onDraftChange={props.onPathDraftChange}
-            onActivateEdit={props.onActivatePathEdit}
-            onSubmit={props.onSubmitPath}
-            onCancel={props.onCancelPathEdit}
-          />
+          <Show when={!props.initializing} fallback={<Skeleton class="h-3 w-36" />}>
+            <FileBrowserPathControl
+              class="min-w-0 flex-1"
+              mode={props.pathControlMode}
+              draft={props.pathDraft}
+              error={props.pathError}
+              submitting={props.pathSubmitting}
+              inputRef={props.pathInputRef}
+              onDraftChange={props.onPathDraftChange}
+              onActivateEdit={props.onActivatePathEdit}
+              onSubmit={props.onSubmitPath}
+              onCancel={props.onCancelPathEdit}
+            />
+          </Show>
         </div>
 
         <div
@@ -315,7 +321,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   };
 
   const openPathEditor = () => {
-    if (pathSubmitting()) return;
+    if (props.initializing || pathSubmitting()) return;
     setPathDraft(formattedCurrentPath());
     setPathError('');
     setPathControlMode('edit');
@@ -323,14 +329,14 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   };
 
   const closePathEditor = () => {
-    if (pathSubmitting()) return;
+    if (props.initializing || pathSubmitting()) return;
     setPathControlMode('read');
     setPathError('');
     setPathDraft(formattedCurrentPath());
   };
 
   const submitPathEditor = async () => {
-    if (pathSubmitting()) return;
+    if (props.initializing || pathSubmitting()) return;
 
     const rawPath = pathDraft().trim();
     const absolutePath = parsePickerPath(rawPath, props.homePath);
@@ -368,7 +374,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   useFileBrowserTypeToFilter({
     rootRef: () => workspaceRootEl,
     filterInputRef: () => filterInputEl,
-    enabled: () => props.mode === 'files',
+    enabled: () => props.mode === 'files' && !props.initializing,
     captureWhenBodyFocused: () => props.captureTypingFromPage === true,
     openPathEditor,
     pathEditorActive: () => pathControlMode() === 'edit',
@@ -408,7 +414,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   });
 
   const handleWorkspaceBackgroundContextMenu = (event: MouseEvent) => {
-    if (props.contentUnavailable) return;
+    if (props.initializing || props.contentUnavailable) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest('button')) return;
 
@@ -452,8 +458,10 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
           <div class="flex items-center justify-between px-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
             <span>{i18n.t('files.folderTree')}</span>
             <span class="flex items-center gap-1">
-              <span>{currentRoot()?.label ?? i18n.t('files.compactDepth')}</span>
-              <Show when={currentRoot()}>
+              <Show when={!props.initializing} fallback={<Skeleton class="h-3 w-12" />}>
+                <span>{currentRoot()?.label ?? i18n.t('files.compactDepth')}</span>
+              </Show>
+              <Show when={!props.initializing && currentRoot()}>
                 {(root) => (
                   <span
                     class="rounded-full border border-border/40 bg-background/80 px-1 py-0 text-[8px] font-semibold leading-4 text-muted-foreground"
@@ -474,18 +482,20 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             data-testid="file-tree-scroll-region"
             class="min-h-0 flex-1 overflow-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
           >
-            <FileBrowserSidebarTree
-              instanceId={props.instanceId}
-              enableDragDrop={dragEnabled()}
-              sidebarOpen={props.open}
-              scrollContainer={() => treeScrollEl}
-              pendingNavigationPath={props.pendingNavigationPath}
-              roots={props.roots}
-              currentPath={props.currentPath}
-              onRootSelect={props.onRootSelect}
-              onRootWritePermissionChange={props.onRootWritePermissionChange}
-              class="min-h-full"
-            />
+            <Show when={!props.initializing} fallback={<div aria-hidden="true" class="space-y-3 py-2"><Skeleton class="h-4 w-24" /><Skeleton class="h-4 w-32" /></div>}>
+              <FileBrowserSidebarTree
+                instanceId={props.instanceId}
+                enableDragDrop={dragEnabled()}
+                sidebarOpen={props.open}
+                scrollContainer={() => treeScrollEl}
+                pendingNavigationPath={props.pendingNavigationPath}
+                roots={props.roots}
+                currentPath={props.currentPath}
+                onRootSelect={props.onRootSelect}
+                onRootWritePermissionChange={props.onRootWritePermissionChange}
+                class="min-h-full"
+              />
+            </Show>
           </div>
         </div>
       )}
@@ -498,6 +508,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
           class={cn('flex h-full min-h-0 flex-col focus:outline-none', redevenSurfaceRoleClass('main'))}
         >
           <FileWorkspaceHeader
+            initializing={props.initializing}
             showMobileSidebarButton={props.showMobileSidebarButton}
             onToggleSidebar={props.onToggleSidebar}
             toolbarEndActions={props.toolbarEndActions}
@@ -529,13 +540,19 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             onContextMenu={handleWorkspaceBackgroundContextMenu}
           >
             {props.contentNotice}
-            <Show when={!props.contentUnavailable}>
-              <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
-                <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full redeven-file-list-compact" />
+            <Show when={props.initializing} fallback={(
+              <Show when={!props.contentUnavailable}>
+                <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
+                  <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full redeven-file-list-compact" />
+                </Show>
               </Show>
+            )}>
+              <div data-file-browser-initial-loading role="status" aria-busy="true" class="flex items-center gap-2 px-4 py-6 text-xs text-muted-foreground">
+                <Skeleton class="h-3 w-3 rounded-full" /><span>{i18n.t('files.loadingFiles')}</span>
+              </div>
             </Show>
           </div>
-          <Show when={!props.contentUnavailable}><FileWorkspaceStatusBar /></Show>
+          <Show when={!props.initializing && !props.contentUnavailable}><FileWorkspaceStatusBar /></Show>
           <FileContextMenu
             boundary={menuBoundary()}
             backLabel={i18n.t('files.contextMenuBack')}
@@ -597,6 +614,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           toolbarEndActions={props.toolbarEndActions}
           contentNotice={props.contentNotice}
           contentUnavailable={props.contentUnavailable}
+          initializing={props.initializing}
           contextMenuBottomLimit={props.contextMenuBottomLimit}
           contextMenuCallbacks={props.contextMenuCallbacks}
           overrideContextMenuItems={props.overrideContextMenuItems}

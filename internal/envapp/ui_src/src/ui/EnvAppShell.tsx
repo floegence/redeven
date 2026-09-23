@@ -8,6 +8,7 @@ import { CodespacesPageSkeleton } from './pages/CodespacesPresentation';
 import { HostApplicationsPageSkeleton } from './pages/HostApplicationsPresentation';
 import { WebServicesPageSkeleton } from './pages/WebServicesPresentation';
 import { ContainersPageSkeleton } from './pages/ContainersPresentation';
+import { FileBrowserPageLoading } from './pages/FileBrowserPageLoading';
 import { createEnvReloadPresentation } from './services/envReloadPresentation';
 import { PageAssetRecoveryNotice, PageLoadError } from './reconnect/PageAssetRecovery';
 import { createEnvAppAssetRecovery } from './reconnect/createEnvAppAssetRecovery';
@@ -4748,6 +4749,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
   const renderActivityPageSkeleton = (id: string) => {
     switch (id) {
+      case 'files': return <FileBrowserPageLoading environment={envId()} />;
       case 'codespaces': return <CodespacesPageSkeleton />;
       case 'applications': return <HostApplicationsPageSkeleton />;
       case 'ports': return <WebServicesPageSkeleton />;

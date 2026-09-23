@@ -3,7 +3,7 @@ type: UI Contract
 title: Env App document reload presentation
 description: Bridge document reload before modules execute and hand off once to the selected authorized inventory.
 tags: [ui, desktop, startup, caching]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 # Summary
 
@@ -19,7 +19,7 @@ Unavailable presentation storage must not prevent normal startup.
 
 The HTML head installs Floe's independent `reload-placeholder` entry before
 external application modules and styles. After an authorized Host Applications,
-Web Services, Containers, or Codespaces view becomes renderable, the Shell arms
+Web Services, Containers, Codespaces, or Files view becomes renderable, the Shell arms
 capture of the visible shell on `pagehide`. Transient portals and dialogs outside
 the shell are excluded. Capture retains only rectangles, resolved colors, corner
 radii, and offsets of explicitly marked scroll containers. It never serializes
@@ -51,8 +51,13 @@ Navigation to another target, a display-mode change, environment or authenticati
 change, explicit locking or denial, connection recovery, and actionable module
 or data errors dismiss the placeholder. Existing verification, error, and retry
 interfaces remain usable. Navigation away while identity checks are pending
-cannot be reversed by a late handoff. Only the four inventory pages opt in;
+cannot be reversed by a late handoff. Only these five Activity pages opt in;
 terminal, logs, monitoring, and embedded application contents are not captured.
+
+Files captures only workspace and visible row geometry, never directory entries,
+paths, names, file contents, or icons. Its session-only directory cache is not
+persisted by this presentation contract. Its first directory response or explicit
+failure completes the same Shell handoff.
 
 Resource snapshots remain subject to
 [Env App resource snapshots](env-resource-cache.md). No text or icon from those
@@ -67,4 +72,5 @@ Activity target selection remains owned by
 - `redeven:internal/envapp/ui_src/src/ui/services/envReloadPresentation.ts` - Single Shell handoff and revocation boundaries.
 - `redeven:internal/envapp/ui_src/src/ui/services/envReloadPresentation.test.ts` - Pending, successful empty, error, navigation, and identity transitions.
 - `redeven:internal/envapp/ui_src/scripts/checkDocumentReload.mjs` - Compiled Shell reload with delayed modules, permission, scope, and data; compositor frames cover the pre-module blank-paint boundary.
+- `redeven:internal/envapp/ui_src/scripts/checkFileBrowserContinuity.mjs` - Files module, path-context, directory, empty result, and retry handoffs in the compiled Shell.
 - `redeven:desktop/scripts/check-env-content-continuity.mjs` - Production Electron and Runtime document reload and window lifecycle evidence.

@@ -28,7 +28,8 @@
     "test:terminal-font-electron": "node scripts/checkTerminalFontElectron.mjs",
     "test:terminal-carrier": "node scripts/checkSemanticTerminalCarrier.mjs",
     "test:terminal-performance": "node scripts/checkTerminalInteractionPerformance.mjs",
-    "test:file-preview-media": "node scripts/checkFilePreviewMedia.mjs"
+    "test:file-preview-media": "node scripts/checkFilePreviewMedia.mjs",
+    "test:files-continuity": "node scripts/checkFileBrowserContinuity.mjs"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",

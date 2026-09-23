@@ -70,6 +70,20 @@ controller. File items, identifiers, menu callbacks, drag targets, and reveal
 requests pass through the workspace with their original absolute paths and
 identity. There is no Home-relative display tree or reverse path conversion.
 
+Files uses the actual workspace chrome throughout module loading, path discovery,
+and first directory loading. Before a successful snapshot exists, a single inline
+loading status replaces the directory body; an uninitialized empty array must not
+claim an empty directory, Root location, or item count. Module and data loading
+share the same sidebar width, toolbar, filter, and content bounds. Ordinary refresh
+and same-environment session replacement keep the last successful directory,
+including an empty result, and only animate the refresh icon. Reconciliation by
+absolute file identifier preserves surviving rows across refreshed metadata and
+Git decorations. Environment changes cancel directory work and invalidate pending
+path-context responses before they can update the new view.
+
+[Document reload presentation](document-reload-presentation.md) owns Files' full
+reload bridge. It persists anonymous layout geometry, not directory snapshots.
+
 Files treats a failed directory load as a settled outcome in its existing view
 state. A deleted saved location, unmounted volume, denied directory, or connection
 failure cannot restart hydration merely because no snapshot is available. The
@@ -135,6 +149,7 @@ product operation executes.
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Published path parsing and formatting, absolute identity, and localized input recovery.
+- `redeven:internal/envapp/ui_src/src/ui/pages/FileBrowserPageLoading.tsx` - Shared workspace presentation before the Files module is ready.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserRecoveryView.tsx` - Responsive unavailable-folder presentation and local copy feedback over existing navigation state.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.paths.browser.test.tsx` - Real Files input through runtime directory requests, root selection, persistence, failure, and cancellation.
 - `redeven:internal/envapp/ui_src/src/ui/services/filesystemPicker.ts` - Runtime and Workbench adapter without independent navigation state.

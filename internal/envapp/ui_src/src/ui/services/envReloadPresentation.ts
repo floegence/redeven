@@ -1,11 +1,12 @@
 import { createEffect, onCleanup, onMount, type Accessor } from 'solid-js';
 import { getReloadPlaceholder } from '@floegence/floe-webapp-core/reload-placeholder';
 
-const cachedPages = new Set(['applications', 'ports', 'containers', 'codespaces']);
+const reloadPages = new Set(['applications', 'ports', 'containers', 'codespaces', 'files']);
 const surfaces = [
   '[data-floe-shell-slot]', '.host-apps', '.web-services', '.codespaces-page', '.redeven-containers', '.host-apps-header', '.host-app-session', '.host-app-tile',
   '.web-services-header', '.web-service-row', '.codespace-card', '.container-header',
   '.container-resource-table-shell', '.container-service-card', 'thead', 'tbody tr',
+  '[data-browser-workspace]', '[data-toolbar-layout]', '[data-file-browser-item-id]',
 ].join(',');
 
 /** One document handoff; inventory and authorization remain owned by their existing services. */
@@ -26,7 +27,7 @@ export function createEnvReloadPresentation(options: {
   let observer: MutationObserver | undefined;
   const inspect = () => {
     frame = undefined;
-    if (!options.activity() || !cachedPages.has(options.target()) || options.blocked()) {
+    if (!options.activity() || !reloadPages.has(options.target()) || options.blocked()) {
       placeholder.clear();
       observer?.disconnect();
       return;
