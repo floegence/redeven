@@ -3784,7 +3784,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       { id: 'monitor', name: i18n.t('shell.nav.monitoring'), icon: Activity, component: EnvMonitorPage, sidebar: { order: 2, fullScreen: true } },
       { id: 'files', name: i18n.t('shell.nav.fileBrowser'), icon: Files, component: EnvFileBrowserPage, sidebar: { order: 3, fullScreen: true } },
       { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: EnvCodespacesPage, sidebar: { order: 4, fullScreen: true } },
-      { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
+      { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: ActivityBarPortsIcon, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
       { id: 'applications', name: i18n.t('hostApplications.title'), icon: ActivityBarHostApplicationsIcon, component: EnvHostApplicationsPage, sidebar: { order: 5.5, fullScreen: true } },
       { id: 'containers', name: i18n.t('shell.nav.containers'), icon: Layers, component: EnvContainersPage, sidebar: { order: 6, fullScreen: true } },
     ];

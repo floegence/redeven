@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkbenchWidgetItem } from '@floegence/floe-webapp-core/workbench';
 
-import { arrangeWorkbenchWidgetsByType } from './workbenchAutoArrange';
+import { arrangeWorkbenchWidgetsByType, resolveFreeWorkbenchWidgetOrigin } from './workbenchAutoArrange';
 
 const TYPE_ORDER = [
   'redeven.files',
@@ -214,6 +214,18 @@ function assertScenarioQuality(
 }
 
 describe('workbenchAutoArrange', () => {
+  it('places a newly opened widget in a free slot around the current viewport', () => {
+    const existing = [
+      widget({ id: 'files', type: 'redeven.files', x: -500, y: -300, width: 760, height: 560 }),
+      widget({ id: 'monitor', type: 'redeven.monitor', x: 300, y: -300, width: 760, height: 420 }),
+      widget({ id: 'terminal', type: 'redeven.terminal', x: 300, y: 160, width: 840, height: 500 }),
+    ];
+    const origin = resolveFreeWorkbenchWidgetOrigin(existing, 1000, 620, { x: 0, y: 0 });
+    const created = widget({ id: 'ports', type: 'redeven.ports', ...origin, width: 1000, height: 620 });
+
+    expect(existing.every((item) => !boxesOverlap(created, item, 0))).toBe(true);
+  });
+
   it('keeps widget sizes intact while centering the arranged scene', () => {
     const widgets = [
       widget({ id: 'files-1', type: 'redeven.files', width: 760, height: 560, x: -1200, y: 400 }),

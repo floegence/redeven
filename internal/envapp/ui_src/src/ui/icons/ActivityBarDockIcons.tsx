@@ -65,10 +65,12 @@ export function ActivityBarCodespacesIcon(props: { class?: string }) {
 
 export function ActivityBarPortsIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-opacity=".55" stroke-width="1" fill="currentColor" fill-opacity=".12" />
-      <path d="M12 5 A 3 7 0 0 0 12 19 A 3 7 0 0 0 12 5" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" fill="none" stroke-linecap="round" />
-      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" stroke-linecap="round" />
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true" data-activity-bar-icon="web-services">
+      <rect x="4" y="5" width="16" height="14" rx="3" fill="currentColor" fill-opacity=".1" stroke="currentColor" stroke-opacity=".72" stroke-width="1.25" />
+      <path d="M4 10h16M8 5v5M16 5v5" stroke="currentColor" stroke-opacity=".45" stroke-width="1.15" stroke-linecap="round" />
+      <circle cx="8" cy="14.5" r="1.25" fill="currentColor" fill-opacity=".82" />
+      <circle cx="12" cy="14.5" r="1.25" fill="currentColor" fill-opacity=".58" />
+      <circle cx="16" cy="14.5" r="1.25" fill="currentColor" fill-opacity=".38" />
     </svg>
   );
 }
