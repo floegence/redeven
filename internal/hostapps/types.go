@@ -106,6 +106,7 @@ type Presentation struct {
 	PictureSmooth        string `json:"pictureSmooth,omitempty"`
 	PictureData          string `json:"pictureData,omitempty"`
 	PictureHint          string `json:"pictureHint,omitempty"`
+	PictureReopenHint    string `json:"pictureReopenHint,omitempty"`
 	PictureAdvanced      string `json:"pictureAdvanced,omitempty"`
 	PictureResolution    string `json:"pictureResolution,omitempty"`
 	PictureFrameRate     string `json:"pictureFrameRate,omitempty"`

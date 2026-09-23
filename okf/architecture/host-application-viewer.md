@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Host application viewer state and geometry
 description: Present authoritative application state, first pixels, recovery and Xpra window geometry without conflating viewer closure with application termination.
 tags: [applications, ui, desktop, runtime]
-timestamp: 2026-09-23T08:00:00Z
+timestamp: 2026-09-23T14:40:00Z
 ---
 # Summary
 
@@ -82,6 +82,24 @@ their normal save/cancel prompts; cancelling keeps both the session and its view
 Closing the outer viewer still preserves the application session.
 
 ## LAN decoding and resource reuse
+
+Clarity first requests native display density through the published SDK. On a
+high-density viewer, applications render additional pixels with matching private
+display DPI and toolkit scale; logical geometry, pointer targets and dialog
+controls remain unchanged. The SDK bounds integral density by DPR and the server's
+maximum display dimensions, and handles viewport and monitor changes. Redeven
+does not implement a second scaling path. Automatic, Smoother motion and Less data
+use logical density. Switching modes preserves the connection and application.
+Clarity retains adaptive encoding speed and quality 95; mode changes request a
+quality-100 refresh so a stationary view can recover exact pixels. Neither high
+quality encoding nor HTTPS alone can restore detail absent from the source raster.
+Extra pixels consume bandwidth and encoding time, so the picture panel explains
+that motion can slow. Application support for live DPI changes remains authoritative.
+
+Applications retain their prepared assets across viewer closure and Runtime
+updates. If the released display API is unavailable, Clarity first remains usable
+and tells high-density viewers to save their work, quit the application and reopen
+it. The viewer never rewrites a live application's assets or silently relaunches it.
 
 The picture panel reports video decoding availability from the actual client
 encoding list. HTTPS alone does not prove decoder support or a received video

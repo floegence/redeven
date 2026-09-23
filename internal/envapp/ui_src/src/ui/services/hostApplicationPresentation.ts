@@ -15,6 +15,7 @@ export const hostApplicationCopyKeys = {
   picture: 'hostApplications.macPicture',
   pictureAuto: 'hostApplications.macPictureAuto',
   pictureClarity: 'hostApplications.macPictureClarity',
+  pictureReopenHint: 'hostApplications.sessionPictureReopenHint',
   pictureSmooth: 'hostApplications.macPictureSmooth',
   pictureData: 'hostApplications.macPictureData',
   pictureAdvanced: 'hostApplications.macPictureAdvanced',

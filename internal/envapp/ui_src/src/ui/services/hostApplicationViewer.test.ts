@@ -14,7 +14,7 @@ let dom: InstanceType<typeof JSDOM>;
 const drain = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.close(); });
 
-async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }) {
+async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }, savedPicture?: string) {
   dom = new JSDOM(html, { url:'http://localhost/pf/test/_redeven_host_app/', runScripts:'dangerously', pretendToBeVisual:true });
   const fetch = vi.fn().mockResolvedValue({ok:true, json:async () => ({state:'running', password:'private'})});
   dom.window.fetch = fetch;
@@ -28,6 +28,7 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
     return vi.fn();
   }) };
   if (native) Object.assign(dom.window, { redevenHostApplicationWindow: nativeWindow });
+  if (savedPicture) dom.window.localStorage.setItem('redeven.xpra-app.picture.v1', savedPicture);
   dom.window.eval(`const config = ${JSON.stringify({base:'/pf/test', copy, icon:'', initial})};\n${source}`);
   await drain();
   const frame = dom.window.document.querySelector('iframe')!;
@@ -53,6 +54,7 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
       commitText:vi.fn(), sendKey:vi.fn(), release:vi.fn(), clipboard:vi.fn(), paste:vi.fn(), onError:undefined as undefined | (() => void)},
     _get_desktop_size:() => [1000, 680], id_to_window:windows, connected:true, reconnect:true, reconnect_count:5,
     _new_window:vi.fn(), do_send_damage_sequence:vi.fn(), send_configure_window:vi.fn(),
+    set_display_density:vi.fn().mockReturnValue(true), scale:1,
     send_control_refresh:vi.fn(), send:vi.fn(), send_close_window:vi.fn(), focused_wid:1, set_focus:vi.fn((win: {wid:number}) => { client.focused_wid = win.wid; }), close:vi.fn(), callback_close:() => {}, on_last_window:vi.fn(),
   };
   Object.assign(frame.contentWindow!, {floeXpraInput:{version:1,getClient:() => (frame.contentWindow as unknown as {client?:unknown}).client}});
@@ -65,6 +67,39 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
 }
 
 describe('host application viewer', () => {
+  it('restores clarity on attachment through the published display API without reconnecting', async () => {
+    const v = await viewer(false, false, false, undefined, undefined, 'clarity');
+    expect(v.client.set_display_density).toHaveBeenCalledWith('native');
+    expect(v.client.send_control_refresh).toHaveBeenCalledTimes(1);
+    expect(v.client.send_control_refresh).toHaveBeenCalledWith(100, {'refresh-now':true});
+    expect(v.client.close).not.toHaveBeenCalled();
+  });
+
+  it('explains how to upgrade retained application resources without closing the application', async () => {
+    const v = await viewer();
+    Object.defineProperty(dom.window, 'devicePixelRatio', {value:2});
+    v.client.set_display_density.mockReturnValue(false);
+    v.appWindow(1); v.client._new_window(1);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    dom.window.document.querySelector<HTMLButtonElement>('[data-picture-mode="clarity"]')!.click();
+    expect(dom.window.document.querySelector('[data-app-copy="pictureReopenHint"]')).not.toBeNull();
+    expect(v.client.close).not.toHaveBeenCalled();
+    expect(v.client.send_close_window).not.toHaveBeenCalled();
+    dom.window.document.querySelector<HTMLButtonElement>('[data-picture-mode="auto"]')!.click();
+    expect(dom.window.document.querySelector('[data-app-copy="pictureReopenHint"]')).toBeNull();
+  });
+
+  it('keeps dialog margins in logical pixels at native density', async () => {
+    const v = await viewer();
+    v.client.scale = 2;
+    const dialog = v.appWindow(2, {'transient-for':1}, 'DIALOG');
+    v.client._new_window(2);
+    expect(dialog.w).toBe(950);
+    expect(dialog.h).toBe(601);
+    expect(dialog.x).toBeGreaterThanOrEqual(dialog.leftoffset + 24);
+    expect(dialog.y).toBeGreaterThanOrEqual(dialog.topoffset + 24);
+  });
+
   it.each([
     {secure:false, encodings:['webp'], available:false, guidance:true},
     {secure:true, encodings:['webp'], available:false, guidance:false},
@@ -190,6 +225,11 @@ describe('host application viewer', () => {
     button('.mac-app-controls-toggle').click();
     button('[data-picture-mode="clarity"]').click();
     expect(v.client.send).toHaveBeenCalledWith(['quality', 95]);
+    expect(v.client.set_display_density).toHaveBeenLastCalledWith('native');
+    expect(v.client.send_control_refresh).toHaveBeenLastCalledWith(100, {'refresh-now':true});
+    button('[data-picture-mode="auto"]').click();
+    expect(v.client.set_display_density).toHaveBeenLastCalledWith('logical');
+    expect(v.client.send).toHaveBeenCalledWith(['quality', -1]);
     expect(v.client.close).not.toHaveBeenCalled();
     button('.mac-app-close').click();
     expect(v.client.send_close_window).toHaveBeenLastCalledWith(second);
