@@ -4882,8 +4882,11 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   });
 
-  it('labels the password field, links helper/error text, and restores focus after unlock failures', async () => {
-    unlockLocalAccessMock.mockRejectedValueOnce(new Error('Wrong password.'));
+  it.each([true, false])('labels the field and classifies unlock feedback (invalid password: %s)', async (invalidPassword) => {
+    const { AccessUnlockError } = await import('./services/accessUnlockError');
+    unlockLocalAccessMock.mockRejectedValueOnce(invalidPassword
+      ? new AccessUnlockError({ message: 'Wrong password.', code: 'ACCESS_PASSWORD_INVALID', status: 401 })
+      : new Error('Connection interrupted.'));
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -4914,8 +4917,8 @@ describe('EnvAppShell environment entry affordances', () => {
 
       const error = host.querySelector('#redeven-access-error');
       expect(error?.getAttribute('role')).toBe('alert');
-      expect(error?.textContent).toContain('Wrong password.');
-      expect(input?.getAttribute('aria-invalid')).toBe('true');
+      expect(error?.textContent).toContain(invalidPassword ? 'The access password is incorrect.' : 'Connection interrupted.');
+      expect(input?.getAttribute('aria-invalid')).toBe(String(invalidPassword));
       expect(document.activeElement).toBe(input);
     } finally {
       dispose();
@@ -4954,6 +4957,7 @@ describe('EnvAppShell environment entry affordances', () => {
       const button = host.querySelector('button[type="submit"]') as HTMLButtonElement | null;
 
       expect(help?.textContent).toContain('Try again in 30s');
+      expect(input?.getAttribute('aria-invalid')).toBe('false');
       expect(button?.disabled).toBe(true);
       expect(button?.textContent).toContain('Retry in 30s');
 
@@ -5448,7 +5452,8 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => Boolean(host.querySelector('input[type="password"]')), 40);
 
       expect(host.textContent).toContain('Unlock local runtime');
-      expect(host.textContent).toContain('Access password expired. Enter it again to continue.');
+      expect(host.textContent).toContain('Your runtime session is no longer valid. Sign in again to continue.');
+      expect(host.querySelector('input[type="password"]')?.getAttribute('aria-invalid')).toBe('false');
       expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeFalsy();
       expect(retryNowMock).not.toHaveBeenCalled();
     } finally {
@@ -5882,7 +5887,8 @@ describe('EnvAppShell remote access gate', () => {
 
       expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
       expect(host.textContent).toContain('Unlock runtime');
-      expect(host.textContent).toContain('Access password expired. Enter it again to continue.');
+      expect(host.textContent).toContain('Your runtime session is no longer valid. Sign in again to continue.');
+      expect(host.querySelector('input[type="password"]')?.getAttribute('aria-invalid')).toBe('false');
       expect(host.querySelector('input[type="password"]')).toBeTruthy();
     } finally {
       dispose();

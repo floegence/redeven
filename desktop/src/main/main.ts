@@ -1,3 +1,4 @@
+import { localAccessCookieFromHeaders } from './localAccessCookie';
 import { DESKTOP_MODEL_SOURCE_RETRY_CHANNEL } from '../shared/desktopSessionContextIPC';
 import { EnvironmentSettingsConnections } from './environmentSettingsConnections';
 import { DESKTOP_SECURITY_CHANNEL, parseDesktopSecurityRequest } from '../shared/runtimeSecurity';
@@ -28,7 +29,7 @@ import crypto from 'node:crypto';
 import { once } from 'node:events';
 import { existsSync, mkdirSync } from 'node:fs';
 import fs from 'node:fs/promises';
-import http, { type ClientRequest, type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
+import http, { type ClientRequest, type IncomingMessage } from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -1207,7 +1208,6 @@ class RuntimeFlowerTransportError extends Error {
   }
 }
 
-const LOCAL_UI_ACCESS_COOKIE_NAME = 'redeven_local_access';
 const runtimeFlowerAccessCookies = new Map<string, string>();
 const runtimeFlowerTargetInFlight = new Map<string, Promise<RuntimeFlowerTarget>>();
 const RUNTIME_FLOWER_READINESS_TIMEOUT_MS = 15_000;
@@ -1246,26 +1246,6 @@ const runtimeFlowerAttachmentOperations = new Map<string, RuntimeFlowerAttachmen
 
 function runtimeFlowerBaseURL(record: LocalEnvironmentRuntimeRecord | RuntimePlacementBridgeRecord): string {
   return requireLocalUIBridgeURL(record.startup);
-}
-
-function runtimeFlowerAccessCookieHeader(cookieValue: string): string {
-  return `${LOCAL_UI_ACCESS_COOKIE_NAME}=${cookieValue}`;
-}
-
-function runtimeFlowerAccessCookieFromHeaders(headers: IncomingHttpHeaders): string {
-  const setCookie = headers['set-cookie'];
-  const values = Array.isArray(setCookie)
-    ? setCookie
-    : typeof setCookie === 'string'
-      ? [setCookie]
-      : [];
-  for (const value of values) {
-    const match = value.match(new RegExp(`^${LOCAL_UI_ACCESS_COOKIE_NAME}=([^;,]+)`, 'iu'));
-    if (match?.[1]) {
-      return compact(match[1]);
-    }
-  }
-  return '';
 }
 
 function bundledRuntimeExecutablePath(): string {
@@ -10320,7 +10300,7 @@ async function unlockRuntimeFlowerAccess(
       response.status,
     ));
   }
-  const cookie = runtimeFlowerAccessCookieFromHeaders(response.headers);
+  const cookie = localAccessCookieFromHeaders(response.headers);
   if (!cookie) {
     throw new Error('Local Environment did not return an access session for Flower.');
   }
@@ -10340,7 +10320,7 @@ async function runtimeFlowerAccessHeaders(
   const cookie = runtimeFlowerAccessCookies.get(baseURL) || await unlockRuntimeFlowerAccess(record, environment);
   return {
     ...bridgeHeaders,
-    Cookie: runtimeFlowerAccessCookieHeader(cookie),
+    Cookie: cookie,
   };
 }
 

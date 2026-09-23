@@ -12,6 +12,12 @@ export class AccessUnlockError extends Error {
   }
 }
 
+export function isAccessUnlockInputError(error: unknown): boolean {
+  if (!(error instanceof AccessUnlockError)) return false;
+  const code = error.code.toUpperCase();
+  return code === 'ACCESS_PASSWORD_INVALID' || code === 'ACCESS_FACTOR_INVALID';
+}
+
 export function isKnownAccessUnlockErrorCode(code: string): boolean {
   switch (String(code ?? '').trim().toUpperCase()) {
     case 'ACCESS_FACTOR_INVALID':

@@ -117,7 +117,7 @@ func TestRuntimeSecurityOwnerBoundaryAndTwoStepLogin(t *testing.T) {
 		t.Fatal("password-only login bypassed MFA")
 	}
 	for _, cookie := range res.Result().Cookies() {
-		if cookie.Name == accessgate.LocalSessionCookieName {
+		if cookie.Name == "redeven_local_access_https_23998" {
 			t.Fatal("password step minted a business cookie")
 		}
 	}
@@ -140,7 +140,7 @@ func TestRuntimeSecurityOwnerBoundaryAndTwoStepLogin(t *testing.T) {
 		t.Fatal("network retry issued a different session")
 	}
 	for _, cookie := range authenticated.Result().Cookies() {
-		if cookie.Name == accessgate.LocalSessionCookieName && (!cookie.Secure || !cookie.HttpOnly) {
+		if cookie.Name == "redeven_local_access_https_23998" && (!cookie.Secure || !cookie.HttpOnly) {
 			t.Fatal("access cookie lacks transport protection")
 		}
 	}

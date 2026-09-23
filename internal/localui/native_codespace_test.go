@@ -3,6 +3,7 @@ package localui
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -38,10 +39,8 @@ func testNativeCodeSpaceLocalAccessAndGeneration(t *testing.T, origin string) {
 		if r.Host != strings.TrimPrefix(origin, "http://") || r.URL.RequestURI() != "/echo?x=%2F&x=2" || r.Header.Get("X-Redeven-Code-Access") != "" || r.Header.Get("X-Redeven-Code-Origin") != "" {
 			t.Errorf("native request boundary: %s %s %v", r.Host, r.URL.RequestURI(), r.Header)
 		}
-		for _, c := range r.Cookies() {
-			if c.Name == accessgate.LocalSessionCookieName {
-				t.Error("runtime credential reached editor")
-			}
+		if r.Header.Get("Cookie") != "editor=preserved" {
+			t.Error("native forwarding must preserve only the editor cookie")
 		}
 		w.Header().Set("Content-Security-Policy", "default-src 'self'")
 		if _, err := io.Copy(w, r.Body); err != nil {
@@ -63,7 +62,10 @@ func testNativeCodeSpaceLocalAccessAndGeneration(t *testing.T, origin string) {
 		req.Header.Set("X-Redeven-Code-Origin", origin)
 		req.Header.Set("X-Redeven-Code-Access", credential)
 		req.AddCookie(&http.Cookie{Name: "editor", Value: "preserved"})
-		req.AddCookie(&http.Cookie{Name: accessgate.LocalSessionCookieName, Value: "editor-controlled"})
+		for _, name := range []string{"redeven_local_access", "redeven_local_access_https_443", "redeven_auth_challenge", "redeven_auth_challenge_https_443", "redeven_local_access_retired"} {
+			req.AddCookie(&http.Cookie{Name: name, Value: "unrelated-credential"})
+		}
+		req.AddCookie(&http.Cookie{Name: "redeven_local_access_http_23998", Value: "editor-controlled"})
 		res := httptest.NewRecorder()
 		s.HandlerForDesktopBridge().ServeHTTP(res, req)
 		return res
@@ -75,12 +77,24 @@ func testNativeCodeSpaceLocalAccessAndGeneration(t *testing.T, origin string) {
 	s.handleAccessUnlock(unlock, httptest.NewRequest("POST", "http://localhost:23998/api/local/access/unlock", bytes.NewBufferString(`{"password":"secret"}`)))
 	credential := ""
 	for _, cookie := range unlock.Result().Cookies() {
-		if cookie.Name == accessgate.LocalSessionCookieName {
+		if cookie.Name == "redeven_local_access_http_23998" {
 			credential = cookie.Value
 		}
 	}
 	if credential == "" {
 		t.Fatal("no local access cookie")
+	}
+	descriptorRequest := httptest.NewRequest("GET", "http://localhost:23998/api/local/codespaces/demo", nil)
+	descriptorRequest.AddCookie(&http.Cookie{Name: "redeven_local_access_http_23998", Value: credential})
+	descriptor := httptest.NewRecorder()
+	s.handleNativeCodeSpace(descriptor, descriptorRequest)
+	var body struct {
+		Data struct {
+			AccessCookieName string `json:"access_cookie_name"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(descriptor.Body.Bytes(), &body); err != nil || descriptor.Code != 200 || body.Data.AccessCookieName != "redeven_local_access_http_23998" {
+		t.Fatal("native descriptor did not publish the Runtime-issued cookie name")
 	}
 	if res := request(credential, "obsolete"); res.Code != 410 {
 		t.Fatalf("stale generation admitted: %d %s", res.Code, res.Body.String())
@@ -93,7 +107,7 @@ func testNativeCodeSpaceLocalAccessAndGeneration(t *testing.T, origin string) {
 		t.Fatalf("Local UI changed native editor response policy: %v", res.Header())
 	}
 	logout := httptest.NewRequest("POST", "http://localhost:23998/api/local/access/logout", nil)
-	logout.AddCookie(&http.Cookie{Name: accessgate.LocalSessionCookieName, Value: credential})
+	logout.AddCookie(&http.Cookie{Name: "redeven_local_access_http_23998", Value: credential})
 	s.handleAccessLogout(httptest.NewRecorder(), logout)
 	if res := request(credential, "generation"); res.Code != 423 {
 		t.Fatalf("revoked access admitted: %d", res.Code)

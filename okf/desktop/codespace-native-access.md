@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Native Desktop CodeSpace access
 description: Bind a Desktop editor origin to one authorized CodeSpace through the current environment transport.
 tags: [desktop, codespace, security, transport]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 # Summary
 
@@ -37,7 +37,7 @@ Remote environments acquire a fresh Code App entry ticket using the trusted envi
 
 ## Runtime boundary and HTTP semantics
 
-The Local UI descriptor resolves only an already-running CodeSpace, returns its generation, and requires full effective read/write/execute permissions plus the current AccessGate. Its native route includes that generation. Remote `code/http_v1` runs in the same typed session dispatcher and checks the same full grant and channel gate for every request. Instance and access-session cancellation close in-flight HTTP and upgraded connections.
+The Local UI descriptor resolves only an already-running CodeSpace, returns its generation and Runtime-owned `access_cookie_name`, and requires full effective read/write/execute permissions plus the current AccessGate. Desktop queries the returned Cookie name instead of inferring the forwarded port; [Runtime access sessions](../security/runtime-access-sessions.md) owns this authentication contract. Its native route includes that generation. Remote `code/http_v1` runs in the same typed session dispatcher and checks the same full grant and channel gate for every request. Instance and access-session cancellation close in-flight HTTP and upgraded connections.
 
 Both paths use one bound native handler. Its dial target comes only from Runtime's running instance. The handler removes its own `/cs/<id>` prefix at most once, rejects another resource and product management paths, preserves raw query/encoded paths, and retains the managed workspace redirect and VSDA shim. The native Local UI route leaves response policy with the bound editor instead of adding the Local UI shell CSP or frame headers. It neither rewrites editor HTML/CSP nor changes the code-server launch configuration. Desktop system-browser admission and its independent lifetime are defined by [CodeSpace system-browser access](codespace-system-browser.md); both Desktop targets share this bound Runtime handler.
 

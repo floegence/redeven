@@ -3,10 +3,11 @@
   "release_review": {
     "release_version": "v0.13.0",
     "previous_release": "v0.11.0",
-    "reviewed_at": "2026-09-22",
-    "review_id": "runtime-access-totp-v1",
-    "summary": "Epoch 32 adds persistent Runtime environment authentication, password plus TOTP challenges, owner-only security management and exact-editor delegation. Older Desktop and Runtime peers remain upgrade-only so password-only native editor authorization cannot silently substitute for the current access contract.",
+    "reviewed_at": "2026-09-23",
+    "review_id": "local-access-cookie-scope-v1",
+    "summary": "Epoch 33 scopes Runtime access and MFA challenge cookies by transport and validated authority port. Desktop consumes Runtime-issued cookie names and native CodeSpace descriptors instead of the retired fixed name. Epoch 32 and older peers remain upgrade-only.",
     "checked_surfaces": [
+      "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 33. HTTP/HTTPS browser refresh retains the existing absolute login lifetime; Runtime restart and security changes still revoke ordinary sessions. Flower HTTP requests retain the complete issued cookie pair, and native CodeSpace descriptors supply access_cookie_name across forwarded ports.",
       "Desktop management consumers share one leased bridge and isolate settings from model preparation. Desktop model connect and pre-upgrade RPC admission use existing AI readiness: transient 503, blocked 409, permanent request/authentication errors unchanged. The connector already classifies these statuses; endpoint paths, successful payloads, TOTP state and Runtime Service wire shapes are unchanged, so epoch 32 remains sufficient.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 32; epoch 31 is upgrade-only. Runtime owns encrypted authentication state, one-shot factors, recovery, absolute session expiry and revocation. Native CodeSpace receives a one-shot exact-resource delegation from its authenticated parent and resumes within that parent lifetime. Public URL query credentials are rejected. Private authenticated host management retains its independent authority and never claims TOTP verification.",
       "Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require epoch 31; epoch 30 is upgrade-only. Runtime provider_link.connection_state reports connected only after control registration, separates retrying, authorization_required, disabled, error and unknown, and preserves local availability when Cloud credentials expire. Desktop renews only expired or exhausted credential pools for an already attached target, fences account and binding generations, stops after bounded transient retries, and exposes restore plus explicit disconnect when recovery needs review. Portal renewals atomically advance the matching binding generation and reject stale or replayed requests; permission revocation is distinct from sign-in expiry. Flowersec remains the sole transport reconnect owner.",
@@ -67,7 +68,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 32,
+  "compatibility_epoch": 33,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -91,7 +92,8 @@
     28,
     29,
     30,
-    31
+    31,
+    32
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"
