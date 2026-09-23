@@ -30,6 +30,19 @@ func TestSessionLaunchDisablesAudioSubsystem(t *testing.T) {
 	}
 }
 
+func TestApplicationInputUsesPrivatePublishedLauncherAndHTML(t *testing.T) {
+	m := macFixture(t)
+	a := &linuxApplication{record: linuxApplicationRecord{ID: strings.Repeat("a", 64)}}
+	arguments := m.applicationArgs(a)
+	joined := strings.Join(arguments, "\n")
+	if strings.Contains(joined, "--input-method=none") || !strings.Contains(joined, "--input-method=keep") {
+		t.Fatal("application launch does not select the published client input environment")
+	}
+	if !strings.Contains(joined, "--html="+filepath.Join(m.applicationDir(a.record.ID), "www")) {
+		t.Fatal("application launch serves the original keyboard-owning HTML client")
+	}
+}
+
 func TestWindowReadinessCancellationReapsProbeChildren(t *testing.T) {
 	dir, err := os.MkdirTemp("", "xpra-cancel-")
 	if err != nil {
@@ -80,5 +93,33 @@ func TestIndependentBackendDoesNotShareRuntimeProcessGroup(t *testing.T) {
 	}
 	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestClientInputCapabilityUsesExactServerInterpreter(t *testing.T) {
+	root := t.TempDir()
+	python := filepath.Join(root, "python-xpra")
+	xpra := filepath.Join(root, "xpra")
+	if err := os.WriteFile(xpra, []byte("#!"+python+"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, supported := range []bool{false, true} {
+		body := "#!/bin/sh\nexit 1\n"
+		if supported {
+			body = "#!/bin/sh\nprintf '%s' '{\"version\":1,\"xpra_version\":\"6.5.3\"}'\n"
+		}
+		if err := os.WriteFile(python, []byte(body), 0700); err != nil {
+			t.Fatal(err)
+		}
+		availability, tools := clientInputTools(context.Background(), Availability{Supported: true, Ready: true}, hostTools{xpra: xpra, python: "independent-gio-python"})
+		if availability.Ready != supported || tools.python != "independent-gio-python" {
+			t.Fatal("client capability changed GIO ownership or accepted an unsupported server")
+		}
+		if supported && tools.inputPython != python {
+			t.Fatal("client input substituted another Python interpreter")
+		}
+		if !supported && (availability.Reason != "missing_dependencies" || len(availability.Requirements) != 1) {
+			t.Fatal("missing input capability has no explicit preparation guidance")
+		}
 	}
 }

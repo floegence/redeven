@@ -109,7 +109,18 @@ enum NativeInput {
             default: throw invalid("Unsupported keyboard modifier.")
             }
         }
-        let codes: [String: CGKeyCode] = [
+
+        guard let code = keyCodes[key] else { throw invalid("Unsupported key; use computer.type for text.") }
+        return try [true, false].map { down in
+            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: down) else {
+                throw unavailable()
+            }
+            event.flags = flags
+            return event
+        }
+    }
+
+    private static let keyCodes: [String: CGKeyCode] = [
             "a":0,"s":1,"d":2,"f":3,"h":4,"g":5,"z":6,"x":7,"c":8,"v":9,
             "b":11,"q":12,"w":13,"e":14,"r":15,"y":16,"t":17,"1":18,"2":19,
             "3":20,"4":21,"6":22,"5":23,"=":24,"9":25,"7":26,"-":27,"8":28,
@@ -122,14 +133,40 @@ enum NativeInput {
             "f1":122,"f2":120,"f3":99,"f4":118,"f5":96,"f6":97,"f7":98,"f8":100,
             "f9":101,"f10":109,"f11":103,"f12":111,
         ]
-        guard let code = codes[key] else { throw invalid("Unsupported key; use computer.type for text.") }
-        return try [true, false].map { down in
-            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: down) else {
-                throw unavailable()
-            }
-            event.flags = flags
-            return event
+
+    // Viewer packets represent one browser key transition. Explicit Unicode on
+    // direct character events keeps the host's input source out of composition.
+    static func viewerKey(_ request: [String: Any]) throws -> CGEvent {
+        guard let key = request["key"] as? String, !key.isEmpty, key.utf8.count <= 128,
+              let code = request["code"] as? String, code.utf8.count <= 64,
+              let pressed = request["pressed"] as? Bool, let repeated = request["repeat"] as? Bool,
+              let shift = request["shiftKey"] as? Bool, let control = request["ctrlKey"] as? Bool,
+              let option = request["altKey"] as? Bool, let command = request["metaKey"] as? Bool else {
+            throw invalid("A complete client key transition is required.")
         }
+        var flags: CGEventFlags = []
+        if shift { flags.insert(.maskShift) }; if control { flags.insert(.maskControl) }
+        if option { flags.insert(.maskAlternate) }; if command { flags.insert(.maskCommand) }
+        let modifiers: [String: CGKeyCode] = ["ShiftLeft":56,"ShiftRight":60,"ControlLeft":59,"ControlRight":62,
+            "AltLeft":58,"AltRight":61,"MetaLeft":55,"MetaRight":54,"CapsLock":57]
+        let names = ["Semicolon":";","Quote":"'","Comma":",","Period":".","Slash":"/","Backslash":"\\",
+            "BracketLeft":"[","BracketRight":"]","Minus":"-","Equal":"=","Backquote":"`","NumpadEnter":"enter"]
+        let name = code.hasPrefix("Key") ? String(code.dropFirst(3)).lowercased()
+            : code.hasPrefix("Digit") ? String(code.dropFirst(5)) : names[code] ?? key.lowercased()
+        let direct = key.count == 1 && !control && !option && !command
+        guard let virtualKey = modifiers[code] ?? keyCodes[name] ?? (direct ? 0 : nil),
+              let event = CGEvent(keyboardEventSource: nil, virtualKey: virtualKey, keyDown: pressed) else {
+            throw invalid("Unsupported client key.")
+        }
+        event.flags = flags
+        if modifiers[code] != nil { event.type = .flagsChanged }
+        event.setIntegerValueField(.keyboardEventAutorepeat, value: pressed && repeated ? 1 : 0)
+        if direct {
+            let units = Array(key.utf16)
+            guard units.count <= 20, !units.contains(0) else { throw invalid("Invalid client key text.") }
+            units.withUnsafeBufferPointer { event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress!) }
+        }
+        return event
     }
 
     static func invalid(_ message: String) -> HostFailure { HostFailure(code: "INVALID_ARGUMENT", message: message) }

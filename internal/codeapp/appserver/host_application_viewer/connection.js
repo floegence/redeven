@@ -2,7 +2,7 @@
 // host state proves termination; an unavailable route never proves app exit.
 const hostApplicationConnection = (() => {
   const ended = state => ['ended', 'applicationExited', 'windowsClosed', 'sharingStopped'].includes(state);
-  const terminal = state => ended(state) || ['sessionFailed', 'sessionMissing'].includes(state);
+  const terminal = state => ended(state) || ['sessionFailed', 'sessionMissing', 'inputVersionUnsupported'].includes(state);
   function state(data) {
     if (data?.state === 'ended') return ({application_exited:'applicationExited', windows_closed:'windowsClosed', sharing_stopped:'sharingStopped'})[data.end_reason] || 'ended';
     if (data?.state === 'failed') return 'sessionFailed';
@@ -22,7 +22,7 @@ const hostApplicationConnection = (() => {
     document.body.dataset.state = state;
     document.getElementById('connection').setAttribute('aria-busy', String(busy));
     document.getElementById('status').textContent = config.copy[state] || config.copy.failed;
-    const hints = {disconnected:'connectionHint', failed:'connectionHint', waiting:'waitingHint', permissionRequired:'permissionHint', sessionUnavailable:'sessionHint', sessionFailed:'reopenHint', captureUnavailable:'captureHint', applicationExited:'applicationExitedHint', windowsClosed:'windowsClosedHint', sharingStopped:'sharingStoppedHint', ended:'endedHint', sessionMissing:'sessionMissingHint', accessRequired:'accessHint'};
+    const hints = {inputUnavailable:'inputUnavailableHint', inputVersionUnsupported:'inputVersionHint', disconnected:'connectionHint', failed:'connectionHint', waiting:'waitingHint', permissionRequired:'permissionHint', sessionUnavailable:'sessionHint', sessionFailed:'reopenHint', captureUnavailable:'captureHint', applicationExited:'applicationExitedHint', windowsClosed:'windowsClosedHint', sharingStopped:'sharingStoppedHint', ended:'endedHint', sessionMissing:'sessionMissingHint', accessRequired:'accessHint'};
     const hint = document.getElementById('hint');
     hint.textContent = config.copy[hints[state]] || (config.backend === 'macos' && ['starting', 'connecting', 'reconnecting'].includes(state) ? config.copy.sharedControl : '') || '';
     hint.hidden = !hint.textContent;

@@ -32,7 +32,7 @@ main[aria-busy="false"] .progress { display:none; }
 .mac-app-toolbar { display:flex; align-items:center; gap:4px; height:100%; padding:0 10px; }
 .mac-app-controls button { margin:0; }
 .mac-app-toolbar>button { flex:none; min-width:32px; height:32px; min-height:32px; padding:0 8px; gap:7px; border:1px solid transparent; border-radius:var(--floe-radius-control); background:transparent; font-size:12px; color:var(--muted-foreground); }
-.mac-app-toolbar>button:is(:hover,[aria-expanded="true"]):not(:disabled) { background:var(--accent); color:var(--foreground); }
+.mac-app-toolbar>button:is(:hover,[aria-expanded="true"],[aria-pressed="true"]):not(:disabled) { background:var(--accent); color:var(--foreground); }
 .mac-app-toolbar>button:active:not(:disabled) { background:var(--accent); }
 .mac-app-toolbar>button:disabled { opacity:.4; cursor:default; }
 .mac-app-toolbar>button:focus-visible { outline-offset:1px; }
@@ -70,7 +70,6 @@ main[aria-busy="false"] .progress { display:none; }
 @media(max-width:680px) { .mac-app-toolbar>.mac-app-menu-toggle { max-width:160px; } }
 @media(max-width:560px) { .mac-app-toolbar { padding:0 6px; gap:2px; } .mac-app-toolbar>.mac-app-controls-toggle .mac-app-toolbar-label,.mac-app-controls-toggle .mac-app-dropdown-chevron,.mac-app-toolbar>.mac-app-windows-toggle .mac-app-toolbar-label { display:none; } .mac-app-toolbar>.mac-app-windows-toggle { min-width:32px; } .mac-app-toolbar>.mac-app-menu-toggle { max-width:120px; } .mac-app-toolbar-separator { margin:0 3px; } .mac-app-toolbar-spacer { min-width:2px; } }
 @media(max-width:360px) { .mac-app-toolbar>.mac-app-menu-toggle .mac-app-toolbar-label { display:none; } .mac-app-identity-separator { display:none; } }
-.mac-app-input { position:absolute; left:50%; top:50%; width:16px; height:20px; margin:0; padding:0; border:0; opacity:0; resize:none; font:16px/20px sans-serif; pointer-events:none; }
 body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; opacity:.45; }
 
 .mac-app-feedback { position:fixed; z-index:3; top:calc(var(--mac-toolbar-height) + 12px); left:50%; transform:translateX(-50%); max-width:calc(100% - 32px); padding:10px 14px; border:1px solid var(--border); border-radius:var(--floe-radius-group); background:var(--card); color:var(--foreground); font-size:12px; pointer-events:none; }

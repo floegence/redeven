@@ -6,7 +6,7 @@ const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
 };
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const shared = ['catalog.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
+const shared = ['catalog.generated.js', 'remote-input.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
 const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/toolbar.js'), 'utf8') + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '').replace('{{.Locale}}', 'en-US');
 const copy = {starting:'Starting', connecting:'Connecting', reconnecting:'Reconnecting', disconnected:'Disconnected', failed:'Failed', ended:'Ended', retry:'Retry', reconnect:'Reconnect', connectionHint:'Return to your application'};
@@ -46,17 +46,17 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
     return win;
   }
   const client = {
+    floeInput: {version:1, target:null as {wid:number} | null,
+      bindTarget(wid: number | null) { if (this.target?.wid !== wid) this.target = wid ? {wid} : null; return this.target; },
+      commitText:vi.fn(), sendKey:vi.fn(), release:vi.fn(), clipboard:vi.fn(), paste:vi.fn(), onError:undefined as undefined | (() => void)},
     _get_desktop_size:() => [1000, 680], id_to_window:windows, connected:true, reconnect:true, reconnect_count:5,
     _new_window:vi.fn(), do_send_damage_sequence:vi.fn(), send_configure_window:vi.fn(),
     send_control_refresh:vi.fn(), send:vi.fn(), send_close_window:vi.fn(), focused_wid:1, set_focus:vi.fn((win: {wid:number}) => { client.focused_wid = win.wid; }), close:vi.fn(), callback_close:() => {}, on_last_window:vi.fn(),
   };
+  Object.assign(frame.contentWindow!, {floeXpraInput:{version:1,getClient:() => (frame.contentWindow as unknown as {client?:unknown}).client}});
   if (!deferredInitialization) {
     Object.assign(frame.contentWindow!, {client});
-    if (lexicalClient) {
-      const declaration = doc.createElement('script');
-      declaration.textContent = 'let client = window.client; delete window.client;';
-      doc.head.append(declaration);
-    }
+    if (lexicalClient) Object.assign(frame.contentWindow!, {floeXpraInput:{version:1,getClient:()=>client}});
   }
   frame.dispatchEvent(new dom.window.Event('load'));
   return {frame, doc, client, appWindow, fetch, nativeWindow, windowStateChanged: (state: { maximized: boolean; minimized: boolean }) => windowStateChanged(state), state:() => dom.window.document.body.dataset.state};
@@ -272,7 +272,7 @@ describe('host application viewer', () => {
     expect(v.frame.getAttribute('aria-hidden')).toBe('false');
   });
 
-  it('connects to an HTML5 client declared as a lexical global', async () => {
+  it('uses the published client accessor independently of global client declarations', async () => {
     const v = await viewer(false, false, true);
     v.appWindow(1); v.client._new_window(1);
     v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
@@ -406,4 +406,117 @@ describe('host application viewer', () => {
     v.windowStateChanged({maximized:false, minimized:false});
     expect(v.client.send_configure_window).toHaveBeenLastCalledWith(primary, {maximized:false, iconified:false}, false);
   });
+});
+
+async function inputViewer() {
+  const v = await viewer();
+  const win = v.appWindow(1); v.doc.body.append(win.div); v.client._new_window(1);
+  const input = v.doc.querySelector<HTMLTextAreaElement>('textarea')!;
+  const commit = (text: string) => {
+    input.dispatchEvent(new dom.window.CompositionEvent('compositionstart'));
+    input.value = text;
+    input.dispatchEvent(new dom.window.InputEvent('input', {inputType:'insertCompositionText', data:text, isComposing:true}));
+    input.dispatchEvent(new dom.window.KeyboardEvent('keydown', {key:'Enter', isComposing:true}));
+    input.dispatchEvent(new dom.window.CompositionEvent('compositionend', {data:text}));
+    input.dispatchEvent(new dom.window.InputEvent('input', {inputType:'insertText', data:text}));
+    input.dispatchEvent(new dom.window.KeyboardEvent('keyup', {key:'Enter'}));
+  };
+  return {...v, input, commit, paint: (wid = 1) => v.client.do_send_damage_sequence(1, wid, 100, 100, 10, '')};
+}
+
+it('gates composition by painted target and delivers repeated Unicode commits once each', async () => {
+  const v = await inputViewer();
+  v.commit('before frame'); expect(v.client.floeInput.commitText).not.toHaveBeenCalled();
+  v.paint();
+  const expected = '中文日本語한글🙂👩🏽‍💻e\u0301𠮷';
+  v.commit(expected); v.commit(expected);
+  expect(v.client.floeInput.commitText.mock.calls).toEqual([[expected, v.client.floeInput.target], [expected, v.client.floeInput.target]]);
+  expect(v.client.floeInput.sendKey).not.toHaveBeenCalled();
+});
+
+it('cancels composition and gates the keyboard while another window awaits its first frame', async () => {
+  const v = await inputViewer(); v.paint(); v.input.focus();
+  v.input.dispatchEvent(new dom.window.CompositionEvent('compositionstart'));
+  const second = v.appWindow(2); v.client._new_window(2); v.client.set_focus(second);
+  expect(v.input.disabled).toBe(true);
+  expect(dom.window.document.querySelector<HTMLButtonElement>('.mac-app-keyboard')!.disabled).toBe(true);
+  v.paint(2);
+  v.input.dispatchEvent(new dom.window.CompositionEvent('compositionend', {data:'old'}));
+  v.input.dispatchEvent(new dom.window.InputEvent('input', {inputType:'insertFromComposition', data:'old'}));
+  expect(v.client.floeInput.commitText).not.toHaveBeenCalled();
+  v.commit('new');
+  expect(v.client.floeInput.commitText).toHaveBeenCalledExactlyOnceWith('new', v.client.floeInput.target);
+  expect(v.client.floeInput.target?.wid).toBe(2);
+});
+
+it('requires an explicit touch keyboard action and retains the editor across viewport changes', async () => {
+  const v = await inputViewer(); v.paint();
+  const target = v.doc.querySelector('div')!;
+  const touch = () => Object.assign(new dom.window.Event('pointerdown', {bubbles:true}), {pointerType:'touch', clientX:100, clientY:120});
+  target.dispatchEvent(touch());
+  expect(v.doc.activeElement).not.toBe(v.input);
+  const keyboard = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-keyboard')!;
+  keyboard.click();
+  expect(v.doc.activeElement).toBe(v.input);
+  expect(keyboard.getAttribute('aria-pressed')).toBe('true');
+  v.frame.contentWindow!.dispatchEvent(new dom.window.Event('resize'));
+  expect(v.doc.querySelector('textarea')).toBe(v.input);
+  expect(v.client.close).not.toHaveBeenCalled();
+  keyboard.click(); expect(v.doc.activeElement).not.toBe(v.input);
+});
+
+it('restores editor focus even when the Xpra pointer target stops propagation', async () => {
+  const v = await inputViewer(); v.paint();
+  const target = v.doc.querySelector('div')!;
+  target.addEventListener('pointerup', event => event.stopPropagation());
+  target.dispatchEvent(Object.assign(new dom.window.Event('pointerup', {bubbles:true}), {pointerType:'mouse'}));
+  expect(v.doc.activeElement).toBe(v.input);
+});
+
+it('routes clipboard to the published adapter and never also submits its text', async () => {
+  const v = await inputViewer(); v.paint();
+  v.client.floeInput.clipboard.mockImplementation(() => true);
+  v.client.floeInput.paste.mockImplementation(event => event.preventDefault());
+  v.input.dispatchEvent(new dom.window.KeyboardEvent('keydown', {key:'v', code:'KeyV', ctrlKey:true}));
+  const paste = new dom.window.Event('paste', {cancelable:true}); v.input.dispatchEvent(paste);
+  expect(paste.defaultPrevented).toBe(true);
+  expect(v.client.floeInput.paste).toHaveBeenCalledExactlyOnceWith(paste, v.client.floeInput.target);
+  expect(v.client.floeInput.sendKey).not.toHaveBeenCalled();
+  expect(v.client.floeInput.commitText).not.toHaveBeenCalled();
+});
+
+it('releases held keys on toolbar focus and never replays text after input failure', async () => {
+  const v = await inputViewer(); v.paint(); v.input.focus();
+  v.input.dispatchEvent(new dom.window.KeyboardEvent('keydown', {key:'Shift', code:'ShiftLeft', shiftKey:true}));
+  dom.window.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!.focus();
+  // JSDOM does not emit the browser's child-window blur when focus crosses an iframe.
+  v.frame.contentWindow!.dispatchEvent(new dom.window.Event('blur'));
+  expect(v.client.floeInput.release).toHaveBeenCalledWith(v.client.floeInput.target);
+  v.client.floeInput.onError?.(); await drain();
+  expect(v.state()).toBe('inputUnavailable');
+  v.commit('late'); expect(v.client.floeInput.commitText).not.toHaveBeenCalled();
+});
+
+it('requires reopening an old input protocol without closing the host application', async () => {
+  const v = await inputViewer(); v.client.floeInput.version = 0; v.paint();
+  expect(v.state()).toBe('inputVersionUnsupported');
+  expect(v.client.send_close_window).not.toHaveBeenCalled();
+  expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(true);
+});
+
+it('cancels composition before an outer toolbar pointer triggers iframe blur', async () => {
+  const v = await inputViewer(); v.paint(); v.input.focus();
+  v.input.dispatchEvent(new dom.window.CompositionEvent('compositionstart'));
+  v.input.value = 'pending';
+  dom.window.document.querySelector('.mac-app-controls-toggle')!.dispatchEvent(new dom.window.Event('pointerdown', {bubbles:true}));
+  v.input.dispatchEvent(new dom.window.CompositionEvent('compositionend', {data:'pending'}));
+  expect(v.client.floeInput.commitText).not.toHaveBeenCalled();
+});
+
+it('updates the iframe editor label in place when the viewer locale changes', async () => {
+  const v = await inputViewer(); v.paint();
+  dom.window.document.documentElement.lang = 'zh-CN'; await drain();
+  expect(v.input.getAttribute('aria-label')).toBe('应用键盘输入');
+  expect(v.doc.querySelector('textarea')).toBe(v.input);
+  expect(v.client.close).not.toHaveBeenCalled();
 });

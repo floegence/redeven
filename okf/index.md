@@ -23,6 +23,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Host Applications](architecture/host-applications.md) - Browse host applications and apply shared authorization and session lifecycle rules.
 - [Cross-platform application behavior](architecture/host-application-behavior.md) - Compare common operations and the OS limits that prevent identical behavior.
 - [Linux application lifecycle](architecture/linux-application-lifecycle.md) - Recover surviving application instances and separate sharing, normal window closure and explicit force quit.
+- [Host application input](architecture/host-application-input.md) - Use client input methods across streamed applications, bind confirmed text to painted targets, and recover without replay.
 - [Host application viewer](architecture/host-application-viewer.md) - Interpret connection, waiting and terminal states and preserve application-controlled window geometry.
 - [Host Application Platforms](architecture/host-application-platforms.md) - Prepare a headless host, diagnose missing capabilities, and distinguish Linux capability requirements from native macOS initialization.
 - [macOS Application Picture](architecture/macos-application-picture.md) - Adjust Retina resolution and streaming quality, and understand actual frame rate and bandwidth.

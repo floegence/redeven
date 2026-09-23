@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Host application viewer state and geometry
 description: Present authoritative application state, first pixels, recovery and Xpra window geometry without conflating viewer closure with application termination.
 tags: [applications, ui, desktop, runtime]
-timestamp: 2026-09-22T05:00:00Z
+timestamp: 2026-09-23T08:00:00Z
 ---
 # Summary
 
@@ -56,9 +56,9 @@ an old viewer URL.
 
 ## Xpra window geometry and closure
 
-The adapter integrates the selected HTML5 v20/v21 client. It reads
-the client binding inside the upstream document, including v21’s lexical global,
-without modifying installed upstream assets. Primary normal
+The adapter integrates the selected HTML5 v20/v21 client. It uses the published
+`floeXpraInput.getClient()` accessor in the privately prepared upstream document.
+Installed upstream assets remain unchanged. Primary normal
 windows fill the viewer and track its size through Xpra's window geometry API;
 Xpra decorations, wallpaper, toolbar, and loading UI are hidden. Native viewer
 chrome owns primary-window movement and the authoritative maximize/minimize state.
@@ -70,8 +70,9 @@ its own client-side header and controls. Transient dialogs retain their stacking
 oversized dialogs negotiate a bounded size so their actions remain reachable.
 Menus and popups keep their ordinary window geometry. No pixel
 stretching or cropping substitutes for application resize. Fixed-size or minimum-size
-applications can still constrain their own layout. Xpra owns keyboard and clipboard
-transport. This path does not create a native OS window per X11 child window.
+applications can still constrain their own layout. The
+[client input contract](host-application-input.md) owns keyboard/composition and
+painted-window binding; Xpra retains pointer and clipboard transport. This path does not create a native OS window per X11 child window.
 
 After Xpra confirms destruction of the final application window, or an established
 application session is confirmed ended, the viewer closes its

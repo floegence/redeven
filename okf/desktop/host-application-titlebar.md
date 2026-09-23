@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Desktop host application titlebar
 description: Place host application controls alongside native window buttons without adding connection latency.
 tags: [desktop, host-applications, ui]
-timestamp: 2026-09-22T10:08:44Z
+timestamp: 2026-09-23T08:00:00Z
 ---
 # Summary
 
@@ -22,7 +22,7 @@ native dragging immediately. Capture pixels begin below this row and are never
 covered by it. Browser popups retain their browser frame and use a 46-pixel
 in-page application toolbar.
 
-The row presents application identity, current window and count, picture settings,
+The row presents application identity, current window and count, Keyboard, picture settings,
 close-current-window and confirmed quit. Destructive controls use compact icons
 with explicit accessible names and tooltips. Labels collapse at narrow widths;
 window titles truncate without consuming space reserved for OS controls. Menus
@@ -41,6 +41,10 @@ popover. Interacting inside a popover retains its normal control behavior.
 Loading, disconnected and completed Desktop documents
 retain the titlebar with unavailable controls disabled. Preparation and local
 connection-failure documents retain a scriptless draggable title.
+
+The [client input contract](../architecture/host-application-input.md) owns the
+Keyboard action, touch focus and candidate placement. The control is unavailable
+until its selected target has decoded pixels.
 
 # Appearance and language
 

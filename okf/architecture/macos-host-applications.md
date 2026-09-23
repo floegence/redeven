@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Native macOS host applications
 description: Real application discovery, direct local launch, owned remote window capture and human input on macOS.
 tags: [runtime, desktop, applications, macos, security]
-timestamp: 2026-09-22T09:00:00Z
+timestamp: 2026-09-23T08:00:00Z
 ---
 # Summary
 
@@ -82,7 +82,7 @@ result.
 An ephemeral loopback listener requires an unpredictable per-session credential
 via WebSocket subprotocol, independently of the existing owner/full-permission
 forward guard. Credentials never enter URLs. One connection owns input; replacement
-revokes the old connection and releases held buttons before the new connection can
+revokes the old connection and releases held keys and buttons before the new connection can
 send input. The viewer first sends one `resume` request carrying its initial
 picture/viewport settings. The adapter orders it after helper launch and rejects
 control before negotiation or repeated negotiation on the same connection.
@@ -90,7 +90,11 @@ Heartbeats detect lost peers. Reconnect refreshes capture without
 launching another process. Capture/permission failure exposes explicit recovery;
 old frames and callback generations cannot reactivate a disconnected view.
 Retired image decoders cannot delay a new connection, and pending pointer movement,
-composition text and menus are discarded when their capture binding changes. Composition begun before a binding has decoded pixels cannot later acquire permission by waiting for a frame. The stable, in-viewport textarea uses a 16-pixel font and disables automatic capitalization and correction; Safari compatibility mouse events cannot steal its focus after a canvas touch. Soft-keyboard deletion and line breaks use the same guarded input channel as physical keys, and composed text and pasted text are committed once. Local focus during a same-window recapture grants no remote input authority.
+composition text and menus are discarded when their capture binding changes.
+The [shared client input contract](host-application-input.md) owns composition,
+keyboard transitions, candidate placement and soft-keyboard interaction. Local
+focus during same-window recapture grants no remote input authority; composition
+begun before decoded pixels cannot acquire permission by waiting for a frame.
 
 # Human control and lifecycle
 
@@ -102,7 +106,7 @@ instead of sending pointer input into another application. A process-scoped even
 tap acknowledges only Redeven-marked input; the next event waits for that receipt,
 without inspecting unmarked key contents or monitoring other applications. A
 missing receipt fails without replaying the action. The viewer supports
-mouse, wheel, native key chords and composed Unicode text. This is human control,
+mouse, wheel, versioned key transitions and confirmed Unicode text. This is human control,
 not a Flower automation or model-observation path. Password/privileged system
 dialogs and OS-reserved shortcuts remain subject to macOS policy.
 

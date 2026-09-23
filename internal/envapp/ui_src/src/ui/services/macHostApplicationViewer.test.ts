@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
   JSDOM: new (html: string, options: Record<string, unknown>) => { window: Window & typeof globalThis };
 };
-const shared = ['catalog.generated.js', 'viewport.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
+const shared = ['catalog.generated.js', 'remote-input.generated.js', 'viewport.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
 const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/toolbar.js'), 'utf8') + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/macos.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '').replace('{{.Locale}}', 'en-US');
 let dom: InstanceType<typeof JSDOM>;
@@ -30,7 +30,7 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
     send = vi.fn();
     close = vi.fn(() => { this.readyState = 3; });
     constructor(readonly url: URL, readonly protocols: string[]) { Socket.instances.push(this); }
-    message(value: unknown) { const msg = value as {type: string; generation: number}; if (msg.type === 'window') this.generation = msg.generation; this.onmessage?.({ data: JSON.stringify(value) }); }
+    message(value: unknown) { const msg = value as {type: string; generation: number}; if (msg.type === 'window') this.generation = msg.generation; this.onmessage?.({ data: JSON.stringify(msg.type === 'window' ? {input_version:1, ...value as object} : value) }); }
     frame(metadata: Record<string, unknown> = {}) {
       const header = new TextEncoder().encode(JSON.stringify({codec: 'jpeg', generation: this.generation, frame_id: ++this.frameID, transport: 'images', ...metadata}));
       const packet = new dom.window.Uint8Array(4 + header.length + 5);
@@ -53,7 +53,7 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
   const statisticsTicks: (() => void)[] = [];
   vi.spyOn(dom.window, 'setInterval').mockImplementation(((callback: () => void) => { statisticsTicks.push(callback); return 1; }) as typeof dom.window.setInterval);
   setup?.(dom.window);
-  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon, initial, copy: { permissionRequired: 'Host permission is required', permissionHint: 'Allow screen recording and accessibility, then reconnect.', sessionUnavailable: 'The graphical session is unavailable', sessionHint: 'Unlock the Mac and sign in, then reconnect.', sessionFailed: 'Application sharing has stopped', reopenHint: 'Return to Host Applications and open the app again.', captureHint: 'Reconnect or choose another window.', controls: 'Application controls', "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', quit: 'Quit application', quitTitle: 'Quit this application?', quitDescription: 'All application windows will close. You can cancel in a save dialog.', quitPending: 'Respond to any save dialog in the application.', quitFailed: 'Quit could not be confirmed.', cancel: 'Cancel', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
+  dom.window.eval(`const config = ${JSON.stringify({ base: '/pf/test', icon, initial, copy: { keyboard: 'Keyboard', inputVersionUnsupported: 'Reopen the application to type', inputVersionHint: 'Save your work on the host, then close and reopen the application.', permissionRequired: 'Host permission is required', permissionHint: 'Allow screen recording and accessibility, then reconnect.', sessionUnavailable: 'The graphical session is unavailable', sessionHint: 'Unlock the Mac and sign in, then reconnect.', sessionFailed: 'Application sharing has stopped', reopenHint: 'Return to Host Applications and open the app again.', captureHint: 'Reconnect or choose another window.', controls: 'Application controls', "picture": "Picture quality", "pictureAuto": "Automatic", "pictureClarity": "Clarity first", "pictureSmooth": "Motion first", "pictureData": "Save data", "pictureHint": "Changes apply immediately. Still images sharpen automatically; the actual frame rate depends on motion and connection speed.", "pictureAdvanced": "Advanced", "picturePixels": "Actual resolution", "pictureResolution": "Resolution limit", "pictureFrameRate": "Frame rate limit", "pictureActualRate": "Actual frame rate", "pictureBandwidth": "Bandwidth", "pictureTransport": "Transport", "pictureVideo": "Hardware video", "pictureImages": "Image stream", operationFailed: 'The action could not be completed. Try again.', waiting: 'Waiting for the application window…', captureUnavailable: 'Window capture is unavailable.', windows: 'Windows', menu: 'Menu', closeWindow: 'Close window', quit: 'Quit application', quitTitle: 'Quit this application?', quitDescription: 'All application windows will close. You can cancel in a save dialog.', quitPending: 'Respond to any save dialog in the application.', quitFailed: 'Quit could not be confirmed.', cancel: 'Cancel', input: 'Input', retry: 'Retry', reconnect: 'Reconnect' } })};\n${source}`);
   await drain();
   const socket = () => Socket.instances.at(-1)!;
   const state = () => dom.window.document.body.dataset.state;
@@ -64,6 +64,19 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
 }
 
 describe('macOS application viewer', () => {
+  it('offers one explicit keyboard control backed by the shared editable element', async () => {
+    const v = await viewer(); await v.activate();
+    const keyboard = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-keyboard');
+    expect(keyboard).not.toBeNull();
+    keyboard!.click();
+    const input = dom.window.document.querySelector('textarea');
+    expect(input?.className).toBe('floe-remote-input');
+    expect(dom.window.document.activeElement).toBe(input);
+    expect(keyboard!.getAttribute('aria-pressed')).toBe('true');
+    keyboard!.click();
+    expect(keyboard!.getAttribute('aria-pressed')).toBe('false');
+    expect(dom.window.document.querySelector('textarea')).toBe(input);
+  });
   it.each([
     ['application_exited', 'applicationExited'],
     ['windows_closed', 'windowsClosed'],
@@ -171,6 +184,7 @@ describe('macOS application viewer', () => {
     input.dispatchEvent(new dom.window.InputEvent('input', { inputType: 'insertText' }));
     expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input')).toEqual([]);
     v.socket().frame(); await drain();
+    input.dispatchEvent(new dom.window.InputEvent('beforeinput', {inputType:'insertText', data:'confirmed'}));
     input.value = 'confirmed';
     input.dispatchEvent(new dom.window.InputEvent('input', { inputType: 'insertText' }));
     expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input')).toEqual([
@@ -213,8 +227,8 @@ describe('macOS application viewer', () => {
       input.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(true);
     }
-    expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input').map(c => c.key))
-      .toEqual(['Backspace', 'Delete', 'Enter']);
+    expect(v.socket().send.mock.calls.map(c => JSON.parse(c[0])).filter(c => c.action === 'input').map(c => [c.key, c.pressed]))
+      .toEqual([['Backspace', true], ['Backspace', false], ['Delete', true], ['Delete', false], ['Enter', true], ['Enter', false]]);
   });
 
   it('keeps plain text and paste continuous across decoded frame updates', async () => {
@@ -222,6 +236,7 @@ describe('macOS application viewer', () => {
     const input = dom.window.document.querySelector('textarea')!; input.focus();
     for (const [inputType, text] of [['insertText', 'a'], ['insertFromPaste', 'paste\ntext']]) {
       v.socket().frame(); await drain();
+      input.dispatchEvent(new dom.window.InputEvent('beforeinput', {inputType, data:text}));
       input.value = text; input.dispatchEvent(new dom.window.InputEvent('input', { inputType }));
       expect(dom.window.document.activeElement).toBe(input);
     }
@@ -487,19 +502,20 @@ describe('macOS application viewer', () => {
   it('binds input to the current window and commits composed text exactly once', async () => {
     const v = await viewer(); await v.activate();
     const input = dom.window.document.querySelector('textarea')!;
+    input.dispatchEvent(new dom.window.CompositionEvent('compositionstart'));
     input.value = '你好';
-    input.dispatchEvent(new dom.window.InputEvent('input', { isComposing: true }));
+    input.dispatchEvent(new dom.window.InputEvent('input', {inputType:'insertCompositionText', data:'你好', isComposing: true}));
     expect(v.socket().send).not.toHaveBeenCalled();
-    input.dispatchEvent(new dom.window.CompositionEvent('compositionend'));
-    input.dispatchEvent(new dom.window.InputEvent('input'));
-    expect(v.socket().send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ window: 'owned', generation: 1, action: 'input', kind: 'text', text: '你好' }));
+    input.dispatchEvent(new dom.window.CompositionEvent('compositionend', {data:'你好'}));
+    input.dispatchEvent(new dom.window.InputEvent('input', {inputType:'insertText', data:'你好'}));
+    expect(v.socket().send.mock.calls.map(([raw]) => JSON.parse(raw))).toEqual([{window:'owned', generation:1, action:'input', kind:'text', input_version:1, text:'你好'}]);
     v.window(2);
     input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a', metaKey: true }));
     expect(v.socket().send).toHaveBeenCalledTimes(1);
     expect(dom.window.document.querySelector('canvas')!.getAttribute('aria-busy')).toBe('true');
     v.socket().frame(); await drain();
     input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a', metaKey: true }));
-    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({ generation: 2, key: 'Meta+a' });
+    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({generation:2, key:'a', metaKey:true, pressed:true, input_version:1});
     v.socket().message({ type: 'error', code: 'STALE_WINDOW' });
     expect(v.state()).toBe('active');
   });
@@ -794,8 +810,10 @@ it('navigates toolbar and nested native menus with arrow keys and restores focus
   const menu = doc.querySelector<HTMLButtonElement>('.mac-app-menu-toggle')!;
   const key = (value: string) => doc.activeElement!.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:value,bubbles:true}));
   menu.focus(); key('ArrowRight');
+  expect(doc.activeElement).toBe(doc.querySelector('.mac-app-keyboard'));
+  key('ArrowRight');
   expect(doc.activeElement).toBe(doc.querySelector('.mac-app-controls-toggle'));
-  key('ArrowLeft'); key('ArrowDown');
+  key('ArrowLeft'); key('ArrowLeft'); key('ArrowDown');
   expect(JSON.parse(v.socket().send.mock.lastCall![0]).action).toBe('menu');
   v.socket().message({type:'menu',generation:1,items:[
     {id:'file',title:'File',enabled:true,children:[{id:'save',title:'Save',enabled:true,children:[]}]},
@@ -872,4 +890,22 @@ it('coalesces viewport and density changes into one generation-independent confi
   const requests = v.socket().send.mock.calls.map(([raw]) => JSON.parse(raw));
   expect(requests).toEqual([expect.objectContaining({action:'configure',width:900,height:600,pixel_ratio:2})]);
   expect(requests[0].generation).toBeUndefined();
+});
+
+it('cancels composition before a toolbar pointer can trigger a native blur commit', async () => {
+  const v = await viewer(); await v.activate();
+  const input = dom.window.document.querySelector('textarea')!; input.focus();
+  input.dispatchEvent(new dom.window.CompositionEvent('compositionstart'));
+  input.value = 'pending';
+  dom.window.document.querySelector('.mac-app-controls-toggle')!.dispatchEvent(new dom.window.Event('pointerdown', {bubbles:true}));
+  input.dispatchEvent(new dom.window.CompositionEvent('compositionend', {data:'pending'}));
+  expect(v.socket().send.mock.calls.map(([raw]) => JSON.parse(raw)).filter(value => value.kind === 'text')).toEqual([]);
+});
+
+it('refuses an old native input version while retaining the application process', async () => {
+  const v = await viewer();
+  v.socket().message({type:'window',window:'owned',generation:1,input_version:0,width:640,height:480});
+  expect(v.state()).toBe('inputVersionUnsupported');
+  expect(dom.window.document.querySelector<HTMLButtonElement>('#retry')!.hidden).toBe(true);
+  expect(v.native.request).not.toHaveBeenCalled();
 });

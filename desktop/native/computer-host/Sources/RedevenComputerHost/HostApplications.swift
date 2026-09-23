@@ -114,7 +114,7 @@ private final class HostApplicationDelivery {
     private var marker: Int64 = 0
     private var received = false
     init(pid: pid_t) {
-        let types: [CGEventType] = [.keyDown, .keyUp, .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
+        let types: [CGEventType] = [.keyDown, .keyUp, .flagsChanged, .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
                                    .otherMouseDown, .otherMouseUp, .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .scrollWheel]
         let mask = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
         tap = CGEvent.tapCreateForPid(pid: pid, place: .tailAppendEventTap, options: .listenOnly, eventsOfInterest: mask, callback: { _, _, event, pointer in
@@ -169,6 +169,7 @@ final class HostApplicationSession {
     private var lastInventory = ""
     private var extra: [URL] = []
     private var heldButtons = Set<Int>()
+    private var heldKeys: [CGKeyCode: CGEvent] = [:]
     private let menu = HostApplicationMenu()
 
     func handle(_ request: [String: Any]) {
@@ -192,7 +193,7 @@ final class HostApplicationSession {
             case "suspend":
                 viewerReady = false
                 generation += 1
-                releaseButtons()
+                releaseInput()
                 delivery = nil
                 menu.invalidate()
                 updateCapture()
@@ -228,7 +229,7 @@ final class HostApplicationSession {
                 viewerReady = true
                 blockedReason = nil
                 guard checkAccess() else { return }
-                releaseButtons()
+                releaseInput()
                 if let app { delivery = HostApplicationDelivery(pid: app.processIdentifier) }
                 app?.unhide()
                 captureFailed = false
@@ -268,7 +269,7 @@ final class HostApplicationSession {
                 _ = app?.activate(options: [])
                 guard AXUIElementPerformAction(item, kAXPressAction as CFString) == .success else { throw NativeInput.unavailable() }
             case "input": try input(request)
-            case "release": releaseButtons()
+            case "release": releaseInput()
             default: throw NativeInput.invalid("Unknown host application action.")
             }
             if ["input", "close", "quit_application", "menu_action", "resize"].contains(action) && request["kind"] as? String != "move" {
@@ -278,7 +279,7 @@ final class HostApplicationSession {
             let failure = error as? HostFailure
             let action = request["action"] as? String ?? ""
             let operation = ["input", "close", "quit_application", "menu", "menu_action", "resize", "select", "release", "resume", "configure", "frame_ack"].contains(action)
-            if operation { releaseButtons() }
+            if operation { releaseInput() }
             self.output(["type": operation ? "operation_error" : "error", "action": action, "code": failure?.code ?? "APPLICATION_FAILED"])
         }
     }
@@ -323,7 +324,7 @@ final class HostApplicationSession {
             blockedReason = reason
             generation += 1
             menu.invalidate()
-            releaseButtons()
+            releaseInput()
             selected = nil
             updateCapture()
             captureFailed = false
@@ -342,7 +343,7 @@ final class HostApplicationSession {
         waiting = true
         generation += 1
         menu.invalidate()
-        releaseButtons()
+        releaseInput()
         selected = nil
         updateCapture()
         lastInventory = ""
@@ -394,7 +395,7 @@ final class HostApplicationSession {
         selected = window
         generation += 1
         menu.invalidate()
-        releaseButtons()
+        releaseInput()
         updateCapture()
     }
     // One transition owns source discovery, start and stop. Requests arriving
@@ -436,7 +437,7 @@ final class HostApplicationSession {
                         self.output(["type": "capture_error", "code": "SC_\(failure.code)", "generation": selectionGeneration])
                     }
                     self.capture = stream
-                    self.output(["type": "window", "window": window.id, "width": candidate.frame.width, "height": candidate.frame.height, "generation": selectionGeneration,
+                    self.output(["type": "window", "input_version": 1, "window": window.id, "width": candidate.frame.width, "height": candidate.frame.height, "generation": selectionGeneration,
                           "source_duration_ms": Int((ProcessInfo.processInfo.systemUptime - started) * 1000)])
                     stream.start(candidate, completion: finish)
                 }
@@ -466,6 +467,7 @@ final class HostApplicationSession {
     }
     private func input(_ request: [String: Any]) throws {
         let window = try target(request)
+        guard request["input_version"] as? Int == 1 else { throw HostFailure(code: "INPUT_VERSION_UNSUPPORTED", message: "Reopen the application input session.") }
         guard let kind = request["kind"] as? String else { throw NativeInput.invalid("Missing input kind.") }
         // Explicit human input may activate this bound application. Events are
         // posted only after verifying the exact application and focused window.
@@ -484,8 +486,11 @@ final class HostApplicationSession {
         }
         guard let rect = axRect(window.element) else { throw NativeInput.unavailable() }
         var events: [CGEvent] = []
-        if kind == "text", let text = request["text"] as? String { events = try NativeInput.text(text); for event in events { event.flags = [] } }
-        else if kind == "key", let chord = request["key"] as? String { events = try NativeInput.key(chord); events.last?.flags = [] }
+        if kind == "text", let text = request["text"] as? String {
+            guard !text.isEmpty, text.utf8.count <= 16000, !text.contains("\0") else { throw NativeInput.invalid("Invalid client text commit.") }
+            events = try NativeInput.text(text); for event in events { event.flags = [] }
+        }
+        else if kind == "key" { events = [try NativeInput.viewerKey(request)] }
         else {
             let point = CGPoint(x: rect.minX + (try number(request, "x", 0...1)) * max(0, rect.width - 1), y: rect.minY + (try number(request, "y", 0...1)) * max(0, rect.height - 1))
             // App activation and WindowServer stacking settle independently.
@@ -540,10 +545,21 @@ final class HostApplicationSession {
             guard NSWorkspace.shared.frontmostApplication?.processIdentifier == window.app.processIdentifier else { throw HostFailure(code: "WINDOW_NOT_FOCUSED", message: "The user changed applications.") }
             guard let delivery else { throw NativeInput.unavailable() }
             try delivery.post(event)
+            if kind == "key" {
+                let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+                if request["pressed"] as? Bool == true {
+                    let release = event.copy()!
+                    if release.type != .flagsChanged { release.type = .keyUp }
+                    release.flags = []
+                    release.setIntegerValueField(.keyboardEventAutorepeat, value: 0)
+                    heldKeys[code] = release
+                } else { heldKeys.removeValue(forKey: code) }
+            }
         }
     }
-    func releaseButtons() {
+    func releaseInput() {
         if let app {
+            for release in heldKeys.values { release.postToPid(app.processIdentifier) }
             for button in heldButtons {
                 let type: CGEventType = button == 2 ? .rightMouseUp : button == 1 ? .otherMouseUp : .leftMouseUp
                 let mouse: CGMouseButton = button == 2 ? .right : button == 1 ? .center : .left
@@ -551,6 +567,7 @@ final class HostApplicationSession {
             }
         }
         heldButtons.removeAll()
+        heldKeys.removeAll()
     }
     func end(reason: String = "sharing_stopped", completion: (() -> Void)? = nil) {
         if ended { completion?(); return }
@@ -559,7 +576,7 @@ final class HostApplicationSession {
         ending = true
         viewerReady = false
         generation += 1
-        releaseButtons()
+        releaseInput()
         app = nil
         selected = nil
         delivery = nil

@@ -89,8 +89,21 @@ class Helper:
         self.messages.put(value)
 
     def send(self, action, **values):
-        if not self.closing:
-            self.host.send(self.session_id, action, **values)
+        if self.closing:
+            return
+        if action == 'input':
+            values['input_version'] = 1
+            if values.get('kind') == 'key' and 'pressed' not in values:
+                # Fixture convenience only: product packets carry one transition.
+                parts = values['key'].split('+')
+                key, modifiers = parts[-1], set(parts[:-1])
+                values.update(key=key, code='Key' + key.upper() if len(key) == 1 and key.isalpha() else key,
+                              repeat=False, shiftKey='Shift' in modifiers, ctrlKey='Control' in modifiers,
+                              altKey='Alt' in modifiers, metaKey='Meta' in modifiers)
+                for pressed in (True, False):
+                    self.host.send(self.session_id, action, pressed=pressed, **values)
+                return
+        self.host.send(self.session_id, action, **values)
 
     def wait(self, kind, timeout=30, predicate=lambda value: True):
         deadline = time.monotonic() + timeout
@@ -179,14 +192,22 @@ def run(helper_path, output):
             eventually(lambda: receipt().get('pid') == pid and receipt().get('clicks') == 1, 'Click did not reach the owned fixture')
             click(200, 240)
             # Unicode is intentional coverage for the native text input contract.
-            helper.send('input', kind='text', text='Redeven macOS 你好', **bound)
+            helper.send('input', kind='text', text='Redeven 中文日本語한글🙂👩🏽‍💻e\u0301𠮷', **bound)
             helper.send('input', kind='key', key='Enter', **bound)
-            eventually(lambda: receipt().get('text') == 'Redeven macOS 你好', 'Unicode text was not committed')
+            eventually(lambda: receipt().get('text') == 'Redeven 中文日本語한글🙂👩🏽‍💻e\u0301𠮷', 'Unicode text was not committed')
             click(200, 240)
             helper.send('input', kind='key', key='Meta+a', **bound)
             helper.send('input', kind='text', text='Replaced', **bound)
             helper.send('input', kind='key', key='Enter', **bound)
             eventually(lambda: receipt().get('text') == 'Replaced', 'Native shortcut did not select the text')
+            click(200, 240)
+            helper.send('input', kind='key', key='Meta+a', **bound)
+            transition = dict(key='a', code='KeyA', pressed=True, repeat=False, shiftKey=False, ctrlKey=False, altKey=False, metaKey=False)
+            helper.send('input', kind='key', **transition, **bound)
+            helper.send('input', kind='key', **dict(transition, repeat=True), **bound)
+            helper.send('input', kind='key', **dict(transition, pressed=False), **bound)
+            helper.send('input', kind='key', key='Enter', **bound)
+            eventually(lambda: receipt().get('text') == 'aa', 'Key repeat or transition delivery failed')
             helper.send('menu', **bound)
             def items(values):
                 for item in values:
@@ -210,7 +231,7 @@ def run(helper_path, output):
             helper.send('menu_action', item=replacement_action['id'], window=resized['window'], generation=resized['generation'])
             replacement = helper.wait('window'); helper.wait('frame')
             assert replacement['window'] != resized['window'] and replacement['generation'] > resized['generation']
-            assert receipt()['pid'] == pid and receipt()['text'] == 'Replaced'
+            assert receipt()['pid'] == pid and receipt()['text'] == 'aa'
             # Retina capture and live profile changes must retain the same app.
             helper.send('configure', mode='clarity', pixel_ratio=2, max_dimension=3840, frame_rate=30, video=True)
             quality_window = helper.wait('window')
