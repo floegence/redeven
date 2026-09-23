@@ -40,6 +40,12 @@ replace an original Canvas track wrapper and stop its producer after collection.
 Closing observation stops only owned tracks, preserving website playback even
 after garbage collection. Other media elements use native element capture.
 
+The released source adapter owns native file-capture audio and its generated
+projection track. It cancels both stream endpoints on retirement or failure;
+website-owned stream audio bypasses this adapter. Native helper diagnostics must
+never enter its structured reply pipe, including RTCP interceptor shutdown logs.
+Library loggers share the collector's silent logger.
+
 DOM checkpoints preserve valid streams. Navigation, element removal and revoked
 viewing retire corresponding streams and decoders. Hidden video picture delivery
 may pause while authorized background audio remains active. Playback commands act
@@ -57,6 +63,20 @@ output device clock after the worklet has consumed its first samples.
 Device-clock queries must not block audio startup;
 video presentation retains its deadline while other tracks update.
 
+File-backed Chromium capture timestamps upcoming audio behind the native output
+device delay. The upstream adapter estimates this delay from a bounded lower
+delivery-age envelope and restores presentation timestamps before encoding,
+without changing PCM, source routing, playback rate, volume or mute. Already
+future-dated audio receives no correction. This is an estimate rather than a
+native device-latency API; old measurements expire after 32 input blocks.
+
+Decoded video lends at most six pictures to the presentation queue and retains
+only one additional latest picture under backpressure. One animation callback
+preserves future deadlines and consumes obsolete due pictures without replaying
+them. Selection clears queued pictures and rejects old decoder generations.
+Identical retransmitted Canvas pixels reuse their existing decoded resource;
+changed pixels and dimensions still update.
+
 Normal-media acceptance compares visible flashes with audible pulses at the
 audio device timeline and requires at most 100 ms of skew. The source fixture
 must contain simultaneous pulses. Decoder callback timing alone does not prove
@@ -72,8 +92,10 @@ built product assets.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserTransport.ts` - Borrowed Flowersec Session and progressive byte acknowledgements.
 - `redeven:internal/codeapp/appserver/browser_projection_test.go` - Real Runtime and source-site-blocked product transport.
 - `floebrowser:src/host/media-source.ts` - Owned capture tracks and picture subscriptions.
+- `floebrowser:src/host/media-audio.ts` - Bounded native audio timestamp correction and owned endpoint disposal.
 - `floebrowser:src/host/media-carrier.ts` - Bounded lane scheduling and cumulative byte credit.
 - `floebrowser:test/media-source-lifetime.e2e.ts` - Source playback survives collection and observation disposal.
 - `floebrowser:src/viewer/media.ts` - Identity-fenced decoding and element composition.
+- `floebrowser:test/media-presentation.e2e.ts` - Future picture deadlines, credit return and selection cleanup.
 - `floebrowser:test/media-sync.e2e.ts` - Displayed and audible pulse synchronization, including delayed initial video.
 - `redeven:internal/envapp/ui_src/scripts/browserProjectionMediaSync.mjs` - Product presentation timing through Flowersec.
