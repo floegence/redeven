@@ -1,3 +1,4 @@
+import '../../styles/browserSources.css';
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { Button, Dialog, Select } from '@floegence/floe-webapp-core/ui';
 import { Globe, Plus, Refresh, Settings } from '@floegence/floe-webapp-core/icons';

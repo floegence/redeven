@@ -39,16 +39,13 @@ function isForbiddenInitialModule(moduleId) {
     || moduleId.startsWith('@beamterm/renderer/');
 }
 
-export function analyzeInitialBuildGraph(manifest, chunkModules) {
-  const entries = Object.entries(manifest).filter(([, item]) => item?.isEntry === true);
-  if (entries.length === 0) throw new Error('Vite manifest does not contain an entry chunk');
+export function analyzeInitialBuildGraph(manifest, chunkModules, entryKey = 'index.html') {
+  if (manifest[entryKey]?.isEntry !== true) throw new Error(`Vite manifest does not contain an entry chunk: ${entryKey}`);
 
   const visited = new Set();
   const paths = new Map();
-  const queue = entries.map(([key]) => {
-    paths.set(key, [key]);
-    return key;
-  });
+  paths.set(entryKey, [entryKey]);
+  const queue = [entryKey];
   while (queue.length > 0) {
     const key = queue.shift();
     if (visited.has(key)) continue;

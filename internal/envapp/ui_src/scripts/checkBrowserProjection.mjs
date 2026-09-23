@@ -21,6 +21,9 @@ import { runBrowserProjectionMediaSync } from './browserProjectionMediaSync.mjs'
 
 // Driven by TestBrowserProjectionUsesOneFlowersecSession. Only startup metadata
 // and results use stdout; artifacts travel through the parent-owned stdin pipe.
+const clientName = process.env.REDEVEN_BROWSER_CLIENT ?? 'chromium';
+assert.ok(['chromium', 'chrome', 'msedge', 'firefox', 'webkit', 'electron', 'firefox-stable'].includes(clientName),
+  `Unsupported qualification client: ${clientName}. Use the requested browser's actual automation driver.`);
 const input = createInterface({ input: process.stdin });
 const nextMessage = () => new Promise(resolve => input.once('line', line => resolve(JSON.parse(line))));
 const firstMessage = nextMessage();
@@ -132,11 +135,10 @@ try {
     configuration = await settings;
   }
   if (process.env.REDEVEN_BROWSER_DEBUG_EVIDENCE) await writeFile(process.env.REDEVEN_BROWSER_DEBUG_EVIDENCE, JSON.stringify({
-    mode: 'Local Fast Debugging; dependency overlay; not release acceptance',
+    mode: 'Product browser measurement', qualificationManifest: process.env.REDEVEN_BROWSER_RUN_MANIFEST ?? null,
     runtime_pid: configuration.runtimePID, fixture_pid: process.pid, origin, source_origin: sourceOrigin,
     source_cdp_port: Number(port), source_kind: managedSource ? 'runtime-managed' : extensionSource ? 'chrome-extension-native-messaging' : 'cdp', state_path: directory, started_at: new Date().toISOString(),
   }, null, 2) + '\n');
-  const clientName = process.env.REDEVEN_BROWSER_CLIENT ?? 'chromium';
   if (clientName === 'firefox-stable') {
     await runWebDriverProjection({ origin, sourceOrigin, configuration, page, directory });
     assert.deepEqual(directProxyRequests, [], 'Stable browser Runtime requests use Flowersec');

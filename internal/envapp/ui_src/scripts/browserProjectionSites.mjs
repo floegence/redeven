@@ -24,7 +24,8 @@ const sites = [
 export async function runBrowserProjectionSites({ popup, source, evidence }) {
   assert.ok(evidence);
   const report = {
-    mode: "Local Fast Debugging; dependency overlays; not release acceptance",
+    mode: "Product browser measurement",
+    qualificationManifest: process.env.REDEVEN_BROWSER_RUN_MANIFEST ?? null,
     seed: 20260923,
     started: new Date().toISOString(),
     sites: [],

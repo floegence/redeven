@@ -46,7 +46,7 @@ export async function runBrowserProjectionSoak({ popup, sourcePages, sourceOrigi
     return { rss: processes.filter(([pid]) => owned.has(pid)).reduce((total, [, , rss]) => total + rss * 1024, 0), processes: processes.filter(([pid]) => owned.has(pid)).length,
       sourceHeap: await heap(sourceMetrics), viewerHeap: await heap(viewerMetrics), fixtureAllocatedHeap, fixtureHeap: process.memoryUsage().heapUsed, fixtureProtocolObjects };
   };
-  const report = { mode: 'Local Fast Debugging; dependency overlays; not release acceptance', seconds, network: 'loopback, unthrottled', started: new Date(started).toISOString(), runtimePID, fixturePID: process.pid, samples, iterations, navigations, inputP95: 0 };
+  const report = { mode: 'Product browser measurement', qualificationManifest: process.env.REDEVEN_BROWSER_RUN_MANIFEST ?? null, seconds, network: 'loopback, unthrottled', started: new Date(started).toISOString(), runtimePID, fixturePID: process.pid, samples, iterations, navigations, inputP95: 0 };
   const save = async () => {
     report.iterations = iterations; report.navigations = navigations;
     report.inputP95 = [...latencies].sort((a, b) => a - b)[Math.floor(latencies.length * .95)] ?? 0;

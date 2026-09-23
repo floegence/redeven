@@ -9,7 +9,7 @@ const p95 = values => [...values].sort((a, b) => a - b)[Math.min(values.length -
 export async function runBrowserProjectionPerformance({ popup, sourcePages, evidence }) {
   assert.equal(process.env.REDEVEN_BROWSER_NETWORK, '80ms-10mbps');
   assert.ok(evidence, 'Performance qualification must retain measurements');
-  const report = { mode: 'Local Fast Debugging; dependency overlays; not release acceptance', network: { rtt_ms: 80, bits_per_second_each_direction: 10000000 }, started: new Date().toISOString(), baseline: [], loaded: [], tabFeedback: [], cachedDisplay: [] };
+  const report = { mode: 'Product browser measurement', qualificationManifest: process.env.REDEVEN_BROWSER_RUN_MANIFEST ?? null, network: { rtt_ms: 80, bits_per_second_each_direction: 10000000 }, started: new Date().toISOString(), baseline: [], loaded: [], tabFeedback: [], cachedDisplay: [] };
   const until = async (predicate, argument) => {
     const handle = await popup.waitForFunction(predicate, argument);
     await handle.dispose();

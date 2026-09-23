@@ -11,7 +11,8 @@ export async function runBrowserProjectionMediaSync({
   evidence,
 }) {
   const report = {
-    mode: "Local Fast Debugging; dependency overlays; not release acceptance",
+    mode: "Product browser measurement",
+    qualificationManifest: process.env.REDEVEN_BROWSER_RUN_MANIFEST ?? null,
     started: new Date().toISOString(),
     measurement:
       "Displayed video luminance and decoded PCM at the audio device timeline; 2-second warmup, 12-second sample",
@@ -120,7 +121,7 @@ export async function runBrowserProjectionMediaSync({
             context.drawImage(clip, 0, 0, 1, 1);
             bright = context.getImageData(0, 0, 1, 1).data[0] > 180;
           }
-          if (bright && !wasVideo && elapsed >= 2000) video.push(now);
+          if (bright && !wasVideo) video.push(now);
           wasVideo = bright;
           let audible = false,
             outputAt = now;
@@ -138,7 +139,9 @@ export async function runBrowserProjectionMediaSync({
                 1000;
             break;
           }
-          if (audible && !wasAudio && elapsed >= 2000) audio.push(outputAt);
+          // The fixture has one 100 ms tone each second; retain its first
+          // onset rather than treating ringing or a render gap as a new pulse.
+          if (audible && !wasAudio && (!audio.length || outputAt - audio.at(-1) > 500)) audio.push(outputAt);
           wasAudio = audible;
           if (elapsed >= 14000) resolve();
           else requestAnimationFrame(sample);
@@ -146,6 +149,8 @@ export async function runBrowserProjectionMediaSync({
         requestAnimationFrame(sample);
       });
       return {
+        start,
+        end: performance.now(),
         audio,
         video,
         decoded: window.fixtureDecodedTransitions,
@@ -166,10 +171,8 @@ export async function runBrowserProjectionMediaSync({
       report.samples.video.length >= 8,
       "At least eight decoded flashes must appear in the replay video",
     );
-    // The worker preserves source timestamps for decoding, but Chromium's
-    // audio decoder may apply a codec pre-skip that is not reflected in the
-    // video timestamp. Compare transitions on the actual decoded wall clock;
-    // retain timestamp skew as diagnostic evidence.
+    // Decode callbacks and packet timestamps are diagnostic only. Acceptance
+    // compares displayed video with the audio device presentation timeline.
     const decodedAudio = report.samples.decoded.audio,
       decodedVideo = report.samples.decoded.video;
     report.decoded_timestamp_skew_ms = decodedVideo.flatMap((video) => {
@@ -203,7 +206,11 @@ export async function runBrowserProjectionMediaSync({
     report.maximum_absolute_decoded_skew_ms = Math.max(
       ...report.decoded_skew_ms.map(Math.abs),
     );
-    report.skew_ms = report.samples.video.map(
+    // Capture outside the comparison window so its edges do not lose one
+    // half of a pulse pair. Interior missing pulses still fail the skew bound.
+    const measuredVideo = report.samples.video.filter(at => at >= report.samples.start + 2000 && at < report.samples.end - 500);
+    assert.ok(measuredVideo.length >= 8, 'At least eight complete pulse pairs are measured');
+    report.skew_ms = measuredVideo.map(
       (at) =>
         at -
         report.samples.audio.reduce((best, value) =>
@@ -212,8 +219,8 @@ export async function runBrowserProjectionMediaSync({
     );
     report.maximum_absolute_skew_ms = Math.max(...report.skew_ms.map(Math.abs));
     assert.ok(
-      report.maximum_absolute_decoded_skew_ms <= 100,
-      `Decoded audio/video wall skew ${report.maximum_absolute_decoded_skew_ms.toFixed(1)} ms exceeds 100 ms`,
+      report.maximum_absolute_skew_ms <= 100,
+      `Presented audio/video skew ${report.maximum_absolute_skew_ms.toFixed(1)} ms exceeds 100 ms`,
     );
     report.result = "passed";
   } catch (error) {
