@@ -298,7 +298,7 @@ import {
   runEnvironmentOpenPreflight,
 } from './environmentOpenPreflight';
 import {
-  type EnvironmentLifecycleAttempt,
+  createEnvironmentLifecycleAttempt, type EnvironmentLifecycleAttempt, type EnvironmentSettingsRestartSource,
 } from './environmentLifecycleDisclosure';
 import {
   environmentProgressMeterPercent,
@@ -2659,6 +2659,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     lateError: error => showActionToast(settingsAccessErrorMessage(error), 'error'),
   });
   const settingsSession = settingsController.session;
+  const [settingsPresent, setSettingsPresent] = createSignal(false);
   const settingsPresentation = createMemo<ReturnType<typeof settingsSession>>(previous => settingsSession() ?? previous, null);
   const [newConnectionState, setNewConnectionState] = createSignal<ConnectionDialogState>(null);
   const connectionDialogState = () => settingsSession()?.connection ?? newConnectionState();
@@ -3617,7 +3618,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     | Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>>
     | SilentLauncherActionFailure
   > {
-    setBusyState(busyStateForLauncherRequest(request));
+    const actionState = busyStateForLauncherRequest(request);
+    setBusyState(actionState);
     try {
       const result = await props.runtime.launcher.performAction(request);
       if (isDesktopLauncherActionFailure(result)) {
@@ -3654,7 +3656,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         message: getErrorMessage(error),
       };
     } finally {
-      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
+      setBusyState(current => current.request_started_at_unix_ms === actionState.request_started_at_unix_ms && current.action === actionState.action
+        ? IDLE_LAUNCHER_BUSY_STATE : current);
     }
   }
 
@@ -3689,6 +3692,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       showActionToast(i18n().t('environmentCenter.environmentRegistrationUnavailable'), 'error');
       return;
     }
+    setLifecycleProgressFocusRequest(current => current?.canReveal ? null : current);
     resetMessages();
     setConnectionDialogFieldErrors({});
     setNewConnectionState(null);
@@ -4308,7 +4312,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ...(environment.managed_runtime_host_access ? { host_access: environment.managed_runtime_host_access } : {}),
       ...(environment.managed_runtime_placement ? { placement: environment.managed_runtime_placement } : {}),
     };
-    if (environment.kind === 'local_environment') {
+    if (environment.kind === 'local_environment' || environment.kind === 'wsl_environment') {
       return withKind({
         ...runtimeTarget,
         environment_id: environment.id,
@@ -5370,22 +5374,88 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }));
   }
 
-  async function saveSettings(options: Readonly<{ restartRuntime?: boolean }> = {}): Promise<void> {
+  async function restartFromSettings(environmentID: string, returnTo: 'access' | 'two_factor', foreground: boolean): Promise<void> {
+    const environment = snapshot().environments.find(entry => entry.id === environmentID);
+    if (!environment) {
+      showActionToast(i18n().t('environmentCenter.environmentRegistrationUnavailable'), 'error');
+      return;
+    }
+    const attempt = createEnvironmentLifecycleAttempt(environment.id, 'restart_runtime');
+    const request = runtimeActionRequest(environment, 'restart_environment_runtime', { attempt });
+    if (!request) {
+      showActionToast(i18n().t('environmentCenter.resolveRuntimeTargetError'), 'error');
+      return;
+    }
+    const [submissionError, setSubmissionError] = createSignal('');
+    let visible = false;
+    const following = () => visible && activeCenterTab() === 'environments' && !settingsSession();
+    const source: EnvironmentSettingsRestartSource = {
+      returnTo, submissionError,
+      visibilityChanged: value => { visible = value; },
+      returnToSettings: () => {
+        openSettingsSurface(environment.id);
+        settingsController.update({ focus_two_factor: returnTo === 'two_factor' });
+        settingsController.selectTab('access');
+      },
+      retry: () => { void restartFromSettings(environment.id, returnTo, true); },
+    };
+    let focusRequestID = 0;
+    if (foreground) {
+      setActiveCenterTab('environments');
+      if (!libraryGroups().some(group => group.member_ids.includes(environment.id))) {
+        setLibraryQuery('');
+        setLibrarySourceFilter('');
+      }
+      focusRequestID = ++lifecycleProgressFocusRequestSequence;
+      setLifecycleProgressFocusRequest({ request_id: focusRequestID, ...attempt,
+        subject_kind: 'environment', subject_id: environment.id, intent: 'restart_runtime', settingsRestart: source,
+        canReveal: () => activeCenterTab() === 'environments' && !settingsPresent() && !settingsSession(),
+      });
+    }
+    const result = await performLauncherActionSilently(request);
+    const willReveal = () => lifecycleProgressFocusRequest()?.request_id === focusRequestID
+      && activeCenterTab() === 'environments' && !settingsSession();
+    if (!result.ok && result.code === 'runtime_lifecycle_in_progress' && result.operation_key) {
+      // Admission identifies the existing owner. A rejected restart never inherits its outcome.
+      setSubmissionError(i18n().t('settings.restartNotApplied'));
+      if (following() || willReveal()) {
+        const operation = activeActionProgress().find(progress => progress.operation_key === result.operation_key);
+        setLifecycleProgressFocusRequest({ request_id: ++lifecycleProgressFocusRequestSequence,
+          operation_key: result.operation_key, started_at_unix_ms: operation?.started_at_unix_ms,
+          subject_kind: 'environment', subject_id: environment.id,
+          canReveal: () => activeCenterTab() === 'environments' && !settingsPresent() && !settingsSession(),
+        });
+      }
+      showActionToast(i18n().t('settings.restartDeferred', { label: environment.label }), 'info');
+      return;
+    }
+    if (!result.ok) setSubmissionError(result.message);
+    else if (result.outcome !== 'restarted_environment_runtime') setSubmissionError(i18n().t('toast.unexpectedLauncherResult'));
+    await refreshSnapshot().catch(error => {
+      if (!following() && !willReveal()) showActionToast(getErrorMessage(error), 'error');
+    });
+    if (!following() && !willReveal()) {
+      showActionToast(submissionError()
+        ? `${i18n().t('settings.restartFailedNamed', { label: environment.label })}\n\n${submissionError()}`
+        : i18n().t('environmentCenter.runtimeRestartedToast', { label: environment.label }), submissionError() ? 'error' : 'success');
+    }
+  }
+
+  async function saveSettings(options: Readonly<{ restartRuntime?: boolean; continueTwoFactor?: boolean }> = {}): Promise<void> {
     const opening = settingsSession();
     if (!opening?.access || opening.saving) return;
     const environment = selectedSettingsEnvironmentEntry()!;
-    if (options.restartRuntime && environment.runtime_operations.restart.availability !== 'available') return;
+    if (options.restartRuntime && (environment.runtime_operations.restart.availability !== 'available' || connectionSettingsDirty())) return;
     setSettingsError('');
-    if (!await settingsController.saveAccess()) return;
-    showActionToast(i18n().t('toast.settingsSaved'));
+    if (!await settingsController.saveAccess(options.restartRuntime ? 'restart' : 'save')) return;
     if (options.restartRuntime) {
-      const result = await restartEnvironmentRuntime(environment, settingsController.current(opening) ? 'settings' : 'connect');
-      if (!result) {
-        if (settingsController.current(opening)) setSettingsError(i18n().t('settings.savedNotApplied'));
-        else showActionToast(i18n().t('settings.savedNotApplied'), 'error');
-      } else if (settingsController.current(opening)) await settingsController.loadAccess();
+      const foreground = settingsController.current(opening);
+      if (foreground) cancelSettings();
+      await restartFromSettings(environment.id, options.continueTwoFactor ? 'two_factor' : 'access', foreground);
+    } else {
+      showActionToast(i18n().t('toast.settingsSaved'));
+      void refreshSnapshot();
     }
-    void refreshSnapshot();
   }
 
   function cancelSettings(): void {
@@ -5760,7 +5830,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function connectionSettingsDirty(): boolean {
     const session = settingsSession();
-    return !!session && JSON.stringify(session.connection) !== JSON.stringify(session.connection_baseline);
+    return !!session && (session.metadata_label !== session.environment.label
+      || JSON.stringify(session.connection) !== JSON.stringify(session.connection_baseline));
   }
   function connectionSaveBlocked(): boolean {
     const session = settingsSession();
@@ -6471,12 +6542,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
       <EnvironmentSettingsDialog open={Boolean(settingsSession())} environment={settingsSession()?.environment ?? null}
         tab={settingsPresentation()?.tab ?? 'connection'} i18n={i18n()} onClose={cancelSettings}
+        onPresenceChange={setSettingsPresent}
         onTabChange={settingsController.selectTab}
         connection={(
           <Show when={settingsPresentation()?.token} keyed>{(_token) => (
             <Show when={settingsPresentation()?.connection} fallback={(
               <EnvironmentSettingsPanel footer={<>
                 <Button variant="ghost" onClick={cancelSettings}>{i18n().t('common.close')}</Button>
+                <Show when={connectionSettingsDirty()}><Button variant="ghost" disabled={Boolean(settingsSession()?.saving)} onClick={settingsController.resetConnection}>{i18n().t('settings.discardConnectionChanges')}</Button></Show>
                 <Show when={settingsPresentation()?.environment.managed_runtime_host_access?.kind === 'wsl_host'}>
                   <Button disabled={!settingsSession() || Boolean(settingsSession()?.saving) || !settingsSession()?.metadata_label.trim()
                     || settingsSession()?.metadata_label === settingsSession()?.environment.label} onClick={() => void saveWSLSettingsLabel()}>
@@ -6505,6 +6578,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               </EnvironmentSettingsPanel>
             )}>
               <div class="environment-settings-panel" inert={!settingsSession()}>
+                <Show when={connectionSettingsDirty()}><div class="px-5 pt-3"><Button size="sm" variant="ghost" disabled={Boolean(settingsSession()?.saving)} onClick={() => { settingsController.resetConnection(); setConnectionDialogFieldErrors({}); setConnectionDialogError(''); }}>{i18n().t('settings.discardConnectionChanges')}</Button></div></Show>
                 <Show when={connectionSaveBlocked()}><p role="status" class="px-5 pt-3 text-xs text-warning">{i18n().t('settings.resolveAccessDraft')}</p></Show>
                 <Show when={settingsPresentation()?.connection?.connection_kind === 'ssh_environment'} fallback={
                   <ConnectionDialogForm {...connectionFormProps} state={settingsPresentation()?.connection ?? null}
@@ -6566,6 +6640,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         applyAccessFixedPort={applyAccessFixedPort}
         toggleAutoPort={toggleAutoPort}
         saveSettings={saveSettings}
+        saveIntent={settingsPresentation()?.access_save_intent}
+        connectionDirty={connectionSettingsDirty()}
+        showConnectionSettings={() => settingsController.selectTab('connection')}
+        focusTwoFactor={settingsPresentation()?.focus_two_factor}
         certificate={props.runtime.settings.certificate ? async request => {
           const opening = settingsSession();
           const result = await props.runtime.settings.certificate!(request);
@@ -8508,6 +8586,7 @@ function EnvironmentProgressPanel(props: Readonly<{
   i18n: DesktopI18n;
   progress: DesktopLauncherActionProgress;
   primaryAction?: EnvironmentActionModel;
+  settingsRestart?: EnvironmentSettingsRestartSource;
   primaryActionBusy?: boolean;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
@@ -8585,7 +8664,8 @@ function EnvironmentProgressPanel(props: Readonly<{
       .filter((group) => group.actions.length > 0);
   });
   const hasPanelActions = createMemo(() => (
-    nextActionGroups().length > 0
+    (props.settingsRestart && phaseStatus() !== 'running')
+    || nextActionGroups().length > 0
     || canCancel()
     || panelPrimaryAction() !== null
   ));
@@ -8777,6 +8857,12 @@ function EnvironmentProgressPanel(props: Readonly<{
             <div class="redeven-environment-progress__target">{environmentProgressLabel(props.i18n, props.progress)}</div>
           </div>
         </div>
+        <Show when={props.settingsRestart}>
+          <p class="redeven-action-popover__detail" data-settings-restart-result>
+            {props.i18n.t(phaseStatus() === 'succeeded' ? 'settings.restartApplied'
+              : phaseStatus() === 'running' ? 'settings.restartSaved' : 'settings.restartNotApplied')}
+          </p>
+        </Show>
         <Show when={progressLeadDetail()}>
           {(detail) => <div class="redeven-action-popover__detail">{detail()}</div>}
         </Show>
@@ -8913,6 +8999,17 @@ function EnvironmentProgressPanel(props: Readonly<{
       <Show when={hasPanelActions()}>
         <div class="redeven-action-popover__action-footer">
           {renderNextActionGroups()}
+          <Show when={props.settingsRestart && phaseStatus() !== 'running'}>
+            <div class="redeven-action-popover__actions">
+              <Show when={(phaseStatus() === 'failed' || phaseStatus() === 'canceled') && !props.progress.next_actions?.some(action => action.kind === 'retry')}>
+                <Button size="sm" variant="outline" onClick={() => props.settingsRestart?.retry()}>{props.i18n.t('settings.retryRestart')}</Button>
+              </Show>
+              <Button size="sm" variant="outline" onClick={() => props.settingsRestart?.returnToSettings()}>
+                {props.i18n.t(phaseStatus() === 'succeeded' && props.settingsRestart?.returnTo === 'two_factor'
+                  ? 'settings.continueTwoFactor' : 'settings.returnToSettings')}
+              </Button>
+            </div>
+          </Show>
           <Show when={canCancel()}>
             <div class="redeven-action-popover__actions">
               <Button
@@ -9221,6 +9318,7 @@ export function EnvironmentSplitActionButton(
     guidanceOpen: boolean;
     onGuidanceOpenChange: (open: boolean) => void;
     progressOpen: boolean;
+    settingsRestart?: EnvironmentSettingsRestartSource;
     onProgressOpenChange: (open: boolean) => void;
     guidanceSession: EnvironmentGuidanceSessionState;
     busyState?: DesktopLauncherBusyState;
@@ -9308,13 +9406,29 @@ export function EnvironmentSplitActionButton(
     };
   });
   const panelProgress = createMemo(() => props.operationState.panelProgress);
-  const hasPanelProgress = createMemo(() => panelProgress() !== null);
+  const settingsPending = createMemo(() => Boolean(props.settingsRestart) && panelProgress() === null);
+  const settingsProgressLabel = createMemo(() => props.i18n.t(
+    panelProgress()?.status === 'succeeded' ? 'progress.ready'
+      : panelProgress()?.status === 'canceled' ? 'progress.canceled'
+      : props.settingsRestart?.submissionError() ? 'progress.restartFailed' : 'progress.restartingEllipsis',
+  ));
+  const hasPanelProgress = createMemo(() => panelProgress() !== null || settingsPending());
   const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());
+  createEffect(() => {
+    const source = props.settingsRestart;
+    source?.visibilityChanged(progressPanelVisible());
+    onCleanup(() => source?.visibilityChanged(false));
+  });
+  const returnToSettings = () => { const source = props.settingsRestart; props.onProgressOpenChange(false); source?.returnToSettings(); };
+  const settingsRestartPanelSource = createMemo(() => {
+    const source = props.settingsRestart;
+    return source ? { ...source, returnToSettings } : undefined;
+  });
   const primaryProgressPresentation = createMemo(() =>
     localizedPrimaryProgressPresentation(props.i18n, environmentProgressPrimaryPresentation(panelProgress())),
   );
   const primaryActionOverlay = createMemo(() =>
-    primaryProgressPresentation() || progressPanelVisible()
+    primaryProgressPresentation() || progressPanelVisible() || props.settingsRestart
       ? undefined
       : (sessionPopoverOverlay() ?? props.presentation.primary_action_overlay),
   );
@@ -9496,11 +9610,28 @@ export function EnvironmentSplitActionButton(
                   }}
                 >
                   <div>
+                    <Show when={settingsPending()}>
+                      <div class="redeven-action-popover redeven-environment-progress" data-redeven-action-popover-initial-focus="" tabIndex={-1} aria-live="polite">
+                        <div class="redeven-environment-progress__body">
+                          <div class="redeven-action-popover__title">{props.i18n.t(props.settingsRestart?.submissionError() ? 'progress.restartFailed' : 'settings.submittingRestart')}</div>
+                          <div class="redeven-environment-progress__target">{props.environmentLabel}</div>
+                          <p class="redeven-action-popover__detail">{props.i18n.t(props.settingsRestart?.submissionError() ? 'settings.restartNotApplied' : 'toast.settingsSaved')}</p>
+                          <Show when={props.settingsRestart?.submissionError()}>{error => <p class="redeven-action-popover__notice-detail" role="alert">{error()}</p>}</Show>
+                        </div>
+                        <Show when={props.settingsRestart?.submissionError()}>
+                          <div class="redeven-action-popover__action-footer redeven-action-popover__actions">
+                            <Button size="sm" onClick={() => props.settingsRestart?.retry()}>{props.i18n.t('settings.retryRestart')}</Button>
+                            <Button size="sm" variant="outline" onClick={returnToSettings}>{props.i18n.t('settings.returnToSettings')}</Button>
+                          </div>
+                        </Show>
+                      </div>
+                    </Show>
                     <Show when={panelProgress()}>
                       {(p) => (
                         <EnvironmentProgressPanel
                           i18n={props.i18n}
                           progress={p()}
+                          settingsRestart={settingsRestartPanelSource()}
                           primaryAction={props.presentation.primary_action}
                           primaryActionBusy={props.operationState.actionsDisabled}
                           cancelOperation={props.cancelOperation}
@@ -9550,6 +9681,7 @@ export function EnvironmentSplitActionButton(
                                 break;
                               }
                               case 'retry': {
+                                if (props.settingsRestart) { props.settingsRestart.retry(); break; }
                                 const retryAction = environmentActionForLauncherRetry(action.retry_action);
                                 if (retryAction) {
                                   props.onRunAction(retryAction);
@@ -9605,10 +9737,10 @@ export function EnvironmentSplitActionButton(
                   style={{
                     'min-width': 'var(--redeven-split-action-primary-min-width)',
                   }}
-                  disabled={props.operationState.actionsDisabled && primaryFallbackRunsAction()}
+                  disabled={!props.settingsRestart && props.operationState.actionsDisabled && primaryFallbackRunsAction()}
                   aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
-                  aria-haspopup={popoverOverlay() ? 'dialog' : undefined}
-                  aria-expanded={popoverOverlay() ? props.guidanceOpen : undefined}
+                  aria-haspopup={hasPanelProgress() || popoverOverlay() ? 'dialog' : undefined}
+                  aria-expanded={props.settingsRestart ? props.progressOpen : popoverOverlay() ? props.guidanceOpen : undefined}
                   aria-label={
                     blockedPrimaryActionDisabled()
                       ? blockedPrimaryActionTriggerLabel(props.i18n, props.presentation.primary_action.label)
@@ -9616,6 +9748,7 @@ export function EnvironmentSplitActionButton(
                   }
                   onClick={() => {
                     closeMenu();
+                    if (props.settingsRestart) { props.onProgressOpenChange(!props.progressOpen); return; }
                     if (primaryFallbackRunsAction()) {
                       props.onGuidanceOpenChange(false);
                       props.onProgressOpenChange(false);
@@ -9626,7 +9759,7 @@ export function EnvironmentSplitActionButton(
                     props.onGuidanceOpenChange(!props.guidanceOpen);
                   }}
                 >
-                  <Show when={blockedPrimaryActionDisabled()} fallback={props.presentation.primary_action.label}>
+                  <Show when={blockedPrimaryActionDisabled()} fallback={props.settingsRestart ? settingsProgressLabel() : props.presentation.primary_action.label}>
                     <span class="redeven-split-action-trigger__content">
                       {props.presentation.primary_action.intent === 'request_open_access' ? (
                         <ShieldCheck class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
@@ -12177,7 +12310,11 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
   applyAccessMode: (mode: DesktopAccessMode) => void;
   applyAccessFixedPort: (port: string) => void;
   toggleAutoPort: (enabled: boolean) => void;
-  saveSettings: (options?: Readonly<{ restartRuntime?: boolean }>) => Promise<void>;
+  saveSettings: (options?: Readonly<{ restartRuntime?: boolean; continueTwoFactor?: boolean }>) => Promise<void>;
+  saveIntent?: 'save' | 'restart';
+  connectionDirty?: boolean;
+  showConnectionSettings?: () => void;
+  focusTwoFactor?: boolean;
   runtimeRestartAvailable: boolean;
   runtimeRunning: boolean;
   runtimeStatusLabel: string;
@@ -12205,6 +12342,7 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
   const canSave = () => pending() && validation().valid && !saving();
   const [certificateReady, setCertificateReady] = createSignal(false);
   const [configuringHTTPS, setConfiguringHTTPS] = createSignal(false);
+  let twoFactorFocusHandled = false;
   let connectionSecurityHeading: HTMLHeadingElement | undefined;
   let twoFactorArea: HTMLElement | undefined;
   function revealAccessSetting(element: HTMLElement | undefined): void {
@@ -12222,7 +12360,8 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
     });
   }
   function finishHTTPS(): void {
-    if (!configuringHTTPS()) return;
+    if (!configuringHTTPS() && (!props.focusTwoFactor || twoFactorFocusHandled)) return;
+    twoFactorFocusHandled = true;
     setConfiguringHTTPS(false);
     queueMicrotask(() => {
       revealAccessSetting(twoFactorArea);
@@ -12230,9 +12369,9 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
     });
   }
   const accessSettingsIdentity = createMemo(() => `${props.open}:${props.snapshot.environment_id}`);
-  createEffect(on(accessSettingsIdentity, () => setConfiguringHTTPS(false)));
+  createEffect(on(accessSettingsIdentity, () => { setConfiguringHTTPS(false); twoFactorFocusHandled = false; }));
   const canApply = () => (pending() || props.snapshot.runtime_configuration_pending) && validation().valid && !saving()
-    && (props.draft.local_ui_protocol !== 'https' || certificateReady());
+    && !props.connectionDirty && (props.draft.local_ui_protocol !== 'https' || certificateReady());
   const connectionRows = createMemo(() => buildRuntimeConnectionRows({
     context: props.snapshot.runtime_connection,
     urls: props.snapshot.current_runtime_urls,
@@ -12251,21 +12390,27 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
   return (
     <EnvironmentSettingsPanel
       footer={(
+        <>
+        <Show when={props.connectionDirty}><div class="environment-settings-draft-notice" role="status">
+          <span>{props.i18n.t('settings.resolveConnectionDraft')}</span>
+          <Button size="sm" variant="ghost" onClick={props.showConnectionSettings}>{props.i18n.t('settings.goToConnection')}</Button>
+        </div></Show>
         <div class="environment-access-actions">
           <Button class="environment-access-close" size="sm" variant="ghost" onClick={props.cancelSettings}>{props.i18n.t('common.close')}</Button>
           <Show when={pending() && props.resetAccess}><Button disabled={saving()} size="sm" variant="ghost" onClick={props.resetAccess}>{props.i18n.t('settings.discardChanges')}</Button></Show>
           <Button size="sm" variant={props.runtimeRestartAvailable ? 'outline' : 'default'}
-            disabled={!canSave()} loading={saving()}
+            disabled={!canSave()} loading={saving() && props.saveIntent !== 'restart'}
             onClick={() => void props.saveSettings()}>
-            {props.i18n.t('settings.saveForNextRestart')}
+            {props.i18n.t(saving() && props.saveIntent !== 'restart' ? 'settings.savingSettings' : 'settings.saveForNextRestart')}
           </Button>
           <Show when={props.runtimeRestartAvailable}>
-            <Button size="sm" disabled={!canApply()} loading={saving()}
-              onClick={() => void props.saveSettings({ restartRuntime: true })}>
-              <Refresh class="mr-1.5 h-3.5 w-3.5" />{props.i18n.t('settings.saveAndRestart')}
+            <Button size="sm" disabled={!canApply()} loading={saving() && props.saveIntent === 'restart'}
+              onClick={() => void props.saveSettings({ restartRuntime: true, ...(configuringHTTPS() ? { continueTwoFactor: true } : {}) })}>
+              <Refresh class="mr-1.5 h-3.5 w-3.5" />{props.i18n.t(saving() && props.saveIntent === 'restart' ? 'settings.savingSettings' : 'settings.saveAndRestart')}
             </Button>
           </Show>
         </div>
+        </>
       )}
     >
       <div class="environment-access-form" inert={saving()}>

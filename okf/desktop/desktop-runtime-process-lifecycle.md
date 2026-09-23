@@ -50,6 +50,13 @@ Directly managed Environment menus keep Start, Stop, Restart, Update, Refresh, w
 
 Welcome derives the main button, lifecycle menu, refresh control, progress panel, and cancel control from one `EnvironmentOperationState`. Renderer `busyState` only suppresses duplicate clicks during the short IPC admission interval; it never owns long-running progress. Runtime health remains a separate observation and cannot overwrite operation status. A conflict response focuses the operation key returned by the main process and never creates a second error or progress presentation. One shared action-keyed presentation maps the running cancel label, its detail, and the canceling title and detail; Launcher snapshots carry no alternate interruption labels or kinds. Cancel labels describe the parent action, including Open, Runtime Update, and Runtime Restart.
 
+Settings-originated restart uses the same direct action and authoritative Launcher
+Operation. WSL routes its saved host and placement without requiring SSH fields.
+Welcome binds submission and retained terminal presentation to the exact operation;
+settings provenance supplies navigation and saved-state wording, never another
+Runtime lifecycle state. The settings-to-card interaction is owned by
+[Environment settings](desktop-environment-settings.md).
+
 Gateway-only, Provider-only, and URL Environments have no authorized direct process channel. They expose their real Open/Connect/refresh-access functions and no Runtime lifecycle menu or Gateway/Provider management fallback.
 
 # Boundaries

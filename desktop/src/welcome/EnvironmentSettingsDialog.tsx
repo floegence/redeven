@@ -29,6 +29,7 @@ export function EnvironmentSettingsDialog(props: {
   i18n: DesktopI18n;
   onClose: () => void;
   onTabChange: (tab: EnvironmentSettingsTab) => void;
+  onPresenceChange?: (present: boolean) => void;
   connection: JSX.Element;
   access: JSX.Element;
 }) {
@@ -38,6 +39,7 @@ export function EnvironmentSettingsDialog(props: {
   const hasAccess = () => !!presentation() && environmentHasAccessSettings(presentation()!);
   const hasTabs = () => hasConnection() && hasAccess();
   return <Dialog open={isOpen()} onOpenChange={open => { if (!open) props.onClose(); }}
+    onPresenceChange={props.onPresenceChange}
     title={props.i18n.t('settings.settingsWindowTitle')} bodyDescription={presentation()?.label}
     closeLabel={props.i18n.t('common.close')} escapeKeyPhase="bubble"
     class={`redeven-environment-settings-dialog${hasTabs() ? ' environment-settings-with-tabs' : ''}`} contentClass="environment-settings-content">

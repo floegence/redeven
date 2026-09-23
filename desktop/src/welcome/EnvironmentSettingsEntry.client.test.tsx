@@ -5,8 +5,10 @@ import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { buildDesktopSettingsSurfaceSnapshot } from '../main/settingsPageContent';
 import { testDesktopPreferences, testProviderEnvironment } from '../testSupport/desktopTestHelpers';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
-import type { DesktopWelcomeSnapshot, DesktopLauncherActionRequest, DesktopLauncherActionResult, DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
+import type { DesktopWelcomeSnapshot, DesktopLauncherActionRequest, DesktopLauncherActionResult, DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { DesktopSettingsResult } from '../shared/settingsIPC';
+import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
+import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 
 const disposers: Array<() => void> = [];
 const settle = () => new Promise(resolve => setTimeout(resolve, 40));
@@ -50,7 +52,7 @@ async function mount(load: (request: { environment_id: string }) => Promise<Desk
     launcher: { getSnapshot: async () => snapshot, performAction, subscribeSnapshot: listener => { receive = listener; return () => {}; }, getSSHConfigHosts: async () => [] }, settings,
   }} />, host));
   await settle();
-  return { settings, performAction, cloud, snapshot, publish: (value: DesktopWelcomeSnapshot) => { snapshot = value; receive?.(value); } };
+  return { settings, performAction, cloud, get snapshot() { return snapshot; }, publish: (value: DesktopWelcomeSnapshot) => { snapshot = value; receive?.(value); } };
 }
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -117,6 +119,237 @@ async function closeEditor() {
   document.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')!.click();
   await new Promise(resolve => setTimeout(resolve, 250));
 }
+
+type RestartRequest = Extract<DesktopLauncherActionRequest, { kind: 'restart_environment_runtime' }>;
+function restartProgress(request: RestartRequest, status: 'running' | 'succeeded' | 'failed' | 'canceled' = 'running'): DesktopLauncherActionProgress {
+  const phase = status === 'succeeded' ? 'runtime_ready' : 'stopping_runtime_process';
+  return { action: request.kind, environment_id: request.environment_id, environment_label: 'Fixture SSH',
+    operation_key: request.operation_key, started_at_unix_ms: request.operation_started_at_unix_ms,
+    status, phase, title: 'Restart Runtime', detail: status === 'failed' ? 'Fixture restart failure' : 'Stopping the running Runtime.',
+    cancelable: status === 'running', active_progress_surface: 'runtime_lifecycle',
+    lifecycle_progress: runtimeLifecycleProgress({ location: 'ssh_host', operation: 'restart', phase,
+      targetID: request.environment_id!, targetLabel: 'Fixture SSH' }),
+  };
+}
+async function restartHarness() {
+  const h = await mount(async () => success);
+  h.publish({ ...h.snapshot, environments: h.snapshot.environments.map(entry => entry.id === id ? {
+    ...entry, runtime_operations: { ...entry.runtime_operations, restart: { ...entry.runtime_operations.restart, availability: 'available' } },
+  } : entry) });
+  const jobs: Array<{ request: RestartRequest; resolve: (result: DesktopLauncherActionResult) => void }> = [];
+  h.performAction.mockImplementation(request => {
+    if (request.kind !== 'restart_environment_runtime') return Promise.resolve({ ok: true, outcome: 'canceled_launcher_operation' });
+    const pending = deferred<DesktopLauncherActionResult>();
+    jobs.push({ request, resolve: pending.resolve });
+    return pending.promise;
+  });
+  const publish = (status: 'running' | 'succeeded' | 'failed' | 'canceled' = 'running') => {
+    h.publish({ ...h.snapshot, action_progress: [restartProgress(jobs.at(-1)!.request, status)] });
+  };
+  const open = async () => { button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await settle(); };
+  const submit = async () => { await open(); input('local-ui-port', '25000'); button('Save and restart').click(); await settle(); };
+  return { ...h, get snapshot() { return h.snapshot; }, open, submit, jobs, progress: publish };
+}
+const finishMotion = () => new Promise(resolve => setTimeout(resolve, 220));
+const progressPanel = () => document.querySelector('.redeven-environment-progress');
+
+describe('settings restart handoff', () => {
+  it('hands a saved draft to the card progress before restart completes', async () => {
+    const restart = deferred<DesktopLauncherActionResult>();
+    const h = await mount(async () => success);
+    h.publish({ ...h.snapshot, environments: h.snapshot.environments.map(entry => entry.id === id ? {
+      ...entry, runtime_operations: { ...entry.runtime_operations, restart: { ...entry.runtime_operations.restart, availability: 'available' } },
+    } : entry) });
+    h.performAction.mockImplementation(request => {
+      if (request.kind !== 'restart_environment_runtime') throw new Error('Unexpected action');
+      h.publish({ ...h.snapshot, action_progress: [{
+        action: request.kind, environment_id: id, environment_label: 'Fixture SSH',
+        operation_key: request.operation_key, started_at_unix_ms: request.operation_started_at_unix_ms,
+        status: 'running', phase: 'stopping_runtime_process', title: 'Restart Runtime', detail: 'Stopping the running Runtime.',
+        active_progress_surface: 'runtime_lifecycle',
+        lifecycle_progress: runtimeLifecycleProgress({ location: 'ssh_host', operation: 'restart', phase: 'stopping_runtime_process',
+          targetID: id, targetLabel: 'Fixture SSH' }),
+      }] });
+      return restart.promise;
+    });
+    button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await settle();
+    input('local-ui-port', '25000'); button('Save and restart').click();
+    await new Promise(resolve => setTimeout(resolve, 250));
+    expect(document.querySelector('.redeven-environment-settings-dialog')).toBeNull();
+    expect(document.querySelector('.redeven-environment-progress')?.textContent).toContain('Fixture SSH');
+    expect(document.querySelector('.redeven-environment-progress')?.textContent).toContain('Stopping');
+    expect(h.settings.save).toHaveBeenCalledTimes(1);
+    expect(h.performAction).toHaveBeenCalledTimes(1);
+    restart.resolve({ ok: true, outcome: 'restarted_environment_runtime' }); await settle();
+  });
+  it('shows only the selected save action as pending and retains a rejected draft', async () => {
+    const h = await restartHarness(), saved = deferred<DesktopSettingsResult>();
+    vi.mocked(h.settings.save).mockReturnValue(saved.promise);
+    await h.submit();
+    expect(button('Saving…').getAttribute('disabled')).not.toBeNull();
+    expect((button('Save for next restart') as HTMLButtonElement).disabled).toBe(true);
+    (button('Saving…') as HTMLButtonElement).click();
+    expect(h.settings.save).toHaveBeenCalledTimes(1);
+    expect(h.jobs).toHaveLength(0);
+    saved.resolve({ ok: false, error: 'Fixture save denied' }); await settle();
+    expect(document.querySelector('.redeven-environment-settings-dialog')?.textContent).toContain('Fixture save denied');
+    expect((document.getElementById('local-ui-port') as HTMLInputElement).value).toBe('25000');
+    expect(h.jobs).toHaveLength(0);
+  });
+  it('shows admission honestly, ignores old progress, and never reopens after Escape', async () => {
+    const h = await restartHarness();
+    await h.submit(); await finishMotion();
+    expect(progressPanel()?.textContent).toContain('Submitting restart request');
+    expect(progressPanel()?.querySelector('.redeven-environment-progress__meter')).toBeNull();
+    h.publish({ ...h.snapshot, action_progress: [{ ...restartProgress(h.jobs[0].request, 'failed'), operation_key: 'old', started_at_unix_ms: 1 }] });
+    await settle(); expect(progressPanel()?.textContent).not.toContain('Fixture restart failure');
+    h.progress(); await settle();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await finishMotion();
+    expect(progressPanel()).toBeNull();
+    h.progress('succeeded'); h.jobs[0].resolve({ ok: true, outcome: 'restarted_environment_runtime' }); await settle();
+    expect(progressPanel()).toBeNull();
+    expect(h.performAction.mock.calls.some(([request]) => request.kind === 'cancel_launcher_operation')).toBe(false);
+  });
+  it('retains an instant result after snapshots retire it and returns to freshly loaded access settings', async () => {
+    const h = await restartHarness(); await h.submit();
+    h.progress('succeeded'); h.jobs[0].resolve({ ok: true, outcome: 'restarted_environment_runtime' });
+    await finishMotion();
+    expect(progressPanel()?.textContent).toContain('Settings applied. The environment is ready.');
+    h.publish({ ...h.snapshot, action_progress: [] }); await settle();
+    expect(progressPanel()?.textContent).toContain('Settings applied. The environment is ready.');
+    expect((document.querySelector('.redeven-desktop-toast-viewport')?.textContent ?? '')).not.toContain('Runtime restarted');
+    button('Return to settings').click(); await finishMotion();
+    expect(document.querySelector('.redeven-environment-settings-dialog')).not.toBeNull();
+    expect(h.settings.load).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Access & security');
+  });
+  it.each(['failed', 'canceled'] as const)('keeps saved settings distinct from a %s restart and retries only restart', async status => {
+    const h = await restartHarness(); await h.submit(); h.progress(status);
+    h.jobs[0].resolve({ ok: false, code: 'action_invalid', scope: 'environment', message: 'Fixture restart failure' });
+    await finishMotion();
+    expect(progressPanel()?.textContent).toContain('Settings are saved, but the restart did not complete.');
+    button('Retry restart').click(); await settle();
+    expect(h.jobs).toHaveLength(2);
+    expect(h.jobs[1].request.operation_key).not.toBe(h.jobs[0].request.operation_key);
+    expect(h.settings.save).toHaveBeenCalledTimes(1);
+    expect(progressPanel()?.textContent).toContain('Submitting restart request');
+    h.progress('succeeded'); h.jobs[1].resolve({ ok: true, outcome: 'restarted_environment_runtime' }); await settle();
+  });
+  it('keeps an admission error in the same card without inventing lifecycle progress', async () => {
+    const h = await restartHarness(); await h.submit();
+    h.jobs[0].resolve({ ok: false, code: 'action_invalid', scope: 'environment', message: 'Restart admission refused' }); await finishMotion();
+    expect(progressPanel()?.textContent).toContain('Restart admission refused');
+    expect(progressPanel()?.textContent).toContain('Settings are saved');
+    expect(progressPanel()?.querySelector('.redeven-environment-progress__meter')).toBeNull();
+    button('Retry restart').click(); await settle(); expect(h.settings.save).toHaveBeenCalledTimes(1);
+    h.progress('succeeded'); h.jobs[1].resolve({ ok: true, outcome: 'restarted_environment_runtime' }); await settle();
+  });
+  it.each([false, true])('focuses the conflicting owner without claiming settings applied, delayed progress=%s', async delayed => {
+    const h = await restartHarness(); await h.submit();
+    const owner = { ...restartProgress(h.jobs[0].request), operation_key: 'another-operation', started_at_unix_ms: 42 };
+    if (!delayed) h.publish({ ...h.snapshot, action_progress: [owner] });
+    h.jobs[0].resolve({ ok: false, code: 'runtime_lifecycle_in_progress', scope: 'environment',
+      message: 'Another operation is running', operation_key: owner.operation_key, environment_id: id });
+    await finishMotion();
+    if (delayed) { h.publish({ ...h.snapshot, action_progress: [owner] }); await settle(); }
+    expect(progressPanel()).not.toBeNull();
+    expect(progressPanel()?.textContent).toContain('Stopping');
+    h.publish({ ...h.snapshot, action_progress: [{ ...owner, status: 'succeeded' }] }); await settle();
+    expect(progressPanel()?.textContent).not.toContain('Settings applied.');
+    expect(h.jobs).toHaveLength(1); expect(h.settings.save).toHaveBeenCalledTimes(1);
+  });
+  it('does not reveal delayed conflicting progress after its panel is dismissed', async () => {
+    const h = await restartHarness(); await h.submit(); await finishMotion();
+    h.jobs[0].resolve({ ok: false, code: 'runtime_lifecycle_in_progress', scope: 'environment',
+      message: 'Another operation is running', operation_key: 'another-operation', environment_id: id });
+    await settle();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await finishMotion();
+    h.publish({ ...h.snapshot, action_progress: [{ ...restartProgress(h.jobs[0].request), operation_key: 'another-operation', started_at_unix_ms: 42 }] });
+    await settle(); expect(progressPanel()).toBeNull();
+  });
+  it('shows an existing Open operation when it rejects the settings restart', async () => {
+    const h = await restartHarness(); await h.submit();
+    const owner: DesktopLauncherActionProgress = {
+      action: 'open_ssh_environment', environment_id: id, environment_label: 'Fixture SSH',
+      operation_key: 'existing-open', started_at_unix_ms: 42, status: 'running', phase: 'opening_window',
+      title: 'Opening environment', detail: 'Opening the existing session',
+      active_progress_surface: 'open',
+      open_progress: openConnectionProgress({ location: 'ssh_host', phase: 'opening_window', environmentID: id, environmentLabel: 'Fixture SSH', targetID: id, targetLabel: 'Fixture SSH' }),
+    };
+    h.publish({ ...h.snapshot, action_progress: [owner] });
+    h.jobs[0].resolve({ ok: false, code: 'runtime_lifecycle_in_progress', scope: 'environment',
+      message: 'Another operation is running', operation_key: owner.operation_key, environment_id: id });
+    await finishMotion();
+    expect(progressPanel()?.textContent).toContain('Opening');
+    expect(progressPanel()?.textContent).not.toContain('Settings applied.');
+  });
+  it('can reopen the saved restart result and its recovery navigation after dismissal', async () => {
+    const h = await restartHarness(); await h.submit();
+    h.progress('succeeded'); h.jobs[0].resolve({ ok: true, outcome: 'restarted_environment_runtime' }); await finishMotion();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await finishMotion();
+    expect(progressPanel()).toBeNull();
+    const trigger = document.querySelector<HTMLButtonElement>(`[data-owner-id="${id}"] .redeven-split-action-primary button`)!;
+    trigger.click(); await settle();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(progressPanel()?.closest('.redeven-popover-panel-collapse--open')).not.toBeNull();
+    expect(progressPanel()?.textContent).toContain('Return to settings');
+  });
+  it('releases the saved restart result when a newer owner operation arrives', async () => {
+    const h = await restartHarness(); await h.submit();
+    h.progress('succeeded'); h.jobs[0].resolve({ ok: true, outcome: 'restarted_environment_runtime' }); await finishMotion();
+    h.publish({ ...h.snapshot, action_progress: [{
+      action: 'open_ssh_environment', environment_id: id, status: 'running', phase: 'opening_window',
+      operation_key: 'subsequent-open', started_at_unix_ms: Date.now(), title: 'Opening environment', detail: '',
+      active_progress_surface: 'open',
+      open_progress: openConnectionProgress({ location: 'ssh_host', phase: 'opening_window', environmentID: id, environmentLabel: 'Fixture SSH', targetID: id, targetLabel: 'Fixture SSH' }),
+    }] }); await settle();
+    expect(progressPanel()?.textContent).toContain('Opening');
+    expect(progressPanel()?.textContent).not.toContain('Settings applied.');
+    expect(progressPanel()?.textContent).not.toContain('Return to settings');
+  });
+  it('protects the connection draft and can discard only that draft without losing access edits', async () => {
+    const h = await restartHarness(); await h.open(); input('local-ui-port', '25000');
+    button('Connection').click(); await settle(); input('ssh-settings-label', 'Unsaved name');
+    button('Access & security').click(); await settle();
+    expect((button('Save and restart') as HTMLButtonElement).disabled).toBe(true);
+    expect((button('Save for next restart') as HTMLButtonElement).disabled).toBe(false);
+    button('Go to connection settings').click(); await settle();
+    button('Discard connection changes').click(); await settle();
+    expect((document.getElementById('ssh-settings-label') as HTMLInputElement).value).toBe('Fixture SSH');
+    button('Access & security').click(); await settle();
+    expect((document.getElementById('local-ui-port') as HTMLInputElement).value).toBe('25000');
+    expect((button('Save and restart') as HTMLButtonElement).disabled).toBe(false);
+    button('Save for next restart').click(); await settle();
+    expect(h.jobs).toHaveLength(0);
+    expect(document.querySelector('.redeven-environment-settings-dialog')).not.toBeNull();
+  });
+  it.each([true, false])('continues two-factor setup only on explicit return and owner HTTPS readiness=%s', async ready => {
+    const h = await restartHarness();
+    let httpsReady = false;
+    const security = vi.fn(async () => ({ https_ready: httpsReady, enabled: false, password_configured: false,
+      recovery_pending: false, recovery_codes_remaining: 0, revision: 1 }));
+    vi.stubGlobal('redevenDesktopSettings', { ...h.settings, security });
+    Object.assign(h.settings, { certificate: vi.fn(async () => ({ status: 'ready', code: '', identity: 'ready', can_manage: true, certificate_kind: 'server' })) });
+    await h.open(); button('Configure HTTPS').click(); await settle();
+    button('Save and restart').click(); await settle();
+    h.progress('succeeded'); h.jobs[0].resolve({ ok: true, outcome: 'restarted_environment_runtime' }); await finishMotion();
+    expect(document.querySelector('.redeven-environment-settings-dialog')).toBeNull();
+    expect(progressPanel()?.textContent).toContain('Continue two-factor setup');
+    expect(security).toHaveBeenCalledTimes(1);
+    httpsReady = ready;
+    button('Continue two-factor setup').click(); await finishMotion();
+    expect(security).toHaveBeenCalledTimes(2);
+    if (ready) expect(document.activeElement?.textContent).toBe('Set up');
+    else expect(document.querySelector('.two-factor-setting')?.textContent).toContain('Set up HTTPS first');
+  });
+  it('does not restart a registration removed while saving', async () => {
+    const h = await restartHarness(), saved = deferred<DesktopSettingsResult>();
+    vi.mocked(h.settings.save).mockReturnValue(saved.promise); await h.submit();
+    h.publish({ ...h.snapshot, environments: h.snapshot.environments.filter(entry => entry.id !== id) });
+    saved.resolve(success); await finishMotion();
+    expect(h.jobs).toHaveLength(0); expect(progressPanel()).toBeNull();
+  });
+});
 
 describe('settings entry asynchronous isolation', () => {
   it.each(['Fixture SSH', 'Other SSH'])('ignores a delayed response after reopening %s from its card', async label => {
@@ -238,7 +471,7 @@ describe('settings entry asynchronous isolation', () => {
       expect((document.getElementById('wsl-settings-name') as HTMLInputElement).value).toBe('Renamed WSL');
     }
     if (kind === 'gateway') {
-      await closeEditor(); h.publish({ ...h.snapshot, environments: [...h.snapshot.environments, { ...entry, can_edit: false }] }); await settle();
+      await closeEditor(); h.publish({ ...h.snapshot, environments: [...h.snapshot.environments.filter(value => value.id !== entry.id), { ...entry, can_edit: false }] }); await settle();
       expect([...document.querySelectorAll('button')].some(el => el.getAttribute('aria-label') === 'Settings for Fixture gateway')).toBe(false);
     }
   });

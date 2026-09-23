@@ -52,13 +52,40 @@ inputs. Access dirty state and save/discard availability use the same comparison
 manually restoring the baseline clears the dirty state.
 
 Switching tabs keeps both forms mounted, preserving drafts, expanded controls and
-scroll positions. Save submits only the active tab and stays in the window.
-Submitted forms reject further edits and duplicate saves until completion.
-Failure retains the draft. Close, Cancel, Escape and backdrop dismissal discard
-unsaved changes directly; they do not cancel an already submitted save. A
-requested save-and-restart continues for its original target after dismissal.
-If persistence succeeds but restart fails, the result is explicitly saved but
-not applied, recoverable through the existing Restart action.
+scroll positions. Ordinary Save submits only the active tab and stays in the
+window. Submitted forms reject further edits and duplicate saves; only the chosen
+save action shows its pending label. Failure retains the draft. Close, Cancel,
+Escape and backdrop dismissal discard unsaved changes directly; they do not
+cancel an already submitted save.
+
+Save and restart persists access settings first. Failure stays in the editor;
+success closes that exact opening and reveals the Environment card's existing
+Runtime progress after the published Dialog reports that its exit has completed.
+The card selects the Runtime owner and scrolls into view, clearing search or
+source filters only when they hide the target. Submission feedback has no fake
+steps or percentage. The admitted operation's exact key and start time bind the
+existing lifecycle disclosure, including an operation that finishes before the
+window exits. Completed results remain readable; reopening through the card also
+retains the settings navigation until another operation replaces it. Dismissing
+progress does not cancel work or let later events reopen it.
+
+A connection draft, including a WSL name change, blocks Save and restart with an
+inline explanation and navigation to Connection. Explicitly discarding connection
+changes retains the access draft; Save for next restart remains available so
+identity edits and access edits cannot deadlock. Saving one section never commits
+or silently discards the other section.
+
+A requested restart continues for its original target after manual dismissal,
+but a late save cannot close a new opening, reveal old progress over it, or steal
+focus. A removed target is not restarted. If restart fails or is canceled, the
+progress surface distinguishes saved settings from an incomplete restart and
+retains diagnostics and recovery. Retry submits only another restart. A lifecycle
+conflict reveals the existing owner when the user is still following the request,
+even when its first progress snapshot arrives after admission; dismissing that
+request or opening settings cancels the pending focus handoff. The owner's
+completion never claims that the rejected restart applied settings. Success
+leaves users on the card with Open Env App and Return to settings. Visible results
+do not also generate success toasts; background results name their Environment.
 
 Connection saves return the committed canonical target ID. A change of host,
 port, container or Runtime directory cannot submit while access edits remain;
@@ -135,6 +162,8 @@ SSH field and secret details are owned by
 [SSH environment settings](desktop-ssh-environment-settings.md).
 
 # Evidence
+
+- `redeven:desktop/scripts/check-settings-restart.mjs` - Full Welcome shell acceptance for Local, SSH, WSL and container restart handoff, focus, dismissal, retry, narrow layouts and reduced motion.
 
 - `redeven:desktop/scripts/check-settings-expansion.mjs` - Per-frame window, footer and disclosure measurements, rapid reversals, immediate focus exclusion and reduced motion.
 - `redeven:desktop/scripts/check-access-settings.mjs` - Browser evidence for control proportions, all shipped themes and locales, narrow panels, enlarged text, real scrolling, certificate presentation and save recovery.

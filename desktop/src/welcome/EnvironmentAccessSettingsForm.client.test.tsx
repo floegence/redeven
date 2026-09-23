@@ -309,7 +309,7 @@ it('routes HTTPS prerequisites into existing settings and returns only after the
   expect(document.querySelector('.two-factor-https-guide')?.textContent).toContain('After the restart');
   expect(document.querySelector('.two-factor-setting')?.textContent).toContain('Set up HTTPS first');
   button('Save and restart').click(); await settle();
-  expect(test.save).toHaveBeenCalledWith({ restartRuntime: true });
+  expect(test.save).toHaveBeenCalledWith({ restartRuntime: true, continueTwoFactor: true });
   // Saving a HTTPS draft does not establish that the running listener changed.
   test.setSnapshot(previous => ({ ...previous, draft: test.draft(), runtime_configuration_pending: true })); await settle();
   expect(security).toHaveBeenCalledTimes(1);
