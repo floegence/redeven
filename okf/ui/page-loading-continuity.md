@@ -39,6 +39,7 @@ progress and confirmation contracts; they are not directory or inventory loads.
 | Files | Actual workspace chrome with blank content regions until the first successful directory result; the directory owner commits valid snapshots and rejects stale responses. |
 | Terminal | Shared initial status until the session catalog resolves; the terminal runtime owns subsequent creation and attachment. |
 | Monitoring | Shared initial status until the first live sample or error; subsequent polling preserves charts and current content. Metrics are not persisted as inventory snapshots. |
+| Remote Browser | Shared module status; the authorized browser view owns connection, source selection, and projection readiness. Remote page content and geometry are not persisted for document reload. |
 | Settings | Shared module status; existing settings resources retain values during refresh and each section owns its form. |
 | Flower | Shared module status; its readiness and workspace-stream owners govern operational content and actionable maintenance. |
 | Plugin Center and dynamic plugin pages | Shared module status; the inventory and published plugin surface lifecycle retain ownership of discovery, permission, and readiness. |
