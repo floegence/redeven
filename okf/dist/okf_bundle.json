@@ -24651,7 +24651,7 @@
         "title": "Env App page loading continuity",
         "type": "UI Contract"
       },
-      "body_length": 5188,
+      "body_length": 5392,
       "summary": "Redeven owns a single page-presentation registry over published Floe lifecycle,\nloading, and layout APIs. Every built-in Activity page declares its initial\npresentation and document-reload eligibility in that registry. Activity and\nWorkbench consume the same declaration. Module loading must stay inside the\nselected page or widget; it cannot replace another mounted page, the whole\ncanvas, or an existing successful result. Data services retain their existing\nauthority. Access denial and authentication changes take precedence over retained\ncontent; ordinary loading does not grant permission or clear content.",
       "sections": [
         {
@@ -24665,8 +24665,8 @@
           "id": "page-ownership",
           "title": "Page ownership",
           "level": 1,
-          "body": "| Surface | Initial presentation and data authority |\n| --- | --- |\n| Host Applications, Web Services, Containers, Codespaces | Shared page frames and list skeletons; the resource cache owns restoration, successful snapshots, refresh, and request fencing. |\n| Files | Actual workspace chrome with blank content regions until the first successful directory result; the directory owner commits valid snapshots and rejects stale responses. |\n| Terminal | Shared initial status until the session catalog resolves; the terminal runtime owns subsequent creation and attachment. |\n| Monitoring | Shared initial status until the first live sample or error; subsequent polling preserves charts and current content. Metrics are not persisted as inventory snapshots. |\n| Settings | Shared module status; existing settings resources retain values during refresh and each section owns its form. |\n| Flower | Shared module status; its readiness and workspace-stream owners govern operational content and actionable maintenance. |\n| Plugin Center and dynamic plugin pages | Shared module status; the inventory and published plugin surface lifecycle retain ownership of discovery, permission, and readiness. |\n\nThis is a common lifecycle policy, not a requirement for identical page shapes or\npersistent caches for all data. Each page's initial geometry follows its own\ncontent. Unknown counts, paths, or metrics are not reported as successful values.",
-          "char_count": 1435
+          "body": "| Surface | Initial presentation and data authority |\n| --- | --- |\n| Host Applications, Web Services, Containers, Codespaces | Shared page frames and list skeletons; the resource cache owns restoration, successful snapshots, refresh, and request fencing. |\n| Files | Actual workspace chrome with blank content regions until the first successful directory result; the directory owner commits valid snapshots and rejects stale responses. |\n| Terminal | Shared initial status until the session catalog resolves; the terminal runtime owns subsequent creation and attachment. |\n| Monitoring | Shared initial status until the first live sample or error; subsequent polling preserves charts and current content. Metrics are not persisted as inventory snapshots. |\n| Remote Browser | Shared module status; the authorized browser view owns connection, source selection, and projection readiness. Remote page content and geometry are not persisted for document reload. |\n| Settings | Shared module status; existing settings resources retain values during refresh and each section owns its form. |\n| Flower | Shared module status; its readiness and workspace-stream owners govern operational content and actionable maintenance. |\n| Plugin Center and dynamic plugin pages | Shared module status; the inventory and published plugin surface lifecycle retain ownership of discovery, permission, and readiness. |\n\nThis is a common lifecycle policy, not a requirement for identical page shapes or\npersistent caches for all data. Each page's initial geometry follows its own\ncontent. Unknown counts, paths, or metrics are not reported as successful values.",
+          "char_count": 1639
         },
         {
           "id": "activity-and-workbench",
@@ -26920,5 +26920,5 @@
       ]
     }
   ],
-  "source_sha256": "48604c9366497b8e5420465743c1e561ce7ba8fea3c129773d7e9eef8135c44b"
+  "source_sha256": "095dce6deb709fce1588fb2ce785a3737acc7ef1a293d1fcac1daa19a2dc7095"
 }

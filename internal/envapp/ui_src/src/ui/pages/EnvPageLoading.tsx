@@ -17,6 +17,7 @@ export const ENV_PAGE_PRESENTATIONS: Record<BuiltinActivityPage, {
 }> = {
   terminal: { loading: ActivityPageLoading, restoreGeometry: false },
   monitor: { loading: ActivityPageLoading, restoreGeometry: false },
+  browser: { loading: ActivityPageLoading, restoreGeometry: false },
   files: { loading: FileBrowserPageLoading, restoreGeometry: true },
   codespaces: { loading: CodespacesPageSkeleton, restoreGeometry: true },
   ports: { loading: WebServicesPageSkeleton, restoreGeometry: true },
