@@ -1,8 +1,9 @@
 import { For, Show, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import { Check, ChevronRight, Copy, ExternalLink, Search, ShareIcon, X } from '@floegence/floe-webapp-core/icons';
+import { Check, ChevronRight, Copy, ExternalLink, HelpIcon, Search, ShareIcon, X } from '@floegence/floe-webapp-core/icons';
 import { isShareableConnectionAddress, type DesktopConnectionAddress, type DesktopConnectionRow } from '../shared/desktopEnvironmentConnection';
 import type { DesktopI18n } from '../shared/i18n';
+import { DesktopTooltip } from './DesktopTooltip';
 
 type ConnectionActions = Readonly<{
   i18n: DesktopI18n;
@@ -37,6 +38,8 @@ export function EnvironmentConnectionRows(props: ConnectionActions & Readonly<{
 
 function ConnectionAddressGroup(props: ConnectionActions & Readonly<{ rows: readonly DesktopConnectionAddress[] }>) {
   const headingID = createUniqueId();
+  const helpLabelID = createUniqueId();
+  const helpDescriptionID = createUniqueId();
   const [query, setQuery] = createSignal('');
   // Once offered, filtering stays mounted even if a refresh reduces the address count.
   const searchable = createMemo<boolean>(previous => previous || props.rows.length > 6, false);
@@ -72,15 +75,25 @@ function ConnectionAddressGroup(props: ConnectionActions & Readonly<{ rows: read
   </div>;
   return <Show when={props.rows[0]}>{first => <section class="redeven-address-group" data-address-scope={first().access_scope}>
     <div class="redeven-address-heading">
-      <span id={headingID} class="redeven-card-endpoint-label">{props.i18n.t(first().label_key)}</span>
+      <div class="redeven-address-title">
+        <span id={headingID} class="redeven-card-endpoint-label">{props.i18n.t(first().label_key)}</span>
+        <Show when={first().access_scope !== 'environment_only'}>
+          <DesktopTooltip content={props.i18n.t(first().detail_key, first().detail_params)} placement="top"
+            anchorClass="redeven-address-help-anchor" class="redeven-address-help-tooltip">
+            <Button type="button" size="sm" variant="ghost" class="redeven-address-help"
+              aria-labelledby={`${headingID} ${helpLabelID}`} aria-describedby={helpDescriptionID}>
+              <HelpIcon class="h-3.5 w-3.5" aria-hidden="true" />
+              <span id={helpLabelID} class="sr-only">{props.i18n.t('common.moreInformation')}</span>
+            </Button>
+          </DesktopTooltip>
+          <span id={helpDescriptionID} class="sr-only">{props.i18n.t(first().detail_key, first().detail_params)}</span>
+        </Show>
+      </div>
       <Show when={props.rows.length > 1 || term()}><span class="redeven-address-count" aria-label={countLabel()} title={countLabel()}>
         {term() ? `${props.i18n.formatNumber(visibleIDs().length)} / ${props.i18n.formatNumber(props.rows.length)}` : props.i18n.formatNumber(props.rows.length)}
       </span></Show>
     </div>
-    <Show when={first().access_scope === 'environment_only'} fallback={<>
-      <p class="redeven-card-endpoint-detail">{props.i18n.t(first().detail_key, first().detail_params)}</p>
-      {list}
-    </>}>
+    <Show when={first().access_scope === 'environment_only'} fallback={list}>
       <span class="redeven-endpoint-scope-title">{props.i18n.t(first().detail_key, first().detail_params)}</span>
       <p class="redeven-card-endpoint-detail">{props.i18n.t('environmentConnection.openViaDesktop', { action: props.i18n.t('environmentAction.open') })}</p>
       <details class="redeven-endpoint-listener">

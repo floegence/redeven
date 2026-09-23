@@ -25,6 +25,8 @@ const report = {
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on('pageerror', (error) => report.errors.push(error.message));
+  await page.exposeFunction('recordEndpointBrowserError', message => report.errors.push(message));
+  await page.addInitScript(() => window.addEventListener('error', event => window.recordEndpointBrowserError(event.message)));
   async function settleDisclosure() {
     await page.evaluate(async () => {
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -45,10 +47,47 @@ try {
       .every(element => getComputedStyle(element).opacity === '1'));
     await page.screenshot({ path, animations: 'disabled' });
   }
+  async function assertAddressHelp(surface, screenshot) {
+    await settleDisclosure();
+    const groups = surface.locator('[data-address-scope="this_device"], [data-address-scope="network"]');
+    for (const group of await groups.all()) {
+      assert.equal(await group.locator('.redeven-card-endpoint-detail').count(), 0, 'address guidance does not occupy a description row');
+      const help = group.locator('.redeven-address-help');
+      const description = await help.evaluate(button => {
+        const description = document.getElementById(button.getAttribute('aria-describedby'));
+        const name = button.getAttribute('aria-labelledby').split(' ').map(id => document.getElementById(id)?.textContent).join(' ');
+        const rect = description.getBoundingClientRect();
+        return { text: description.textContent, name, hidden: rect.width <= 1 && rect.height <= 1, cursor: getComputedStyle(button).cursor };
+      });
+      assert.ok(description.hidden && description.text.length > 0, 'screen readers retain the full explanation without visual space');
+      assert.ok(description.name.includes(await group.locator('.redeven-card-endpoint-label').innerText()), 'help is named for its address scope');
+      assert.equal(description.cursor, 'pointer');
+      await help.scrollIntoViewIfNeeded();
+      const before = await surface.boundingBox();
+      await help.hover();
+      const tooltip = page.getByRole('tooltip');
+      await tooltip.waitFor();
+      assert.equal(await tooltip.innerText(), description.text, 'hover reveals the complete localized explanation');
+      const bounds = await tooltip.boundingBox();
+      const viewport = page.viewportSize();
+      assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= viewport.width && bounds.y + bounds.height <= viewport.height,
+        'help stays within the viewport');
+      assert.deepEqual(await surface.boundingBox(), before, 'help does not resize or move its parent surface');
+      if (screenshot) await stableScreenshot(screenshot);
+      await group.locator('.redeven-card-endpoint-label').hover();
+      await tooltip.waitFor({ state: 'detached' });
+      await help.focus();
+      await tooltip.waitFor();
+      assert.equal(await tooltip.innerText(), description.text, 'keyboard focus reveals the same explanation');
+      await page.keyboard.press('Tab');
+      await tooltip.waitFor({ state: 'detached' });
+    }
+  }
 
   // Native wheel input must reach the settings body through an exhausted address list.
   // Assigning scrollTop alone cannot detect a broken browser scroll chain.
-  for (const [width, height] of [[1440, 900], [480, 640]]) {
+  // A short viewport keeps the compact overview scrollable even after filtering.
+  for (const [width, height] of [[1440, 640], [480, 640]]) {
     await page.setViewportSize({ width, height });
     for (const inventory of ['short', 'long']) {
       await page.goto(new URL(`environment-endpoints.html?locale=en-US&${inventory === 'short' ? 'network-local=1' : 'addresses=40'}`, report.url).href);
@@ -59,6 +98,7 @@ try {
       const body = dialog.locator('.environment-settings-scroll:visible');
       await body.waitFor();
       await settleDisclosure();
+      assert.ok(await body.evaluate(element => element.scrollHeight > element.clientHeight), 'wheel chaining requires an overflowing settings body');
       const backgroundTop = await page.evaluate(() => document.scrollingElement.scrollTop);
       assert.ok(await page.evaluate(() => document.scrollingElement.scrollHeight > innerHeight), 'background can reveal scroll bleed');
       const geometry = async () => dialog.evaluate(panel => {
@@ -117,6 +157,7 @@ try {
           await group.getByRole('searchbox', { name: 'Filter addresses' }).fill(query);
           await body.evaluate(element => { element.scrollTop = 0; });
           assert.equal(await list.evaluate(element => element.scrollHeight - element.clientHeight), 0, 'filtered addresses have no internal scroll range');
+          assert.ok(await body.evaluate(element => element.scrollHeight > element.clientHeight), 'filtered settings still have room to scroll');
           movement = await wheel(list, 120);
           assert.ok(movement.after > movement.before, 'a filtered or empty list continues into settings');
         }
@@ -141,6 +182,7 @@ try {
     await trigger.click();
     const popup = page.locator('.redeven-endpoints-popover');
     await popup.waitFor();
+    await assertAddressHelp(popup, `${output}/help-${name.replaceAll(' ', '-')}.png`);
     await assertActionAlignment(popup);
     const readingAlignment = await popup.locator('.redeven-card-endpoint-row:not([data-endpoint-kind="address"])').evaluateAll(rows => rows.map(row => {
       const label = row.querySelector('.redeven-card-endpoint-label');
@@ -189,6 +231,8 @@ try {
     await page.locator(`[data-environment="${name}"]`).getByRole('button', { name: '环境设置' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.waitFor();
+    await settleDisclosure();
+    await assertAddressHelp(dialog, `${output}/help-settings-${name.replaceAll(' ', '-')}.png`);
     await assertActionAlignment(dialog);
     assert.equal(await dialog.getByLabel('分享连接').count(), name === 'Network' ? 1 : 0);
     assert.equal(await dialog.getByRole('button', { name: '在浏览器中打开' }).count(), name !== 'gzcom' ? 1 : 0);
@@ -305,6 +349,8 @@ try {
     await page.goto(new URL(`environment-endpoints.html?theme=${mode}&multiple&label=production-long-environment-name`, report.url).href);
     await page.locator('[data-environment="Network"] [aria-haspopup="dialog"]').click();
     await page.locator('.redeven-endpoints-popover [aria-expanded="false"]').first().click();
+    await settleDisclosure();
+    await assertAddressHelp(page.locator('.redeven-endpoints-popover'), `${output}/help-narrow-${mode}.png`);
     await stableScreenshot(`${output}/multiple-${mode}.png`);
     const geometry = await page.locator('.redeven-endpoints-popover').evaluate(el => {
       const r = el.getBoundingClientRect();
@@ -329,6 +375,7 @@ try {
     await page.locator('[data-environment="Network"] [aria-haspopup="dialog"]').click();
     await page.waitForFunction(() => getComputedStyle(document.querySelector('.redeven-endpoints-popover')).opacity === '1');
     assert.equal(await page.locator('.redeven-endpoints-popover').evaluate(el => el.scrollWidth > el.clientWidth), false);
+    await assertAddressHelp(page.locator('.redeven-endpoints-popover'));
     await page.keyboard.press('Escape'); await page.locator('.redeven-endpoints-popover').waitFor({ state: 'detached' });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator('[data-environment="gzcom"] [aria-haspopup="dialog"]').click();
@@ -375,7 +422,7 @@ try {
     assert.ok(dimensions.height <= 192 && dimensions.content > dimensions.height * 10, 'many addresses use a bounded list');
     assert.equal(dimensions.overflow, 0);
     assert.equal(await viewport.locator('[data-endpoint-id]').count(), count + 1, 'all addresses remain available');
-    assert.equal(await group.getByText('网络地址，能否访问取决于你的网络连接。', { exact: true }).count(), 1);
+    assert.equal(await group.locator('.sr-only').last().textContent(), '网络地址，能否访问取决于你的网络连接。');
     assert.ok((await popup.boundingBox()).height < 600, 'large inventories leave the surrounding panel compact');
     await stableScreenshot(`${output}/many-${mode}-${width}.png`);
     const filter = group.getByRole('searchbox', { name: '筛选地址' });
@@ -593,6 +640,7 @@ try {
     await page.locator(`[data-environment="${name}"]`).getByLabel('View connection details').click();
     const popup = page.locator('.redeven-endpoints-popover');
     await popup.waitFor();
+    await assertAddressHelp(popup);
     const network = popup.locator('[data-address-scope="network"]');
     const local = popup.locator(`[data-address-scope="${name === 'Network' ? 'environment_only' : 'this_device'}"]`);
     assert.equal(await network.getByLabel('Share connection', { exact: true }).count(), 1);
@@ -611,10 +659,12 @@ try {
       assert.equal(await local.locator('[data-endpoint-kind="address"]').count(), 3);
     }
     await stableScreenshot(`${output}/network-local-${name.replaceAll(' ', '-')}.png`);
+    await popup.screenshot({ path: `${output}/compact-help-${name.replaceAll(' ', '-')}.png`, animations: 'disabled' });
     await page.keyboard.press('Escape');
     await popup.waitFor({ state: 'detached' });
   }
   report.cases.push('network-mode-local-aliases-and-remote-namespace');
+  report.cases.push('address-help-hover-keyboard-locales-and-geometry');
 
   assert.deepEqual(report.errors, []);
   report.status = 'passed';
