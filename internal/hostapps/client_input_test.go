@@ -5,6 +5,9 @@ package hostapps
 import (
 	"context"
 	"encoding/json"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -31,12 +34,44 @@ func TestInstalledClientInputViewer(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := installedLifecycleManager(t, state)
+	// A known custom cursor qualifies the real PNG transport and click hotspot
+	// alongside input. Rendering and normalization remain owned by the SDK.
+	cursor := image.NewNRGBA(image.Rect(0, 0, 48, 48))
+	for y := 0; y < 48; y++ {
+		for x := 0; x < 48; x++ {
+			value := color.NRGBA{R: 255, A: 255}
+			if x >= 24 {
+				value = color.NRGBA{B: 255, A: 255}
+			}
+			cursor.SetNRGBA(x, y, value)
+		}
+	}
+	cursorFile, err := os.Create(filepath.Join(root, "cursor.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(cursorFile, cursor); err != nil {
+		_ = cursorFile.Close()
+		t.Fatal(err)
+	}
+	if err := cursorFile.Close(); err != nil {
+		t.Fatal(err)
+	}
 	fixture := filepath.Join(root, "fixture.py")
 	source := `import json, os, gi
 from pathlib import Path
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
+from gi.repository import Gtk, Gdk, GdkPixbuf
 root = Path(` + quotePython(root) + `)
+cursor = Gdk.Cursor.new_from_pixbuf(Gdk.Display.get_default(), GdkPixbuf.Pixbuf.new_from_file(str(root / 'cursor.png')), 22, 24)
+def move(field, event):
+    event.window.set_cursor(cursor)
+    return False
+def clicked(field, event):
+    pending = root / 'pointer.tmp'
+    pending.write_text(json.dumps([event.x_root, event.y_root]))
+    pending.replace(root / 'pointer.json')
+    return False
 w = Gtk.Window(title="Client input acceptance")
 b = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 w.add(b)
@@ -49,6 +84,9 @@ for field in fields:
     field.set_size_request(400, 140)
     b.pack_start(field, True, True, 0)
     field.connect('changed', save)
+    field.add_events(Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.BUTTON_PRESS_MASK)
+    field.connect('motion-notify-event', move)
+    field.connect('button-press-event', clicked)
 w.set_default_size(640, 480)
 w.connect('destroy', Gtk.main_quit)
 w.show_all()
@@ -67,21 +105,29 @@ from pathlib import Path
 root = Path(` + quotePython(root) + `)
 class Page(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == '/cursor.png':
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/png')
+            self.end_headers()
+            self.wfile.write((root/'cursor.png').read_bytes())
+            return
         page = b'''<!doctype html><title>Client input acceptance</title>
-<style>body{margin:0;height:100vh;display:flex;flex-direction:column}textarea{flex:1;min-height:0;font:24px system-ui;resize:none}</style>
+<style>body{margin:0;height:100vh;display:flex;flex-direction:column}textarea{flex:1;min-height:0;font:24px system-ui;resize:none;cursor:url(/cursor.png) 22 24,text}</style>
 <textarea autofocus></textarea><textarea></textarea>
 <script>const fields=[...document.querySelectorAll('textarea')];let pending=Promise.resolve();
 const save=()=>{const body=JSON.stringify(fields.map(f=>f.value));pending=pending.then(()=>fetch('/receipt',{method:'POST',body}));};
-fields.forEach(f=>f.addEventListener('input',save));save();</script>'''
+fields.forEach(f=>f.addEventListener('input',save));
+fields.forEach(f=>f.addEventListener('pointerdown',e=>fetch('/pointer',{method:'POST',body:JSON.stringify([e.screenX,e.screenY])})));save();</script>'''
         self.send_response(200)
         self.send_header('Content-Type','text/html; charset=utf-8')
         self.end_headers()
         self.wfile.write(page)
     def do_POST(self):
         values = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-        pending = root / 'receipt.tmp'
+        name = 'pointer' if self.path == '/pointer' else 'receipt'
+        pending = root / (name + '.tmp')
         pending.write_text(json.dumps(values))
-        pending.replace(root / 'receipt.json')
+        pending.replace(root / (name + '.json'))
         self.send_response(204)
         self.end_headers()
     def log_message(self, *args): pass

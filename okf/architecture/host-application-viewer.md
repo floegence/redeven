@@ -111,6 +111,28 @@ normal browser cache partitioning. Session documents, settings, credentials and
 control remain uncached and independently authorized even when scripts are cached.
 Detaching still closes all accepted sharing sockets without terminating the app.
 
+## Remote cursor geometry
+
+Published `floe-native-apps` prepares the only Linux cursor owner. Remote PNG
+shapes, alpha and complete bounds are retained; their longest edge is at most
+24 CSS pixels and smaller images are never enlarged. The hotspot uses the same
+scale, is rounded once and remains inside the image. Integral backing density
+declared through CSS `image-set()` affects resolution only. DPR and viewport
+changes render from the original decoded image, never from an already scaled copy.
+CSS cursors and the existing remote pointer use the same normalized result.
+
+One connection owns its current image and decode generation. A newer packet,
+reset or disconnect invalidates pending decodes; destroyed windows receive no
+late updates, and new windows inherit the current result. Transparent images
+remain invisible. Invalid metadata or failed decoding clears the old cursor and
+restores the system default without interrupting input. Redeven adds no cursor
+size setting, CSS override, mouse listener or second image-processing path.
+
+An existing application keeps its prepared resources and process identity across
+viewer closure and Runtime update. The new cursor contract takes effect after
+the application exits normally and is launched again. Viewer closure alone does
+not upgrade it. macOS native applications retain the client's existing cursor.
+
 # Boundaries
 
 The viewer cannot infer process termination from an empty inventory or failed
@@ -122,5 +144,6 @@ and browser dismissal permissions remain authoritative.
 - `internal/codeapp/appserver/host_application_viewer/`: connection reconciliation, first-frame, terminal and geometry adapters.
 - `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts` and `macHostApplicationViewer.test.ts`: backend events, stale callbacks, first-pixel and reconnect acceptance.
 - `internal/codeapp/appserver/host_applications_test.go`: owner-authorized terminal snapshots and retained state routes.
+- `scripts/check_host_application_input.mjs` and `internal/hostapps/client_input_test.go`: released PNG preparation, hotspot coordinates and real application input receipts.
 
 - `internal/hostapps/client_assets_test.go` and `internal/codeapp/appserver/host_application_assets_test.go`: stable resource references, gzip, cache validators, origin/owner/version and revoked permission boundaries.
