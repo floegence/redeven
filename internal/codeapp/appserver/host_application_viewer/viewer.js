@@ -1,4 +1,5 @@
-// Xpra HTML5 v20/v21 owns rendering, input, clipboard and transient-window stacking.
+// Xpra owns rendering, pointer input, clipboard and transient-window stacking.
+// Published Floe remote-input exclusively owns local keyboard and composition.
 // This adapter owns the application's viewport and one reconnectable viewer.
 (() => {
   const frame = document.getElementById('application');
@@ -8,6 +9,8 @@
   let deadline;
   let request;
   let client;
+  let inputController;
+  let keyboardVisible = false;
   let attached = false;
   let wasActive = false;
   const nativeWindow = window.redevenHostApplicationWindow;
@@ -28,8 +31,17 @@
 
   document.body.classList.add('mac-app-viewer');
   frame.classList.add('host-app-frame');
-  const {controls, toolbar, menu, windowToggle, windowCount, controlsButton, close, quit,
+  const {controls, toolbar, menu, windowToggle, windowCount, controlsButton, keyboard, close, quit,
     popover, windowPanel, windowList, quitPanel, cancelQuit, confirmQuit} = createHostApplicationToolbar();
+  keyboard.onclick = () => {
+    const visible = !keyboardVisible;
+    collapseControls(); inputController?.reset();
+    inputController?.setKeyboardVisible(visible);
+  };
+  keyboard.addEventListener('mousedown', event => event.preventDefault());
+  controls.addEventListener('pointerdown', event => {
+    if (!keyboard.contains(event.target)) inputController?.reset();
+  }, true);
   // Linux applications expose their own menus inside their rendered windows.
   const identity = document.createElement('div');
   identity.className = 'host-app-identity';
@@ -73,6 +85,7 @@
     if (restore && toggle && !toggle.disabled) toggle.focus({preventScroll:true});
   }
   function toggleControls(section) {
+    inputController?.reset();
     const opening = panelSection !== section;
     collapseControls();
     if (!opening || toggles[section].disabled) return;
@@ -90,6 +103,7 @@
     const active = document.body.dataset.state === 'active' && client?.connected;
     controls.hidden = !nativeWindow && !active;
     for (const button of toolbar.querySelectorAll('button')) button.disabled = !active || !windows.size;
+    keyboard.disabled = !active || !client?.floeInput?.target;
     windowCount.textContent = hostApplicationAppearance.number(windows.size); windowCount.hidden = windows.size < 2;
     const current = currentWindow();
     const title = current?.metadata.title || config.copy.windows;
@@ -106,7 +120,10 @@
       for (const button of toolbar.querySelectorAll('button')) button.tabIndex = button === first ? 0 : -1;
     }
   }
-  hostApplicationAppearance.subscribe(() => { syncToolbar(); positionPopover(); });
+  hostApplicationAppearance.subscribe(() => {
+    syncToolbar(); positionPopover();
+    inputController?.element.setAttribute('aria-label', config.copy.input);
+  });
   function applyPicture() {
     if (!client?.connected) return;
     const [quality, speed] = {auto:[-1,-1], clarity:[95,-1], smooth:[65,90], data:[40,75]}[picture.mode];
@@ -176,6 +193,7 @@
 
   function stopClient() {
     const previous = client;
+    inputController?.dispose(); inputController = null;
     client = null;
     windows.clear(); windowList.replaceChildren(); syncToolbar();
     attached = false;
@@ -219,10 +237,42 @@
 
   function installClient(attempt) {
     const doc = frame.contentDocument;
-    const xpra = frame.contentWindow.redevenXpraClient();
+    const xpra = frame.contentWindow.floeXpraInput?.getClient();
     if (xpra && client === xpra) return;
     if (!xpra || typeof xpra._new_window !== 'function' || typeof xpra.do_send_damage_sequence !== 'function') throw new Error('Unsupported Xpra HTML5 client');
+    if (!xpra.floeInput) { finish('inputVersionUnsupported'); return; }
     client = xpra;
+    const paintedWindows = new Set();
+    const adapter = xpra.floeInput;
+    inputController = hostApplicationInput.createRemoteInput({
+      surface: doc.getElementById('screen') || doc.body, label: config.copy.input,
+      commitText: (text, target) => adapter.commitText(text, target),
+      sendKey: (key, target) => adapter.sendKey(key, target),
+      release: target => adapter.release(target),
+      clipboard: (event, target) => adapter.clipboard(event, target),
+      onKeyboardVisibilityChange(visible) { keyboardVisible = visible; keyboard.setAttribute('aria-pressed', String(visible)); },
+    });
+    const controller = inputController;
+    controller.element.addEventListener('paste', event => adapter.paste(event, adapter.target));
+    adapter.onError = () => { if (attempt === generation) finish('inputUnavailable'); };
+    function syncInput() {
+      if (attempt !== generation) return;
+      const wid = xpra.focused_wid;
+      controller.bindTarget(adapter.bindTarget(paintedWindows.has(wid) && xpra.id_to_window[wid] ? wid : null));
+      syncToolbar();
+    }
+    function checkInputVersion() {
+      if (adapter.version !== 1) { finish('inputVersionUnsupported'); return false; }
+      return true;
+    }
+    doc.addEventListener('pointerdown', event => {
+      controller.setAnchor(event.clientX, event.clientY);
+      if (event.pointerType !== 'touch' || keyboardVisible) controller.focus();
+    }, true);
+    // Xpra's window handler can change its target during this same pointer event.
+    doc.addEventListener('pointerup', event => {
+      if (event.pointerType !== 'touch' || keyboardVisible) controller.focus();
+    }, true);
     // Input inside the same-origin application document does not bubble to the
     // toolbar document. Observe it before Xpra handles it, without consuming it.
     const dismissControls = () => { if (attempt === generation && client === xpra) collapseControls(); };
@@ -233,7 +283,7 @@
     xpra.callback_close = () => connectionLost(attempt);
     doc.addEventListener('connection-lost', () => connectionLost(attempt));
     doc.addEventListener('connection-established', () => {
-      if (attempt !== generation || Object.keys(xpra.id_to_window).length) return;
+      if (attempt !== generation || !checkInputVersion() || Object.keys(xpra.id_to_window).length) return;
       clearTimeout(deadline);
       present('waiting');
     });
@@ -246,14 +296,15 @@
         if (attempt === generation && wasActive && Object.keys(xpra.id_to_window).length === 0) finish('windowsClosed');
       });
     };
-    // Keep upstream input controls intact; application windows own all visible space.
+    // The prepared upstream page has no local keyboard owners. Application windows own all visible space.
     const style = doc.createElement('style');
     style.textContent = 'html,body,#screen{background:transparent!important;background-image:none!important}#float_menu,#toolbar,#progress,#notifications,.spinneroverlay{display:none!important}.redeven-primary{border:0!important;border-radius:0!important;box-shadow:none!important}.redeven-primary>.windowhead,.redeven-primary>.ui-resizable-handle{display:none!important}';
+    style.textContent += hostApplicationInput.style;
     doc.head.append(style);
     doc.documentElement.style.backgroundColor = getComputedStyle(document.body).backgroundColor;
 
     const setFocus = xpra.set_focus;
-    xpra.set_focus = function(win) { setFocus.call(this, win); syncToolbar(); };
+    xpra.set_focus = function(win) { setFocus.call(this, win); syncInput(); };
     function trackWindow(win) {
       if (windows.has(win.wid)) return;
       const button = document.createElement('button'), label = document.createElement('span');
@@ -269,7 +320,8 @@
       win.destroy = function() {
         destroy.call(this);
         if (attempt !== generation) return;
-        windows.delete(win.wid); button.remove(); syncToolbar();
+        paintedWindows.delete(win.wid);
+        windows.delete(win.wid); button.remove(); syncInput();
       };
       syncToolbar();
     }
@@ -352,18 +404,21 @@
     xpra.do_send_damage_sequence = function(sequence, wid, width, height, decodeTime, message) {
       damage.call(this, sequence, wid, width, height, decodeTime, message);
       if (attempt !== generation || !paintableWindows.has(wid) || !xpra.id_to_window[wid] || decodeTime < 0 || message) return;
+      paintedWindows.add(wid);
+      syncInput();
       if (document.body.dataset.state === 'active') return;
       // Reveal only after the server has painted, including the offscreen-worker path.
       requestAnimationFrame(() => {
-        if (attempt !== generation) return;
+        if (attempt !== generation || !checkInputVersion()) return;
         clearTimeout(deadline);
         present('active');
+        syncInput();
         wasActive = true;
         frame.focus();
       });
     };
     if (picture.mode !== 'auto') applyPicture();
-    if (xpra.connected) xpra.send_control_refresh(100, {'refresh-now':true});
+    if (xpra.connected && checkInputVersion()) xpra.send_control_refresh(100, {'refresh-now':true});
   }
 
   frame.addEventListener('load', () => {
@@ -373,14 +428,8 @@
       if (frame.contentWindow.location.pathname !== config.base + '/index.html') { connectionLost(attempt); return; }
       // The upstream page initializes after an asynchronous defaults request;
       // document load can precede client creation on a cached reload.
-      // Upstream v21 declares client with let, which is not a window property.
-      // Read the page's global binding inside its own realm, without eval or
-      // altering installed upstream files. This also supports v20's var binding.
-      const bridge = frame.contentDocument.createElement('script');
-      bridge.textContent = 'window.redevenXpraClient = () => typeof client === "undefined" ? null : client;';
-      frame.contentDocument.head.append(bridge);
-      bridge.remove();
-      if (frame.contentWindow.redevenXpraClient()) installClient(attempt);
+      if (frame.contentWindow.floeXpraInput?.version !== 1) { finish('inputVersionUnsupported'); return; }
+      if (frame.contentWindow.floeXpraInput.getClient()) installClient(attempt);
       else frame.contentDocument.addEventListener('connection-established', () => {
         if (attempt !== generation) return;
         try { installClient(attempt); }

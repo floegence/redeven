@@ -106,6 +106,11 @@ export type HostApplicationPresentation = Readonly<{
   closeWindow?: string;
   sharedControl?: string;
   input?: string;
+  keyboard?: string;
+  inputUnavailable?: string;
+  inputUnavailableHint?: string;
+  inputVersionUnsupported?: string;
+  inputVersionHint?: string;
   locale: string;
   connecting: string;
   reconnecting: string;

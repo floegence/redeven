@@ -31,17 +31,18 @@ for(const type of ['pointerdown','pointerup','click'])div.addEventListener(type,
 return {wid,div,metadata:{title},windowtype:['NORMAL'],override_redirect:false,tray:false,
 has_windowtype:types=>types.includes('NORMAL'),screen_resized(){},set_maximized(){},set_minimized(){},initiate_moveresize(){},move_resize(){},update_metadata(value){Object.assign(this.metadata,value)},destroy(){div.remove()}};
 }
-const client={connected:true,focused_wid:1,id_to_window:{1:remoteWindow(1,'Research notes'),2:remoteWindow(2,'Project brief')},
+const client={floeInput:{version:1,target:null,bindTarget(wid){if(this.target?.wid!==wid)this.target=wid?{wid}:null;return this.target},commitText(text,target){window.operations.push(['text',target.wid,text])},sendKey(key,target){window.operations.push(['key',target.wid,key])},release(){},clipboard(){return false},paste(){}},connected:true,focused_wid:1,id_to_window:{1:remoteWindow(1,'Research notes'),2:remoteWindow(2,'Project brief')},
 _new_window(){},do_send_damage_sequence(){},send_configure_window(){},send_control_refresh(){},on_last_window(){},callback_close(){},
 set_focus(win){this.focused_wid=win.wid;Object.values(this.id_to_window).forEach(w=>w.div.hidden=w!==win)},
 send(packet){window.operations.push(packet)},send_close_window(win){window.operations.push(['close-window',win.wid])},close(){}};
+window.floeXpraInput={version:1,getClient:()=>client};
 client.set_focus(client.id_to_window[1]);
 addEventListener('load',()=>setTimeout(()=>client.do_send_damage_sequence(1,1,800,600,1,''),80));`;
 const catalogSource = readFileSync(path.join(source, 'catalog.generated.js'), 'utf8');
 const catalog = JSON.parse(catalogSource.slice(catalogSource.indexOf(' = ') + 3).trim().slice(0, -1));
 const html = readFileSync(path.join(source, 'viewer.html'), 'utf8').replaceAll('{{.Name}}', 'Text Editor').replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Nonce}}', 'fixture')
-  .replace('{{.Style}}', ['appearance.generated.css', 'viewer.css'].map(file => readFileSync(path.join(source, file), 'utf8')).join('\n')).replace('{{.Config}}', JSON.stringify({ base: '/fixture', copy, icon: '' }))
-  .replace('{{.Script}}', ['catalog.generated.js', 'appearance.js', 'connection.js', 'toolbar.js', 'viewer.js'].map(file => readFileSync(path.join(source, file), 'utf8')).join('\n'));
+  .replace('{{.Style}}', ['appearance.generated.css', 'remote-input.generated.css', 'viewer.css'].map(file => readFileSync(path.join(source, file), 'utf8')).join('\n')).replace('{{.Config}}', JSON.stringify({ base: '/fixture', copy, icon: '' }))
+  .replace('{{.Script}}', ['catalog.generated.js', 'remote-input.generated.js', 'appearance.js', 'connection.js', 'toolbar.js', 'viewer.js'].map(file => readFileSync(path.join(source, file), 'utf8')).join('\n'));
 const server = createServer((request, response) => {
   response.setHeader('Content-Type', 'text/html; charset=utf-8');
   if (request.url?.endsWith('/state')) {
@@ -124,7 +125,7 @@ async function run() {
     // still reach the application exactly once, including after reconnection.
     for (const reconnect of [false, true]) {
       if (reconnect) {
-        await evaluate(`document.querySelector('#application').contentWindow.redevenXpraClient().callback_close()`);
+        await evaluate(`document.querySelector('#application').contentWindow.floeXpraInput.getClient().callback_close()`);
         await wait(`document.body.dataset.state==='disconnected'`);
         await click('#retry');
         await wait(`document.body.dataset.state==='active'`);
@@ -151,18 +152,18 @@ async function run() {
     }
     console.log('Titlebar outside-input acceptance passed: three popovers, preserved clicks, internal controls and reconnect');
     await evaluate(`document.querySelector('.mac-app-windows-toggle').click();document.querySelectorAll('.mac-app-window-list button')[1].click()`);
-    assert.equal(await evaluate(`document.querySelector('#application').contentWindow.redevenXpraClient().focused_wid`), 2);
+    assert.equal(await evaluate(`document.querySelector('#application').contentWindow.floeXpraInput.getClient().focused_wid`), 2);
     await evaluate(`document.querySelector('.mac-app-controls-toggle').click();document.querySelector('[data-picture-mode="clarity"]').click()`);
     const operations = await evaluate(`document.querySelector('#application').contentWindow.operations`);
     assert(operations.some((v: unknown[]) => v[0] === 'quality' && v[1] === 95));
     await evaluate(`document.querySelector('.mac-app-controls-toggle').focus();if(document.querySelector('.mac-app-popover').hidden)document.querySelector('.mac-app-controls-toggle').click();Promise.all(document.getAnimations().filter(a=>a.effect.getTiming().iterations!==Infinity).map(a=>a.finished))`);
-    await evaluate(`window.savedFrame=document.querySelector('#application');window.savedClient=savedFrame.contentWindow.redevenXpraClient();window.savedToggle=document.querySelector('.mac-app-controls-toggle');`);
+    await evaluate(`window.savedFrame=document.querySelector('#application');window.savedClient=savedFrame.contentWindow.floeXpraInput.getClient();window.savedToggle=document.querySelector('.mac-app-controls-toggle');`);
     const operationCount = operations.length;
     for (const nextLocale of REDEVEN_SUPPORTED_LOCALES) {
       locale = nextLocale; publishAppearance();
       await wait(`document.querySelector('.mac-app-controls-toggle').title===${JSON.stringify(catalog.locales[locale].picture)}`);
       assert.equal(await evaluate(`document.querySelector('.mac-app-picture p').textContent`), catalog.locales[locale].sessionPictureHint);
-      assert.equal(await evaluate(`document.activeElement===savedToggle && document.querySelector('#application')===savedFrame && savedFrame.contentWindow.redevenXpraClient()===savedClient && savedClient.focused_wid===2`), true);
+      assert.equal(await evaluate(`document.activeElement===savedToggle && document.querySelector('#application')===savedFrame && savedFrame.contentWindow.floeXpraInput.getClient()===savedClient && savedClient.focused_wid===2`), true);
       assert.equal(await evaluate(`savedFrame.contentWindow.operations.length`), operationCount);
       assert.equal(await evaluate(`document.querySelector('[data-picture-mode="clarity"]').getAttribute('aria-pressed')`), 'true');
     }

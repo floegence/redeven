@@ -3,7 +3,7 @@ type: Validation Guide
 title: Host application distribution validation
 description: Installed-stack evidence, architecture limits and repeatable native application acceptance.
 tags: [runtime, applications, linux, validation]
-timestamp: 2026-09-22T01:30:00Z
+timestamp: 2026-09-23T08:00:00Z
 ---
 # Summary
 
@@ -46,6 +46,54 @@ window, the isolated application view fills that window and follows its native
 resize, and the application's close action destroys both surfaces. This is window
 integration evidence; the separate managed native launch test establishes actual
 host application execution.
+
+# Client input qualification
+
+The current client-input contract consumes published Floe webapp core 0.72.0
+(including remote-input introduced in 0.71.0) and native apps v0.5.1. Upstream's
+immutable v0.5.1 qualification passed on native amd64 and arm64 with managed
+Xpra 6.2.2 and complete system Xpra 6.5.3. GTK3, Qt5, Qt6, Chromium 145 and xterm
+received exact Unicode strings, including 40 ordered commit/Enter pairs, a 15 KB
+commit, selection replacement, deletion, alternating focus and clipboard operations.
+The bridge is not a GTK4 qualification. Earlier distribution tables below are
+historical graphical/lifecycle evidence; they do not qualify current client input.
+
+Redeven's task-owned orange fixture uses the released managed components and real
+`Manager.Launch`, with private state and loopback ports. Run
+`TestInstalledClientInputViewer` with a new absolute
+`REDEVEN_TEST_CLIENT_INPUT_EVIDENCE` directory and verified
+`REDEVEN_TEST_NATIVE_COMPONENT_STATE`. While it reports ready, run
+`node scripts/check_host_application_input.mjs <ssh-host> <remote-evidence> <local-evidence>`.
+The driver serves the production viewer assets, tunnels only the fixture listener,
+and asserts the GTK application's own text receipt before signalling completion.
+It records PID, ports, component digest, browser version and a screenshot without
+copying the authentication credential into final evidence. The fixture terminates
+only its own test application and closes its private listener.
+
+The September 23 check passed repeated identical CJK/emoji/non-BMP/combining/ZWJ
+commits, physical typing, Backspace, pointer focus between two fields and toolbar
+isolation in Chromium 145, Firefox 146.0.1 and WebKit 26.0. The installed launch/resume/stop regression also passed.
+Browser events in this driver are synthetic: it establishes controller-to-app
+delivery, not a native input-method candidate workflow.
+
+Native macOS checks passed Unicode and ordinary `abc` key delivery into a disposable
+AppKit text field with both ABC and Simplified Pinyin selected on the host. The
+original input source was restored. Native launch, pixels, menus, shortcuts,
+reconnect, stale input, resize, window replacement, ordinary close and concurrent
+session isolation also passed with the changed helper. Desktop's real Electron
+41.10.5 titlebar/preload/action/reconnect fixture and 56 browser appearance checks
+passed; 111 deterministic viewer tests and 23 helper tests cover the input lifecycle
+contract. The 18 affected Desktop tests, localization, dependency boundaries,
+generated assets, Go hostapps/appserver tests and their race checks passed.
+
+Actual desktop OS candidate selection has not been qualified: the available UI
+automation attempt produced direct Latin text, without an observable native
+composition transaction. Real iOS/iPadOS Safari and Android Chrome soft keyboards
+were unavailable and remain unpassed. A simulated mobile viewport does not replace
+these checks. `udesk26` SSH authentication was unavailable; it was neither deployed
+nor claimed as verified. Real macOS browser and terminal applications were not
+qualified as host targets in this change; AppKit text-field receipts are narrower
+evidence. These limits must remain visible in delivery records.
 
 # Distribution validation
 
@@ -163,6 +211,9 @@ that single-application startup tests cannot detect; the
 defines the required process and channel boundaries.
 
 # Evidence
+
+- [Floe native input v0.5.1 qualification](https://github.com/floegence/floe-native-apps/actions/runs/35834089131): immutable native amd64/arm64 managed/system application input matrix.
+- [Floe webapp v0.71.0](https://www.npmjs.com/package/@floegence/floe-webapp-core/v/0.71.0): published remote-input controller, subsequently consumed through 0.72.0.
 
 - `internal/hostapps/manager_test.go`: installed GIO and Xpra launch/resume/stop tests.
 - `internal/hostapps/setup_test.go`: published component preparation and responsive application window inventory.

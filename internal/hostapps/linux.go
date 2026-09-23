@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,6 +38,7 @@ type linuxApplicationRecord struct {
 type linuxApplication struct {
 	record               linuxApplicationRecord
 	tools                hostTools
+	input                nativeapps.ClientInput
 	ready, ended         bool // protected by Manager.appsMu
 	terminationRequested bool
 }
@@ -277,13 +279,14 @@ func (m *Manager) shareApplication(ctx context.Context, owner string, a *linuxAp
 func (m *Manager) applicationArgs(a *linuxApplication) []string {
 	dir, socketDir := m.applicationDir(a.record.ID), applicationSocketDir(a.record.ID)
 	t := a.tools
-	args := []string{t.xpra, "start", "--daemon=no", "--systemd-run=no", "--attach=no", "--use-display=no", "--bind-ws=" + a.record.Address,
-		"--ws-auth=file:filename=" + filepath.Join(dir, "password"), "--html=" + t.html, "--sessions-dir=" + filepath.Join(socketDir, "sessions"), "--socket-dir=" + socketDir, "--socket-dirs=" + socketDir,
-		"--bind=" + filepath.Join(socketDir, "control"), "--terminate-children=yes", "--start-new-commands=no", "--sharing=no", "--mdns=no", "--source=", "--source-start=", "--input-method=none",
+	args := []string{t.inputPython, a.input.Launcher, "start", "--daemon=no", "--systemd-run=no", "--attach=no", "--use-display=no", "--bind-ws=" + a.record.Address,
+		"--ws-auth=file:filename=" + filepath.Join(dir, "password"), "--html=" + filepath.Join(dir, "www"), "--sessions-dir=" + filepath.Join(socketDir, "sessions"), "--socket-dir=" + socketDir, "--socket-dirs=" + socketDir,
+		"--bind=" + filepath.Join(socketDir, "control"), "--terminate-children=yes", "--start-new-commands=no", "--sharing=no", "--mdns=no", "--source=", "--source-start=",
 		"--webcam=no", "--printing=no", "--file-transfer=no", "--notifications=no", "--dbus-launch=", "--session-name=" + a.record.ID,
 		"--xvfb=" + quoteArgv([]string{t.xvfb, "-screen", "0", "3840x2160x24", "-nolisten", "tcp", "-noreset", "+extension", "Composite", "-auth", "$XAUTHORITY"}),
 		"--start-child=" + quoteArgv([]string{t.python, m.helper, "launch", m.custom, a.record.Application.ID, filepath.Join(dir, "launch.json"), m.launcher})}
 	args = append(args, nativeapps.XpraNoAudioArgs()...)
+	args = append(args, a.input.XpraArgs(os.Environ())...)
 	return append(args, nativeapps.XpraApplicationLifetimeArgs()...)
 }
 
@@ -317,6 +320,13 @@ func (m *Manager) startApplication(owner string, app Application, tools hostTool
 		component = "system"
 	}
 	a := &linuxApplication{record: linuxApplicationRecord{Version: 2, Component: component, ID: id, Owner: owner, Application: app, Address: address, StartedAt: time.Now().UnixMilli()}, tools: tools}
+	a.input, err = nativeapps.PrepareClientInput(filepath.Join(dir, "input"), runtime.GOARCH)
+	if err != nil {
+		return nil, err
+	}
+	if err = nativeapps.PrepareInputClient(tools.html, filepath.Join(dir, "www")); err != nil {
+		return nil, err
+	}
 	if err = os.WriteFile(filepath.Join(dir, "password"), []byte(randomID()+randomID()), 0600); err != nil {
 		return nil, err
 	}

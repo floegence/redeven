@@ -233,7 +233,7 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, _ *http.Request
 		Name, Nonce, Locale, Theme string
 		Config, Script             template.JS
 		Style                      template.CSS
-	}{s.Application.Name, nonce, s.Presentation.Locale, s.Presentation.ShellTheme, template.JS(config), template.JS(hostApplicationCatalogJS + "\n" + hostApplicationViewportJS + "\n" + hostApplicationAppearanceJS + "\n" + hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + script), template.CSS(hostApplicationAppearanceCSS + "\n" + hostApplicationCSS)})
+	}{s.Application.Name, nonce, s.Presentation.Locale, s.Presentation.ShellTheme, template.JS(config), template.JS(hostApplicationCatalogJS + "\n" + hostApplicationViewportJS + "\n" + hostApplicationInputJS + "\n" + hostApplicationAppearanceJS + "\n" + hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + script), template.CSS(hostApplicationAppearanceCSS + "\n" + hostApplicationInputCSS + "\n" + hostApplicationCSS)})
 }
 
 //go:embed host_application_viewer/viewer.html
@@ -247,6 +247,12 @@ var hostApplicationCatalogJS string
 
 //go:embed host_application_viewer/viewport.generated.js
 var hostApplicationViewportJS string
+
+//go:embed host_application_viewer/remote-input.generated.js
+var hostApplicationInputJS string
+
+//go:embed host_application_viewer/remote-input.generated.css
+var hostApplicationInputCSS string
 
 //go:embed host_application_viewer/appearance.js
 var hostApplicationAppearanceJS string

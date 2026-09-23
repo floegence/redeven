@@ -3,6 +3,21 @@ import CoreGraphics
 @testable import RedevenComputerHost
 
 final class InputTests: XCTestCase {
+    func testViewerKeysPreservePressReleaseRepeatAndClientCharacters() throws {
+        let base: [String: Any] = ["key":"j", "code":"KeyJ", "pressed":true, "repeat":true,
+                                  "shiftKey":false, "ctrlKey":false, "altKey":false, "metaKey":false]
+        let down = try NativeInput.viewerKey(base)
+        XCTAssertEqual(down.type, .keyDown)
+        XCTAssertEqual(down.getIntegerValueField(.keyboardEventAutorepeat), 1)
+        var units = [UniChar](repeating: 0, count: 20), length = 0
+        down.keyboardGetUnicodeString(maxStringLength: 20, actualStringLength: &length, unicodeString: &units)
+        XCTAssertEqual(String(decoding: units.prefix(length), as: UTF16.self), "j")
+        var released = base; released["pressed"] = false; released["repeat"] = false
+        XCTAssertEqual(try NativeInput.viewerKey(released).type, .keyUp)
+        var modifier = base; modifier["key"] = "Shift"; modifier["code"] = "ShiftRight"; modifier["shiftKey"] = true
+        XCTAssertEqual(try NativeInput.viewerKey(modifier).type, .flagsChanged)
+        XCTAssertThrowsError(try NativeInput.viewerKey(["key":"Enter"]))
+    }
     func testCancellationReleasesOnlyPostedInputAtCurrentPointer() throws {
         var pending = NativePendingInput()
         let clicks = try NativeInput.click(at: CGPoint(x: 30, y: 40), count: 1)

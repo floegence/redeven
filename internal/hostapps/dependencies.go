@@ -22,6 +22,7 @@ type hostTools struct {
 	managed                        *nativeapps.Tools
 	componentDigest                string
 	xpra, python, xvfb, dbus, html string
+	inputPython                    string
 }
 
 func detectDependencies(ctx context.Context, platform string, env []string) (Availability, hostTools) {

@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Host application catalog and owned native sessions
 description: Browse Linux and macOS host applications and open owned, reconnectable graphical sessions through existing authorized windows.
 tags: [runtime, desktop, applications, security, ui]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-09-23T08:00:00Z
 ---
 # Summary
 
@@ -56,8 +56,9 @@ Wayland-only applications, applications requiring a full desktop service stack,
 singletons that redirect through their own shared profile, hardware-accelerated
 graphics, and privileged system controls may require application-specific setup.
 The initial integration does not provide audio, microphone, webcam, printing,
-file-transfer, or remote notification forwarding. Xpra owns clipboard and keyboard
-behavior; browser permissions and reserved shortcuts still apply.
+file-transfer, or remote notification forwarding. The [client input contract](host-application-input.md) owns composition and keys;
+Xpra retains Linux clipboard transport. Browser permissions and reserved shortcuts
+still apply.
 
 # Contract
 

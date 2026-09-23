@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	nativeapps "github.com/floegence/floe-native-apps"
 )
@@ -128,12 +129,36 @@ func (m *Manager) tools(ctx context.Context) (Availability, hostTools) {
 		if err == nil {
 			if installed := manager.Snapshot("").Installed; installed != nil && installed.Ready {
 				if tools, err := resolveManagedTools(manager, installed.Digest); err == nil {
-					return Availability{Supported: true, Ready: true}, tools
+					return clientInputTools(ctx, Availability{Supported: true, Ready: true}, tools)
 				}
 			}
 		}
 	}
-	return detectDependencies(ctx, runtime.GOOS, os.Environ())
+	availability, tools := detectDependencies(ctx, runtime.GOOS, os.Environ())
+	return clientInputTools(ctx, availability, tools)
+}
+
+// Only new launches require the input capability. Recovery retains the exact
+// old backend and its component identity without changing or ending its app.
+func clientInputTools(ctx context.Context, availability Availability, tools hostTools) (Availability, hostTools) {
+	if !availability.Ready {
+		return availability, tools
+	}
+	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	var err error
+	if tools.managed != nil {
+		tools.inputPython = tools.managed.Python
+		_, err = nativeapps.ProbeClientInput(ctx, tools.inputPython, tools.environment(os.Environ()))
+	} else {
+		tools.inputPython, err = nativeapps.SystemClientInputPython(ctx, tools.xpra, os.Environ())
+	}
+	if err != nil {
+		availability.Ready = false
+		availability.Reason = "missing_dependencies"
+		availability.Requirements = append(availability.Requirements, "Xpra client input v1 (GIO, xcb-imdkit)")
+	}
+	return availability, tools
 }
 func (t hostTools) environment(base []string) []string {
 	if t.managed != nil {

@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Host application platforms and initialization
 description: Capability-based Linux initialization, dependency diagnostics, distribution evidence, and native macOS requirements.
 tags: [runtime, applications, linux, desktop]
-timestamp: 2026-09-20T08:00:00Z
+timestamp: 2026-09-23T08:00:00Z
 ---
 # Summary
 
@@ -21,7 +21,9 @@ not use Xpra or Linux virtual displays. Existing
 
 The integration accepts Xpra 6.x with local X11 server and command-line client
 support, HTML5 client v20 or v21, Xvfb, xauth, dbus-run-session, dbus-daemon, and a
-Python 3 interpreter with working GIO/GTK 3 introspection. Other Xpra major versions
+Python 3 interpreter with working GIO/GTK 3 introspection. New applications also
+require the released client-input v1 capability, including xcb-imdkit, from the
+exact Xpra interpreter; the [input contract](host-application-input.md) owns this probe. Other Xpra major versions
 and HTML5 generations need explicit adapter validation before being advertised.
 The monitored application launcher also requires Linux pidfds (kernel 5.3 or
 later), child subreaping and Python support for pidfd operations.
@@ -32,9 +34,10 @@ HTML5 version, principal assets, and referenced scripts/stylesheets, including
 distribution symlinks into shared resource directories. Broken links report a
 missing HTML5 client before a viewer opens. It obtains the resource root from `xpra
 path-info` and selects its `www` or `html5` directory, passing that exact directory
-to the session's HTTP server. A nonstandard installation must expose its assets
+to the upstream input-client preparation API. The session serves the resulting
+private HTML directory. A nonstandard installation must expose its assets
 under that resource root; Xpra's `XPRA_RESOURCES_DIR` override is respected. Neither
-the client nor application metadata is copied into Redeven.
+upstream client implementations nor application metadata are maintained in Redeven.
 
 GIO need not share Xpra's interpreter. Python candidates come from absolute PATH
 directories and are tested in order, so an unrelated virtual environment without

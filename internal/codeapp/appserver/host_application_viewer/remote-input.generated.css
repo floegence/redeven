@@ -1,0 +1,23 @@
+/* Generated from published Floe remote-input.css; run buildHostApplicationAppearance.mjs. */
+/* A real input anchors the operating system's IME without covering the surface. */
+.floe-remote-input {
+  position: fixed;
+  z-index: 10;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  resize: none;
+  overflow: hidden;
+  font: 16px/1.5 sans-serif;
+}
+.floe-remote-input[data-composing] {
+  width: 20rem;
+  height: 1.5em;
+  opacity: 1;
+  color: var(--foreground, CanvasText);
+  background: var(--background, Canvas);
+}

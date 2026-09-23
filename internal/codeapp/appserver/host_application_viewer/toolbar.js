@@ -21,6 +21,8 @@ function createHostApplicationToolbar() {
     return button;
   }
   const close = toolbarButton('mac-app-close', 'closeWindow', '<rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M3 7h14m-9 3 4 4m0-4-4 4"/>');
+  const keyboard = toolbarButton('mac-app-keyboard', 'keyboard', '<rect x="2" y="4" width="16" height="12" rx="2"/><path d="M5 8h1m3 0h1m3 0h1m-9 4h1m3 0h5"/>');
+  keyboard.setAttribute('aria-pressed', 'false');
   const quit = toolbarButton('mac-app-quit', 'quit', '<path d="M10 2v8m-4-6a7 7 0 1 0 8 0"/>');
   const menu = toolbarButton('mac-app-menu-toggle', 'menu', '<rect x="3" y="3" width="14" height="14" rx="3"/><path d="M3 7h14M7 7v10"/>');
   menu.removeAttribute('data-app-copy-title');
@@ -88,10 +90,10 @@ function createHostApplicationToolbar() {
   const spacer = document.createElement('span');
   spacer.className = 'mac-app-toolbar-spacer';
   spacer.setAttribute('aria-hidden', 'true');
-  toolbar.append(menu, identitySeparator, windowToggle, spacer, controlsButton, separator, close, quit);
+  toolbar.append(menu, identitySeparator, windowToggle, spacer, keyboard, controlsButton, separator, close, quit);
   controls.append(toolbar, popover);
   document.body.append(controls);
-  return { controls, toolbar, menu, windowToggle, windowCount, controlsButton, close, quit, popover, menuPanel, windowPanel, windowList, quitPanel, cancelQuit, confirmQuit, chevron };
+  return { controls, toolbar, menu, windowToggle, windowCount, controlsButton, keyboard, close, quit, popover, menuPanel, windowPanel, windowList, quitPanel, cancelQuit, confirmQuit, chevron };
 }
 
 function createHostApplicationPictureModes(picture, changed) {

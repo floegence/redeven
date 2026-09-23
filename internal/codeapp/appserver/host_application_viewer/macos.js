@@ -12,7 +12,7 @@
   const retry = document.getElementById('retry');
   const native = window.redevenHostApplicationWindow;
   document.body.classList.add('mac-app-viewer');
-  const { controls, toolbar, menu, windowToggle, windowCount, controlsButton, close, quit, popover, menuPanel, windowPanel, windowList, quitPanel, cancelQuit, confirmQuit, chevron } = createHostApplicationToolbar();
+  const { controls, toolbar, menu, windowToggle, windowCount, controlsButton, keyboard, close, quit, popover, menuPanel, windowPanel, windowList, quitPanel, cancelQuit, confirmQuit, chevron } = createHostApplicationToolbar();
   const windowEntries = new Map();
   let panelSection = null;
   let quitTimer;
@@ -26,6 +26,7 @@
     menu.setAttribute('aria-label', menu.title);
     quit.disabled = !available || quitPending;
     controlsButton.disabled = document.body.dataset.state !== 'active';
+    keyboard.disabled = document.body.dataset.state !== 'active' || !current?.window || renderedGeneration !== current.generation;
     windowCount.textContent = hostApplicationAppearance.number(windowEntries.size);
     windowCount.hidden = windowEntries.size < 2;
     for (const [id, entry] of windowEntries) {
@@ -196,6 +197,7 @@
     if (restoreFocus && toggle && !toggle.disabled) toggle.focus({preventScroll:true});
   }
   function toggleControls(section) {
+    inputController.reset();
     const opening = panelSection !== section;
     collapseControls();
     if (!opening || toggles[section].disabled) return;
@@ -290,14 +292,26 @@
       quitPending = false; syncWindowPicker(); showFeedback('quitFailed');
     }, 6000);
   };
-  const input = document.createElement('textarea');
-  input.className = 'mac-app-input';
+  let keyboardVisible = false;
+  const inputController = hostApplicationInput.createRemoteInput({
+    surface: canvas, label: config.copy.input,
+    commitText(text, target) { if (target === current) send({action:'input', kind:'text', text}); },
+    sendKey(key, target) { if (target === current) send({action:'input', kind:'key', ...key}); },
+    release(target) { if (target === current) send({action:'release'}); },
+    onKeyboardVisibilityChange(visible) { keyboardVisible = visible; keyboard.setAttribute('aria-pressed', String(visible)); },
+  });
+  const input = inputController.element;
   hostApplicationAppearance.copy(input, 'input', 'aria-label');
-  input.autocomplete = 'off';
-  input.autocapitalize = 'off';
-  input.setAttribute('autocorrect', 'off');
-  input.spellcheck = false;
-  document.body.append(input);
+  keyboard.onclick = () => {
+    const visible = !keyboardVisible;
+    collapseControls(); inputController.reset();
+    inputController.setKeyboardVisible(visible);
+  };
+  // Keep the editor's focus until click toggles it, including Safari touch.
+  keyboard.addEventListener('mousedown', event => event.preventDefault());
+  controls.addEventListener('pointerdown', event => {
+    if (!keyboard.contains(event.target)) inputController.reset();
+  }, true);
   const feedback = document.createElement('div');
   feedback.className = 'mac-app-feedback';
   feedback.setAttribute('role', 'status');
@@ -335,7 +349,7 @@
     controls.hidden = !native && !['active', 'waiting', 'captureUnavailable'].includes(state);
     picturePanel.hidden = state !== 'active' || panelSection !== 'picture';
     syncWindowPicker();
-    input.disabled = state !== 'active' || !current?.window;
+    if (state !== 'active') inputController.bindTarget(null);
     if (state !== 'active') {
       feedback.hidden = true;
       collapseControls();
@@ -352,16 +366,18 @@
         JSON.stringify({
           window: current.window,
           generation: current.generation,
+          ...(value.action === 'input' ? {input_version:1} : {}),
           ...value,
         }),
       );
   }
-  function invalidateCapture() {
+  function invalidateCapture(keepFocus = false) {
+    if (keepFocus) inputController.reset();
+    else inputController.bindTarget(null);
     renderedGeneration = 0;
     pending = null;
     drawing = null;
     resetDecoder();
-    input.value = '';
     if (move) cancelAnimationFrame(move);
     move = null;
     if (panelSection === 'menu') collapseControls();
@@ -374,6 +390,7 @@
     clearTimeout(quitTimer);
     quitPending = false;
     abort?.abort();
+    inputController.bindTarget(null);
     socket?.close();
     socket = null;
     current = null;
@@ -448,6 +465,7 @@
           if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
           context.drawImage(image, 0, 0);
           renderedGeneration = current.generation;
+          inputController.bindTarget(current);
           canvas.setAttribute('aria-busy', 'false');
           statisticValues.resolution.textContent = `${width} × ${height}`;
           hostApplicationAppearance.copy(statisticValues.transport, next.meta.transport === 'video' ? 'pictureVideo' : 'pictureImages');
@@ -537,13 +555,17 @@
         } else if (message.type === 'operation_error') {
           if (message.action === 'quit_application') {
             clearTimeout(quitTimer); quitPending = false; syncWindowPicker(); showFeedback('quitFailed');
-          } else if (message.code !== 'STALE_WINDOW') showFeedback('operationFailed');
+          } else if (message.code !== 'STALE_WINDOW') {
+            if (message.action === 'input') inputController.reset();
+            showFeedback('operationFailed');
+          }
           if (message.action === 'menu' && panelSection === 'menu') collapseControls(true);
         } else if (message.type === 'operation_complete') {
           if (message.action === 'quit_application') {
             clearTimeout(quitTimer); quitPending = false; syncWindowPicker(); showFeedback('quitPending');
           } else feedback.hidden = true;
         } else if (message.type === 'window') {
+          if (message.input_version !== 1) { disconnect('inputVersionUnsupported'); return; }
           clearTimeout(deadline);
           deadline = setTimeout(() => {
             if (mine === attempt && socket === connection) {
@@ -552,14 +574,13 @@
             }
           }, 45000);
           const sameWindow = current?.window === message.window && document.body.dataset.state === 'active';
-          invalidateCapture();
+          invalidateCapture(sameWindow);
           // Keep the window picker usable while another owned window loads.
           // Retained pixels are dimmed and input stays bound to decoded frames.
           const switching = document.body.dataset.state === 'active';
           current = message;
           if (!switching) present(active ? 'reconnecting' : 'connecting');
           canvas.setAttribute('aria-busy', 'true');
-          input.disabled = !sameWindow;
           syncWindowPicker();
           resize();
         } else if (message.type === 'windows') {
@@ -633,7 +654,8 @@
   canvas.addEventListener('mousedown', event => event.preventDefault());
   canvas.addEventListener('pointerdown', (event) => {
     if (document.body.dataset.state !== 'active') return;
-    input.focus({ preventScroll: true });
+    inputController.setAnchor(event.clientX, event.clientY);
+    if (event.pointerType !== 'touch' || keyboardVisible) inputController.focus();
     canvas.setPointerCapture(event.pointerId);
     send({
       action: 'input',
@@ -682,67 +704,6 @@
     },
     { passive: false },
   );
-  input.addEventListener('keydown', (event) => {
-    if (
-      event.isComposing ||
-      event.key === 'Process' ||
-      ['Meta', 'Control', 'Alt', 'Shift'].includes(event.key)
-    )
-      return;
-    if (
-      event.key.length === 1 &&
-      !event.metaKey &&
-      !event.ctrlKey &&
-      !event.altKey
-    )
-      return;
-    event.preventDefault();
-    const modifiers = [
-      event.metaKey ? 'Meta' : '',
-      event.ctrlKey ? 'Control' : '',
-      event.altKey ? 'Alt' : '',
-      event.shiftKey ? 'Shift' : '',
-    ].filter(Boolean);
-    send({
-      action: 'input',
-      kind: 'key',
-      key: [...modifiers, event.key === ' ' ? 'Space' : event.key].join('+'),
-    });
-  });
-  const editableBinding = () => current?.window && renderedGeneration === current.generation ? current : null;
-  let compositionBinding;
-  input.addEventListener('compositionstart', () => { compositionBinding = editableBinding(); });
-  input.addEventListener('beforeinput', event => {
-    if (event.isComposing || compositionBinding !== undefined) return;
-    const key = {deleteContentBackward: 'Backspace', deleteContentForward: 'Delete',
-      insertLineBreak: 'Enter', insertParagraph: 'Enter'}[event.inputType];
-    if (!key) return;
-    event.preventDefault();
-    send({action: 'input', kind: 'key', key});
-    input.value = '';
-  });
-  input.addEventListener('input', (event) => {
-    // compositionend owns the commit; a later browser tail cannot replay it.
-    if (event.inputType === 'insertFromComposition' && compositionBinding === undefined) { input.value = ''; return; }
-    if (event.isComposing) {
-      if (compositionBinding === undefined) compositionBinding = editableBinding();
-      return;
-    }
-    if (compositionBinding !== undefined && compositionBinding !== current) { input.value = ''; return; }
-    if (input.value) {
-      send({ action: 'input', kind: 'text', text: input.value });
-      input.value = '';
-    }
-  });
-  input.addEventListener('compositionend', () => {
-    const binding = compositionBinding;
-    compositionBinding = undefined;
-    if (binding !== current) { input.value = ''; return; }
-    if (input.value) {
-      send({ action: 'input', kind: 'text', text: input.value });
-      input.value = '';
-    }
-  });
   window.addEventListener('blur', () => send({ action: 'release' }));
   const stopViewport = hostApplicationViewport.observeViewport(window, viewport => {
     Object.assign(document.body.style, hostApplicationViewport.viewportStyle(viewport));
@@ -751,6 +712,7 @@
   });
   window.addEventListener('beforeunload', () => {
     stopViewport();
+    inputController.dispose();
     attempt++;
     send({ action: 'release' });
     socket?.close();

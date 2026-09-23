@@ -11,6 +11,8 @@ import catalogJS from '../../../../codeapp/appserver/host_application_viewer/cat
 import appearanceJS from '../../../../codeapp/appserver/host_application_viewer/appearance.js?raw';
 import connectionJS from '../../../../codeapp/appserver/host_application_viewer/connection.js?raw';
 import toolbarJS from '../../../../codeapp/appserver/host_application_viewer/toolbar.js?raw';
+import inputJS from '../../../../codeapp/appserver/host_application_viewer/remote-input.generated.js?raw';
+import inputCSS from '../../../../codeapp/appserver/host_application_viewer/remote-input.generated.css?raw';
 import viewerJS from '../../../../codeapp/appserver/host_application_viewer/macos.js?raw';
 
 const catalog = JSON.parse(catalogJS.slice(catalogJS.indexOf(' = ') + 3).trim().slice(0, -1)) as {
@@ -31,7 +33,7 @@ async function viewer(theme: string, locale = 'zh-CN', width = 420) {
       static OPEN=1;readyState=1;
       constructor(){window.socketCount++;queueMicrotask(()=>{
         this.onmessage({data:JSON.stringify({type:'windows',windows:[{id:'one',title:'Research notes'},{id:'two',title:'Project brief'}]})});
-        this.onmessage({data:JSON.stringify({type:'window',window:'one',generation:1,width:640,height:480})});
+        this.onmessage({data:JSON.stringify({type:'window',input_version:1,window:'one',generation:1,width:640,height:480})});
         const header=new TextEncoder().encode(JSON.stringify({codec:'jpeg',generation:1,frame_id:1}));
         const packet=new Uint8Array(4+header.length+1);new DataView(packet.buffer).setUint32(0,header.length);packet.set(header,4);
         this.onmessage({data:packet.buffer});
@@ -39,9 +41,9 @@ async function viewer(theme: string, locale = 'zh-CN', width = 420) {
       send(value){window.sent.push(JSON.parse(value))}close(){}
     };`;
   frame.srcdoc = viewerHTML.replaceAll('{{.Locale}}', locale).replaceAll('{{.Theme}}', theme).replaceAll('{{.Name}}', 'Text Editor')
-    .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', appearanceCSS + '\n' + viewerCSS)
+    .replaceAll('{{.Nonce}}', 'fixture').replace('{{.Style}}', appearanceCSS + '\n' + inputCSS + '\n' + viewerCSS)
     .replace('{{.Config}}', JSON.stringify({base:window.location.origin+'/fixture',backend:'macos',copy}))
-    .replace('{{.Script}}', [fixture, viewportJS, catalogJS, appearanceJS, connectionJS, toolbarJS, viewerJS].join('\n'));
+    .replace('{{.Script}}', [fixture, inputJS, viewportJS, catalogJS, appearanceJS, connectionJS, toolbarJS, viewerJS].join('\n'));
   document.body.append(frame);
   await expect.poll(() => frame.contentDocument?.body.dataset.state).toBe('active');
   const doc = frame.contentDocument!, view = frame.contentWindow!;

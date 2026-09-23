@@ -11,14 +11,16 @@ import viewerHTML from '../../../../codeapp/appserver/host_application_viewer/vi
 import rawViewerCSS from '../../../../codeapp/appserver/host_application_viewer/viewer.css?raw';
 import toolbarJS from '../../../../codeapp/appserver/host_application_viewer/toolbar.js?raw';
 import rawConnectionJS from '../../../../codeapp/appserver/host_application_viewer/connection.js?raw';
+import inputJS from '../../../../codeapp/appserver/host_application_viewer/remote-input.generated.js?raw';
+import inputCSS from '../../../../codeapp/appserver/host_application_viewer/remote-input.generated.css?raw';
 import viewerJS from '../../../../codeapp/appserver/host_application_viewer/macos.js?raw';
 
 import appearanceCSS from '../../../../codeapp/appserver/host_application_viewer/appearance.generated.css?raw';
 import appearanceJS from '../../../../codeapp/appserver/host_application_viewer/appearance.js?raw';
 import viewportJS from '../../../../codeapp/appserver/host_application_viewer/viewport.generated.js?raw';
 import catalogJS from '../../../../codeapp/appserver/host_application_viewer/catalog.generated.js?raw';
-const viewerCSS = appearanceCSS + '\n' + rawViewerCSS;
-const connectionJS = viewportJS + '\n' + catalogJS + '\n' + appearanceJS + '\n' + rawConnectionJS;
+const viewerCSS = inputCSS + '\n' + appearanceCSS + '\n' + rawViewerCSS;
+const connectionJS = inputJS + '\n' + viewportJS + '\n' + catalogJS + '\n' + appearanceJS + '\n' + rawConnectionJS;
 
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); });
@@ -171,7 +173,7 @@ it.each([320, 390, 1000])('keeps the counted window picker usable at %s px while
       }); }
       window(id) {
         const generation = ++this.generation;
-        this.onmessage({data:JSON.stringify({type:'window',window:id,generation,width:640,height:480})});
+        this.onmessage({data:JSON.stringify({type:'window',input_version:1,window:id,generation,width:640,height:480})});
         const header = new TextEncoder().encode(JSON.stringify({codec:'jpeg',generation,frame_id:generation}));
         const packet = new Uint8Array(4 + header.length + 1);
         new DataView(packet.buffer).setUint32(0,header.length); packet.set(header,4);
@@ -252,7 +254,7 @@ it('decodes and acknowledges a single static native video frame without waiting 
         if (message.action === 'frame_ack') document.body.dataset.ack = String(message.frame_id);
         if (message.action !== 'resume') return;
         document.body.dataset.video = String(message.video);
-        this.onmessage({data:JSON.stringify({type:'window',window:'one',generation:1,width:64,height:64})});
+        this.onmessage({data:JSON.stringify({type:'window',input_version:1,window:'one',generation:1,width:64,height:64})});
         const header = new TextEncoder().encode(JSON.stringify({codec:'h264',key:true,transport:'video',generation:1,frame_id:1,timestamp:0,profile:encoded.profile,description:encoded.description}));
         const bytes = Uint8Array.from(atob(encoded.data), ch => ch.charCodeAt(0));
         const packet = new Uint8Array(4 + header.length + bytes.length);
