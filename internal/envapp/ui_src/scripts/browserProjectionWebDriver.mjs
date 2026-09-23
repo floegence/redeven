@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { access, writeFile } from 'node:fs/promises';
 import net from 'node:net';
+import { runBrowserProjectionMediaSync } from './browserProjectionMediaSync.mjs';
 
 // Stable Firefox uses its native WebDriver/BiDi implementation. Playwright's
 // patched Firefox build is separate development coverage, not stable qualification.
@@ -159,6 +160,27 @@ export async function runWebDriverProjection({ origin, sourceOrigin, configurati
     await page.waitForFunction(() => window.count === 3);
     await top();
     await mediaPixels('blue');
+    if (process.env.REDEVEN_BROWSER_SYNC_EVIDENCE) {
+      // Run the same presentation measurement through native WebDriver so
+      // stable Firefox qualification includes audible output, not just video.
+      const measurementPage = {
+        evaluate: async (fn, ...args) => {
+          const result = await asyncEvaluate(fn, ...args);
+          if (result.error) throw new Error(result.error);
+          return result.value;
+        },
+        waitForFunction: async fn => {
+          await until(() => evaluate(fn), 'audio output readiness');
+          return { dispose: async () => {} };
+        },
+        getByRole: (role, { name }) => {
+          assert.equal(role, 'combobox');
+          assert.equal(name, 'Website address');
+          return { click: () => click('[role="combobox"][aria-label="Website address"]') };
+        },
+      };
+      await runBrowserProjectionMediaSync({ popup: measurementPage, source: page, evidence: process.env.REDEVEN_BROWSER_SYNC_EVIDENCE });
+    }
     console.error('Stable Firefox media evidence:', JSON.stringify(await evaluate(() => window.fixtureMediaEvents)));
     assert.equal(await evaluate(() => window.fixtureDirectRTC), 0);
     assert.deepEqual(forbiddenRequests, [], 'Stable client never fetches the source website');
