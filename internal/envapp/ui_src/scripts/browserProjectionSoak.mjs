@@ -43,10 +43,11 @@ export async function runBrowserProjectionSoak({ popup, sourcePages, sourceOrigi
     }
     const fixtureProtocolObjects = {};
     for (const object of popup._connection._objects.values()) fixtureProtocolObjects[object._type] = (fixtureProtocolObjects[object._type] ?? 0) + 1;
-    return { rss: processes.filter(([pid]) => owned.has(pid)).reduce((total, [, , rss]) => total + rss * 1024, 0), processes: processes.filter(([pid]) => owned.has(pid)).length,
-      sourceHeap: await heap(sourceMetrics), viewerHeap: await heap(viewerMetrics), fixtureAllocatedHeap, fixtureHeap: process.memoryUsage().heapUsed, fixtureProtocolObjects };
+    const processMemory = processes.filter(([pid]) => owned.has(pid)).map(([pid, parent, rss]) => ({ pid, parent, rss: rss * 1024 }));
+    return { rss: processMemory.reduce((total, value) => total + value.rss, 0), processes: processMemory.length, processMemory,
+      sourceHeap: await heap(sourceMetrics), viewerHeap: await heap(viewerMetrics), sourceDOM: await sourceMetrics.send('Memory.getDOMCounters'), viewerDOM: await viewerMetrics.send('Memory.getDOMCounters'), fixtureAllocatedHeap, fixtureHeap: process.memoryUsage().heapUsed, fixtureProtocolObjects };
   };
-  const report = { mode: 'Product browser measurement', qualificationManifest: process.env.REDEVEN_BROWSER_RUN_MANIFEST ?? null, seconds, network: 'loopback, unthrottled', started: new Date(started).toISOString(), runtimePID, fixturePID: process.pid, samples, iterations, navigations, inputP95: 0 };
+  const report = { mode: seconds >= 1800 ? 'Product browser acceptance' : 'Product browser diagnostic', qualificationManifest: process.env.REDEVEN_BROWSER_RUN_MANIFEST ?? null, seconds, network: 'loopback, unthrottled', started: new Date(started).toISOString(), runtimePID, fixturePID: process.pid, samples, iterations, navigations, inputP95: 0 };
   const save = async () => {
     report.iterations = iterations; report.navigations = navigations;
     report.inputP95 = [...latencies].sort((a, b) => a - b)[Math.floor(latencies.length * .95)] ?? 0;
@@ -107,5 +108,25 @@ export async function runBrowserProjectionSoak({ popup, sourcePages, sourceOrigi
     report.result = 'failed'; report.error = error.message;
     throw error;
   }
-  finally { server.setMaxDispatchersForTest(undefined); await save(); await sourceMetrics.detach(); await viewerMetrics.detach(); }
+  finally {
+    // Diagnose retained browser objects only after the unchanged acceptance
+    // checks. Forced collection must never turn a failed normal-memory run into
+    // a pass or change any of the measured steady-state samples.
+    try {
+      await sourceMetrics.send('HeapProfiler.collectGarbage');
+      await viewerMetrics.send('HeapProfiler.collectGarbage');
+      report.afterBrowserGC = await memory();
+      const snapshot = process.env.REDEVEN_BROWSER_SOAK_HEAP_SNAPSHOT;
+      if (snapshot) {
+        const chunks = [];
+        const receive = ({ chunk }) => chunks.push(chunk);
+        viewerMetrics.on('HeapProfiler.addHeapSnapshotChunk', receive);
+        try {
+          await viewerMetrics.send('HeapProfiler.takeHeapSnapshot');
+          await writeFile(snapshot, chunks.join(''));
+        } finally { viewerMetrics.off('HeapProfiler.addHeapSnapshotChunk', receive); }
+      }
+    } catch (error) { report.retentionProbeError = error.message; }
+    server.setMaxDispatchersForTest(undefined); await save(); await sourceMetrics.detach(); await viewerMetrics.detach();
+  }
 }
