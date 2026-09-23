@@ -71,18 +71,14 @@ requests pass through the workspace with their original absolute paths and
 identity. There is no Home-relative display tree or reverse path conversion.
 
 Files uses the actual workspace chrome throughout module loading, path discovery,
-and first directory loading. Before a successful snapshot exists, the published
-Floe list or grid renders structural placeholders using its actual columns, row
-or tile dimensions, icon slots, and saved view mode. The status bar reserves its
-normal height without showing an unconfirmed count or path. Redeven path segments
-and root/directory placeholders share the real breadcrumb and tree geometry. A
-plain loading message in an otherwise empty body is not a matching skeleton. An
-uninitialized empty array must not claim an empty directory, Root location, or
-item count. Module and data loading use the same workspace. Ordinary refresh
-and same-environment session replacement keep the last successful directory,
-including an empty result, and only animate the refresh icon. Reconciliation by
-absolute file identifier preserves surviving rows across refreshed metadata and
-Git decorations. Environment changes cancel directory work and invalidate pending
+and first directory loading. The sidebar tree, file list/grid, path, and count
+remain blank until the first successful directory result. Keep the actual toolbar, pane widths, headings and
+status-bar space; do not invent directory levels, file counts, or item shapes.
+Only a confirmed empty response may show the empty-directory message. After a
+successful response, refresh and ordinary reconnection retain its content and
+valid row nodes. Module loading uses this same empty workspace presentation.
+Reconciliation by absolute file identifier preserves rows across metadata and Git
+decoration updates. Environment changes cancel directory work and fence pending
 path-context responses before they can update the new view.
 
 [Document reload presentation](document-reload-presentation.md) owns Files' full

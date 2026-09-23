@@ -27,7 +27,8 @@ HTML, resource text, image sources, input values, URLs, or permission facts.
 
 The record is bounded by the published contract and lives in this window's
 `sessionStorage`, isolated by browser origin and the environment session key.
-It does not use Desktop's synchronous preference IPC or replace the asynchronous
+The `reload-layout-v2` key retires earlier captures that included Files content
+shapes; old records are not restored. It does not use Desktop's synchronous preference IPC or replace the asynchronous
 resource cache. Viewport or scope mismatch and malformed records use normal
 startup. An absent record has a small static branded loading surface in HTML;
 application mounting replaces it atomically. No resource count is invented in
@@ -57,9 +58,11 @@ interfaces remain usable. Navigation away while identity checks are pending
 cannot be reversed by a late handoff. Only these five Activity pages opt in;
 terminal, logs, monitoring, and embedded application contents are not captured.
 
-Files captures only workspace and visible row geometry, never directory entries,
-paths, names, file contents, or icons. Its session-only directory cache is not
-persisted by this presentation contract. Its first directory response or explicit
+Files captures workspace chrome only. Its tree, file list/grid, path and status
+regions use published `data-floe-reload-omit` to exclude both surfaces and their
+text/icon shapes, keeping those regions blank during reload. It never captures
+directory entries, paths, names, file contents, or icons. Its session-only directory
+cache is not persisted by this presentation contract. Its first directory response or explicit
 failure completes the same Shell handoff.
 
 Resource snapshots remain subject to

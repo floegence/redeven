@@ -21,6 +21,12 @@ try {
     await page.addInitScript(({ key, record, viewMode }) => {
       if (!globalThis.localStorage.getItem(key)) globalThis.localStorage.setItem(key, JSON.stringify(record));
       globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+      // Earlier releases captured file shapes. The current policy must never restore them.
+      globalThis.sessionStorage.setItem('redeven-envapp:reload-layout', JSON.stringify({
+        version: 1, scope: globalThis.sessionStorage.getItem('redeven_env_public_id') ?? '',
+        width: globalThis.innerWidth, height: globalThis.innerHeight, background: 'rgb(247, 246, 241)',
+        scroll: [], boxes: [[400, 200, 100, 100, 4, 'rgb(200, 200, 200)', 'transparent']],
+      }));
       globalThis.localStorage.setItem('redeven-envapp:env_local-files:env_local:fileBrowser:viewMode', JSON.stringify(viewMode));
     }, { key: navigationKey, record: navigationRecord('files'), viewMode: mode.toLowerCase() });
     await page.addInitScript(() => {
@@ -52,29 +58,31 @@ try {
     const workspace = page.locator('[data-browser-workspace]').first();
     const pending = page.locator('[data-file-browser-initial-loading]').first();
     const row = page.locator('[data-file-browser-item-id="/workspace/continuity-file.txt"]').first();
-    const itemGeometry = element => ({
-      box: element.getBoundingClientRect().toJSON(),
-      cells: [...element.children].slice(0, element.hasAttribute('data-file-list-row') ? 3 : 2).map(child => child.getBoundingClientRect().toJSON()),
-    });
+    const assertBlankContents = async () => {
+      assert.equal(await page.locator('[data-file-browser-placeholder], [data-file-tree-skeleton], [data-file-path-skeleton]').count(), 0);
+      for (const testID of ['file-tree-scroll-region', 'file-browser-content-scroll-region']) {
+        assert.equal(await page.getByTestId(testID).evaluate(element => element.childElementCount), 0, 'Unconfirmed content stays blank');
+      }
+      assert.equal(await page.getByText('Loading files...', { exact: true }).count(), 0);
+    };
     try {
       await page.goto(new URL('_redeven_proxy/env/', server.baseURL).href, { waitUntil: 'commit' });
       await pending.waitFor();
+      assert.equal(await page.locator('[data-floe-reload-placeholder]').count(), 0, 'Retired file-shaped geometry must not cover initial loading');
       await paint(page);
       const initialBounds = await page.waitForFunction(() => {
         const rect = globalThis.document.querySelector('[data-browser-workspace]')?.getBoundingClientRect();
         return rect?.width && rect.height ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
       }).then(handle => handle.jsonValue());
       assert.equal(await page.getByRole('radio', { name: mode, exact: true }).getAttribute('aria-checked'), 'true', 'Module fallback restores the actual view mode');
-      assert.ok(await page.locator('[data-file-browser-placeholder]').count() > 0);
-      const initialItemGeometry = await page.locator('[data-file-browser-placeholder]').first().evaluate(itemGeometry);
-      assert.equal(await page.getByText('Loading files...', { exact: true }).count(), 0);
+      await assertBlankContents();
       if (artifact) await page.screenshot({ path: `${artifact}/files-${mode}-initial.png` });
       releaseModule();
       await page.waitForFunction(() => globalThis.document.querySelector('[data-browser-mode-stack]'));
       await paint(page);
       assert.deepEqual(await workspace.boundingBox(), initialBounds, 'Module handoff must retain the workspace layout');
       assert.equal(await pending.isVisible(), true);
-      assert.deepEqual(await page.locator('[data-file-browser-placeholder]').first().evaluate(itemGeometry), initialItemGeometry, 'Module and data placeholders share item geometry');
+      await assertBlankContents();
       releaseContext();
       await page.waitForFunction(() => globalThis.document.querySelector('[data-filesystem-root-id]') || globalThis.document.querySelector('[data-browser-mode-stack]'));
       await paint(page);
@@ -85,7 +93,6 @@ try {
       await page.getByRole('radio', { name: mode, exact: true }).click();
       await paint(page);
       assert.deepEqual(await workspace.boundingBox(), initialBounds);
-      assert.deepEqual(await row.evaluate(itemGeometry), initialItemGeometry, 'Initial placeholders match actual item and cell geometry');
       const coldFrames = await page.evaluate(() => globalThis.__fileFrames);
       assert.ok(coldFrames.every(frame => !frame.empty && !frame.generic && !frame.curtain), JSON.stringify(coldFrames));
       // Same-path refresh never replaces the existing tree, rows, or focused filter.
@@ -104,7 +111,14 @@ try {
       await filter.fill('');
       await paint(page);
       if (artifact) await page.screenshot({ path: `${artifact}/files-${mode}-ready.png` });
-      await page.evaluate(() => globalThis.window.dispatchEvent(new Event('pagehide')));
+      const captured = await page.evaluate(() => {
+        globalThis.window.dispatchEvent(new Event('pagehide'));
+        const record = JSON.parse(globalThis.sessionStorage.getItem('redeven-envapp:reload-layout-v2'));
+        const omitted = [...globalThis.document.querySelectorAll('[data-floe-reload-omit]')].map(element => element.getBoundingClientRect());
+        return record.boxes.filter(([x, y, width, height]) => omitted.some(rect => rect.width > 0 && rect.height > 0
+          && x >= rect.left && y >= rect.top && x + width <= rect.right && y + height <= rect.bottom));
+      });
+      assert.deepEqual(captured, [], 'Reload must keep file contents blank, including paths and directory icons');
       const entry = server.hold('entry');
       const listing = server.hold('file-list');
       const finishPaints = await recordDocumentPaints(cdp);
@@ -158,7 +172,7 @@ try {
       await page.locator('[data-floe-reload-placeholder]').waitFor({ state: 'detached' });
       await paint(page);
       assert.equal(await row.count(), 0);
-      assert.equal(await page.evaluate(() => globalThis.sessionStorage.getItem('redeven-envapp:reload-layout')), null);
+      assert.equal(await page.evaluate(() => globalThis.sessionStorage.getItem('redeven-envapp:reload-layout-v2')), null);
       assert.ok((await page.evaluate(() => globalThis.__fileFrames)).every(frame => !frame.row));
       console.log('PASS Files denied access never presents old content:', mode);
     } catch (error) {

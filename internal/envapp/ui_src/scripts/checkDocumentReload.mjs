@@ -49,7 +49,7 @@ try {
       await page.locator('[data-floe-reload-placeholder]').waitFor();
       await nextPaint(page);
       assert.equal(await page.locator('[data-floe-shell]').count(), 0, 'The application module is held');
-      const record = await page.evaluate(() => JSON.parse(sessionStorage.getItem('redeven-envapp:reload-layout')));
+      const record = await page.evaluate(() => JSON.parse(sessionStorage.getItem('redeven-envapp:reload-layout-v2')));
       assert.ok(record.boxes.some(box => Math.abs(box[0] - bounds.x) < 1 && Math.abs(box[1] - bounds.y) < 1 && Math.abs(box[2] - bounds.width) < 1 && Math.abs(box[3] - bounds.height) < 1), `${target}: the prior real row boundary must survive`);
       assert.ok(!JSON.stringify(record).includes(selectors.title), 'Geometry cannot persist resource content');
       if (artifact) {
@@ -89,7 +89,7 @@ try {
       await page.locator('[data-floe-reload-placeholder]').waitFor({ state: 'detached' });
       await nextPaint(page);
       assert.equal(await row.count(), 0, `${target}: revoked read access cannot display cached facts`);
-      assert.equal(await page.evaluate(() => sessionStorage.getItem('redeven-envapp:reload-layout')), null, 'Revocation removes old geometry');
+      assert.equal(await page.evaluate(() => sessionStorage.getItem('redeven-envapp:reload-layout-v2')), null, 'Revocation removes old geometry');
       assert.ok((await page.evaluate(() => globalThis.__continuityFrames)).every(frame => !frame.row), 'Denied content is never painted');
       console.log(`PASS document reload denial: ${target}`);
     } finally { if (!paints) await finishPaints(); server.setReadDenied(false); entry(); permissions(); scope(); data(); await context.close(); }
