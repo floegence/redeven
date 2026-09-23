@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash, X509Certificate } from 'node:crypto';
+import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer as createHTTPServer } from 'node:http';
 import { createServer as createHTTPSServer } from 'node:https';
@@ -1021,6 +1022,111 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
   }
 }
 
+async function verifyBuiltMobileFlowerVisibility(browser, tls) {
+  const scenarios = [];
+  for (const colorScheme of ['light', 'dark']) {
+    for (const startsLocked of [true, false]) {
+      let unlocked = !startsLocked;
+      const server = await createBuiltDistServer({
+        accessReady: true, fileContinuity: true, tls,
+        handleRequest: async (_request, response, url) => {
+          if (url.pathname === '/api/local/access/status') {
+            jsonResponse(response, { password_required: true, unlocked });
+          } else if (url.pathname === '/api/local/access/unlock') {
+            unlocked = true;
+            jsonResponse(response, { unlocked: true, resume_token: 'built-mobile-resume' });
+          } else if (url.pathname === '/__fixture/files/1010') {
+            jsonResponse(response, {
+              agent_home_path_abs: '/workspace', home_path_abs: '/workspace', default_root_id: 'home',
+              roots: [{ id: 'home', label: 'Home', kind: 'home', path_abs: '/workspace', permissions: { read: true, write: true } }],
+            });
+          } else if (url.pathname === '/__fixture/files/1001') {
+            jsonResponse(response, { entries: [{ name: 'visible-file.txt', path: '/workspace/visible-file.txt', is_directory: false, entry_type: 'file', resolved_type: 'file', size: 128, modified_at: 1, created_at: 1 }] });
+          } else return false;
+          return true;
+        },
+      });
+      const context = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true, colorScheme });
+      const page = await context.newPage();
+      page.setDefaultTimeout(15_000);
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
+      page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+      try {
+        await trustBuiltDistWebTransport(page, tls);
+        await page.addInitScript(() => {
+          globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+          globalThis.localStorage.setItem('redeven-envapp:env_local-activity-navigation', JSON.stringify({
+            version: 1, target: { kind: 'builtin', page: 'files' }, recentBuiltins: ['files', 'ai'],
+          }));
+        });
+        await page.goto(new URL(entryPath.slice(1), server.baseURL).href);
+        if (startsLocked) {
+          await page.getByRole('heading', { name: 'Unlock local runtime', exact: true }).waitFor();
+          await page.locator('input[type="password"]').fill('fixture-password');
+          await page.getByRole('button', { name: 'Unlock', exact: true }).click();
+        }
+        const product = page.locator('#redeven-activity-flower-product');
+        const composer = page.locator('.flower-composer textarea');
+        const file = page.locator('[data-file-browser-item-id="/workspace/visible-file.txt"]').first();
+        const assertHiddenProduct = async () => {
+          await composer.waitFor({ state: 'attached' });
+          await page.waitForFunction(() => globalThis.document.querySelector('#redeven-activity-flower-product')?.getAttribute('aria-hidden') === 'true');
+          // aria-hidden and inert do not suppress paint. Check actual layout boxes
+          // with the production Flower CSS, including the retained composer.
+          for (const locator of [product, composer]) {
+            assert.equal(await locator.evaluate(element => element.getClientRects().length), 0, 'Retained mobile Flower must not paint over the active page');
+          }
+          await file.waitFor({ state: 'visible' });
+          for (const slot of ['top-bar', 'main', 'mobile-tab-bar']) {
+            await page.locator(`[data-floe-shell-slot="${slot}"]`).waitFor({ state: 'visible' });
+          }
+          assert.equal(await page.evaluate(() => globalThis.document.documentElement.scrollHeight <= globalThis.innerHeight), true, 'The shell must not create document scrolling');
+        };
+        await assertHiddenProduct();
+        await page.getByRole('tab', { name: 'Flower', exact: true }).click();
+        await composer.waitFor({ state: 'visible' });
+        await composer.fill('Keep this mobile draft');
+        await composer.evaluate(element => {
+          element.setSelectionRange(5, 9);
+          globalThis.__builtMobileFlowerIdentity = {
+            product: globalThis.document.querySelector('#redeven-activity-flower-product'),
+            composer: element,
+          };
+        });
+        const assertRetainedDraft = async () => {
+          assert.deepEqual(await composer.evaluate(element => ({
+            sameProduct: globalThis.__builtMobileFlowerIdentity.product === globalThis.document.querySelector('#redeven-activity-flower-product'),
+            sameComposer: globalThis.__builtMobileFlowerIdentity.composer === element,
+            value: element.value, start: element.selectionStart, end: element.selectionEnd,
+          })), { sameProduct: true, sameComposer: true, value: 'Keep this mobile draft', start: 5, end: 9 });
+        };
+        await page.getByRole('tab', { name: 'File Browser', exact: true }).click();
+        await assertHiddenProduct();
+        await assertRetainedDraft();
+        await page.setViewportSize({ width: 1280, height: 800 });
+        await page.locator('#redeven-activity-flower-companion').waitFor({ state: 'visible' });
+        await composer.waitFor({ state: 'visible' });
+        await assertRetainedDraft();
+        await page.setViewportSize({ width: 393, height: 852 });
+        await page.getByRole('tab', { name: 'File Browser', exact: true }).waitFor();
+        await assertHiddenProduct();
+        await page.getByRole('tab', { name: 'Flower', exact: true }).click();
+        await composer.waitFor({ state: 'visible' });
+        await assertRetainedDraft();
+        assert.deepEqual(errors, [], 'The built mobile unlock and Flower flow must not produce application errors');
+        scenarios.push({ color_scheme: colorScheme, starts_locked: startsLocked, active_page_visible: true, draft_and_identity_preserved: true, page_error_count: errors.length });
+      } catch (error) {
+        throw new Error(`built mobile Flower visibility failed: ${JSON.stringify({ colorScheme, startsLocked, errors, body: (await page.locator('body').innerText()).slice(0, 1500) })}`, { cause: error });
+      } finally {
+        await context.close();
+        await server.close();
+      }
+    }
+  }
+  return scenarios;
+}
+
 async function verifyBuiltPluginInstallRouting(browser, tls) {
   const server = await createBuiltDistServer({ accessReady: true, pluginInstallFlow: true, tls });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -1467,6 +1573,7 @@ async function main() {
 
     const pluginInstall = await verifyBuiltPluginInstallRouting(browser, tls);
     const flowerLifecycle = await verifyBuiltFlowerLifecycle(browser, tls);
+    const mobileFlowerVisibility = await verifyBuiltMobileFlowerVisibility(browser, tls);
 
     report = {
       schema_version: 1,
@@ -1492,6 +1599,7 @@ async function main() {
       page_error_count: 0,
       request_failure_count: 0,
       flower_lifecycle: flowerLifecycle,
+      mobile_flower_visibility: mobileFlowerVisibility,
       status: 'passed',
     };
   } finally {
@@ -1508,7 +1616,7 @@ async function main() {
   process.stdout.write(`${JSON.stringify(report)}\n`);
 }
 
-export { createBuiltDistServer, createBuiltDistTLS, trustBuiltDistWebTransport };
+export { createBuiltDistServer, createBuiltDistTLS, trustBuiltDistWebTransport, verifyBuiltMobileFlowerVisibility };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(async (error) => {
