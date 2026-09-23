@@ -11,17 +11,18 @@ const server = await createContinuityServer(tls, { fileContinuity: true });
 const browser = await chromium.launch({ args: [`--ignore-certificate-errors-spki-list=${tls.certificateSPKIHash}`] });
 const paint = page => page.evaluate(() => new Promise(resolve => globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(resolve))));
 try {
-  for (const mode of ['Grid', 'List']) {
+  for (const mode of ['List', 'Grid']) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const page = await context.newPage();
     page.setDefaultTimeout(20000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await trustBuiltDistWebTransport(page, tls);
-    await page.addInitScript(({ key, record }) => {
+    await page.addInitScript(({ key, record, viewMode }) => {
       if (!globalThis.localStorage.getItem(key)) globalThis.localStorage.setItem(key, JSON.stringify(record));
       globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
-    }, { key: navigationKey, record: navigationRecord('files') });
+      globalThis.localStorage.setItem('redeven-envapp:env_local-files:env_local:fileBrowser:viewMode', JSON.stringify(viewMode));
+    }, { key: navigationKey, record: navigationRecord('files'), viewMode: mode.toLowerCase() });
     await page.addInitScript(() => {
       globalThis.__fileFrames = [];
       const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
@@ -51,19 +52,29 @@ try {
     const workspace = page.locator('[data-browser-workspace]').first();
     const pending = page.locator('[data-file-browser-initial-loading]').first();
     const row = page.locator('[data-file-browser-item-id="/workspace/continuity-file.txt"]').first();
+    const itemGeometry = element => ({
+      box: element.getBoundingClientRect().toJSON(),
+      cells: [...element.children].slice(0, element.hasAttribute('data-file-list-row') ? 3 : 2).map(child => child.getBoundingClientRect().toJSON()),
+    });
     try {
       await page.goto(new URL('_redeven_proxy/env/', server.baseURL).href, { waitUntil: 'commit' });
       await pending.waitFor();
+      await paint(page);
       const initialBounds = await page.waitForFunction(() => {
         const rect = globalThis.document.querySelector('[data-browser-workspace]')?.getBoundingClientRect();
         return rect?.width && rect.height ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
       }).then(handle => handle.jsonValue());
+      assert.equal(await page.getByRole('radio', { name: mode, exact: true }).getAttribute('aria-checked'), 'true', 'Module fallback restores the actual view mode');
+      assert.ok(await page.locator('[data-file-browser-placeholder]').count() > 0);
+      const initialItemGeometry = await page.locator('[data-file-browser-placeholder]').first().evaluate(itemGeometry);
+      assert.equal(await page.getByText('Loading files...', { exact: true }).count(), 0);
       if (artifact) await page.screenshot({ path: `${artifact}/files-${mode}-initial.png` });
       releaseModule();
       await page.waitForFunction(() => globalThis.document.querySelector('[data-browser-mode-stack]'));
       await paint(page);
       assert.deepEqual(await workspace.boundingBox(), initialBounds, 'Module handoff must retain the workspace layout');
       assert.equal(await pending.isVisible(), true);
+      assert.deepEqual(await page.locator('[data-file-browser-placeholder]').first().evaluate(itemGeometry), initialItemGeometry, 'Module and data placeholders share item geometry');
       releaseContext();
       await page.waitForFunction(() => globalThis.document.querySelector('[data-filesystem-root-id]') || globalThis.document.querySelector('[data-browser-mode-stack]'));
       await paint(page);
@@ -74,6 +85,7 @@ try {
       await page.getByRole('radio', { name: mode, exact: true }).click();
       await paint(page);
       assert.deepEqual(await workspace.boundingBox(), initialBounds);
+      assert.deepEqual(await row.evaluate(itemGeometry), initialItemGeometry, 'Initial placeholders match actual item and cell geometry');
       const coldFrames = await page.evaluate(() => globalThis.__fileFrames);
       assert.ok(coldFrames.every(frame => !frame.empty && !frame.generic && !frame.curtain), JSON.stringify(coldFrames));
       // Same-path refresh never replaces the existing tree, rows, or focused filter.

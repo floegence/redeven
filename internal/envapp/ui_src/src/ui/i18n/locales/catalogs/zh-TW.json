@@ -832,12 +832,6 @@
       "addWidget": "新增 {label}",
       "goToWidget": "前往 {label}"
     },
-    "progress": {
-      "connecting": "連線工作區",
-      "layout": "正在載入佈局",
-      "canvas": "正在準備畫布",
-      "ready": "就緒"
-    },
     "widgets": {
       "files": {
         "label": "檔案",
@@ -1001,8 +995,6 @@
     "showInternalSessions": "顯示內部工作階段",
     "hideInternal": "隱藏內部",
     "showInternal": "顯示內部",
-    "loadingEyebrow": "監控",
-    "loadingMessage": "正在載入監控資料...",
     "runtimeApp": "運行時",
     "codeApp": "程式碼",
     "portForwardApp": "連接埠轉送",

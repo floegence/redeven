@@ -832,12 +832,6 @@
       "addWidget": "{label} を追加",
       "goToWidget": "{label} へ移動"
     },
-    "progress": {
-      "connecting": "ワークスペースに接続中",
-      "layout": "レイアウトを読み込み中",
-      "canvas": "キャンバスを準備中",
-      "ready": "準備完了"
-    },
     "widgets": {
       "files": {
         "label": "ファイル",
@@ -1001,8 +995,6 @@
     "showInternalSessions": "内部セッションを表示",
     "hideInternal": "内部を非表示",
     "showInternal": "内部を表示",
-    "loadingEyebrow": "モニタリング",
-    "loadingMessage": "Monitoring データを読み込み中...",
     "runtimeApp": "ランタイム",
     "codeApp": "コード",
     "portForwardApp": "ポートフォワード",

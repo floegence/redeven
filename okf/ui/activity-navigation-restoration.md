@@ -22,6 +22,11 @@ The UI preference binding partitions the record by stable environment and access
 source. Desktop uses the native renderer storage scope, so changing loopback
 ports and window IDs do not change the record's identity. This is small UI state,
 separate from asynchronous resource snapshots and authorization credentials.
+Browser startup uses the stable `env_local` preference binding before local
+runtime discovery, matching navigation and subsequent reloads. Module placeholders
+read that same binding for view mode and layout; temporary lack of runtime
+metadata must not select a different preference store. Legacy navigation lookup
+retains its original namespace solely for the one-time migration.
 
 Built-in targets include Terminal, Monitor, Files, Codespaces, Web Services,
 Host Applications, Containers, Flower, Settings, and Plugin Center. Connection

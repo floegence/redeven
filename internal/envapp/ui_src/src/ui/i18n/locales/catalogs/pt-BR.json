@@ -832,12 +832,6 @@
       "addWidget": "Adicionar {label}",
       "goToWidget": "Ir para {label}"
     },
-    "progress": {
-      "connecting": "Conectando a área de trabalho",
-      "layout": "Carregando layout",
-      "canvas": "Preparando canvas",
-      "ready": "Pronto"
-    },
     "widgets": {
       "files": {
         "label": "Arquivos",
@@ -1001,8 +995,6 @@
     "showInternalSessions": "Mostrar sessões internas",
     "hideInternal": "Ocultar internas",
     "showInternal": "Mostrar internas",
-    "loadingEyebrow": "Monitoramento",
-    "loadingMessage": "Carregando dados de monitoramento...",
     "runtimeApp": "Tempo de execução",
     "codeApp": "Código",
     "portForwardApp": "Porta direta",

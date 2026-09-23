@@ -19,7 +19,8 @@ import { Skeleton } from '@floegence/floe-webapp-core/loading';
 import { Button, SegmentedControl, formatPickerPath, parsePickerPath, type SurfaceFloatingBoundary } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { FileBrowserPathControl, type FileBrowserPathControlMode } from './FileBrowserPathControl';
-import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
+import { FileBrowserPathBreadcrumbSkeleton } from './FileBrowserPathBreadcrumb';
+import { FileBrowserSidebarTree, FileBrowserSidebarTreeSkeleton } from './FileBrowserSidebarTree';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { useFileBrowserTypeToFilter } from './fileBrowserTypeToFilter';
 import { resolveFileBrowserToolbarLayout } from './fileBrowserPathLayout';
@@ -154,7 +155,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
         </div>
 
         <div data-floe-surface={props.pathControlMode === 'edit' ? 'inset' : undefined} data-floe-input-surface={props.pathControlMode === 'edit' ? '' : undefined} aria-invalid={Boolean(props.pathError) || undefined} class={cn(FILE_WORKSPACE_TOOLBAR_PATH_CLASS, props.pathControlMode === 'edit' && redevenSurfaceRoleClass('controlMuted'))}>
-          <Show when={!props.initializing} fallback={<Skeleton class="h-3 w-36" />}>
+          <Show when={!props.initializing} fallback={<FileBrowserPathBreadcrumbSkeleton class="min-w-0 flex-1" />}>
             <FileBrowserPathControl
               class="min-w-0 flex-1"
               mode={props.pathControlMode}
@@ -237,11 +238,12 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
   );
 }
 
-function FileWorkspaceStatusBar() {
+function FileWorkspaceStatusBar(props: { initializing?: boolean }) {
   const i18n = useI18n();
 
   return (
     <FileBrowserStatusBar
+      initializing={props.initializing}
       class={cn('px-2.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}
       pathClass="max-w-full sm:max-w-[45%]"
       formatItemCount={(count) => i18n.tn('files.itemCount', count)}
@@ -458,7 +460,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
           <div class="flex items-center justify-between px-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
             <span>{i18n.t('files.folderTree')}</span>
             <span class="flex items-center gap-1">
-              <Show when={!props.initializing} fallback={<Skeleton class="h-3 w-12" />}>
+              <Show when={!props.initializing} fallback={<><Skeleton class="h-3 w-9" /><Skeleton class="h-[18px] w-6 rounded-full" /></>}>
                 <span>{currentRoot()?.label ?? i18n.t('files.compactDepth')}</span>
               </Show>
               <Show when={!props.initializing && currentRoot()}>
@@ -482,7 +484,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             data-testid="file-tree-scroll-region"
             class="min-h-0 flex-1 overflow-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
           >
-            <Show when={!props.initializing} fallback={<div aria-hidden="true" class="space-y-3 py-2"><Skeleton class="h-4 w-24" /><Skeleton class="h-4 w-32" /></div>}>
+            <Show when={!props.initializing} fallback={<FileBrowserSidebarTreeSkeleton />}>
               <FileBrowserSidebarTree
                 instanceId={props.instanceId}
                 enableDragDrop={dragEnabled()}
@@ -536,23 +538,21 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             }}
             {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
             data-testid="file-browser-content-scroll-region"
+            data-file-browser-initial-loading={props.initializing || undefined}
+            role={props.initializing ? 'status' : undefined}
+            aria-busy={props.initializing || undefined}
+            aria-label={props.initializing ? i18n.t('files.loadingFiles') : undefined}
             class={cn('flex min-h-0 flex-1 flex-col overflow-auto', redevenSurfaceRoleClass('main'))}
             onContextMenu={handleWorkspaceBackgroundContextMenu}
           >
             {props.contentNotice}
-            <Show when={props.initializing} fallback={(
-              <Show when={!props.contentUnavailable}>
-                <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
-                  <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full redeven-file-list-compact" />
-                </Show>
+            <Show when={!props.contentUnavailable}>
+              <Show when={browser.viewMode() === 'list'} fallback={<FileGridView initializing={props.initializing} instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
+                <FileListView initializing={props.initializing} instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full redeven-file-list-compact" />
               </Show>
-            )}>
-              <div data-file-browser-initial-loading role="status" aria-busy="true" class="flex items-center gap-2 px-4 py-6 text-xs text-muted-foreground">
-                <Skeleton class="h-3 w-3 rounded-full" /><span>{i18n.t('files.loadingFiles')}</span>
-              </div>
             </Show>
           </div>
-          <Show when={!props.initializing && !props.contentUnavailable}><FileWorkspaceStatusBar /></Show>
+          <Show when={!props.contentUnavailable}><FileWorkspaceStatusBar initializing={props.initializing} /></Show>
           <FileContextMenu
             boundary={menuBoundary()}
             backLabel={i18n.t('files.contextMenuBack')}

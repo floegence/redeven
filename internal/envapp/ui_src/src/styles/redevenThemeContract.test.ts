@@ -287,7 +287,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.redeven-terminal-loading-curtain {');
     expect(src).toContain('--redeven-terminal-loading-background');
     expect(src).toContain('--redeven-terminal-loading-foreground');
-    expect(src).toContain('.redeven-workbench-progress-curtain {');
+    expect(src).not.toContain('.redeven-workbench-progress-curtain');
     expect(src).toContain('@media (prefers-reduced-motion: reduce) {');
     expect(src).toContain('.git-inline-loading-status__skeleton::after,');
     expect(src).toContain('animation: none;');
