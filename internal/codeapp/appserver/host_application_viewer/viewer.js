@@ -67,7 +67,16 @@
     applyPicture();
   });
   const pictureHint = document.createElement('p'); hostApplicationAppearance.copy(pictureHint, 'pictureHint');
-  picturePanel.append(pictureTitle, modes, pictureHint);
+  const decoding = document.createElement('div'); decoding.className = 'mac-app-picture-statistics';
+  const decodingRow = document.createElement('div');
+  const decodingLabel = document.createElement('span'); hostApplicationAppearance.copy(decodingLabel, 'videoDecoding');
+  const decodingStatus = document.createElement('output'); decodingStatus.className = 'host-app-video-status';
+  hostApplicationAppearance.copy(decodingStatus, 'videoUnavailable');
+  decodingRow.append(decodingLabel, decodingStatus); decoding.append(decodingRow);
+  const httpsHint = document.createElement('p'); httpsHint.className = 'host-app-https-hint';
+  hostApplicationAppearance.copy(httpsHint, 'httpsPerformanceHint');
+  httpsHint.hidden = window.isSecureContext;
+  picturePanel.append(pictureTitle, modes, pictureHint, decoding, httpsHint);
   popover.append(windowPanel, picturePanel, quitPanel);
   const panels = {windows:windowPanel, picture:picturePanel, quit:quitPanel};
   const toggles = {windows:windowToggle, picture:controlsButton, quit};
@@ -242,6 +251,9 @@
     if (!xpra || typeof xpra._new_window !== 'function' || typeof xpra.do_send_damage_sequence !== 'function') throw new Error('Unsupported Xpra HTML5 client');
     if (!xpra.floeInput) { finish('inputVersionUnsupported'); return; }
     client = xpra;
+    // The negotiated decoder list is authoritative; HTTPS alone is insufficient.
+    const videoAvailable = xpra.supported_encodings?.some(codec => ['h264', 'vp8', 'vp9', 'av1'].includes(codec));
+    hostApplicationAppearance.copy(decodingStatus, videoAvailable ? 'videoAvailable' : 'videoUnavailable');
     const paintedWindows = new Set();
     const adapter = xpra.floeInput;
     inputController = hostApplicationInput.createRemoteInput({

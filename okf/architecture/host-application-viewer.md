@@ -81,6 +81,36 @@ child window, or a lost connection never closes the viewer. Applications retain
 their normal save/cancel prompts; cancelling keeps both the session and its viewer.
 Closing the outer viewer still preserves the application session.
 
+## LAN decoding and resource reuse
+
+The picture panel reports video decoding availability from the actual client
+encoding list. HTTPS alone does not prove decoder support or a received video
+frame. Automatic retains Xpra's adaptive quality/speed semantics. An insecure
+browser context explains how to enable HTTPS through Redeven Desktop's environment
+access settings, trust the identity on the viewing device and reopen the app.
+The [certificate contract](../security/local-ui-certificates.md) owns identity and
+trust; the viewer never creates certificates, installs trust, changes the saved
+protocol, restarts a Runtime, or silently downgrades TLS.
+
+The published native SDK owns a bounded immutable snapshot of the prepared public
+client resources, content hashing, compression, conditional responses and worker
+URL relocation. Redeven owns the snapshot for each live Linux application, retaining
+it across viewer detach and releasing it when the backend ends. A recovered instance
+loads its prepared resources before admitting a new share. The digest includes the
+exact prepared input adapter and transformed worker bytes, not merely the component
+recipe. Unsupported preparation fails before sharing; there is no unversioned
+resource fallback.
+
+Only `/_redeven_proxy/host-application-assets/<digest>/...` may override the normal
+no-store policy with private immutable caching. The route requires full permission,
+a matching live application owner and exact digest. Env and admitted Host Applications
+port-forward origins may access it; codespace, other forward, retired share and
+unknown origins cannot. LAN viewers share the stable authenticated Env-origin route,
+so a new sharing ID can reuse browser resources. Separate cloud origins retain their
+normal browser cache partitioning. Session documents, settings, credentials and
+control remain uncached and independently authorized even when scripts are cached.
+Detaching still closes all accepted sharing sockets without terminating the app.
+
 # Boundaries
 
 The viewer cannot infer process termination from an empty inventory or failed
@@ -92,3 +122,5 @@ and browser dismissal permissions remain authoritative.
 - `internal/codeapp/appserver/host_application_viewer/`: connection reconciliation, first-frame, terminal and geometry adapters.
 - `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts` and `macHostApplicationViewer.test.ts`: backend events, stale callbacks, first-pixel and reconnect acceptance.
 - `internal/codeapp/appserver/host_applications_test.go`: owner-authorized terminal snapshots and retained state routes.
+
+- `internal/hostapps/client_assets_test.go` and `internal/codeapp/appserver/host_application_assets_test.go`: stable resource references, gzip, cache validators, origin/owner/version and revoked permission boundaries.

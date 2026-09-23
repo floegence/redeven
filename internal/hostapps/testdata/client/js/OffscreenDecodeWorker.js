@@ -1,0 +1,1 @@
+// Public offscreen worker fixture.

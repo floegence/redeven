@@ -273,3 +273,38 @@ var macHostApplicationJS string
 
 //go:embed host_application_viewer/toolbar.js
 var hostApplicationToolbarJS string
+
+func (g *Server) serveHostApplicationAssets(w http.ResponseWriter, r *http.Request, role originRole) {
+	w.Header().Set("Cache-Control", "no-store")
+	if (role != originRoleEnv && role != originRolePortForward) || g.hostApps == nil {
+		http.NotFound(w, r)
+		return
+	}
+	meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
+	if !ok {
+		return
+	}
+	// Remote port-forward origins must still name an admitted application share.
+	// LAN assets arrive through the authenticated Env origin, without a share ID.
+	if role == originRolePortForward {
+		id, valid := portForwardIDFromRequest(r)
+		s, owner, found := g.hostApps.ForForward(id)
+		if !valid || !found || owner != meta.UserPublicID || (s.State != "starting" && s.State != "running") {
+			http.NotFound(w, r)
+			return
+		}
+	}
+	digest, resource, ok := strings.Cut(strings.TrimPrefix(r.URL.Path, hostapps.ClientAssetsPath), "/")
+	if !ok || len(digest) != 64 || resource == "" {
+		http.NotFound(w, r)
+		return
+	}
+	assets := g.hostApps.ClientAssets(meta.UserPublicID, digest)
+	if assets == nil {
+		http.NotFound(w, r)
+		return
+	}
+	next := r.Clone(r.Context())
+	next.URL.Path, next.URL.RawPath = "/"+resource, ""
+	assets.ServeHTTP(w, next)
+}

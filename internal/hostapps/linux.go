@@ -39,7 +39,8 @@ type linuxApplication struct {
 	record               linuxApplicationRecord
 	tools                hostTools
 	input                nativeapps.ClientInput
-	ready, ended         bool // protected by Manager.appsMu
+	assets               *nativeapps.ClientAssets // protected by Manager.appsMu
+	ready, ended         bool                     // protected by Manager.appsMu
 	terminationRequested bool
 }
 
@@ -245,6 +246,15 @@ func (m *Manager) launchLinux(ctx context.Context, owner string, req LaunchReque
 }
 
 func (m *Manager) shareApplication(ctx context.Context, owner string, a *linuxApplication, presentation Presentation) (Session, error) {
+	// Snapshot once for this application's lifetime, including recovered instances.
+	// Detaching a viewer preserves the exact resource version for the next share.
+	if a.assets == nil {
+		assets, err := nativeapps.OpenClientAssets(filepath.Join(m.applicationDir(a.record.ID), "www"))
+		if err != nil {
+			return Session{}, fmt.Errorf("prepare application resources: %w", err)
+		}
+		a.assets = assets
+	}
 	password := randomID() + randomID()
 	path := filepath.Join(m.applicationDir(a.record.ID), "password")
 	if err := os.WriteFile(path+".tmp", []byte(password), 0600); err != nil {
@@ -253,7 +263,7 @@ func (m *Manager) shareApplication(ctx context.Context, owner string, a *linuxAp
 	if err := os.Rename(path+".tmp", path); err != nil {
 		return Session{}, err
 	}
-	proxy, address, err := newApplicationProxy("http://" + a.record.Address)
+	proxy, address, err := newApplicationProxy("http://"+a.record.Address, a.assets)
 	if err != nil {
 		return Session{}, err
 	}
@@ -325,6 +335,10 @@ func (m *Manager) startApplication(owner string, app Application, tools hostTool
 		return nil, err
 	}
 	if err = nativeapps.PrepareInputClient(tools.html, filepath.Join(dir, "www")); err != nil {
+		return nil, err
+	}
+	a.assets, err = nativeapps.OpenClientAssets(filepath.Join(dir, "www"))
+	if err != nil {
 		return nil, err
 	}
 	if err = os.WriteFile(filepath.Join(dir, "password"), []byte(randomID()+randomID()), 0600); err != nil {
@@ -404,6 +418,7 @@ func (m *Manager) watchApplication(a *linuxApplication, done <-chan error) {
 			if !alive {
 				m.appsMu.Lock()
 				a.ended = true
+				a.assets = nil
 				m.appsMu.Unlock()
 				code, reason := "capture_failed", ""
 				m.appsMu.Lock()
@@ -571,4 +586,17 @@ func applicationWindowCloseTargets(info string) []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+// ClientAssets selects public bytes for an authenticated owner. The caller must
+// separately authorize session documents and live control, even on cache hits.
+func (m *Manager) ClientAssets(owner, digest string) *nativeapps.ClientAssets {
+	m.appsMu.Lock()
+	defer m.appsMu.Unlock()
+	for _, a := range m.applications {
+		if !a.ended && a.record.Owner == owner && a.assets != nil && a.assets.Digest() == digest {
+			return a.assets
+		}
+	}
+	return nil
 }

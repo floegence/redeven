@@ -97,6 +97,10 @@ export type HostApplicationPresentation = Readonly<{
   pictureTransport?: string;
   pictureVideo?: string;
   pictureImages?: string;
+  videoDecoding?: string;
+  videoAvailable?: string;
+  videoUnavailable?: string;
+  httpsPerformanceHint?: string;
   operationFailed?: string;
   waiting?: string;
   waitingHint?: string;

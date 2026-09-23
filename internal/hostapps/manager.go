@@ -193,7 +193,7 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 			return Session{}, ErrInvalid
 		}
 	}
-	for _, value := range []string{req.Presentation.Checking, req.Presentation.ApplicationExited, req.Presentation.ApplicationExitedHint, req.Presentation.WindowsClosed, req.Presentation.WindowsClosedHint, req.Presentation.SharingStopped, req.Presentation.SharingStoppedHint, req.Presentation.EndedHint, req.Presentation.SessionMissing, req.Presentation.SessionMissingHint, req.Presentation.AccessRequired, req.Presentation.AccessHint, req.Presentation.Dismiss, req.Presentation.SessionFailed, req.Presentation.ReopenHint, req.Presentation.PermissionRequired, req.Presentation.PermissionHint, req.Presentation.SessionUnavailable, req.Presentation.SessionHint, req.Presentation.CaptureHint} {
+	for _, value := range []string{req.Presentation.Checking, req.Presentation.ApplicationExited, req.Presentation.ApplicationExitedHint, req.Presentation.WindowsClosed, req.Presentation.WindowsClosedHint, req.Presentation.SharingStopped, req.Presentation.SharingStoppedHint, req.Presentation.EndedHint, req.Presentation.SessionMissing, req.Presentation.SessionMissingHint, req.Presentation.AccessRequired, req.Presentation.AccessHint, req.Presentation.Dismiss, req.Presentation.SessionFailed, req.Presentation.ReopenHint, req.Presentation.PermissionRequired, req.Presentation.PermissionHint, req.Presentation.SessionUnavailable, req.Presentation.SessionHint, req.Presentation.CaptureHint, req.Presentation.VideoDecoding, req.Presentation.VideoAvailable, req.Presentation.VideoUnavailable, req.Presentation.HttpsPerformanceHint} {
 		if len(value) > 1024 {
 			return Session{}, ErrInvalid
 		}
