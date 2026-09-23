@@ -78,6 +78,7 @@ import { TerminalSettingsDialog } from './TerminalSettingsDialog';
 import { createResolvedTerminalFont } from '../services/terminalFonts';
 import { TerminalFontStatus } from './TerminalFontStatus';
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
+import { resolveTerminalMobileKeyboardVisibility } from './terminalMobileKeyboardVisibility';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { fileItemFromPath } from '../utils/filePreviewItem';
 import { writeTextToClipboard } from '../utils/clipboard';
@@ -2304,6 +2305,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return isMobileLayout() && mobileInputMode() === 'floe';
   });
 
+  // A session drawer is a focused navigation surface. Keeping the optional
+  // command keyboard mounted while it is open consumes the same bottom area
+  // and leaves too little room for the session list on mobile.
+  const effectiveMobileKeyboardVisible = createMemo(() => (
+    resolveTerminalMobileKeyboardVisibility({
+      eligible: shouldUseFloeMobileKeyboard(),
+      requested: mobileKeyboardVisible(),
+      sessionDrawerOpen: sessionDrawerOpen(),
+    })
+  ));
+
   const mobileKeyboardSuggestions = createMemo<TerminalMobileKeyboardSuggestion[]>(() => {
     if (!shouldUseFloeMobileKeyboard()) return [];
     return buildTerminalMobileKeyboardSuggestions({
@@ -2315,7 +2327,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const terminalViewportInsetPx = createMemo(() => {
-    if (!shouldUseFloeMobileKeyboard() || !mobileKeyboardVisible()) return 0;
+    if (!effectiveMobileKeyboardVisible()) return 0;
     return mobileKeyboardInsetPx();
   });
 
@@ -2340,7 +2352,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     : i18n.t('terminal.processRunningDescription'));
 
   const useMobileRecoveryStatusBar = createMemo(() => (
-    shouldUseFloeMobileKeyboard() && mobileKeyboardVisible()
+    effectiveMobileKeyboardVisible()
   ));
 
   const statusBarSessionLabel = createMemo(() => {
@@ -3689,7 +3701,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const syncMobileKeyboardInset = () => {
     const keyboardEl = mobileKeyboardElement();
-    if (!shouldUseFloeMobileKeyboard() || !mobileKeyboardVisible() || !keyboardEl) {
+    if (!effectiveMobileKeyboardVisible() || !keyboardEl) {
       setMobileKeyboardInsetPx(0);
       return;
     }
@@ -3716,7 +3728,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   createEffect(() => {
     void shouldUseFloeMobileKeyboard();
-    void mobileKeyboardVisible();
+    void effectiveMobileKeyboardVisible();
     void activeSessionId();
     void surfaceRegistrySeq();
     const el = mobileKeyboardElement();
@@ -3729,7 +3741,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     scheduleMobileKeyboardInsetSync();
 
-    if (!shouldUseFloeMobileKeyboard() || !mobileKeyboardVisible()) {
+    if (!effectiveMobileKeyboardVisible()) {
       return;
     }
 
@@ -5459,7 +5471,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             setMobileKeyboardElement(el);
             syncMobileKeyboardInset();
           }}
-          visible={mobileKeyboardVisible()}
+          visible={effectiveMobileKeyboardVisible()}
           quickInserts={TERMINAL_MOBILE_KEYBOARD_QUICK_INSERTS}
           suggestions={mobileKeyboardSuggestions()}
           onKey={handleMobileKeyboardPayload}

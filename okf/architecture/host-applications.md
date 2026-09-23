@@ -112,6 +112,10 @@ centered identity, and a trailing action or session indicator. Descriptions appe
 only when supplied by the host; missing metadata never reserves an empty description
 area. Long names wrap to at most two lines and expose the full name in their title
 and accessible action label. The responsive grid fits narrow widget surfaces.
+Below 768 CSS pixels, the page header keeps the title and icon actions on one
+56px row, omits the repeated eyebrow and description, and keeps the running
+application section's status rows compact so the library search remains close
+to the primary content.
 The whole card opens the application, with a keyboard focus indicator and a
 hover/focus affordance; cards do not repeat a visible opening instruction. During
 launch, identity and card geometry remain stable while the trailing progress

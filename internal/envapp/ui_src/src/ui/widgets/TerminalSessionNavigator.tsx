@@ -810,7 +810,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
           ariaLabel={i18n.t('terminal.title')}
           class={`redeven-terminal-session-sidebar ${props.mobile
             ? props.drawerOpen
-              ? 'absolute inset-y-0 left-0 z-40 !h-full !max-h-full !min-h-0 !w-[min(88vw,320px)] overflow-hidden shadow-2xl'
+              ? 'absolute inset-y-0 left-0 z-40 !h-full !max-h-full !min-h-0 !w-[min(92vw,360px)] overflow-hidden shadow-2xl'
               : 'hidden'
             : '!w-[286px] !min-w-[286px] !max-w-[286px] overflow-hidden'}`}
         >
@@ -946,7 +946,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           </span>
                         </Show>
                         <div
-                          class="relative flex min-h-11 items-center gap-1 rounded-lg bg-[color-mix(in_srgb,var(--primary)_7%,var(--sidebar))] px-1.5 text-sidebar-foreground transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]"
+                          class={`relative flex ${props.mobile ? 'min-h-10' : 'min-h-11'} items-center gap-1 rounded-lg bg-[color-mix(in_srgb,var(--primary)_7%,var(--sidebar))] px-1.5 text-sidebar-foreground transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]`}
                           data-terminal-group-header={navigationGroup().id}
                           data-terminal-group-drop-target={dropIntent()?.groupId === navigationGroup().id ? dropIntent()?.position : undefined}
                           data-terminal-group-draggable={!navigationGroup().isDefault && !navigationGroup().pending ? 'true' : 'false'}
@@ -1173,7 +1173,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           data-terminal-session-row={sessionId}
                           aria-grabbed={draggedSessionId() === sessionId ? 'true' : 'false'}
                           class={`group relative grid cursor-pointer items-center overflow-hidden rounded-md border border-transparent text-xs transition-[background-color,border-color,color,transform,opacity] duration-150 ${props.mobile
-                            ? 'min-h-[68px] grid-cols-[36px_minmax(0,1fr)_60px] gap-x-2 px-2.5 py-1'
+                            ? 'min-h-[58px] grid-cols-[36px_minmax(0,1fr)_60px] gap-x-2 px-2.5 py-1'
                             : 'min-h-[52px] grid-cols-[36px_minmax(0,1fr)_40px] gap-x-1.5 px-1.5 py-1'} ${sidebarActive()
                             ? 'border-primary/15 bg-[color-mix(in_srgb,var(--primary)_6%,var(--sidebar))] text-sidebar-accent-foreground'
                             : 'bg-transparent text-sidebar-foreground/78 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground'}`}
@@ -1283,7 +1283,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             </Show>
                           </button>
                           <span
-                            class="pointer-events-none relative z-10 grid min-h-11 min-w-0 content-center overflow-hidden text-left"
+                            class={`pointer-events-none relative z-10 grid ${props.mobile ? 'min-h-9' : 'min-h-11'} min-w-0 content-center overflow-hidden text-left`}
                             data-terminal-session-content={sessionId}
                           >
                             <span class="flex h-7 min-w-0 items-center gap-1">
@@ -1380,12 +1380,12 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           </span>
                           <div
                             class={`pointer-events-none relative z-20 grid self-center justify-self-end gap-1 ${props.mobile
-                              ? 'grid-cols-[28px_28px] grid-rows-[28px_28px]'
+                              ? 'grid-cols-[26px_26px] grid-rows-[26px_26px]'
                               : 'grid-cols-[20px_20px] grid-rows-[20px_20px]'}`}
                             data-terminal-session-actions={sessionId}
                           >
                             <span
-                              class={`col-start-1 row-start-1 flex items-center justify-center ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'}`}
+                              class={`col-start-1 row-start-1 flex items-center justify-center ${props.mobile ? 'h-[26px] w-[26px]' : 'h-5 w-5'}`}
                               data-terminal-session-action-cell="index"
                               aria-hidden="true"
                             >
@@ -1396,14 +1396,14 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </Show>
                             </span>
                             <span
-                              class={`col-start-2 row-start-1 flex items-center justify-center ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'}`}
+                              class={`col-start-2 row-start-1 flex items-center justify-center ${props.mobile ? 'h-[26px] w-[26px]' : 'h-5 w-5'}`}
                               data-terminal-session-action-cell="close"
                             >
                               <Show when={item().closable}>
                                 <button
                                   type="button"
                                   class={`flex cursor-pointer items-center justify-center rounded text-[11px] text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 hover:bg-error/10 hover:text-error focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${props.mobile
-                                    ? 'h-7 w-7'
+                                    ? 'h-[26px] w-[26px]'
                                     : 'h-5 w-5'} ${props.mobile
                                     ? 'pointer-events-auto opacity-100'
                                     : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}
@@ -1420,13 +1420,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </Show>
                             </span>
                             <span
-                              class={`col-start-1 row-start-2 flex items-center justify-center ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'}`}
+                              class={`col-start-1 row-start-2 flex items-center justify-center ${props.mobile ? 'h-[26px] w-[26px]' : 'h-5 w-5'}`}
                               data-terminal-session-action-cell="copy"
                             >
                               <Show when={item().fullPath}>
                                 <button
                                   type="button"
-                                  class={`pointer-events-auto flex cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'} ${props.copiedPathSessionId === sessionId
+                                  class={`pointer-events-auto flex cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${props.mobile ? 'h-[26px] w-[26px]' : 'h-5 w-5'} ${props.copiedPathSessionId === sessionId
                                     ? 'bg-primary/10 text-primary'
                                     : 'hover:bg-sidebar-accent hover:text-sidebar-foreground'}`}
                                   title={props.copiedPathSessionId === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}
@@ -1444,7 +1444,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </Show>
                             </span>
                             <span
-                              class={`col-start-2 row-start-2 flex items-center justify-center ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'}`}
+                              class={`col-start-2 row-start-2 flex items-center justify-center ${props.mobile ? 'h-[26px] w-[26px]' : 'h-5 w-5'}`}
                               data-terminal-session-action-cell="files"
                             >
                               <Tooltip content={filesTooltip()} placement="top" delay={0} disabled={draggedSessionId() !== null || draggedGroupId() !== null}>
