@@ -1,9 +1,12 @@
-import { englishMessages, type BrowserMessageKey, type BrowserMessages } from '@floegence/floebrowser/viewer';
+import type { BrowserMessageKey, BrowserMessages } from '@floegence/floebrowser/viewer';
 import type { I18nHelpers } from './createI18n';
-import type { EnvAppTranslationKey } from './locales';
+import { enUS, type EnvAppTranslationKey } from './locales';
 
-// Use the released engine's key set, with every value explicitly maintained in
-// Redeven's complete locale catalogs. Interpolation remains owned by the engine.
+// Derive keys from the maintained catalog without loading the browser engine in
+// the environment shell. Contract tests compare them with the released engine.
+const keys = Object.entries(enUS.browserEngine).flatMap(([group, messages]) => Object.keys(messages).map(key => `${group}.${key}` as BrowserMessageKey));
+
+// Every value is explicit in the selected locale; interpolation stays upstream.
 export function browserMessages(i18n: I18nHelpers): BrowserMessages {
-  return Object.fromEntries((Object.keys(englishMessages) as BrowserMessageKey[]).map(key => [key, i18n.t(`browserEngine.${key}` as EnvAppTranslationKey)])) as BrowserMessages;
+  return Object.fromEntries(keys.map(key => [key, i18n.t(`browserEngine.${key}` as EnvAppTranslationKey)])) as BrowserMessages;
 }

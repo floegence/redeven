@@ -3,7 +3,7 @@ import type { BrowserSourceMessages } from '../i18n/browserSourceMessages';
 import type { BrowserSourceSelection } from './browserSourceContract';
 import type { Session } from '@floegence/flowersec-core';
 import type { BrowserMessages } from '@floegence/floebrowser/viewer';
-import { createBrowserWindow } from './browserWindow';
+import type { createBrowserWindow } from './browserWindow';
 import { browserDocumentURL, type BrowserViewDescriptor, type BrowserWorkspaceRequest } from './browserWindowProtocol';
 import { desktopShellBridgeAvailable, prepareDesktopBrowserWindow } from './desktopShellBridge';
 import { fetchLocalApiJSON } from './localApi';
@@ -35,6 +35,8 @@ export function createBrowserWorkspaceWindows(configuration: () => { title: stri
   const connect = async (entry: Entry, selection?: BrowserSourceSelection, operationSignal?: AbortSignal): Promise<void> => {
     const current = session, signal = operationSignal ? AbortSignal.any([lifetime.signal, operationSignal]) : lifetime.signal;
     if (!current || signal.aborted) throw new Error('Browser environment unavailable');
+    const { createBrowserWindow } = await import('./browserWindow');
+    signal.throwIfAborted();
     const previous = entry.host;
     const view = await openBrowserWorkspace(selection?.request ?? entry.request, signal);
     // Opening another view or refreshing never repeats a new-tab command or

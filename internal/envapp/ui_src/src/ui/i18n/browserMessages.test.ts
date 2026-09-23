@@ -8,7 +8,7 @@ describe('browser component translations', () => {
   it('supplies the complete released catalog and preserves interpolation in every locale', () => {
     for (const locale of SUPPORTED_LOCALES) {
       const messages = browserMessages(createTestI18nHelpers(locale));
-      expect(Object.keys(messages)).toEqual(Object.keys(englishMessages));
+      expect(Object.keys(messages).sort()).toEqual(Object.keys(englishMessages).sort());
       expect(() => browserText(messages)).not.toThrow();
       expect(browserText(messages)('tabs.closeNamed', { title: 'source-title' })).toContain('source-title');
     }

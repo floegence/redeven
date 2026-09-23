@@ -17,7 +17,8 @@ export function findForbiddenInitialAssetNames(assets, forbiddenNames) {
   ));
 }
 
-function isForbiddenInitialModule(moduleId) {
+function isForbiddenInitialModule(moduleId, entryKey) {
+  if (entryKey !== 'browser.html' && moduleId.startsWith('@floegence/floebrowser/dist/viewer/')) return true;
   if (['FlowerSurface.tsx', 'FlowerInputChoices.tsx', 'SubagentDetailWindow.tsx', 'FlowerComputerStage.tsx', 'settings/FlowerSettingsSurface.tsx']
     .some((panel) => moduleId.endsWith(`/internal/flower_ui/src/${panel}`))) return true;
   if (moduleId.endsWith('/internal/config/model_catalog.generated.json')) return true;
@@ -78,7 +79,7 @@ export function analyzeInitialBuildGraph(manifest, chunkModules, entryKey = 'ind
       throw new Error(`Chunk module manifest is missing the initial asset: ${item.file}`);
     }
     for (const moduleId of chunk.modules) {
-      if (!isForbiddenInitialModule(moduleId)) continue;
+      if (!isForbiddenInitialModule(moduleId, entryKey)) continue;
       forbiddenModules.push({
         asset: item.file,
         moduleId,
