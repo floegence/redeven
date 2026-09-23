@@ -66,13 +66,17 @@ enum NativeInput {
         var events: [CGEvent] = []
         for character in text {
             let units = Array(String(character).utf16)
+            // AppKit clients such as Chromium discard a line feed carried by
+            // an ordinary character key. Preserve its native Return identity
+            // while keeping the committed Unicode payload on both transitions.
+            let virtualKey: CGKeyCode = ["\n", "\r", "\r\n"].contains(String(character)) ? 36 : 0
             // CGEvent supports at most 20 UTF-16 units. Split oversized grapheme
             // clusters by scalar boundaries without splitting surrogate pairs.
             var chunk: [UniChar] = []
             func appendChunk() throws {
                 guard !chunk.isEmpty else { return }
                 for down in [true, false] {
-                    guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down) else {
+                    guard let event = CGEvent(keyboardEventSource: nil, virtualKey: virtualKey, keyDown: down) else {
                         throw unavailable()
                     }
                     chunk.withUnsafeBufferPointer {

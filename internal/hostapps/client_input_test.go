@@ -57,6 +57,46 @@ save()
 (root / 'environment.json').write_text(json.dumps({key:os.environ.get(key) for key in ['DISPLAY','DBUS_SESSION_BUS_ADDRESS','GTK_IM_MODULE','QT_IM_MODULE','XMODIFIERS']}))
 Gtk.main()
 `
+	if target := os.Getenv("REDEVEN_TEST_CLIENT_INPUT_TARGET"); target != "" {
+		if target != "firefox" {
+			t.Fatal("unsupported input fixture target", target)
+		}
+		source = `import json, os, subprocess, threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+root = Path(` + quotePython(root) + `)
+class Page(BaseHTTPRequestHandler):
+    def do_GET(self):
+        page = b'''<!doctype html><title>Client input acceptance</title>
+<style>body{margin:0;height:100vh;display:flex;flex-direction:column}textarea{flex:1;min-height:0;font:24px system-ui;resize:none}</style>
+<textarea autofocus></textarea><textarea></textarea>
+<script>const fields=[...document.querySelectorAll('textarea')];let pending=Promise.resolve();
+const save=()=>{const body=JSON.stringify(fields.map(f=>f.value));pending=pending.then(()=>fetch('/receipt',{method:'POST',body}));};
+fields.forEach(f=>f.addEventListener('input',save));save();</script>'''
+        self.send_response(200)
+        self.send_header('Content-Type','text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(page)
+    def do_POST(self):
+        values = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        pending = root / 'receipt.tmp'
+        pending.write_text(json.dumps(values))
+        pending.replace(root / 'receipt.json')
+        self.send_response(204)
+        self.end_headers()
+    def log_message(self, *args): pass
+server=ThreadingHTTPServer(('127.0.0.1',0),Page)
+threading.Thread(target=server.serve_forever,daemon=True).start()
+profile=root/'firefox-profile'
+profile.mkdir()
+(profile/'user.js').write_text('user_pref("browser.shell.checkDefaultBrowser", false);\nuser_pref("browser.aboutwelcome.enabled", false);\nuser_pref("termsofuse.bypassNotification", true);\nuser_pref("datareporting.healthreport.uploadEnabled", false);\nuser_pref("browser.startup.homepage_override.mstone", "ignore");\n')
+(root/'environment.json').write_text(json.dumps({key:os.environ.get(key) for key in ['DISPLAY','DBUS_SESSION_BUS_ADDRESS','GTK_IM_MODULE','QT_IM_MODULE','XMODIFIERS']}))
+try:
+    subprocess.run(['/usr/bin/firefox','--no-remote','--profile',str(profile),'http://127.0.0.1:'+str(server.server_port)],check=True)
+finally:
+    server.shutdown()
+`
+	}
 	if err := os.WriteFile(fixture, []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}

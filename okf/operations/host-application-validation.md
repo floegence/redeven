@@ -82,7 +82,7 @@ original input source was restored. Native launch, pixels, menus, shortcuts,
 reconnect, stale input, resize, window replacement, ordinary close and concurrent
 session isolation also passed with the changed helper. Desktop's real Electron
 41.10.5 titlebar/preload/action/reconnect fixture and 56 browser appearance checks
-passed; 111 deterministic viewer tests and 23 helper tests cover the input lifecycle
+passed; 111 deterministic viewer tests and 24 helper tests cover the input lifecycle
 contract. The 18 affected Desktop tests, localization, dependency boundaries,
 generated assets, Go hostapps/appserver tests and their race checks passed.
 
@@ -90,10 +90,24 @@ Actual desktop OS candidate selection has not been qualified: the available UI
 automation attempt produced direct Latin text, without an observable native
 composition transaction. Real iOS/iPadOS Safari and Android Chrome soft keyboards
 were unavailable and remain unpassed. A simulated mobile viewport does not replace
-these checks. `udesk26` SSH authentication was unavailable; it was neither deployed
-nor claimed as verified. Real macOS browser and terminal applications were not
-qualified as host targets in this change; AppKit text-field receipts are narrower
-evidence. These limits must remain visible in delivery records.
+these checks. The user owns the remaining real input-method operation acceptance.
+
+The follow-up authenticated `udesk26` check passed actual GTK3 input using private
+state, released components and the production viewer. Its installed Firefox 155.0.1
+also passed repeated Unicode, physical typing, deletion, field switching and toolbar
+isolation. Select it with `REDEVEN_TEST_CLIENT_INPUT_TARGET=firefox`; its disposable
+profile suppresses first-run notifications and disables telemetry upload. No personal
+browser profile is modified. No application or Runtime deployment is implied by a
+passing isolated fixture.
+
+The macOS follow-up passed actual Google Chrome textarea and Terminal stdin receipts
+for repeated Unicode and physical typing/deletion. Chrome additionally verifies
+selection replacement and multiline text. This exposed and fixed native line-feed
+events being discarded when carried by an ordinary character key: committed line
+breaks retain their Unicode payload and native Return key identity. Run
+`scripts/check_macos_host_application_input_targets.py --helper <built-helper> --output <evidence>`
+to create and close only disposable test windows in the installed applications.
+This check does not perform native candidate selection or modify personal documents.
 
 # Distribution validation
 
@@ -217,6 +231,7 @@ defines the required process and channel boundaries.
 
 - `internal/hostapps/manager_test.go`: installed GIO and Xpra launch/resume/stop tests.
 - `internal/hostapps/setup_test.go`: published component preparation and responsive application window inventory.
+- `scripts/check_macos_host_application_input_targets.py`: Chrome and Terminal actual input receipts.
 - `scripts/check_macos_host_application_startup.py`: native attach/reconnect and capture lifecycle measurements.
 - `scripts/check_macos_host_application_concurrency.py`: independent application channels under one native capture owner.
 - `internal/envapp/ui_src/src/styles/hostApplicationSurfaces.browser.test.tsx`: first static video frame decode and acknowledgement.

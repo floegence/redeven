@@ -78,6 +78,8 @@ Native window snapshots advertise `input_version: 1`. Each input packet uses tha
 version. Confirmed text uses the existing scoped Unicode injection; keys carry one
 browser transition with explicit pressed, repeat and modifier fields. Direct printable
 keys include their Unicode value, independent of the host's current input source.
+Committed line breaks retain their Unicode payload and native Return identity so
+browser text controls do not discard them as ordinary character-key events.
 The helper tracks native key identities and releases them on ownership loss together
 with held mouse buttons. Production code never switches the host's global input source.
 

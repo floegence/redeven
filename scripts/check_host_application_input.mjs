@@ -37,6 +37,7 @@ const waitFor = async (check, description, timeout = 15000) => {
   throw new Error(description);
 };
 let browser;
+let page;
 const source = path.join(repository, 'internal/codeapp/appserver/host_application_viewer');
 const asset = name => readFile(path.join(source, name), 'utf8');
 const catalogSource = await asset('catalog.generated.js');
@@ -72,14 +73,20 @@ try {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
   browser = await browserType.launch({headless:true, executablePath:process.env.REDEVEN_INPUT_BROWSER_EXECUTABLE || undefined});
-  const page = await browser.newPage({viewport:{width:900,height:640}});
+  page = await browser.newPage({viewport:{width:900,height:640}});
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${port}/fixture/_redeven_host_app/`);
   await page.waitForFunction(() => document.body.dataset.state === 'active', undefined, {timeout:30000});
   const frame = page.frames().find(item => item.url().includes('/fixture/index.html'));
   assert(frame, 'prepared Xpra frame is missing');
+  await frame.evaluate(() => {
+    const adapter = window.floeXpraInput.getClient().floeInput;
+    const previous = adapter.onError;
+    adapter.onError = code => { window.parent.fixtureInputError = code; previous?.(code); };
+  });
   await page.mouse.click(300, 170);
   await frame.waitForFunction(() => document.activeElement === document.querySelector('.floe-remote-input'));
+  await page.screenshot({path:path.join(output,'before-input.png')});
   const input = frame.locator('.floe-remote-input');
   const compose = text => input.evaluate((element, text) => {
     element.dispatchEvent(new CompositionEvent('compositionstart'));
@@ -110,7 +117,15 @@ try {
   remote(`printf %s ${quote(JSON.stringify(expected))} > ${quote(remoteRoot + '/done.json')}`);
   const identity = {...metadata}; delete identity.password;
   await writeFile(path.join(output,'result.json'), JSON.stringify({passed:true,...identity,port,browserName,browser:browser.version(),expected,checks:['exact repeated Unicode','physical typing','Backspace','pointer field switch','toolbar isolation'],systemIME:false},null,2));
-  console.log('PASS: published controller → prepared Xpra → actual GTK text receipt');
+  console.log('PASS: published controller → prepared Xpra → actual application text receipt');
+} catch (error) {
+  await page?.screenshot({path:path.join(output,'failure.png')}).catch(() => {});
+  await writeFile(path.join(output,'failure.json'), JSON.stringify({message:error.message,
+    inputError:await page?.evaluate(() => window.fixtureInputError),
+    received:JSON.parse(remote(`cat ${quote(remoteRoot + '/receipt.json')}`))},null,2));
+  // An invalid completion receipt fails the host fixture and runs its cleanup.
+  remote(`printf %s ${quote(JSON.stringify({error:error.message}))} > ${quote(remoteRoot + '/done.json')}`);
+  throw error;
 } finally {
   await browser?.close(); server.closeAllConnections(); await new Promise(resolve=>server.close(resolve));
   tunnel.kill('SIGTERM');
