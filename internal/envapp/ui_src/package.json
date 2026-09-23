@@ -36,6 +36,7 @@
     "@floegence/floe-webapp-boot": "0.75.0",
     "@floegence/floe-webapp-core": "0.75.0",
     "@floegence/floe-webapp-protocol": "0.75.0",
+    "@floegence/floebrowser": "0.1.11",
     "@floegence/floeterm-terminal-web": "0.19.2",
     "@floegence/flowersec-core": "5.4.1",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz",
@@ -60,8 +61,7 @@
     "shiki": "^3.22.0",
     "solid-js": "^1.9.3",
     "solid-motionone": "^1.0.4",
-    "thinking-orbs": "0.3.1",
-    "@floegence/floebrowser": "0.1.10"
+    "thinking-orbs": "0.3.1"
   },
   "overrides": {
     "@floegence/flowersec-core": "5.4.1",

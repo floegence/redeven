@@ -38,6 +38,7 @@ function sha256(value) {
 }
 
 test('generates signed-manifest inputs with executable digests and the reviewed upgrade epoch', () => {
+  const upgradeEpochs = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31];
   const dist = mkdtempSync(path.join(tmpdir(), 'redeven-runtime-compatibility-'));
   try {
     const expected = new Map();
@@ -63,9 +64,8 @@ test('generates signed-manifest inputs with executable digests and the reviewed 
       assert.equal(manifest.schema_version, 2);
       assert.equal('gateway' in manifest, false);
       assert.equal(manifest.runtime.sha256, digests.runtime);
-      assert.equal(manifest.runtime.compatibility_epoch, 9);
-      assert.deepEqual(manifest.compatibility.upgrade_from_runtime_epochs, [8]);
-      assert.deepEqual(manifest.compatibility, { upgrade_from_runtime_epochs: [8] });
+      assert.equal(manifest.runtime.compatibility_epoch, 32);
+      assert.deepEqual(manifest.compatibility, { upgrade_from_runtime_epochs: upgradeEpochs });
     }
   } finally {
     rmSync(dist, { recursive: true, force: true });

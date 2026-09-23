@@ -109,6 +109,9 @@ Main-thread WebGPU canvases use the same bounded element-image path as Canvas
 source-local bitmap before presentation discards it, without recording commands,
 changing rendering options or executing website code in the viewer. Worker-owned
 OffscreenCanvas and protected or origin-tainted graphics remain unsupported.
+Attaching to an already-created WebGPU context identifies it on native texture
+acquisition and observes subsequent asynchronous submissions. A graphics buffer
+discarded before attachment requires the site's next native redraw.
 
 Normal-media acceptance compares visible flashes with audible pulses at the
 audio device timeline and requires at most 100 ms of skew. The source fixture

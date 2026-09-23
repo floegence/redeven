@@ -1597,7 +1597,7 @@ SOFTWARE.
 | @floegence/floe-webapp-boot | 0.75.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.75.0 |  |
 | @floegence/floe-webapp-core | 0.75.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.75.0 |  |
 | @floegence/floe-webapp-protocol | 0.75.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.75.0 |  |
-| @floegence/floebrowser | 0.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.10 |  |
+| @floegence/floebrowser | 0.1.11 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.11 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
 | @floegence/flowersec-core | 5.2.2 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.2.2 |  |
 | @floegence/flowersec-core | 5.4.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.4.1 |  |
@@ -4451,7 +4451,7 @@ Flower's headless Chromium browser is installed separately, only after user conf
 
 ## FloeBrowser Projection and Media Collector
 
-Redeven bundles the published `@floegence/floebrowser@0.1.10` SDK and its native element-media collector. The following original license texts cover its JavaScript runtime components and compiled Go dependencies, including Pion WebRTC, mediacommon, the Go runtime and platform-specific modules. They are reproduced from the SDK's verified `dist/THIRD_PARTY_LICENSES.txt`, which is also retained in the computer-helper resource bundle.
+Redeven bundles the published `@floegence/floebrowser@0.1.11` SDK and its native element-media collector. The following original license texts cover its JavaScript runtime components and compiled Go dependencies, including Pion WebRTC, mediacommon, the Go runtime and platform-specific modules. They are reproduced from the SDK's verified `dist/THIRD_PARTY_LICENSES.txt`, which is also retained in the computer-helper resource bundle.
 
 ````text
 # Third-party notices
