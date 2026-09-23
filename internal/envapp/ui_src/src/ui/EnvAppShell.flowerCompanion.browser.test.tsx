@@ -896,6 +896,7 @@ vi.mock('./utils/windowNavigation', () => ({ reopenEnvironmentPage: vi.fn(), rel
 vi.mock('./services/desktopShellCommandPalette', () => ({ buildDesktopShellCommandPaletteEntries: () => [] }));
 vi.mock('./services/desktopShellBridge', () => ({
   desktopShellBridgeAvailable: () => false,
+  prepareDesktopBrowserWindow: vi.fn(async () => false),
   getRuntimeMaintenanceContextFromDesktopShell: vi.fn(async () => null),
   notifyRuntimeMaintenanceStartedInDesktopShell: vi.fn(),
   openConnectionCenter: vi.fn(async () => false),
