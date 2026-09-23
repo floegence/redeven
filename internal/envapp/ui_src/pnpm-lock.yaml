@@ -42,8 +42,8 @@ importers:
         specifier: 0.75.0
         version: 0.75.0(solid-js@1.9.13)
       '@floegence/floebrowser':
-        specifier: https://github.com/floegence/floebrowser/releases/download/v0.1.6/floegence-floebrowser-0.1.6.tgz
-        version: https://github.com/floegence/floebrowser/releases/download/v0.1.6/floegence-floebrowser-0.1.6.tgz
+        specifier: https://github.com/floegence/floebrowser/releases/download/v0.1.8/floegence-floebrowser-0.1.8.tgz
+        version: https://github.com/floegence/floebrowser/releases/download/v0.1.8/floegence-floebrowser-0.1.8.tgz
       '@floegence/floeterm-terminal-web':
         specifier: 0.19.2
         version: 0.19.2
@@ -553,9 +553,9 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floebrowser@https://github.com/floegence/floebrowser/releases/download/v0.1.6/floegence-floebrowser-0.1.6.tgz':
-    resolution: {integrity: sha512-3Vfnk/uyGODL90kuyD6DjCNEl4/0lWFveK9Nr1rD7vxI3Y3JMizSfHWB87iTQQI7zIHxj8/smtCe7JiyktVevA==, tarball: https://github.com/floegence/floebrowser/releases/download/v0.1.6/floegence-floebrowser-0.1.6.tgz}
-    version: 0.1.6
+  '@floegence/floebrowser@https://github.com/floegence/floebrowser/releases/download/v0.1.8/floegence-floebrowser-0.1.8.tgz':
+    resolution: {integrity: sha512-DZzeF3NlH69Oj18H63Mvhw71HDaKMYqKO/Vyl9ldbwBr/+SDpB40PaW2IhtWKi3H1NcfQZRK3VMBbg40mZ6tGw==, tarball: https://github.com/floegence/floebrowser/releases/download/v0.1.8/floegence-floebrowser-0.1.8.tgz}
+    version: 0.1.8
     engines: {node: '>=26'}
     hasBin: true
 
@@ -3247,7 +3247,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floebrowser@https://github.com/floegence/floebrowser/releases/download/v0.1.6/floegence-floebrowser-0.1.6.tgz':
+  '@floegence/floebrowser@https://github.com/floegence/floebrowser/releases/download/v0.1.8/floegence-floebrowser-0.1.8.tgz':
     dependencies:
       '@rrweb/record': 2.1.6
       '@rrweb/replay': 2.1.6
