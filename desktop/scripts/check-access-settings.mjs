@@ -15,127 +15,148 @@ const browser = await chromium.launch({ headless: true });
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
   pid: process.pid, url: server.resolvedUrls.local[0], output, cases: [], errors: [], status: 'running' };
 try {
+  const { createDesktopI18n } = await server.ssrLoadModule(fileURLToPath(new URL('../src/shared/i18n/index.ts', import.meta.url)));
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on('pageerror', error => report.errors.push(error.message));
   const dialog = page.getByRole('dialog');
+  let t = createDesktopI18n('en-US').t;
+  const button = key => dialog.getByRole('button', { name: t(key), exact: true });
+  const body = () => dialog.locator('.environment-settings-scroll:visible');
+  const footer = () => dialog.locator('.environment-settings-actions:visible');
   async function open(locale = 'en-US', preset = 'classic-light', target = 'Local Environment', suffix = '') {
+    t = createDesktopI18n(locale).t;
     await page.goto(`${report.url}environment-endpoints.html?locale=${locale}&preset=${preset}${suffix}`);
     await page.locator(`[data-environment="${target}"] > button`).click();
-    await page.locator('#local-ui-port').waitFor();
+    await button('accessFlow.changeAccess').waitFor();
     await page.evaluate(() => document.fonts.ready);
     await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-floe-dialog-panel]')).opacity === '1');
   }
-  async function capture(name) { await page.screenshot({ path: `${output}/${name}.png`, animations: 'disabled' }); }
-  async function geometry() {
-    return dialog.evaluate(panel => {
-      const body = panel.querySelector('.environment-settings-scroll');
-      const port = panel.querySelector('#local-ui-port').getBoundingClientRect();
-      const password = panel.querySelector('#local-ui-password').getBoundingClientRect();
-      const bounds = panel.getBoundingClientRect();
-      return { width: bounds.width, right: bounds.right, left: bounds.left, bottom: bounds.bottom,
-        overflow: body.scrollWidth > body.clientWidth || panel.scrollWidth > panel.clientWidth, scroll: body.scrollHeight - body.clientHeight,
-        portWidth: port.width, passwordWidth: password.width, portRight: port.right, passwordRight: password.right };
-    });
+  const capture = name => page.screenshot({ path: `${output}/${name}.png`, animations: 'disabled' });
+  async function layout(name) {
+    const bounds = await dialog.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= page.viewportSize().width + 1 && bounds.y + bounds.height <= page.viewportSize().height + 1, `${name}: clipped dialog`);
+    assert.equal(await dialog.evaluate(panel => panel.scrollWidth > panel.clientWidth), false, `${name}: dialog overflow`);
+    assert.equal(await body().evaluate(el => el.scrollWidth > el.clientWidth), false, `${name}: content overflow`);
+    assert.equal(await dialog.evaluate(panel => panel.scrollHeight > panel.clientHeight), false, `${name}: only the body scrolls`);
+    const before = await footer().boundingBox();
+    await body().evaluate(el => { el.scrollTop = el.scrollHeight; });
+    assert.equal((await footer().boundingBox()).y, before.y, `${name}: footer moves while reading`);
+    await body().evaluate(el => { el.scrollTop = 0; });
   }
-  await open('zh-CN');
-  await capture('local-zh-CN');
-  const initial = await geometry();
-  report.initial = initial;
-  assert.ok(initial.portWidth <= 128, 'port is a compact numeric field, not a full-width text field');
-  assert.ok(initial.passwordWidth <= 320, 'password has a comfortable reading width');
-  assert.ok(Math.abs(initial.portRight - initial.passwordRight) < 1, 'controls share one trailing alignment');
-  // Settings use a fixed viewport, including Local; the body may scroll as security sections grow.
-  const initialFooter = await page.locator('.environment-settings-actions').boundingBox();
-  assert.equal(await dialog.evaluate(panel => panel.scrollHeight > panel.clientHeight), false, 'only the settings body may scroll');
-  assert.ok(initial.bottom <= 900 && initial.left >= 0 && initial.right <= 1280, 'the complete settings window fits the viewport');
-  await page.locator('.environment-settings-scroll').evaluate(body => { body.scrollTop = body.scrollHeight; });
-  assert.equal((await page.locator('.environment-settings-actions').boundingBox()).y, initialFooter.y, 'save actions remain visible while reading the complete body');
-  assert.equal(await page.locator('.environment-settings-scroll').evaluate(body => body.scrollHeight - body.clientHeight - body.scrollTop <= 1), true, 'all access settings remain reachable');
-  report.cases.push('local-control-proportions-and-alignment');
+  async function editAccess() {
+    await button('accessFlow.changeAccess').click();
+    await dialog.locator('.environment-access-advanced summary').click();
+  }
+  async function assertA11y() {
+    const require = createRequire(new URL('../../internal/envapp/ui_src/package.json', import.meta.url));
+    await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+    const violations = await page.evaluate(async () => (await window.axe.run('.redeven-environment-settings-dialog', {
+      runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'],
+    })).violations.map(({ id, nodes }) => ({ id, targets: nodes.map(node => node.target) })));
+    assert.deepEqual(violations, []);
+  }
+  await open('zh-CN'); await layout('overview'); await capture('overview-zh-CN');
+  assert.equal(await page.locator('#local-ui-port').count(), 0, 'opening shows tasks, not unrelated fields');
+  await editAccess(); await layout('access'); await capture('access-zh-CN');
+  assert.ok((await page.locator('#local-ui-port').boundingBox()).width <= 128, 'port remains compact');
+  report.cases.push('task-overview-and-fixed-footer');
 
   const locales = ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'];
-  for (const preset of (process.argv.includes('--interactions-only') ? [] : builtInShellThemePresets)) {
-    for (const locale of locales) {
-      await open(locale, preset.name);
-      const layout = await geometry();
-      assert.equal(layout.overflow, false, `${preset.name}/${locale}: horizontal overflow`);
-      assert.ok(layout.bottom <= 900 && layout.left >= 0 && layout.right <= 1280, `${preset.name}/${locale}: clipped dialog`);
-      if (['classic-light', 'ocean'].includes(preset.name) && ['zh-CN', 'en-US'].includes(locale)) await capture(`local-${preset.name}-${locale}`);
-    }
+  const presets = process.argv.includes('--interactions-only') ? builtInShellThemePresets.filter(p => ['classic-light', 'ocean'].includes(p.name)) : builtInShellThemePresets;
+  for (const preset of presets) for (const locale of locales) {
+    await open(locale, preset.name); await layout(`${preset.name}/${locale}/overview`);
+    await button('accessFlow.changeAccess').click(); await layout(`${preset.name}/${locale}/access`);
+    if (['zh-CN', 'en-US'].includes(locale) && ['classic-light', 'ocean'].includes(preset.name)) await capture(`access-${preset.name}-${locale}`);
   }
-  if (!process.argv.includes('--interactions-only')) report.cases.push(`${builtInShellThemePresets.length}-themes-by-${locales.length}-locales`);
-  await open();
-  const focusStyles = await page.locator('#local-ui-port').evaluate(async input => {
+  report.cases.push(`${presets.length}-themes-by-${locales.length}-locales`);
+  await open(); await editAccess();
+  await page.locator('#local-ui-port').click();
+  const focus = await page.locator('#local-ui-port').evaluate(async input => {
     input.blur();
-    const read = () => {
-      const style = getComputedStyle(input), bounds = input.getBoundingClientRect();
-      return { width: bounds.width, height: bounds.height, padding: style.padding,
-        border: style.borderWidth, background: style.backgroundColor, shadow: style.boxShadow, outline: style.outlineStyle, color: style.borderColor };
-    };
-    const before = read(); input.focus();
-    await Promise.all(input.getAnimations().map(animation => animation.finished.catch(() => {})));
-    return { before, after: read() };
+    const read = () => { const s = getComputedStyle(input), b = input.getBoundingClientRect(); return { width: b.width, height: b.height, padding: s.padding, border: s.borderWidth, background: s.backgroundColor, shadow: s.boxShadow, outline: s.outlineStyle, color: s.borderColor }; };
+    await Promise.all(input.getAnimations().map(a => a.finished.catch(() => {})));
+    const before = read(); input.focus(); await Promise.all(input.getAnimations().map(a => a.finished.catch(() => {}))); return { before, after: read(), focused: document.activeElement === input };
   });
-  for (const key of ['width', 'height', 'padding', 'border', 'background', 'shadow']) assert.equal(focusStyles.before[key], focusStyles.after[key], `focus changes ${key}`);
-  assert.equal(focusStyles.after.outline, 'none');
-  assert.notEqual(focusStyles.before.color, focusStyles.after.color);
-  report.cases.push('published-input-focus-boundary');
-  await page.locator('#local-ui-port').fill('25000');
-  assert.ok((await dialog.innerText()).includes('http://localhost:23998/'), 'editing never changes the running address');
-  await dialog.getByRole('button', { name: 'Save for next restart', exact: true }).click();
-  assert.equal(await page.locator('#local-ui-port').inputValue(), '25000');
-  assert.ok((await dialog.innerText()).includes('Changes not yet applied'));
-  await capture('local-pending');
-  await dialog.getByRole('button', { name: 'Save and restart', exact: true }).click();
-  assert.equal(await dialog.getByText('Changes not yet applied', { exact: true }).count(), 0);
-  await dialog.getByRole('radio', { name: 'HTTPS · Recommended', exact: true }).click();
-  await dialog.getByText('Ready', { exact: true }).waitFor();
-  await capture('local-https');
-  const require = createRequire(new URL('../../internal/envapp/ui_src/package.json', import.meta.url));
-  await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
-  const violations = await page.evaluate(async () => (await window.axe.run('.redeven-environment-settings-dialog', {
-    runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'],
-  })).violations.map(({ id, nodes }) => ({ id, targets: nodes.map(node => node.target) })));
-  assert.deepEqual(violations, []);
-  report.cases.push('save-timings-https-and-accessibility');
+  for (const key of ['width', 'height', 'padding', 'border', 'background', 'shadow']) assert.equal(focus.before[key], focus.after[key]);
+  assert.equal(focus.focused, true);
+  assert.equal(focus.after.outline, 'none'); assert.notEqual(focus.before.color, focus.after.color);
+  await page.locator('#local-ui-port').fill('99999'); await button('accessFlow.checkChanges').click();
+  assert.equal(await page.locator('#local-ui-port').evaluate(el => el === document.activeElement), true);
+  await page.locator('#local-ui-port').fill('25000'); await button('accessFlow.checkChanges').click();
+  await button('settings.saveForNextRestart').click(); await button('accessFlow.changeAccess').waitFor();
+  assert.ok((await dialog.innerText()).includes('http://localhost:23998/'), 'saved draft does not replace the current connection');
+  await dialog.getByText(t('settings.pendingChanges'), { exact: true }).waitFor();
+  await capture('saved-for-later'); await button('accessFlow.checkChanges').click(); await button('settings.saveAndRestart').click();
+  assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_bind), 'localhost:25000');
+  report.cases.push('input-focus-validation-and-save-timings');
 
-  await open('en-US', 'ocean', 'gzcom');
-  assert.equal(await dialog.getByRole('button', { name: 'Copy Environment URL' }).count(), 0);
-  await capture('remote-ocean');
-  await open('en-US', 'classic-light', 'Local Environment', '&save-error=1');
-  await page.locator('#local-ui-port').fill('25100');
-  await dialog.getByRole('button', { name: 'Save for next restart', exact: true }).click();
-  await dialog.getByRole('alert').waitFor();
-  assert.equal(await page.locator('#local-ui-port').inputValue(), '25100');
-  await capture('local-save-error');
-  await dialog.getByRole('button', { name: 'Discard changes', exact: true }).click();
-  assert.equal(await page.locator('#local-ui-port').inputValue(), '23998');
-  report.cases.push('remote-loopback-and-save-failure-draft');
+  await open(); await button('accessFlow.changeAccess').click(); await button('settings.sharedLocalNetworkLabel').click(); await button('accessFlow.checkChanges').click();
+  await page.locator('#local-ui-password').fill('test-only-password'); await page.locator('#access-password-confirm').fill('mismatch'); await button('security.continue').click();
+  await footer().getByRole('alert').waitFor(); assert.equal(await page.locator('#access-password-confirm').evaluate(el => el === document.activeElement), true);
+  await page.locator('#access-password-confirm').fill('test-only-password'); await button('security.continue').click();
+  assert.ok(!(await dialog.locator('.access-flow-review').innerText()).includes('test-only-password'));
+  await capture('network-review'); await assertA11y(); await button('settings.saveForNextRestart').click();
+  assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_password), '');
+  report.cases.push('network-password-confirmation-and-secret-free-review');
+
+  await open('en-US', 'classic-light', 'Local Environment', '&secure=enabled');
+  await button('accessFlow.changeAccess').click(); await dialog.getByRole('radio', { name: 'HTTP', exact: true }).click(); await button('accessFlow.verifyContinue').click();
+  await capture('protected-change-plan'); await button('accessFlow.verifyContinue').click();
+  assert.equal(await dialog.count(), 1, 'owner verification is part of the same dialog');
+  await dialog.getByLabel(t('security.password'), { exact: true }).fill('wrong'); await dialog.getByLabel(t('security.code'), { exact: true }).fill('123456'); await button('security.continue').click();
+  await footer().getByRole('alert').waitFor(); await capture('verification-error-near-action');
+  await dialog.getByLabel(t('security.password'), { exact: true }).fill('test-only-owner'); await button('security.continue').click();
+  await button('security.disable').click(); await dialog.locator('.access-flow-review').waitFor();
+  assert.equal(await page.evaluate(() => window.accessFixture.security.enabled), false);
+  assert.equal(await page.evaluate(() => window.accessFixture.requests.filter(r => r.action === 'commit').length), 1);
+  await button('common.cancel').click(); await dialog.getByText(t('accessFlow.securityDisabled'), { exact: true }).waitFor();
+  report.cases.push('protected-http-explicit-identity-commit-and-cancel');
+
+  await open('en-US', 'ocean', 'Local Environment', '&secure=ready');
+  await button('accessFlow.manageProtection').click(); await button('security.setup').click();
+  await capture('authenticator-ocean');
+  await dialog.locator('#two-factor-verify input').fill('123456'); await button('security.continue').click();
+  await dialog.getByText(t('security.recoveryTitle'), { exact: true }).waitFor();
+  assert.equal(await button('security.enable').isEnabled(), false);
+  await capture('recovery-codes-ocean'); await dialog.getByText(t('security.saved'), { exact: true }).click();
+  assert.equal(await dialog.getByRole('checkbox', { name: t('security.saved'), exact: true }).isChecked(), true); await button('security.enable').click();
+  assert.equal(await page.evaluate(() => window.accessFixture.security.enabled), true);
+  report.cases.push('inline-enrollment-and-explicit-recovery-confirmation');
+
+  await open('en-US', 'classic-light', 'Local Environment', '&missing-certificate=1');
+  await button('accessFlow.manageProtection').click(); await button('security.configureHTTPS').click();
+  const blocked = dialog.locator('[data-redeven-tooltip-anchor]').filter({ has: page.getByRole('button', { name: t('settings.saveAndRestart'), exact: true }) });
+  await blocked.focus(); await page.getByRole('tooltip').waitFor();
+  await button('settings.generateCertificate').click();
+  assert.equal(await page.evaluate(() => window.accessFixture.requests.filter(r => r.operation === 'install').length), 0, 'creation never installs trust');
+  await button('settings.trustCertificate').click(); await dialog.getByText(t('settings.certificateTrusted'), { exact: true }).waitFor();
+  await button('accessFlow.exportCertificate').click(); await dialog.getByText(t('accessFlow.certificateExported'), { exact: true }).waitFor();
+  await capture('https-prepared'); await assertA11y();
+  report.cases.push('https-prerequisite-tooltip-create-trust-export');
+
+  await open('en-US', 'classic-light', 'Local Environment', '&missing-certificate=1&certificate-error=1');
+  await button('accessFlow.manageProtection').click(); await button('security.configureHTTPS').click(); await button('settings.generateCertificate').click();
+  await dialog.getByRole('alert').waitFor(); assert.equal(await button('settings.saveAndRestart').isEnabled(), false);
+  await capture('certificate-failure'); report.cases.push('certificate-failure-blocks-restart');
+  await open('en-US', 'classic-light', 'Local Environment', '&save-error=1'); await editAccess(); await page.locator('#local-ui-port').fill('25100'); await button('accessFlow.checkChanges').click(); await button('settings.saveForNextRestart').click();
+  await footer().getByRole('alert').waitFor(); assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_bind), 'localhost:25100');
+  await capture('save-error-near-action'); await button('common.cancel').click(); await button('settings.discardChanges').click();
+  assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_bind), 'localhost:23998');
+  report.cases.push('save-failure-retains-draft-and-local-error');
 
   for (const locale of ['en-US', 'zh-CN', 'de-DE']) {
-    await page.setViewportSize({ width: 390, height: 700 });
-    await open(locale);
-    assert.equal((await geometry()).overflow, false);
-    await page.locator('summary').click();
-    const footerBefore = await page.locator('.environment-settings-actions').boundingBox();
-    const body = page.locator('.environment-settings-scroll');
-    await body.hover();
-    await page.mouse.wheel(0, 700);
-    await page.waitForFunction(() => document.querySelector('.environment-settings-scroll').scrollTop > 0);
-    assert.equal((await page.locator('.environment-settings-actions').boundingBox()).y, footerBefore.y, 'actions stay fixed while the body scrolls');
-    await capture(`narrow-${locale}`);
+    await page.setViewportSize({ width: 390, height: 700 }); await open(locale, locale === 'de-DE' ? 'ocean' : 'classic-light');
+    await layout(`narrow-${locale}-overview`); await capture(`narrow-${locale}-overview`); await editAccess(); await layout(`narrow-${locale}-access`);
+    const before = await footer().boundingBox(); await body().hover(); await page.mouse.wheel(0, 700);
+    await page.waitForFunction(() => [...document.querySelectorAll('.environment-settings-scroll')].some(el => el.scrollTop > 0));
+    assert.equal((await footer().boundingBox()).y, before.y); await capture(`narrow-${locale}-access`);
     await page.addStyleTag({ content: '.redeven-environment-settings-dialog :is(input, button, label, p, span, summary) { font-size: 24px !important; }' });
-    assert.equal((await geometry()).overflow, false, `${locale}: enlarged text overflows`);
-    assert.equal(await page.locator('.environment-settings-actions').evaluate(footer => [...footer.querySelectorAll('button')].every(button => button.scrollHeight <= button.clientHeight + 1)), true, `${locale}: action text must fit inside its button`);
-    await page.locator('.environment-settings-actions button').last().scrollIntoViewIfNeeded();
+    await layout(`large-text-${locale}`);
+    assert.equal(await footer().evaluate(el => [...el.querySelectorAll('button')].every(b => b.scrollHeight <= b.clientHeight + 1)), true);
     await capture(`large-text-${locale}`);
   }
-  report.cases.push('narrow-enlarged-text-and-real-scroll');
-  assert.deepEqual(report.errors, []);
-  report.status = 'passed';
+  report.cases.push('narrow-dark-localized-large-text-and-real-scroll');
+  assert.deepEqual(report.errors, []); report.status = 'passed';
   console.log(`Access settings passed: ${report.cases.length} scenarios. Evidence: ${output}`);
 } catch (error) { report.status = 'failed'; report.failure = String(error.stack || error); throw error; }
-finally {
-  await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2));
-  await browser.close(); await server.close();
-}
+finally { await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2)); await browser.close(); await server.close(); }

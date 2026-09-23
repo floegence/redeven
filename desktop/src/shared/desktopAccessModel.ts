@@ -14,6 +14,7 @@ import {
   DEFAULT_DESKTOP_LOCAL_UI_BIND,
   parseLocalUIBind,
 } from './localUIBind';
+import type { SecurityResult } from './runtimeSecurity';
 
 export const DEFAULT_DESKTOP_FIXED_PORT = 23998;
 export const DEFAULT_DESKTOP_FIXED_PORT_TEXT = String(DEFAULT_DESKTOP_FIXED_PORT);
@@ -67,14 +68,15 @@ export type DesktopAccessModelOptions = Readonly<{
   current_runtime_urls?: readonly string[];
   local_ui_password_configured?: boolean;
   runtime_password_required?: boolean;
+  security?: Pick<SecurityResult, 'enabled' | 'recovery_pending'>;
   mode_override?: DesktopAccessMode | null;
 }>;
 
 export type DesktopAccessDraftValidation = Readonly<{
   valid: boolean;
   address_error_key?: 'settings.portInvalid' | 'settings.bindAddressInvalid';
-  password_error_key?: 'settings.sharedPasswordRequired' | 'settings.passwordTooLong';
-  protocol_error_key?: 'settings.protocolRequired';
+  password_error_key?: 'settings.sharedPasswordRequired' | 'settings.passwordTooLong' | 'security.accessPasswordRequired';
+  protocol_error_key?: 'settings.protocolRequired' | 'security.accessHTTPSRequired';
 }>;
 
 function trimString(value: unknown): string {
@@ -325,7 +327,10 @@ export function validateDesktopAccessDraft(
       ? 'settings.bindAddressInvalid'
       : 'settings.portInvalid';
   }
-  const passwordErrorKey = new TextEncoder().encode(draft.local_ui_password).length > 72
+  const protectedAccess = options.security?.enabled || options.security?.recovery_pending;
+  const passwordErrorKey = protectedAccess && normalizeDesktopLocalUIPasswordMode(draft.local_ui_password_mode) !== 'keep'
+    ? 'security.accessPasswordRequired' as const
+    : new TextEncoder().encode(draft.local_ui_password).length > 72
     ? 'settings.passwordTooLong' as const
     : !addressErrorKey
     && model.password_required
@@ -338,6 +343,7 @@ export function validateDesktopAccessDraft(
   } catch {
     protocolErrorKey = 'settings.protocolRequired';
   }
+  if (protectedAccess && draft.local_ui_protocol !== 'https') protocolErrorKey = 'security.accessHTTPSRequired';
   return {
     valid: !addressErrorKey && !passwordErrorKey && !protocolErrorKey,
     ...(protocolErrorKey ? { protocol_error_key: protocolErrorKey } : {}),

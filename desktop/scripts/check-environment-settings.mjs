@@ -128,6 +128,8 @@ try {
   report.cases.push('late-response-cannot-replace-other-environment');
   await page.setViewportSize({ width: 480, height: 640 });
   await settleMotion();
+  await dialog.getByRole('button', { name: 'Change access', exact: true }).click();
+  await dialog.locator('.environment-access-advanced summary').click();
   await page.locator('#local-ui-port').fill('25000');
   const accessScroll = await page.locator('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-scroll').evaluate(body => {
     body.scrollTop = 140; return body.scrollTop;
@@ -186,7 +188,7 @@ try {
     assert.equal(await dialog.evaluate(panel => panel.scrollWidth > panel.clientWidth), false);
     await capture(`authorization-${locale}`);
     await dialog.getByRole('button', { name: locale === 'zh-CN' ? '重试' : 'Retry', exact: true }).click();
-    await page.locator('#local-ui-port').waitFor();
+    await dialog.getByRole('button', { name: locale === 'zh-CN' ? '修改访问方式' : 'Change access', exact: true }).waitFor();
     assert.equal(await dialog.count(), 1);
     assert.equal(await page.evaluate(() => window.settingsFixture.loads), 2);
     report.cases.push(`authorization-guidance-and-retry-${locale}`);

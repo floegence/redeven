@@ -1,11 +1,37 @@
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
+import { X509Certificate } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 import { desktopCertificateIdentity, isCertificateReplacement, parseDesktopCertificateReport, type DesktopCertificateOperation, type DesktopCertificateReport } from '../shared/desktopCertificate';
 
 export type CertificateCommand = Exclude<DesktopCertificateOperation, 'setup'>;
 export type CertificateRunner = (operation: CertificateCommand) => Promise<DesktopCertificateReport>;
+
+type CertificateCommandReport = DesktopCertificateReport & { public_certificate_pem?: string };
+export function parseCertificateCommandReport(value: unknown, operation: CertificateCommand): CertificateCommandReport {
+  const report = parseDesktopCertificateReport(value);
+  const pem = (value as Record<string, unknown>).public_certificate_pem;
+  return { ...report, ...(operation === 'export' && typeof pem === 'string' ? { public_certificate_pem: pem } : {}) };
+}
+
+// Only native dialogs select paths; the renderer never receives PEM or a file-write capability.
+export async function selectDesktopCertificateExport(
+  select: () => Promise<string | undefined>, run: () => Promise<CertificateCommandReport>,
+  write: (filePath: string, pem: string) => Promise<void> = (filePath, pem) => fs.writeFile(filePath, pem, { mode: 0o644 }),
+): Promise<DesktopCertificateReport> {
+  const filePath = await select();
+  if (!filePath) return { status: 'canceled', code: 'local_ui_certificate_selection_canceled' };
+  const { public_certificate_pem: pem, ...report } = await run();
+  if (report.status === 'failed') return report;
+  const blocks = pem?.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g);
+  if (!pem || pem.length > 1024 * 1024 || !blocks?.length || pem.replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g, '').trim()) {
+    throw new Error('The Runtime did not return a valid public certificate.');
+  }
+  for (const block of blocks) new X509Certificate(block);
+  await write(filePath, blocks.join('\n') + '\n');
+  return report;
+}
 
 export type CertificateImport = Readonly<{ certificate_pem: string; private_key_pem: string }>;
 
@@ -33,16 +59,16 @@ export async function selectDesktopCertificateImport(select: (kind: 'certificate
 
 export function certificateCommandArguments(operation: CertificateCommand, bind?: string): string[] {
   return ['device-ca', operation, ...(isCertificateReplacement(operation) ? ['--confirm'] : []),
-    ...(operation === 'status' && bind ? ['--bind', bind] : [])];
+    ...(operation === 'status' && bind ? ['--bind', bind] : []), ...(operation === 'export' ? ['--output', '-'] : [])];
 }
 
-export function runDesktopCertificateCommand(executable: string, stateRoot: string, operation: CertificateCommand, input?: CertificateImport, bind?: string): Promise<DesktopCertificateReport> {
+export function runDesktopCertificateCommand(executable: string, stateRoot: string, operation: CertificateCommand, input?: CertificateImport, bind?: string): Promise<CertificateCommandReport> {
   return new Promise((resolve, reject) => {
     const child = execFile(executable, ['local-authority', ...certificateCommandArguments(operation, bind), '--state-root', stateRoot], {
-      env: sanitizeDesktopChildEnvironment(process.env), timeout: 60_000, maxBuffer: 64 * 1024, windowsHide: true,
+      env: sanitizeDesktopChildEnvironment(process.env), timeout: 60_000, maxBuffer: 2 * 1024 * 1024, windowsHide: true,
     }, (error, stdout, stderr) => {
       try {
-        resolve(parseDesktopCertificateReport(JSON.parse(String(error ? stderr : stdout).trim())));
+        resolve(parseCertificateCommandReport(JSON.parse(String(error ? stderr : stdout).trim()), operation));
       } catch (parseError) {
         reject(error ?? parseError);
       }
@@ -66,6 +92,12 @@ export async function performDesktopCertificateOperation(
   });
   try {
     current = await run('status');
+    if (operation === 'export') {
+      stage = 'export';
+      if (current.can_export !== true) return failed({ status: 'failed', code: 'local_ui_certificate_upgrade_required' });
+      const exported = await run('export');
+      return exported.status === 'failed' ? failed(exported) : project({ ...current, status: exported.status, code: exported.code });
+    }
     if (isCertificateReplacement(operation)) {
       stage = operation;
       if (current.can_manage !== true) return failed({ status: 'failed', code: 'local_ui_certificate_upgrade_required' });

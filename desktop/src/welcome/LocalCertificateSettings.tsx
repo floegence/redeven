@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup } from 'solid-js';
-import { AlertCircle, Check, ChevronDown, Copy, FileText, Info, Lock, Refresh, ShieldCheck, Trash, Upload } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, Check, ChevronDown, Copy, Download, FileText, Info, Lock, Refresh, ShieldCheck, Trash, Upload } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { EnvironmentSettingsReveal } from './EnvironmentSettingsDialog';
 import { desktopCertificateIdentity, isCertificateReplacement, type DesktopCertificateOperation, type DesktopCertificateReport, type DesktopCertificateRequest } from '../shared/desktopCertificate';
@@ -11,9 +11,11 @@ export function LocalCertificateSettings(props: Readonly<{
   manage: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>;
   remote: boolean;
   onReadiness: (ready: boolean) => void;
+  onReport?: (report: DesktopCertificateReport | undefined) => void;
   copyText: (value: string, label: string) => Promise<void>;
 }>) {
   const [report, setReport] = createSignal<DesktopCertificateReport>();
+  createEffect(() => props.onReport?.(report()));
   const [operation, setOperation] = createSignal<DesktopCertificateOperation>();
   const [queryFailed, setQueryFailed] = createSignal(false);
   const [copying, setCopying] = createSignal(false);
@@ -102,7 +104,7 @@ export function LocalCertificateSettings(props: Readonly<{
   };
   const canInstall = () => !props.remote && report()?.can_install === true && report()?.certificate_kind !== 'server';
   const canceled = () => report()?.code === 'local_ui_device_ca_install_canceled';
-  const showFailure = () => !operation() && (queryFailed() || failed() && (isCertificateReplacement(report()?.failure_stage) || !invalid() && identity() !== 'missing'));
+  const showFailure = () => !operation() && (queryFailed() || failed() && (Boolean(report()?.failure_stage && !['status', 'verify'].includes(report()!.failure_stage!)) || !invalid() && identity() !== 'missing'));
   const actionKey = (action: 'import' | 'regenerate' | 'remove'): DesktopTranslationKey => action === 'import' ? 'settings.certificateImport' : action === 'regenerate' ? 'settings.certificateRegenerate' : 'settings.certificateRemove';
   const confirmationKey = (): DesktopTranslationKey => confirmation() === 'import' ? 'settings.certificateImportHelp' : confirmation() === 'regenerate' ? 'settings.certificateRegenerateHelp' : 'settings.certificateRemoveHelp';
   const validUntil = () => report()?.not_after
@@ -154,6 +156,7 @@ export function LocalCertificateSettings(props: Readonly<{
             </div>
             <Show when={identity() === 'ready' && validUntil()}><p class="mt-1 text-xs text-muted-foreground">{validUntil()}</p></Show>
           </div>
+          <Show when={report()?.can_export && identity() === 'ready'}><Button size="sm" variant="outline" disabled={Boolean(operation())} loading={operation() === 'export'} onClick={() => void perform('export')}><Download class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{props.i18n.t('accessFlow.exportCertificate')}</Button></Show>
           <Show when={report()?.can_manage}>
             <Button ref={manageButton} size="sm" variant="outline" class="h-auto min-h-8 whitespace-normal" disabled={Boolean(operation())}
               aria-expanded={managing()} aria-controls={managementID}
@@ -163,12 +166,13 @@ export function LocalCertificateSettings(props: Readonly<{
           </Show>
           <Show when={identity() === 'missing'}>
             <Button size="sm" class="h-auto min-h-8 whitespace-normal text-left" disabled={Boolean(operation())}
-              loading={operation() === 'setup' || operation() === 'generate'} onClick={() => void perform(canInstall() ? 'setup' : 'generate')}>
-              {props.i18n.t(canInstall() ? 'settings.certificateSetupAction' : 'settings.generateCertificate')}
+              loading={operation() === 'setup' || operation() === 'generate'} onClick={() => void perform('generate')}>
+              {props.i18n.t('settings.generateCertificate')}
             </Button>
           </Show>
         </div>
 
+        <Show when={report()?.status === 'exported'}><p class="text-xs text-muted-foreground" role="status">{props.i18n.t('accessFlow.certificateExported')}</p></Show>
         <EnvironmentSettingsReveal open={managing()}>
           <div id={managementID} class="space-y-3 rounded-md bg-background/70 p-3" onKeyDown={(event) => {
             if (event.key === 'Escape' && !operation()) { event.preventDefault(); event.stopPropagation(); cancelConfirmation(); setManaging(false); }
@@ -229,7 +233,7 @@ export function LocalCertificateSettings(props: Readonly<{
         </Show>
 
         <Show when={operation() && operation() !== 'status'}>
-          <p role="status" class="text-xs text-muted-foreground">{props.i18n.t(operation() === 'install' ? 'settings.certificateTrustBusy' : 'settings.certificateSetupBusy')}</p>
+          <p role="status" class="text-xs text-muted-foreground">{props.i18n.t(operation() === 'export' ? 'accessFlow.exportCertificate' : operation() === 'install' ? 'settings.certificateTrustBusy' : 'settings.certificateSetupBusy')}</p>
         </Show>
         <Show when={invalid() && !operation()}>
           <p role="alert" class="text-xs leading-relaxed text-destructive">{props.i18n.t('settings.certificateInvalidHelp')}</p>

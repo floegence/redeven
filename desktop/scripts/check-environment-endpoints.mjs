@@ -121,8 +121,13 @@ try {
       assert.equal(await summary.evaluate(el => el === document.activeElement), true);
       assert.equal(await dialog.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').isVisible(), true);
       await stableScreenshot(`${output}/settings-listener-details.png`);
+      await dialog.getByRole('button', { name: '修改访问方式', exact: true }).click();
+      await dialog.locator('.environment-access-advanced summary').click();
       await dialog.locator('#local-ui-port').fill('25000');
-      await dialog.getByText('网络可达设备', { exact: true }).click();
+      await dialog.getByRole('button', { name: '网络可达设备', exact: true }).click();
+      await dialog.getByRole('button', { name: '返回概览', exact: true }).click();
+      if (!await dialog.locator('.redeven-endpoint-listener').evaluate(el => el.open)) await dialog.locator('.redeven-endpoint-listener summary').click();
+      await dialog.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').waitFor();
       assert.equal(await dialog.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').innerText(), 'http://localhost:23998/');
       assert.equal(await dialog.locator('.redeven-endpoint-listener').evaluate(el => el.open), true);
       assert.equal(await dialog.getByRole('button', { name: '在浏览器中打开' }).count(), 0);
@@ -319,7 +324,11 @@ try {
     await settingsGroup.getByRole('searchbox', { name: '筛选地址' }).fill('2001:db8');
     await settingsViewport.getByLabel('在浏览器中打开').click();
     assert.equal(await page.locator('[data-copy-result]').innerText(), ipv6);
+    await dialog.getByRole('button', { name: '修改访问方式', exact: true }).click();
+    await dialog.locator('.environment-access-advanced summary').click();
     await dialog.locator('#local-ui-port').fill('25000');
+    await dialog.getByRole('button', { name: '返回概览', exact: true }).click();
+    await settingsGroup.getByRole('searchbox', { name: '筛选地址' }).fill('2001:db8');
     assert.equal(await settingsViewport.locator('.redeven-card-endpoint-value').innerText(), ipv6);
     const after = await dialog.boundingBox();
     assert.ok(Math.abs(after.height - bounds.height) < 0.5, 'filtering never resizes settings');

@@ -34,6 +34,8 @@ type localAuthorityReport struct {
 	OutputPath            string `json:"output_path,omitempty"`
 	CertificateKind       string `json:"certificate_kind,omitempty"`
 	Fingerprint           string `json:"fingerprint,omitempty"`
+	PublicCertificatePEM  string `json:"public_certificate_pem,omitempty"`
+	CertificateExport     bool   `json:"certificate_export,omitempty"`
 	CertificateManagement bool   `json:"certificate_management,omitempty"`
 }
 
@@ -139,7 +141,7 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 	}
 	fs := newCLIFlagSet("local-authority device-ca " + operation)
 	stateRoot := fs.String("state-root", "", "Exact Redeven state root")
-	outputPath := fs.String("output", "", "New public CA certificate export path")
+	outputPath := fs.String("output", "", "New public certificate export path; - returns public PEM in the JSON report")
 	scope := fs.String("scope", "user", "Trust scope; only user is supported")
 	bind := fs.String("bind", "", "Verify certificate coverage for the next HTTPS bind")
 	confirm := fs.Bool("confirm", false, "Confirm certificate replacement or removal")
@@ -256,6 +258,15 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-export", Status: "failed", Code: "output_required", Message: "--output is required"})
 			return 2
 		}
+		if strings.TrimSpace(*outputPath) == "-" {
+			body, err := localui.LocalUIPublicCertificatePEM(layout.StateDir)
+			if err != nil {
+				writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-export", Status: "failed", Code: deviceCAErrorCode(err), Message: "Public certificate export did not complete."})
+				return 1
+			}
+			writeLocalAuthorityReport(c.stdout, localAuthorityReport{Operation: "device-ca-export", Status: "exported", Code: "local_ui_device_ca_exported", PublicCertificatePEM: string(body)})
+			return 0
+		}
 		if err := localui.ExportLocalUIDeviceCA(layout.StateDir, *outputPath); err != nil {
 			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-export", Status: "failed", Code: deviceCAErrorCode(err), Message: "Public CA certificate export did not complete."})
 			return 1
@@ -306,6 +317,7 @@ func deviceCAReport(operation string, status localui.DeviceCAStatus) localAuthor
 		CertificateKind:       status.Kind,
 		Fingerprint:           status.Fingerprint,
 		CertificateManagement: true,
+		CertificateExport:     true,
 	}
 }
 

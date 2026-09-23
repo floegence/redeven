@@ -60,6 +60,8 @@ export function createEnvironmentSettingsController<C>(io: {
       access_state: 'ready', access_error: null,
       access: previous?.dirty ? {
         ...previous, baseline_surface: { ...previous.baseline_surface,
+          local_ui_password_configured: result.snapshot.local_ui_password_configured,
+          runtime_password_required: result.snapshot.runtime_password_required,
           runtime_configuration_pending: result.snapshot.runtime_configuration_pending,
           runtime_started_at_unix_ms: result.snapshot.runtime_started_at_unix_ms },
       } : accessDraft(result.snapshot),

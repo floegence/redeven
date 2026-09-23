@@ -41,15 +41,16 @@ describe('HTTPS certificate configuration', () => {
   it('shows neutral untrusted status after creation and allows the next action', async () => {
     const manage = vi.fn(async ({ operation }: DesktopCertificateRequest) => operation === 'status' ? missing : ready);
     mount(manage); await settle();
-    button('Create and trust on this device').click(); await settle();
-    expect(manage).toHaveBeenCalledWith({ environment_id: 'local', operation: 'setup' });
+    button('Create certificate').click(); await settle();
+    expect(manage).toHaveBeenCalledWith({ environment_id: 'local', operation: 'generate' });
     expect(document.querySelector('[role="alert"]')).toBeNull();
     expect(button('Trust on this device').disabled).toBe(false);
   });
   it('retains the certificate and a usable retry when system authorization is canceled', async () => {
-    const manage = vi.fn(async ({ operation }: DesktopCertificateRequest) => operation === 'status' ? missing
+    const manage = vi.fn(async ({ operation }: DesktopCertificateRequest) => operation === 'status' ? missing : operation === 'generate' ? ready
       : { ...ready, status: 'failed', code: 'local_ui_device_ca_install_canceled', failure_stage: 'install' as const });
-    const test = mount(manage); await settle(); button('Create and trust on this device').click(); await settle();
+    const test = mount(manage); await settle(); button('Create certificate').click(); await settle();
+    button('Trust on this device').click(); await settle();
     expect(document.body.textContent).toContain('authorization was canceled');
     expect(document.body.textContent).not.toContain('Invalid certificate');
     expect(button('Trust on this device').disabled).toBe(false);
@@ -62,7 +63,7 @@ describe('HTTPS certificate configuration', () => {
     const manage = vi.fn(({ operation }: DesktopCertificateRequest) => operation === 'status' ? Promise.resolve(missing)
       : new Promise<DesktopCertificateReport>((resolve) => { finish = resolve; }));
     const test = mount(manage); await settle();
-    const setup = button('Create and trust on this device'); setup.click(); setup.click();
+    const setup = button('Create certificate'); setup.click(); setup.click();
     expect(setup.disabled).toBe(true);
     expect(test.onReadiness).toHaveBeenLastCalledWith(false);
     expect(manage).toHaveBeenCalledTimes(2);
@@ -208,4 +209,12 @@ describe('explicit certificate management', () => {
     mount(manage); await settle(); button('Manage certificate').click();button('Import certificate…').click();button('Choose PEM files…').click();await settle();
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('could not complete');
   });
+});
+
+it('shows a failed creation beside its action even while the identity is missing', async () => {
+  const test = mount(async request => request.operation === 'status' ? missing : { ...missing, code: 'local_ui_device_ca_permission_denied', failure_stage: 'generate' });
+  await settle(); button('Create certificate').click(); await settle();
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('access was denied');
+  expect(test.onReadiness).toHaveBeenLastCalledWith(false);
+  expect(button('Create certificate').disabled).toBe(false);
 });
