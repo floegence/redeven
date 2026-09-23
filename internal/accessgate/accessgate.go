@@ -17,7 +17,6 @@ import (
 const (
 	DefaultResumeTTL       = 12 * time.Hour
 	DefaultLocalSessionTTL = 12 * time.Hour
-	LocalSessionCookieName = "redeven_local_access"
 )
 
 type Options struct {

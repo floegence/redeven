@@ -41,7 +41,7 @@ it('keeps access gates opaque, readable and keyboard-operable across locales and
                   retryActive={false}
                   retryDuration=""
                   password={password()}
-                  error=""
+                  feedback={null}
                   languageMenu={null}
                   inputRef={() => undefined}
                   onPasswordInput={setPassword}
@@ -147,7 +147,7 @@ it('keeps the authenticator step simple at 320px and preserves pasted leading ze
           retryActive={false}
           retryDuration=""
           password={value()}
-          error=""
+          feedback={null}
           languageMenu={null}
           inputRef={() => undefined}
           onPasswordInput={setValue}

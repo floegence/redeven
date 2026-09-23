@@ -119,4 +119,36 @@ it("uses the local challenge cookie without reading or storing remote grants", a
   expect(fetcher.mock.calls[0][0]).toBe("/api/local/access/unlock");
   expect(fetcher.mock.calls[0][1].credentials).toBe("same-origin");
   expect(navigate).not.toHaveBeenCalled();
+  expect(host.querySelector("input")?.getAttribute("aria-invalid")).toBe("false");
+});
+
+
+it.each([
+  { code: "ACCESS_PASSWORD_INVALID", factor: false, invalid: true },
+  { code: "ACCESS_FACTOR_INVALID", factor: true, invalid: true },
+  { code: "ACCESS_PASSWORD_RETRY_LATER", factor: false, invalid: false },
+  { code: "", factor: false, invalid: false },
+])("distinguishes resource input validation from service failure: $code", async ({ code, factor, invalid }) => {
+  const fetcher = vi.fn();
+  if (factor) fetcher.mockResolvedValueOnce(response({ second_factor_required: true, challenge_id: "challenge" }));
+  if (code) {
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({
+      ok: false, error: { code, retry_after_ms: code === "ACCESS_PASSWORD_RETRY_LATER" ? 30_000 : 0 },
+    }), { status: code === "ACCESS_PASSWORD_RETRY_LATER" ? 429 : 401 }));
+  } else {
+    fetcher.mockRejectedValueOnce(new Error("Connection interrupted"));
+  }
+  vi.stubGlobal("fetch", fetcher);
+  const { host, navigate } = mount(true);
+  await expect.poll(() => host.querySelector("input")).toBeTruthy();
+  await page.elementLocator(host.querySelector("input")!).fill("environment password");
+  await userEvent.keyboard("{Enter}");
+  if (factor) {
+    await expect.poll(() => host.querySelector("input")?.autocomplete).toBe("one-time-code");
+    await page.elementLocator(host.querySelector("input")!).fill("012345");
+    await userEvent.keyboard("{Enter}");
+  }
+  await expect.poll(() => host.querySelector('[role="alert"]')?.textContent).toBeTruthy();
+  expect(host.querySelector("input")?.getAttribute("aria-invalid")).toBe(String(invalid));
+  expect(navigate).not.toHaveBeenCalled();
 });

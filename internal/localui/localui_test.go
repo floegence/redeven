@@ -262,7 +262,7 @@ func newTestServerWithAppServer(t *testing.T, gate *accessgate.Gate, appSrv *app
 		pending:            make(map[string]pendingDirect),
 		deviceCA:           testDeviceCA,
 		protocol:           "https",
-		publicAuthorities: map[string]struct{}{"localhost:23998": {}, "127.0.0.1:23998": {}, "[::1]:23998": {}},
+		publicAuthorities:  map[string]struct{}{"localhost:23998": {}, "127.0.0.1:23998": {}, "[::1]:23998": {}},
 	}
 }
 
@@ -700,7 +700,7 @@ func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 
 	connectReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
 	connectReq.TLS = &tls.ConnectionState{}
-	connectReq.AddCookie(cookies[0])
+	connectReq.AddCookie(resumedCookies[0])
 	connectRes := httptest.NewRecorder()
 	s.handleConnectArtifact(connectRes, connectReq)
 	if connectRes.Result().StatusCode != http.StatusOK {
@@ -905,8 +905,8 @@ func TestServer_handleCodeSpace_bootstrapsLocalAccessCookieFromResumeToken(t *te
 	if len(cookies) == 0 {
 		t.Fatalf("expected bootstrap cookie")
 	}
-	if cookies[0].Name != accessgate.LocalSessionCookieName {
-		t.Fatalf("cookie name = %q, want %q", cookies[0].Name, accessgate.LocalSessionCookieName)
+	if cookies[0].Name != "redeven_local_access_http_23998" {
+		t.Fatalf("cookie name = %q, want %q", cookies[0].Name, "redeven_local_access_http_23998")
 	}
 }
 
@@ -1020,13 +1020,13 @@ func TestServer_DiagnosticsConnectInfoReusesTraceID(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	diagStore := newDiagnosticsStoreForConfig(t, cfgPath)
 	s := &Server{
-		protocol:           "https",
-		log:                slog.New(slog.NewTextHandler(io.Discard, nil)),
-		configPath:         cfgPath,
-		version:            "dev",
-		appServer:          newTestAppServer(t, cfgPath),
-		diag:               diagStore,
-		pending:            make(map[string]pendingDirect),
+		protocol:          "https",
+		log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+		configPath:        cfgPath,
+		version:           "dev",
+		appServer:         newTestAppServer(t, cfgPath),
+		diag:              diagStore,
+		pending:           make(map[string]pendingDirect),
 		publicAuthorities: map[string]struct{}{"localhost:23998": {}},
 	}
 

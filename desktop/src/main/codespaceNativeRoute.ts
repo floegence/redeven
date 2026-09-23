@@ -6,6 +6,7 @@ import type { NativeCodeSpaceRoute } from './codespaceNativeGateway';
 import type { DesktopSessionTransport } from './desktopSessionTransport';
 import { desktopPrivateBridgeRequestHeaders } from './desktopSessionTransport';
 import type { StartupReport } from './startup';
+import { isLocalAccessCookieName } from './localAccessCookie';
 
 /** Reuses the EnvironmentSession's selected listener, including placement's H2 bridge. */
 export async function createLocalNativeCodeSpaceRoute(
@@ -38,18 +39,19 @@ export async function createLocalNativeCodeSpaceRoute(
   if (!response.ok) throw new Error('codespace_unavailable');
   const payload = (await response.json()) as {
     ok?: boolean;
-    data?: { instance_id?: string };
+    data?: { instance_id?: string; access_cookie_name?: string };
   };
   const instance = payload.data?.instance_id;
   if (
     payload.ok !== true ||
     !instance ||
-    !/^[a-zA-Z0-9_-]{16,128}$/u.test(instance)
+    !/^[a-zA-Z0-9_-]{16,128}$/u.test(instance) ||
+    !isLocalAccessCookieName(payload.data?.access_cookie_name)
   )
     throw new Error('codespace_unavailable');
   const access = await input.webSession.cookies.get({
     url: base.href,
-    name: 'redeven_local_access',
+    name: payload.data.access_cookie_name,
   });
   const sockets = new Set<Duplex>();
   let closed = false;

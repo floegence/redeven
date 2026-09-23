@@ -1014,7 +1014,7 @@ func (s *Server) localAccessToken(r *http.Request) string {
 	if s == nil || r == nil {
 		return ""
 	}
-	c, err := r.Cookie(accessgate.LocalSessionCookieName)
+	c, err := r.Cookie(localAccessCookieName(r))
 	if err != nil || c == nil {
 		return ""
 	}
@@ -1130,38 +1130,6 @@ func (s *Server) activeLocalAccessSession(r *http.Request) (string, time.Time, b
 		return "", time.Time{}, false
 	}
 	return accessSessionID, expiresAt, true
-}
-
-func (s *Server) setLocalAccessCookie(w http.ResponseWriter, r *http.Request, token string, expiresAtUnixMs int64) {
-	if w == nil || token == "" {
-		return
-	}
-	expiresAt := time.UnixMilli(expiresAtUnixMs)
-	http.SetCookie(w, &http.Cookie{
-		Name:     accessgate.LocalSessionCookieName,
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   r != nil && r.TLS != nil,
-		SameSite: http.SameSiteLaxMode,
-		Expires:  expiresAt,
-	})
-}
-
-func (s *Server) clearLocalAccessCookie(w http.ResponseWriter, r *http.Request) {
-	if w == nil {
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     accessgate.LocalSessionCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   r != nil && r.TLS != nil,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-		Expires:  time.Unix(0, 0),
-	})
 }
 
 func (s *Server) requireLocalAccessAPI(w http.ResponseWriter, r *http.Request) bool {
@@ -1598,7 +1566,7 @@ func (s *Server) handleAccessUnlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	binding := ""
-	if cookie, err := r.Cookie("redeven_auth_challenge"); err == nil {
+	if cookie, err := r.Cookie(localAuthCookieName(r, localChallengeCookiePrefix)); err == nil {
 		binding = cookie.Value
 	}
 	if req.ChallengeID == "" && s.accessGate.TwoFactorEnabled() {
@@ -1608,7 +1576,7 @@ func (s *Server) handleAccessUnlock(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		binding = base64.RawURLEncoding.EncodeToString(raw)
-		http.SetCookie(w, &http.Cookie{Name: "redeven_auth_challenge", Value: binding, Path: "/api/local/access", Secure: r.TLS != nil, HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 300})
+		http.SetCookie(w, &http.Cookie{Name: localAuthCookieName(r, localChallengeCookiePrefix), Value: binding, Path: "/api/local/access", Secure: r.TLS != nil, HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 300})
 	}
 	result, err := s.accessGate.AuthenticateLocal(req, unlockAttemptSubject(r), binding)
 	if err != nil {

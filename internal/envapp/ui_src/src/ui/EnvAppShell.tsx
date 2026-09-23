@@ -1,5 +1,5 @@
 import { createActivityNavigation, activityTargetID, isBuiltinActivityPage, PENDING_ACTIVITY_PLUGIN_ID, type ActivityNavigation, type ActivityRestoreTarget } from './services/activityNavigation';
-import { EnvironmentAccessGate, type AccessGatePhase } from './EnvironmentAccessGate';
+import { EnvironmentAccessGate, type AccessGatePhase, type AccessGateFeedback } from './EnvironmentAccessGate';
 import { createEnvResourceCacheAccess, isResourceAuthorizationError } from './services/envResourceCache';
 import { isSessionEventAuthorizationError } from './services/sessionHTTP';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
@@ -194,6 +194,7 @@ import {
 } from './services/localApi';
 import {
   AccessUnlockError,
+  isAccessUnlockInputError,
   formatAccessUnlockRetryAfter,
   getAccessUnlockRetryAfterMs,
   isKnownAccessUnlockErrorCode,
@@ -708,7 +709,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const [localAccessStatus, setLocalAccessStatus] = createSignal<LocalAccessStatus | null>(null);
   const [localAccessChecked, setLocalAccessChecked] = createSignal(false);
   const [localAccessPassword, setLocalAccessPassword] = createSignal('');
-  const [localAccessError, setLocalAccessError] = createSignal<string | null>(null);
+  const [localAccessFeedback, setLocalAccessFeedback] = createSignal<AccessGateFeedback | null>(null);
   const [localAccessUnlocking, setLocalAccessUnlocking] = createSignal(false);
   const [localAccessChannelReady, setLocalAccessChannelReady] = createSignal(false);
   const [localAccessResumeToken, setLocalAccessResumeToken] = createSignal(initialAccessResumeToken);
@@ -717,7 +718,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const [remoteAccessStatus, setRemoteAccessStatus] = createSignal<EnvAppAccessStatus | null>(null);
   const [remoteAccessChecked, setRemoteAccessChecked] = createSignal(false);
   const [remoteAccessPassword, setRemoteAccessPassword] = createSignal('');
-  const [remoteAccessError, setRemoteAccessError] = createSignal<string | null>(null);
+  const [remoteAccessFeedback, setRemoteAccessFeedback] = createSignal<AccessGateFeedback | null>(null);
   const [remoteAccessUnlocking, setRemoteAccessUnlocking] = createSignal(false);
   const [remoteAccessChannelReady, setRemoteAccessChannelReady] = createSignal(false);
   const [remoteAccessResumeToken, setRemoteAccessResumeToken] = createSignal(initialAccessResumeToken);
@@ -731,7 +732,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const accessStatus = createMemo(() => (isLocalMode() ? localAccessStatus() : remoteAccessStatus()));
   const accessChecked = createMemo(() => (isLocalMode() ? localAccessChecked() : remoteAccessChecked()));
   const accessPassword = createMemo(() => (isLocalMode() ? localAccessPassword() : remoteAccessPassword()));
-  const accessError = createMemo(() => (isLocalMode() ? localAccessError() : remoteAccessError()));
+  const accessFeedback = createMemo(() => (isLocalMode() ? localAccessFeedback() : remoteAccessFeedback()));
+  const accessError = createMemo(() => accessFeedback()?.message ?? null);
   const accessUnlocking = createMemo(() => (isLocalMode() ? localAccessUnlocking() : remoteAccessUnlocking()));
   const accessChannelReady = createMemo(() => (isLocalMode() ? localAccessChannelReady() : remoteAccessChannelReady()));
   const accessResumeToken = createMemo(() => (isLocalMode() ? localAccessResumeToken() : remoteAccessResumeToken()));
@@ -779,12 +781,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     setCurrentAccessError(null);
   };
 
-  const setCurrentAccessError = (value: string | null) => {
+  const setCurrentAccessError = (message: string | null, invalidInput = false) => {
+    const value = message ? { message, invalidInput } : null;
     if (isLocalMode()) {
-      setLocalAccessError(value);
+      setLocalAccessFeedback(value);
       return;
     }
-    setRemoteAccessError(value);
+    setRemoteAccessFeedback(value);
   };
 
   const setCurrentAccessUnlocking = (value: boolean) => {
@@ -852,7 +855,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const handleAccessRecoveryFailure = (error: unknown) => {
     const message = getErrorMessage(error);
     if (isAccessResumeAuthFailure(error)) {
-      markCurrentAccessLocked(i18n.t('accessGate.passwordExpiredError'));
+      markCurrentAccessLocked(i18n.t('accessGate.sessionEndedError'));
       return;
     }
     if (accessRecoverable()) {
@@ -3424,7 +3427,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       const message = localizedAccessUnlockErrorMessage(error, i18n);
       const retryAfterMs = getAccessUnlockRetryAfterMs(error);
       setCurrentAccessRetryUntil(retryAfterMs > 0 ? Date.now() + retryAfterMs : 0);
-      setCurrentAccessError(message || i18n.t('accessGate.unlockFailedError'));
+      setCurrentAccessError(
+        message || i18n.t('accessGate.unlockFailedError'),
+        isAccessUnlockInputError(error),
+      );
       queueMicrotask(() => {
         accessPasswordInput?.focus();
         accessPasswordInput?.select();
@@ -3463,7 +3469,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     void getLocalAccessStatus().then((status) => {
       if (canceled || !status?.password_required || status.unlocked) return;
       setLocalAccessStatus(status);
-      markCurrentAccessLocked(i18n.t('accessGate.passwordExpiredError'));
+      markCurrentAccessLocked(i18n.t('accessGate.sessionEndedError'));
     });
   });
 
@@ -3496,7 +3502,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
     lastConnectedClient = null;
     if (isLocalMode() && snapshotFailureCode.toUpperCase() === 'ACCESS_PASSWORD_REQUIRED') {
-      markCurrentAccessLocked(i18n.t('accessGate.passwordExpiredError'));
+      markCurrentAccessLocked(i18n.t('accessGate.sessionEndedError'));
     }
     if (protocolStatusValue === 'connecting') {
       untrack(() => reconnectController.noteProtocolConnecting(protocolSnapshot.attempt));
@@ -4526,7 +4532,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       recoveryCode={accessRecoveryCode()}
       onToggleRecovery={() => {setAccessRecoveryCode(!accessRecoveryCode());setCurrentAccessPassword('');setCurrentAccessError(null);}}
       onBackToPassword={() => {setAccessChallenge('');setCurrentAccessPassword('');setCurrentAccessError(null);}}
-      error={accessError()}
+      feedback={accessFeedback()}
       languageMenu={<LanguagePreferenceMenu variant="access_gate" openRequestSeq={languageMenuOpenSeq} notify={notify} />}
       inputRef={(input) => { accessPasswordInput = input; }}
       onPasswordInput={setCurrentAccessPassword}

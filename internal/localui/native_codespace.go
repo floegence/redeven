@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/codeapp"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
 )
@@ -28,11 +27,11 @@ func (s *Server) handleNativeCodeSpace(w http.ResponseWriter, r *http.Request) {
 		cookies := r.Cookies()
 		r.Header.Del("Cookie")
 		for _, cookie := range cookies {
-			if cookie.Name != accessgate.LocalSessionCookieName {
+			if !isLocalAuthCookie(cookie.Name) {
 				r.AddCookie(cookie)
 			}
 		}
-		r.AddCookie(&http.Cookie{Name: accessgate.LocalSessionCookieName, Value: credential})
+		r.AddCookie(&http.Cookie{Name: localAccessCookieName(r), Value: credential})
 	}
 	if s.accessEnabled() && !s.ensureLocalAccessHTTPResponse(w, r) {
 		http.Error(w, "access password required", http.StatusLocked)
@@ -47,7 +46,7 @@ func (s *Server) handleNativeCodeSpace(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]string{"instance_id": binding.InstanceID}})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]string{"instance_id": binding.InstanceID, "access_cookie_name": localAccessCookieName(r)}})
 		return
 	}
 	if len(parts) != 3 || parts[1] != binding.InstanceID {
@@ -65,7 +64,7 @@ func (s *Server) handleNativeCodeSpace(w http.ResponseWriter, r *http.Request) {
 	next.Header.Del(localAccessResumeHeader)
 	next.Header.Del("Cookie")
 	for _, cookie := range r.Cookies() {
-		if cookie.Name != accessgate.LocalSessionCookieName {
+		if !isLocalAuthCookie(cookie.Name) {
 			next.AddCookie(cookie)
 		}
 	}

@@ -19,6 +19,8 @@ const ACCESS_GATE_IDS = {
   notice: 'redeven-access-notice',
 } as const;
 
+export type AccessGateFeedback = Readonly<{ message: string; invalidInput: boolean }>;
+
 export type EnvironmentAccessGateProps = Readonly<{
   phase: AccessGatePhase;
   secondFactor?: boolean;
@@ -33,7 +35,7 @@ export type EnvironmentAccessGateProps = Readonly<{
   retryActive: boolean;
   retryDuration: string;
   password: string;
-  error: string | null;
+  feedback: AccessGateFeedback | null;
   languageMenu: JSX.Element;
   inputRef: (input: HTMLInputElement) => void;
   onPasswordInput: (value: string) => void;
@@ -126,14 +128,14 @@ export function EnvironmentAccessGate(props: EnvironmentAccessGateProps) {
     if (props.phase === 'resuming' || props.phase === 'resume_blocked') {
       ids.push(ACCESS_GATE_IDS.resumeHint);
     }
-    if (props.error) {
+    if (props.feedback?.message) {
       ids.push(ACCESS_GATE_IDS.error);
     }
     return ids.join(' ');
   });
   const accessGatePasswordDescribedBy = createMemo(() => {
     const ids: string[] = [ACCESS_GATE_IDS.passwordHelp];
-    if (props.error) {
+    if (props.feedback?.message) {
       ids.push(ACCESS_GATE_IDS.error);
     }
     return ids.join(' ');
@@ -198,7 +200,7 @@ export function EnvironmentAccessGate(props: EnvironmentAccessGateProps) {
                 }
                 disabled={props.pending || props.unlocking}
                 aria-describedby={accessGatePasswordDescribedBy()}
-                aria-invalid={!!props.error}
+                aria-invalid={props.feedback?.invalidInput ?? false}
                 class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
               />
               <p
@@ -292,13 +294,13 @@ export function EnvironmentAccessGate(props: EnvironmentAccessGateProps) {
           </>
         </Show>
 
-        <Show when={props.error}>
+        <Show when={props.feedback?.message}>
           <div
             id={ACCESS_GATE_IDS.error}
             role="alert"
             class="mx-auto mt-3 max-w-[316px] text-left text-xs leading-5 text-error"
           >
-            {props.error}
+            {props.feedback?.message}
           </div>
         </Show>
 

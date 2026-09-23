@@ -19,6 +19,7 @@ it.each<{ kind: DesktopSessionTransportKind; host: string }>([
   { kind: 'external_local_ui', host: '::1' },
 ])('reuses the selected $kind listener at $host and its bound instance', async ({ kind, host }) => {
   const instance = 'fixed-generation-12345678';
+  const accessCookieName = 'redeven_local_access_http_23998';
   const privateToken = Buffer.alloc(32, 7).toString('base64url');
   const privateBridge =
     kind === 'native_local_bridge' || kind === 'placement_bridge';
@@ -29,7 +30,7 @@ it.each<{ kind: DesktopSessionTransportKind; host: string }>([
     if (request.url === '/api/local/codespaces/demo') {
       response.setHeader('Content-Type', 'application/json');
       response.end(
-        JSON.stringify({ ok: true, data: { instance_id: instance } }),
+        JSON.stringify({ ok: true, data: { instance_id: instance, access_cookie_name: accessCookieName } }),
       );
       return;
     }
@@ -77,8 +78,31 @@ it.each<{ kind: DesktopSessionTransportKind; host: string }>([
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('native\x00body');
     expect(webSession.fetch).toHaveBeenCalledTimes(1);
+    expect(webSession.cookies.get).toHaveBeenCalledWith({ url: baseURL, name: accessCookieName });
   } finally {
     await gateway.close();
     await new Promise<void>((resolve) => upstream.close(() => resolve()));
   }
+});
+
+
+it.each([undefined, 'redeven_local_access', 'redeven_local_access_http_0', 'other_cookie'])('rejects a missing or invalid Runtime cookie contract: %s', async (accessCookieName) => {
+  const baseURL = 'http://127.0.0.1:23998/';
+  const webSession = {
+    fetch: vi.fn(async () => new Response(JSON.stringify({
+      ok: true, data: { instance_id: 'fixed-generation-12345678', access_cookie_name: accessCookieName },
+    }))),
+    cookies: { get: vi.fn() },
+  } as unknown as Session;
+  await expect(createLocalNativeCodeSpaceRoute({
+    transport: {
+      kind: 'external_local_ui', baseURL, allowedBaseURL: baseURL, entryURL: baseURL,
+      displayURL: baseURL, partition: '', proxyPolicy: 'direct',
+    },
+    startup: {} as StartupReport,
+    webSession,
+    codeSpaceID: 'demo',
+    signal: new AbortController().signal,
+  })).rejects.toThrow('codespace_unavailable');
+  expect(webSession.cookies.get).not.toHaveBeenCalled();
 });

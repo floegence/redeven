@@ -1,8 +1,9 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
-import { EnvironmentAccessGate } from "./EnvironmentAccessGate";
+import { EnvironmentAccessGate, type AccessGateFeedback } from "./EnvironmentAccessGate";
 import { useI18n } from "./i18n";
 import {
   AccessUnlockError,
+  isAccessUnlockInputError,
   formatAccessUnlockRetryAfter,
 } from "./services/accessUnlockError";
 import type {
@@ -23,7 +24,7 @@ export function ResourceAccessGate(
   const [recovery, setRecovery] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [checking, setChecking] = createSignal(true);
-  const [error, setError] = createSignal("");
+  const [feedback, setFeedback] = createSignal<AccessGateFeedback | null>(null);
   const [retryUntil, setRetryUntil] = createSignal(0);
   const [now, setNow] = createSignal(Date.now());
   let input: HTMLInputElement | undefined;
@@ -94,7 +95,7 @@ export function ResourceAccessGate(
     event.preventDefault();
     if (busy() || !value() || retryUntil() > Date.now()) return;
     setBusy(true);
-    setError("");
+    setFeedback(null);
     try {
       const result = await authenticate(
         challenge()
@@ -149,7 +150,7 @@ export function ResourceAccessGate(
                 : code === "ACCESS_PASSWORD_RETRY_LATER"
                   ? "accessGate.errors.retryLater"
                   : "accessGate.unavailableError";
-      setError(i18n.t(key));
+      setFeedback({ message: i18n.t(key), invalidInput: isAccessUnlockInputError(failure) });
       queueMicrotask(() => {
         input?.focus();
         input?.select();
@@ -173,7 +174,7 @@ export function ResourceAccessGate(
         Math.max(0, retryUntil() - now()),
       )}
       password={value()}
-      error={error()}
+      feedback={feedback()}
       languageMenu={null}
       inputRef={(element) => {
         input = element;
@@ -185,13 +186,13 @@ export function ResourceAccessGate(
       onToggleRecovery={() => {
         setRecovery(!recovery());
         setValue("");
-        setError("");
+        setFeedback(null);
       }}
       onBackToPassword={() => {
         setChallenge("");
         setRecovery(false);
         setValue("");
-        setError("");
+        setFeedback(null);
       }}
     />
   );
