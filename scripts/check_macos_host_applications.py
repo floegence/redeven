@@ -207,7 +207,11 @@ def run(helper_path, output):
             helper.send('input', kind='key', **dict(transition, repeat=True), **bound)
             helper.send('input', kind='key', **dict(transition, pressed=False), **bound)
             helper.send('input', kind='key', key='Enter', **bound)
-            eventually(lambda: receipt().get('text') == 'aa', 'Key repeat or transition delivery failed')
+            try:
+                eventually(lambda: receipt().get('text') == 'aa', 'Key repeat or transition delivery failed')
+            except AssertionError:
+                (output / 'key-transition-failure.json').write_text(json.dumps({'receipt':receipt(), 'events':list(helper.events)}, indent=2))
+                raise
             helper.send('menu', **bound)
             def items(values):
                 for item in values:

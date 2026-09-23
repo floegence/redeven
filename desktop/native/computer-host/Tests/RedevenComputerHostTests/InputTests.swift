@@ -3,6 +3,14 @@ import CoreGraphics
 @testable import RedevenComputerHost
 
 final class InputTests: XCTestCase {
+    func testCommittedLineBreakUsesNativeReturnWithoutLosingUnicode() throws {
+        let events = try NativeInput.text("中\n文")
+        XCTAssertEqual(events[2].getIntegerValueField(.keyboardEventKeycode), 36)
+        XCTAssertEqual(events[3].type, .keyUp)
+        var units = [UniChar](repeating: 0, count: 20), length = 0
+        events[2].keyboardGetUnicodeString(maxStringLength: 20, actualStringLength: &length, unicodeString: &units)
+        XCTAssertEqual(String(decoding: units.prefix(length), as: UTF16.self), "\n")
+    }
     func testViewerKeysPreservePressReleaseRepeatAndClientCharacters() throws {
         let base: [String: Any] = ["key":"j", "code":"KeyJ", "pressed":true, "repeat":true,
                                   "shiftKey":false, "ctrlKey":false, "altKey":false, "metaKey":false]
