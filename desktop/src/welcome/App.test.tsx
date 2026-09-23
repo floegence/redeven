@@ -423,7 +423,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('props.i18n.t(headerCopy().descriptionKey)');
     expect(appSrc).not.toContain("props.i18n.t('environmentCenter.description')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.addGatewayShort')");
-    expect(appSrc).toContain("title={props.i18n.t('environmentCenter.addGateway')}");
+    expect(appSrc).toContain("<DesktopTooltip content={props.i18n.t('environmentCenter.addGateway')}");
     expect(appSrc).toContain("aria-label={props.i18n.t('environmentCenter.addGateway')}");
     expect(appSrc).toContain("case 'view_gateway_environments':");
     expect(appSrc).toContain("case 'add_gateway_environment':");

@@ -4465,10 +4465,20 @@ pre,
 .redeven-other-owner-pin { display: flex; align-items: center; gap: .375rem; padding: 0 1rem .5rem; font-size: .6875rem; color: var(--muted-foreground); }
 .redeven-environment-owner-tab > span:last-child { max-width: none; white-space: normal; overflow-wrap: anywhere; }
 
-.redeven-center-actions { justify-content: flex-end; }
+.redeven-center-actions { width: 100%; justify-content: flex-end; }
 .redeven-center-search { flex: 1 1 14.5rem; min-width: 0; }
-.redeven-center-action-group { flex: 0 1 auto; }
-.redeven-center-actions button,
+.redeven-center-action-group { flex: none; }
+.redeven-center-action-group > [data-redeven-tooltip-anchor] { display: inline-flex; flex: none; }
+.redeven-center-actions button { height: 1.75rem; gap: .375rem; white-space: nowrap; }
+@media (min-width: 1024px) {
+  .redeven-center-actions { width: 28rem; max-width: 50%; flex: none; }
+}
+@media (max-width: 639px) {
+  .redeven-center-action-label { display: none; }
+  .redeven-center-actions button { width: 2.75rem; height: 2.75rem; padding: 0; gap: 0; }
+  .redeven-center-actions button > svg { width: 1.125rem; height: 1.125rem; }
+  .redeven-center-search input { height: 2.75rem; font-size: 1rem; }
+}
 .redeven-cloud-source-header button {
   height: auto;
   min-height: 1.75rem;

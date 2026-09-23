@@ -1603,6 +1603,7 @@
     "searchPlaceholder": "環境の検索...",
     "refreshRuntimeStatuses": "ランタイム ステータスの更新",
     "connectProvider": "Redeven Cloud に接続",
+    "connectCloudShort": "接続",
     "newEnvironmentShort": "新規",
     "gatewaySearchPlaceholder": "ゲートウェイの検索...",
     "addGateway": "ゲートウェイの追加",

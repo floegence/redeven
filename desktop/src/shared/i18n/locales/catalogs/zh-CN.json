@@ -1603,6 +1603,7 @@
     "searchPlaceholder": "搜索 environments...",
     "refreshRuntimeStatuses": "刷新运行时状态",
     "connectProvider": "连接 Redeven Cloud",
+    "connectCloudShort": "连接",
     "newEnvironmentShort": "新建",
     "gatewaySearchPlaceholder": "搜索网关...",
     "addGateway": "添加网关",

@@ -646,6 +646,7 @@ export const enUS = {
     searchPlaceholder: 'Search environments...',
     refreshRuntimeStatuses: 'Refresh runtime statuses',
     connectProvider: 'Connect Redeven Cloud',
+    connectCloudShort: 'Connect',
     newEnvironmentShort: 'New',
     gatewaySearchPlaceholder: 'Search gateways...',
     addGateway: 'Add Gateway',
