@@ -923,16 +923,6 @@ vi.mock('./services/localApi', () => ({
   uploadLocalApiFile: vi.fn(),
   unlockEnvAppAccess: vi.fn(async () => ({ unlocked: true, resume_token: 'resume123' })),
 }));
-vi.mock('./services/accessUnlockError', () => ({
-  AccessUnlockError: class AccessUnlockError extends Error {
-    status = 0;
-    code = '';
-    retryAfterMs = 0;
-  },
-  formatAccessUnlockRetryAfter: () => '1m',
-  getAccessUnlockRetryAfterMs: () => 0,
-  isKnownAccessUnlockErrorCode: () => false,
-}));
 vi.mock('./services/localAccessAuth', () => ({
   clearLocalAccessResumeToken: vi.fn(),
   writeLocalAccessResumeToken: vi.fn(),
