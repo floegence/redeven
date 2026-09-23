@@ -46,6 +46,11 @@ website-owned stream audio bypasses this adapter. Native helper diagnostics must
 never enter its structured reply pipe, including RTCP interceptor shutdown logs.
 Library loggers share the collector's silent logger.
 
+The loopback collector requests an immediate RTCP sender report for each new
+track and waits for that source-clock mapping before forwarding encoded frames.
+It retains initial packets in the bounded receiver, including an isolated paused
+picture. Audio and video must not invent separate clocks from packet arrival.
+
 DOM checkpoints preserve valid streams. Navigation, element removal and revoked
 viewing retire corresponding streams and decoders. Hidden video picture delivery
 may pause while authorized background audio remains active. Playback commands act
