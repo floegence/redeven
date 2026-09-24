@@ -55,6 +55,19 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = VitestResizeObserver;
 }
 
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia;
+}
+
 if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.animate !== 'function') {
   HTMLElement.prototype.animate = function animate(
     _keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
