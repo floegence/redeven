@@ -1,9 +1,6 @@
 /* Product navigation sheets use Floe's presence and visible-area contracts. */
 .plugin-mobile-launcher-drawer {
-  width: 100%;
-  max-width: 640px;
   height: 86%;
-  border-radius: 24px;
 }
 
 .mobile-tools-icon {
