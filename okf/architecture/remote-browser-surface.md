@@ -61,6 +61,8 @@ opener or parent before handing over ports. A source replacement changes the
 query as well as the nonce, so the browser loads a new document instead of doing
 a fragment-only navigation with retired ports. Desktop reserves that exact URL
 once and gives the child no preload or generic bridge.
+Desktop presents the independent window at creation. Its visible shell owns
+loading and recovery; a paint event must not gate the user's window visibility.
 For a Desktop private Local UI bridge, the main process lends authentication
 headers only to that child's reserved static document and same-origin Env App
 assets. The child is not registered as an environment or IPC owner; API paths,
