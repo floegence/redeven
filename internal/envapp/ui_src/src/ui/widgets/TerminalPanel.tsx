@@ -1028,6 +1028,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [searchQuery, setSearchQuery] = createSignal('');
   const [sessionFilterQuery, setSessionFilterQuery] = createSignal('');
   const [sessionDrawerOpen, setSessionDrawerOpen] = createSignal(false);
+  const [sessionDrawerPresent, setSessionDrawerPresent] = createSignal(false);
   const [terminalStatusAnnouncement, setTerminalStatusAnnouncement] = createSignal<Readonly<{
     sequence: number;
     text: string;
@@ -2312,7 +2313,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     resolveTerminalMobileKeyboardVisibility({
       eligible: shouldUseFloeMobileKeyboard(),
       requested: mobileKeyboardVisible(),
-      sessionDrawerOpen: sessionDrawerOpen(),
+      sessionDrawerOpen: sessionDrawerOpen() || sessionDrawerPresent(),
     })
   ));
 
@@ -4374,6 +4375,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         onSelect: () => askFlowerFromSidebarItem(item, { x: menu.x, y: menu.y }),
       },
       {
+        id: 'sidebar-copy-path',
+        kind: 'action',
+        label: i18n.t('terminal.copyPath'),
+        icon: Copy,
+        disabled: !item.fullPath,
+        onSelect: () => copySidebarItemPath(item),
+      },
+      {
         id: 'sidebar-files',
         kind: 'action',
         label: i18n.t('terminal.files'),
@@ -4442,7 +4451,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     event.preventDefault();
     event.stopPropagation();
     const currentTarget = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
-    const triggerElement = currentTarget
+    const triggerElement = currentTarget instanceof HTMLButtonElement ? currentTarget : currentTarget
       ? Array.from(currentTarget.querySelectorAll<HTMLButtonElement>('button[data-terminal-session-id]'))
           .find((button) => button.dataset.terminalSessionId === item.id) ?? null
       : null;
@@ -4450,8 +4459,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setTerminalAskMenu(null);
     setTerminalSidebarMenu({
       kind: 'session',
-      x: event.clientX,
-      y: event.clientY,
+      x: event.detail === 0 ? (currentTarget?.getBoundingClientRect().left ?? event.clientX) : event.clientX,
+      y: event.detail === 0 ? (currentTarget?.getBoundingClientRect().bottom ?? event.clientY) : event.clientY,
       sessionId: item.id,
       triggerElement,
     });
@@ -4852,6 +4861,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               || terminalAskMenuEl?.contains(target),
             )}
             onCloseDrawer={dismissSessionDrawer}
+            onDrawerPresenceChange={setSessionDrawerPresent}
             onCreateSessionInGroup={(groupId) => void createSessionInGroup(groupId)}
             onCreateGroup={() => setGroupEditorTarget('create')}
             onToggleGroup={toggleNavigationGroup}

@@ -695,56 +695,25 @@ describe('PluginPanel', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it('uses a modal mobile sheet with 44px controls and restores focus after backdrop dismiss', async () => {
+  it('uses the shared mobile drawer, keeps its search manual and dismisses through its backdrop', async () => {
     const trigger = createTrigger();
-    const shell = document.createElement('main');
-    const preExistingInert = document.createElement('aside');
-    preExistingInert.inert = true;
-    document.body.append(shell, preExistingInert);
     trigger.focus();
     const [open, setOpen] = createSignal(true);
     const mount = document.createElement('div');
     document.body.append(mount);
-    dispose = render(() => (
-      <PluginPanel
-        open={open()}
-        mobile
-        trigger={trigger}
-        model={panelModel()}
-        onClose={() => setOpen(false)}
-        onOpenCenter={vi.fn()}
-        onOpenPluginDetails={vi.fn()}
-        onOpenPluginSurface={vi.fn()}
-      />
-    ), mount);
-    await Promise.resolve();
-
-    const dialog = document.querySelector('[role="dialog"]')!;
+    dispose = render(() => <PluginPanel open={open()} mobile trigger={trigger} model={panelModel()}
+      onClose={() => setOpen(false)} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />, mount);
+    await vi.waitFor(() => expect(document.querySelector('[data-floe-dialog-panel]')).not.toBeNull());
+    const dialog = document.querySelector('[data-floe-dialog-panel]')!;
     expect(dialog.getAttribute('aria-modal')).toBe('true');
-    expect(dialog.querySelector('header')?.className).toContain('border-b');
-    expect(dialog.querySelector('footer')).toBeNull();
-    const close = document.querySelector('[aria-label="Close plugins"]') as HTMLButtonElement;
-    expect(close.className).toContain('h-[44px]');
-    expect(close.className).toContain('w-[44px]');
-    expect(document.activeElement).toBe(document.querySelector('[data-plugin-launcher-search]'));
-    expect(trigger.inert).toBe(true);
-    expect(shell.inert).toBe(true);
-    expect(preExistingInert.inert).toBe(true);
-
-    close.focus();
-    close.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
-    const center = document.querySelector('[data-plugin-center-market-action]') as HTMLButtonElement;
-    expect(document.activeElement).toBe(center);
-    center.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
-    expect(document.activeElement).toBe(close);
-
-    const backdrop = dialog.parentElement!;
-    backdrop.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    expect(dialog.classList.contains('plugin-mobile-launcher-drawer')).toBe(true);
+    expect(dialog.querySelector('[data-floe-autofocus]')?.tagName).toBe('BUTTON');
+    expect(document.activeElement).not.toBe(document.querySelector('[data-plugin-launcher-search]'));
+    document.querySelector<HTMLElement>('[data-floe-dialog-backdrop]')!.click();
     expect(open()).toBe(false);
+    expect(dialog.getAttribute('data-floating-presence')).toBe('exiting');
+    await vi.waitFor(() => expect(dialog.isConnected).toBe(false));
     expect(document.activeElement).toBe(trigger);
-    expect(Boolean(trigger.inert)).toBe(false);
-    expect(Boolean(shell.inert)).toBe(false);
-    expect(preExistingInert.inert).toBe(true);
   });
 
 });

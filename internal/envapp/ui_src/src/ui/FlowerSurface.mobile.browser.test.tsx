@@ -21,26 +21,34 @@ async function mountMobile(width: number) {
 }
 
 describe('Flower mobile navigation', () => {
-  it.each([390, 640, 767])('shows one full-height pane at %i pixels and retains the draft between panes', async (width) => {
+  it.each([390, 640, 767])('opens a large conversation drawer at %i pixels and retains the detail and draft', async (width) => {
     const runtime = await mountMobile(width);
-    const rail = runtime.querySelector<HTMLElement>('.flower-component-thread-rail')!;
     const detail = runtime.querySelector<HTMLElement>('.flower-component-main')!;
     const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
     expect(Number.parseFloat(getComputedStyle(editor).fontSize)).toBeGreaterThanOrEqual(16);
-    expect(rail.getBoundingClientRect().height).toBe(0);
+    expect(runtime.querySelector('.flower-component-thread-rail')).toBeNull();
     expect(detail.getBoundingClientRect().height).toBeGreaterThanOrEqual(700);
     await userEvent.fill(editor, 'Retained mobile draft 中文');
     editor.setSelectionRange(2, 7);
     await userEvent.click(page.getByRole('button', { name: DEFAULT_FLOWER_SURFACE_COPY.chat.conversationsAria, exact: true }));
-    expect(detail.getBoundingClientRect().height).toBe(0);
+    await vi.waitFor(() => expect(runtime.querySelector('.flower-mobile-thread-drawer')).not.toBeNull());
+    const rail = runtime.querySelector<HTMLElement>('.flower-component-thread-rail')!;
+    await vi.waitFor(() => expect(rail.closest('[data-floe-dialog-panel]')?.getAttribute('data-floating-presence')).toBe('open'));
+    await new Promise(resolve => setTimeout(resolve, 260));
+    expect(detail.getBoundingClientRect().height).toBeGreaterThanOrEqual(700);
     expect(detail.inert).toBe(true);
-    expect(rail.getBoundingClientRect().height).toBeGreaterThanOrEqual(700);
+    expect(rail.getBoundingClientRect().height).toBeGreaterThan(480);
+    expect(rail.getBoundingClientRect().top).toBeGreaterThanOrEqual(24);
+    expect(rail.closest('[role="dialog"]')).not.toBeNull();
+    expect(document.activeElement?.tagName).not.toBe('INPUT');
     expect(Number.parseFloat(getComputedStyle(rail.querySelector('input')!).fontSize)).toBeGreaterThanOrEqual(16);
+    expect(rail.querySelector('input')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect([...rail.querySelectorAll('h2')].filter(heading => heading.getBoundingClientRect().height > 0)).toHaveLength(1);
     await userEvent.click(page.getByRole('button', { name: DEFAULT_FLOWER_SURFACE_COPY.settings.backToChat, exact: true }));
     expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
     expect(editor.value).toBe('Retained mobile draft 中文');
     expect(editor.selectionStart).toBe(2);
-    expect(rail.getBoundingClientRect().height).toBe(0);
+    await vi.waitFor(() => expect(rail.isConnected).toBe(false));
     await page.viewport(1024, 720);
     await vi.waitFor(() => expect(rail.getBoundingClientRect().width).toBeGreaterThan(200));
     expect(detail.getBoundingClientRect().height).toBeGreaterThanOrEqual(700);
@@ -77,7 +85,7 @@ describe('Flower mobile navigation', () => {
     setSettingsRequest(1);
     await vi.waitFor(() => expect(runtime.querySelector('.flower-settings-providers-section')).toBeTruthy());
     const detail = runtime.querySelector<HTMLElement>('.flower-component-main')!;
-    expect(detail.inert).toBe(false);
+    await vi.waitFor(() => expect(detail.inert).toBe(false));
     expect(detail.getBoundingClientRect().height).toBeGreaterThanOrEqual(700);
   });
 
@@ -97,4 +105,51 @@ describe('Flower mobile navigation', () => {
     await vi.waitFor(() => expect(button.disabled).toBe(false));
     assertCircle();
   });
+});
+
+
+it('uses task suggestion cards instead of conversation rows on mobile', async () => {
+  const runtime = await mountMobile(393);
+  await userEvent.click(page.getByRole('button', { name: DEFAULT_FLOWER_SURFACE_COPY.chat.conversationsAria, exact: true }));
+  await userEvent.click(page.getByRole('button', { name: DEFAULT_FLOWER_SURFACE_COPY.chat.newChat, exact: true }));
+  await vi.waitFor(() => expect(runtime.querySelectorAll('.flower-empty-suggestion').length).toBe(4));
+  const cards = [...runtime.querySelectorAll<HTMLButtonElement>('.flower-empty-suggestion')];
+  const first = cards[0].getBoundingClientRect();
+  const second = cards[1].getBoundingClientRect();
+  expect(first.height).toBeGreaterThanOrEqual(100);
+  expect(Math.abs(first.top - second.top)).toBeLessThan(1);
+  expect(second.left).toBeGreaterThan(first.right);
+  expect(cards[2].getBoundingClientRect().height).toBe(0);
+  expect(runtime.querySelector('.flower-empty-suggestion-label')?.textContent).toContain(DEFAULT_FLOWER_SURFACE_COPY.emptyState.suggestionsLabel);
+  await userEvent.click(cards[0]);
+  expect(runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!.value).toBe(DEFAULT_FLOWER_SURFACE_COPY.emptyState.suggestions[0].prompt);
+});
+
+it('lets the host toggle a retained mobile drawer and keeps search state through resize', async () => {
+  await page.viewport(393, 720);
+  const [open, setOpen] = createSignal(false);
+  const runtime = renderSurfaceWithAdapterProps(adapter(true), {
+    get mobileThreadsOpen() { return open(); },
+    onMobileThreadsOpenChange: setOpen,
+  });
+  Object.assign(runtime.style, { height: '100%', width: '100%' });
+  await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea:not(:disabled)')));
+  const editor = runtime.querySelector('.flower-composer textarea');
+  setOpen(true);
+  await vi.waitFor(() => expect(runtime.querySelector('.flower-mobile-thread-drawer')).not.toBeNull());
+  const search = runtime.querySelector<HTMLInputElement>('.flower-component-thread-rail input')!;
+  await userEvent.fill(search, 'Retained search');
+  setOpen(false);
+  await vi.waitFor(() => expect(search.isConnected).toBe(false));
+  setOpen(true);
+  await vi.waitFor(() => expect(search.isConnected).toBe(true));
+  expect(search.value).toBe('Retained search');
+  await page.viewport(1024, 720);
+  await vi.waitFor(() => expect(runtime.querySelector('.flower-mobile-thread-drawer')).toBeNull());
+  expect(runtime.querySelector('.flower-component-thread-rail input')).toBe(search);
+  expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
+  await page.viewport(393, 720);
+  await vi.waitFor(() => expect(runtime.querySelector('.flower-mobile-thread-drawer')).not.toBeNull());
+  await userEvent.keyboard('{Escape}');
+  await vi.waitFor(() => expect(open()).toBe(false));
 });

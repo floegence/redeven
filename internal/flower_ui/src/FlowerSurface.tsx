@@ -15,7 +15,7 @@ import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, cr
 import { cn, useMediaQuery } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, Link, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
-import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, Dialog, DialogPlacementProvider, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 import { createInputHistoryController, type InputHistoryEntry } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
@@ -628,6 +628,8 @@ export type FlowerSurfaceProps = Readonly<{
   warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
+  mobileThreadsOpen?: boolean;
+  onMobileThreadsOpenChange?: (open: boolean) => void;
   settingsFocusRequest?: number;
   sidebarLeadingAction?: JSX.Element;
   presentation?: 'full' | 'companion';
@@ -714,12 +716,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const presentation = () => props.presentation ?? 'full';
   const mobileViewport = useMediaQuery('(max-width: 767px)');
   const mobileNavigation = () => presentation() === 'full' && mobileViewport();
-  const [mobileThreadsOpen, setMobileThreadsOpen] = createSignal(false);
+  const [localMobileThreadsOpen, setLocalMobileThreadsOpen] = createSignal(false);
+  const mobileThreadsOpen = () => props.mobileThreadsOpen ?? localMobileThreadsOpen();
+  const setMobileThreadsOpen = (open: boolean) => {
+    setLocalMobileThreadsOpen(open);
+    props.onMobileThreadsOpenChange?.(open);
+  };
+  const [mobileDrawerPresent, setMobileDrawerPresent] = createSignal(false);
   const mobileThreadListVisible = () => mobileNavigation() && mobileThreadsOpen();
   const companionCollapsed = () => presentation() === 'companion' && !(props.companionOpen ?? true);
   const surfaceEngaged = () => props.engaged ?? true;
   const transcriptVisible = () => props.transcriptVisible ?? true;
-  const foregroundEngagementRequested = () => surfaceEngaged() && transcriptVisible() && !mobileThreadListVisible() && documentVisible();
+  const foregroundEngagementRequested = () => surfaceEngaged() && transcriptVisible() && !mobileDrawerPresent() && documentVisible();
   const effectiveEngagement = () => foregroundEngagementRequested() && engagementBootstrapReady();
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY;
   const attachmentCopy = () => copy().attachments;
@@ -984,7 +992,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let companionSummaryRef: HTMLButtonElement | undefined;
   let surfaceRef: HTMLElement | undefined;
   let mobileThreadsTrigger: HTMLButtonElement | undefined;
-  let mobileChatTrigger: HTMLButtonElement | undefined;
+
   let composerSurfaceRef: HTMLDivElement | undefined;
   let restoringCompanionFocus = false;
   let companionActivationToken = 0;
@@ -4029,7 +4037,7 @@ webSearch: model.web_search,
     scheduleSelectedThreadTailReveal(tid, sequence);
     returnToChat();
     if (detailAvailable) {
-      requestComposerFocus(focusOwner);
+      if (!mobileNavigation()) requestComposerFocus(focusOwner);
       if (revalidateWarmDetail) {
         void requestThreadDetail(
           tid,
@@ -4049,7 +4057,7 @@ webSearch: model.web_search,
       } else {
         scrollSelectedThreadToLatestAfterLayout(loaded.thread_id, sequence);
       }
-      requestComposerFocus(focusOwner);
+      if (!mobileNavigation()) requestComposerFocus(focusOwner);
     } else {
       if (selectedThreadTailRevealIsCurrent(tid, sequence)) {
         cancelSelectedThreadTailReveal();
@@ -11157,9 +11165,9 @@ webSearch: model.web_search,
                   ref={mobileThreadsTrigger}
                   aria-label={copy().chat.conversationsAria}
                   title={copy().chat.conversationsAria}
-                  onClick={() => {
+                  onClick={(event) => {
+                    event.currentTarget.focus({ preventScroll: true });
                     setMobileThreadsOpen(true);
-                    queueMicrotask(() => mobileChatTrigger?.focus({ preventScroll: true }));
                   }}
                 >
                   <ChevronLeft class="h-4 w-4" />
@@ -11938,49 +11946,24 @@ webSearch: model.web_search,
     </div>
   );
 
-  return (
-    <main
-      id="redeven-flower-surface"
-      ref={(node) => {
-        surfaceRef = node;
-        setComputerStageBoundary(node);
-      }}
-      tabIndex={-1}
-      class={cn(
-        'flower-component-shell flower-surface',
-        presentation() === 'companion' && 'flower-surface-companion',
-        companionCollapsed() && 'flower-surface-companion-collapsed',
-        threadRailResizing() && 'flower-component-shell-resizing',
-        props.class,
-      )}
-      data-flower-presentation={presentation()}
-      data-flower-mobile-pane={mobileNavigation() ? (mobileThreadsOpen() ? 'threads' : 'detail') : undefined}
-      data-flower-companion-open={presentation() === 'companion' ? (!companionCollapsed() ? 'true' : 'false') : undefined}
-      data-flower-engaged={surfaceEngaged() ? 'true' : 'false'}
-      data-flower-transcript-visible={transcriptVisible() ? 'true' : 'false'}
-      data-flower-selected-thread-id={selectedThreadID()}
-      data-flower-selected-thread-status={selectedThreadLiveStatus()}
-      data-flower-selected-thread-loading={selectedThreadLoading() ? 'true' : 'false'}
-      data-flower-warmup={surfaceWarmupActive() ? 'true' : 'false'}
-      data-flower-side-panel={sidePanel()}
-      style={{ '--flower-thread-rail-width': `${threadRailWidth()}px` }}
-    >
+  const threadRail = (
       <aside class="flower-component-thread-rail" aria-label={copy().chat.conversationsAria}
         inert={mobileNavigation() && !mobileThreadsOpen()}
         aria-hidden={mobileNavigation() && !mobileThreadsOpen() ? 'true' : undefined}>
+        <div class="flower-mobile-drawer-handle" aria-hidden="true" />
         <div class="flower-sidebar-actions">
+          <h2 class="flower-mobile-drawer-title">{copy().chat.conversationsAria}</h2>
           <button
-            ref={mobileChatTrigger}
+            data-floe-autofocus
             type="button"
             class="flower-mobile-navigation-button flower-header-icon-button"
             aria-label={copy().settings.backToChat}
             title={copy().settings.backToChat}
             onClick={() => {
               setMobileThreadsOpen(false);
-              queueMicrotask(() => mobileThreadsTrigger?.focus({ preventScroll: true }));
             }}
           >
-            <ChevronRight class="h-4 w-4" />
+            <ChevronDown class="h-4 w-4" />
           </button>
           {props.sidebarLeadingAction}
           <button
@@ -12024,6 +12007,55 @@ webSearch: model.web_search,
           onMenuAction={(action, item, restore) => void handleThreadMenuAction(action, item, restore)}
         />
       </aside>
+  );
+
+  return (
+    <main
+      id="redeven-flower-surface"
+      ref={(node) => {
+        surfaceRef = node;
+        setComputerStageBoundary(node);
+      }}
+      tabIndex={-1}
+      class={cn(
+        'flower-component-shell flower-surface',
+        presentation() === 'companion' && 'flower-surface-companion',
+        companionCollapsed() && 'flower-surface-companion-collapsed',
+        threadRailResizing() && 'flower-component-shell-resizing',
+        props.class,
+      )}
+      data-floe-dialog-surface-host={mobileNavigation() ? "true" : undefined}
+      data-floe-surface-portal-layer={mobileNavigation() ? "true" : undefined}
+      data-flower-presentation={presentation()}
+      data-flower-mobile-pane={mobileNavigation() ? (mobileThreadsOpen() ? 'threads' : 'detail') : undefined}
+      data-flower-companion-open={presentation() === 'companion' ? (!companionCollapsed() ? 'true' : 'false') : undefined}
+      data-flower-engaged={surfaceEngaged() ? 'true' : 'false'}
+      data-flower-transcript-visible={transcriptVisible() ? 'true' : 'false'}
+      data-flower-selected-thread-id={selectedThreadID()}
+      data-flower-selected-thread-status={selectedThreadLiveStatus()}
+      data-flower-selected-thread-loading={selectedThreadLoading() ? 'true' : 'false'}
+      data-flower-warmup={surfaceWarmupActive() ? 'true' : 'false'}
+      data-flower-side-panel={sidePanel()}
+      style={{ '--flower-thread-rail-width': `${threadRailWidth()}px` }}
+    >
+      <Show when={mobileNavigation()} fallback={threadRail}>
+        <DialogPlacementProvider mode="auto">
+          <Dialog open={mobileThreadListVisible() && surfaceEngaged()}
+            onOpenChange={setMobileThreadsOpen}
+            onPresenceChange={(present) => {
+              setMobileDrawerPresent(present);
+              if (!present && mobileNavigation() && surfaceEngaged()) {
+                const active = document.activeElement;
+                if (!active || active === document.body) mobileThreadsTrigger?.focus({ preventScroll: true });
+              }
+            }}
+            title={copy().chat.conversationsAria}
+            header={null} presentation="bottom-drawer" escapeKeyPhase="bubble"
+            class="flower-mobile-thread-drawer" contentClass="flex min-h-0 flex-col overflow-hidden p-0">
+            {threadRail}
+          </Dialog>
+        </DialogPlacementProvider>
+      </Show>
       <Show when={transcriptMenu()}>
         {(menu) => (
           <FlowerContextMenu
@@ -12184,8 +12216,8 @@ webSearch: model.web_search,
       >
         <GripVertical class="h-3.5 w-3.5" />
       </button>
-      <section class="flower-component-main" inert={mobileThreadListVisible()}
-        aria-hidden={mobileThreadListVisible() ? 'true' : undefined}>
+      <section class="flower-component-main" inert={mobileDrawerPresent()}
+        aria-hidden={mobileDrawerPresent() ? 'true' : undefined}>
         <Show when={sidePanel() === 'chat'}>{chatPanel()}</Show>
         <div class={cn('h-full min-h-0', sidePanel() !== 'settings' && 'hidden')} aria-hidden={sidePanel() !== 'settings'}>
           <Show when={settingsOpened()}>

@@ -664,6 +664,7 @@ vi.mock('./pages/EnvAIPage', () => ({
     return (
       <div
         data-testid="env-ai-page"
+        data-mobile-threads-open={String(Boolean(props.mobileThreadsOpen))}
         data-mount-id={mountID}
         data-presentation={props.presentation}
         data-companion-open={String(Boolean(props.companionOpen))}
@@ -908,6 +909,7 @@ vi.mock('./services/localApi', () => ({
   fetchLocalApi: vi.fn(),
   fetchLocalApiJSON: vi.fn(async () => ({ scope_id: 'a'.repeat(64) })),
   fetchLocalApiJSONResponse: vi.fn(),
+  readApiJSONResponse: vi.fn(async () => ({ data: {}, headers: new Headers(), status: 200 })),
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
   LocalApiError: class LocalApiError extends Error {
     readonly data: unknown;
@@ -1247,6 +1249,19 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-visibility') ?? 'hidden').toBe('hidden');
     await vi.waitFor(() => expect(page.getByRole('tab', { name: 'Flower', exact: true }).element().getAttribute('aria-selected')).toBe('true'));
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+  });
+
+  it('toggles the mobile conversation drawer with the Flower tab without remounting the product', async () => {
+    await page.viewport(393, 844);
+    const fixture = await mountProductionMobileShell();
+    const tab = page.getByRole('tab', { name: 'Flower', exact: true });
+    await userEvent.click(tab);
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="env-ai-page"]')?.getAttribute('data-mobile-threads-open')).toBe('true'));
+    expect(tab.element().getAttribute('aria-expanded')).toBe('true');
+    await userEvent.click(tab);
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="env-ai-page"]')?.getAttribute('data-mobile-threads-open')).toBe('false'));
+    expect(tab.element().getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.textarea);
   });
 
   it('keeps the mobile companion hidden through viewport changes', async () => {

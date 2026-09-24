@@ -4087,6 +4087,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     setEnvSidebarActiveTab(fallback, { openSidebar: false });
   });
 
+  let mobileFlowerTrigger: HTMLButtonElement | null = null;
+  const [mobileFlowerThreadsOpen, setMobileFlowerThreadsOpen] = createSignal(false);
+  createEffect(() => {
+    if (!layout.isMobile() || viewMode() !== 'activity' || layout.sidebarActiveTab() !== 'ai') {
+      setMobileFlowerThreadsOpen(false);
+    }
+  });
+
   const activityItems = (): ActivityBarItem[] => {
     const items: ActivityBarItem[] = [];
     const pluginPanelItem: ActivityBarItem = {
@@ -4098,10 +4106,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       ariaExpanded: pluginsPanelOpen,
       ariaControls: 'redeven-plugin-switcher',
       ariaHasPopup: 'dialog',
-      onClick: () => updatePluginPanel({
-        open: !(pluginsPanelOpen() && pluginsPanelPlacement() === 'activity'),
-        placement: 'activity',
-      }),
+      onClick: () => {
+        if (layout.isMobile()) pluginsPanelTrigger()?.focus({ preventScroll: true });
+        updatePluginPanel({
+          open: !(pluginsPanelOpen() && pluginsPanelPlacement() === 'activity'),
+          placement: 'activity',
+        });
+      },
     };
 
     if (!layout.isMobile()) items.push(pluginPanelItem);
@@ -4139,7 +4150,15 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         icon: FlowerNavigationIcon,
         label: i18n.t('shell.nav.flower'),
         collapseBehavior: 'preserve',
-        onClick: () => activateActivitySurface('ai'),
+        buttonRef: (trigger) => { mobileFlowerTrigger = trigger; },
+        ariaExpanded: () => layout.isMobile() && mobileFlowerThreadsOpen(),
+        ariaHasPopup: layout.isMobile() ? 'dialog' : undefined,
+        onClick: () => {
+          if (layout.isMobile()) mobileFlowerTrigger?.focus({ preventScroll: true });
+          const nextOpen = layout.sidebarActiveTab() !== 'ai' || !mobileFlowerThreadsOpen();
+          activateActivitySurface('ai');
+          if (layout.isMobile()) setMobileFlowerThreadsOpen(nextOpen);
+        },
       });
     }
     if (!layout.isMobile()) {
@@ -4736,6 +4755,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
               focusRequestScope={flowerProductPlacement() === 'workbench' ? 'workbench' : 'activity'}
               focusThreadRequest={flowerSurfaceVisible() ? activityFlowerFocusRequest() : null}
               focusComposerRequest={flowerSurfaceVisible() ? activityFlowerComposerFocusRequest() : 0}
+              mobileThreadsOpen={mobileFlowerThreadsOpen()}
+              onMobileThreadsOpenChange={setMobileFlowerThreadsOpen}
               onFocusThreadRequestConsumed={consumeActivityFlowerFocusRequest}
               onCompanionOpenRequest={(threadID) => {
                 if (threadID) focusActivityFlowerThread(threadID);
@@ -4957,7 +4978,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     </div>
   );
 
+  const [mobilePluginDrawerPresent, setMobilePluginDrawerPresent] = createSignal(false);
   const mobilePluginModalOpen = () => (
+    mobilePluginDrawerPresent() ||
     layout.isMobile() && viewMode() === 'activity' && activityPluginWindows().length > 0
   );
 
@@ -5103,6 +5126,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       }}
     >
       <PluginPanel
+        onMobilePresenceChange={setMobilePluginDrawerPresent}
         id="redeven-plugin-switcher"
         open={pluginsPanelOpen()}
         mobile={layout.isMobile()}

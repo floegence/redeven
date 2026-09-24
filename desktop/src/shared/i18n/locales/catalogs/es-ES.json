@@ -648,7 +648,8 @@
       "organizeDescription": "Conoce los archivos y prepara un plan de organización claro y práctico.",
       "organizePrompt": "Ayúdame a entender qué contiene el directorio de trabajo actual y cómo organizarlo para encontrar las cosas más fácilmente.\n\nPrimero examina los nombres, tipos y tamaños de los archivos y la estructura de carpetas. Si hace falta, lee algunos documentos introductorios para resumir el contenido principal. Identifica archivos dispersos, nombres confusos, posibles versiones duplicadas y candidatos para archivar, sin considerar que un nombre idéntico o una fecha antigua bastan para justificar una eliminación.\n\nPropón una clasificación lo más sencilla posible según el uso real de esta carpeta. Utiliza archivos existentes como ejemplos y muestra su ubicación exacta antes y después. Explica qué debería mantenerse tal como está y qué movimientos podrían afectar a proyectos, aplicaciones o referencias a archivos.\n\nPresenta primero la visión general y el plan en la conversación, enumerando los movimientos y cambios de nombre propuestos y las decisiones que debo tomar. Espera mi confirmación antes de ejecutarlo.",
       "sendKeyLabel": "enviar",
-      "newLineKeyLabel": "nueva línea"
+      "newLineKeyLabel": "nueva línea",
+      "suggestionsLabel": "Empieza con una sugerencia"
     },
     "subagents": {
       "title": "Subagentes",

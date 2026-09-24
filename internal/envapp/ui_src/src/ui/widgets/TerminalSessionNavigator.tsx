@@ -1,6 +1,7 @@
+import './terminal-mobile-navigation.css';
 import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
-import { Button, Input } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import { Check, Copy, FolderOpen, FolderPlus, Link, MoreHorizontal, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
 
 import { useI18n } from '../i18n';
@@ -79,6 +80,7 @@ export type TerminalSessionNavigatorProps = Readonly<{
   ownedLayerIds?: readonly string[];
   isFocusWithinOwnedLayer?: (target: Node | null) => boolean;
   onCloseDrawer: () => void;
+  onDrawerPresenceChange?: (present: boolean) => void;
   onCreateSessionInGroup?: (groupId: string) => void;
   onCreateGroup?: () => void;
   onToggleGroup?: (groupId: string) => void;
@@ -656,6 +658,11 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     props.onReorderGroup?.(groupId, intent.beforeGroupId);
   };
 
+  const drawerPresence = createFloatingPresence({ open: () => Boolean(props.mobile && props.drawerOpen), exitDurationMs: 180 });
+  createEffect(() => props.onDrawerPresenceChange?.(drawerPresence.mounted()));
+  const drawerInitialFocus = () => drawerDialogEl?.querySelector<HTMLElement>(props.mobile
+    ? '[data-testid="terminal-session-drawer-close"]'
+    : '[data-testid="terminal-session-filter"]');
   const drawerFocusableElements = () => {
     if (!drawerDialogEl) return [];
     return Array.from(drawerDialogEl.querySelectorAll<HTMLElement>(
@@ -667,7 +674,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     if (!props.mobile || !props.drawerOpen) return;
     queueMicrotask(() => {
       if (!props.mobile || !props.drawerOpen || !drawerDialogEl) return;
-      const initialFocus = drawerDialogEl.querySelector<HTMLElement>('[data-testid="terminal-session-filter"]')
+      const initialFocus = drawerInitialFocus()
         ?? drawerFocusableElements()[0];
       initialFocus?.focus({ preventScroll: true });
     });
@@ -709,7 +716,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
           .find((button) => button.dataset.terminalSessionId === sessionId)
       : null;
     const fallback = replacement
-      ?? drawerDialogEl?.querySelector<HTMLElement>('[data-testid="terminal-session-filter"]')
+      ?? drawerInitialFocus()
       ?? drawerFocusableElements()[0];
     fallback?.focus({ preventScroll: true });
   };
@@ -732,7 +739,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
       }
       if (props.mobile && props.drawerOpen) {
         focusOwnedByNavigator = true;
-        const fallback = drawerDialogEl?.querySelector<HTMLElement>('[data-testid="terminal-session-filter"]')
+        const fallback = drawerInitialFocus()
           ?? drawerFocusableElements()[0];
         fallback?.focus({ preventScroll: true });
         return;
@@ -787,9 +794,10 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
 
   return (
     <>
-      <Show when={props.mobile && props.drawerOpen}>
+      <Show when={drawerPresence.mounted()}>
         <div
-          class="absolute inset-0 z-30 cursor-default bg-[var(--redeven-overlay-scrim)]"
+          class="absolute inset-0 z-30 cursor-pointer bg-[var(--redeven-overlay-scrim)] floe-floating-presence floe-floating-backdrop"
+          data-floating-presence={drawerPresence.state()}
           aria-hidden="true"
           data-testid="terminal-session-drawer-backdrop"
           onClick={props.onCloseDrawer}
@@ -797,7 +805,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
       </Show>
       <div
         ref={drawerDialogEl}
-        class="contents"
+        class={props.mobile ? (drawerPresence.mounted()
+          ? 'terminal-mobile-session-sheet floe-floating-presence floe-bottom-drawer-panel absolute inset-x-2 bottom-2 z-40 overflow-hidden shadow-2xl'
+          : 'hidden') : 'contents'}
+        data-floating-presence={props.mobile ? drawerPresence.state() : undefined}
+        inert={props.mobile && !props.drawerOpen}
+        aria-hidden={props.mobile && !props.drawerOpen ? 'true' : undefined}
+        data-terminal-mobile-drawer={props.mobile ? "true" : undefined}
         role={props.mobile && props.drawerOpen ? 'dialog' : undefined}
         aria-modal={props.mobile && props.drawerOpen ? 'true' : undefined}
         aria-label={props.mobile && props.drawerOpen ? i18n.t('terminal.sessions') : undefined}
@@ -809,9 +823,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
           width={sidebarWidth()}
           ariaLabel={i18n.t('terminal.title')}
           class={`redeven-terminal-session-sidebar ${props.mobile
-            ? props.drawerOpen
-              ? 'absolute inset-y-0 left-0 z-40 !h-full !max-h-full !min-h-0 !w-[min(92vw,360px)] overflow-hidden shadow-2xl'
-              : 'hidden'
+            ? '!h-full !max-h-full !min-h-0 !w-full overflow-hidden'
             : '!w-[286px] !min-w-[286px] !max-w-[286px] overflow-hidden'}`}
         >
           <SidebarContent class="h-full min-h-0 overflow-hidden">
@@ -826,14 +838,15 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                 if (acceptsTerminalGroupDrag(event)) setGroupDropIntent(null);
               }}
             >
+              <Show when={props.mobile}><div class="terminal-mobile-drawer-handle" aria-hidden="true" /></Show>
               <div class="shrink-0 space-y-2">
-              <div class="flex items-center gap-2 px-0.5">
+              <div class="terminal-session-drawer-header flex items-center gap-2 px-0.5">
                 <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent/55 text-sidebar-accent-foreground">
                   <TerminalSessionChromeIcon avatar={props.activeAvatar} class="h-3.5 w-3.5" />
                 </div>
                 <div class="min-w-0 flex-1">
-                  <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">{i18n.t('terminal.title')}</div>
-                  <div class="truncate text-xs font-semibold text-sidebar-foreground" title={props.activeTitle}>{props.activeTitle}</div>
+                  <div class="terminal-session-drawer-eyebrow text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">{i18n.t('terminal.title')}</div>
+                  <div class="truncate text-xs font-semibold text-sidebar-foreground" title={props.activeTitle}>{props.mobile ? i18n.t('terminal.sessions') : props.activeTitle}</div>
                 </div>
                 <Button
                   size="sm"
@@ -886,7 +899,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
             </div>
 
             <SidebarSection
-              title={i18n.t('terminal.title')}
+              title={props.mobile ? undefined : i18n.t('terminal.title')}
               actions={(
                 <button
                   type="button"
@@ -1173,7 +1186,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           data-terminal-session-row={sessionId}
                           aria-grabbed={draggedSessionId() === sessionId ? 'true' : 'false'}
                           class={`group relative grid cursor-pointer items-center overflow-hidden rounded-md border border-transparent text-xs transition-[background-color,border-color,color,transform,opacity] duration-150 ${props.mobile
-                            ? 'min-h-[58px] grid-cols-[36px_minmax(0,1fr)_60px] gap-x-2 px-2.5 py-1'
+                            ? 'min-h-[64px] grid-cols-[36px_minmax(0,1fr)_44px] gap-x-2 px-2.5 py-1'
                             : 'min-h-[52px] grid-cols-[36px_minmax(0,1fr)_40px] gap-x-1.5 px-1.5 py-1'} ${sidebarActive()
                             ? 'border-primary/15 bg-[color-mix(in_srgb,var(--primary)_6%,var(--sidebar))] text-sidebar-accent-foreground'
                             : 'bg-transparent text-sidebar-foreground/78 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground'}`}
@@ -1378,14 +1391,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </span>
                             </Show>
                           </span>
+                          <Show when={props.mobile} fallback={(
                           <div
-                            class={`pointer-events-none relative z-20 grid self-center justify-self-end gap-1 ${props.mobile
-                              ? 'grid-cols-[26px_26px] grid-rows-[26px_26px]'
-                              : 'grid-cols-[20px_20px] grid-rows-[20px_20px]'}`}
+                            class={`pointer-events-none relative z-20 grid self-center justify-self-end gap-1 grid-cols-[20px_20px] grid-rows-[20px_20px]`}
                             data-terminal-session-actions={sessionId}
                           >
                             <span
-                              class={`col-start-1 row-start-1 flex items-center justify-center ${props.mobile ? 'h-[26px] w-[26px]' : 'h-5 w-5'}`}
+                              class={`col-start-1 row-start-1 flex items-center justify-center h-5 w-5`}
                               data-terminal-session-action-cell="index"
                               aria-hidden="true"
                             >
@@ -1396,17 +1408,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </Show>
                             </span>
                             <span
-                              class={`col-start-2 row-start-1 flex items-center justify-center ${props.mobile ? 'h-[26px] w-[26px]' : 'h-5 w-5'}`}
+                              class={`col-start-2 row-start-1 flex items-center justify-center h-5 w-5`}
                               data-terminal-session-action-cell="close"
                             >
                               <Show when={item().closable}>
                                 <button
                                   type="button"
-                                  class={`flex cursor-pointer items-center justify-center rounded text-[11px] text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 hover:bg-error/10 hover:text-error focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${props.mobile
-                                    ? 'h-[26px] w-[26px]'
-                                    : 'h-5 w-5'} ${props.mobile
-                                    ? 'pointer-events-auto opacity-100'
-                                    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}
+                                  class={`flex cursor-pointer items-center justify-center rounded text-[11px] text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 hover:bg-error/10 hover:text-error focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 h-5 w-5 pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100`}
                                   data-testid={`close-session-${sessionId}`}
                                   aria-label={`${i18n.t('terminal.deleteSession')} ${item().title}`}
                                   title={i18n.t('terminal.deleteSession')}
@@ -1420,13 +1428,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </Show>
                             </span>
                             <span
-                              class={`col-start-1 row-start-2 flex items-center justify-center ${props.mobile ? 'h-[26px] w-[26px]' : 'h-5 w-5'}`}
+                              class={`col-start-1 row-start-2 flex items-center justify-center h-5 w-5`}
                               data-terminal-session-action-cell="copy"
                             >
                               <Show when={item().fullPath}>
                                 <button
                                   type="button"
-                                  class={`pointer-events-auto flex cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${props.mobile ? 'h-[26px] w-[26px]' : 'h-5 w-5'} ${props.copiedPathSessionId === sessionId
+                                  class={`pointer-events-auto flex cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring h-5 w-5 ${props.copiedPathSessionId === sessionId
                                     ? 'bg-primary/10 text-primary'
                                     : 'hover:bg-sidebar-accent hover:text-sidebar-foreground'}`}
                                   title={props.copiedPathSessionId === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}
@@ -1444,7 +1452,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </Show>
                             </span>
                             <span
-                              class={`col-start-2 row-start-2 flex items-center justify-center ${props.mobile ? 'h-[26px] w-[26px]' : 'h-5 w-5'}`}
+                              class={`col-start-2 row-start-2 flex items-center justify-center h-5 w-5`}
                               data-terminal-session-action-cell="files"
                             >
                               <Tooltip content={filesTooltip()} placement="top" delay={0} disabled={draggedSessionId() !== null || draggedGroupId() !== null}>
@@ -1452,9 +1460,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                   type="button"
                                   class={`flex items-center justify-center rounded text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${item().canBrowsePath
                                     ? 'cursor-pointer hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                                    : 'cursor-not-allowed opacity-45'} ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'} ${props.mobile
-                                    ? 'pointer-events-auto opacity-100'
-                                    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}
+                                    : 'cursor-not-allowed opacity-45'} h-5 w-5 pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100`}
                                   data-testid={`terminal-session-files-${sessionId}`}
                                   data-terminal-files-availability={item().filesAvailability}
                                   aria-disabled={item().canBrowsePath ? undefined : 'true'}
@@ -1470,6 +1476,15 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </Tooltip>
                             </span>
                           </div>
+                          )}>
+                            <button type="button" class="relative z-20 flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-sidebar-accent"
+                              data-testid={`terminal-session-actions-${sessionId}`}
+                              aria-label={`${i18n.t('common.actions.more')}: ${item().title}`}
+                              aria-haspopup="menu"
+                              onClick={(event) => props.onOpenContextMenu(event, item())}>
+                              <MoreHorizontal class="h-5 w-5" />
+                            </button>
+                          </Show>
                         </div>
                         </div>
                       );

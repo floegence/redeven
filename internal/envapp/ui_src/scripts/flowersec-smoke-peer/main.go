@@ -234,6 +234,12 @@ func newHandlers(nativeCode, visualGit, fileContinuity bool, httpUpstream string
 		5001: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
 			return map[string]any{"sessions": []any{}}, nil
 		},
+		2017: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
+			return map[string]any{"revision": 1, "groups": []any{map[string]any{
+				"id": "default", "name": "Default", "default_working_dir": "/workspace",
+				"sort_order": 0, "created_at_ms": 1, "updated_at_ms": 1, "is_default": true,
+			}}}, nil
+		},
 		2002: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
 			return map[string]any{"sessions": []any{}}, nil
 		},

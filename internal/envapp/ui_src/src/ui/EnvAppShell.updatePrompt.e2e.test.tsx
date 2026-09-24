@@ -297,6 +297,7 @@ vi.mock('./pages/EnvAIPage', () => ({ EnvAIPage: () => <div /> }));
 
 vi.mock('./services/localApi', () => ({
   fetchLocalApiJSON: vi.fn(async () => ({ scope_id: 'a'.repeat(64) })),
+  readApiJSONResponse: vi.fn(async () => ({ data: {}, headers: new Headers(), status: 200 })),
   localApiRequestCredentials: () => 'same-origin',
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
   uploadLocalApiFile: vi.fn(),

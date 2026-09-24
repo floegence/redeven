@@ -648,7 +648,8 @@
       "organizeDescription": "Comprendre les fichiers et préparer un plan de rangement clair et réalisable.",
       "organizePrompt": "Aide-moi à comprendre ce que contient le répertoire de travail actuel et comment l’organiser pour retrouver les choses plus facilement.\n\nCommence par examiner les noms, types et tailles des fichiers ainsi que l’arborescence. Au besoin, lis quelques documents d’introduction pour résumer les principaux contenus. Repère les fichiers éparpillés, les noms confus, les versions éventuellement en double et les éléments à archiver, sans considérer un nom identique ou une date ancienne comme une raison suffisante pour supprimer un fichier.\n\nPropose un classement aussi simple que possible, adapté à l’usage réel du dossier. Utilise des fichiers existants pour montrer leurs emplacements précis avant et après rangement. Explique ce qui devrait rester en place et quels déplacements pourraient affecter des projets, des applications ou des références à des fichiers.\n\nPrésente d’abord l’aperçu du dossier et le plan dans la conversation, en listant clairement les déplacements et renommages proposés ainsi que les décisions qui me reviennent. Attends ma confirmation avant de les exécuter.",
       "sendKeyLabel": "envoyer",
-      "newLineKeyLabel": "nouvelle ligne"
+      "newLineKeyLabel": "nouvelle ligne",
+      "suggestionsLabel": "Commencez par une suggestion"
     },
     "subagents": {
       "title": "Sous-agents",

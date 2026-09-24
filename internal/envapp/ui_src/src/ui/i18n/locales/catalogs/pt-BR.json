@@ -153,7 +153,8 @@
       "close": "Fechar",
       "confirm": "Confirmar",
       "yes": "Sim",
-      "no": "Não"
+      "no": "Não",
+      "more": "Mais ações"
     },
     "status": {
       "connected": "Conectado",
@@ -5559,7 +5560,8 @@
       "organizeDescription": "Entenda os arquivos e prepare um plano de organização claro e viável.",
       "organizePrompt": "Ajude-me a entender o que há no diretório de trabalho atual e como organizá-lo para encontrar as coisas com mais facilidade.\n\nPrimeiro, examine nomes, tipos e tamanhos de arquivos e a estrutura de pastas. Se necessário, leia alguns documentos introdutórios para resumir o conteúdo principal. Identifique arquivos dispersos, nomes confusos, possíveis versões duplicadas e candidatos ao arquivamento, mas não considere nomes iguais ou datas antigas motivos suficientes para excluir algo.\n\nProponha uma classificação simples com base no uso real desta pasta. Use arquivos existentes como exemplos, mostrando os locais exatos antes e depois da organização. Explique o que deve permanecer como está e quais mudanças de local podem afetar projetos, aplicativos ou referências a arquivos.\n\nPrimeiro, apresente a visão geral e o plano na conversa, listando claramente as movimentações e renomeações propostas e as decisões que preciso tomar. Aguarde minha confirmação antes de executar o plano.",
       "sendKeyLabel": "enviar",
-      "newLineKeyLabel": "nova linha"
+      "newLineKeyLabel": "nova linha",
+      "suggestionsLabel": "Comece com uma sugestão"
     },
     "subagents": {
       "title": "Subagentes",

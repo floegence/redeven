@@ -475,34 +475,36 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
 
   return (
     <div ref={listRef} class="flower-thread-list flex min-h-0 flex-col gap-3 p-3">
-      <div class="flex items-center gap-2">
-        <div class="min-w-0 flex-1">
-          <h2 class="flower-thread-list-title truncate text-sm font-semibold">{copy().title}</h2>
-          <p class="flower-thread-list-description truncate text-xs">
-            {props.warmup || props.loading ? copy().warmupDescription : copy().description}
-          </p>
+      <div class="flower-thread-list-toolbar flex flex-col gap-3">
+        <div class="flower-thread-list-header flex items-center gap-2">
+          <div class="flower-thread-list-heading min-w-0 flex-1">
+            <h2 class="flower-thread-list-title truncate text-sm font-semibold">{copy().title}</h2>
+            <p class="flower-thread-list-description truncate text-xs">
+              {props.warmup || props.loading ? copy().warmupDescription : copy().description}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="flower-thread-refresh-button flex cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45"
+            aria-label={copy().refreshLabel}
+            title={copy().refreshLabel}
+            disabled={props.refreshing || props.warmup}
+            onClick={props.onRefresh}
+          >
+            <Refresh class={cn('h-3.5 w-3.5', props.refreshing && 'animate-spin')} />
+          </button>
         </div>
-        <button
-          type="button"
-          class="flower-thread-refresh-button flex cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45"
-          aria-label={copy().refreshLabel}
-          title={copy().refreshLabel}
-          disabled={props.refreshing || props.warmup}
-          onClick={props.onRefresh}
-        >
-          <Refresh class={cn('h-3.5 w-3.5', props.refreshing && 'animate-spin')} />
-        </button>
+        <label class="relative block">
+          <Search class="flower-thread-list-description pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+          <Input
+            class="flower-thread-search-input pl-9"
+            value={props.query}
+            placeholder={copy().searchPlaceholder}
+            disabled={searchDisabled()}
+            onInput={(event) => props.onQueryChange(event.currentTarget.value)}
+          />
+        </label>
       </div>
-      <label class="relative block">
-        <Search class="flower-thread-list-description pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
-        <Input
-          class="flower-thread-search-input pl-9"
-          value={props.query}
-          placeholder={copy().searchPlaceholder}
-          disabled={searchDisabled()}
-          onInput={(event) => props.onQueryChange(event.currentTarget.value)}
-        />
-      </label>
       <Show when={props.query.trim() && pinnedIDs().length > 1 && props.onMovePinned}>
         <button type="button" class="flower-thread-clear-sort-search" onClick={() => props.onQueryChange('')}>{copy().clearSearchToReorder}</button>
       </Show>

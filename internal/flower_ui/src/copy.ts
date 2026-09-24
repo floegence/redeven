@@ -28,6 +28,7 @@ export type FlowerEmptyStateSuggestionCopy = Readonly<{
 }>;
 
 export type FlowerEmptyStateCopy = Readonly<{
+  suggestionsLabel: string;
   moreSuggestions: string;
   fewerSuggestions: string;
   title: string;
@@ -1003,6 +1004,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     },
   },
   emptyState: {
+    suggestionsLabel: 'Start with a suggestion',
     moreSuggestions: 'More suggestions',
     fewerSuggestions: 'Fewer suggestions',
     title: 'Ask Flower',

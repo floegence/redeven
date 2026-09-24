@@ -417,6 +417,7 @@ export const flowerSurfaceEnUS = {
     groupOlder: 'Older',
   },
   emptyState: {
+    suggestionsLabel: 'Start with a suggestion',
     moreSuggestions: 'More suggestions',
     fewerSuggestions: 'Fewer suggestions',
     title: 'Ask Flower',
