@@ -7305,6 +7305,7 @@
     "openTimeout": "瀏覽器未及時回應。",
     "recoveryBlocked": "請先在來源瀏覽器中結束私密工作階段，再復原瀏覽器服務。",
     "outcomeUnknown": "操作可能已完成，請選擇來源查看目前狀態。",
-    "retry": "重試"
+    "retry": "重試",
+    "moreActions": "更多瀏覽器操作"
   }
 }

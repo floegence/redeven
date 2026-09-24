@@ -1,7 +1,7 @@
 import { browserFailureCode, type BrowserFailureCode } from './ui/services/browserFailure';
 import type { FlowerBrowserInstallationSnapshot } from '../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { BrowserSourceService } from './ui/services/browserSourceContract';
-import { mountBrowser, projectionPortConnection, type AddressSuggestion } from '@floegence/floebrowser/viewer';
+import { mountBrowser, projectionPortConnection, type AddressSuggestion, type BrowserMenu } from '@floegence/floebrowser/viewer';
 import decoderURL from '@floegence/floebrowser/media-worker.js?url';
 import audioWorkletURL from '@floegence/floebrowser/audio-worklet.js?url';
 import '@floegence/floebrowser/viewer.css';
@@ -91,12 +91,9 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
   let recoveryRevision = 0;
   let openingSources = false, disposed = false;
   let view: ReturnType<typeof mountBrowser> | undefined;
+  let menu: BrowserMenu | undefined;
   if (configuration.sources) {
     const sources = configuration.sources;
-    const bar = document.createElement('nav'); bar.className = 'redeven-browser-document-bar';
-    const button = document.createElement('button'); button.type = 'button'; button.textContent = sources.messages.product.sources;
-    button.setAttribute('aria-haspopup', 'dialog');
-    const label = document.createElement('span'); label.textContent = sources.current.label;
     const service: BrowserSourceService = {
       profiles: async signal => await request({ method: 'source.profiles' }, signal) as Awaited<ReturnType<BrowserSourceService['profiles']>>,
       createProfile: async (name, signal) => await request({ method: 'source.createProfile', name }, signal) as Awaited<ReturnType<BrowserSourceService['profiles']>>,
@@ -118,21 +115,30 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
         },
       },
     };
-    button.addEventListener('click', () => {
+    const chooseSource = async () => {
       if (openingSources || disposeSources) return;
-      openingSources = true; button.disabled = true;
-      void import('./browserSources').then(({ mountBrowserSources }) => {
+      const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+      openingSources = true;
+      try {
+        const { mountBrowserSources } = await import('./browserSources');
         if (disposed) return;
         disposeSources = mountBrowserSources({ service, messages: sources.messages, current: sources.current,
           select: async (selection, signal) => { await request({ method: 'source.select', selection }, signal); },
-          close: () => { disposeSources?.(); disposeSources = undefined; button.focus(); },
+          close: () => { disposeSources?.(); disposeSources = undefined; returnFocus?.focus(); },
         });
-      }).catch(() => { label.textContent = sources.messages.computer.chromeContinueFailed; label.setAttribute('role', 'alert'); })
-        .finally(() => { openingSources = false; button.disabled = false; });
-    });
+      } finally { openingSources = false; }
+    };
+    menu = { label: sources.messages.product.moreActions, actions: [
+      { label: sources.messages.product.sources, description: sources.current.label, run: chooseSource, failureMessage: sources.messages.computer.chromeContinueFailed },
+      ...(configuration.openWindow ? [{ label: sources.messages.product.openWindow,
+        run: async () => { await request({ method: 'workspace.openWindow' }); },
+        failureMessage: (error: unknown) => (error as { code?: string })?.code === 'BROWSER_WINDOW_BLOCKED' ? sources.messages.product.windowBlocked : sources.messages.product.windowUnavailable,
+      }] : []),
+    ] };
     showFailure = (code, phase = 'failed') => {
       const revision = ++recoveryRevision;
       connected = false; active = '';
+      disposeSources?.(); disposeSources = undefined;
       view?.destroy(); view = undefined;
       surface.hidden = true;
       void import('./browserSources').then(({ mountBrowserRecovery }) => {
@@ -141,14 +147,14 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
         disposeRecovery = mountBrowserRecovery({ state: { phase, failure: code, selection: sources.current }, service,
           messages: sources.messages, connected: true,
           retry: async () => { await request({ method: 'workspace.retry' }); }, recover: async () => { await request({ method: 'workspace.recover' }); },
-          chooseSource: () => button.click() });
+          chooseSource: () => { void chooseSource().catch(() => showFailure?.('BROWSER_OPEN_FAILED')); } });
       });
     };
     if (configuration.failure) showFailure(configuration.failure);
-    bar.append(button, label); surface.before(bar);
   }
   view = configuration.failure ? undefined : mountBrowser(surface, {
     title: configuration.title,
+    menu,
     fetchResource: (url, signal) => {
       const { target, id } = browserResourceIdentity(url, location.href);
       return file('resource', target, id, signal);

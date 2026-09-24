@@ -10,7 +10,7 @@ import { createBrowserWorkspaceController, type BrowserWorkspaceController, type
 export { openBrowserWorkspace, browserWorkspaceSource } from './browserWorkspaceController';
 
 type Entry = { controller: BrowserWorkspaceController; service: BrowserSourceService; child: Window | null; host?: ReturnType<typeof createBrowserWindow>; unsubscribe?: () => void; document?: string; rendering?: Promise<void>; revision: number; closed: boolean };
-export class BrowserWindowBlockedError extends Error {}
+export class BrowserWindowBlockedError extends Error { readonly code = 'BROWSER_WINDOW_BLOCKED'; }
 
 /** Windows retain their shells on disconnect; the shared controller alone owns
  * admitted views and source selection. The environment owns the only Session. */
@@ -43,10 +43,11 @@ export function createBrowserWorkspaceWindows(configuration: () => { title: stri
     const previous = entry.host;
     const host = createBrowserWindow({ session, view: state.view, child: () => entry.child,
       configuration: { type: 'redeven-browser-ports', nonce, title: copy.title, locale: copy.locale, messages: copy.messages, theme,
-        failure: state.failure, sources: { messages: copy.sources.messages, current, desktop: Boolean(entry.service.management.browserDesktopAvailable) } },
+        failure: state.failure, openWindow: true, sources: { messages: copy.sources.messages, current, desktop: Boolean(entry.service.management.browserDesktopAvailable) } },
       sources: { service: entry.service, select: (selection, signal) => entry.controller.open(selection, signal) },
       onReconnect: () => entry.controller.reconnect(),
       onRecover: () => entry.controller.recover(),
+      onOpenWindow: () => open(entry.controller.currentRequest()),
       onFailure: code => { if (entry.host === host) void entry.controller.fail(code); },
       onStatus: status => { if (entry.host === host && status === 'disconnected') void entry.controller.fail(); },
       onTabs: state => { if (entry.host === host) entry.controller.selectTarget(state.active); },
@@ -58,6 +59,26 @@ export function createBrowserWorkspaceWindows(configuration: () => { title: stri
     else entry.child = window.open(url, '_blank', 'popup,width=1280,height=900');
     if (!entry.child) { dispose(entry); throw new BrowserWindowBlockedError('Browser window blocked'); }
   };
+  async function open(request: BrowserWorkspaceRequest): Promise<void> {
+    if (!session || entries.size >= 8) throw new Error('Browser window unavailable');
+    const copy = configuration();
+    const service = browserSourceService(copy.sources.environment);
+    const controller = createBrowserWorkspaceController(service, { request, label: '' });
+    const entry: Entry = { controller, service, child: null, revision: 0, closed: false };
+    if (!desktopShellBridgeAvailable()) {
+      entry.child = window.open('about:blank', '_blank', 'popup,width=1280,height=900');
+      if (!entry.child) { controller.close(); throw new BrowserWindowBlockedError('Browser window blocked'); }
+      entry.child.document.title = copy.title;
+      entry.child.document.body.textContent = copy.connecting;
+    }
+    entries.add(entry); controller.setSession(session);
+    entry.unsubscribe = controller.subscribe(state => {
+      entry.rendering = render(entry, state);
+      void entry.rendering.catch(() => { if (entry.host) entry.host.suspend('BROWSER_OPEN_FAILED'); else dispose(entry); });
+    });
+    await controller.open({ request, label: '' }).catch(() => undefined);
+    await entry.rendering;
+  }
   return {
     setSession(next: Session | undefined): void {
       if (next === session) return;
@@ -67,26 +88,7 @@ export function createBrowserWorkspaceWindows(configuration: () => { title: stri
         if (next) void entry.controller.reconnect().catch(() => undefined);
       }
     },
-    async open(request: BrowserWorkspaceRequest): Promise<void> {
-      if (!session || entries.size >= 8) throw new Error('Browser window unavailable');
-      const copy = configuration();
-      const service = browserSourceService(copy.sources.environment);
-      const controller = createBrowserWorkspaceController(service, { request, label: '' });
-      const entry: Entry = { controller, service, child: null, revision: 0, closed: false };
-      if (!desktopShellBridgeAvailable()) {
-        entry.child = window.open('about:blank', '_blank', 'popup,width=1280,height=900');
-        if (!entry.child) { controller.close(); throw new BrowserWindowBlockedError('Browser window blocked'); }
-        entry.child.document.title = copy.title;
-        entry.child.document.body.textContent = copy.connecting;
-      }
-      entries.add(entry); controller.setSession(session);
-      entry.unsubscribe = controller.subscribe(state => {
-        entry.rendering = render(entry, state);
-        void entry.rendering.catch(() => { if (entry.host) entry.host.suspend('BROWSER_OPEN_FAILED'); else dispose(entry); });
-      });
-      await controller.open({ request, label: '' }).catch(() => undefined);
-      await entry.rendering;
-    },
+    open,
     refreshPresentation() {
       for (const entry of entries) {
         if (entry.controller.snapshot().view) void entry.controller.reconnect().catch(() => undefined);

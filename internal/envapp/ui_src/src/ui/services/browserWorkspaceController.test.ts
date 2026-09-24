@@ -54,11 +54,13 @@ it('rebuilds presentation from the admitted target without opening another works
   const { controller, request } = await fixture();
   await controller.open(selection);
   controller.selectTarget('second-tab');
+  expect(controller.currentRequest()).toEqual({ source_target: 'second-tab' });
   request.mockResolvedValueOnce(Response.json({ ok: true, data: view('browser-view-next') }));
   await controller.reconnect();
   expect(String(request.mock.calls[1]![0])).toBe('/_redeven_proxy/api/browser/views');
   expect(JSON.parse(String(request.mock.calls[1]![1]?.body))).toEqual({ targets: ['second-tab'] });
   controller.close(); controller.close();
+  expect(() => controller.currentRequest()).toThrow('BROWSER_SOURCE_UNAVAILABLE');
   expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(2);
 });
 

@@ -7309,6 +7309,7 @@
     "openTimeout": "O navegador não respondeu a tempo.",
     "recoveryBlocked": "Encerre a sessão privada no navegador de origem antes de recuperar o serviço.",
     "outcomeUnknown": "A ação pode já ter sido concluída. Selecione a origem para verificar o estado atual.",
-    "retry": "Tentar novamente"
+    "retry": "Tentar novamente",
+    "moreActions": "Mais ações do navegador"
   }
 }

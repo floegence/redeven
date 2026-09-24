@@ -23,6 +23,7 @@ export type BrowserWindowOptions = Readonly<{
   onClose?(): void;
   onFailure?(code: BrowserFailureCode): void;
   onRecover?(): Promise<void>;
+  onOpenWindow?(): Promise<void>;
 }>;
 
 /** The environment remains the sole Session owner. Each trusted browser document
@@ -85,6 +86,10 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
   const execute = async (operation: BrowserDocumentRequest, signal: AbortSignal): Promise<BrowserDocumentResult> => {
     if (operation.method === 'workspace.retry') { await options.onReconnect(); return; }
     if (operation.method === 'workspace.recover') { await options.onRecover?.(); return; }
+    if (operation.method === 'workspace.openWindow') {
+      if (suspended || !options.view || !options.onOpenWindow) throw new Error('Browser window unavailable');
+      await options.onOpenWindow(); return;
+    }
     if (operation.method.startsWith('source.')) {
       if (!sourcePort) throw new Error('Browser source management unavailable');
       return sourcePort.execute(operation as BrowserSourceOperation, signal);
@@ -177,7 +182,7 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
     requests.set(message.id, { abort, view: !message.operation.method?.startsWith('source.') && !message.operation.method?.startsWith('workspace.') });
     void execute(message.operation, AbortSignal.any([lifetime.signal, abort.signal])).then(
       value => { if (!lifetime.signal.aborted && !abort.signal.aborted) product?.postMessage({ type: 'result', id: message.id, ok: true, value }, value && typeof value === 'object' && 'body' in value ? [value.body] : []); },
-      error => { if (!lifetime.signal.aborted) product?.postMessage({ type: 'result', id: message.id, ok: false, code: browserFailureCode(error) }); },
+      error => { if (!lifetime.signal.aborted) product?.postMessage({ type: 'result', id: message.id, ok: false, code: message.operation.method === 'workspace.openWindow' && error?.code === 'BROWSER_WINDOW_BLOCKED' ? 'BROWSER_WINDOW_BLOCKED' : browserFailureCode(error) }); },
     ).finally(() => requests.delete(message.id));
   };
 

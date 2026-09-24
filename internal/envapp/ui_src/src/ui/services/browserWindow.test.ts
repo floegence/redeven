@@ -34,7 +34,7 @@ import { createBrowserWindow } from './browserWindow';
 let cleanup: (() => void) | undefined;
 afterEach(() => { cleanup?.(); cleanup = undefined; vi.unstubAllGlobals(); vi.clearAllMocks(); document.body.replaceChildren(); });
 
-async function fixture() {
+async function fixture(onOpenWindow?: () => Promise<void>) {
   vi.stubGlobal('MessageChannel', MessageChannel);
   state.api.mockImplementation(() => Promise.resolve(undefined));
   const frame = document.createElement('iframe'); document.body.append(frame);
@@ -45,7 +45,7 @@ async function fixture() {
     view: { generation: 'fixture-generation', id: 'browser-view-test', initial_target: 'first', protocol_version: 22, media_wire_version: 1 },
     child: () => child,
     configuration: { type: 'redeven-browser-ports', nonce: 'nonce', title: 'Browser', locale: 'en-US', messages: {} as BrowserMessages, theme: {} },
-    onReconnect: vi.fn(),
+    onReconnect: vi.fn(), onOpenWindow,
   });
   window.dispatchEvent(new MessageEvent('message', { source: child, origin: location.origin, data: { type: 'redeven-browser-ready', nonce: 'nonce' } }));
   const ports = (delivered.mock.calls[0] as unknown as [unknown, string, MessagePort[]])[2];
@@ -68,7 +68,12 @@ async function fixture() {
     return { ...result, response };
   };
   const token = (target = 'first') => state.carrierOptions!.controlToken({ type: 'command', id: 1, tab: target, epoch: 'epoch', action: { kind: 'reload' } });
-  return { acquire, received, token };
+  const request = (method: string) => {
+    const response = new Promise(resolve => { product.onmessage = event => { if (event.data.type === 'result') resolve(event.data); }; });
+    product.postMessage({ type: 'request', id: ++id, operation: { method } });
+    return response;
+  };
+  return { acquire, received, token, request, host };
 }
 
 it('admits source control only after its private token arrives, regardless of lane order', async () => {
@@ -112,4 +117,14 @@ it('discards a held grant and delayed credentials when the selected target chang
   await pending.response;
   expect(token()).toBe('');
   expect(received.some(message => message.type === 'control' && message.active)).toBe(false);
+});
+
+it('allows only an active document to open a window and preserves the popup-blocked code', async () => {
+  const open = vi.fn(async () => { throw Object.assign(new Error('Blocked'), { code: 'BROWSER_WINDOW_BLOCKED' }); });
+  const { request, host } = await fixture(open);
+  expect(await request('workspace.openWindow')).toMatchObject({ ok: false, code: 'BROWSER_WINDOW_BLOCKED' });
+  expect(open).toHaveBeenCalledOnce();
+  host.suspend('BROWSER_DISCONNECTED');
+  expect(await request('workspace.openWindow')).toMatchObject({ ok: false, code: 'BROWSER_OPEN_FAILED' });
+  expect(open).toHaveBeenCalledOnce();
 });

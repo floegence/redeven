@@ -216,7 +216,9 @@ try {
   popup.on('pageerror', error => console.error('Popup error:', error.message));
   diagnosticPage = popup; popup.setDefaultTimeout(10000);
   const popupReplay = popup.frameLocator('iframe');
-  await popup.getByRole('button', { name: 'Browser sources', exact: true }).click({ timeout: 2000 });
+  await popup.getByRole('button', { name: 'More browser actions', exact: true }).click({ timeout: 2000 });
+  await popup.getByRole('menuitem', { name: 'Browser sources', exact: true }).click();
+  assert.equal(await popup.locator('.redeven-browser-document-bar').count(), 0, 'Product actions share the address row');
   await popup.getByRole('dialog').waitFor();
   if (extensionSource) {
     await popup.getByRole('radio', { name: /New background tab/ }).waitFor();
@@ -353,7 +355,8 @@ try {
     assert.equal(await popup.getByRole('tab').count(), 2, 'A managed popup joins its opened profile directory');
   } else {
   const findSources = async () => {
-    await popup.getByRole('button', { name: 'Browser sources', exact: true }).click();
+    await popup.getByRole('button', { name: 'More browser actions', exact: true }).click();
+    await popup.getByRole('menuitem', { name: 'Browser sources', exact: true }).click();
     const dialog = popup.getByRole('dialog');
     await dialog.waitFor();
     if (!extensionSource) {

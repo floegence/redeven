@@ -7305,6 +7305,7 @@
     "openTimeout": "浏览器未及时响应。",
     "recoveryBlocked": "请先在源浏览器中结束私密会话，再恢复浏览器服务。",
     "outcomeUnknown": "操作可能已经完成，请选择来源查看当前状态。",
-    "retry": "重试"
+    "retry": "重试",
+    "moreActions": "更多浏览器操作"
   }
 }

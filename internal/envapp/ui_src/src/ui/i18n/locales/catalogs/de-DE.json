@@ -7309,6 +7309,7 @@
     "openTimeout": "Der Browser hat nicht rechtzeitig geantwortet.",
     "recoveryBlocked": "Beenden Sie vor der Wiederherstellung die private Sitzung im Quellbrowser.",
     "outcomeUnknown": "Die Aktion wurde möglicherweise bereits ausgeführt. Wählen Sie die Quelle, um den aktuellen Zustand zu prüfen.",
-    "retry": "Erneut versuchen"
+    "retry": "Erneut versuchen",
+    "moreActions": "Weitere Browseraktionen"
   }
 }

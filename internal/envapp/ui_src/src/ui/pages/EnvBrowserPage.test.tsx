@@ -38,6 +38,7 @@ it('keeps the view stable when shell settings refresh without a presentation cha
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <EnvBrowserPage onOpenWindow={async () => undefined} />, root);
   await vi.waitFor(() => expect(root.querySelector('[data-browser-surface]')).not.toBeNull());
+  expect(root.querySelector('.redeven-browser-profile-bar')).toBeNull();
   expect(sequence).toBe(1);
   setTheme({ mode: 'light', preset: 'default' });
   await Promise.resolve(); await Promise.resolve();

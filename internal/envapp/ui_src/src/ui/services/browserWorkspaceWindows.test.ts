@@ -88,3 +88,13 @@ it('keeps the current document when source replacement fails and ignores retired
   const posts = request.mock.calls.filter(([, init]) => init?.method === 'POST');
   expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ targets: ['current-tab'] });
 });
+
+it('opens another window from the confirmed current source without replaying a source operation', async () => {
+  const { children, request } = await setupWindows();
+  hosts[0]!.options.onTabs?.({ active: 'latest-tab', tabs: [] });
+  expect(hosts[0]!.options.configuration.openWindow).toBe(true);
+  await hosts[0]!.options.onOpenWindow?.();
+  expect(children).toHaveLength(2);
+  const posts = request.mock.calls.filter(([, init]) => init?.method === 'POST');
+  expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ targets: ['latest-tab'] });
+});

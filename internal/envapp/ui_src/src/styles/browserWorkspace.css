@@ -16,14 +16,6 @@
   min-height: 0;
 }
 
-.redeven-browser-profile-bar {
-  display: flex;
-  gap: .5rem;
-  padding: .5rem .75rem;
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-}
-
 .redeven-floebrowser-document {
   min-height: 0;
   width: 100%;
@@ -48,10 +40,6 @@
 .redeven-floebrowser-surface > .redeven-floebrowser-page-loading {
   position: absolute;
   inset: 0;
-}
-
-@media (max-width: 560px) {
-  .redeven-browser-profile-bar { flex-wrap: wrap; }
 }
 
 .redeven-browser-notice {

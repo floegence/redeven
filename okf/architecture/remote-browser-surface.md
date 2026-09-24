@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote browser surface
 description: Mount shared browser windows with current control and coherent tab presentation.
 tags: [architecture, browser, ui]
-timestamp: 2026-09-24T00:00:00Z
+timestamp: 2026-09-25T00:00:00Z
 ---
 # Summary
 
@@ -31,6 +31,13 @@ The environment shell loads the window adapter only when a browser window is
 requested. The full viewer engine belongs to the browser document, outside the
 environment and access documents' initial asset graphs. Locale keys come from
 the maintained product catalog and are checked against the released engine.
+The address row's More menu owns product actions. Both inline and independent
+windows expose source selection and open independent windows there through
+named host operations. There is no separate product toolbar.
+The menu shows the current source as secondary text, preserves keyboard focus,
+and renders localized failures without changing the selected page. Hosts supply
+plain labels and callbacks to the released FloeBrowser menu; they do not copy its
+chrome or menu implementation.
 Its source dialog edits a draft and applies it only on Open; profile creation,
 Chrome setup and browser installation reuse the same operations as Flower.
 Independent windows reuse the admitted source identity, so reopening a window
@@ -117,3 +124,5 @@ without `allow-forms` and its `form-action 'none'` policy.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.test.ts` - Grant/token ordering, immediate revocation and stale selection rejection.
 - [FloeBrowser v0.1.12: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/viewer/replay-pages.ts) — Bounded inert document retention.
 - [FloeBrowser v0.1.12: test/tab-cache.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/test/tab-cache.e2e.ts) — Immediate presentation without stale input authority.
+
+- [FloeBrowser v0.1.13: test/browser-menu.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.13/test/browser-menu.e2e.ts) — Address-row actions, activation, focus, narrow bounds and late completion.
