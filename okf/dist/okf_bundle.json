@@ -12987,7 +12987,7 @@
         "files",
         "privacy"
       ],
-      "timestamp": "2026-09-23T00:00:00Z",
+      "timestamp": "2026-09-24T00:00:00Z",
       "frontmatter": {
         "description": "Transfer exact source files through authorized browser views.",
         "tags": [
@@ -12996,11 +12996,11 @@
           "files",
           "privacy"
         ],
-        "timestamp": "2026-09-23T00:00:00Z",
+        "timestamp": "2026-09-24T00:00:00Z",
         "title": "Remote browser files",
         "type": "Architecture Contract"
       },
-      "body_length": 4426,
+      "body_length": 5041,
       "summary": "- Authority: the Runtime authorizes a source view and FloeBrowser owns its file handles and capture lifecycle.\n- Outcome: users upload to a selected source input and explicitly save source-generated downloads through Flowersec.\n- Invariants: file identities belong to their admitted source; captures preserve original bytes and source request semantics; personal browser directories are never scanned.\n- Failure boundary: revoked views, expired handles and unsupported download forms fail explicitly without refetching a URL or selecting another file.",
       "sections": [
         {
@@ -13014,8 +13014,8 @@
           "id": "authorized-transfer-and-cleanup",
           "title": "Authorized transfer and cleanup",
           "level": 1,
-          "body": "The browser download panel exposes source-provided names and states. Saving is\nan explicit user action. Runtime file routes validate the current view, target\ngrant and opaque download identity before opening its byte stream. Revoking\nthe view cancels its transfer. Canceling a receiving capture closes its source\nstream; source disposal removes task-owned temporary files.\n\nUploads travel through the authenticated Flowersec upload stream to source\ntemporary storage and apply only to the selected live source file input.\nDesktop save dialogs and Web browser downloads are client-side destinations;\nthe replay document receives no filesystem or Desktop bridge.",
-          "char_count": 660
+          "body": "The browser download panel exposes source-provided names and states. Saving is\nan explicit user action. Runtime file routes validate the current view, target\ngrant and opaque download identity before opening its byte stream. Revoking\nthe view cancels its transfer. Canceling a receiving capture closes its source\nstream; source disposal removes task-owned temporary files.\n\nThe environment reads opaque resource and download identities through its\ncurrent Session HTTP carrier, then transfers bytes over the view's product port.\nResource reads are bounded to 8 MiB each; download reads to 256 MiB each and four\nconcurrent downloads. Reads share a 256 MiB in-flight byte budget, reject truncated\nresponses and cancel when their request or view ends. The trusted document\ncreates only local Blob destinations. It receives no generic HTTP operation or\ncontrol token. FloeBrowser's published `fetchResource` adapter owns replay\nresource presentation and its separate decoded-resource limits.\n\nUploads travel through the authenticated Flowersec upload stream to source\ntemporary storage and apply only to the selected live source file input.\nDesktop save dialogs and Web browser downloads are client-side destinations;\nthe replay document receives no filesystem or Desktop bridge.",
+          "char_count": 1275
         }
       ],
       "evidence": [
@@ -13457,7 +13457,7 @@
         "browser",
         "ui"
       ],
-      "timestamp": "2026-09-23T00:00:00Z",
+      "timestamp": "2026-09-24T00:00:00Z",
       "frontmatter": {
         "description": "Mount shared browser windows with current control and coherent tab presentation.",
         "tags": [
@@ -13465,19 +13465,19 @@
           "browser",
           "ui"
         ],
-        "timestamp": "2026-09-23T00:00:00Z",
+        "timestamp": "2026-09-24T00:00:00Z",
         "title": "Remote browser surface",
         "type": "Architecture Contract"
       },
-      "body_length": 4099,
+      "body_length": 5687,
       "summary": "- Authority: the environment window owns its authenticated Session and private control token; FloeBrowser owns reusable browser chrome and inert page presentation.\n- Outcome: Desktop and Web clients browse through the same surface and can open independent windows without selecting their source again.\n- Invariants: fresh source selection and control admission precede input; child windows receive only named browser operations; cached documents confer no authority.\n- Failure boundary: replacing a source fails without destroying the current view; disconnect destroys stale presentation and never replays uncertain input.",
       "sections": [
         {
           "id": "window-ownership",
           "title": "Window ownership",
           "level": 1,
-          "body": "The shared `FloeBrowserSurface` mounts the released `@floegence/floebrowser` viewer against a Runtime-issued authenticated projection endpoint. Its endpoint is an opaque carrier identity. The viewer can request takeover, but the host decides whether control is granted and revokes it before draining in-flight input. A disconnected or stale generation destroys the previous view before mounting a new one, so old DOM and notices cannot flash over a new tab.\n\nSource admission, popup privacy and directory retirement belong to [browser source ownership](remote-browser-sources.md). [Browser persistence](remote-browser-persistence.md) owns the library and managed restoration. [Browser transport and media](remote-browser-media.md) owns authenticated carriers and source playback.\n\n\nThe Browser page opens the default managed profile without AI configuration.\nThe environment shell loads the window adapter only when a browser window is\nrequested. The full viewer engine belongs to the browser document, outside the\nenvironment and access documents' initial asset graphs. Locale keys come from\nthe maintained product catalog and are checked against the released engine.\nIts source dialog edits a draft and applies it only on Open; profile creation,\nChrome setup and browser installation reuse the same operations as Flower.\nIndependent windows reuse the admitted source identity, so reopening a window\nnever repeats a new-tab operation or rebinds an outdated URL selection. They mount\nthe same source chooser through named product-port operations. Installation uses\nthe environment's existing coordinator, including Desktop package transfer;\nthe child receives no generic fetch, IPC, installation-chunk or Session API.\nA failed replacement leaves the current window and source usable. External\npopups remain outside its grants until the user explicitly selects that page.\n\nThe environment window forwards input readiness only after both the private\ncontrol token and the matching source control grant arrive. Revocation and tab\nchanges remain immediate; a delayed token cannot revive a revoked grant.\nAddress submissions additionally wait for idle-control admission. HTTP responses and DOM/control messages may\narrive in either order. A changed tab, newer address or disconnected view cancels\nan unsubmitted navigation; previously submitted input is never retried.",
-          "char_count": 2363
+          "body": "The shared `FloeBrowserSurface` mounts the released `@floegence/floebrowser` viewer against a Runtime-issued authenticated projection endpoint. Its endpoint is an opaque carrier identity. The viewer can request takeover, but the host decides whether control is granted and revokes it before draining in-flight input. A disconnected or stale generation destroys the previous view before mounting a new one, so old DOM and notices cannot flash over a new tab.\n\nSource admission, popup privacy and directory retirement belong to [browser source ownership](remote-browser-sources.md). [Browser persistence](remote-browser-persistence.md) owns the library and managed restoration. [Browser transport and media](remote-browser-media.md) owns authenticated carriers and source playback.\n\n\nThe Browser page opens the default managed profile without AI configuration.\nThe environment shell loads the window adapter only when a browser window is\nrequested. The full viewer engine belongs to the browser document, outside the\nenvironment and access documents' initial asset graphs. Locale keys come from\nthe maintained product catalog and are checked against the released engine.\nIts source dialog edits a draft and applies it only on Open; profile creation,\nChrome setup and browser installation reuse the same operations as Flower.\nIndependent windows reuse the admitted source identity, so reopening a window\nnever repeats a new-tab operation or rebinds an outdated URL selection. They mount\nthe same source chooser through named product-port operations. Installation uses\nthe environment's existing coordinator, including Desktop package transfer;\nthe child receives no generic fetch, IPC, installation-chunk or Session API.\nA failed replacement leaves the current window and source usable. External\npopups remain outside its grants until the user explicitly selects that page.\n\nThe trusted document is a static shell without a view identity or source data.\nIts URL carries only a fresh instance nonce, also checked against the exact\nopener or parent before handing over ports. A source replacement changes the\nquery as well as the nonce, so the browser loads a new document instead of doing\na fragment-only navigation with retired ports. Desktop reserves that exact URL\nonce and gives the child no preload or generic bridge.\n\nView creation, source management, control, preferences, library, resource reads,\ndownloads and cleanup use the Shell's existing Session HTTP lifecycle. Local UI\ncookies and the synthetic `local-ui` HTTP identity never own a browser view.\nDOM, input, media and upload lanes borrow that same Session. Runtime owner and\nchannel checks remain mandatory; no local-identity fallback exists. Source\nresources and downloads are named operations on the existing product port,\nscoped to its issued view. The document cannot choose another view, a URL, or\nrequest headers. This works without a Service Worker on direct Local UI clients.\n\nSelecting the current source explicitly opens a fresh view, including after\nbrowser installation or a failed initial open. Browser chrome consumes the host\npalette in welcome, navigation and disconnected states. Web Services retains its\nglobe icon; Remote Browser uses a browser-window icon.\n\nThe environment window forwards input readiness only after both the private\ncontrol token and the matching source control grant arrive. Revocation and tab\nchanges remain immediate; a delayed token cannot revive a revoked grant.\nAddress submissions additionally wait for idle-control admission. HTTP responses and DOM/control messages may\narrive in either order. A changed tab, newer address or disconnected view cancels\nan unsubmitted navigation; previously submitted input is never retried.\nThe address field's Enter key and Go button issue source commands directly.\nThey never submit a native form, so the inline document keeps its restrictive\nsandbox without `allow-forms` and its `form-action 'none'` policy.",
+          "char_count": 3952
         },
         {
           "id": "tab-presentation",
@@ -27058,5 +27058,5 @@
       ]
     }
   ],
-  "source_sha256": "0b7b90ab6822d598337a66c07a30514eb4b8e8f6da5eb3167d2e048e8dcc85fa"
+  "source_sha256": "c52ce8bb1f9d10ef02de77e7a543f53981ed0cd7ecb3c1e35316cbb02fadba27"
 }

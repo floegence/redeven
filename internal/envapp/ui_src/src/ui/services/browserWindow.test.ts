@@ -12,7 +12,7 @@ const state = vi.hoisted(() => ({
   receive: undefined as ((message: ServerMessage) => void | Promise<void>) | undefined,
   connection: undefined as ProjectionConnection | undefined,
 }));
-vi.mock('./localApi', () => ({ fetchLocalApiJSON: state.api }));
+vi.mock('./sessionHTTP', () => ({ fetchSessionJSON: state.api }));
 vi.mock('./browserTransport', () => ({
   createBrowserUpload: () => vi.fn(),
   createBrowserCarrier: (options: BrowserCarrierOptions) => {

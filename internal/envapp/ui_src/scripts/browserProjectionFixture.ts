@@ -1,3 +1,4 @@
+import { bindSessionHTTP } from '../src/ui/services/sessionHTTP';
 import { browserSourceMessages } from '../src/ui/i18n/browserSourceMessages';
 import { createI18nHelpers } from '../src/ui/i18n/createI18n';
 import { enUS } from '../src/ui/i18n/locales/en-US';
@@ -24,6 +25,7 @@ window.startBrowserFixture = async ({ artifact, connection, managed }) => {
     serviceWorker: { scriptUrl: '/_redeven_sw.js', scope: '/' },
     runtime: { pathPolicy: { allowedPathPrefixes: ['/_redeven_proxy/'] } },
   });
+  const releaseHTTP = bindSessionHTTP({ fetch: (input, init) => owner.runtime.fetch(input, init), events: async function* () { throw new Error('Unexpected event stream'); } });
   const views: ReturnType<typeof createBrowserWindow>[] = [];
   window.browserFixtureCDPTabs = async endpoint => {
     const response = await owner.runtime.fetch('/_redeven_proxy/api/browser/connections/cdp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint }) });
@@ -58,5 +60,5 @@ window.startBrowserFixture = async ({ artifact, connection, managed }) => {
     void independent.open(browserWorkspaceSource(inline));
   });
   window.leaveBrowserPage = () => { for (const view of views) view.close(); frame.remove(); };
-  window.closeBrowserFixture = async () => { independent.close(); for (const view of views) view.close(); await owner.dispose(); };
+  window.closeBrowserFixture = async () => { independent.close(); for (const view of views) view.close(); await owner.dispose(); releaseHTTP(); };
 };

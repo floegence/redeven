@@ -34,7 +34,7 @@ func TestBrowserViewAPIRejectsForgedGrantsWithoutAcquiringAI(t *testing.T) {
 			t.Fatalf("%s %s: %d %s", check.method, check.path, response.Code, response.Body.String())
 		}
 	}
-	for _, path := range []string{"forged-view/", "forged-view/?browser_target=page&browser_resource=opaque", "forged-view/../another/"} {
+	for _, path := range []string{"?browser_target=page&browser_resource=opaque", "?instance=short", "?instance=1234567890123456&instance=1234567890123456", "forged-view/", "forged-view/?browser_target=page&browser_resource=opaque", "forged-view/../another/"} {
 		response := serveAIReadinessTestRequest(srv, origin, http.MethodGet, "/_redeven_proxy/env/browser/"+path, nil)
 		if response.Code != http.StatusNotFound {
 			t.Fatalf("browser document %s: %d %s", path, response.Code, response.Body.String())

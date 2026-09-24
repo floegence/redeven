@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote browser surface
 description: Mount shared browser windows with current control and coherent tab presentation.
 tags: [architecture, browser, ui]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-24T00:00:00Z
 ---
 # Summary
 
@@ -34,13 +34,36 @@ the child receives no generic fetch, IPC, installation-chunk or Session API.
 A failed replacement leaves the current window and source usable. External
 popups remain outside its grants until the user explicitly selects that page.
 
+The trusted document is a static shell without a view identity or source data.
+Its URL carries only a fresh instance nonce, also checked against the exact
+opener or parent before handing over ports. A source replacement changes the
+query as well as the nonce, so the browser loads a new document instead of doing
+a fragment-only navigation with retired ports. Desktop reserves that exact URL
+once and gives the child no preload or generic bridge.
+
+View creation, source management, control, preferences, library, resource reads,
+downloads and cleanup use the Shell's existing Session HTTP lifecycle. Local UI
+cookies and the synthetic `local-ui` HTTP identity never own a browser view.
+DOM, input, media and upload lanes borrow that same Session. Runtime owner and
+channel checks remain mandatory; no local-identity fallback exists. Source
+resources and downloads are named operations on the existing product port,
+scoped to its issued view. The document cannot choose another view, a URL, or
+request headers. This works without a Service Worker on direct Local UI clients.
+
+Selecting the current source explicitly opens a fresh view, including after
+browser installation or a failed initial open. Browser chrome consumes the host
+palette in welcome, navigation and disconnected states. Web Services retains its
+globe icon; Remote Browser uses a browser-window icon.
+
 The environment window forwards input readiness only after both the private
 control token and the matching source control grant arrive. Revocation and tab
 changes remain immediate; a delayed token cannot revive a revoked grant.
 Address submissions additionally wait for idle-control admission. HTTP responses and DOM/control messages may
 arrive in either order. A changed tab, newer address or disconnected view cancels
 an unsubmitted navigation; previously submitted input is never retried.
-
+The address field's Enter key and Go button issue source commands directly.
+They never submit a native form, so the inline document keeps its restrictive
+sandbox without `allow-forms` and its `form-action 'none'` policy.
 
 # Tab presentation
 

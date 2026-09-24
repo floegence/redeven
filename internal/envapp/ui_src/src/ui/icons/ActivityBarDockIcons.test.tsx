@@ -4,7 +4,7 @@ import type { JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ActivityBarPortsIcon, ActivityBarSettingsIcon, ActivityBarSwitchIcon } from './ActivityBarDockIcons';
+import { ActivityBarBrowserIcon, ActivityBarPortsIcon, ActivityBarSettingsIcon, ActivityBarSwitchIcon } from './ActivityBarDockIcons';
 
 function renderIcon(Icon: (props: { class?: string }) => JSX.Element): SVGSVGElement {
   const host = document.createElement('div');
@@ -39,13 +39,23 @@ describe('Activity Bar bottom icons', () => {
     expect(icon.querySelector('title, [tabindex]')).toBeNull();
   });
 
-  it('uses a server and port glyph for Web Services instead of the browser globe', () => {
+  it('keeps the globe glyph for Web Services', () => {
     const icon = renderIcon(ActivityBarPortsIcon);
 
     expect(icon.getAttribute('data-activity-bar-icon')).toBe('web-services');
+    expect(icon.querySelector('circle')).not.toBeNull();
+    expect(icon.querySelector('line')).not.toBeNull();
+    expect(icon.querySelector('rect')).toBeNull();
+    expect(icon.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('uses a browser window with a globe for FloeBrowser', () => {
+    const icon = renderIcon(ActivityBarBrowserIcon);
+
+    expect(icon.getAttribute('data-activity-bar-icon')).toBe('floebrowser');
     expect(icon.querySelector('rect')).not.toBeNull();
     expect(icon.querySelectorAll('circle')).toHaveLength(3);
-    expect(icon.querySelector('ellipse')).toBeNull();
+    expect(icon.querySelector('line')).toBeNull();
     expect(icon.getAttribute('aria-hidden')).toBe('true');
   });
 });

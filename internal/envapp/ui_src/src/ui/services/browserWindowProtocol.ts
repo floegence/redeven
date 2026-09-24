@@ -42,6 +42,7 @@ export type BrowserDocumentRequest = BrowserSourceOperation
   | { method: 'zoom.load'; origin: string }
   | { method: 'zoom.save'; origin: string; factor: number }
   | { method: 'upload'; chooser: FileChooserState; file: File }
+  | { method: 'resource' | 'download'; target: string; id: string }
   | { method: 'visibility'; visible: boolean };
 
 export type BrowserDocumentEvent =
@@ -50,10 +51,14 @@ export type BrowserDocumentEvent =
   | { type: 'state'; state: BrowserState }
   | { type: 'status'; status: 'connecting' | 'refreshing' | 'live' | 'disconnected' };
 
-export type BrowserDocumentResult = BrowserSourceResult | string | number | readonly AddressSuggestion[] | undefined;
+export type BrowserFileResult = Readonly<{ body: ArrayBuffer; contentType: string; disposition: string }>;
+
+export type BrowserDocumentResult = BrowserFileResult | BrowserSourceResult | string | number | readonly AddressSuggestion[] | undefined;
 
 export function browserDocumentURL(view: BrowserViewDescriptor, nonce: string): string {
   if (!/^browser-view-[A-Za-z0-9]+$/u.test(view.id) || view.protocol_version !== 22 || view.media_wire_version !== 1)
     throw new Error('Browser version or identity unavailable');
-  return `/_redeven_proxy/env/browser/${encodeURIComponent(view.id)}/#${encodeURIComponent(nonce)}`;
+  // A distinct document query forces a real navigation when replacing a source.
+  // Fragment-only changes would retain the closed document and its stale ports.
+  return `/_redeven_proxy/env/browser/?instance=${encodeURIComponent(nonce)}#${encodeURIComponent(nonce)}`;
 }
