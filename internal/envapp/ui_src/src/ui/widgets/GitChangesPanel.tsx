@@ -24,7 +24,7 @@ import {
 } from '../utils/gitWorkbench';
 import { GitCommitDialog } from './GitCommitDialog';
 import { GitDiffPanel } from './GitDiffPanel';
-import { GitDiffSplit } from './GitDiffSplit';
+import { GitDiffSplit, type GitDiffNavigation } from './GitDiffSplit';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
   GIT_CHANGED_FILES_TABLE_CLASS,
@@ -421,6 +421,7 @@ function parentGitPath(relativePath: string): string {
 }
 
 export function GitChangesPanel(props: GitChangesPanelProps) {
+  let diffNavigation: GitDiffNavigation | undefined;
   const i18n = useI18n();
   const [commitDialogOpen, setCommitDialogOpen] = createSignal(false);
   const [selectedDiffKey, setSelectedDiffKey] = createSignal('');
@@ -662,6 +663,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   };
 
   const openWorkspaceDiff = (item: GitSeededWorkspaceChange) => {
+    diffNavigation?.openDetail();
     setSelectedDiffKey(workspaceEntryKey(item));
     props.onSelectItem?.(item);
   };
@@ -1174,6 +1176,8 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
           </div>
 
           <GitDiffSplit
+            ref={(navigation) => { diffNavigation = navigation; }}
+            resetKey={`${repoRootPath()}:${selectedSection()}:${activeDirectoryPath()}`}
             detail={(
               <GitDiffPanel
                 open={Boolean(diffItem())}

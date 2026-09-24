@@ -1264,6 +1264,20 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.textarea);
   });
 
+  it('toggles terminal navigation from its mobile tab and clears it when leaving', async () => {
+    await page.viewport(393, 844);
+    await mountProductionMobileShell();
+    const tab = page.getByRole('tab', { name: 'Terminal', exact: true });
+    await userEvent.click(tab);
+    expect(tab.element().getAttribute('aria-expanded')).toBe('true');
+    await userEvent.click(tab);
+    expect(tab.element().getAttribute('aria-expanded')).toBe('false');
+    await userEvent.click(tab);
+    expect(tab.element().getAttribute('aria-expanded')).toBe('true');
+    await userEvent.click(page.getByRole('tab', { name: 'Flower', exact: true }));
+    expect(tab.element().getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('keeps the mobile companion hidden through viewport changes', async () => {
     await page.viewport(390, 844);
     const original = Object.getOwnPropertyDescriptor(window, 'visualViewport');

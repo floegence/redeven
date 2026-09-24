@@ -1,9 +1,11 @@
 import '../../index.css';
 
 import { createSignal } from 'solid-js';
+import { page, userEvent } from 'vitest/browser';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const layoutState = vi.hoisted(() => ({ mobile: false, active: (() => true) as () => boolean }));
 const protocolState = vi.hoisted(() => ({
   client: (() => null) as () => object | null,
   status: (() => 'connected') as () => string,
@@ -24,13 +26,13 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
   useCurrentWidgetId: () => null,
-  useLayout: () => ({ isMobile: () => false }),
+  useLayout: () => ({ isMobile: () => layoutState.mobile }),
   useNotification: () => ({ error: vi.fn(), info: vi.fn(), success: vi.fn() }),
   useResolvedFloeConfig: () => ({
     persist: { load: (_key: string, fallback: unknown) => fallback, debouncedSave: vi.fn() },
   }),
   useTheme: () => ({ resolvedTheme: () => 'dark', shellPresetForMode: () => null }),
-  useViewActivation: () => ({ id: 'terminal-continuity', visible: () => true, active: () => true, activationSeq: () => 0 }),
+  useViewActivation: () => ({ id: 'terminal-continuity', visible: layoutState.active, active: layoutState.active, activationSeq: () => 0 }),
 }));
 
 vi.mock('../pages/EnvContext', () => ({
@@ -178,11 +180,37 @@ function renderCreateFlow(createSession: TerminalPanelSessionOperations['createS
 }
 
 describe('TerminalPanel loading continuity', () => {
+  it('retains an externally opened drawer through the initial inactive mount', async () => {
+    await page.viewport(393, 740);
+    layoutState.mobile = true;
+    const [active, setActive] = createSignal(false);
+    const [open, setOpen] = createSignal(true);
+    layoutState.active = active;
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '393px', height: '640px' });
+    document.body.append(host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider>
+      <TerminalPanel variant="panel" mobileSessionsOpen={open()} onMobileSessionsOpenChange={setOpen} />
+    </TerminalSessionCatalogProvider>, host);
+    expect(open()).toBe(true);
+    setActive(true);
+    await expect.poll(() => host.querySelector('[data-terminal-mobile-drawer]')?.getAttribute('role')).toBe('dialog');
+    const trigger = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')!;
+    await userEvent.click(page.getByTestId('terminal-session-drawer-close'));
+    await expect.poll(open).toBe(false);
+    await userEvent.click(trigger);
+    await expect.poll(open).toBe(true);
+    await userEvent.click(page.getByTestId('terminal-session-drawer-close'));
+    await expect.poll(() => document.activeElement).toBe(trigger);
+  });
+
   beforeEach(() => {
     const [client] = createSignal<object | null>({ id: 'client-1' });
     const [status] = createSignal('connected');
     protocolState.client = client;
     protocolState.status = status;
+    layoutState.mobile = false;
+    layoutState.active = () => true;
     rpcState.sessions = [];
     runtimeState.propsBySession.clear();
     sessionStorage.clear();

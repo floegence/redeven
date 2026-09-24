@@ -58,6 +58,9 @@ export function EnvTerminalPage() {
       >
         <TerminalPanel
           variant="panel"
+          mobileSessionsOpen={env.terminalSessionsOpen?.()}
+          onMobileSessionsOpenChange={env.setTerminalSessionsOpen}
+          mobileSessionsTrigger={env.terminalSessionsTrigger}
           openSessionRequest={env.openTerminalInDirectoryRequest()}
           onOpenSessionRequestHandled={env.consumeOpenTerminalInDirectoryRequest}
         />

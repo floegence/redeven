@@ -1,4 +1,5 @@
 import { GitFileLabel } from './GitFileLabel';
+import { useGitDiffNavigation } from './GitDiffSplit';
 import {
   Match,
   Show,
@@ -11,7 +12,7 @@ import {
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
-import { FileText, Refresh } from '@floegence/floe-webapp-core/icons';
+import { ArrowLeft, FileText, Refresh } from '@floegence/floe-webapp-core/icons';
 import {
   useRedevenRpc,
   type GitCommitDiffPresentation,
@@ -334,6 +335,7 @@ function createGitDiffDialogLoadSlot(values: Partial<GitDiffDialogLoadSlot> = {}
 }
 
 export function GitDiffPanel(props: GitDiffPanelProps) {
+  const navigation = useGitDiffNavigation();
   const i18n = useI18n();
   const rpc = useRedevenRpc();
   const protocol = useProtocol();
@@ -640,6 +642,12 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
   const dialogContent = () => (
     <div data-git-diff-panel class={cn("git-diff-panel flex h-full min-h-0 min-w-0 flex-col", props.class)}>
       <div class="git-diff-panel__toolbar">
+        <Show when={navigation}>
+          <button type="button" data-git-diff-back class="git-diff-panel__back" onClick={() => navigation?.showFiles()}
+            title={i18n.t('uiCopy.git.changedFiles')} aria-label={i18n.t('uiCopy.git.changedFiles')}>
+            <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+          </button>
+        </Show>
         <div class="git-diff-panel__identity">
           <Show when={!props.loading} fallback={<GitSkeletonBlock class="h-3 w-40 max-w-full" />}>
             <Show when={props.item} fallback={<span class="text-[11px] font-medium text-muted-foreground">{i18n.t('gitDiff.title')}</span>}>
@@ -720,6 +728,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
             <GitPatchViewer
               class="h-full min-h-0 flex-1"
               fillViewport
+              showMobileHint={false}
               item={activeUnavailableState()?.item}
               emptyMessage={activeBodyEmptyMessage()}
               unavailableMessage={activeUnavailableState()?.message}
@@ -730,6 +739,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
             <GitPatchViewer
               class="h-full min-h-0 flex-1"
               fillViewport
+              showMobileHint={false}
               item={activeReadyItem()}
               emptyMessage={activeBodyEmptyMessage()}
               unavailableMessage={unavailableMessage}

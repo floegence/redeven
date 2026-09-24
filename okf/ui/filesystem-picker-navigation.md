@@ -69,6 +69,10 @@ cache, cancellation, and commit owner rather than mounting a picker navigation
 controller. File items, identifiers, menu callbacks, drag targets, and reveal
 requests pass through the workspace with their original absolute paths and
 identity. There is no Home-relative display tree or reverse path conversion.
+On mobile, selecting directories retains the open tree drawer for successive
+path changes. Initial hydration preserves the Shell's opening intent; a successful
+directory load does not implicitly dismiss it. Explicit dismissal, leaving the
+surface, or changing environments releases that navigation state.
 
 Files uses the actual workspace chrome throughout module loading, path discovery,
 and first directory loading. The sidebar tree, file list/grid, path, and count

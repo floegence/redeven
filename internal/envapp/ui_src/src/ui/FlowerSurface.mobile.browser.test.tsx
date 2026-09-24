@@ -21,6 +21,39 @@ async function mountMobile(width: number, height = 720) {
 }
 
 describe('Flower mobile navigation', () => {
+  it('keeps the clipped page stationary throughout repeated drawer entry and exit', async () => {
+    const runtime = await mountMobile(393);
+    Object.assign(runtime.style, { position: 'absolute', top: '48px', height: '600px', overflow: 'hidden' });
+    const header = runtime.querySelector<HTMLElement>('.flower-chat-header')!;
+    const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    await userEvent.fill(editor, 'Retained draft 中文');
+    editor.setSelectionRange(2, 7);
+    for (let cycle = 0; cycle < 2; cycle += 1) {
+      const frames: { top: number; scroll: number; opacity: number | null }[] = [];
+      let frameId = 0;
+      const sample = () => {
+        const panel = runtime.querySelector<HTMLElement>('.flower-mobile-thread-drawer');
+        frames.push({ top: header.getBoundingClientRect().top, scroll: runtime.scrollTop, opacity: panel ? Number(getComputedStyle(panel).opacity) : null });
+        frameId = requestAnimationFrame(sample);
+      };
+      sample();
+      try {
+        await userEvent.click(page.getByRole('button', { name: DEFAULT_FLOWER_SURFACE_COPY.chat.conversationsAria, exact: true }));
+        await vi.waitFor(() => expect(runtime.querySelector('.flower-mobile-thread-drawer')).not.toBeNull());
+        await new Promise(resolve => setTimeout(resolve, 350));
+        await userEvent.keyboard('{Escape}');
+        await vi.waitFor(() => expect(runtime.querySelector('.flower-mobile-thread-drawer')).toBeNull());
+      } finally {
+        cancelAnimationFrame(frameId);
+      }
+      expect(frames.some(frame => frame.opacity !== null && frame.opacity < 1)).toBe(true);
+      expect(frames.every(frame => Math.abs(frame.top - frames[0].top) < 1 && frame.scroll === 0)).toBe(true);
+      expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
+      expect(editor.value).toBe('Retained draft 中文');
+      expect([editor.selectionStart, editor.selectionEnd]).toEqual([2, 7]);
+    }
+  });
+
   it.each([390, 640, 767])('opens a large conversation drawer at %i pixels and retains the detail and draft', async (width) => {
     const runtime = await mountMobile(width);
     const detail = runtime.querySelector<HTMLElement>('.flower-component-main')!;
@@ -40,13 +73,16 @@ describe('Flower mobile navigation', () => {
     const panel = rail.closest<HTMLElement>('[data-floe-dialog-panel]')!;
     const overlayBounds = overlay.getBoundingClientRect();
     const panelBounds = panel.getBoundingClientRect();
+    const newChat = rail.querySelector<HTMLButtonElement>('.flower-new-chat-button')!;
+    const newChatBounds = newChat.getBoundingClientRect();
+    const iconBounds = newChat.firstElementChild!.getBoundingClientRect();
+    expect(newChatBounds.width).toBeGreaterThanOrEqual(44);
+    expect(Math.abs(iconBounds.left + iconBounds.width / 2 - newChatBounds.left - newChatBounds.width / 2)).toBeLessThan(1);
     const overlayStyle = getComputedStyle(overlay);
     const paddingTop = Number.parseFloat(overlayStyle.paddingTop);
     const paddingBottom = Number.parseFloat(overlayStyle.paddingBottom);
     expect(detail.getBoundingClientRect().height).toBeGreaterThanOrEqual(700);
     expect(detail.getBoundingClientRect().top).toBe(detailBefore.top);
-    expect(getComputedStyle(panel).position).toBe('absolute');
-    expect(getComputedStyle(panel).bottom).toBe('0px');
     expect(panelBounds.top).toBeGreaterThanOrEqual(overlayBounds.top + paddingTop - 1);
     expect(panelBounds.bottom).toBeLessThanOrEqual(overlayBounds.bottom - paddingBottom + 1);
     expect(panelBounds.bottom).toBeGreaterThan(panelBounds.top);

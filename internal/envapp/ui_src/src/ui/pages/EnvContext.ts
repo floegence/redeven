@@ -119,6 +119,9 @@ export type EnvContextValue = {
   filesSidebarOpen: () => boolean;
   setFilesSidebarOpen: (open: boolean) => void;
   toggleFilesSidebar: () => void;
+  terminalSessionsOpen?: () => boolean;
+  setTerminalSessionsOpen?: (open: boolean) => void;
+  terminalSessionsTrigger?: () => HTMLButtonElement | null;
 
   settingsSeq: () => number;
   bumpSettingsSeq: () => void;
