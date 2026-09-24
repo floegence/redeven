@@ -68,7 +68,7 @@ export class BrowserProjectionWindows {
     if (!owner || expiry <= Date.now() || parent.isDestroyed()) return { action: 'deny' };
     return {
       action: 'allow',
-      overrideBrowserWindowOptions: { width: 1280, height: 900, minWidth: 720, minHeight: 480, frame: true, titleBarStyle: 'default', show: false,
+      overrideBrowserWindowOptions: { width: 1280, height: 900, minWidth: 720, minHeight: 480, frame: true, titleBarStyle: 'default', show: true,
         webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } },
       createWindow: options => {
         const preferences = { ...options.webPreferences };
@@ -84,7 +84,6 @@ export class BrowserProjectionWindows {
           if (expiry > Date.now()) owner.windows.set(child, destination);
           else event.preventDefault();
         });
-        child.once('ready-to-show', () => { if (!child.isDestroyed()) child.show(); });
         child.once('closed', () => owner.windows.delete(child));
         return child.webContents;
       },

@@ -14,7 +14,7 @@ it('reserves only the exact same-origin static document instance and consumes it
   }
   expect(windows.consume(parent, { url })).toEqual({ action: 'deny' });
   expect(windows.prepare(parent, url)).toBe(true);
-  expect(windows.consume(parent, { url })).toMatchObject({ action: 'allow', overrideBrowserWindowOptions: { webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } } });
+  expect(windows.consume(parent, { url })).toMatchObject({ action: 'allow', overrideBrowserWindowOptions: { show: true, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } } });
   expect(windows.consume(parent, { url })).toEqual({ action: 'deny' });
 });
 
