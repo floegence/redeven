@@ -436,6 +436,7 @@ vi.mock('@floegence/floe-webapp-core', async () => {
   return {
   secureRandomUUID: actual.secureRandomUUID,
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
+  useResizeObserver: () => () => ({ width: 1024, height: 768 }),
   getShellThemePresetsForMode: () => [],
   resolveThemeTokenOverrides: () => ({}),
   createUIFirstSelection: (options: any) => {

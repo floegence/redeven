@@ -93,7 +93,7 @@ describe('browser workspace layout wiring', () => {
     expect(workspaceSrc).toContain("import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';");
     expect(workspaceSrc).toContain("redevenSurfaceRoleClass('controlMuted')");
     expect(workspaceSrc).toContain("redevenSurfaceRoleClass('segmented')");
-    expect(workspaceSrc).toContain("class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}");
+    expect(workspaceSrc).toContain("class={cn('file-workspace-header shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}");
     expect(workspaceSrc).toContain('text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60');
     expect(workspaceSrc).not.toContain('FileBrowserCurrentFolderCard');
     expect(workspaceSrc).toContain('<FileBrowserSidebarTree');

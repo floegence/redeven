@@ -1424,7 +1424,7 @@ describe('FileBrowserWorkspace interactions', () => {
       await flush();
       expect(toolbar?.getAttribute('data-toolbar-layout')).toBe('stacked');
 
-      defineElementWidth(toolbar!, 760);
+      defineElementWidth(toolbar!, 800);
       triggerResizeObservers();
       await flush();
       expect(toolbar?.getAttribute('data-toolbar-layout')).toBe('inline');
