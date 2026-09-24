@@ -12,6 +12,16 @@ const summary = (): FlowerThreadSnapshot => ({
 });
 
 describe('applyFlowerRuntimeCurrentView', () => {
+  it('preserves exact approval command whitespace through canonical refreshes', () => {
+    const command = '\n  printf "first line"\n  printf "second line"\n';
+    const current: FlowerRuntimeCurrentView = {
+      thread_id: 'thread-a', view_version: 2, activity: 'active', turn_id: 'turn-a', run_id: 'run-a',
+      interactions: [{ id: 'approval-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval',
+        approval: { tool_name: 'terminal.exec', tool_call_id: 'tool-a', label: 'Inspect output', command } }],
+    };
+    expect(applyFlowerRuntimeCurrentView(summary(), current).approval_actions?.[0].summary.command).toBe(command);
+  });
+
   it('retains canonical terminal execution identity without deriving it from a successful tool', () => {
     const view: FlowerRuntimeCurrentView = { thread_id: 'thread-a', view_version: 2, turn_id: 'turn-a', run_id: 'run-a', activity: 'idle', last_outcome: 'cancelled' };
     const stopped = applyFlowerRuntimeCurrentView(summary(), view);

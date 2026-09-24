@@ -5407,8 +5407,8 @@
       "toolApprovalDetails": "操作の詳細を表示",
       "toolApprovalScope": "承認は表示されている操作にのみ適用されます。",
       "toolApprovalQueueCount": "ほかに {count} 件の承認待ち",
-      "toolApprovalPendingCount": "ツール承認待ち {count} 件",
-      "toolApprovalRejectBatch": "すべて拒否",
+      "toolApprovalPendingCount": "承認待ち · {count} 件",
+      "toolApprovalRejectBatch": "{count} 件を拒否",
       "toolApprovalRejectBatchAction": "保留中のツール承認 {count} 件をすべて拒否",
       "toolApprovalOutsideWorkspaceRisk": "この操作はワークスペース外のリソースにアクセスする可能性があります。",
       "toolApprovalWritesFilesRisk": "この操作によりファイルが変更されます。",
@@ -5463,11 +5463,15 @@
       "workingDirPickerRecent": "最近使用",
       "workingDirPickerConfirm": "選択",
       "linkedContextLabel": "関連コンテキスト",
-      "toolApprovalApproveBatch": "すべて許可",
+      "toolApprovalApproveBatch": "{count} 件を一度だけ許可",
       "toolApprovalApproveBatchAction": "保留中のツール承認 {count} 件をすべて許可",
       "restoredInputTitle": "復元後に保持された入力",
       "restoredInputDescription": "この入力は自動実行されません。再実行するには新しいタスクにコピーしてください。",
-      "restoredInputCopy": "入力をコピー"
+      "restoredInputCopy": "入力をコピー",
+      "toolApprovalOnceScope": "今回のみ",
+      "toolApprovalExpandCommand": "コマンド全体を表示",
+      "toolApprovalHideCommand": "折りたたむ",
+      "toolApprovalEligibleCount": "承認可能 · {count} 件"
     },
     "threadList": {
       "title": "会話",

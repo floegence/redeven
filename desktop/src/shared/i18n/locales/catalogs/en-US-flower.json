@@ -376,8 +376,8 @@
     "toolApprovalDetails": "View action details",
     "toolApprovalScope": "Approval applies only to the listed actions.",
     "toolApprovalQueueCount": "{count} more approval(s) waiting",
-    "toolApprovalPendingCount": "{count} pending tool approval(s)",
-    "toolApprovalRejectBatch": "Reject all",
+    "toolApprovalPendingCount": "Approval required · {count}",
+    "toolApprovalRejectBatch": "Reject · {count}",
     "toolApprovalRejectBatchAction": "Reject all {count} pending tool approvals",
     "toolApprovalOutsideWorkspaceRisk": "This action may access resources outside the workspace.",
     "toolApprovalWritesFilesRisk": "This action will modify files.",
@@ -422,7 +422,7 @@
     "workingDirPickerTitle": "Select working directory",
     "workingDirPickerRecent": "Recently used",
     "workingDirPickerConfirm": "Select",
-    "toolApprovalApproveBatch": "Allow all",
+    "toolApprovalApproveBatch": "Allow once · {count}",
     "toolApprovalApproveBatchAction": "Allow all {count} pending tool approvals",
     "restoredInputTitle": "Input preserved after restore",
     "restoredInputDescription": "This input will not run automatically. Copy it into a new task to run it again.",
@@ -435,7 +435,11 @@
     "computerFrameRateHint": "Higher frame rates use more bandwidth. Actual updates depend on your device and connection.",
     "computerReceivedFrameRate": "Receiving {fps} FPS",
     "computerControlTaken": "You have control",
-    "computerControlNotReady": "The page is not ready yet. Complete the step described above, then try again."
+    "computerControlNotReady": "The page is not ready yet. Complete the step described above, then try again.",
+    "toolApprovalOnceScope": "This time only",
+    "toolApprovalExpandCommand": "View full command",
+    "toolApprovalHideCommand": "Collapse",
+    "toolApprovalEligibleCount": "Can approve · {count}"
   },
   "threadList": {
     "title": "Conversations",

@@ -46,8 +46,8 @@ export function presentFlowerApproval(
   const fileTargets = targetsOfKind(targets, 'file');
   const networkTargets = targetsOfKind(targets, 'web_url', 'web_query');
   const workingDirectories = targetsOfKind(targets, 'working_directory');
-  const commandTarget = targetsOfKind(targets, 'command')[0]?.label.trim();
-  const command = action.summary.command?.trim() || commandTarget || '';
+  const commandTarget = targetsOfKind(targets, 'command')[0]?.label;
+  const command = action.summary.command?.trim() ? action.summary.command : commandTarget || '';
   let operationLabel = copy.executeRequestedAction;
   let displayTargets: readonly string[] = [];
 
@@ -69,7 +69,7 @@ export function presentFlowerApproval(
   ].filter(Boolean).join(' ');
   const description = action.summary.description?.trim() || '';
   const label = safeSummaryLabel(action);
-  operationLabel = (label !== command ? label : '') || description || operationLabel;
+  operationLabel = (label !== command.trim() ? label : '') || description || operationLabel;
 
   return {
     title: copy.title,

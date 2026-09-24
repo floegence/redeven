@@ -27,7 +27,8 @@ import {
 } from './FlowerSurface.navigation.testHarness';
 
 describe('Flower bottom decision surface', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await page.viewport(1280, 900);
     const featureStyle = document.createElement('style');
     featureStyle.textContent = flowerFeatureStyles;
     document.head.append(featureStyle);
@@ -530,9 +531,9 @@ describe('Flower bottom decision surface', () => {
     expect(surface.classList.contains('flower-decision-surface')).toBe(true);
     expect(surface.querySelector('.flower-decision-surface')).toBeNull();
     expect(surface.querySelector('.flower-approval-card')).toBeNull();
-    expect(surface.querySelector('.flower-approval-copy-btn')).toBeNull();
+    expect(surface.querySelectorAll('.flower-approval-copy-btn')).toHaveLength(2);
     expect(surface.querySelectorAll('[data-flower-composer-approval="true"]')).toHaveLength(2);
-    expect(surface.querySelector('.flower-approval-queue-progress')?.textContent?.trim()).toBe('2 pending tool approvals');
+    expect(surface.querySelector('.flower-approval-queue-progress')?.textContent?.trim()).toBe('Approval required · 2');
     expect(surface.querySelector('textarea')).toBeNull();
     expect(surface.querySelector('input[type="password"]')).toBeNull();
     expect(surface.querySelector('input[type="file"]')).toBeNull();
@@ -549,21 +550,22 @@ describe('Flower bottom decision surface', () => {
     expect(stop?.disabled).toBe(false);
     expect(surface.querySelector('.flower-composer-attachment-button')).toBeNull();
     expect(surface.textContent).not.toContain('Review before this runs');
-    expect(surface.textContent).toContain('Allow the following action?');
+    expect(surface.querySelector('.flower-approval-question')).toBeNull();
     expect(surface.querySelector('.flower-approval-intro')).toBeNull();
     expect(surface.textContent).not.toContain('terminal.exec');
     expect(surface.querySelector('.flower-approval-operation-label')?.textContent).toContain('Validate the release endpoint');
     expect(surface.querySelector('.flower-approval-operation-description')).toBeNull();
     expect(surface.querySelector('.flower-approval-risk')?.textContent).not.toContain('Validate the release endpoint');
     expect(surface.textContent?.match(/printf flower-decision-surface/g)).toHaveLength(2);
-    expect(surface.textContent).toContain('2 pending tool approvals');
+    expect(surface.textContent).toContain('Approval required · 2');
 
-    expect(decisions.map((button) => button.textContent?.trim())).toEqual(['Reject', 'Allow once', 'Reject', 'Allow once', 'Reject all', 'Allow all']);
+    expect(decisions.map((button) => button.textContent?.trim())).toEqual(['Reject', 'Allow once', 'Reject', 'Allow once', 'Reject · 2', 'Allow once · 2']);
     expect(surface.querySelectorAll('[data-flower-approval-decision-group="true"]')).toHaveLength(3);
     const footer = surface.querySelector('.flower-approval-queue-footer') as HTMLElement;
     const batchCapsule = footer.querySelector('[data-flower-approval-decision-group="true"]') as HTMLElement;
     const batchStop = footer.querySelector('.flower-composer-stop-thread') as HTMLButtonElement;
-    expect(batchCapsule.nextElementSibling).toBe(batchStop);
+    expect(footer.firstElementChild).toBe(batchStop);
+    expect(footer.lastElementChild).toBe(batchCapsule);
     const observedModes: string[] = [];
     const observer = new MutationObserver(() => {
       const mode = runtime.querySelector<HTMLElement>('[data-flower-bottom-mode]')?.dataset.flowerBottomMode;
@@ -587,6 +589,7 @@ describe('Flower bottom decision surface', () => {
     const nextDecision = Array.from(nextSurface.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
       .find((button) => button.textContent?.trim() === 'Allow once')!;
     expect(nextSurface.querySelectorAll('[data-flower-composer-approval="true"]')).toHaveLength(1);
+    nextDecision.focus();
     nextDecision.click();
     await waitFor(() => submitApproval.mock.calls.length === 2);
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="chat"]')));
@@ -708,7 +711,7 @@ describe('Flower bottom decision surface', () => {
     (runtime.querySelector(`[data-thread-id="${approvalThread.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelectorAll('[data-flower-composer-approval="true"]').length === 2);
     const allowAll = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
-      .find((button) => button.textContent?.trim() === (approved ? 'Allow all' : 'Reject all'));
+      .find((button) => button.textContent?.trim() === (approved ? 'Allow once · 2' : 'Reject · 2'));
     expect(allowAll).toBeTruthy();
     allowAll?.click();
     allowAll?.click();
@@ -893,6 +896,7 @@ describe('Flower bottom decision surface', () => {
     });
     const secondApprove = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
       .find((button) => button.textContent?.trim() === 'Allow once');
+    secondApprove?.focus();
     secondApprove?.click();
     await waitFor(() => runtime.querySelector('[data-flower-bottom-mode="chat"]') !== null);
     const restoredComposer = runtime.querySelector('[data-flower-bottom-mode="chat"]') as HTMLElement;
@@ -998,8 +1002,8 @@ describe('Flower bottom decision surface', () => {
     const capsule = runtime.querySelector('[data-flower-approval-decision-group="true"]') as HTMLElement;
     const stop = runtime.querySelector('.flower-composer-stop-thread') as HTMLButtonElement;
     const actions = capsule.parentElement as HTMLElement;
-    expect(actions.classList.contains('flower-composer-approval-actions')).toBe(true);
-    expect(stop.nextElementSibling).toBe(capsule);
+    expect(actions.classList.contains('flower-approval-actions')).toBe(true);
+    expect(stop.parentElement?.classList.contains('flower-approval-queue-footer')).toBe(true);
     expect(capsule.querySelectorAll(':scope > button.flower-composer-approval-decision')).toHaveLength(2);
     expect(capsule.querySelectorAll(':scope > .flower-approval-decision-divider')).toHaveLength(0);
     stop.focus();

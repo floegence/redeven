@@ -5407,8 +5407,8 @@
       "toolApprovalDetails": "Ver detalles de la acción",
       "toolApprovalScope": "La autorización solo se aplica a las acciones indicadas.",
       "toolApprovalQueueCount": "Aprobaciones adicionales en espera: {count}",
-      "toolApprovalPendingCount": "{count} aprobación(es) de herramientas pendientes",
-      "toolApprovalRejectBatch": "Rechazar todo",
+      "toolApprovalPendingCount": "Pendientes de aprobación · {count}",
+      "toolApprovalRejectBatch": "Rechazar · {count}",
       "toolApprovalRejectBatchAction": "Rechazar las {count} aprobaciones de herramientas pendientes",
       "toolApprovalOutsideWorkspaceRisk": "Esta acción puede acceder a recursos fuera del espacio de trabajo.",
       "toolApprovalWritesFilesRisk": "Esta acción modificará archivos.",
@@ -5463,11 +5463,15 @@
       "workingDirPickerRecent": "Recientes",
       "workingDirPickerConfirm": "Seleccionar",
       "linkedContextLabel": "Contexto vinculado",
-      "toolApprovalApproveBatch": "Permitir todo",
+      "toolApprovalApproveBatch": "Permitir una vez · {count}",
       "toolApprovalApproveBatchAction": "Permitir las {count} aprobaciones de herramientas pendientes",
       "restoredInputTitle": "Entrada conservada tras la restauración",
       "restoredInputDescription": "Esta entrada no se ejecutará automáticamente. Cópiala en una tarea nueva para volver a ejecutarla.",
-      "restoredInputCopy": "Copiar entrada"
+      "restoredInputCopy": "Copiar entrada",
+      "toolApprovalOnceScope": "Solo esta vez",
+      "toolApprovalExpandCommand": "Ver el comando completo",
+      "toolApprovalHideCommand": "Contraer",
+      "toolApprovalEligibleCount": "Se pueden aprobar · {count}"
     },
     "threadList": {
       "title": "Conversaciones",

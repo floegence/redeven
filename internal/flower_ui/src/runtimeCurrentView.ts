@@ -314,7 +314,7 @@ function runtimeApprovalActions(
       summary: {
         label: trim(approval.label) || trim(approval.tool_name),
         ...(trim(approval.description) ? { description: trim(approval.description) } : {}),
-        ...(trim(approval.command) ? { command: trim(approval.command) } : {}),
+        ...(trim(approval.command) ? { command: approval.command } : {}),
         ...(trim(approval.risk) ? { risk: trim(approval.risk) } : {}),
         ...(approval.effects?.length ? { effects: [...approval.effects] } : {}),
         ...(approval.targets?.length ? {

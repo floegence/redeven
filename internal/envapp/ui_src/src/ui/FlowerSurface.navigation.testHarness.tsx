@@ -495,7 +495,7 @@ export function runtimeCurrentView(
       tool_call_id: action.tool_id,
       resolved: action.status !== 'pending' || action.state !== 'requested',
       approved: action.state === 'approved',
-      approval: { ...action.summary, targets: undefined, safe_targets: action.summary.targets, tool_name: action.tool_name, tool_call_id: action.tool_id },
+      approval: { ...action.summary, targets: action.summary.targets?.map(target => `${target.kind}:${target.label}`), tool_name: action.tool_name, tool_call_id: action.tool_id },
     })),
     ...(threadValue.input_request ? [{
       id: threadValue.input_request.prompt_id,
