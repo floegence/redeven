@@ -13,6 +13,7 @@ button{top:220px;width:180px;height:60px}#field{top:350px}#drag{top:100px;width:
 const outer=document.querySelector('#outer'),inner=document.querySelector('#inner'),drag=document.querySelector('#drag');
 const state={clicks:0,doubles:0,rights:0,drag:20,releases:0};let pending=Promise.resolve();
 function save(){state.inset=outerHeight-innerHeight;state.width=outerWidth;state.height=outerHeight;state.outer=[outer.scrollLeft,outer.scrollTop];state.inner=[inner.scrollLeft,inner.scrollTop];const body=JSON.stringify(state);pending=pending.then(()=>fetch('/receipt',{method:'POST',body}));}
+document.addEventListener('wheel',e=>{state.lastWheel={x:e.clientX,y:e.clientY,target:e.target.closest('#inner,#outer')?.id,dx:e.deltaX,dy:e.deltaY};save();},{passive:true});
 document.addEventListener('pointerup',()=>{state.releases++;save();});
 for(const el of [outer,inner])el.addEventListener('scroll',save);
 document.querySelector('#tap').onclick=()=>{state.clicks++;save();};
