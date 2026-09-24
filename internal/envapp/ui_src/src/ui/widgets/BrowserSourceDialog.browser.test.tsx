@@ -82,3 +82,15 @@ for (const [locale, width] of [['en-US', 1280], ['zh-CN', 390], ['de-DE', 390]] 
   for (const input of dialog.querySelectorAll<HTMLInputElement>('input[type="radio"]')) expect(input.getBoundingClientRect().width).toBeGreaterThan(10);
   if (import.meta.env.VITE_REDEVEN_BROWSER_SOURCE_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/browser-sources-${locale}-${width}.png` });
 });
+
+it('submits profile intent once on Enter and ignores composition Enter without native forms', async () => {
+  await mount();
+  const name = document.querySelector<HTMLInputElement>('input[maxlength="120"]')!;
+  name.value = 'Keyboard profile'; name.dispatchEvent(new Event('input', { bubbles: true }));
+  name.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }));
+  expect(api.request.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+  name.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Keyboard profile'));
+  expect(api.request.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
+  expect(document.querySelector('[role="dialog"] form')).toBeNull();
+});
