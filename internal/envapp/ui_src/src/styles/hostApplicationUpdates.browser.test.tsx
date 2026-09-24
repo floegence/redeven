@@ -77,3 +77,25 @@ it.each(SUPPORTED_LOCALES)('localizes update, transfer size and keyboard actions
   expect(state.start).toHaveBeenCalledWith(expect.any(String), 'download', 0, 'a'.repeat(64));
   if (locale === 'zh-CN') await page.screenshot({ element: dialog, path: '__screenshots__/components-zh-CN.png' });
 });
+
+it.each(SUPPORTED_LOCALES)('shows cached and partially downloaded Desktop components accessibly in %s', async locale => {
+  state.locale = locale;
+  await page.viewport(360, 850);
+  const { HostApplicationSetupPanel } = await import('../ui/pages/HostApplicationSetupPanel');
+  const { createSignal } = await import('solid-js');
+  const [progress, update] = createSignal<import('../ui/pages/HostApplicationSetupPanel').HostApplicationDesktopProgress>({ phase: 'packing', component_bytes: 10000000, cached_bytes: 10000000, download_bytes: 0, downloaded_bytes: 0 });
+  const host = document.createElement('main'); document.body.append(host);
+  dispose = render(() => <HostApplicationSetupPanel setup={{ ...status, state: 'available', installed: undefined, package: { ...status.package, architecture: 'amd64', installed_bytes: 100000000 } }} desktopProgress={progress()} plan={{ package_digest: 'a'.repeat(64), architecture: 'amd64', missing_artifacts: ['b'.repeat(64)], missing_bytes: 10000000 }}
+    allowed submitting canRelay disconnected={false} downloadMethod="desktop" onDownloadMethodChange={() => {}}
+    onStart={() => {}} onCancel={() => {}} onReconnect={() => {}} onUpload={() => {}} />, host);
+  const copy = createTestI18nHelpers(locale);
+  await expect.poll(() => host.textContent).toContain(copy.t('hostApplications.prepare.desktopCached'));
+  expect(host.querySelector('[role=progressbar]')!.hasAttribute('aria-valuenow')).toBe(false);
+  expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+  expect((await axe.run(host, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations).toEqual([]);
+  if (locale === 'zh-CN') await page.screenshot({ element: host, path: '__screenshots__/component-cache-zh-CN.png' });
+  update({ phase: 'downloading', component_bytes: 10000000, cached_bytes: 6000000, download_bytes: 4000000, downloaded_bytes: 2000000 });
+  await expect.poll(() => host.querySelector('[role=progressbar]')!.getAttribute('aria-valuenow')).toBe('50');
+  expect(host.textContent).toContain(copy.t('hostApplications.prepare.desktopBytes', { cached: new Intl.NumberFormat(locale, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(6), download: new Intl.NumberFormat(locale, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(4) }));
+  expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+});

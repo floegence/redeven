@@ -18592,7 +18592,7 @@ if (!app.requestSingleInstanceLock()) {
       event.sender.once('destroyed', () => { void hostApplicationComponents.cancel(owner); hostApplicationComponentOwners.delete(owner); });
     }
     try {
-      if (request.action === 'capabilities') return { ok: true, supports_transfer_plan: true };
+      if (request.action === 'capabilities') return { ok: true, supports_transfer_plan: true, supports_cache_progress: true };
       if (request.action === 'cancel') { await hostApplicationComponents.cancel(owner); return { ok: true }; }
       if (request.action === 'read') return await hostApplicationComponents.read(owner, request.offset);
       if (request.action !== 'acquire' || !['amd64', 'arm64'].includes(request.architecture)) return { ok: false };
@@ -18810,6 +18810,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     installDesktopDiagnosticsHooks(session.defaultSession);
+    void hostApplicationComponents.maintainCache().catch(error => { console.warn('[redeven:component-cache]', error); });
     // Keep attached provider links healthy for every Desktop session, including
     // direct and local transports. The recovery coordinator coalesces wakeups
     // and fences stale completions, so this timer is intentionally process-wide.

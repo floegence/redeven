@@ -1,13 +1,44 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { isHostApplicationTransferPlan, type HostApplicationTransferPlan, type HostApplicationComponentsProgress, type HostApplicationComponentsResult } from '../shared/hostApplicationComponents';
+import { isHostApplicationTransferPlan, parseHostApplicationComponentsProgress, type HostApplicationTransferPlan, type HostApplicationComponentsProgress, type HostApplicationComponentsResult } from '../shared/hostApplicationComponents';
 
 type Acquisition = { controller: AbortController; directory: string; file: string; size: number; finished: Promise<void>; finish: () => void };
 // This adapter delegates acquisition/integrity to the bundled Runtime's released
 // native component SDK. It owns only the initiating Desktop document and bytes.
 export class HostApplicationComponents {
   private readonly entries = new Map<number, Acquisition>();
+  private initialization?: Promise<void>;
+  private maintenance?: Promise<void>;
+  // Called only by the Desktop instance that holds its user-data single-instance lock.
+  initialize(): Promise<void> {
+    return this.initialization ??= (async () => {
+      await fs.mkdir(this.root(), { recursive: true, mode: 0o700 });
+      for (const entry of await fs.readdir(this.root(), { withFileTypes: true })) {
+        if (entry.isDirectory() && /^transfer-[A-Za-z0-9]{6}$/u.test(entry.name)) {
+          await fs.rm(path.join(this.root(), entry.name), { recursive: true, force: true });
+        }
+      }
+    })();
+  }
+  maintainCache(): Promise<void> {
+    return this.maintenance ??= this.runMaintenance().finally(() => { this.maintenance = undefined; });
+  }
+  private async runMaintenance(): Promise<void> {
+    await this.initialize();
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(this.executable(), ['host-application-package', '--maintenance', '--cache', path.join(this.root(), 'cache')], { stdio: ['ignore', 'ignore', 'pipe'] });
+      let diagnostic = '';
+      child.stderr.setEncoding('utf8');
+      child.stderr.on('data', (chunk: string) => { diagnostic = (diagnostic + chunk).slice(-4096); });
+      let failure: Error | undefined;
+      child.once('error', error => { failure = error; });
+      child.once('close', code => {
+        if (!failure && code === 0) resolve();
+        else reject(failure ?? new Error(diagnostic.trim() || 'Component cache maintenance failed'));
+      });
+    });
+  }
   constructor(private readonly executable: () => string, private readonly root: () => string) {}
   async cancel(owner: number): Promise<void> {
     const entry = this.entries.get(owner);
@@ -16,6 +47,7 @@ export class HostApplicationComponents {
     await entry.finished;
     if (entry.directory) await fs.rm(entry.directory, { recursive: true, force: true });
     if (this.entries.get(owner) === entry) this.entries.delete(owner);
+    await this.maintainCache().catch(error => { console.warn('[redeven:component-cache]', error); });
   }
   async acquire(owner: number, architecture: 'amd64' | 'arm64', progress: (value: HostApplicationComponentsProgress) => void, plan?: HostApplicationTransferPlan): Promise<HostApplicationComponentsResult> {
     if (plan && (!isHostApplicationTransferPlan(plan) || plan.architecture !== architecture)) return { ok: false, error: 'target_mismatch' };
@@ -27,13 +59,16 @@ export class HostApplicationComponents {
     let ready = false;
     let targetMismatch = false;
     try {
-      await fs.mkdir(this.root(), { recursive: true, mode: 0o700 });
+      await this.initialize();
       entry.directory = await fs.mkdtemp(path.join(this.root(), 'transfer-'));
       entry.file = path.join(entry.directory, 'components.zip');
       if (entry.controller.signal.aborted) return { ok: false };
       await new Promise<void>((resolve, reject) => {
-        const child = spawn(this.executable(), ['host-application-package', '--arch', architecture, '--cache', path.join(this.root(), 'cache'), '--output', entry.file, ...(plan ? ['--plan', JSON.stringify(plan)] : [])], { signal: entry.controller.signal, stdio: ['ignore', 'pipe', 'ignore'] });
+        const child = spawn(this.executable(), ['host-application-package', '--arch', architecture, '--cache', path.join(this.root(), 'cache'), '--output', entry.file, ...(plan ? ['--plan', JSON.stringify(plan)] : [])], { signal: entry.controller.signal, stdio: ['ignore', 'pipe', 'pipe'] });
         let pending = '';
+        let diagnostic = '';
+        child.stderr.setEncoding('utf8');
+        child.stderr.on('data', (chunk: string) => { diagnostic = (diagnostic + chunk).slice(-4096); });
         child.stdout.setEncoding('utf8');
         child.stdout.on('data', (chunk: string) => {
           pending += chunk;
@@ -42,8 +77,8 @@ export class HostApplicationComponents {
           while ((newline = pending.indexOf('\n')) >= 0) {
             const line = pending.slice(0, newline); pending = pending.slice(newline + 1);
             try {
-              const value = JSON.parse(line) as HostApplicationComponentsProgress;
-              if (Number.isSafeInteger(value.received_bytes) && Number.isSafeInteger(value.expected_bytes) && value.received_bytes >= 0 && value.expected_bytes > 0 && value.received_bytes <= value.expected_bytes) progress(value);
+              const value = parseHostApplicationComponentsProgress(JSON.parse(line));
+              if (value) progress(value);
             } catch { /* Runtime diagnostics are not protocol progress. */ }
           }
         });
@@ -53,6 +88,7 @@ export class HostApplicationComponents {
         // Ownership and temporary files must survive until close confirms exit.
         child.once('close', code => {
           targetMismatch = code === 3;
+          if (diagnostic.trim()) console.warn('[redeven:component-cache]', diagnostic.trim());
           if (!failure && code === 0) resolve(); else reject(failure ?? new Error('Component acquisition failed'));
         });
       });
