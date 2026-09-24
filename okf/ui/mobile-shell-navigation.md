@@ -55,6 +55,8 @@ Escape clears plugin search first, returns from a tools subpage next, and closes
 the root panel. Explicit dismissals restore the visible trigger without scrolling;
 page changes leave focus to the destination. Global confirmation dialogs retain
 priority over this local navigation boundary.
+Changing a tools subpage must not replay panel-entry focus after the user has
+already moved to bottom navigation. Tab and Shift+Tab traverse both focus roots.
 
 Floe keeps navigation visible above the software keyboard while a panel is
 present. Ordinary page editors retain the existing keyboard-driven navigation

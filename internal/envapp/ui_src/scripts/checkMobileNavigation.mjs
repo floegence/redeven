@@ -216,10 +216,17 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
             await tools.press('Escape');
             await tools.locator('[data-mobile-tool="dashboard"]').focus();
             await page.keyboard.press('Tab');
-            assert.equal(await navigation.evaluate(element => element.contains(document.activeElement)), true);
+            await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => window.setTimeout(resolve, 0))));
+            assert.equal(await navigation.evaluate(element => element.contains(document.activeElement)), true,
+              'returning from a tools subpage must not reclaim navigation focus after paint');
             await more.focus();
             await page.keyboard.press('Tab');
             assert.equal(await tools.evaluate(element => element.contains(document.activeElement)), true);
+            await page.keyboard.press('Shift+Tab');
+            assert.equal(await more.evaluate(element => document.activeElement === element), true,
+              'reverse traversal returns from the panel to the fixed More action');
+            await page.keyboard.press('Shift+Tab');
+            assert.equal(await navigation.evaluate(element => element.contains(document.activeElement)), true);
             stage = 'close tools';
             await more.tap(); await tools.waitFor({ state: 'detached' });
             stage = 'search handoff';
