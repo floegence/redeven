@@ -9,7 +9,7 @@ import (
 func (g *Server) handleBrowserWorkspaceAPI(w http.ResponseWriter, r *http.Request) bool {
 	const prefix = "/_redeven_proxy/api/browser/"
 	switch r.URL.Path {
-	case prefix + "environment", prefix + "profiles", prefix + "workspace", prefix + "installation", prefix + "connections/cdp", prefix + "extension/setup", prefix + "extension/open", prefix + "extension/status", prefix + "extension/tabs":
+	case prefix + "recovery", prefix + "environment", prefix + "profiles", prefix + "workspace", prefix + "installation", prefix + "connections/cdp", prefix + "extension/setup", prefix + "extension/open", prefix + "extension/status", prefix + "extension/tabs":
 	default:
 		return false
 	}
@@ -20,6 +20,14 @@ func (g *Server) handleBrowserWorkspaceAPI(w http.ResponseWriter, r *http.Reques
 	var data any
 	var err error
 	switch {
+	case r.URL.Path == prefix+"recovery" && r.Method == http.MethodPost:
+		var request struct {
+			Generation string `json:"expected_generation"`
+		}
+		if !decodeBrowserRequest(w, r, 4096, &request) {
+			return true
+		}
+		data, err = g.browserRuntime.RecoverBrowser(r.Context(), meta, request.Generation)
 	case r.URL.Path == prefix+"extension/setup" && r.Method == http.MethodPost:
 		data, err = g.browserRuntime.BrowserExtensionSetup(r.Context(), meta)
 	case r.URL.Path == prefix+"extension/status" && r.Method == http.MethodGet:
@@ -96,9 +104,21 @@ func (g *Server) handleBrowserWorkspaceAPI(w http.ResponseWriter, r *http.Reques
 			g.writeComputerExtensionFailure(w, err, stage)
 			return true
 		}
-		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_workspace_unavailable"})
+		writeBrowserFailure(w, err)
 	} else {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: data})
 	}
 	return true
+}
+
+func writeBrowserFailure(w http.ResponseWriter, err error) {
+	code := ai.BrowserErrorCode(err)
+	status := http.StatusConflict
+	if code == "BROWSER_SERVICE_FAILED" || code == "BROWSER_OPEN_FAILED" {
+		status = http.StatusServiceUnavailable
+	}
+	if code == "BROWSER_OPEN_TIMEOUT" {
+		status = http.StatusGatewayTimeout
+	}
+	writeJSON(w, status, apiResp{OK: false, Error: "Browser operation could not be completed", ErrorCode: code})
 }

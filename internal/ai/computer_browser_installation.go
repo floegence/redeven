@@ -27,14 +27,20 @@ func (r *ComputerUseRuntime) ConfigureManagedBrowser(stateDirectory string) {
 	r.browserInstallationErr = err
 }
 func (r *ComputerUseRuntime) managedBrowserEnabled() bool {
-	return r.browserInstallationErr == nil && (r.browserInstallation == nil || r.browserInstallation.Snapshot().Enabled)
+	return r.browserInstallationErr == nil && r.browserInstallation != nil && r.browserInstallation.Snapshot().Enabled
 }
 func (r *ComputerUseRuntime) requireManagedBrowser() (string, error) {
+	r.mu.RLock()
+	closed := r.closed
+	r.mu.RUnlock()
+	if closed {
+		return "", &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "runtime_closed"}
+	}
 	if r.browserInstallationErr != nil {
 		return "", r.browserInstallationErr
 	}
 	if r.browserInstallation == nil {
-		return "", nil
+		return "", errors.New("browser installer unavailable")
 	}
 	return r.browserInstallation.Executable()
 }

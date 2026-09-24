@@ -7293,6 +7293,18 @@
     "noPages": "페이지가 없습니다. 원본 브라우저에서 페이지를 연 다음 새로 고침하세요.",
     "openSelection": "선택 항목 열기",
     "selectionHint": "여기서 페이지를 열어도 Flower가 선택한 페이지는 변경되지 않습니다.",
-    "chromeConfirmHint": "Chrome에서 연결을 확인한 다음 여기서 열 페이지를 선택하세요."
+    "chromeConfirmHint": "Chrome에서 연결을 확인한 다음 여기서 열 페이지를 선택하세요.",
+    "installTitle": "환경 브라우저 설정",
+    "installOpen": "설치 후 열기",
+    "recoverTitle": "브라우저 서비스가 중지되었습니다",
+    "recover": "브라우저 복구",
+    "recoveryDescription": "환경 브라우저를 다시 시작하고 저장된 탭을 복원합니다. 페이지에서 저장하지 않은 내용은 사라질 수 있습니다. 환경의 다른 서비스는 계속 실행됩니다.",
+    "sourceUnavailable": "이 페이지를 더 이상 사용할 수 없습니다. 브라우저 소스를 선택하세요.",
+    "disconnected": "브라우저 연결이 끊어졌습니다.",
+    "openFailed": "브라우저를 열지 못했습니다. 다시 시도하거나 다른 소스를 선택하세요.",
+    "openTimeout": "브라우저가 제시간에 응답하지 않았습니다.",
+    "recoveryBlocked": "소스 브라우저에서 비공개 세션을 종료한 후 복구하세요.",
+    "outcomeUnknown": "작업이 이미 완료되었을 수 있습니다. 소스를 선택하여 현재 상태를 확인하세요.",
+    "retry": "다시 시도"
   }
 }

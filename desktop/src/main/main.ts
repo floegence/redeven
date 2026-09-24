@@ -17600,7 +17600,9 @@ function installDesktopDiagnosticsHooks(
   }
   desktopDiagnosticsHookSessions.add(webSession);
   webSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    const sessionRecord = sessionRecordForWebContentsID((details as { webContentsId?: number }).webContentsId ?? -1);
+    const contentsID = (details as { webContentsId?: number }).webContentsId ?? -1;
+    const sessionRecord = sessionRecordForWebContentsID(contentsID)
+      ?? sessionRecordForWebContentsID(browserProjectionWindows.staticRequestOwner(contentsID, details) ?? -1);
     const diagnosticHeaders = sessionRecord?.diagnostics.startRequest({
       requestID: details.id,
       method: details.method,

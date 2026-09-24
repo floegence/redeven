@@ -7293,6 +7293,18 @@
     "noPages": "未找到页面。请先在源浏览器中打开页面，再刷新。",
     "openSelection": "打开所选项",
     "selectionHint": "在此打开页面不会更改 Flower 当前选择的页面。",
-    "chromeConfirmHint": "在 Chrome 中确认连接，然后选择要在此打开的页面。"
+    "chromeConfirmHint": "在 Chrome 中确认连接，然后选择要在此打开的页面。",
+    "installTitle": "设置环境浏览器",
+    "installOpen": "安装并打开",
+    "recoverTitle": "浏览器服务已停止",
+    "recover": "恢复浏览器",
+    "recoveryDescription": "将重启环境浏览器并恢复已保存的标签页。页面中未保存的内容可能丢失，其他环境服务将继续运行。",
+    "sourceUnavailable": "此页面已不可用，请重新选择浏览器来源。",
+    "disconnected": "浏览器连接已中断。",
+    "openFailed": "无法打开浏览器，请重试或选择其他来源。",
+    "openTimeout": "浏览器未及时响应。",
+    "recoveryBlocked": "请先在源浏览器中结束私密会话，再恢复浏览器服务。",
+    "outcomeUnknown": "操作可能已经完成，请选择来源查看当前状态。",
+    "retry": "重试"
   }
 }

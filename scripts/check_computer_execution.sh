@@ -18,8 +18,9 @@ REDEVEN_BROWSER_BRIDGE_BINARY="$temporary/redeven" node --test \
   internal/envapp/ui_src/scripts/computerExtensionInstall.node-test.mjs \
   internal/envapp/ui_src/scripts/computerExtension.node-test.mjs \
   internal/envapp/ui_src/scripts/computerNativeMessaging.node-test.mjs
-REDEVEN_BROWSER_INTEGRATION=1 GOWORK=off go test ./internal/ai \
-  -run '^TestManagedBrowser|^TestComputerPartialErrorAndUnknownOutcome' -count=1
+node scripts/check_browser_qualification.mjs
+GOWORK=off go test ./internal/ai \
+  -run '^TestComputerPartialErrorAndUnknownOutcome' -count=1
 node scripts/check_computer_host_safety.mjs
 node --test scripts/computer_benchmark_report.test.mjs
 REDEVEN_COMPUTER_BUNDLE_QUALIFICATION=1 node --test scripts/stage_computer_resources.test.mjs

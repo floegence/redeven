@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"log/slog"
 	"slices"
@@ -17,6 +18,8 @@ import (
 // Resolving identity is read-only. Preparation happens after target policy has
 // authorized the action, and only a successful adapter handshake grants ready.
 type ComputerUseRuntime struct {
+	browserService         BrowserServiceStatus // protected by mu
+	browserRecovery        *browserRecovery     // protected by connectMu
 	browserInstallation    *browserinstall.Manager
 	browserInstallationErr error
 	browserStore           *browserstore.Store
@@ -89,7 +92,7 @@ type TargetStartupError struct{ Code, Reason string }
 func (e *TargetStartupError) Error() string { return e.Code + ": " + e.Reason }
 
 func NewComputerUseRuntime(registry *TargetRegistry, executors map[string]TargetToolExecutor, mediaDirectory string) *ComputerUseRuntime {
-	r := &ComputerUseRuntime{registry: registry, executors: executors, media: computerMediaStore{directory: mediaDirectory}}
+	r := &ComputerUseRuntime{browserService: BrowserServiceStatus{State: "idle", Generation: rand.Text()}, registry: registry, executors: executors, media: computerMediaStore{directory: mediaDirectory}}
 	for _, executor := range executors {
 		if browser, ok := executor.(*PlaywrightTargetExecutor); ok {
 			browser.runtimeManaged = true
@@ -191,11 +194,21 @@ func (r *ComputerUseRuntime) prepareInitialManagedTarget(ctx context.Context, ta
 		r.mu.RLock()
 		executor, ok := r.executors[target.ID].(*PlaywrightTargetExecutor)
 		needsPage := ok && executor.CDPURL == ""
+		retired := false
+		if ok {
+			executor.mu.Lock()
+			retired = executor.closed
+			executor.mu.Unlock()
+		}
 		closed := r.closed
 		r.mu.RUnlock()
 		if closed {
 			r.connectMu.Unlock()
 			return target, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "runtime_closed"}
+		}
+		if retired {
+			r.connectMu.Unlock()
+			return target, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_tab_disconnected"}
 		}
 		if needsPage {
 			var prepared TargetDescriptor

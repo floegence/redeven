@@ -143,6 +143,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	host.executors["browser-main"] = NewPlaywrightTargetExecutor(node, helper, t.TempDir())
+	configureBrowserFixture(t, host)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		if r.URL.Path == "/child" {
@@ -288,6 +289,7 @@ func TestComputerAutonomousCDPPagesPreserveExistingTab(t *testing.T) {
 		t.Fatal(err)
 	}
 	host.executors["browser-main"] = NewPlaywrightTargetExecutor(node, helper, t.TempDir())
+	configureBrowserFixture(t, host)
 	source, err := host.ConnectBrowser(t.Context(), ComputerBrowserConnection{ManagedProfileID: "browser-main", NewTab: true})
 	if err != nil {
 		t.Fatal(err)

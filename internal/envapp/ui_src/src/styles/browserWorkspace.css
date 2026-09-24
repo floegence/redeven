@@ -50,29 +50,25 @@
   inset: 0;
 }
 
-.redeven-floebrowser-empty,
-.redeven-floebrowser-error {
-  display: grid;
-  min-height: 12rem;
-  width: 100%;
-  place-items: center;
-  padding: 2rem;
-  color: var(--muted-foreground);
-  text-align: center;
-}
-
-.redeven-floebrowser-error {
-  position: absolute;
-  right: 1rem;
-  bottom: 1rem;
-  min-height: 0;
-  width: auto;
-  border: 1px solid color-mix(in srgb, var(--destructive) 30%, transparent);
-  border-radius: .6rem;
-  background: color-mix(in srgb, var(--background) 92%, var(--destructive));
-  color: var(--destructive);
-}
-
 @media (max-width: 560px) {
   .redeven-browser-profile-bar { flex-wrap: wrap; }
 }
+
+.redeven-browser-notice {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: var(--background);
+  color: var(--foreground);
+}
+.redeven-browser-notice-content {
+  width: min(100%, 42rem);
+  margin: clamp(1rem, 8vh, 5rem) auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.redeven-browser-notice-content > h2 { font-size: 1.15rem; font-weight: 600; line-height: 1.5; }
+.redeven-browser-notice-content > p { color: var(--muted-foreground); line-height: 1.6; }
+.redeven-browser-notice-actions { display: flex; gap: .75rem; flex-wrap: wrap; }

@@ -1,19 +1,20 @@
 import process from 'node:process';
 import path from 'node:path';
-import { readFileSync, existsSync, mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { readFileSync, mkdirSync } from 'node:fs';
 import readline from 'node:readline';
 
 const profile = process.argv[2];
-const resources = path.dirname(fileURLToPath(import.meta.url));
 const emit = value => process.stdout.write(JSON.stringify(value) + '\n');
 let context;
 try {
   const { chromium } = await import('playwright');
   if (!path.isAbsolute(profile)) throw new Error('invalid profile');
-  const executablePath = process.argv[3] || undefined;
-  if (!executablePath && existsSync(path.join(resources, 'manifest.json'))) throw new Error('browser installation required');
+  const executablePath = process.argv[3];
+  if (!executablePath || !path.isAbsolute(executablePath)) throw new Error('browser installation required');
   context = await chromium.launchPersistentContext(profile, { executablePath, chromiumSandbox: true, headless: true, viewport: { width: 1280, height: 800 }, args: ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1'] });
+  // This launcher owns the process, not page decisions. A listener disables
+  // Playwright's default auto-dismiss; the source host owns every dialog reply.
+  context.on('dialog', () => {});
   const [port] = readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf8').split('\n');
   if (!/^\d+$/u.test(port)) throw new Error('invalid endpoint');
   const session = await context.browser().newBrowserCDPSession();

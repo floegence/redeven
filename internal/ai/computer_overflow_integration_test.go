@@ -84,6 +84,7 @@ func testComputerDeepSeekImageOverflow(t *testing.T, longHistory bool) {
 	}
 	state := t.TempDir()
 	host := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"target": executor}, filepath.Join(state, "media"))
+	installBrowserStub(t, host)
 	t.Cleanup(func() { _ = host.Close() })
 	model, ok := config.AIModelCatalogEntry("deepseek", "deepseek-v4-flash-vision-exp")
 	if !ok {

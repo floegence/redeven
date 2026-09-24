@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { BrowserWindow } from 'electron';
+import type { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
 import { expect, it, vi } from 'vitest';
 import { BrowserProjectionWindows } from './browserProjectionWindows';
 
@@ -16,4 +16,30 @@ it('reserves only the exact same-origin static document instance and consumes it
   expect(windows.prepare(parent, url)).toBe(true);
   expect(windows.consume(parent, { url })).toMatchObject({ action: 'allow', overrideBrowserWindowOptions: { webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } } });
   expect(windows.consume(parent, { url })).toEqual({ action: 'deny' });
+});
+
+it('authorizes only the reserved child document and assets without granting environment APIs', () => {
+  const parentContents = Object.assign(new EventEmitter(), { id: 1, session: {}, getURL: () => 'http://localhost:24498/_redeven_proxy/env/' });
+  const parent = { webContents: parentContents, isDestroyed: () => false } as unknown as BrowserWindow;
+  const childContents = Object.assign(new EventEmitter(), { id: 2, setWindowOpenHandler: vi.fn() });
+  const child = Object.assign(new EventEmitter(), { webContents: childContents, isDestroyed: () => false, close: vi.fn(), show: vi.fn() }) as unknown as BrowserWindow;
+  const create = vi.fn((_options: BrowserWindowConstructorOptions) => child);
+  const windows = new BrowserProjectionWindows(create);
+  const nonce = 'b2b9b64c-b986-4ec2-bfab-de739c46a0fc';
+  const url = `http://localhost:24498/_redeven_proxy/env/browser/?instance=${nonce}#${nonce}`;
+  expect(windows.prepare(parent, url)).toBe(true);
+  const response = windows.consume(parent, { url });
+  if (response?.action !== 'allow') throw new Error('Reserved browser document denied');
+  response.createWindow!({ webPreferences: { preload: '/owner/preload.js' } });
+  expect(create.mock.calls[0]![0].webPreferences).toMatchObject({ session: parentContents.session, sandbox: true, contextIsolation: true, nodeIntegration: false });
+  expect(create.mock.calls[0]![0].webPreferences?.preload).toBeUndefined();
+  expect(windows.staticRequestOwner(2, { url: url.split('#')[0]!, method: 'GET' })).toBe(1);
+  expect(windows.staticRequestOwner(2, { url: 'http://localhost:24498/_redeven_proxy/env/assets/browser.js', method: 'GET' })).toBe(1);
+  for (const blocked of [url.replace(nonce, 'unreserved'), url.replace('localhost', 'source.test'), 'http://localhost:24498/_redeven_proxy/api/browser/environment', 'http://localhost:24498/_redeven_proxy/env/']) {
+    expect(windows.staticRequestOwner(2, { url: blocked, method: 'GET' })).toBeUndefined();
+  }
+  expect(windows.staticRequestOwner(2, { url, method: 'POST' })).toBeUndefined();
+  expect(windows.staticRequestOwner(3, { url, method: 'GET' })).toBeUndefined();
+  child.emit('closed');
+  expect(windows.staticRequestOwner(2, { url, method: 'GET' })).toBeUndefined();
 });

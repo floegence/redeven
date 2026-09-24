@@ -13,7 +13,7 @@ import { PageAssetRecoveryNotice, PageLoadError } from './reconnect/PageAssetRec
 import { createEnvAppAssetRecovery } from './reconnect/createEnvAppAssetRecovery';
 import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
 import { writeTextToClipboard } from './utils/clipboard';
-import { ErrorBoundary, For, Show, Suspense, batch, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Resource, type Setter } from 'solid-js';
+import { ErrorBoundary, For, Show, Suspense, batch, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, on, onCleanup, onMount, untrack, type Accessor, type Resource, type Setter } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { createUIFirstSelection, deferAfterPaint, type FloeComponent, type UIFirstSelectionEvent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryContributions, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
@@ -561,6 +561,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const protocol = useProtocol();
   const browserWindows = createBrowserWorkspaceWindows(() => ({ title: i18n.t('shell.nav.remoteBrowser'), connecting: i18n.t('browserEngine.connection.connecting'), locale: i18n.locale(), messages: browserMessages(i18n), sources: { environment: envId() || 'env_local', messages: browserSourceMessages(i18n) } }));
   createEffect(() => browserWindows.setSession(protocol.session?.() ?? undefined));
+  const browserPresentation = createMemo(() => JSON.stringify([i18n.locale(), theme.resolvedTheme(), theme.shellPresetForMode(theme.resolvedTheme())?.name]));
+  createEffect(on(browserPresentation, () => browserWindows.refreshPresentation(), { defer: true }));
   onCleanup(() => browserWindows.close());
   const BrowserPage = () => <EnvBrowserPage onOpenWindow={request => browserWindows.open(request)} />;
   let remoteProxyServiceWorkerControlled = false;

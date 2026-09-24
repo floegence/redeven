@@ -30,6 +30,7 @@ func runtimeFixture(t *testing.T) (*ComputerUseRuntime, *PlaywrightTargetExecuto
 	// and exact-tab isolation have separate process and real-browser fixtures.
 	executor.CDPURL, executor.TabID, executor.BrowserContextID = "http://127.0.0.1:1", "fixture", "default"
 	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": executor}, t.TempDir())
+	installBrowserStub(t, runtime)
 	runtime.browserHost, _ = browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
 			ID, Method string
@@ -151,8 +152,7 @@ func TestComputerRuntimeConnectRequiresReadyAndPreservesExistingConnection(t *te
 	// Another connection must fail closed without replacing that source.
 	runtime.browserHost.cancel()
 	failed, err := runtime.ConnectBrowser(t.Context(), ComputerBrowserConnection{CDPURL: "http://127.0.0.1:9223", TabID: "tab-one", ProfileID: "default"})
-	var startup *TargetStartupError
-	if !errors.As(err, &startup) || startup.Code != "TARGET_CONNECTION_REQUIRED" || failed.Ready {
+	if !errors.Is(err, errBrowserHostFailed) || failed.Ready {
 		t.Fatalf("failed connection reported success: %+v %v", failed, err)
 	}
 	if runtime.executors[first.ID] != original || original.closed {

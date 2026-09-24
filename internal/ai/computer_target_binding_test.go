@@ -28,6 +28,7 @@ func computerBindingFixture(t *testing.T) (*ComputerUseRuntime, *bindingTestExec
 		}
 	}
 	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": executor, "desktop-main": executor}, t.TempDir())
+	installBrowserStub(t, runtime)
 	t.Cleanup(func() { _ = runtime.Close() })
 	path := filepath.Join(t.TempDir(), "threads.sqlite")
 	store, err := threadstore.Open(path)
@@ -96,6 +97,7 @@ func TestComputerTargetBindingRestoresWithoutRestoringReadiness(t *testing.T) {
 		t.Fatal(err)
 	}
 	restored := NewComputerUseRuntime(registry, nil, t.TempDir())
+	installBrowserStub(t, restored)
 	restored.bindings = reopened
 	target, err := restored.ResolveTargetForThread(t.Context(), "thread-first", "current")
 	if err != nil || target.ID != "desktop-main" || target.Ready {

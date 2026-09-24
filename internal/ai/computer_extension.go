@@ -573,6 +573,9 @@ func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connec
 	}
 	raw, err := client.call(ctx, command, map[string]any{"tab_id": connection.TabID, "tab_title": connection.TabTitle, "tab_url": connection.TabURL})
 	if err != nil {
+		if connection.NewTab {
+			return TargetDescriptor{}, errBrowserOutcomeUnknown
+		}
 		return TargetDescriptor{}, err
 	}
 	var binding struct {
@@ -581,6 +584,9 @@ func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connec
 		Binding string `json:"binding"`
 	}
 	if json.Unmarshal(raw, &binding) != nil || binding.TabID == "" || len(binding.Binding) != 36 {
+		if connection.NewTab {
+			return TargetDescriptor{}, errBrowserOutcomeUnknown
+		}
 		return TargetDescriptor{}, errors.New("invalid browser binding")
 	}
 	if targetID == "" {

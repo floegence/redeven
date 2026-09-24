@@ -155,6 +155,7 @@ func testComputerAutonomousProductionToolLoop(t *testing.T, stale bool) {
 		t.Fatal(err)
 	}
 	host := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": NewPlaywrightTargetExecutor(node, helper, t.TempDir())}, t.TempDir())
+	configureBrowserFixture(t, host)
 	defer host.Close()
 	state := t.TempDir()
 	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,

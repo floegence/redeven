@@ -11,6 +11,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Remote browser surface](architecture/remote-browser-surface.md) - Mount shared browser windows with current control and coherent tab presentation.
 - [Remote browser source ownership](architecture/remote-browser-sources.md) - Admit native pages once and preserve directory, control and popup privacy boundaries.
 - [Remote browser persistence](architecture/remote-browser-persistence.md) - Restore managed pages and save browser library state without persisting authority.
+- [Remote browser service recovery](architecture/remote-browser-recovery.md) - Rebuild a failed browser service without reviving old grants or losing saved managed tabs.
 - [Remote browser transport and media](architecture/remote-browser-media.md) - Carry source DOM and element media through bounded authenticated lanes.
 - [Remote browser files](architecture/remote-browser-files.md) - Transfer authorized source uploads and original downloads without refetching requests or scanning personal files.
 - [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.

@@ -17,11 +17,12 @@ type ComputerCapability struct {
 }
 
 type ComputerEnvironment struct {
-	Hostname string                  `json:"hostname"`
-	Platform string                  `json:"platform"`
-	Managed  ComputerCapability      `json:"managed"`
-	Desktop  ComputerCapability      `json:"desktop"`
-	Chrome   ComputerExtensionStatus `json:"chrome"`
+	BrowserService BrowserServiceStatus    `json:"browser_service"`
+	Hostname       string                  `json:"hostname"`
+	Platform       string                  `json:"platform"`
+	Managed        ComputerCapability      `json:"managed"`
+	Desktop        ComputerCapability      `json:"desktop"`
+	Chrome         ComputerExtensionStatus `json:"chrome"`
 }
 
 func computerCapabilityFailure(err error) ComputerCapability {
@@ -61,6 +62,7 @@ func (r *ComputerUseRuntime) ComputerEnvironment(ctx context.Context) (ComputerE
 	if closed {
 		return result, errors.New("computer runtime is closed")
 	}
+	result.BrowserService = r.browserServiceSnapshot()
 	result.Chrome = r.extensionStatus()
 	r.connectMu.Lock()
 	_, managedErr := r.managedProfilesLocked()

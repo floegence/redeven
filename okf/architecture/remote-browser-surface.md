@@ -21,7 +21,12 @@ The shared `FloeBrowserSurface` mounts the released `@floegence/floebrowser` vie
 Source admission, popup privacy and directory retirement belong to [browser source ownership](remote-browser-sources.md). [Browser persistence](remote-browser-persistence.md) owns the library and managed restoration. [Browser transport and media](remote-browser-media.md) owns authenticated carriers and source playback.
 
 
-The Browser page opens the default managed profile without AI configuration.
+The Browser page prepares the default managed profile without AI configuration.
+One browser workspace controller owns source choice, open intent, replacement,
+view release and recovery for both the page and independent windows. Surfaces
+own only their document and ports. Managed opens check current installation
+readiness before admission; Runtime checks again at process launch. Browsing
+never initiates an installation without confirmation.
 The environment shell loads the window adapter only when a browser window is
 requested. The full viewer engine belongs to the browser document, outside the
 environment and access documents' initial asset graphs. Locale keys come from
@@ -36,12 +41,30 @@ the child receives no generic fetch, IPC, installation-chunk or Session API.
 A failed replacement leaves the current window and source usable. External
 popups remain outside its grants until the user explicitly selects that page.
 
+Each controller keeps one current open intent. Late results can only release
+their own view; they cannot replace a newer choice. A Session interruption
+revokes the old view and ports while preserving the independent window shell.
+Reconnection uses a confirmed source, never an earlier new-tab operation. Theme
+configuration refreshes with unchanged effective values do not reopen a view.
+Actual locale or palette changes acquire a new view of the selected target;
+callbacks from the retired document cannot change current presentation.
+
+Structured error codes select installation, enablement, source selection,
+reconnection or explicit [service recovery](remote-browser-recovery.md).
+The source chooser preserves its draft and displays replacement errors locally.
+Its installation step has no redundant disabled Open action. Installation and
+continuation follow the shared [installation contract](../ai/computer-use-browser-installation.md).
+
 The trusted document is a static shell without a view identity or source data.
 Its URL carries only a fresh instance nonce, also checked against the exact
 opener or parent before handing over ports. A source replacement changes the
 query as well as the nonce, so the browser loads a new document instead of doing
 a fragment-only navigation with retired ports. Desktop reserves that exact URL
 once and gives the child no preload or generic bridge.
+For a Desktop private Local UI bridge, the main process lends authentication
+headers only to that child's reserved static document and same-origin Env App
+assets. The child is not registered as an environment or IPC owner; API paths,
+other origins, other document instances and non-GET requests receive no grant.
 
 View creation, source management, control, preferences, library, resource reads,
 downloads and cleanup use the Shell's existing Session HTTP lifecycle. Local UI
@@ -84,6 +107,10 @@ without `allow-forms` and its `form-action 'none'` policy.
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FloeBrowserSurface.tsx` - Shared viewer mount and generation-bound cleanup.
+- `redeven:internal/envapp/ui_src/src/ui/services/browserWorkspaceController.ts` - Single view intent and release owner.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvBrowserPage.test.tsx` - Effective presentation changes without repeated source opens.
+- `redeven:internal/envapp/ui_src/src/ui/services/browserWorkspaceWindows.test.ts` - Retained window shells and independent cleanup.
+- `redeven:desktop/src/main/browserProjectionWindows.test.ts` - Exact static-document loading without environment API authority.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.ts` - Environment-owned window, source replacement and private control admission.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.test.ts` - Grant/token ordering, immediate revocation and stale selection rejection.
 - [FloeBrowser v0.1.12: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/viewer/replay-pages.ts) — Bounded inert document retention.

@@ -7297,6 +7297,18 @@
     "noPages": "No se encontraron páginas. Abra una página en el navegador de origen y actualice la lista.",
     "openSelection": "Abrir selección",
     "selectionHint": "Abrir una página aquí no cambia la página seleccionada por Flower.",
-    "chromeConfirmHint": "Confirme la conexión en Chrome y seleccione la página que desea abrir aquí."
+    "chromeConfirmHint": "Confirme la conexión en Chrome y seleccione la página que desea abrir aquí.",
+    "installTitle": "Configurar el navegador del entorno",
+    "installOpen": "Instalar y abrir",
+    "recoverTitle": "El servicio del navegador se ha detenido",
+    "recover": "Restablecer el navegador",
+    "recoveryDescription": "Se reiniciará el navegador del entorno y se restaurarán las pestañas guardadas. El contenido de las páginas que no se haya guardado puede perderse. Los demás servicios del entorno seguirán funcionando.",
+    "sourceUnavailable": "Esta página ya no está disponible. Selecciona una fuente del navegador.",
+    "disconnected": "Se ha interrumpido la conexión con el navegador.",
+    "openFailed": "No se ha podido abrir el navegador. Inténtalo de nuevo o elige otra fuente.",
+    "openTimeout": "El navegador no ha respondido a tiempo.",
+    "recoveryBlocked": "Finaliza la sesión privada en el navegador de origen antes de restablecer el servicio.",
+    "outcomeUnknown": "Es posible que la acción ya se haya completado. Selecciona la fuente para comprobar su estado actual.",
+    "retry": "Reintentar"
   }
 }
