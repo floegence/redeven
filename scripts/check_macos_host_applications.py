@@ -108,12 +108,15 @@ class Helper:
     def wait(self, kind, timeout=30, predicate=lambda value: True):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            value = self.messages.get(timeout=max(0.01, deadline - time.monotonic()))
+            try:
+                value = self.messages.get(timeout=max(0.01, deadline - time.monotonic()))
+            except queue.Empty:
+                break
             if value['type'] == kind and predicate(value):
                 return value
             if value['type'] in ('error', 'operation_error', 'blocked', 'capture_error', 'ended'):
                 raise AssertionError(value)
-        raise AssertionError('Timed out waiting for ' + kind)
+        raise AssertionError(dict(waiting_for=kind, events=[event for event in self.events if event['type'] not in ('catalog', 'frame')][-20:], frames=len(self.frames)))
 
     def close(self):
         if self.closing:

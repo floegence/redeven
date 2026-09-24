@@ -64,6 +64,14 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
 }
 
 describe('macOS application viewer', () => {
+  it('keeps an established viewer open when the host supplies no known end reason', async () => {
+    const v = await viewer(); await v.activate();
+    v.fetch.mockResolvedValue({ok:true,json:async () => ({state:'ended',end_reason:'unexpected'})});
+    v.socket().onclose?.(); await drain();
+    expect(v.state()).toBe('ended');
+    expect(v.native.request).not.toHaveBeenCalled();
+  });
+
   it('offers one explicit keyboard control backed by the shared editable element', async () => {
     const v = await viewer(); await v.activate();
     const keyboard = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-keyboard');
@@ -416,7 +424,7 @@ describe('macOS application viewer', () => {
     v.socket().message({ type: 'blocked' }); expect(v.state()).toBe('permissionRequired');
     expect(v.native.request).not.toHaveBeenCalled();
     await v.retry(); await v.activate();
-    v.fetch.mockResolvedValue({ ok: true, json: async () => ({ state: 'ended' }) });
+    v.fetch.mockResolvedValue({ ok: true, json: async () => ({ state: 'ended', end_reason: 'application_exited' }) });
     v.socket().onclose?.(); await drain();
     expect(v.native.request).toHaveBeenCalledWith('close');
   });

@@ -22,7 +22,8 @@ func axRect(_ element: AXUIElement) -> CGRect? {
 
 final class NativeWindow {
     struct Reference { let element: AXUIElement; let role: String; let name: String }
-    let id = "macos-window-" + UUID().uuidString.lowercased()
+    let id: String
+    private(set) var destructionObserved = false
     let app: NSRunningApplication
     let application: AXUIElement
     let element: AXUIElement
@@ -33,12 +34,14 @@ final class NativeWindow {
     var userInControl = false
     var changed = false
 
-    init(app: NSRunningApplication, application: AXUIElement, element: AXUIElement, windowID: CGWindowID) {
+    init(app: NSRunningApplication, application: AXUIElement, element: AXUIElement, windowID: CGWindowID, identity: String? = nil) {
+        self.id = identity ?? "macos-window-" + UUID().uuidString.lowercased()
         self.app = app; self.application = application; self.element = element; self.windowID = windowID
         var observer: AXObserver?
         if AXObserverCreate(app.processIdentifier, { _, element, notification, pointer in
             guard let pointer else { return }
             let window = Unmanaged<NativeWindow>.fromOpaque(pointer).takeUnretainedValue()
+            window.observeDestruction(element: element, notification: notification as String)
             window.changed = true
             if notification as String == kAXUIElementDestroyedNotification || notification as String == kAXWindowCreatedNotification {
                 window.invalidate()
@@ -54,6 +57,10 @@ final class NativeWindow {
             }
             CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
         }
+    }
+
+    func observeDestruction(element: AXUIElement, notification: String) {
+        if notification == kAXUIElementDestroyedNotification && CFEqual(element, self.element) { destructionObserved = true }
     }
 
     deinit { if let observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes) } }

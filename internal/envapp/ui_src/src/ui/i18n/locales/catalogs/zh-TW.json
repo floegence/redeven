@@ -7040,7 +7040,7 @@
     "macStopSharing": "停止共享",
     "macStopSharingDescription": "中斷此應用程式與 Redeven 的連線。應用程式視窗和未儲存的工作會保留在 Mac 上。",
     "macOperationFailed": "應用程式暫時無法完成此操作。請在視窗就緒後重試。",
-    "macWaitingHint": "應用程式正在執行，目前沒有可分享的視窗。可透過頂端工具列的應用程式選單開啟視窗，或重新連線。",
+    "macWaitingHint": "應用程式仍在執行，但暫時無法取得可分享的視窗。請在主機上還原或開啟視窗、使用上方的應用程式選單，或重新連線。",
     "macWaiting": "正在等候應用程式視窗…",
     "macPermissionRequired": "需要主機授權",
     "macPermissionHint": "請在這台 Mac 上為 Redeven 開啟螢幕錄製和輔助使用權限，然後重新連線。",

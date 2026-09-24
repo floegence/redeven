@@ -2,6 +2,11 @@
 // host state proves termination; an unavailable route never proves app exit.
 const hostApplicationConnection = (() => {
   const ended = state => ['ended', 'applicationExited', 'windowsClosed', 'sharingStopped'].includes(state);
+  function dismissEnded(state, established, quitRequested = false) {
+    if (!['applicationExited', 'windowsClosed', 'sharingStopped'].includes(state) || !(established || quitRequested)) return;
+    if (window.redevenHostApplicationWindow) window.redevenHostApplicationWindow.request('close');
+    else if (window.opener) window.close();
+  }
   const terminal = state => ended(state) || ['sessionFailed', 'sessionMissing', 'inputVersionUnsupported'].includes(state);
   function state(data) {
     if (data?.state === 'ended') return ({application_exited:'applicationExited', windows_closed:'windowsClosed', sharing_stopped:'sharingStopped'})[data.end_reason] || 'ended';
@@ -39,5 +44,5 @@ const hostApplicationConnection = (() => {
   }
   hostApplicationAppearance.subscribe(() => present(document.body.dataset.state));
   const initial = ['ended', 'failed'].includes(config.initial?.state) ? state(config.initial) : null;
-  return {ended, terminal, read, present, initial};
+  return {dismissEnded, terminal, read, present, initial};
 })();

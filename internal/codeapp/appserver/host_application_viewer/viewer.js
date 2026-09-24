@@ -267,10 +267,7 @@
     present(state);
     // Only a confirmed ended session closes an established viewer. Application
     // save dialogs and transport loss must keep the physical window available.
-    if (hostApplicationConnection.ended(state) && wasActive) {
-      if (nativeWindow) nativeWindow.request('close');
-      else window.close();
-    }
+    hostApplicationConnection.dismissEnded(state, wasActive);
     if (!retry.hidden) retry.focus({preventScroll:true});
   }
 

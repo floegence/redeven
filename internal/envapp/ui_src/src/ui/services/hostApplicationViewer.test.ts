@@ -91,6 +91,16 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
 }
 
 describe('host application viewer', () => {
+  it('retains an established Xpra viewer for unknown termination reasons', async () => {
+    const v = await viewer(false, true);
+    v.appWindow(1); v.client._new_window(1);
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    v.fetch.mockResolvedValue({ok:true,json:async () => ({state:'ended',end_reason:'unknown'})});
+    v.doc.dispatchEvent(new dom.window.Event('connection-lost')); await drain();
+    expect(v.state()).toBe('ended');
+    expect(v.nativeWindow.request).not.toHaveBeenCalled();
+  });
+
   it('restores saved clarity after a slow handshake and ignores reselecting the active mode', async () => {
     const v = await viewer(false, false, false, undefined, undefined, 'clarity', 1, false);
     expect(v.client.set_display_density).not.toHaveBeenCalled();
@@ -466,7 +476,7 @@ describe('host application viewer', () => {
     const v = await viewer(false, true);
     v.appWindow(1); v.client._new_window(1);
     v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
-    v.fetch.mockResolvedValue({ok:true, json:async () => ({state:'ended'})});
+    v.fetch.mockResolvedValue({ok:true, json:async () => ({state:'ended',end_reason:'application_exited'})});
     v.doc.dispatchEvent(new dom.window.Event('connection-lost'));
     await drain();
     expect(v.nativeWindow.request).toHaveBeenCalledWith('close');
@@ -485,11 +495,12 @@ describe('host application viewer', () => {
 
   it('closes a browser popup after its active application ends', async () => {
     const v = await viewer();
+    Object.assign(dom.window, {opener:{}});
     const close = vi.spyOn(dom.window, 'close').mockImplementation(() => {});
     try {
       v.appWindow(1); v.client._new_window(1);
       v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
-      v.fetch.mockResolvedValue({ok:true, json:async () => ({state:'ended'})});
+      v.fetch.mockResolvedValue({ok:true, json:async () => ({state:'ended',end_reason:'application_exited'})});
       v.doc.dispatchEvent(new dom.window.Event('connection-lost')); await drain();
       expect(close).toHaveBeenCalledOnce();
     } finally { close.mockRestore(); }

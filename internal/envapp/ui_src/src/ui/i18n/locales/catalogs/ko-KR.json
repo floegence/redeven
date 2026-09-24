@@ -7040,7 +7040,7 @@
     "macStopSharing": "공유 중지",
     "macStopSharingDescription": "이 앱과 Redeven의 연결을 끊습니다. 창과 저장하지 않은 작업은 Mac에 그대로 유지됩니다.",
     "macOperationFailed": "앱이 이 작업을 완료하지 못했습니다. 창이 준비되면 다시 시도하세요.",
-    "macWaitingHint": "앱이 실행 중이지만 아직 공유할 수 있는 창이 없습니다. 상단 도구 모음의 앱 메뉴에서 창을 열거나 다시 연결하세요.",
+    "macWaitingHint": "앱은 실행 중이지만 현재 공유할 수 있는 창을 가져올 수 없습니다. 호스트에서 창을 복원하거나 열고, 상단 앱 메뉴를 사용하거나 다시 연결하세요.",
     "macWaiting": "앱 창을 기다리는 중…",
     "macPermissionRequired": "호스트 권한이 필요합니다",
     "macPermissionHint": "Mac에서 Redeven의 화면 기록 및 손쉬운 사용 권한을 허용한 후 다시 연결하세요.",

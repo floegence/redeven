@@ -53,6 +53,16 @@ func (m *Manager) macHelper() string {
 }
 
 type macMessage struct {
+	LifecycleReason string `json:"reason,omitempty"`
+	PID             int    `json:"pid,omitempty"`
+	Instance        string `json:"instance,omitempty"`
+	LifecycleState  string `json:"state,omitempty"`
+	RetainedWindows int    `json:"retained_windows,omitempty"`
+	WindowEvidence  []struct {
+		ID      string `json:"id"`
+		Surface uint32 `json:"surface"`
+	} `json:"windows,omitempty"`
+
 	EndReason           string               `json:"end_reason,omitempty"`
 	Running             []RunningApplication `json:"running,omitempty"`
 	ExistingApplication bool                 `json:"existing_application,omitempty"`
@@ -497,7 +507,7 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			m.mu.Lock()
 			s.view.ExistingApplication = msg.ExistingApplication
 			m.mu.Unlock()
-			slog.Info("native application attached", "session", s.view.ID, "existing_application", msg.ExistingApplication)
+			slog.Info("native application attached", "session", s.view.ID, "existing_application", msg.ExistingApplication, "pid", msg.PID, "instance", msg.Instance)
 		case "frame":
 			frame, err := base64.StdEncoding.DecodeString(msg.Data)
 			if err != nil {
@@ -545,7 +555,10 @@ func (m *Manager) runMac(ctx context.Context, s *ownedSession) {
 			n.mu.Lock()
 			n.windows = raw
 			n.mu.Unlock()
+		case "lifecycle":
+			slog.Info("native application window lifecycle", "session", s.view.ID, "pid", msg.PID, "state", msg.LifecycleState, "reason", msg.LifecycleReason, "generation", msg.Generation, "retained_windows", msg.RetainedWindows, "windows", msg.WindowEvidence)
 		case "ended":
+			slog.Info("native application sharing ended", "session", s.view.ID, "reason", msg.EndReason, "first_frame", started)
 			m.mu.Lock()
 			switch msg.EndReason {
 			case "application_exited", "windows_closed", "sharing_stopped":

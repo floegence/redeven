@@ -7044,7 +7044,7 @@
     "macStopSharing": "Arrêter le partage",
     "macStopSharingDescription": "Déconnecter cette application de Redeven. Ses fenêtres et le travail non enregistré resteront ouverts sur le Mac.",
     "macOperationFailed": "L’application n’a pas pu effectuer cette action. Réessayez lorsque sa fenêtre sera prête.",
-    "macWaitingHint": "L’application est en cours d’exécution, mais aucune fenêtre ne peut encore être partagée. Ouvrez une fenêtre via le menu de l’application dans la barre d’outils en haut, ou reconnectez-vous.",
+    "macWaitingHint": "L’application est en cours d’exécution, mais aucune fenêtre ne peut être partagée pour le moment. Restaurez ou ouvrez une fenêtre sur l’hôte, utilisez le menu de l’application ci-dessus ou reconnectez-vous.",
     "macWaiting": "En attente de la fenêtre de l’application…",
     "macPermissionRequired": "Une autorisation sur l’hôte est requise",
     "macPermissionHint": "Sur le Mac, autorisez l’enregistrement de l’écran et l’accessibilité pour Redeven, puis reconnectez-vous.",

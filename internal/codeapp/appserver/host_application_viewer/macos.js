@@ -398,10 +398,7 @@
     current = null;
     invalidateCapture();
     present(state);
-    if (hostApplicationConnection.ended(state) && (active || quitRequested)) {
-      if (native) native.request('close');
-      else window.close();
-    }
+    hostApplicationConnection.dismissEnded(state, active, quitRequested);
   }
   let configuredGeometry;
   function viewportSize() {
