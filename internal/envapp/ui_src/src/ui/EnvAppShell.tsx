@@ -37,6 +37,7 @@ import {
 import type { WorkbenchCanvasWidgetPlacement, WorkbenchExternalDockDragController, WorkbenchHostDockItem } from '@floegence/floe-webapp-core/workbench';
 import {
   ActivityBarCodespacesIcon,
+  ActivityBarBrowserIcon,
   ActivityBarContainersIcon,
   ActivityBarHostApplicationsIcon,
   ActivityBarFolderIcon,
@@ -3780,7 +3781,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const components = createMemo<FloeComponent[]>(() => {
     const list: FloeComponent[] = [
       { id: 'terminal', name: i18n.t('shell.nav.terminal'), icon: Terminal, component: EnvTerminalPage, sidebar: { order: 1, fullScreen: true } },
-      { id: 'browser', name: i18n.t('shell.nav.remoteBrowser'), icon: Globe, component: BrowserPage, sidebar: { order: 1.5, fullScreen: true } },
+      { id: 'browser', name: i18n.t('shell.nav.remoteBrowser'), icon: ActivityBarBrowserIcon, component: BrowserPage, sidebar: { order: 1.5, fullScreen: true } },
       { id: 'monitor', name: i18n.t('shell.nav.monitoring'), icon: Activity, component: EnvMonitorPage, sidebar: { order: 2, fullScreen: true } },
       { id: 'files', name: i18n.t('shell.nav.fileBrowser'), icon: Files, component: EnvFileBrowserPage, sidebar: { order: 3, fullScreen: true } },
       { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: EnvCodespacesPage, sidebar: { order: 4, fullScreen: true } },
@@ -4107,7 +4108,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
     items.push(
       { id: 'terminal', icon: ActivityBarTerminalIcon, label: i18n.t('shell.nav.terminal'), collapseBehavior: 'preserve' },
-      { id: 'browser', icon: Globe, label: i18n.t('shell.nav.remoteBrowser'), collapseBehavior: 'preserve' },
+      { id: 'browser', icon: ActivityBarBrowserIcon, label: i18n.t('shell.nav.remoteBrowser'), collapseBehavior: 'preserve' },
       { id: 'monitor', icon: ActivityBarMonitorIcon, label: i18n.t('shell.nav.monitoring'), collapseBehavior: 'preserve' },
       layout.isMobile()
         ? {

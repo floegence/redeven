@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -197,7 +198,7 @@ func TestBrowserProjectionUsesOneFlowersecSession(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// This listener is private to the authenticated Flowersec ProxyServer.
 		r.Header.Set(sessionhop.HeaderChannelID, meta.ChannelID)
-		if r.URL.Query().Get("browser_resource") != "" {
+		if strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/browser/views/") && strings.HasSuffix(r.URL.Path, "/resource") && r.URL.Query().Get("target") != "" && r.URL.Query().Get("id") != "" {
 			resourceRequests.Add(1)
 		}
 		srv.ServeHTTP(w, r)

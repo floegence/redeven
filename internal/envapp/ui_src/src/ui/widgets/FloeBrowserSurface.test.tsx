@@ -24,7 +24,7 @@ describe('FloeBrowserSurface', () => {
     const options = state.open.mock.calls[0]![0] as BrowserWindowOptions;
     expect(options.session).toBe(session);
     expect(options.child()).toBe(frame.contentWindow);
-    expect(new URL(frame.src).pathname).toBe('/_redeven_proxy/env/browser/browser-view-fixture/');
+    expect(new URL(frame.src).pathname).toBe('/_redeven_proxy/env/browser/');
     expect(new URL(frame.src).hash).toBe(`#${options.configuration.nonce}`);
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-same-origin allow-downloads');
     dispose(); dispose = undefined;

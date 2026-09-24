@@ -1,12 +1,12 @@
 import { browserInstallationForSession } from '../../../../../flower_ui/host/browserInstallationController';
 import { browserPackageBridge } from '../../../../../flower_ui/host/browserPackageBridge';
 import type { FlowerComputerManagement } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { fetchLocalApiJSON } from './localApi';
+import { fetchSessionJSON } from './sessionHTTP';
 import type { BrowserSourceService } from './browserSourceContract';
 
 export function browserSourceManagement(environment: string) {
   const request = <T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<T> =>
-    fetchLocalApiJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    fetchSessionJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const desktop = browserPackageBridge();
   const installation = browserInstallationForSession(`environment:${environment}`, request, desktop);
   return {
@@ -22,7 +22,7 @@ export function browserSourceManagement(environment: string) {
 }
 
 export function browserSourceService(environment: string): BrowserSourceService {
-  const api = <T>(path: string, signal: AbortSignal, body?: unknown): Promise<T> => fetchLocalApiJSON(`/_redeven_proxy/api/browser/${path}`, {
+  const api = <T>(path: string, signal: AbortSignal, body?: unknown): Promise<T> => fetchSessionJSON(`/_redeven_proxy/api/browser/${path}`, {
     method: body === undefined ? 'GET' : 'POST', ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal,
   });
   return {

@@ -1,6 +1,6 @@
 import type { BrowserWindow, BrowserWindowConstructorOptions, WindowOpenHandlerResponse } from 'electron';
 
-const documentPath = /^\/_redeven_proxy\/env\/browser\/browser-view-[A-Za-z0-9]+\/$/u;
+const documentPath = '/_redeven_proxy/env/browser/';
 type Owner = { pending: Map<string, number>; windows: Set<BrowserWindow>; dispose(): void };
 
 /** Only an authenticated environment root can reserve an exact document URL.
@@ -16,7 +16,7 @@ export class BrowserProjectionWindows {
     try {
       url = new URL(value);
       if (url.origin !== new URL(parent.webContents.getURL()).origin || !['http:', 'https:'].includes(url.protocol)
-        || url.username || url.password || url.search || !documentPath.test(url.pathname) || !/^#[a-zA-Z0-9-]{16,128}$/u.test(url.hash)) return false;
+        || url.username || url.password || url.search !== `?instance=${url.hash.slice(1)}` || url.pathname !== documentPath || !/^#[a-zA-Z0-9-]{16,128}$/u.test(url.hash)) return false;
     } catch { return false; }
     let owner = this.owners.get(parent.webContents.id);
     if (!owner) {

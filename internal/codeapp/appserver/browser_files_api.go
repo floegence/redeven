@@ -5,6 +5,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/floegence/redeven/internal/session"
@@ -65,31 +66,22 @@ func (g *Server) serveBrowserFile(w http.ResponseWriter, r *http.Request, meta *
 	}
 }
 
-// Each trusted browser document has a view-specific base URL. FloeBrowser's
-// relative opaque resource URLs therefore retain the exact view capability.
+var browserDocumentInstance = regexp.MustCompile(`^[a-zA-Z0-9-]{16,128}$`)
+
+// This static shell has no view identity or source data. Its authenticated
+// environment owner lends named browser operations over nonce-bound ports;
+// every view, resource and download request retains the owner's exact Session.
 func (g *Server) serveBrowserDocument(w http.ResponseWriter, r *http.Request) bool {
-	const prefix = "/_redeven_proxy/env/browser/"
-	if !strings.HasPrefix(r.URL.Path, prefix) {
+	const path = "/_redeven_proxy/env/browser/"
+	if !strings.HasPrefix(r.URL.Path, path) {
 		return false
 	}
-	view := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, prefix), "/")
-	meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-	if !ok || !g.requireBrowserRuntime(w) {
+	if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
 		return true
 	}
-	if !isDistRequestMethod(r.Method) || view == "" || strings.Contains(view, "/") || g.browserRuntime.AuthorizeBrowserView(meta, view) != nil {
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if !isDistRequestMethod(r.Method) || r.URL.Path != path || err != nil || len(query) != 1 || len(query["instance"]) != 1 || !browserDocumentInstance.MatchString(query.Get("instance")) {
 		browserFileUnavailable(w)
-		return true
-	}
-	if r.URL.RawQuery != "" {
-		query, err := url.ParseQuery(r.URL.RawQuery)
-		if err != nil || len(query) != 2 || len(query["browser_target"]) != 1 || len(query["browser_resource"]) != 1 {
-			browserFileUnavailable(w)
-			return true
-		}
-		resource := r.Clone(r.Context())
-		resource.URL.RawQuery = url.Values{"target": query["browser_target"], "id": query["browser_resource"]}.Encode()
-		g.serveBrowserFile(w, resource, meta, view, "resource")
 		return true
 	}
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' blob:; img-src 'self' data: blob:; font-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'")

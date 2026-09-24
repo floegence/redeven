@@ -1,10 +1,11 @@
+import { readBrowserFile } from './browserFiles';
 import { browserSourcePort } from './browserSourcePort';
 import type { BrowserSourceOperation, BrowserSourceService, BrowserSourceSelection } from './browserSourceContract';
 import type { Session } from '@floegence/flowersec-core';
 import { serveProjectionPorts, type AddressSuggestion } from '@floegence/floebrowser/viewer';
 import type { BrowserState, ClientMessage, ServerMessage, TabState } from '@floegence/floebrowser/protocol';
 import { createBrowserCarrier, createBrowserUpload } from './browserTransport';
-import { fetchLocalApiJSON } from './localApi';
+import { fetchSessionJSON } from './sessionHTTP';
 import type { BrowserDocumentConfiguration, BrowserDocumentRequest, BrowserDocumentResult, BrowserViewDescriptor } from './browserWindowProtocol';
 
 type LibraryEntry = { url: string; title: string };
@@ -50,7 +51,7 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
   const setupTimer = setTimeout(() => close(), 45000);
 
   const api = <T>(path: string, method: string, body: unknown, signal: AbortSignal = lifetime.signal): Promise<T> =>
-    fetchLocalApiJSON<T>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal });
+    fetchSessionJSON<T>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal });
   const currentToken = (message: ClientMessage): string => 'tab' in message && message.tab !== controlled ? '' : token;
   const upload = createBrowserUpload({ session: options.session, view: options.view.id, token: target => target === controlled ? token : '', signal: lifetime.signal });
 
@@ -122,6 +123,9 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
         await api(`${root}/preferences`, 'PUT', { visible: operation.visible, audio: true }, signal);
         return;
       }
+      case 'resource':
+      case 'download':
+        return readBrowserFile(root, operation.method, operation.target, operation.id, signal);
       case 'upload': {
         if (!(operation.file instanceof File) || operation.file.size > 256 * 1024 * 1024 || uploads >= 4
           || operation.chooser?.target !== controlled || !token) throw new Error('Browser upload unavailable');
@@ -163,7 +167,7 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
     const abort = new AbortController();
     requests.set(message.id, abort);
     void execute(message.operation, AbortSignal.any([lifetime.signal, abort.signal])).then(
-      value => { if (!lifetime.signal.aborted) product?.postMessage({ type: 'result', id: message.id, ok: true, value }); },
+      value => { if (!lifetime.signal.aborted && !abort.signal.aborted) product?.postMessage({ type: 'result', id: message.id, ok: true, value }, value && typeof value === 'object' && 'body' in value ? [value.body] : []); },
       () => { if (!lifetime.signal.aborted) product?.postMessage({ type: 'result', id: message.id, ok: false }); },
     ).finally(() => requests.delete(message.id));
   };
@@ -212,7 +216,7 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
     control?.abort.abort(); requests.clear(); sourcePort?.close();
     bridge?.close(); product?.close(); receivers.clear(); token = ''; controlled = ''; grant = undefined;
     // An unopened or abruptly destroyed document still retires its issued view.
-    void fetchLocalApiJSON(root, { method: 'DELETE' }).catch(() => undefined);
+    void fetchSessionJSON(root, { method: 'DELETE' }).catch(() => undefined);
     options.onClose?.();
   }
   window.addEventListener('message', attach);

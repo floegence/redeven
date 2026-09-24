@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote browser files
 description: Transfer exact source files through authorized browser views.
 tags: [architecture, browser, files, privacy]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-24T00:00:00Z
 ---
 # Summary
 
@@ -52,6 +52,15 @@ an explicit user action. Runtime file routes validate the current view, target
 grant and opaque download identity before opening its byte stream. Revoking
 the view cancels its transfer. Canceling a receiving capture closes its source
 stream; source disposal removes task-owned temporary files.
+
+The environment reads opaque resource and download identities through its
+current Session HTTP carrier, then transfers bytes over the view's product port.
+Resource reads are bounded to 8 MiB each; download reads to 256 MiB each and four
+concurrent downloads. Reads share a 256 MiB in-flight byte budget, reject truncated
+responses and cancel when their request or view ends. The trusted document
+creates only local Blob destinations. It receives no generic HTTP operation or
+control token. FloeBrowser's published `fetchResource` adapter owns replay
+resource presentation and its separate decoded-resource limits.
 
 Uploads travel through the authenticated Flowersec upload stream to source
 temporary storage and apply only to the selected live source file input.

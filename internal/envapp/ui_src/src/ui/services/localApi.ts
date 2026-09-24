@@ -136,7 +136,11 @@ export type LocalApiJSONResponse<T> = Readonly<{
 }>;
 
 export async function fetchLocalApiJSONResponse<T>(url: string, init: RequestInit): Promise<LocalApiJSONResponse<T>> {
-  const resp = await fetch(url, await prepareLocalApiRequestInit(init));
+  return readApiJSONResponse<T>(await fetch(url, await prepareLocalApiRequestInit(init)));
+}
+
+// Decode the product envelope independently of the authenticated carrier.
+export async function readApiJSONResponse<T>(resp: Response): Promise<LocalApiJSONResponse<T>> {
   const text = await resp.text();
   let data: any = null;
   let parsedJSON = false;

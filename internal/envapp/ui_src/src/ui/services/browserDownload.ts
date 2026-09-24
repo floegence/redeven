@@ -1,11 +1,10 @@
-// Trusted browser-document adapter. An anchor with an HTTP download URL bypasses
-// Service Workers in supported clients, so bytes must first pass through the
-// existing authenticated fetch path. Blob downloads stay local to this document.
+// The environment owner supplies an authorized response over the product port.
+// Blob downloads stay local to this trusted document.
 const limit = 256 * 1024 * 1024;
 let retained = 0;
 let active = 0;
 
-export async function saveBrowserDownload(url: string, signal: AbortSignal): Promise<void> {
+export async function saveBrowserDownload(response: Response, signal: AbortSignal): Promise<void> {
   signal.throwIfAborted();
   if (active >= 4) throw new Error('Browser download limit');
   active++;
@@ -13,7 +12,6 @@ export async function saveBrowserDownload(url: string, signal: AbortSignal): Pro
   let released = false;
   const release = () => { if (!released) { released = true; retained -= size; } };
   try {
-    const response = await fetch(url, { signal, credentials: 'same-origin', redirect: 'error', cache: 'no-store' });
     if (!response.ok || !response.body) { await response.body?.cancel(); throw new Error('Browser download unavailable'); }
     const header = response.headers.get('Content-Length');
     const expected = header === null ? undefined : Number(header);
@@ -44,7 +42,9 @@ export async function saveBrowserDownload(url: string, signal: AbortSignal): Pro
     } finally { await reader.cancel().catch(() => undefined); reader.releaseLock(); }
     const object = URL.createObjectURL(new Blob(chunks, { type: 'application/octet-stream' }));
     const link = document.createElement('a');
-    link.href = object; link.download = name.replace(/[\u0000-\u001f\u007f/\\]/gu, '_'); link.hidden = true;
+    link.href = object;
+    link.download = Array.from(name, character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127 || character === '/' || character === '\\' ? '_' : character).join('');
+    link.hidden = true;
     document.body.append(link); link.click(); link.remove();
     // Keep the local object alive while the native download consumes it. The
     // same budget includes these objects, not just simultaneous HTTP readers.

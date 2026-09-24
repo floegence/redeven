@@ -66,11 +66,22 @@ export function ActivityBarCodespacesIcon(props: { class?: string }) {
 export function ActivityBarPortsIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true" data-activity-bar-icon="web-services">
-      <rect x="4" y="5" width="16" height="14" rx="3" fill="currentColor" fill-opacity=".1" stroke="currentColor" stroke-opacity=".72" stroke-width="1.25" />
-      <path d="M4 10h16M8 5v5M16 5v5" stroke="currentColor" stroke-opacity=".45" stroke-width="1.15" stroke-linecap="round" />
-      <circle cx="8" cy="14.5" r="1.25" fill="currentColor" fill-opacity=".82" />
-      <circle cx="12" cy="14.5" r="1.25" fill="currentColor" fill-opacity=".58" />
-      <circle cx="16" cy="14.5" r="1.25" fill="currentColor" fill-opacity=".38" />
+      <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-opacity=".55" stroke-width="1" fill="currentColor" fill-opacity=".12" />
+      <path d="M12 5 A 3 7 0 0 0 12 19 A 3 7 0 0 0 12 5" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" fill="none" stroke-linecap="round" />
+      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+export function ActivityBarBrowserIcon(props: { class?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true" data-activity-bar-icon="floebrowser">
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".78" stroke-width="1.35" />
+      <path d="M4 9h16" stroke="currentColor" stroke-opacity=".48" stroke-width="1.25" />
+      <circle cx="6.5" cy="6.75" r=".8" fill="currentColor" fill-opacity=".72" />
+      <circle cx="9" cy="6.75" r=".8" fill="currentColor" fill-opacity=".46" />
+      <circle cx="12.5" cy="14" r="3.5" stroke="currentColor" stroke-opacity=".72" stroke-width="1.15" fill="currentColor" fill-opacity=".1" />
+      <path d="M12.5 10.5c1.15 0 2.08 1.57 2.08 3.5s-.93 3.5-2.08 3.5-2.08-1.57-2.08-3.5.93-3.5 2.08-3.5ZM9 14h7" stroke="currentColor" stroke-opacity=".58" stroke-width=".85" fill="none" stroke-linecap="round" />
     </svg>
   );
 }

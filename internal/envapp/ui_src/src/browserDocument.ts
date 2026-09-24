@@ -5,6 +5,7 @@ import decoderURL from '@floegence/floebrowser/media-worker.js?url';
 import audioWorkletURL from '@floegence/floebrowser/audio-worklet.js?url';
 import '@floegence/floebrowser/viewer.css';
 import './styles/browserDocument.css';
+import { browserResourceIdentity } from './ui/services/browserResourceIdentity';
 import { saveBrowserDownload } from './ui/services/browserDownload';
 import type { BrowserDocumentConfiguration, BrowserDocumentEvent, BrowserDocumentRequest, BrowserDocumentResult } from './ui/services/browserWindowProtocol';
 
@@ -62,6 +63,11 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
     else work.reject(new Error('Browser request unavailable'));
   };
   product.start();
+  const file = async (method: 'resource' | 'download', target: string, id: string, signal: AbortSignal): Promise<Response> => {
+    const value = await request({ method, target, id }, signal);
+    if (!value || typeof value !== 'object' || !('body' in value) || !(value.body instanceof ArrayBuffer)) throw new Error('Browser file unavailable');
+    return new Response(value.body, { headers: { 'Content-Type': value.contentType, 'Content-Disposition': value.disposition, 'Content-Length': String(value.body.byteLength) } });
+  };
   const connection = projectionPortConnection({ messages, media }, {
     upload: async (chooser, file, signal) => {
       const id = await request({ method: 'upload', chooser, file }, signal);
@@ -70,8 +76,7 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
     },
     download: async (target, id, signal) => {
       signal.throwIfAborted();
-      const view = location.pathname.split('/').filter(Boolean).at(-1)!;
-      await saveBrowserDownload(`/_redeven_proxy/api/browser/views/${encodeURIComponent(view)}/download?${new URLSearchParams({ target, id })}`, signal);
+      await saveBrowserDownload(await file('download', target, id, signal), signal);
     },
   });
   const acquireIdle = () => {
@@ -123,6 +128,10 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
   }
   const view = mountBrowser(surface, {
     title: configuration.title,
+    fetchResource: (url, signal) => {
+      const { target, id } = browserResourceIdentity(url, location.href);
+      return file('resource', target, id, signal);
+    },
     messages: configuration.messages,
     mediaAssets: { decoderURL, audioWorkletURL },
     connect: () => {

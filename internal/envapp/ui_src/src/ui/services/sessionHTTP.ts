@@ -1,3 +1,4 @@
+import { readApiJSONResponse } from './localApi';
 import type { AcquisitionConnectionLifecycle, FetchServerSentEventsOptions, ServerSentEvent } from '@floegence/floe-webapp-boot';
 
 // The Shell's connection lifecycle owns transport and cancellation. This binding
@@ -29,4 +30,10 @@ export async function* readSessionEvents(
 export function isSessionEventAuthorizationError(error: unknown): boolean {
   const status = Number((error as { status?: unknown } | null)?.status);
   return status === 401 || status === 403 || status === 423;
+}
+
+export async function fetchSessionJSON<T>(input: RequestInfo | URL, init: RequestInit): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (typeof init.body === 'string' && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  return (await readApiJSONResponse<T>(await fetchSessionHTTP(input, { ...init, headers }))).data;
 }

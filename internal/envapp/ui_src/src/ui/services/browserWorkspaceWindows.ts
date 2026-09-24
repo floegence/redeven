@@ -6,14 +6,14 @@ import type { BrowserMessages } from '@floegence/floebrowser/viewer';
 import type { createBrowserWindow } from './browserWindow';
 import { browserDocumentURL, type BrowserViewDescriptor, type BrowserWorkspaceRequest } from './browserWindowProtocol';
 import { desktopShellBridgeAvailable, prepareDesktopBrowserWindow } from './desktopShellBridge';
-import { fetchLocalApiJSON } from './localApi';
+import { fetchSessionJSON } from './sessionHTTP';
 
 type Entry = { label?: string; changing?: boolean; request: BrowserWorkspaceRequest; child: Window | null; host?: ReturnType<typeof createBrowserWindow> };
 export class BrowserWindowBlockedError extends Error {}
 
 export function openBrowserWorkspace(request: BrowserWorkspaceRequest, signal: AbortSignal): Promise<BrowserViewDescriptor> {
   const existing = 'source_target' in request;
-  return fetchLocalApiJSON(existing ? '/_redeven_proxy/api/browser/views' : '/_redeven_proxy/api/browser/workspace', {
+  return fetchSessionJSON(existing ? '/_redeven_proxy/api/browser/views' : '/_redeven_proxy/api/browser/workspace', {
     method: 'POST', body: JSON.stringify(existing ? { targets: [request.source_target] } : request), signal,
   });
 }
@@ -72,7 +72,7 @@ export function createBrowserWorkspaceWindows(configuration: () => { title: stri
       if (!entry.child) { host.close(); throw new BrowserWindowBlockedError('Browser window blocked'); }
       entries.add(entry);
     } finally {
-      if (issued) void fetchLocalApiJSON(`/_redeven_proxy/api/browser/views/${encodeURIComponent(view.id)}`, { method: 'DELETE' }).catch(() => undefined);
+      if (issued) void fetchSessionJSON(`/_redeven_proxy/api/browser/views/${encodeURIComponent(view.id)}`, { method: 'DELETE' }).catch(() => undefined);
     }
   };
   return {

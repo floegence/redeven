@@ -4,7 +4,7 @@ import { ChevronDown, Globe } from '@floegence/floe-webapp-core/icons';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { FloeBrowserSurface } from '../widgets/FloeBrowserSurface';
 import { BrowserSourceDialog, type BrowserSourceSelection } from '../widgets/BrowserSourceDialog';
-import { fetchLocalApiJSON } from '../services/localApi';
+import { fetchSessionJSON } from '../services/sessionHTTP';
 import type { BrowserViewDescriptor, BrowserWorkspaceRequest } from '../services/browserWindowProtocol';
 import { useI18n } from '../i18n';
 import { browserSourceService } from '../services/browserSourceManagement';
@@ -44,12 +44,12 @@ export function EnvBrowserPage(props: { onOpenWindow(request: BrowserWorkspaceRe
     void openBrowserWorkspace(confirmed ?? selected.request, controller.signal).then(result => {
       issued = result;
       if (controller.signal.aborted) {
-        void fetchLocalApiJSON(`/_redeven_proxy/api/browser/views/${encodeURIComponent(result.id)}`, { method: 'DELETE' }).catch(() => undefined);
+        void fetchSessionJSON(`/_redeven_proxy/api/browser/views/${encodeURIComponent(result.id)}`, { method: 'DELETE' }).catch(() => undefined);
       } else { confirmed = browserWorkspaceSource(result); setView(result); }
     }).catch(() => { if (!controller.signal.aborted) setFailed(true); });
     onCleanup(() => {
       controller.abort();
-      if (issued) void fetchLocalApiJSON(`/_redeven_proxy/api/browser/views/${encodeURIComponent(issued.id)}`, { method: 'DELETE' }).catch(() => undefined);
+      if (issued) void fetchSessionJSON(`/_redeven_proxy/api/browser/views/${encodeURIComponent(issued.id)}`, { method: 'DELETE' }).catch(() => undefined);
     });
   }));
   return <div class="redeven-browser-page">
@@ -70,6 +70,6 @@ export function EnvBrowserPage(props: { onOpenWindow(request: BrowserWorkspaceRe
         copy={{ unavailable: i18n.t('shell.notifications.remoteBrowserUnavailable'), connecting: i18n.t('browserEngine.connection.connecting') }} onReconnect={retry} />
     </Show>
     <Show when={choosing()}><BrowserSourceDialog service={sourceService} messages={browserSourceMessages(i18n)} current={selection()} onClose={() => setChoosing(false)}
-      onSelect={next => { setSelection(next); setChoosing(false); }} /></Show>
+      onSelect={next => { setSelection({ ...next }); setChoosing(false); }} /></Show>
   </div>;
 }

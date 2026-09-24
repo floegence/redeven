@@ -181,6 +181,14 @@ try {
   assert.equal(await replay.locator('#picture').evaluate(image => image.naturalWidth), 44);
   assert.equal(await replay.locator('#counter').evaluate(button => getComputedStyle(button).color), 'rgb(13, 87, 143)');
   assert.equal(await replay.locator('body').evaluate(() => window.websiteExecuted), undefined, 'source scripts never execute in the client replay');
+  const inlineAddress = document.getByRole('combobox', { name: 'Website address' });
+  await inlineAddress.fill(sourceOrigin + '/inline-navigation');
+  await inlineAddress.press('Enter');
+  await page.waitForURL(sourceOrigin + '/inline-navigation');
+  await inlineAddress.fill(sourceOrigin + '/');
+  await document.getByRole('button', { name: 'Open website', exact: true }).click();
+  await page.waitForURL(sourceOrigin + '/');
+  await replay.locator('#counter').waitFor({ state: 'visible' });
   const button = await replay.locator('#counter').boundingBox(); assert.ok(button);
   await viewer.mouse.click(button.x + button.width / 2, button.y + button.height / 2);
   await page.waitForFunction(() => window.count === 1);

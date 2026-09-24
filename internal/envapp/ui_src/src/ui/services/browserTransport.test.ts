@@ -14,9 +14,11 @@ class BrowserTestStream implements ByteStream {
   readonly reset = vi.fn(async () => { this.push(null); });
   readonly close = vi.fn(async () => { this.push(null); });
   readonly closeWrite = vi.fn(async () => undefined);
-  private queue: Array<Uint8Array | null> = [encoder.encode('{"ok":true}\n')];
+  private queue: Array<Uint8Array | null>;
   private waiting: ((bytes: Uint8Array | null) => void) | undefined;
-  constructor(readonly kind: string) {}
+  constructor(readonly kind: string, admissionChunks: Uint8Array[] = [encoder.encode('{"ok":true}\n')]) {
+    this.queue = [...admissionChunks];
+  }
   async read(): Promise<Uint8Array | null> {
     if (this.queue.length) return this.queue.shift()!;
     return new Promise(resolve => { this.waiting = resolve; });
@@ -28,8 +30,8 @@ class BrowserTestStream implements ByteStream {
   }
 }
 
-function fixture() {
-  const streams = Object.fromEntries(Object.values(redevenV1StreamKinds.browser).map(kind => [kind, new BrowserTestStream(kind)]));
+function fixture(admissionChunks?: Uint8Array[]) {
+  const streams = Object.fromEntries(Object.values(redevenV1StreamKinds.browser).map(kind => [kind, new BrowserTestStream(kind, admissionChunks)]));
   const openStream = vi.fn(async (kind: string) => streams[kind]!);
   const closed = vi.fn();
   const carrier = createBrowserCarrier({ session: { openStream } as unknown as Session, view: 'view', controlToken: () => 'current-token', onClose: closed });
@@ -40,6 +42,14 @@ const command: ClientMessage = { type: 'command', id: 1, tab: 'target', epoch: '
 const packet = () => encodeMediaFrame({ version: 1, target: 'target', view: 'media-view', stream: 'video', node: 1, track: 'video', codec: 'vp8', timestamp_us: 0, duration_us: 33333, keyframe: true, width: 16, height: 16, bytes: 3 }, new Uint8Array([1, 2, 3]));
 
 describe('browser carrier', () => {
+  it('accepts admission frames split across Flowersec chunks', async () => {
+    const state = fixture([encoder.encode('{"ok'), encoder.encode('":true}\n')]);
+
+    await vi.waitFor(() => expect(state.openStream).toHaveBeenCalledTimes(3));
+    expect(state.closed).not.toHaveBeenCalled();
+    state.carrier.close();
+  });
+
   it('returns media credit only after child consumption while input remains independent', async () => {
     const state = fixture();
     let release!: () => void;
