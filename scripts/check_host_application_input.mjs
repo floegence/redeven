@@ -25,6 +25,7 @@ const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const remote = command => host==='local' ? execFileSync('/bin/sh',['-c',command],{encoding:'utf8'}) : execFileSync('ssh', ['-x', host, command], {encoding:'utf8'});
 const metadata = JSON.parse(remote(`cat ${quote(remoteRoot + '/connection.json')}`));
 const pointerMode=metadata.kind?.startsWith('pointer-');
+const unsupportedMode = process.env.REDEVEN_INPUT_EXPECT_UNSUPPORTED === '1';
 if(pointerMode)assert.equal(browserName,'chromium','native browser touch driver requires Chromium');
 const remotePort = Number(metadata.address.split(':')[1]);
 assert(remotePort > 0 && metadata.address.startsWith('127.0.0.1:'));
@@ -135,7 +136,45 @@ app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());
     };
   });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
+  const legacySnapshot = () => JSON.parse(remote(`python3 - <<'PY'
+from pathlib import Path
+import hashlib,json,os
+process=Path('/proc')/${JSON.stringify(String(metadata.pid))}
+state=Path(${JSON.stringify(metadata.state)})
+files={str(p.relative_to(state)):hashlib.sha256(p.read_bytes()).hexdigest()
+       for p in state.rglob('*') if p.is_file() and not p.is_symlink()
+       and any(part in ('www','input') for part in p.relative_to(state).parts)}
+assert files, 'Prepared fixture resources are missing'
+print(json.dumps({'executable':os.readlink(process/'exe'),
+ 'started':(process/'stat').read_text().split(') ')[1].split()[19], 'resources':files}))
+PY`));
+  const beforeLegacy = unsupportedMode ? legacySnapshot() : null;
   await page.goto(`http://127.0.0.1:${port}/fixture/_redeven_host_app/`);
+  if (unsupportedMode) {
+    for (const reload of [false, true]) {
+      if (reload) await page.reload();
+      await page.waitForFunction(() => document.body.dataset.state === 'inputVersionUnsupported');
+      assert.equal(page.isClosed(), false);
+      assert((await page.locator('#hint').innerText()).includes('Save your work on the host'));
+      assert.equal(await page.locator('#application').getAttribute('src'), null);
+      assert.equal(await page.locator('.floe-remote-input').count(), 0);
+      assert.deepEqual(legacySnapshot(), beforeLegacy);
+    }
+    await page.screenshot({path:path.join(output,'viewer.png')});
+    await page.close();
+    assert.deepEqual(legacySnapshot(), beforeLegacy, 'Closing the rejected viewer changed the application');
+    assert.deepEqual(JSON.parse(remote(`cat ${quote(remoteRoot + '/receipt.json')}`)), ['', '']);
+    // Removing the rejected iframe revokes its worker origin in WebKit. Keep
+    // those teardown diagnostics in evidence; reject unrelated script errors.
+    const unexpected = errors.filter(message => browserName !== 'webkit' ||
+      !/^\/127\.0\.0\.1:\d+\/fixture\/js\/(Protocol|DecodeWorker)\.js due to access control checks\.$/.test(message));
+    assert.deepEqual(unexpected, []);
+    const identity={...metadata}; delete identity.password;
+    await writeFile(path.join(output,'result.json'), JSON.stringify({passed:true,...identity,browserName,browser:browserVersion,
+      process:beforeLegacy,teardownDiagnostics:errors,checks:['old preparation rejected before input','save and reopen guidance','reload preserves resources','viewer close preserves process','no application input']},null,2));
+    remote(`printf %s '${JSON.stringify(['',''])}' > ${quote(remoteRoot + '/done.json')}`);
+    console.log('PASS: old preparation is rejected without changing its application or resources');
+  } else {
   await page.waitForFunction(() => document.body.dataset.state === 'active', undefined, {timeout:30000});
   const frame = page.frames().find(item => item.url().includes('/fixture/index.html'));
   if(metadata.backend!=='macos')assert(frame, 'prepared Xpra frame is missing');
@@ -174,6 +213,9 @@ app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());
   else await waitFor(() => receipt()[0] === 'abc', 'Click followed by physical typing did not reach the application');
   let cursor = null;
   if (!editorMode && !gtk4Mode) {
+  // Native text controls may hide their cursor while typing. Restore hover
+  // before checking its shape; the preceding click-to-key test stays intact.
+  await page.mouse.move(301, 170);
   await frame.waitForFunction(() => {
     const cursor = window.floeXpraInput.getClient().floeCursor;
     return cursor?.source?.width === 48 && cursor.current?.width === 24;
@@ -244,6 +286,7 @@ app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());
   await writeFile(path.join(output,'result.json'), JSON.stringify({passed:true,...identity,port,browserName,browser:browserVersion,expected,cursor,checks:[...(!gtk4Mode?['actual remote PNG normalization','application click coordinates']:[]),'click then physical typing','exact repeated Unicode','Backspace','pointer field switch','toolbar isolation'],actualOSCursor:false,systemIME:false},null,2));
   }
   console.log('PASS: published controller → prepared Xpra → actual application text receipt');
+  }
   }
 } catch (error) {
   await page?.screenshot({path:path.join(output,'failure.png')}).catch(() => {});

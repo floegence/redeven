@@ -120,7 +120,9 @@ async function run() {
         assert.equal(await dragRegion(), 'drag');
       }
     }
-    assert.deepEqual(await evaluate(`document.querySelector('#application').contentWindow.operations`), []);
+    // Native blur/geometry changes may request an idempotent pointer release.
+    // Header controls must not produce any actual content input or command.
+    assert.deepEqual(await evaluate(`document.querySelector('#application').contentWindow.operations.filter(operation=>operation[0]!=='pointer-release')`), []);
     await click('.mac-app-controls-toggle');
     await wait(`!document.querySelector('.mac-app-popover').hidden`);
     await click('.mac-app-windows-toggle');

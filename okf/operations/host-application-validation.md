@@ -3,7 +3,7 @@ type: Validation Guide
 title: Host application distribution validation
 description: Installed-stack evidence, architecture limits and repeatable native application acceptance.
 tags: [runtime, applications, linux, validation]
-timestamp: 2026-09-23T08:00:00Z
+timestamp: 2026-09-24T19:25:00Z
 ---
 # Summary
 
@@ -51,66 +51,10 @@ host application execution.
 
 ## Client input qualification
 
-The September 23 client-input qualification used published Floe webapp core 0.77.1
-(including the released remote-input and remote-pointer controllers) and native
-apps v0.7.10. Upstream's immutable release qualification passed on native amd64
-and arm64 with managed Xpra 6.2.2 and complete system Xpra 6.5.3. GTK3, Qt5, Qt6, Chromium 145 and xterm
-received exact Unicode strings, including 40 ordered commit/Enter pairs, a 15 KB
-commit, selection replacement, deletion, alternating focus and clipboard operations.
-The bridge is not a GTK4 qualification. Earlier distribution tables below are
-historical graphical/lifecycle evidence; they do not qualify current client input.
-
-Redeven's task-owned orange fixture uses the released managed components and real
-`Manager.Launch`, with private state and loopback ports. Run
-`TestInstalledClientInputViewer` with a new absolute
-`REDEVEN_TEST_CLIENT_INPUT_EVIDENCE` directory and verified
-`REDEVEN_TEST_NATIVE_COMPONENT_STATE`. While it reports ready, run
-`node scripts/check_host_application_input.mjs <ssh-host> <remote-evidence> <local-evidence>`.
-The driver serves the production viewer assets, tunnels only the fixture listener,
-and asserts the GTK application's own text receipt before signalling completion.
-It records PID, ports, component digest, browser version and a screenshot without
-copying the authentication credential into final evidence. The fixture terminates
-only its own test application and closes its private listener.
-
-The September 23 check passed repeated identical CJK/emoji/non-BMP/combining/ZWJ
-commits, physical typing, Backspace, pointer focus between two fields and toolbar
-isolation in Chromium 145, Firefox 146.0.1 and WebKit 26.0. The installed launch/resume/stop regression also passed.
-Browser events in this driver are synthetic: it establishes controller-to-app
-delivery, not a native input-method candidate workflow or physical touch behavior.
-
-Native macOS checks passed Unicode and ordinary `abc` key delivery into a disposable
-AppKit text field with both ABC and Simplified Pinyin selected on the host. The
-original input source was restored. Native launch, pixels, menus, shortcuts,
-reconnect, stale input, resize, window replacement, ordinary close and concurrent
-session isolation also passed with the changed helper. Desktop's real Electron
-41.10.5 titlebar/preload/action/reconnect fixture and 56 browser appearance checks
-passed; 111 deterministic viewer tests and 24 helper tests cover the input lifecycle
-contract. The 18 affected Desktop tests, localization, dependency boundaries,
-generated assets, Go hostapps/appserver tests and their race checks passed.
-
-Actual desktop OS candidate selection has not been qualified: the available UI
-automation attempt produced direct Latin text, without an observable native
-composition transaction. Real iOS/iPadOS Safari and Android Chrome soft keyboards
-and the mobile pointer matrix were unavailable and remain unpassed. A simulated
-mobile viewport or synthetic pointer sequence does not replace these checks. The
-user owns the remaining real input-method and physical mobile interaction acceptance.
-
-The follow-up authenticated `udesk26` check passed actual GTK3 input using private
-state, released components and the production viewer. Its installed Firefox 155.0.1
-also passed repeated Unicode, physical typing, deletion, field switching and toolbar
-isolation. Select it with `REDEVEN_TEST_CLIENT_INPUT_TARGET=firefox`; its disposable
-profile suppresses first-run notifications and disables telemetry upload. No personal
-browser profile is modified. No application or Runtime deployment is implied by a
-passing isolated fixture.
-
-The macOS follow-up passed actual Google Chrome textarea and Terminal stdin receipts
-for repeated Unicode and physical typing/deletion. Chrome additionally verifies
-selection replacement and multiline text. This exposed and fixed native line-feed
-events being discarded when carried by an ordinary character key: committed line
-breaks retain their Unicode payload and native Return key identity. Run
-`scripts/check_macos_host_application_input_targets.py --helper <built-helper> --output <evidence>`
-to create and close only disposable test windows in the installed applications.
-This check does not perform native candidate selection or modify personal documents.
+[Host application input validation](host-application-input-validation.md) owns
+current GTK3/GTK4/Qt/XIM application receipts, click-to-keyboard focus, old-session
+upgrade checks and the distinction between synthetic composition and real IME
+acceptance. Earlier component installation results do not qualify toolkit input.
 
 ## Mobile pointer acceptance
 

@@ -42,6 +42,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [macOS application management and graceful quit](architecture/macos-application-management.md): Manage live host applications, distinguish quit from sharing, and reject stale process targets.
 - [Host Application Setup](operations/host-application-setup.md) - Install compatible Arch, Enterprise Linux and Alpine packages and verify native application startup.
 - [Host Application Validation](operations/host-application-validation.md) - Qualify managed components, native client input and mobile pointer behavior.
+- [Host application input validation](operations/host-application-input-validation.md) - Verify actual toolkit text, click focus and old-session recovery while separating real IME acceptance.
 - [Host application platform validation](operations/host-application-platform-validation.md) - Verify Linux userspace and native macOS evidence while retaining hardware, translation and policy limits.
 - [Host application cursor acceptance](operations/host-application-cursor-validation.md) - Verify transported cursor geometry and application clicks while tracking physical pointer and device limitations.
 - [Host Application Lifecycle](operations/host-application-lifecycle.md) - Diagnose startup, window, access and transport transitions using the focused acceptance matrix.

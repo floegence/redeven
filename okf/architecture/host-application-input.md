@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Client input for host applications
 description: Own composition once on the client, bind confirmed text and keys to painted application windows, and recover without replay.
 tags: [applications, input, linux, macos, desktop]
-timestamp: 2026-09-23T08:00:00Z
+timestamp: 2026-09-24T19:25:00Z
 ---
 # Summary
 
@@ -110,7 +110,7 @@ rejects input until the replacement frame is decoded.
 
 ## Verification boundary
 
-The [validation record](../operations/host-application-validation.md) distinguishes
+The [validation record](../operations/host-application-input-validation.md) distinguishes
 controller event simulation, real app text receipts, real OS IME input and actual
 mobile-device evidence. A sent packet, mobile viewport emulation or synthetic
 composition event alone does not establish system input-method acceptance.
