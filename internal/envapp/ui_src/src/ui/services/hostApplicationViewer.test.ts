@@ -15,7 +15,7 @@ type DisplayState = {available:boolean; policy:string; density:number; width:num
 const drain = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.close(); });
 
-async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }, savedPicture?: string, pointerVersion = 1, connected = true) {
+async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }, savedPicture?: string, pointerVersion = 1, connected = true, preparationVersion: number | null = 2) {
   dom = new JSDOM(html, { url:'http://localhost/pf/test/_redeven_host_app/', runScripts:'dangerously', pretendToBeVisual:true });
   const fetch = vi.fn().mockResolvedValue({ok:true, json:async () => ({state:'running', password:'private'})});
   dom.window.fetch = fetch;
@@ -79,10 +79,11 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
     }),
     send_control_refresh:vi.fn(), send:vi.fn(), send_close_window:vi.fn(), focused_wid:1, set_focus:vi.fn((win: {wid:number}) => { client.focused_wid = win.wid; }), close:vi.fn(), callback_close:() => {}, on_last_window:vi.fn(),
   };
-  Object.assign(frame.contentWindow!, {floeXpraInput:{version:1,getClient:() => (frame.contentWindow as unknown as {client?:unknown}).client}});
+  const bootstrap = {version:preparationVersion,getClient:() => (frame.contentWindow as unknown as {client?:unknown}).client};
+  if (preparationVersion !== null) Object.assign(frame.contentWindow!, {floeXpraInput:bootstrap});
   if (!deferredInitialization) {
     Object.assign(frame.contentWindow!, {client});
-    if (lexicalClient) Object.assign(frame.contentWindow!, {floeXpraInput:{version:1,getClient:()=>client}});
+    if (lexicalClient && preparationVersion !== null) Object.assign(frame.contentWindow!, {floeXpraInput:{...bootstrap,getClient:()=>client}});
   }
   frame.dispatchEvent(new dom.window.Event('load'));
   return {frame, doc, client, appWindow, fetch, nativeWindow, unsubscribeDisplay,
@@ -91,6 +92,38 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
 }
 
 describe('host application viewer', () => {
+  it.each([null, 1, 3])('rejects preparation version %s before creating input owners and preserves the application', async preparationVersion => {
+    const v = await viewer(false, true, false, undefined, undefined, undefined, 1, true, preparationVersion);
+    expect(v.state()).toBe('inputVersionUnsupported');
+    expect(v.doc.querySelector('.floe-remote-input')).toBeNull();
+    expect(v.doc.querySelector('[data-floe-remote-pointer]')).toBeNull();
+    expect(v.client.subscribe_display).not.toHaveBeenCalled();
+    expect(v.client.send_close_window).not.toHaveBeenCalled();
+    expect(v.nativeWindow.request).not.toHaveBeenCalled();
+    expect(dom.window.document.querySelector<HTMLButtonElement>('#retry')!.hidden).toBe(true);
+  });
+
+  it('rechecks preparation before deferred client installation', async () => {
+    const v = await viewer(true);
+    expect(v.state()).toBe('connecting');
+    Object.assign(v.frame.contentWindow!, {client:v.client, floeXpraInput:{version:1,getClient:()=>v.client}});
+    v.doc.dispatchEvent(new dom.window.Event('connection-established'));
+    expect(v.state()).toBe('inputVersionUnsupported');
+    expect(v.doc.querySelector('.floe-remote-input')).toBeNull();
+    expect(v.client.send_close_window).not.toHaveBeenCalled();
+  });
+
+  it('ignores deferred initialization from a retired connection', async () => {
+    const v = await viewer(true, true);
+    expect(v.state()).toBe('connecting');
+    dom.window.dispatchEvent(new dom.window.Event('pagehide'));
+    Object.assign(v.frame.contentWindow!, {client:v.client});
+    v.doc.dispatchEvent(new dom.window.Event('connection-established'));
+    expect(v.doc.querySelector('.floe-remote-input')).toBeNull();
+    expect(v.client.subscribe_display).not.toHaveBeenCalled();
+    expect(v.nativeWindow.request).not.toHaveBeenCalled();
+  });
+
   it('retains an established Xpra viewer for unknown termination reasons', async () => {
     const v = await viewer(false, true);
     v.appWindow(1); v.client._new_window(1);
