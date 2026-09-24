@@ -297,7 +297,7 @@ func (host *browserSourceHost) call(ctx context.Context, method string, params, 
 	}
 	response, err := host.request(ctx, http.MethodPost, "/command", bytes.NewReader(body))
 	if err != nil {
-		return err
+		return fmt.Errorf("browser host %s: %w", method, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {

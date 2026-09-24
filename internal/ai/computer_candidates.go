@@ -193,19 +193,25 @@ func (r *ComputerUseRuntime) candidateBrowserTabs(ctx context.Context, connectio
 		r.connectMu.Lock()
 		defer r.connectMu.Unlock()
 		profile := r.managedProfiles[connection.ManagedProfileID]
-		if profile == nil {
-			return nil, nil
-		}
-		if profile.stopped() {
+		if profile != nil && profile.stopped() {
+			profile.fault()
 			delete(r.managedProfiles, connection.ManagedProfileID)
+			return nil, errBrowserHostFailed
+		}
+		status := r.browserServiceSnapshot()
+		if status.State == "failed" || status.State == "recovering" {
+			return nil, errBrowserHostFailed
+		}
+		if profile == nil {
 			return nil, nil
 		}
 		tabs, err := profile.call(ctx, "inventory")
 		if ctx.Err() == nil && profile.stopped() {
-			// A dead managed process needs no manual pairing. Discovery offers
-			// a new page; only an authorized selection may restart the profile.
+			// Discovery retires dead identities; only explicit service recovery
+			// may make the profile available for a fresh user selection.
+			profile.fault()
 			delete(r.managedProfiles, connection.ManagedProfileID)
-			return nil, nil
+			return nil, errBrowserHostFailed
 		}
 		if err != nil {
 			return nil, err

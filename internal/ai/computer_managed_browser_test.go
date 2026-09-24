@@ -317,12 +317,21 @@ await browser.close();`, executor.CDPURL, executor.TabID, loss)
 				if candidate.TargetID == target.ID && candidate.State == "ready" {
 					t.Error("closed page is still presented as ready")
 				}
-				if candidate.CandidateRef == inventory.DefaultCandidateRef {
+				if candidate.Kind == "browser.managed" && candidate.NewTab {
 					fresh = candidate
 				}
 			}
-			if !fresh.NewTab || fresh.State != "ready" || fresh.Kind != "browser.managed" {
-				t.Fatalf("agent has no fresh headless page candidate: %+v", inventory)
+			expectedState := "ready"
+			if loss == "crashed_browser" {
+				expectedState = "connection_required"
+				if inventory.DefaultCandidateRef != "" {
+					t.Fatal("failed browser advertised a default ready candidate")
+				}
+			} else if inventory.DefaultCandidateRef != fresh.CandidateRef {
+				t.Fatal("closed tab lost its fresh page default")
+			}
+			if !fresh.NewTab || fresh.State != expectedState || fresh.Kind != "browser.managed" {
+				t.Fatalf("managed candidate does not reflect service health: %+v", inventory)
 			}
 			if selected, _ := store.GetComputerTarget(ctx, "thread-first"); selected != target.ID {
 				t.Fatal("discovery replaced the selected page")
@@ -337,8 +346,33 @@ await browser.close();`, executor.CDPURL, executor.TabID, loss)
 			if selected, _ := store.GetComputerTarget(ctx, "thread-first"); selected != target.ID {
 				t.Fatal("rejected replacement changed the selected page")
 			}
-			if loss == "crashed_browser" && len(host.managedProfiles) != 0 {
-				t.Fatal("discovery retained or restarted a dead browser")
+			if loss == "crashed_browser" {
+				if len(host.managedProfiles) != 0 {
+					t.Fatal("discovery retained or restarted a dead browser")
+				}
+				if _, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.select_target"}, fresh.CandidateRef, ToolTargetPolicy{}); err == nil {
+					t.Fatal("selection restarted a failed service without explicit recovery")
+				}
+				meta := &session.Meta{ChannelID: "recovery-channel", UserPublicID: "user", EndpointID: "environment", CanRead: true, CanWrite: true, CanExecute: true}
+				if _, err := host.RecoverBrowser(ctx, meta, host.browserServiceSnapshot().Generation); err != nil {
+					t.Fatal(err)
+				}
+				if selected, _ := store.GetComputerTarget(ctx, "thread-first"); selected != target.ID {
+					t.Fatal("recovery rebound the selected page")
+				}
+				inventory, err = host.ComputerTargets(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.targets"}, ToolTargetPolicy{})
+				if err != nil || inventory.DefaultCandidateRef == "" {
+					t.Fatalf("recovered browser has no new selection: %+v %v", inventory, err)
+				}
+				fresh = ComputerCandidate{}
+				for _, candidate := range inventory.Candidates {
+					if candidate.CandidateRef == inventory.DefaultCandidateRef {
+						fresh = candidate
+					}
+				}
+				if !fresh.NewTab || fresh.State != "ready" || fresh.Kind != "browser.managed" {
+					t.Fatalf("recovery did not restore explicit new page selection: %+v", inventory)
+				}
 			}
 			replacement, err := host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: "thread-first", ToolName: "computer.select_target"}, fresh.CandidateRef, ToolTargetPolicy{})
 			if err != nil {

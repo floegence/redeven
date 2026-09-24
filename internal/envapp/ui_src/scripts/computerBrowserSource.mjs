@@ -136,8 +136,10 @@ async function createSourceOwner(source, disposeSource, captureDownloads) {
           controller.close();
           try { await downloads?.close(); }
           finally {
-            for (const session of controller.page.sessions.keys()) controller.page.releaseSession(session);
-            await disposeSource();
+            // Fetch interception stays enabled until its debugger detaches.
+            // Keep the policy listener alive while pending navigation drains.
+            try { await disposeSource(); }
+            finally { for (const session of controller.page.sessions.keys()) controller.page.releaseSession(session); }
           }
         }
       })();
