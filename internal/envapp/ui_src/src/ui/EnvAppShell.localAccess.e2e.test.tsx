@@ -435,7 +435,6 @@ vi.mock('@floegence/floe-webapp-core', async () => {
   const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core')>('@floegence/floe-webapp-core');
   return {
   secureRandomUUID: actual.secureRandomUUID,
-  useResizeObserver: actual.useResizeObserver,
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
   useResizeObserver: () => () => ({ width: 1024, height: 768 }),
   getShellThemePresetsForMode: () => [],
