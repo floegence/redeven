@@ -9,6 +9,7 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { createRequire } from 'node:module';
 import { build } from 'vite';
+import solid from 'vite-plugin-solid';
 import { chromium, firefox, webkit, _electron as electron } from 'playwright';
 import { createProxyServiceWorkerScript } from '@floegence/flowersec-core/proxy';
 import { stageBrowserExtension } from '../../../../scripts/stage_browser_extension.mjs';
@@ -83,17 +84,20 @@ try {
   ({ targetInfo } = await probe.send('Target.getTargetInfo')); await probe.detach();
   port = (await readFile(path.join(directory, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
   }
-  const bundle = await build({ configFile: false, logLevel: 'silent', build: { write: false, minify: false,
-    lib: { entry: 'scripts/browserProjectionFixture.ts', formats: ['es'] },
+  const bundle = await build({ configFile: false, plugins: [solid()], resolve: { conditions: ['browser'] }, logLevel: 'silent', build: { write: false, minify: false,
+    lib: { entry: 'scripts/browserProjectionFixture.tsx', formats: ['es'] },
     rolldownOptions: { output: { codeSplitting: false } },
   } });
-  const script = (Array.isArray(bundle) ? bundle[0] : bundle).output.find(item => item.type === 'chunk').code;
+  const output = (Array.isArray(bundle) ? bundle[0] : bundle).output;
+  const script = output.find(item => item.type === 'chunk').code;
+  const style = output.filter(item => item.type === 'asset' && item.fileName.endsWith('.css')).map(item => item.source).join('\n');
   const worker = createProxyServiceWorkerScript({ proxyPathPrefix: '/_redeven_proxy/', stripProxyPathPrefix: false });
   const directProxyRequests = [];
   publicServer = https.createServer({ cert: tls.certificate, key: tls.privateKey }, (request, response) => {
     if (request.url === '/_redeven_sw.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(worker); }
     else if (request.url === '/fixture.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(script); }
-    else if (request.url?.startsWith('/fixture.html')) { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><script type="module" src="/fixture.js"></script><body style="margin:0"><button id="open">Open independent browser</button>'); }
+    else if (request.url === '/fixture.css') { response.setHeader('Content-Type', 'text/css'); response.end(style); }
+    else if (request.url?.startsWith('/fixture.html')) { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><link rel="stylesheet" href="/fixture.css"><script type="module" src="/fixture.js"></script><body style="margin:0"><button id="open">Open independent browser</button>'); }
     else { if (request.url?.startsWith('/_redeven_proxy/')) { directProxyRequests.push(request.url); console.error('Unproxied browser resource', request.url); } response.writeHead(404); response.end(); }
   });
   publicServer.listen(0, '127.0.0.1'); await once(publicServer, 'listening');
@@ -173,6 +177,7 @@ try {
   viewer.on('console', message => { if (message.type() === 'error') console.error('viewer:', message.text()); });
   if (!desktop) await viewer.goto(origin + '/fixture.html');
   await viewer.waitForFunction(() => typeof window.startBrowserFixture === 'function');
+  diagnosticPage = viewer;
   await viewer.evaluate(value => window.startBrowserFixture(value), configuration);
   const document = viewer.frameLocator('#browser-document');
   const replay = document.frameLocator('iframe');
@@ -197,6 +202,28 @@ try {
   await document.getByRole('button', { name: 'Bookmark this page', exact: true }).click();
   await document.locator('.browser-library-entries').getByText(sourceOrigin + '/', { exact: true }).waitFor();
   await document.getByRole('button', { name: 'Close library', exact: true }).click();
+  const chooseProfile = async (surface, name) => {
+    await surface.getByRole('button', { name: 'More browser actions', exact: true }).click();
+    await surface.getByRole('menuitem', { name: 'Browser sources', exact: true }).click();
+    await surface.getByRole('radio', { name }).click();
+    await surface.getByRole('button', { name: 'Open selection', exact: true }).click();
+    await surface.getByRole('dialog').waitFor({ state: 'hidden' });
+  };
+  if (managedSource) {
+    await document.getByRole('button', { name: 'More browser actions', exact: true }).click();
+    await document.getByRole('menuitem', { name: 'Browser sources', exact: true }).click();
+    await document.getByRole('textbox', { name: 'New profile name', exact: true }).fill('Inline selection');
+    await document.getByRole('button', { name: 'Create profile', exact: true }).click();
+    await document.getByRole('radio', { name: /Inline selection/ }).waitFor();
+    await document.getByRole('button', { name: 'Open selection', exact: true }).click();
+    await document.getByRole('dialog').waitFor({ state: 'hidden' });
+    await document.getByRole('tab').waitFor();
+    await inlineAddress.fill(sourceOrigin + '/inline-selected'); await inlineAddress.press('Enter');
+    await replay.getByText('Count 0', { exact: true }).waitFor();
+    assert.equal(page.url(), sourceOrigin + '/', 'Replacing the inline view never navigates the preceding profile');
+    await chooseProfile(document, /Default profile/);
+    await replay.getByText('Count 1', { exact: true }).waitFor();
+  }
   let privateDescendant;
   if (extensionSource) {
     await viewer.evaluate(() => window.setBrowserFixturePrivate(true));
@@ -228,7 +255,17 @@ try {
     assert.equal(await popup.getByRole('radio', { name: /Popup popup/ }).count(), 0, 'Private native descendants stay outside source selection after their direct opener closes');
     assert.equal(await popup.getByRole('radio', { name: /Shared source fixture/ }).count(), 0, 'The private root is absent from another window inventory');
   }
-  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
+  if (managedSource) {
+    await popup.getByRole('button', { name: 'Open selection', exact: true }).click();
+    await popup.getByRole('dialog').waitFor({ state: 'hidden' });
+    await popup.getByRole('tab').waitFor();
+    const selectedAddress = popup.getByRole('combobox', { name: 'Website address' });
+    await selectedAddress.fill(sourceOrigin + '/popup-selected'); await selectedAddress.press('Enter');
+    await popupReplay.getByText('Count 0', { exact: true }).waitFor();
+    await replay.getByText('Count 1', { exact: true }).waitFor();
+    await chooseProfile(popup, /Default profile/);
+    assert.equal(popup.isClosed(), false, 'Successful source replacement retains the independent window');
+  } else await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
   if (extensionSource) {
     await viewer.evaluate(() => window.setBrowserFixturePrivate(false));
     await privateDescendant.close();

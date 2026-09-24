@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { render } from 'solid-js/web';
-import { createSignal } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Session } from '@floegence/flowersec-core';
 import { englishMessages } from '@floegence/floebrowser/viewer';
@@ -11,6 +11,8 @@ vi.mock('../services/browserWindow', () => ({ createBrowserWindow: (options: Bro
 import { browserSourceMessages } from '../i18n/browserSourceMessages';
 import type { BrowserSourceService } from '../services/browserSourceContract';
 import { FloeBrowserSurface } from './FloeBrowserSurface';
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
+import { createBrowserWorkspaceController } from '../services/browserWorkspaceController';
 
 const sources = { service: { management: {} } as BrowserSourceService, messages: browserSourceMessages({ t: (key: string) => key } as never), current: { label: 'Default', request: { managed_profile_id: 'browser-main' } }, select: async () => undefined };
 
@@ -56,5 +58,40 @@ describe('FloeBrowserSurface', () => {
     expect(container.textContent).not.toContain('Connecting');
     current.onFailure?.('BROWSER_SERVICE_FAILED');
     expect(failure).toHaveBeenCalledExactlyOnceWith('BROWSER_SERVICE_FAILED');
+  });
+  it('keeps the current document alive while its source-selection request is pending', async () => {
+    const descriptor = (id: string) => ({ generation: 'generation', id, profile_id: id === 'browser-view-first' ? 'browser-main' : 'profile-next', protocol_version: 22, media_wire_version: 1, initial_target: id + '-tab' });
+    const request = vi.fn(async (_path: RequestInfo | URL, _init?: RequestInit) => Response.json({ ok: true, data: descriptor('browser-view-first') }));
+    const unbind = await bindTestSessionHTTP(request);
+    const service = { management: { loadBrowserInstallation: async () => ({ enabled: true, state: 'installed' }) } } as unknown as BrowserSourceService;
+    const controller = createBrowserWorkspaceController(service, sources.current);
+    const session = {} as Session;
+    controller.setSession(session);
+    await controller.open(sources.current);
+    const [workspace, setWorkspace] = createSignal(controller.snapshot());
+    const unsubscribe = controller.subscribe(setWorkspace);
+    const container = document.createElement('div'); document.body.append(container);
+    try {
+      dispose = render(() => <Show when={workspace().view}><FloeBrowserSurface sources={{ ...sources, service, current: workspace().selection, select: controller.open }}
+        onOpenWindow={async () => undefined} session={session} view={workspace().view!} title="Remote Browser" locale="en-US" messages={englishMessages}
+        copy={{ unavailable: 'Unavailable', connecting: 'Connecting' }} onReconnect={() => undefined} /></Show>, container);
+      await vi.waitFor(() => expect(state.open).toHaveBeenCalledOnce());
+      const current = state.open.mock.calls[0]![0] as BrowserWindowOptions;
+      const lifetime = new AbortController();
+      state.close.mockImplementationOnce(() => lifetime.abort());
+      let complete!: (response: Response) => void;
+      request.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+      const selection = current.sources!.select({ label: 'Next', request: { managed_profile_id: 'profile-next' } }, lifetime.signal);
+      void selection.catch(() => undefined);
+      expect(state.open).toHaveBeenCalledOnce();
+      expect(state.close).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(complete).toBeDefined());
+      complete(Response.json({ ok: true, data: descriptor('browser-view-next') }));
+      await selection;
+      await vi.waitFor(() => expect(state.open).toHaveBeenCalledTimes(2));
+      expect(controller.snapshot().view?.id).toBe('browser-view-next');
+      expect(state.close).toHaveBeenCalledOnce();
+      expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE').map(([path]) => String(path))).toEqual(['/_redeven_proxy/api/browser/views/browser-view-first']);
+    } finally { dispose?.(); dispose = undefined; unsubscribe(); controller.close(); unbind(); }
   });
 });
