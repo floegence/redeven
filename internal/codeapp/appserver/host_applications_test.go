@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -20,6 +21,7 @@ type hostAppsStub struct {
 	calls       int
 	state       string
 	setupDigest string
+	launch      hostapps.LaunchRequest
 }
 
 func (s *hostAppsStub) Catalog(context.Context, string, string) (hostapps.Catalog, error) {
@@ -27,10 +29,64 @@ func (s *hostAppsStub) Catalog(context.Context, string, string) (hostapps.Catalo
 	return hostapps.Catalog{}, nil
 }
 func (s *hostAppsStub) Sessions(string) []hostapps.Session { s.calls++; return nil }
-func (s *hostAppsStub) Launch(_ context.Context, owner string, _ hostapps.LaunchRequest) (hostapps.Session, error) {
+func (s *hostAppsStub) Launch(_ context.Context, owner string, req hostapps.LaunchRequest) (hostapps.Session, error) {
 	s.calls++
 	s.owner = owner
+	s.launch = req
 	return hostapps.Session{}, nil
+}
+
+func TestHostApplicationLaunchAcceptsEveryPublishedPresentationField(t *testing.T) {
+	// The generated catalog uses the same key mapping as the real Env App launch.
+	// Handwritten request fixtures missed new fields rejected by the strict decoder.
+	_, encoded, ok := strings.Cut(hostApplicationCatalogJS, "const hostApplicationCatalog = ")
+	if !ok {
+		t.Fatal("missing generated presentation catalog")
+	}
+	var catalog struct {
+		Locales map[string]map[string]string `json:"locales"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSuffix(strings.TrimSpace(encoded), ";")), &catalog); err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog.Locales) == 0 {
+		t.Fatal("empty presentation catalog")
+	}
+	for locale, copy := range catalog.Locales {
+		t.Run(locale, func(t *testing.T) {
+			// These standalone viewer variants replace existing launch fields on Linux.
+			for alias, field := range map[string]string{"sessionQuit": "quit", "sessionQuitTitle": "quitTitle", "sessionWaitingHint": "waitingHint", "sessionQuitDescription": "quitDescription", "sessionPictureHint": "pictureHint"} {
+				copy[field] = copy[alias]
+				delete(copy, alias)
+			}
+			copy["locale"] = locale
+			copy["shellTheme"] = "porcelain-light"
+			body, err := json.Marshal(map[string]any{"application_id": "editor.desktop", "locale": locale, "mode": "stream", "presentation": copy})
+			if err != nil {
+				t.Fatal(err)
+			}
+			backend := &hostAppsStub{}
+			server := &Server{hostApps: backend, resolveSessionMeta: resolveMetaForTest("ch_hostapps", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+			r := httptest.NewRequest(http.MethodPost, hostApplicationsAPI+"/sessions", strings.NewReader(string(body)))
+			r.Header.Set("Origin", envOriginWithChannel("ch_hostapps"))
+			w := httptest.NewRecorder()
+			server.handleHostApplicationsAPI(w, r)
+			if w.Code != http.StatusAccepted || backend.calls != 1 {
+				t.Fatalf("real presentation rejected: %d %s", w.Code, w.Body.String())
+			}
+			preserved, err := json.Marshal(backend.launch.Presentation)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var actual map[string]string
+			if err := json.Unmarshal(preserved, &actual); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(actual, copy) {
+				t.Fatal("launch did not preserve the complete viewer presentation")
+			}
+		})
+	}
 }
 func (s *hostAppsStub) Stop(_ context.Context, owner, _ string) error {
 	s.calls++

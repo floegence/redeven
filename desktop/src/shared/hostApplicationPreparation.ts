@@ -1,4 +1,4 @@
-import { buildDesktopWindowChromeStyleText } from './windowChromeContract';
+import { buildDesktopWindowChromeStyleText, type DesktopWindowChromeSnapshot } from './windowChromeContract';
 import { resolveDesktopWindowChromeSnapshot } from './windowChromePlatform';
 export const HOST_APPLICATION_PREPARATION_CHANNEL = 'redeven-desktop:host-application-preparation';
 export const HOST_APPLICATION_PREPARATION_CLOSED_CHANNEL = 'redeven-desktop:host-application-preparation-closed';
@@ -34,9 +34,9 @@ export type HostApplicationPreparationPalette = Readonly<{ background: string; f
 
 const escapeHTML = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 
-export function hostApplicationPreparationDocument(view: HostApplicationPreparationView, palette: HostApplicationPreparationPalette): string {
+export function hostApplicationPreparationDocument(view: HostApplicationPreparationView, palette: HostApplicationPreparationPalette, chrome: DesktopWindowChromeSnapshot | null = resolveDesktopWindowChromeSnapshot()): string {
   return `<!doctype html><html lang="${escapeHTML(view.locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; base-uri 'none'; form-action 'none'"><title>${escapeHTML(view.title)}</title><style>
-${buildDesktopWindowChromeStyleText(resolveDesktopWindowChromeSnapshot())}
+${chrome ? buildDesktopWindowChromeStyleText(chrome) : ''}
 .host-application-loading-titlebar{position:fixed;inset:0 0 auto;display:flex;align-items:center;height:var(--redeven-desktop-titlebar-height);padding-inline:var(--redeven-desktop-titlebar-start-inset) var(--redeven-desktop-titlebar-end-inset);font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;app-region:drag;user-select:none}
 *{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}body{font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:${escapeHTML(palette.background)};color:${escapeHTML(palette.foreground)};color-scheme:${escapeHTML(palette.colorScheme)};display:grid;place-items:center}
 main{width:min(340px,calc(100% - 64px));text-align:center;animation:appear .2s ease-out}img{display:block;width:64px;height:64px;object-fit:contain;margin:0 auto 24px}img[hidden]{display:none}h1{font-size:20px;font-weight:600;letter-spacing:-.025em;margin:0 0 28px;overflow-wrap:anywhere}#heading{font-size:13px;font-weight:500;margin:0 0 12px}#detail{color:${escapeHTML(palette.muted)};font-size:12px;min-height:3.1em;margin:14px 0 0;overflow-wrap:anywhere}.track{height:2px;background:${escapeHTML(palette.border)};overflow:hidden;border-radius:1px}.fill{display:block;width:38%;height:100%;background:${escapeHTML(palette.primary)};animation:travel 1.5s ease-in-out infinite;transform-origin:left;transition:width .2s ease}.determinate .fill{animation:none}body[data-failed=true] .fill{animation:none;width:0!important}@keyframes travel{0%{transform:translateX(-110%)}100%{transform:translateX(365%)}}@keyframes appear{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){main,.fill{animation:none;transition:none}}

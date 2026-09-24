@@ -5,13 +5,14 @@ import { useViewActivation, useResizeObserver } from '@floegence/floe-webapp-cor
 import { Check, Filter, MoreHorizontal, ExternalLink, Plus, Refresh, Search, Stop } from '@floegence/floe-webapp-core/icons';
 import { Button, Dropdown, Input } from '@floegence/floe-webapp-core/ui';
 import { hostApplicationPresentation } from '../services/hostApplicationPresentation';
+import { renderHostApplicationLaunchDocument } from '../services/hostApplicationLaunchDocument';
 import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { useEnvContext } from './EnvContext';
 import { addHostApplication, cancelHostApplicationSetup, getHostApplicationSetup, getHostApplicationTransferPlan, hostApplicationSetupActive, observeHostApplicationSetup, startHostApplicationSetup, uploadHostApplicationSetup, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, listRunningHostApplications, quitHostApplication, terminateHostApplication, detachHostApplication, type RunningHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSession, type HostApplicationSetup, type HostApplicationTransferPlan } from '../services/hostApplicationsApi';
 import { HostApplicationSetupPanel, hostApplicationSetupHeading, hostApplicationSetupProgress } from './HostApplicationSetupPanel';
-import { hostApplicationPreparationDocument, updateHostApplicationPreparationDocument, type HostApplicationPreparationView } from '../../../../../../desktop/src/shared/hostApplicationPreparation';
+import { updateHostApplicationPreparationDocument, type HostApplicationPreparationView } from '../../../../../../desktop/src/shared/hostApplicationPreparation';
 import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopShellBridge';
 import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
 import { LocalApiError } from '../services/localApi';
@@ -271,18 +272,7 @@ export function EnvHostApplicationsPage() {
     } else {
       const popup = window.open('about:blank', `redeven-host-app-${ctx.env_id()}-${encodeURIComponent(app.id)}`);
       if (!popup) throw new Error('The application window was blocked.');
-      const style = getComputedStyle(document.documentElement);
-      const color = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
-      popup.document.open();
-      popup.document.write(hostApplicationPreparationDocument(view, {
-        background: color('--background', 'Canvas'),
-        foreground: color('--foreground', 'CanvasText'),
-        muted: color('--muted-foreground', 'GrayText'),
-        border: color('--border', 'ButtonBorder'),
-        primary: color('--primary', 'AccentColor'),
-        colorScheme: style.colorScheme || 'light dark',
-      }));
-      popup.document.close();
+      renderHostApplicationLaunchDocument(popup, view);
       pending = { app, popup, active: true };
     }
     if (disposed) { closePending(pending); throw new Error('The application page was closed.'); }
@@ -491,6 +481,20 @@ export function EnvHostApplicationsPage() {
   const applicationsByID = createMemo(() => new Map((catalog()?.applications ?? []).map(app => [app.id, app])));
   const processesByID = createMemo(() => new Map(runningApplications().map(item => [item.app.id, item])));
 
+  const showLaunchFailure = (app: HostApplication, popup: Window, message: string) => {
+    if (!popup.closed) {
+      try {
+        renderHostApplicationLaunchDocument(popup, {
+          title: app.name, icon: app.icon, locale: i18n.locale(), heading: message,
+          detail: '', failed: true,
+        }, {
+          retry: i18n.t('hostApplications.retry'), dismiss: i18n.t('hostApplications.dismiss'),
+          onRetry: () => { if (!disposed) void open(app, { app, popup, active: true }); },
+        });
+      } catch { /* Navigation may already have transferred the tab to its viewer origin. */ }
+    }
+  };
+
   const open = async (app: HostApplication, prepared?: PendingApplication) => {
     if (!canLaunch() || busy()[app.id]) return;
     const operationResource = applicationResource.identity();
@@ -504,8 +508,10 @@ export function EnvHostApplicationsPage() {
       setBusy(value => ({ ...value, [app.id]: false }));
       const current = catalog()?.applications.find(item => item.id === app.id);
       if (disposed || !operationCurrent() || applicationResource.snapshot().stale || !current) {
-        if (prepared) closePending(prepared);
-        if (!disposed) setAppErrors(value => ({ ...value, [app.id]: i18n.t(current ? 'hostApplications.errors.failed' : 'hostApplications.errors.notFound') }));
+        const message = i18n.t(current ? 'hostApplications.errors.failed' : 'hostApplications.errors.notFound');
+        if (prepared?.popup && !disposed && operationCurrent()) showLaunchFailure(app, prepared.popup, message);
+        else if (prepared) closePending(prepared);
+        if (!disposed) setAppErrors(value => ({ ...value, [app.id]: message }));
         return;
       }
       app = current;
@@ -526,10 +532,11 @@ export function EnvHostApplicationsPage() {
     const localNative = nativeLaunch();
     const popup = prepared?.popup ?? (desktop || localNative ? null : window.open('about:blank', `redeven-host-app-${ctx.env_id()}-${encodeURIComponent(app.id)}`));
     if (!desktop && !localNative && !popup) { setAppErrors(v => ({ ...v, [app.id]: i18n.t('webServices.errors.popupBlocked') })); return; }
-    if (popup && !prepared) {
-      popup.document.title = app.name;
-      popup.document.body.textContent = i18n.t('hostApplications.starting');
-      popup.document.body.style.cssText = 'font:14px system-ui;margin:0;min-height:100vh;display:grid;place-items:center;color-scheme:light dark';
+    if (popup) {
+      renderHostApplicationLaunchDocument(popup, {
+        title: app.name, icon: app.icon, locale: i18n.locale(),
+        heading: i18n.t('hostApplications.starting'), detail: '',
+      });
     }
     setBusy(v => ({ ...v, [app.id]: true })); setAppErrors(v => ({ ...v, [app.id]: '' }));
     try {
@@ -555,9 +562,11 @@ export function EnvHostApplicationsPage() {
       if (popup) windows.set(app.id, popup);
       await refresh(true);
     } catch (e) {
-      popup?.close(); if (prepared) closePending(prepared);
+      const message = translateError(e);
+      if (popup) showLaunchFailure(app, popup, message);
+      else if (prepared?.preparationID) closePending(prepared);
       if (!disposed) void refresh(true);
-      if (!disposed) setAppErrors(v => ({ ...v, [app.id]: translateError(e) }));
+      if (!disposed) setAppErrors(v => ({ ...v, [app.id]: message }));
     } finally { if (!disposed) setBusy(v => ({ ...v, [app.id]: false })); }
   };
 

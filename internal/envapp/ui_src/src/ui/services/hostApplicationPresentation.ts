@@ -81,7 +81,7 @@ export const hostApplicationCopyKeys = {
   retry: 'hostApplications.retry',
   quitDescription: 'hostApplications.macQuitDescription',
   pictureHint: 'hostApplications.macPictureHint',
-} as const satisfies Record<string, EnvAppTranslationKey>;
+} as const satisfies Partial<Record<keyof HostApplicationPresentation, EnvAppTranslationKey>>;
 
 export function hostApplicationPresentation(
   i18n: Pick<I18nHelpers, 't'> & { locale: () => string },

@@ -116,6 +116,9 @@ export type HostApplicationPresentation = Readonly<{
   sharedControl?: string;
   input?: string;
   keyboard?: string;
+  touchHelp?: string;
+  touchHelpTitle?: string;
+  touchHelpDescription?: string;
   inputUnavailable?: string;
   inputUnavailableHint?: string;
   inputVersionUnsupported?: string;

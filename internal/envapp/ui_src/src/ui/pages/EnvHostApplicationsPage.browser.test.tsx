@@ -20,8 +20,8 @@ vi.mock('../services/hostApplicationsApi', async importOriginal => {
   return {
     ...await importOriginal<object>(),
     listHostApplications: async () => state.catalog.getMockImplementation() ? state.catalog() : ({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [session], running: [{ application_id: app.id, instances: ['instance'] }] }),
-    listHostApplicationSessions: async () => [session],
-    listRunningHostApplications: async () => [{ application_id: app.id, instances: ['instance'] }],
+    listHostApplicationSessions: async () => state.catalog.getMockImplementation() ? (await state.catalog()).sessions : [session],
+    listRunningHostApplications: async () => state.catalog.getMockImplementation() ? (await state.catalog()).running ?? [] : [{ application_id: app.id, instances: ['instance'] }],
     detachHostApplication: state.detach,
   };
 });
@@ -119,7 +119,7 @@ it.each([390, 1440])('uses the same host header and tile geometry for module and
   expect(geometry()).toEqual(before);
 });
 
-it('keeps one searchable mobile catalog with running applications first and preserves the search node across resizing', async () => {
+it('keeps compact running controls and a searchable mobile catalog with stable search across resizing', async () => {
   state.locale = 'en-US'; state.scope = `mobile-host-${crypto.randomUUID()}`;
   await page.viewport(1200, 800);
   const apps = Array.from({ length: 100 }, (_, index) => ({ id: `app-${index}`, name: `Application ${String(index).padStart(3, '0')}`, description: '', categories: ['Development'], icon: '', custom: false }));
@@ -130,9 +130,12 @@ it('keeps one searchable mobile catalog with running applications first and pres
   await expect.poll(() => host.querySelector('button.host-app-tile')?.textContent).toContain('Application 050');
   const tiles = [...host.querySelectorAll('button.host-app-tile')];
   expect(tiles[1].textContent).toContain('Application 070');
-  expect(host.querySelector<HTMLElement>('.host-apps-running')?.getBoundingClientRect().height).toBe(0);
+  const running = host.querySelector<HTMLElement>('.host-apps-running')!.getBoundingClientRect();
+  expect(running.height).toBeGreaterThan(0);
+  expect(running.height).toBeLessThan(120);
   const search = host.querySelector<HTMLInputElement>('.host-apps-search input')!;
-  expect(search.getBoundingClientRect().top).toBeLessThan(70);
+  expect(search.getBoundingClientRect().top).toBeGreaterThanOrEqual(running.bottom);
+  expect(search.getBoundingClientRect().top - running.bottom).toBeLessThan(24);
   expect(search.getBoundingClientRect().width).toBeGreaterThanOrEqual(128);
   expect(host.querySelector('.host-apps-header')!.getBoundingClientRect().height).toBeLessThanOrEqual(56);
   search.focus();
