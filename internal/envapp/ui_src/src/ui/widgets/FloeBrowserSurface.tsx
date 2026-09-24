@@ -1,5 +1,7 @@
 import '../../styles/browserWorkspace.css';
 import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
+import type { BrowserSourceMessages } from '../i18n/browserSourceMessages';
+import type { BrowserSourceSelection, BrowserSourceService } from '../services/browserSourceContract';
 import type { BrowserFailureCode } from '../services/browserWorkspaceController';
 import type { Session } from '@floegence/flowersec-core';
 import type { BrowserMessages } from '@floegence/floebrowser/viewer';
@@ -14,6 +16,8 @@ export type FloeBrowserSurfaceProps = {
   locale: string;
   messages: BrowserMessages;
   copy: Readonly<{ connecting: string; unavailable: string }>;
+  sources: { service: BrowserSourceService; messages: BrowserSourceMessages; current: BrowserSourceSelection; select(selection: BrowserSourceSelection, signal: AbortSignal): Promise<void> };
+  onOpenWindow(): Promise<void>;
   onReconnect(): void;
   onFailure?(code: BrowserFailureCode): void;
   onState?(state: BrowserState): void;
@@ -42,7 +46,10 @@ export function FloeBrowserSurface(props: FloeBrowserSurfaceProps) {
       const theme = Object.fromEntries(Object.entries(colors).map(([name, token]) => [name, style.getPropertyValue(token).trim()]).filter(([, value]) => value));
       const current = createBrowserWindow({
         session: props.session, view: props.view, child: () => frame.contentWindow,
-        configuration: { type: 'redeven-browser-ports', nonce, title: props.title, locale: props.locale, messages: props.messages, theme },
+        configuration: { type: 'redeven-browser-ports', nonce, title: props.title, locale: props.locale, messages: props.messages, theme,
+          sources: { messages: props.sources.messages, current: props.sources.current, desktop: Boolean(props.sources.service.management.browserDesktopAvailable) }, openWindow: true },
+        sources: { service: props.sources.service, select: props.sources.select },
+        onOpenWindow: () => props.onOpenWindow(),
         onReconnect: () => { if (host === current) props.onReconnect(); },
         onFailure: code => { if (host === current) props.onFailure?.(code); },
         onState: state => { if (host === current) props.onState?.(state); },

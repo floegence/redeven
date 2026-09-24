@@ -30,13 +30,14 @@ export type BrowserDocumentConfiguration = Readonly<{
   messages: BrowserMessages;
   theme: Record<string, string>;
   library?: boolean;
+  openWindow?: boolean;
   sources?: { messages: BrowserSourceMessages; current: BrowserSourceSelection; desktop: boolean };
 }>;
 
 // This private product port has no URL fetch, generic IPC, filesystem or
 // environment-session operation. Source page scripts never run in this document.
 export type BrowserDocumentRequest = BrowserSourceOperation
-  | { method: 'workspace.retry' | 'workspace.recover' }
+  | { method: 'workspace.retry' | 'workspace.recover' | 'workspace.openWindow' }
   | { method: 'control'; target: string; takeover: boolean; private: boolean }
   | { method: 'suggest'; query: string; tabs: TabState }
   | { method: 'library.list'; kind: 'bookmarks' | 'history'; query: string }

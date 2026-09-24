@@ -115,6 +115,10 @@ export function createBrowserWorkspaceController(service: BrowserSourceService, 
       }
     },
     open, reconnect, fail,
+    currentRequest(): BrowserWorkspaceRequest {
+      if (!state.view) throw new BrowserWorkspaceError('BROWSER_SOURCE_UNAVAILABLE');
+      return { source_target: activeTarget || state.view.initial_target };
+    },
     selectTarget(target: string) { activeTarget = target; },
     recover(): Promise<void> {
       if (recovery) return recovery;
