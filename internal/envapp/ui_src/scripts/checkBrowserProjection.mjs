@@ -71,7 +71,7 @@ try {
       response.end('#counter { color: rgb(13, 87, 143); font-size: 24px; }');
     } else {
       response.setHeader('Content-Type', 'text/html');
-      response.end('<!doctype html><title>' + (request.url?.startsWith('/popup') ? 'Popup ' + request.url.slice(1) : 'Shared source fixture') + '</title><link rel="stylesheet" href="/theme.css"><h1>Source-only website</h1><img id="picture" src="/picture.svg"><button id="counter" onclick="this.textContent = `Count ${++window.count}`">Count 0</button><p><input id="upload" type="file" onchange="this.files[0].text().then(text=>document.getElementById(&quot;uploaded&quot;).textContent=text.length)"><output id="uploaded"></output></p><a id="download" href="/fixture-download">Download fixture</a> <a id="binary-download" href="/browser-binary.bin">Download binary</a> <button id="blob-download" onclick="const a=document.createElement(&quot;a&quot;);a.href=window.URL.createObjectURL(new Blob([&quot;source Blob bytes&quot;]));a.download=&quot;browser-blob.txt&quot;;a.click();window.URL.revokeObjectURL(a.href)">Download Blob</button><p><a id="popup-link" href="/popup" target="_blank">Open source popup</a></p><p><canvas id="scene" width="160" height="90"></canvas><video id="clip" width="160" height="90" autoplay muted playsinline></video></p><script>window.count=0;window.websiteExecuted=true;const scene=document.getElementById("scene"),ctx=scene.getContext("2d"),clip=document.getElementById("clip");setInterval(()=>{ctx.fillStyle=window.count<3?"#00ff00":"#0000ff";ctx.fillRect(0,0,160,90)},80);clip.srcObject=scene.captureStream(15);clip.play()</script>');
+      response.end('<!doctype html><title>' + (request.url?.startsWith('/popup') ? 'Popup ' + request.url.slice(1) : 'Shared source fixture') + '</title><link rel="stylesheet" href="/theme.css"><h1>Source-only website</h1><label>Note <input id="focus-note" autofocus></label><img id="picture" src="/picture.svg"><button id="counter" onclick="this.textContent = `Count ${++window.count}`">Count 0</button><p><input id="upload" type="file" onchange="this.files[0].text().then(text=>document.getElementById(&quot;uploaded&quot;).textContent=text.length)"><output id="uploaded"></output></p><a id="download" href="/fixture-download">Download fixture</a> <a id="binary-download" href="/browser-binary.bin">Download binary</a> <button id="blob-download" onclick="const a=document.createElement(&quot;a&quot;);a.href=window.URL.createObjectURL(new Blob([&quot;source Blob bytes&quot;]));a.download=&quot;browser-blob.txt&quot;;a.click();window.URL.revokeObjectURL(a.href)">Download Blob</button><p><a id="popup-link" href="/popup" target="_blank">Open source popup</a></p><p><canvas id="scene" width="160" height="90"></canvas><video id="clip" width="160" height="90" autoplay muted playsinline></video></p><script>window.count=0;window.websiteExecuted=true;const scene=document.getElementById("scene"),ctx=scene.getContext("2d"),clip=document.getElementById("clip");setInterval(()=>{ctx.fillStyle=window.count<3?"#00ff00":"#0000ff";ctx.fillRect(0,0,160,90)},80);clip.srcObject=scene.captureStream(15);clip.play()</script>');
     }
   });
   website.listen(0, '127.0.0.1'); await once(website, 'listening');
@@ -186,6 +186,18 @@ try {
   assert.equal(await replay.locator('#picture').evaluate(image => image.naturalWidth), 44);
   assert.equal(await replay.locator('#counter').evaluate(button => getComputedStyle(button).color), 'rgb(13, 87, 143)');
   assert.equal(await replay.locator('body').evaluate(() => window.websiteExecuted), undefined, 'source scripts never execute in the client replay');
+  // Repeated source focus must restore a visible native caret, even when the
+  // source selection did not move. Unicode input uses the same authorized Session.
+  for (let click = 0; click < 2; click++) {
+    const field = await replay.locator('#focus-note').boundingBox(); assert.ok(field);
+    await viewer.mouse.click(field.x + 10, field.y + field.height / 2);
+    await document.locator('.floe-input-proxy').waitFor({ state: 'visible' });
+    await document.locator('.floe-input-proxy').evaluate(control => {
+      if (control.ownerDocument.activeElement !== control) throw new Error('Source caret is not focused');
+    });
+  }
+  await viewer.keyboard.insertText('光标验收');
+  await page.waitForFunction(() => document.querySelector('#focus-note').value === '光标验收');
   const inlineAddress = document.getByRole('combobox', { name: 'Website address' });
   await inlineAddress.fill(sourceOrigin + '/inline-navigation');
   await inlineAddress.press('Enter');
