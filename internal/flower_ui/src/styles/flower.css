@@ -10428,7 +10428,14 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-mobile-drawer-title, .flower-mobile-drawer-handle { display: none; }
 .flower-mobile-thread-drawer {
-  width: 100%; max-width: 40rem; height: calc(100% - 32px); border-radius: 24px;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  width: auto;
+  max-width: 40rem;
+  height: calc(100% - 32px);
+  margin-inline: auto;
+  border-radius: 24px;
   box-shadow: 0 -8px 40px color-mix(in srgb, var(--foreground) 12%, transparent);
 }
 .flower-mobile-thread-drawer .flower-component-thread-rail { height: 100%; }

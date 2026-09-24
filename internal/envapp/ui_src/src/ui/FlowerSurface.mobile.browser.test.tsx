@@ -7,8 +7,8 @@ import { createSignal } from 'solid-js';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-async function mountMobile(width: number) {
-  await page.viewport(width, 720);
+async function mountMobile(width: number, height = 720) {
+  await page.viewport(width, height);
   const selected = thread({ title: 'Mobile conversation' });
   const runtime = renderSurfaceWithAdapterProps({
     ...adapter(true),
@@ -25,6 +25,7 @@ describe('Flower mobile navigation', () => {
     const runtime = await mountMobile(width);
     const detail = runtime.querySelector<HTMLElement>('.flower-component-main')!;
     const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    const detailBefore = detail.getBoundingClientRect();
     expect(Number.parseFloat(getComputedStyle(editor).fontSize)).toBeGreaterThanOrEqual(16);
     expect(runtime.querySelector('.flower-component-thread-rail')).toBeNull();
     expect(detail.getBoundingClientRect().height).toBeGreaterThanOrEqual(700);
@@ -35,7 +36,20 @@ describe('Flower mobile navigation', () => {
     const rail = runtime.querySelector<HTMLElement>('.flower-component-thread-rail')!;
     await vi.waitFor(() => expect(rail.closest('[data-floe-dialog-panel]')?.getAttribute('data-floating-presence')).toBe('open'));
     await new Promise(resolve => setTimeout(resolve, 260));
+    const overlay = rail.closest<HTMLElement>('[data-floe-dialog-overlay-root]')!;
+    const panel = rail.closest<HTMLElement>('[data-floe-dialog-panel]')!;
+    const overlayBounds = overlay.getBoundingClientRect();
+    const panelBounds = panel.getBoundingClientRect();
+    const overlayStyle = getComputedStyle(overlay);
+    const paddingTop = Number.parseFloat(overlayStyle.paddingTop);
+    const paddingBottom = Number.parseFloat(overlayStyle.paddingBottom);
     expect(detail.getBoundingClientRect().height).toBeGreaterThanOrEqual(700);
+    expect(detail.getBoundingClientRect().top).toBe(detailBefore.top);
+    expect(getComputedStyle(panel).position).toBe('absolute');
+    expect(getComputedStyle(panel).bottom).toBe('0px');
+    expect(panelBounds.top).toBeGreaterThanOrEqual(overlayBounds.top + paddingTop - 1);
+    expect(panelBounds.bottom).toBeLessThanOrEqual(overlayBounds.bottom - paddingBottom + 1);
+    expect(panelBounds.bottom).toBeGreaterThan(panelBounds.top);
     expect(detail.inert).toBe(true);
     expect(rail.getBoundingClientRect().height).toBeGreaterThan(480);
     expect(rail.getBoundingClientRect().top).toBeGreaterThanOrEqual(24);
@@ -55,6 +69,25 @@ describe('Flower mobile navigation', () => {
     expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
     expect(runtime.querySelector<HTMLElement>('.flower-mobile-navigation-button')!.getBoundingClientRect().width).toBe(0);
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(1024);
+  });
+
+  it.each([320, 390, 430])('keeps the conversation drawer inside a short visible surface at %i pixels', async (width) => {
+    const runtime = await mountMobile(width, 480);
+    const detail = runtime.querySelector<HTMLElement>('.flower-component-main')!;
+    const detailBefore = detail.getBoundingClientRect();
+    await userEvent.click(page.getByRole('button', { name: DEFAULT_FLOWER_SURFACE_COPY.chat.conversationsAria, exact: true }));
+    await vi.waitFor(() => expect(runtime.querySelector('.flower-mobile-thread-drawer')).not.toBeNull());
+    const panel = runtime.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+    await vi.waitFor(() => expect(panel.getAttribute('data-floating-presence')).toBe('open'));
+    await new Promise(resolve => setTimeout(resolve, 260));
+    const overlay = panel.closest<HTMLElement>('[data-floe-dialog-overlay-root]')!;
+    const overlayBounds = overlay.getBoundingClientRect();
+    const panelBounds = panel.getBoundingClientRect();
+    const overlayStyle = getComputedStyle(overlay);
+    expect(panelBounds.top).toBeGreaterThanOrEqual(overlayBounds.top + Number.parseFloat(overlayStyle.paddingTop) - 1);
+    expect(panelBounds.bottom).toBeLessThanOrEqual(overlayBounds.bottom - Number.parseFloat(overlayStyle.paddingBottom) + 1);
+    expect(detail.getBoundingClientRect().top).toBe(detailBefore.top);
+    expect(detail.getBoundingClientRect().height).toBe(detailBefore.height);
   });
 
   it('opens selected and new conversations in the detail pane', async () => {
