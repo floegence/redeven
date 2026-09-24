@@ -21,7 +21,7 @@ Closing a pending viewer prevents automatic application opening.
 
 ## Component ownership and admission
 
-Redeven consumes `github.com/floegence/floe-native-apps` v0.6.0 as a published Go
+Redeven consumes `github.com/floegence/floe-native-apps` v0.9.0 as a published Go
 module, built with the same Go 1.27.1 toolchain. Its embedded catalog pins original
 publisher URLs, archive sizes, SHA-256, licenses and source references. The Runtime accepts no client-provided URL, artifact specification,
 catalog, executable, or install destination. The upstream acquires original Alpine
@@ -103,6 +103,10 @@ reach the acquisition command. Browser users and offline deployments may explici
 select an upstream-generated ZIP in the preparation panel. Uploaded chunks have a
 256 KiB bound and the complete archive has the pinned package's bounded ZIP overhead.
 The user's local ZIP path is never sent to the host.
+
+The [Desktop component cache contract](../desktop/host-application-component-cache.md)
+owns cross-device reuse, seven-day idle retention, the 2 GB archive budget,
+process leases and separate cache/download/transfer presentation.
 
 ## Window and permission interaction
 

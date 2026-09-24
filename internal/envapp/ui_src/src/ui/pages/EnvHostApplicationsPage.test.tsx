@@ -318,7 +318,7 @@ it('reuses the exact admission after a lost start response and reconnects observ
 });
 it('downloads through Desktop only when selected and verifies on the host', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
- state.components.mockImplementation(async (request: { action: string }) => request.action === 'acquire' ? { ok: true, size: 180, supports_transfer_plan: true } : { ok: true, data: new Uint8Array([1]), supports_transfer_plan: true });
+ state.components.mockImplementation(async (request: { action: string }) => request.action === 'acquire' ? { ok: true, size: 180, supports_transfer_plan: true, supports_cache_progress: true } : { ok: true, data: new Uint8Array([1]), supports_transfer_plan: true, supports_cache_progress: true });
  state.setupStart.mockImplementation(async (_id: string, source: string) => source === 'upload'
   ? { state: 'receiving', operation_id: 'relay', received_bytes: 0, expected_bytes: 180, can_cancel: true }
   : { state: 'downloading', operation_id: 'install', received_bytes: 0, expected_bytes: 100, can_cancel: true });
@@ -344,7 +344,7 @@ it('resumes the selected remote macOS app in its reserved window after actual au
 
 it('cancels a relay admitted after cancellation without uploading or reopening the application', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
- state.components.mockResolvedValue({ ok: true, size: 180, supports_transfer_plan: true });
+ state.components.mockResolvedValue({ ok: true, size: 180, supports_transfer_plan: true, supports_cache_progress: true });
  let receive!: (value: unknown) => void;
  state.setupStart.mockImplementation(async (_id: string, source: string) => source === 'upload' ? new Promise(resolve => { receive = resolve; }) : { state: 'downloading', operation_id: 'install', can_cancel: true });
  await selectAndPrepare('desktop');
@@ -356,7 +356,7 @@ it('cancels a relay admitted after cancellation without uploading or reopening t
 });
 it('resumes an interrupted Desktop transfer into the same host operation', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
- state.components.mockResolvedValue({ ok: true, size: 180, supports_transfer_plan: true });
+ state.components.mockResolvedValue({ ok: true, size: 180, supports_transfer_plan: true, supports_cache_progress: true });
  state.setupStatus.mockResolvedValue({ state: 'receiving', operation_id: 'existing-transfer', received_bytes: 50, expected_bytes: 180, can_cancel: true, package: { architecture: 'arm64', size_bytes: 100 } });
  state.setupUpload.mockResolvedValue({ state: 'validating', operation_id: 'existing-transfer', received_bytes: 180, expected_bytes: 180, can_cancel: true });
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
@@ -412,7 +412,7 @@ it('shows both download paths and defaults to host download even inside Desktop'
  expect(hostOption).not.toBeNull(); expect(desktopOption).not.toBeNull();
  expect(hostOption!.checked).toBe(true);
  expect(hostOption!.closest('label')!.textContent).toContain('Host downloads');
- expect(desktopOption!.closest('label')!.textContent).toContain('Desktop downloads and uploads');
+ expect(desktopOption!.closest('label')!.textContent).toContain('Transfer through Desktop');
  [...host.querySelectorAll('button')].find(el => el.textContent === 'Prepare')!.click(); await settle();
  expect(state.setupStart).toHaveBeenCalledWith(expect.any(String), 'download', 0, transferPlan.package_digest);
  expect(state.components).not.toHaveBeenCalled();
@@ -437,7 +437,7 @@ it('preserves an explicit Desktop choice when opening an application setup dialo
 it('cancels Desktop acquisition before there is a host operation', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
  let finish!: (value: unknown) => void;
- state.components.mockImplementation((request: { action: string }) => request.action === 'acquire' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ok:true,supports_transfer_plan:true}));
+ state.components.mockImplementation((request: { action: string }) => request.action === 'acquire' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ok:true,supports_transfer_plan:true,supports_cache_progress:true}));
  await selectAndPrepare('desktop');
  [...host.querySelectorAll('button')].find(el => el.textContent === 'Cancel')!.click(); await settle();
  finish({ok:true,size:180}); await settle();
@@ -448,7 +448,7 @@ it('cancels Desktop acquisition before there is a host operation', async () => {
 });
 it('reuses Desktop upload admission after its response is lost', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
- state.components.mockResolvedValue({ok:true,size:180,supports_transfer_plan:true});
+ state.components.mockResolvedValue({ok:true,size:180,supports_transfer_plan:true,supports_cache_progress:true});
  state.setupStart.mockRejectedValue(new Error('Response lost'));
  await selectAndPrepare('desktop');
  preparationButton().click(); await settle();
@@ -639,4 +639,35 @@ describe('browser launch recovery', () => {
     expect(state.open).toHaveBeenLastCalledWith(expect.anything(), 'one', 'http://127.0.0.1:40201', 'unified_proxy', '/_redeven_host_app/', false, expect.any(Function), expect.anything(), popup, 'application');
     expect(popup.close).not.toHaveBeenCalled();
   });
+});
+
+it('presents cached Desktop preparation and host-confirmed upload without network progress', async () => {
+ requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
+ let listener!: (value: import('../../../../../../desktop/src/shared/hostApplicationComponents').HostApplicationComponentsProgress) => void;
+ window.redevenDesktopShell!.onApplicationComponentsProgress = callback => { listener = callback; return () => {}; };
+ let acquired!: (value: unknown) => void;
+ state.components.mockImplementation((request: { action: string }) => request.action === 'acquire' ? new Promise(resolve => { acquired = resolve; }) : Promise.resolve({ ok: true, supports_transfer_plan: true, supports_cache_progress: true }));
+ state.setupStart.mockResolvedValue({ state: 'receiving', operation_id: 'relay', received_bytes: 45, expected_bytes: 180, can_cancel: true });
+ state.setupUpload.mockReturnValue(new Promise(() => {}));
+ await selectAndPrepare('desktop');
+ expect(host.textContent).toContain('Checking this computer’s cache');
+ expect(host.querySelector('[role=progressbar]')!.hasAttribute('aria-valuenow')).toBe(false);
+ listener({ phase: 'waiting', component_bytes: 100, downloaded_bytes: 0 }); await settle();
+ expect(host.textContent).toContain('Waiting for Desktop');
+ listener({ phase: 'packing', component_bytes: 100, cached_bytes: 100, download_bytes: 0, downloaded_bytes: 0 }); await settle();
+ expect(host.textContent).toContain('Using the local cache. No download is needed.');
+ expect(host.querySelector('[role=progressbar]')!.hasAttribute('aria-valuenow')).toBe(false);
+ expect(state.preparation).toHaveBeenCalledWith(expect.objectContaining({ action: 'update', view: expect.objectContaining({ heading: 'Preparing files for transfer…', detail: 'Using the local cache. No download is needed.' }) }));
+ acquired({ ok: true, size: 180 }); await settle();
+ expect(host.textContent).toContain('Transferring to the host');
+ expect(host.querySelector('[role=progressbar]')!.getAttribute('aria-valuenow')).toBe('25');
+});
+
+it('requires the cache progress capability before acquiring through an older Desktop', async () => {
+ requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
+ state.components.mockResolvedValue({ ok: true, supports_transfer_plan: true });
+ await selectAndPrepare('desktop');
+ expect(state.components).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'acquire' }));
+ expect(state.setupStart).not.toHaveBeenCalled();
+ expect(host.textContent).toContain('Update Desktop or choose host download');
 });

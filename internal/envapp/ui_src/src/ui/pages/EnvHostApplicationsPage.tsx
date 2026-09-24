@@ -11,7 +11,8 @@ import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { useEnvContext } from './EnvContext';
 import { addHostApplication, cancelHostApplicationSetup, getHostApplicationSetup, getHostApplicationTransferPlan, hostApplicationSetupActive, observeHostApplicationSetup, startHostApplicationSetup, uploadHostApplicationSetup, requestHostApplicationPermission, launchHostApplication, listHostApplicationSessions, listHostApplications, listRunningHostApplications, quitHostApplication, terminateHostApplication, detachHostApplication, type RunningHostApplication, type HostApplication, type HostApplicationCatalog, type HostApplicationSession, type HostApplicationSetup, type HostApplicationTransferPlan } from '../services/hostApplicationsApi';
-import { HostApplicationSetupPanel, hostApplicationSetupHeading, hostApplicationSetupProgress } from './HostApplicationSetupPanel';
+import { HostApplicationSetupPanel, hostApplicationSetupHeading, hostApplicationSetupProgress, hostApplicationDesktopDetail, type HostApplicationDesktopProgress } from './HostApplicationSetupPanel';
+import type { HostApplicationComponentsProgress } from '../../../../../../desktop/src/shared/hostApplicationComponents';
 import { updateHostApplicationPreparationDocument, type HostApplicationPreparationView } from '../../../../../../desktop/src/shared/hostApplicationPreparation';
 import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopShellBridge';
 import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
@@ -82,10 +83,8 @@ export function EnvHostApplicationsPage() {
   const [setupPlan, setSetupPlan] = createSignal<HostApplicationTransferPlan | null>(null);
   const [planBusy, setPlanBusy] = createSignal(false);
   const [downloadMethod, setDownloadMethod] = createSignal<'host' | 'desktop'>('host');
-  const [acquisitionProgress, setAcquisitionProgress] = createSignal<{ received_bytes: number; expected_bytes: number } | null>(null);
-  const displayedSetup = (): HostApplicationSetup | null => acquisitionProgress()
-    ? { ...setup()!, ...acquisitionProgress()!, state: 'downloading', error_code: undefined, can_cancel: true }
-    : setup();
+  const [acquisitionProgress, setAcquisitionProgress] = createSignal<HostApplicationDesktopProgress | null>(null);
+  const preparationActive = () => Boolean(acquisitionProgress()) || hostApplicationSetupActive(setup());
   const [setupDisconnected, setSetupDisconnected] = createSignal(false);
   const [setupDialog, setSetupDialog] = createSignal(false);
   const [selectedApplication, setSelectedApplication] = createSignal<HostApplication | null>(null);
@@ -197,9 +196,9 @@ export function EnvHostApplicationsPage() {
 
   const preparationView = (app: HostApplication): HostApplicationPreparationView => ({
     title: app.name, icon: app.icon, locale: i18n.locale(),
-    heading: i18n.t(isMac() ? 'hostApplications.macPermissions' : setupDisconnected() ? 'hostApplications.disconnected' : hostApplicationSetupHeading(displayedSetup())),
-    detail: i18n.t(setupDisconnected() ? 'hostApplications.prepare.connectionHint' : 'hostApplications.prepare.background'),
-    progress: hostApplicationSetupProgress(displayedSetup()), failed: displayedSetup()?.state === 'failed',
+    heading: i18n.t(isMac() ? 'hostApplications.macPermissions' : setupDisconnected() ? 'hostApplications.disconnected' : hostApplicationSetupHeading(setup(), acquisitionProgress())),
+    detail: hostApplicationDesktopDetail(acquisitionProgress(), i18n) ?? i18n.t(setupDisconnected() ? 'hostApplications.prepare.connectionHint' : 'hostApplications.prepare.background'),
+    progress: hostApplicationSetupProgress(setup(), acquisitionProgress()), failed: setup()?.state === 'failed',
   });
   const closePending = (pending: PendingApplication) => {
     pending.active = false;
@@ -354,17 +353,17 @@ export function EnvHostApplicationsPage() {
     if (!canLaunch() || !acquire || !source.package || relaying || disposed) return;
     relaying = true; relaySourceReceiving = source.state === 'receiving';
     const transfer = new AbortController(); setupTransfer = transfer;
-    const updateAcquisition = (progress: { received_bytes: number; expected_bytes: number }) => {
+    const updateAcquisition = (progress: HostApplicationComponentsProgress) => {
       if (disposed || transfer.signal.aborted) return;
       setAcquisitionProgress(progress);
       void updatePending().catch(() => {});
     };
     const remove = bridge.onApplicationComponentsProgress?.(updateAcquisition);
-    updateAcquisition({ received_bytes: 0, expected_bytes: plan.missing_bytes });
+    updateAcquisition({ phase: 'checking', component_bytes: plan.missing_bytes, downloaded_bytes: 0 });
     try {
       const capability = await acquire({ action: 'capabilities' });
       if (disposed || transfer.signal.aborted) return;
-      if (!capability.ok || !capability.supports_transfer_plan) throw new ComponentAcquisitionError('hostApplications.update.desktopMismatch');
+      if (!capability.ok || !capability.supports_transfer_plan || !capability.supports_cache_progress) throw new ComponentAcquisitionError('hostApplications.update.desktopMismatch');
       const bundle = await acquire({ action: 'acquire', architecture: source.package.architecture, plan });
       if (disposed || transfer.signal.aborted) return;
       if (!bundle.ok || !bundle.size) throw new ComponentAcquisitionError(bundle.error === 'target_mismatch' ? 'hostApplications.update.desktopMismatch' : 'hostApplications.prepare.networkError');
@@ -379,7 +378,7 @@ export function EnvHostApplicationsPage() {
         if (next.can_cancel && next.operation_id) await cancelHostApplicationSetup(next.operation_id);
         return;
       }
-      setAcquisitionProgress(null);
+      setAcquisitionProgress(current => current ? { ...current, phase: 'uploading' } : null);
       acceptSetup(next);
       if (next.state === 'receiving' && next.operation_id) {
         acceptSetup(await uploadHostApplicationSetup(next.operation_id, { size: bundle.size, read: async offset => {
@@ -406,7 +405,7 @@ export function EnvHostApplicationsPage() {
     if (!canLaunch() || (!relaying && !setup()?.operation_id)) return;
     const operationID = setup()?.operation_id;
     setupCancelled = true;
-    const localAcquisitionOnly = relaying && !relaySourceReceiving && acquisitionProgress() !== null;
+    const localAcquisitionOnly = relaying && !relaySourceReceiving && acquisitionProgress() !== null && acquisitionProgress()?.phase !== 'uploading';
     setupTransfer?.abort();
     setAcquisitionProgress(null);
     for (const pending of pendingApplications.values()) closePending(pending);
@@ -423,7 +422,7 @@ export function EnvHostApplicationsPage() {
     } catch (e) { setError(translateError(e)); }
   };
 
-  const preparationPanel = (inDialog = false) => <HostApplicationSetupPanel setup={displayedSetup()} plan={setupPlan()} checkingPlan={planBusy()} inDialog={inDialog}
+  const preparationPanel = (inDialog = false) => <HostApplicationSetupPanel setup={setup()} desktopProgress={acquisitionProgress()} plan={setupPlan()} checkingPlan={planBusy()} inDialog={inDialog}
     downloadMethod={downloadMethod()} onDownloadMethodChange={setDownloadMethod} allowed={canLaunch()} submitting={setupBusy()}
     canRelay={Boolean(window.redevenDesktopShell?.applicationComponents)}
     disconnected={setupDisconnected()} applicationName={selectedApplication()?.name}
@@ -519,7 +518,7 @@ export function EnvHostApplicationsPage() {
     if (!ready()) {
       if (prepared) closePending(prepared);
       setSelectedApplication(app);
-      if (hostApplicationSetupActive(displayedSetup())) {
+      if (preparationActive()) {
         try { await reserveApplication(app); observeSetup(); if (setup()?.state === 'ready') void continuePreparedApplications(); }
         catch (e) { if (!disposed) setAppErrors(v => ({ ...v, [app.id]: translateError(e) })); }
       } else setSetupDialog(true);
@@ -609,9 +608,9 @@ export function EnvHostApplicationsPage() {
       <Show when={ctx.env()?.permissions?.can_read === false}><div class="host-apps-empty"><ActivityBarHostApplicationsIcon class="w-9 h-9" /><h2>{i18n.t('hostApplications.permissionTitle')}</h2><p>{i18n.t('hostApplications.readPermission')}</p></div></Show>
       <Show when={ctx.env()?.permissions?.can_read !== false}>
         <Show when={catalog()} fallback={<HostApplicationsListSkeleton />}>
-          <Show when={ready() && !isMac() && setup()?.installed?.ready && (setup()?.update_available || hostApplicationSetupActive(displayedSetup()) || displayedSetup()?.state === 'failed')}>
+          <Show when={ready() && !isMac() && setup()?.installed?.ready && (setup()?.update_available || preparationActive() || setup()?.state === 'failed')}>
             <div class="host-apps-notice host-apps-update-notice" role="status">
-              <div class="min-w-0 flex-1"><strong>{i18n.t(hostApplicationSetupActive(displayedSetup()) ? hostApplicationSetupHeading(displayedSetup()) : 'hostApplications.update.available')}</strong><p>{i18n.t(displayedSetup()?.state === 'failed' ? 'hostApplications.update.failedRetained' : 'hostApplications.update.description')}</p></div>
+              <div class="min-w-0 flex-1"><strong>{i18n.t(preparationActive() ? hostApplicationSetupHeading(setup(), acquisitionProgress()) : 'hostApplications.update.available')}</strong><p>{i18n.t(setup()?.state === 'failed' ? 'hostApplications.update.failedRetained' : 'hostApplications.update.description')}</p></div>
               <Button variant="outline" size="sm" onClick={() => void viewUpdate()}>{i18n.t('hostApplications.update.view')}</Button>
             </div>
           </Show>

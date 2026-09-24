@@ -8,14 +8,14 @@ afterEach(async () => { for (const root of roots.splice(0)) await fs.rm(root, { 
 async function fixture(slow = false) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-native-relay-')); roots.push(root);
   const executable = path.join(root, 'runtime');
-  await fs.writeFile(executable, `#!${process.execPath}\nconst fs=require('node:fs');const out=process.argv[process.argv.indexOf('--output')+1];fs.writeFileSync(require('node:path').join(require('node:path').dirname(out),'pid'),String(process.pid));console.log(JSON.stringify({received_bytes:8,expected_bytes:8}));setTimeout(()=>{fs.writeFileSync(out,'verified');},${slow ? 10000 : 5});\n`, { mode: 0o700 });
+  await fs.writeFile(executable, `#!${process.execPath}\nconst fs=require('node:fs');if(process.argv.includes('--maintenance'))process.exit(0);const out=process.argv[process.argv.indexOf('--output')+1];fs.writeFileSync(require('node:path').join(require('node:path').dirname(out),'pid'),String(process.pid));console.log(JSON.stringify({phase:'packing',component_bytes:8,cached_bytes:8,download_bytes:0,downloaded_bytes:0}));setTimeout(()=>{fs.writeFileSync(out,'verified');},${slow ? 10000 : 5});\n`, { mode: 0o700 });
   return { manager: new HostApplicationComponents(() => executable, () => path.join(root, 'components')), root };
 }
 describe.skipIf(process.platform === 'win32')('Desktop component acquisition adapter', () => {
   it('delegates to the fixed Runtime and scopes chunk access to its initiating document', async () => {
     const { manager } = await fixture(); const events: unknown[] = [];
     expect(await manager.acquire(10, 'arm64', value => events.push(value))).toEqual({ ok: true, size: 8 });
-    expect(events).toEqual([{ received_bytes: 8, expected_bytes: 8 }]);
+    expect(events).toEqual([{ phase: 'packing', component_bytes: 8, cached_bytes: 8, download_bytes: 0, downloaded_bytes: 0 }]);
     expect(await manager.read(11, 0)).toEqual({ ok: false });
     expect(await manager.read(10, -1)).toEqual({ ok: false });
     expect(Buffer.from((await manager.read(10, 0)).data!).toString()).toBe('verified');
@@ -60,4 +60,36 @@ it.skipIf(process.platform === 'win32')('waits for the exact acquisition process
  expect(await acquisition).toEqual({ ok: false });
  expect(() => process.kill(pid, 0)).toThrow();
  expect(await manager.read(10, 0)).toEqual({ ok: false });
+});
+
+it.skipIf(process.platform === 'win32')('reports cache inspection without inventing download bytes and preserves cached files on cleanup', async () => {
+ const { manager, root } = await fixture();
+ const cache = path.join(root, 'components', 'cache', 'archives');
+ await fs.mkdir(cache, { recursive: true });
+ await fs.writeFile(path.join(cache, 'a'.repeat(64)), 'cached');
+ await fs.writeFile(path.join(root, 'runtime'), `#!${process.execPath}\nconst fs=require('node:fs');if(process.argv.includes('--maintenance'))process.exit(0);console.log(JSON.stringify({phase:'checking',component_bytes:8,downloaded_bytes:0}));console.log(JSON.stringify({phase:'packing',component_bytes:8,cached_bytes:8,download_bytes:0,downloaded_bytes:0}));fs.writeFileSync(process.argv[process.argv.indexOf('--output')+1],'verified');\n`, { mode: 0o700 });
+ const events: unknown[] = [];
+ expect(await manager.acquire(10, 'arm64', value => events.push(value))).toEqual({ ok: true, size: 8 });
+ expect(events).toEqual([{ phase: 'checking', component_bytes: 8, downloaded_bytes: 0 }, { phase: 'packing', component_bytes: 8, cached_bytes: 8, download_bytes: 0, downloaded_bytes: 0 }]);
+ await manager.cancel(10);
+ expect(await fs.readFile(path.join(cache, 'a'.repeat(64)), 'utf8')).toBe('cached');
+});
+
+it.skipIf(process.platform === 'win32')('cleans only previous transfer directories before creating a current transfer', async () => {
+ const { manager, root } = await fixture();
+ const base = path.join(root, 'components');
+ await fs.mkdir(path.join(base, 'transfer-ABC123'), { recursive: true });
+ await fs.mkdir(path.join(base, 'transfer-user-notes'));
+ const outside = path.join(root, 'outside'); await fs.mkdir(outside);
+ await fs.writeFile(path.join(outside, 'keep'), 'keep');
+ await fs.symlink(outside, path.join(base, 'transfer-XYZ789'));
+ await manager.initialize();
+ await expect(fs.stat(path.join(base, 'transfer-ABC123'))).rejects.toThrow();
+ expect((await fs.lstat(path.join(base, 'transfer-XYZ789'))).isSymbolicLink()).toBe(true);
+ expect((await fs.stat(path.join(base, 'transfer-user-notes'))).isDirectory()).toBe(true);
+ expect(await manager.acquire(1, 'arm64', () => {})).toEqual({ ok: true, size: 8 });
+ await manager.initialize();
+ expect((await manager.read(1, 0)).ok).toBe(true);
+ await manager.cancel(1);
+ expect(await fs.readFile(path.join(outside, 'keep'), 'utf8')).toBe('keep');
 });
