@@ -167,6 +167,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   Switch: actual.Switch,
   RadioGroup: actual.RadioGroup,
   RadioOption: actual.RadioOption,
+  DialogPlacementProvider: actual.DialogPlacementProvider,
   Button: (props: any) => {
     if (props.class?.includes('flower-composer-approval-decision') || props.class?.includes('flower-composer-submit') || props['data-computer-control-action']) return <Dynamic component={actual.Button} {...props} />;
     return (
@@ -272,7 +273,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
       onChange={(event) => props.onChange?.((event.currentTarget as HTMLInputElement).checked)}
     />
   ),
-  Dialog: (props: any) => (
+  Dialog: (props: any) => props.presentation ? <Dynamic component={actual.Dialog} {...props} /> : (
     <Show when={props.open}>
       <div role="dialog">{props.children}</div>
     </Show>
@@ -986,6 +987,8 @@ const mountFlowerSurface = (
     copy?: FlowerSurfaceProps['copy'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
+    mobileThreadsOpen?: boolean;
+    onMobileThreadsOpenChange?: (open: boolean) => void;
     presentation?: 'full' | 'companion';
     companionOpen?: boolean;
     engaged?: boolean;
@@ -1011,6 +1014,8 @@ const mountFlowerSurface = (
       }}
       focusThreadRequest={props.focusThreadRequest}
       settingsFocusRequest={props.settingsFocusRequest}
+      mobileThreadsOpen={props.mobileThreadsOpen}
+      onMobileThreadsOpenChange={props.onMobileThreadsOpenChange}
       presentation={props.presentation}
       companionOpen={props.companionOpen}
       engaged={props.engaged}
@@ -1073,6 +1078,8 @@ export function renderSurfaceWithAdapterProps(
     copy?: FlowerSurfaceProps['copy'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
+    mobileThreadsOpen?: boolean;
+    onMobileThreadsOpenChange?: (open: boolean) => void;
     presentation?: 'full' | 'companion';
     companionOpen?: boolean;
     engaged?: boolean;

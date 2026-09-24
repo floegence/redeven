@@ -2,6 +2,7 @@ import '../../index.css';
 
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
+import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -129,7 +130,6 @@ async function settleLayout() {
 
 const surfaces = [
   { surface: 'desktop', mobile: false, scale: 1 },
-  { surface: 'mobile drawer', mobile: true, scale: 1 },
   ...[0.75, 1.25, 2].map((scale) => ({ surface: `Workbench scale ${scale}`, mobile: false, scale })),
 ];
 
@@ -144,7 +144,7 @@ describe.each(['light', 'dark'])('TerminalSessionNavigator %s tree geometry', (t
   });
 });
 
-it.each([false, true])('removes empty and folded rails and restores alignment (mobile=%s)', async (mobile) => {
+it.each([false])('removes empty and folded rails and restores alignment (mobile=%s)', async (mobile) => {
   const host = mountNavigator(mobile);
   await settleLayout();
   const empty = host.querySelector('[data-terminal-tree-group="empty"]')!;
@@ -161,4 +161,18 @@ it.each([false, true])('removes empty and folded rails and restores alignment (m
   await settleLayout();
   expect(toggle.getAttribute('aria-expanded')).toBe('true');
   expectContinuousRail(host, 'workspace');
+});
+
+
+it('opens mobile navigation without focusing an input and gives session actions a touch target', async () => {
+  const host = mountNavigator(true);
+  await settleLayout();
+  await new Promise(resolve => setTimeout(resolve, 260));
+  expect(document.activeElement).toBe(host.querySelector('[data-testid="terminal-session-drawer-close"]'));
+  const action = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-actions-single"]');
+  expect(action).not.toBeNull();
+  expect(action!.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+  expect(action!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  expect(host.querySelector('[data-terminal-tree-rail]')?.getBoundingClientRect().width ?? 0).toBe(0);
+  await page.screenshot({ element: host, path: '../../../node_modules/.cache/mobile-navigation/terminal-populated.png' });
 });

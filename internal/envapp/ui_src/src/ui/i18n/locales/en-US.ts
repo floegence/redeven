@@ -394,6 +394,7 @@ export const enUS = defineDictionary({
   },
   common: {
     actions: {
+      more: 'More actions',
       open: 'Open',
       save: 'Save',
       cancel: 'Cancel',

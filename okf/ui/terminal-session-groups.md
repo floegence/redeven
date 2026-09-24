@@ -3,7 +3,7 @@ type: UI Contract
 title: Terminal session groups
 description: Persist one environment-wide terminal group catalog while Activity and Workbench render placement-specific trees.
 tags: [ui, terminal, groups, activity, workbench, sqlite]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-09-24T00:00:00Z
 ---
 # Summary
 
@@ -32,9 +32,17 @@ Workbench state continues to store only Session placement and terminal geometry.
 
 The sidebar renders Group headers with explicit expand/collapse and scoped create-Session actions. Creating a Group derives its initial name from the selected path basename while preserving later user edits; the editable absolute path field includes the permission-scoped shared directory picker. Group overflow and right-click open the same externally dismissible context menu for copying the path, editing, and allowed deletion.
 
-Expanded, nonempty Groups have one visually continuous tree rail: the header trunk and Session rail share the same horizontal position and meet without a gap or overlap. Header decoration must not offset that geometry on desktop, in the mobile drawer, or under Workbench scaling. Empty and folded Groups show no rail.
+Expanded, nonempty Groups have one visually continuous tree rail: the header trunk and Session rail share the same horizontal position and meet without a gap or overlap. Header decoration must not offset that geometry on desktop or under Workbench scaling. Mobile omits decorative rails and indentation to reserve width for Session names and touch controls. Empty and folded Groups show no rail.
 
-Children retain the existing Session identity, status, unread attention, path, active edge, keyboard access, and quick actions in a compact desktop row; mobile uses a compact touch-safe row so more sessions remain visible while the 44px controls stay reachable. Default Session rows use a transparent border and background, with only a quiet hover fill and a low-contrast active fill, so the tree rail rather than repeated cards carries hierarchy. A Session row uses grab/grabbing affordances and a compact elevated, textless drag image while its source becomes a translucent placeholder. Dragging over a Group changes only that header's background color; it never adds a border, ring, scale, shadow, tooltip, or visible instruction label. Each insertion boundary has one canonical owner: the lower half of one item and upper half of the next both resolve to the next item's single before slot. Session and movable non-Default Group reordering therefore show only one thin insertion line and node. Screen-reader announcements preserve the destination detail removed from the visual treatment. Cross-Group drop and same-Group reorder share one relocation path; the keyboard/context action calls the same Group move operation without changing Workbench placement.
+Children retain the existing Session identity, status, unread attention, path, active edge, keyboard access, and quick actions in a compact desktop row; mobile uses a 64px row with one 44px More action opening the existing Session menu for copy path, files, duplicate, move, clear, Ask Flower, and allowed deletion. Default Session rows use a transparent border and background, with only a quiet hover fill and a low-contrast active fill, so the tree rail rather than repeated cards carries hierarchy. A Session row uses grab/grabbing affordances and a compact elevated, textless drag image while its source becomes a translucent placeholder. Dragging over a Group changes only that header's background color; it never adds a border, ring, scale, shadow, tooltip, or visible instruction label. Each insertion boundary has one canonical owner: the lower half of one item and upper half of the next both resolve to the next item's single before slot. Session and movable non-Default Group reordering therefore show only one thin insertion line and node. Screen-reader announcements preserve the destination detail removed from the visual treatment. Cross-Group drop and same-Group reorder share one relocation path; the keyboard/context action calls the same Group move operation without changing Workbench placement.
+
+Mobile Session navigation is a wide, rounded bottom drawer with a handle and
+shared Floe presence motion. Opening focuses its close button rather than the
+search input, so browsing does not summon the system keyboard. Search keeps a
+16px input font and focuses only on explicit editing. Terminal's simulated
+keyboard remains hidden through the drawer's exit presence; closing restores
+its trigger. Existing owned-menu focus, Escape, and outside dismissal remain
+authoritative, and navigation never remounts the Session runtime.
 
 Create, update, move, and delete are locally optimistic and scoped to the affected Group or Session. A pending Session appears before the spawn RPC, a move changes only tree placement, and confirmed deletion hides the Group and all members in every mounted projection without blocking unrelated Terminal controls. Per-Session operation sequences keep the newest move visible while older completions settle; only a failed current operation rolls back and reports an error. Every confirmed membership write schedules an authoritative list request that began after that write, even when it first joins an older in-flight refresh. A response from an old Environment, connection, request fence, or operation is inert. Concurrent Group closes use a bounded worker set rather than serial browser work.
 

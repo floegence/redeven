@@ -4,6 +4,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Package, Search, X } from '@floegence/floe-webapp-core/icons';
 import type { BarItemContextMenuRequest } from '@floegence/floe-webapp-core/layout';
 import { WorkbenchDockPopoverSurface, type WorkbenchCanvasWidgetPlacement, type WorkbenchExternalDockDragController } from '@floegence/floe-webapp-core/workbench';
+import { Dialog, DialogPlacementProvider } from '@floegence/floe-webapp-core/ui';
 import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 import type {
@@ -35,7 +36,7 @@ const CATEGORY_IDS: readonly PluginPresentationCategory[] = [
 ];
 
 type PluginPanelMotionState = 'entering' | 'open' | 'closing';
-type PluginPanelMotionKind = 'modal' | 'mobile-sheet' | 'workbench-popover';
+type PluginPanelMotionKind = 'modal' | 'workbench-popover';
 
 export type PluginPanelProps = {
   id?: string;
@@ -45,6 +46,7 @@ export type PluginPanelProps = {
   placement?: 'activity' | 'workbench';
   model: PluginPanelModel;
   onClose: () => void;
+  onMobilePresenceChange?: (present: boolean) => void;
   onOpenCenter: () => void;
   onOpenPluginSurface: (target: PluginSurfaceLaunchTarget) => void;
   onOpenPluginDetails: (inventoryKey: string) => void;
@@ -83,9 +85,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   let closeTimer: number | undefined;
   let entranceRequest = 0;
   const isWorkbenchPopup = () => props.placement === 'workbench';
-  const motionKind = (): PluginPanelMotionKind => props.mobile
-    ? 'mobile-sheet'
-    : (isWorkbenchPopup() ? 'workbench-popover' : 'modal');
+  const motionKind = (): PluginPanelMotionKind => isWorkbenchPopup() ? 'workbench-popover' : 'modal';
 
   onCleanup(() => {
     entranceRequest += 1;
@@ -93,6 +93,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   });
 
   createEffect(() => {
+    if (props.mobile) return;
     if (props.open) {
       if (closeTimer !== undefined) {
         window.clearTimeout(closeTimer);
@@ -137,7 +138,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   createEffect(() => {
     const trigger = props.trigger;
     const kind = motionKind();
-    if (!props.open) return;
+    if (!props.open || props.mobile) return;
     queueMicrotask(() => applyPluginPanelMotionGeometry(panelRef, trigger, kind));
   });
 
@@ -155,7 +156,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   };
 
   createEffect(() => {
-    if (!props.open) return;
+    if (!props.open || props.mobile) return;
     restoreFocusAfterClose = false;
     focusRestoreTarget = props.trigger
       ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -291,14 +292,16 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
 
   const panelContents = () => (
     <>
-            <header class={cn('shrink-0', isWorkbenchPopup() ? 'px-2.5 py-2' : 'border-b px-4 py-3 sm:px-5')}>
-              <div class={cn('flex items-center', isWorkbenchPopup() ? 'gap-2' : 'gap-3')}>
-                <button type="button" data-plugin-center-market-action aria-label={i18n.t('uiCopy.plugin.centerTitle')} title={i18n.t('uiCopy.plugin.centerTitle')} class="order-last inline-flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none sm:h-8 sm:w-8" onClick={() => { props.onOpenCenter(); props.onClose(); }}>
+            <Show when={props.mobile}><div class="mx-auto mt-2.5 mb-1 h-1 w-8 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden="true" /></Show>
+            <header class={cn('shrink-0', props.mobile ? 'border-b px-3 pt-1 pb-3' : isWorkbenchPopup() ? 'px-2.5 py-2' : 'border-b px-4 py-3 sm:px-5')}>
+              <div class={cn('flex items-center', props.mobile ? 'flex-wrap gap-1' : isWorkbenchPopup() ? 'gap-2' : 'gap-3')}>
+                <button type="button" data-plugin-center-market-action aria-label={i18n.t('uiCopy.plugin.centerTitle')} title={i18n.t('uiCopy.plugin.centerTitle')} class={cn(props.mobile ? 'h-11 w-11' : 'h-[44px] w-[44px] sm:h-8 sm:w-8', 'order-last inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none')} onClick={() => { props.onOpenCenter(); props.onClose(); }}>
                   <Package class="h-4 w-4" />
                 </button>
                 <button
                   type="button"
-                  class={cn('order-last inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none', isWorkbenchPopup() ? 'h-8 w-8' : 'h-[44px] w-[44px] sm:h-8 sm:w-8')}
+                  data-floe-autofocus={props.mobile ? '' : undefined}
+                  class={cn('order-last inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none', props.mobile ? 'h-11 w-11' : isWorkbenchPopup() ? 'h-8 w-8' : 'h-[44px] w-[44px] sm:h-8 sm:w-8')}
                   aria-label={i18n.t('uiCopy.plugin.closePanel')}
                   title={i18n.t('uiCopy.plugin.closePanel')}
                   onClick={dismiss}
@@ -306,11 +309,11 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                   <X class="h-3.5 w-3.5" />
                 </button>
                 <Show when={!isWorkbenchPopup()}>
-                  <h2 id="plugin-launcher-title" class="shrink-0 text-base font-semibold">
+                  <h2 id="plugin-launcher-title" class={cn("shrink-0 text-base font-semibold", props.mobile && "flex-1")}>
                     {i18n.t('uiCopy.plugin.launcherTitle')}
                   </h2>
                 </Show>
-                <label class="relative min-w-0 flex-1">
+                <label class={cn("relative min-w-0 flex-1", props.mobile && "order-last basis-full")}>
                   <span class="sr-only">{i18n.t('uiCopy.plugin.launcherSearchLabel')}</span>
                   <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
@@ -320,7 +323,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                     value={query()}
                     onInput={(event) => setQuery(event.currentTarget.value)}
                     placeholder={i18n.t('uiCopy.plugin.launcherSearchPlaceholder')}
-                    class={cn('w-full rounded-md border bg-muted/40 outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 motion-reduce:transition-none', isWorkbenchPopup() ? 'h-8 pl-8 pr-2 text-xs' : 'h-10 pl-9 pr-3 text-sm')}
+                    class={cn('w-full rounded-md border bg-muted/40 outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 motion-reduce:transition-none', props.mobile ? 'h-11 pl-9 pr-3 text-base' : isWorkbenchPopup() ? 'h-8 pl-8 pr-2 text-xs' : 'h-10 pl-9 pr-3 text-sm')}
                   />
                 </label>
               </div>
@@ -431,6 +434,8 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
     </>
   );
 
+  const contents = untrack(panelContents);
+
   return (
     <>
       <Show when={visible() && isWorkbenchPopup() && props.trigger?.isConnected ? props.trigger : null}>
@@ -456,12 +461,12 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             )}
           >
             <div data-plugin-panel-content class="redeven-plugin-motion flex min-h-0 flex-1 flex-col">
-              {panelContents()}
+              {contents}
             </div>
           </WorkbenchDockPopoverSurface>
         )}
       </Show>
-      <Show when={!isWorkbenchPopup()}>
+      <Show when={!isWorkbenchPopup() && !props.mobile}>
         <Portal>
           <div
             data-plugin-launcher-backdrop={visible() ? '' : undefined}
@@ -472,7 +477,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             class={cn(
               'plugin-panel-backdrop redeven-plugin-motion fixed inset-0 flex',
               'bg-[var(--redeven-overlay-scrim)]',
-              props.mobile ? 'items-end' : 'items-center justify-center p-4',
+              'items-center justify-center p-4',
             )}
             style={{ 'z-index': ENV_APP_FLOATING_LAYER.pluginPanel }}
             onPointerDown={(event) => {
@@ -486,12 +491,12 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                 applyPluginPanelMotionGeometry(
                   element,
                   props.trigger,
-                  props.mobile ? 'mobile-sheet' : 'modal',
+                  'modal',
                 );
               }}
               role={props.open ? 'dialog' : undefined}
               data-plugin-panel-motion-axis="y"
-              data-plugin-panel-motion-kind={props.mobile ? 'mobile-sheet' : 'modal'}
+              data-plugin-panel-motion-kind={'modal'}
               data-plugin-panel-motion-state={visible() ? motionState() : undefined}
               tabIndex={-1}
               aria-modal={props.open ? 'true' : undefined}
@@ -499,17 +504,32 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
               aria-describedby={props.open ? 'plugin-launcher-description' : undefined}
               class={cn(
                 'plugin-panel-surface redeven-plugin-motion flex min-h-0 w-full flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl',
-                props.mobile
-                  ? 'h-[min(680px,92dvh)] rounded-t-lg border-x-0 border-b-0'
-                  : 'h-[min(680px,78dvh)] max-w-[820px] rounded-lg',
+                'h-[min(680px,78dvh)] max-w-[820px] rounded-lg',
               )}
             >
               <div data-plugin-panel-content class="redeven-plugin-motion flex min-h-0 flex-1 flex-col">
-                {panelContents()}
+                {contents}
               </div>
             </div>
           </div>
         </Portal>
+      </Show>
+      <Show when={props.mobile && !isWorkbenchPopup()}>
+        <DialogPlacementProvider mode="global" globalZIndex={ENV_APP_FLOATING_LAYER.pluginPanel}>
+          <Dialog open={props.open} onOpenChange={(open) => { if (!open) dismiss(); }}
+            onPresenceChange={props.onMobilePresenceChange}
+            title={i18n.t('uiCopy.plugin.launcherTitle')} header={null}
+            presentation="bottom-drawer" class="plugin-mobile-launcher-drawer"
+            contentClass="flex min-h-0 flex-col overflow-hidden p-0" escapeKeyPhase="bubble"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && query() && !event.isComposing) {
+                event.preventDefault();
+                setQuery('');
+              }
+            }}>
+            <div id={props.id} class="flex min-h-0 flex-1 flex-col">{contents}</div>
+          </Dialog>
+        </DialogPlacementProvider>
       </Show>
       <PluginPinContextMenu
         request={pinMenu()?.request ?? null}
@@ -619,10 +639,7 @@ function applyPluginPanelMotionGeometry(
   let originY = '50%';
   let enterX = 0;
   let enterY = 12;
-  if (kind === 'mobile-sheet') {
-    originY = '100%';
-    enterY = 18;
-  } else if (kind === 'workbench-popover') {
+  if (kind === 'workbench-popover') {
     originY = '100%';
     enterY = 10;
   } else {

@@ -435,6 +435,7 @@ vi.mock('@floegence/floe-webapp-core', async () => {
   const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core')>('@floegence/floe-webapp-core');
   return {
   secureRandomUUID: actual.secureRandomUUID,
+  useResizeObserver: actual.useResizeObserver,
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
   useResizeObserver: () => () => ({ width: 1024, height: 768 }),
   getShellThemePresetsForMode: () => [],
@@ -1398,6 +1399,7 @@ vi.mock('./utils/windowNavigation', () => ({ reopenEnvironmentPage: vi.fn(), rel
 vi.mock('./services/localApi', () => ({
   fetchLocalApiJSON: (url: string, ...args: unknown[]) => url === '/_redeven_proxy/api/ui-cache-scope'
     ? cacheScopeMock() : fetchLocalApiJSONMock(url, ...args),
+  readApiJSONResponse: vi.fn(async () => ({ data: {}, headers: new Headers(), status: 200 })),
   localApiRequestCredentials: () => 'same-origin',
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
   uploadLocalApiFile: vi.fn(),

@@ -1,0 +1,37 @@
+.terminal-mobile-drawer-handle { flex: 0 0 4px; width: 32px; margin: 10px auto 4px; border-radius: 999px; background: color-mix(in srgb, var(--muted-foreground) 30%, transparent); }
+[data-terminal-mobile-drawer].terminal-mobile-session-sheet {
+  width: calc(100% - 16px) !important;
+  height: calc(100% - 32px) !important;
+  max-height: calc(100% - 32px) !important;
+  min-height: 0 !important;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+}
+[data-terminal-mobile-drawer] .terminal-session-drawer-header button,
+[data-terminal-mobile-drawer] [data-terminal-group-header] button,
+[data-terminal-mobile-drawer] [data-testid='terminal-sidebar-add-group'] {
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+[data-terminal-mobile-drawer] .terminal-session-drawer-eyebrow { display: none; }
+[data-terminal-mobile-drawer] .terminal-session-drawer-header .text-xs { font-size: 16px; }
+[data-terminal-mobile-drawer] [data-testid='terminal-session-filter'] {
+  height: 44px;
+  font-size: 16px;
+  padding-right: 44px;
+}
+[data-terminal-mobile-drawer] [data-testid='terminal-session-filter'] ~ button { width: 44px; height: 44px; right: 0; }
+[data-terminal-mobile-drawer] [data-terminal-tree-trunk],
+[data-terminal-mobile-drawer] [data-terminal-tree-rail],
+[data-terminal-mobile-drawer] [data-terminal-tree-connector],
+[data-terminal-mobile-drawer] [data-terminal-tree-junction] { display: none; }
+[data-terminal-mobile-drawer] [data-terminal-group-sessions] { margin-left: 0; padding-left: 0; }
+[data-terminal-mobile-drawer] [data-terminal-group-header] { background: transparent; padding-inline: 0; gap: 0; }
+[data-terminal-mobile-drawer] [data-terminal-group-header] > button:first-of-type { border: 0; box-shadow: none; background: transparent; }
+[data-terminal-mobile-drawer] [data-terminal-group-drag-handle] > span:first-child { font-size: 13px; }
+[data-terminal-mobile-drawer] [data-terminal-group-drag-handle] > span:last-child { font-size: 11px; line-height: 16px; }
+[data-terminal-mobile-drawer] [data-terminal-session-row] { border-radius: 12px; }
+[data-terminal-mobile-drawer] [data-terminal-session-path] { font-size: 12px; }
+[data-terminal-mobile-drawer] [data-terminal-output-slot] { width: 44px; height: 44px; }
+[data-terminal-mobile-drawer] [data-terminal-output-slot] button { width: 44px; height: 44px; }

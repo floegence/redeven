@@ -918,11 +918,14 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
     await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
 
-    const dialog = document.querySelector<HTMLElement>('#plugin-switcher-browser-test')!;
+    const dialog = document.querySelector<HTMLElement>('.plugin-mobile-launcher-drawer')!;
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expectInsideViewport(dialog, viewport);
     expectNoHorizontalOverflow(dialog);
 
+    expect(document.activeElement?.tagName).not.toBe('INPUT');
+    expect(Number.parseFloat(getComputedStyle(dialog).borderTopLeftRadius)).toBeGreaterThanOrEqual(20);
+    expect(dialog.getBoundingClientRect().top).toBeGreaterThanOrEqual(32);
     const actions = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'));
     expect(actions.length).toBeGreaterThanOrEqual(4);
     actions.forEach(expectTouchTarget);
@@ -1195,8 +1198,8 @@ describe('plugin management browser geometry and interaction', () => {
     expect(host.querySelector('[data-plugin-center-details]')?.textContent).toContain('Metrics');
   });
 
-  it('opens a filter from the keyboard and restores focus when dismissed', async () => {
-    await page.viewport(390, 844);
+  it('opens a desktop filter from the keyboard and restores focus when dismissed', async () => {
+    await page.viewport(1440, 900);
     const host = mountPluginCenter();
     await settle();
     const source = host.querySelector<HTMLElement>('[data-plugin-center-filter="source"]')!;
@@ -1219,24 +1222,27 @@ describe('plugin management browser geometry and interaction', () => {
   });
 
   it.each(viewportCases.filter(({ width }) => width <= 390))(
-    'keeps clear filters visible outside the horizontal filter track at $width px',
+    'keeps mobile filter state and clear available at $width px',
     async (viewport) => {
       await page.viewport(viewport.width, viewport.height);
       const host = mountPluginCenter();
       await settle();
-      const sourceTrigger = host.querySelector<HTMLElement>('[data-plugin-center-filter="source"]')!
-        .closest<HTMLElement>('[data-floe-dropdown-trigger]')!;
-      sourceTrigger.focus();
+      const trigger = host.querySelector<HTMLElement>('.plugin-center-filter-trigger')!;
+      expectInsideViewport(trigger, viewport);
+      expectTouchTarget(trigger);
+      trigger.focus();
       await userEvent.keyboard('{Enter}');
+      await page.getByRole('menuitem', { name: 'Plugin source: All', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Official', exact: true }).click();
       await settle();
-      await userEvent.keyboard('{ArrowDown}{Enter}');
+      expect(trigger.textContent).toContain('1');
+      trigger.focus();
+      await userEvent.keyboard('{Enter}');
+      await expect.element(page.getByRole('menuitem', { name: 'Plugin source: Official', exact: true })).toBeVisible();
+      await page.getByRole('menuitem', { name: 'Clear filters', exact: true }).click();
       await settle();
-
-      const clear = host.querySelector<HTMLButtonElement>('[data-plugin-center-clear-filters]')!;
-      expect(clear).not.toBeNull();
-      expect(clear.closest('[data-plugin-center-filter-scroll]')).toBeNull();
-      expectInsideViewport(clear, viewport);
-      expectTouchTarget(clear);
+      expect(trigger.textContent).not.toContain('1');
+      expect(document.activeElement).toBe(trigger);
     },
   );
 

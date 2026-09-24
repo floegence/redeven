@@ -13,6 +13,7 @@
   --flower-thread-rail-accent-strong: color-mix(in srgb, var(--primary) 18%, var(--flower-thread-rail-surface));
   --flower-thread-selected-foreground: oklch(from var(--foreground) min(l, 0.4) c h);
   --flower-thread-drop-indicator: color-mix(in srgb, var(--primary) 60%, var(--foreground));
+  position: relative;
   display: grid;
   grid-template-columns: var(--flower-thread-rail-width, 17rem) 0 minmax(0, 1fr);
   min-width: 0;
@@ -40,9 +41,7 @@
   flex-shrink: 0;
 }
 
-.flower-component-shell[data-flower-mobile-pane] > .flower-component-rail-resizer,
-.flower-component-shell[data-flower-mobile-pane='detail'] > .flower-component-thread-rail,
-.flower-component-shell[data-flower-mobile-pane='threads'] > .flower-component-main {
+.flower-component-shell[data-flower-mobile-pane] > .flower-component-rail-resizer {
   display: none;
 }
 
@@ -10427,13 +10426,40 @@ button.flower-attachment-preview-trigger:disabled {
   }
 }
 
+.flower-mobile-drawer-title, .flower-mobile-drawer-handle { display: none; }
+.flower-mobile-thread-drawer {
+  width: 100%; max-width: 40rem; height: calc(100% - 32px); border-radius: 24px;
+  box-shadow: 0 -8px 40px color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+.flower-mobile-thread-drawer .flower-component-thread-rail { height: 100%; }
+.flower-mobile-thread-drawer .flower-thread-list { padding-top: 0; }
+.flower-mobile-thread-drawer .flower-thread-list-toolbar { flex-direction: row; gap: 8px; }
+.flower-mobile-thread-drawer .flower-thread-list-heading { display: none; }
+.flower-mobile-thread-drawer .flower-thread-list-header { order: 2; }
+.flower-mobile-thread-drawer .flower-thread-list-toolbar > label { flex: 1; min-width: 0; }
+.flower-mobile-thread-drawer .flower-thread-refresh-button { width: 44px; height: 44px; }
+.flower-mobile-thread-drawer .flower-thread-search-input { height: 44px; }
+
+.flower-mobile-thread-drawer .flower-mobile-drawer-handle {
+  display: block; flex: 0 0 4px; width: 32px; margin: 10px auto 2px;
+  border-radius: 999px; background: color-mix(in srgb, var(--muted-foreground) 30%, transparent);
+}
+.flower-mobile-thread-drawer .flower-mobile-drawer-title { display: block; flex: 1; font-size: 16px; font-weight: 600; }
+.flower-mobile-thread-drawer .flower-sidebar-actions { gap: 8px; padding: 4px 12px 8px; }
+.flower-mobile-thread-drawer .flower-mobile-navigation-button { order: 3; }
+.flower-mobile-thread-drawer .flower-new-chat-button { flex: 0 0 44px; width: 44px; min-height: 44px; padding: 0; }
+.flower-mobile-thread-drawer .flower-new-chat-label { display: none; }
+.flower-mobile-thread-drawer .flower-header-icon-button { width: 44px; height: 44px; }
+.flower-empty-suggestion-label { display: none; }
 .flower-empty-expand { display: none; }
 @container flower-chat (width < 768px) {
   .flower-empty-state { justify-content: center; padding: 12px; }
+  .flower-empty-suggestion-label { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; font-size: 12px; color: var(--muted-foreground); }
   .flower-empty-hero, .flower-empty-hint { display: none; }
-  .flower-empty-suggestions { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .flower-empty-suggestion { padding: 8px 12px; align-items: center; min-height: 44px; }
-  .flower-empty-suggestion > div:first-child { width: 28px; height: 28px; }
+  .flower-empty-suggestions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 420px; }
+  .flower-empty-suggestion { padding: 14px; flex-direction: column; align-items: flex-start; min-height: 112px; gap: 12px; border-radius: 16px; border: 1px solid var(--border); background: var(--card); }
+  .flower-empty-suggestion > div:last-child > div:first-child { font-size: 13px; line-height: 1.5; text-wrap: balance; }
+  .flower-empty-suggestion > div:first-child { width: 32px; height: 32px; }
   .flower-empty-suggestion > div:last-child > div:last-child { display: none; }
   .flower-empty-state:not([data-suggestions-expanded="true"]) .flower-empty-suggestion:nth-child(n+3) { display: none; }
   .flower-empty-expand { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; margin-top: 8px; padding-inline: 12px; font-size: 12px; color: var(--muted-foreground); cursor: pointer; border-radius: 6px; }

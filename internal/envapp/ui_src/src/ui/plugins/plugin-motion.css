@@ -45,14 +45,6 @@
     transition-duration: 170ms, 200ms;
   }
 
-  .plugin-panel-surface[data-plugin-panel-motion-kind='mobile-sheet'] {
-    transform: translate3d(
-      var(--redeven-plugin-panel-enter-x),
-      var(--redeven-plugin-panel-enter-y),
-      0
-    ) scale(0.985);
-  }
-
   .plugin-panel-surface[data-plugin-panel-motion-state='open'] {
     opacity: 1;
     transform: translate3d(0, 0, 0) scale(1);

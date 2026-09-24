@@ -153,7 +153,8 @@
       "close": "Schließen",
       "confirm": "Bestätigen",
       "yes": "Ja",
-      "no": "Nein"
+      "no": "Nein",
+      "more": "Weitere Aktionen"
     },
     "status": {
       "connected": "Verbunden",
@@ -5559,7 +5560,8 @@
       "organizeDescription": "Dateien überblicken und einen klaren, umsetzbaren Ordnungsplan erstellen.",
       "organizePrompt": "Hilf mir, das aktuelle Arbeitsverzeichnis zu überblicken: Was liegt darin, und wie lässt es sich so ordnen, dass ich Dinge leichter finde?\n\nPrüfe zuerst Dateinamen, Typen, Größen und die Ordnerstruktur. Lies bei Bedarf einige wenige Einführungstexte, um die Hauptinhalte zusammenzufassen. Erkenne verstreute Dateien, unklare Namen, möglicherweise doppelte Versionen und Kandidaten für die Archivierung. Gleiche Namen oder ein älteres Datum allein sind aber kein Löschgrund.\n\nSchlage anhand der tatsächlichen Nutzung eine möglichst einfache Einteilung vor. Zeige an vorhandenen Dateien die genauen Orte vor und nach der Ordnung. Erkläre, was unverändert bleiben sollte und welche Verschiebungen Projekte, Anwendungen oder Dateiverweise beeinträchtigen könnten.\n\nStelle zunächst den Überblick und den Ordnungsplan im Gespräch bereit. Liste vorgeschlagene Verschiebungen, Umbenennungen und Entscheidungen, die ich treffen muss, klar auf. Warte vor der Umsetzung auf meine Bestätigung.",
       "sendKeyLabel": "senden",
-      "newLineKeyLabel": "neue Zeile"
+      "newLineKeyLabel": "neue Zeile",
+      "suggestionsLabel": "Mit einem Vorschlag beginnen"
     },
     "subagents": {
       "title": "Sub-Agenten",

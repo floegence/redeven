@@ -1085,6 +1085,9 @@ async function verifyBuiltMobileFlowerVisibility(browser, tls) {
         };
         await assertHiddenProduct();
         await page.getByRole('tab', { name: 'Flower', exact: true }).click();
+        await page.locator('.flower-mobile-thread-drawer').waitFor();
+        await page.getByRole('tab', { name: 'Flower', exact: true }).click();
+        await page.locator('.flower-mobile-thread-drawer').waitFor({ state: 'detached' });
         await composer.waitFor({ state: 'visible' });
         await composer.fill('Keep this mobile draft');
         await composer.evaluate(element => {
@@ -1112,12 +1115,15 @@ async function verifyBuiltMobileFlowerVisibility(browser, tls) {
         await page.getByRole('tab', { name: 'File Browser', exact: true }).waitFor();
         await assertHiddenProduct();
         await page.getByRole('tab', { name: 'Flower', exact: true }).click();
+        await page.locator('.flower-mobile-thread-drawer').waitFor();
+        await page.getByRole('tab', { name: 'Flower', exact: true }).click();
+        await page.locator('.flower-mobile-thread-drawer').waitFor({ state: 'detached' });
         await composer.waitFor({ state: 'visible' });
         await assertRetainedDraft();
         assert.deepEqual(errors, [], 'The built mobile unlock and Flower flow must not produce application errors');
         scenarios.push({ color_scheme: colorScheme, starts_locked: startsLocked, active_page_visible: true, draft_and_identity_preserved: true, page_error_count: errors.length });
       } catch (error) {
-        throw new Error(`built mobile Flower visibility failed: ${JSON.stringify({ colorScheme, startsLocked, errors, body: (await page.locator('body').innerText()).slice(0, 1500) })}`, { cause: error });
+        throw new Error(`built mobile Flower visibility failed: ${JSON.stringify({ colorScheme, startsLocked, error: error.message, errors, body: (await page.locator('body').innerText()).slice(0, 1500) })}`, { cause: error });
       } finally {
         await context.close();
         await server.close();

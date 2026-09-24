@@ -665,6 +665,7 @@ vi.mock('./services/desktopShellBridge', () => ({
 }));
 vi.mock('./services/localApi', () => ({
   fetchLocalApiJSON: vi.fn(async () => ({ scope_id: 'a'.repeat(64) })),
+  readApiJSONResponse: vi.fn(async () => ({ data: {}, headers: new Headers(), status: 200 })),
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
   uploadLocalApiFile: vi.fn(),
   unlockEnvAppAccess: vi.fn(async () => ({ unlocked: true, resume_token: 'resume123' })),

@@ -528,7 +528,8 @@
     "organizeDescription": "Understand the files and prepare a clear, practical organization plan.",
     "organizePrompt": "Help me make sense of the current working directory: what is in it, and how could it be organized to make things easier to find?\n\nStart with file names, types, sizes, and the folder structure. If needed, sample a few introductory documents to summarize the main contents. Identify loose files, confusing names, possible duplicate versions, and candidates for archiving, but do not treat matching names or older dates alone as reasons to delete anything.\n\nBased on how this folder is actually used, propose a simple organization scheme. Use existing files as examples and show their exact locations before and after. Explain what should stay as it is and which moves might affect projects, applications, or file references.\n\nFirst deliver the folder overview and organization plan in the conversation, clearly listing proposed moves, renames, and decisions I need to make. Wait for my confirmation before carrying out the plan.",
     "sendKeyLabel": "send",
-    "newLineKeyLabel": "new line"
+    "newLineKeyLabel": "new line",
+    "suggestionsLabel": "Start with a suggestion"
   },
   "subagents": {
     "title": "Subagents",

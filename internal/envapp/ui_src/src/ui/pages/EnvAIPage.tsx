@@ -63,6 +63,8 @@ export type EnvAIPageProps = Readonly<{
   focusRequestScope?: 'workbench' | 'activity';
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
+  mobileThreadsOpen?: boolean;
+  onMobileThreadsOpenChange?: (open: boolean) => void;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
   onCompanionOpenRequest?: (threadID?: string) => void;
   companionCopy?: Omit<FlowerThreadSwitcherCopy, 'threadList'>;
@@ -211,6 +213,8 @@ export function EnvAIPage(props: EnvAIPageProps) {
         onPresenceChange={props.onPresenceChange}
         focusThreadRequest={props.focusRequestScope === 'activity' ? props.focusThreadRequest : env.aiThreadFocusRequest()}
         focusComposerRequest={props.focusComposerRequest}
+        mobileThreadsOpen={props.mobileThreadsOpen}
+        onMobileThreadsOpenChange={props.onMobileThreadsOpenChange}
         onFocusThreadRequestConsumed={props.focusRequestScope === 'activity'
           ? props.onFocusThreadRequestConsumed
           : env.consumeAIThreadFocusRequest}

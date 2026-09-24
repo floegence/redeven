@@ -59,7 +59,8 @@ export const FlowerEmptyState: Component<FlowerEmptyStateProps> = (props) => {
       </div>
 
       <Show when={suggestionsVisible()}>
-        <div class="flower-empty-suggestions">
+        <p class="flower-empty-suggestion-label"><Sparkles class="h-3.5 w-3.5" />{copy().suggestionsLabel}</p>
+        <div class="flower-empty-suggestions" role="group" aria-label={copy().suggestionsLabel}>
           <For each={suggestionRows(copy())}>
             {(item) => {
               const Icon = item.icon;
