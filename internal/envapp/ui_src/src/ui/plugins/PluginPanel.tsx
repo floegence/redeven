@@ -302,7 +302,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                 </button>
                 <button
                   type="button"
-                  data-floe-autofocus={props.mobile ? '' : undefined}
+                  data-floe-autofocus={props.mobile && props.open ? '' : undefined}
                   class={cn('order-last inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none', props.mobile ? 'h-11 w-11' : isWorkbenchPopup() ? 'h-8 w-8' : 'h-[44px] w-[44px] sm:h-8 sm:w-8')}
                   aria-label={i18n.t('uiCopy.plugin.closePanel')}
                   title={i18n.t('uiCopy.plugin.closePanel')}

@@ -698,9 +698,10 @@ describe('PluginPanel', () => {
   it('supplies retained mobile content without owning a global modal', async () => {
     const trigger = createTrigger();
     const onClose = vi.fn();
+    const [open, setOpen] = createSignal(true);
     const mount = document.createElement('div');
     document.body.append(mount);
-    dispose = render(() => <PluginPanel open mobile contentOnly trigger={trigger} model={panelModel()}
+    dispose = render(() => <PluginPanel open={open()} mobile contentOnly trigger={trigger} model={panelModel()}
       onClose={onClose} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />, mount);
     expect(document.querySelector('[data-floe-dialog-panel]')).toBeNull();
     expect(mount.querySelector('[data-floe-autofocus]')?.tagName).toBe('BUTTON');
@@ -713,6 +714,9 @@ describe('PluginPanel', () => {
     mount.querySelector<HTMLButtonElement>('[data-floe-autofocus]')!.click();
     expect(onClose).toHaveBeenCalledOnce();
     expect(document.activeElement).toBe(trigger);
+    setOpen(false);
+    expect(mount.querySelector('[data-floe-autofocus]')).toBeNull();
+    expect(mount.querySelector('[data-plugin-launcher-search]')).toBe(search);
   });
 
 });
