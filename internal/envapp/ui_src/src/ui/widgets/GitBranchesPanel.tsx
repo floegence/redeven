@@ -110,7 +110,7 @@ import {
 } from "./GitChrome";
 import { GitChangesBreadcrumb } from "./GitChangesBreadcrumb";
 import { GitDiffPanel } from "./GitDiffPanel";
-import { GitDiffSplit } from "./GitDiffSplit";
+import { GitDiffSplit, useGitDiffNavigation } from "./GitDiffSplit";
 import { GitFileLabel } from "./GitFileLabel";
 import { GitCommitGraph } from './GitCommitGraph';
 import { GitCommitMessageDialog } from './GitCommitMessageDialog';
@@ -500,6 +500,8 @@ interface BranchCompareFilesTableProps {
 }
 
 function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
+  const navigation = useGitDiffNavigation();
+  const openDiff: NonNullable<typeof props.onOpenDiff> = (...args) => { props.onOpenDiff?.(...args); navigation?.openDetail(); };
   const i18n = useI18n();
   const contextMenu = createGitEntityContextMenuController<BranchFileContextMenuTarget>({
     snapshotTarget: (target) => ({
@@ -567,7 +569,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
         rank: 10,
         label: i18n.t("git.contextMenu.viewDiff"),
         icon: ArrowRightLeft,
-        onSelect: () => props.onOpenDiff?.(item, context),
+        onSelect: () => openDiff(item, context),
       });
     }
     if (
@@ -686,7 +688,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
               <tr
                 aria-selected={active()}
                 class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
-                onClick={() => props.onOpenDiff?.(item, props.context)}
+                onClick={() => openDiff(item, props.context)}
                 tabIndex={0}
                 onContextMenu={(event) => {
                   event.stopPropagation();
@@ -704,7 +706,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
                       type="button"
                       class="git-file-open"
                       title={changeSecondaryPath(item)}
-                      onClick={(event) => { event.stopPropagation(); props.onOpenDiff?.(item, props.context); }}
+                      onClick={(event) => { event.stopPropagation(); openDiff(item, props.context); }}
                     >
                       <GitFileLabel path={compareFilePath(item, i18n.t('filePreview.unknownPath'))} secondaryPath={changeSecondaryPath(item)} />
                     </button>
@@ -721,7 +723,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
                 </td>
                 <td class={gitChangedFilesStickyCellClass(active())}>
                   <GitChangedFilesActionButton
-                    onClick={() => props.onOpenDiff?.(item, props.context)}
+                    onClick={() => openDiff(item, props.context)}
                   >
                     {i18n.t('files.menuViewDiff')}
                   </GitChangedFilesActionButton>
@@ -853,6 +855,8 @@ function BranchStatusUnavailableSurface(props: {
 }
 
 function BranchStatusTable(props: BranchStatusTableProps) {
+  const navigation = useGitDiffNavigation();
+  const openDiff: NonNullable<typeof props.onOpenDiff> = (...args) => { props.onOpenDiff?.(...args); navigation?.openDetail(); };
   const i18n = useI18n();
   const contextMenu = createGitEntityContextMenuController<BranchStatusItemContextMenuTarget>({
     snapshotTarget: (target) => ({
@@ -928,7 +932,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
         rank: 10,
         label: i18n.t("git.contextMenu.viewDiff"),
         icon: ArrowRightLeft,
-        onSelect: () => props.onOpenDiff?.(item, context),
+        onSelect: () => openDiff(item, context),
       });
     }
     if (
@@ -1079,7 +1083,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                   }
                   return;
                 }
-                props.onOpenDiff?.(item, menuTarget(item));
+                openDiff(item, menuTarget(item));
               }}
             >
               <td class={GIT_CHANGED_FILES_CELL_CLASS}>
@@ -1101,7 +1105,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                         }
                         return;
                       }
-                      props.onOpenDiff?.(item, menuTarget(item));
+                      openDiff(item, menuTarget(item));
                     }}
                   >
                     <GitFileLabel
@@ -1159,7 +1163,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                       }
                       return;
                     }
-                    props.onOpenDiff?.(item, menuTarget(item));
+                    openDiff(item, menuTarget(item));
                   }}
                 >
                   {isGitWorkspaceDirectoryEntry(item)
@@ -1393,7 +1397,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                     <GitChangeMetrics additions={props.fileTotals.additions} deletions={props.fileTotals.deletions} />
                   </Show>
                 </div>
-                <GitDiffSplit loading={loading()} detail={
+                <GitDiffSplit resetKey={props.commit.hash} loading={loading()} detail={
                   <GitDiffPanel loading={loading()} open={Boolean(diffItem())} item={diffItem()}
                     source={{ kind: 'commit', repoRootPath: props.repoRootPath, commit: props.commit.hash, presentation: props.presentation }}
                     emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
@@ -1940,7 +1944,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
                           </div>
                         </div>
 
-                        <GitDiffSplit detail={
+                        <GitDiffSplit resetKey={`${compareAccessor().baseRef}:${compareAccessor().targetRef}`} detail={
                           <GitDiffPanel open={props.open && Boolean(diffItem())} item={diffItem()}
                             source={{ kind: 'compare', repoRootPath: exactGitPath(props.repoRootPath), baseRef: compareAccessor().baseRef, targetRef: compareAccessor().targetRef }}
                             emptyMessage={i18n.t('uiCopy.git.selectComparedFile')}

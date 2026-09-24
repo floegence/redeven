@@ -3613,8 +3613,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     </>
   );
 
-  createEffect(() => {
-    const id = envId();
+  createEffect(on(envId, (id, previousId) => {
     gitAskFlowerReqSeq += 1;
     const restored = untrack(() => ({
       nextPath: id ? readPersistedLastPath(id) : '',
@@ -3631,7 +3630,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setShowHidden(restored.nextShowHidden);
     setGitSubview(restored.nextSubview);
     setPageMode(restored.nextMode);
-    closePageSidebar();
+    if (previousId !== undefined) closePageSidebar();
     setRepoInfo(null);
     setRepoInfoLoading(false);
     setRepoInfoResolved(false);
@@ -3650,7 +3649,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
     previousEnvId = id;
     directoryModeHydrated = true;
-  });
+  }));
 
   const showPathLoadFailure = (result: PathLoadResult) => {
     if (result.status === 'canceled') return;
@@ -5572,11 +5571,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                           persistOnReady: true,
                           intent: 'browse',
                         });
-                      }}
-                      onPathChange={(_path, source) => {
-                        if (source === 'user' && layout.isMobile()) {
-                          closePageSidebar();
-                        }
                       }}
                       onPathSubmit={async (path): Promise<FileBrowserPathSubmitResult> => {
                         const result = await requestManualDirectoryNavigation(path);

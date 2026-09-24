@@ -8,7 +8,7 @@ import {
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
 import { GitFileLabel } from "./GitFileLabel";
-import { Calendar, Copy, Eye, FileText, Folder, Hash, Terminal, User } from "@floegence/floe-webapp-core/icons";
+import { Calendar, Copy, Eye, FileText, Folder, GitBranch, Hash, Terminal, User } from "@floegence/floe-webapp-core/icons";
 import { Button } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
 import {
@@ -41,7 +41,7 @@ import {
 } from "../utils/gitBrowserShortcuts";
 import { redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { GitDiffPanel } from "./GitDiffPanel";
-import { GitDiffSplit } from "./GitDiffSplit";
+import { GitDiffSplit, type GitDiffNavigation } from "./GitDiffSplit";
 import { GitCommitMessageDialog, normalizedGitCommitBody } from './GitCommitMessageDialog';
 import {
   GitChangeMetrics,
@@ -144,6 +144,7 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
 }
 
 export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
+  let diffNavigation: GitDiffNavigation | undefined;
   const i18n = useI18n();
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -259,7 +260,9 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   };
 
   const openDiff = (file: GitCommitFileSummary, hash = commitHash()) => {
-    if (hash === commitHash()) setSelectedDiffKey(selectedFileIdentity(file));
+    if (hash !== commitHash()) return;
+    setSelectedDiffKey(selectedFileIdentity(file));
+    diffNavigation?.openDetail();
   };
   const commitContextMenuItems = (target: CommitContextTarget): GitContextMenuActionItem[] => {
     const commit = target.commit;
@@ -413,7 +416,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   });
 
   return (
-    <div class={cn("relative flex h-full min-h-0 flex-col", props.class)}>
+    <div class={cn("git-history-browser relative flex h-full min-h-0 flex-col", props.class)}>
       <Show
         when={repoAvailable()}
         fallback={(
@@ -465,8 +468,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
               <div class="flex-1 px-3 py-4 text-xs text-muted-foreground">{i18n.t('uiCopy.git.commitDetailsUnavailable')}</div>
             }>
               <div class="relative flex min-h-0 flex-1 flex-col" aria-busy={detailLoading()}>
-                <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="max-h-[40%] shrink-0 overflow-auto border-b border-border">
-                  <GitPanelFrame as="section" class="!px-4 !py-3">
+                <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="git-commit-overview max-h-[40%] shrink-0 overflow-auto border-b border-border">
+                  <GitPanelFrame as="section" class="git-commit-overview__frame">
                     <div
                       ref={setCommitOverviewElement}
                       tabIndex={0}
@@ -483,14 +486,14 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                         if (commitContextMenuItems(target).length > 0) commitContextMenu.openFromKeyboard(event, target);
                       }}
                     >
-                      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div class="min-w-0 flex-1 space-y-2">
-                          <div class="max-w-4xl break-words text-[15px] font-bold leading-6 tracking-tight text-foreground">
+                      <div class="git-commit-overview__row flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div class="git-commit-overview__identity min-w-0 flex-1 space-y-2">
+                          <div class="git-commit-overview__subject max-w-4xl break-words text-[15px] font-bold leading-6 tracking-tight text-foreground" title={displayCommit().subject}>
                             <Show when={!detailLoading() || props.selectedCommit?.hash === commitHash()} fallback={<GitSkeletonBlock class="my-1.5 h-3 w-3/5" />}>
                               {displayCommit().subject || i18n.t('uiCopy.git.noSubject')}
                             </Show>
                           </div>
-                          <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] leading-4 text-muted-foreground">
+                          <div class="git-commit-overview__metadata flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] leading-4 text-muted-foreground">
                             <span class="inline-flex items-center gap-1 whitespace-nowrap">
                               <Hash class="h-3 w-3 shrink-0 text-muted-foreground/45" />
                               <span>{displayCommit().shortHash}</span>
@@ -550,23 +553,25 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                           </Show>
                         </div>
 
-                        <div class="flex shrink-0 flex-wrap items-center gap-1.5">
+                        <div class="git-commit-overview__actions flex shrink-0 flex-wrap items-center gap-1.5">
                           <Button
                             size="xs"
                             variant="outline"
                             data-git-full-commit-message-trigger
+                            title={i18n.t('uiCopy.git.viewFullCommitMessage')} aria-label={i18n.t('uiCopy.git.viewFullCommitMessage')}
                             disabled={detailLoading()}
                             class={cn("rounded-md", outlineControlClass)}
                             onClick={() => setCommitMessageDialogOpen(true)}
                           >
                             <FileText class="mr-1 h-3.5 w-3.5" />
-                            {i18n.t('uiCopy.git.viewFullCommitMessage')}
+                            <span class="git-commit-overview__action-label">{i18n.t('uiCopy.git.viewFullCommitMessage')}</span>
                           </Button>
                           <Show when={props.onSwitchDetached}>
                             <Button
                               size="xs"
                               variant="outline"
                               class={cn("rounded-md", outlineControlClass)}
+                              title={switchDetachedLabel()} aria-label={switchDetachedLabel()}
                               disabled={detailLoading() || Boolean(props.switchDetachedBusy) || alreadyDetachedHere()}
                               onClick={() => props.onSwitchDetached?.({
                                 commitHash: displayCommit().hash,
@@ -574,7 +579,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 source: "graph",
                               })}
                             >
-                              {switchDetachedLabel()}
+                              <GitBranch class="git-commit-overview__action-icon h-4 w-4" aria-hidden="true" />
+                              <span class="git-commit-overview__action-label">{switchDetachedLabel()}</span>
                             </Button>
                           </Show>
                           <Show when={props.onAskFlower}>
@@ -604,6 +610,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                 </div>
 
                 <GitDiffSplit
+                  ref={(navigation) => { diffNavigation = navigation; }}
+                  resetKey={commitHash()}
                   loading={detailLoading()}
                   filesHeader={<>{i18n.t('uiCopy.git.filesInCommit')}<Show when={!detailLoading()}> · {commitFiles().length}</Show></>}
                   detail={(

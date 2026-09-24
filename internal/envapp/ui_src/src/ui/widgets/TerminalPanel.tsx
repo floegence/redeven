@@ -1,4 +1,4 @@
-import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
+import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup } from 'solid-js';
 import { createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 
@@ -205,6 +205,9 @@ export function resolveSystemTerminalThemeColors(
 
 export interface TerminalPanelProps {
   variant?: TerminalPanelVariant;
+  mobileSessionsOpen?: boolean;
+  onMobileSessionsOpenChange?: (open: boolean) => void;
+  mobileSessionsTrigger?: () => HTMLButtonElement | null;
   openSessionRequest?: {
     requestId: string;
     workingDir: string;
@@ -1027,7 +1030,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [sessionFilterQuery, setSessionFilterQuery] = createSignal('');
-  const [sessionDrawerOpen, setSessionDrawerOpen] = createSignal(false);
+  const [localSessionDrawerOpen, setLocalSessionDrawerOpen] = createSignal(false);
+  const sessionDrawerOpen = () => props.mobileSessionsOpen ?? localSessionDrawerOpen();
+  const setSessionDrawerOpen = (open: boolean) => {
+    if (props.onMobileSessionsOpenChange) props.onMobileSessionsOpenChange(open);
+    else setLocalSessionDrawerOpen(open);
+  };
   const [sessionDrawerPresent, setSessionDrawerPresent] = createSignal(false);
   const [terminalStatusAnnouncement, setTerminalStatusAnnouncement] = createSignal<Readonly<{
     sequence: number;
@@ -1035,6 +1043,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   }> | null>(null);
   let terminalStatusAnnouncementSequence = 0;
   let sessionDrawerTriggerEl: HTMLButtonElement | null = null;
+  let sessionDrawerReturnFocus: HTMLButtonElement | null = null;
+  createEffect(on(sessionDrawerOpen, (open) => {
+    if (!open) return;
+    const active = document.activeElement;
+    if (active === sessionDrawerTriggerEl || active === props.mobileSessionsTrigger?.()) {
+      sessionDrawerReturnFocus = active as HTMLButtonElement;
+    }
+  }));
   const [searchResultCount, setSearchResultCount] = createSignal(0);
   const [searchResultIndex, setSearchResultIndex] = createSignal(-1);
   const [searchState, setSearchState] = createSignal<'idle' | 'searching' | 'ready' | 'error'>('idle');
@@ -1115,7 +1131,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (terminalFocusOwner()) return;
     // Inactive KeepAlive views must release every document-level focus owner without restoring focus into hidden DOM.
     setPanelHasFocus(false);
-    setSessionDrawerOpen(false);
+    // Activity owns its drawer intent before this lazily mounted view becomes active.
+    if (props.mobileSessionsOpen === undefined) setLocalSessionDrawerOpen(false);
     setTerminalSidebarMenu(null);
     setTerminalAskMenu(null);
   });
@@ -2546,7 +2563,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setSessionDrawerOpen(false);
     queueMicrotask(() => {
       if (isMobileLayout() && sessionDrawerTriggerEl?.isConnected) {
-        sessionDrawerTriggerEl.focus({ preventScroll: true });
+        const trigger = sessionDrawerReturnFocus?.isConnected ? sessionDrawerReturnFocus : sessionDrawerTriggerEl;
+        trigger.focus({ preventScroll: true });
         return;
       }
       restoreActiveTerminalFocus();
@@ -4858,7 +4876,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             ]}
             isFocusWithinOwnedLayer={(target) => Boolean(
               terminalSidebarMenuEl?.contains(target)
-              || terminalAskMenuEl?.contains(target),
+              || terminalAskMenuEl?.contains(target)
+              || (target && target === props.mobileSessionsTrigger?.()),
             )}
             onCloseDrawer={dismissSessionDrawer}
             onDrawerPresenceChange={setSessionDrawerPresent}

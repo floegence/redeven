@@ -271,10 +271,31 @@ func newHandlers(nativeCode, visualGit, fileContinuity bool, httpUpstream string
 		}
 	}
 	if visualGit {
+		commit := map[string]any{"hash": "abcdef1234567890", "short_hash": "abcdef1", "parents": []string{}, "subject": "Refine mobile navigation and preserve workspace state", "author_name": "Developer", "author_time_ms": 1789516800000}
+		files := []any{}
+		for index := 0; index < 24; index++ {
+			files = append(files, map[string]any{"path": fmt.Sprintf("src/feature-%d.ts", index), "change_type": "modified", "additions": 70, "deletions": 1})
+		}
+		registrations[1119] = func(_ context.Context, body json.RawMessage) (any, *flowersec.RPCError) {
+			var request struct {
+				File struct {
+					Path string `json:"path"`
+				} `json:"file"`
+			}
+			if err := json.Unmarshal(body, &request); err != nil {
+				return nil, &flowersec.RPCError{Code: 400, Message: "Invalid visual diff request"}
+			}
+			patch := "@@ -1,1 +1,70 @@\n-old\n"
+			for line := 0; line < 70; line++ {
+				patch += fmt.Sprintf("+const line%d = %d;\n", line, line)
+			}
+			return map[string]any{"repo_root_path": "/workspace", "file": map[string]any{"path": request.File.Path, "change_type": "modified", "additions": 70, "deletions": 1, "patch_text": patch}}, nil
+		}
 		// This fixture exposes reads only; mutation RPCs remain unregistered.
 		responses := map[uint32]any{
 			1101: map[string]any{"available": true, "git_available": true, "repo_root_path": "/workspace", "head_ref": "main", "head_commit": "abcdef1234567890"},
-			1102: map[string]any{"repo_root_path": "/workspace", "commits": []any{}, "has_more": false},
+			1102: map[string]any{"repo_root_path": "/workspace", "commits": []any{commit}, "has_more": false},
+			1103: map[string]any{"repo_root_path": "/workspace", "commit": commit, "files": files},
 			1104: map[string]any{"repo_root_path": "/workspace", "worktree_path": "/workspace", "head_ref": "main", "head_commit": "abcdef1234567890", "upstream_ref": "origin/main", "workspace_summary": map[string]any{}, "workspace_revision": "visual-1"},
 			1105: map[string]any{"repo_root_path": "/workspace", "summary": map[string]any{}, "staged": []any{}, "unstaged": []any{}, "untracked": []any{}, "conflicted": []any{}},
 			1106: map[string]any{"repo_root_path": "/workspace", "current_ref": "main", "local": []any{map[string]any{"name": "main", "full_name": "refs/heads/main", "kind": "local", "current": true, "upstream_ref": "origin/main", "worktree_path": "/workspace", "subject": "Refine theme surfaces"}}, "remote": []any{map[string]any{"name": "origin/main", "full_name": "refs/remotes/origin/main", "kind": "remote", "subject": "Refine theme surfaces"}}},

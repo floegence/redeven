@@ -348,7 +348,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   });
 
   return (
-    <div class={cn('relative flex h-full min-h-0 flex-col', redevenSurfaceRoleClass('main'), props.class)}>
+    <div class={cn('git-workbench relative flex h-full min-h-0 flex-col', redevenSurfaceRoleClass('main'), props.class)}>
       <div
         class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}
         data-git-repository-header="compact"
@@ -357,7 +357,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
           <div
             class="min-w-0 flex-1 rounded-md px-1 py-0.5"
             tabIndex={0}
-            data-git-repository-context-target="header"
+            data-git-repository-context-target="header" title={repoPath()}
             onContextMenu={(event) => {
               const target = repositoryContextTarget();
               if (target) repositoryContextMenu.openFromContextMenu(event, target);
@@ -367,7 +367,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               if (target) repositoryContextMenu.openFromKeyboard(event, target);
             }}
           >
-            <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+            <div class="git-repository-identity flex min-w-0 flex-wrap items-center gap-1.5">
               <GitPrimaryTitle class="min-w-0 max-w-full truncate">{repoLabel()}</GitPrimaryTitle>
               <span class="text-muted-foreground/45" aria-hidden="true">/</span>
               <Show
@@ -380,7 +380,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 <GitMetaPill tone="info">{localizedSyncStatusLabel(props.repoSummary?.aheadCount, props.repoSummary?.behindCount, i18n)}</GitMetaPill>
               </Show>
             </div>
-            <div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={repoPath()}>{repoPath()}</div>
+            <div class="git-repository-path mt-0.5 truncate text-[10px] text-muted-foreground" title={repoPath()}>{repoPath()}</div>
           </div>
 
           <div class="flex shrink-0 items-center gap-1">

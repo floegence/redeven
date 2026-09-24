@@ -101,16 +101,57 @@ describe('Git inline diff browsing', () => {
     expect(scrollers[0].scrollTop).toBe(0);
   });
 
-  it('stacks the file rail above the diff at narrow container widths without horizontal page overflow', async () => {
+  it.each([320, 393, 767])('uses a retained single-pane file and diff flow at %i pixels', async width => {
     await page.viewport(1100, 800);
-    const { host } = mount(420);
+    const { host } = mount(width);
     await expect.poll(() => host.querySelector('[data-git-diff-panel]')?.textContent).toContain('file0Line0');
     const rail = host.querySelector<HTMLElement>('.git-diff-split__files')!;
     const detail = host.querySelector<HTMLElement>('.git-diff-split__detail')!;
-    expect(rail.getBoundingClientRect().bottom).toBeLessThanOrEqual(detail.getBoundingClientRect().top + 1);
-    expect(detail.clientHeight).toBeGreaterThan(250);
+    expect(detail.getBoundingClientRect().height).toBe(0);
+    expect(rail.clientHeight).toBeGreaterThan(400);
+    const rows = [...rail.querySelectorAll<HTMLElement>('tr[aria-selected]')];
+    expect(rows[0].getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    await userEvent.click(rows[1].querySelector('td:first-child button')!);
+    await expect.poll(() => detail.getBoundingClientRect().height).toBeGreaterThan(400);
+    expect(rail.getBoundingClientRect().height).toBe(0);
+    expect(detail.textContent).toContain('file1Line0');
+    const back = detail.querySelector<HTMLButtonElement>('[data-git-diff-back]')!;
+    expect(back.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    await userEvent.click(back);
+    expect(rail.clientHeight).toBeGreaterThan(400);
+    expect(host.querySelector('.git-diff-split__detail')).toBe(detail);
+    expect(rows[1].getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(rows[1].querySelector('td:first-child button'));
+    host.style.width = '900px';
+    await expect.poll(() => detail.clientHeight).toBeGreaterThan(400);
+    expect(rail.getBoundingClientRect().right).toBeLessThanOrEqual(detail.getBoundingClientRect().left + 1);
     expect(host.scrollWidth).toBe(host.clientWidth);
-    expect(detail.scrollWidth).toBe(detail.clientWidth);
+  });
+
+  it('opens a mobile commit diff from its context menu and preserves the compact header', async () => {
+    await page.viewport(393, 740);
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '393px', height: '640px' });
+    document.body.append(host);
+    dispose = render(() => <LayoutProvider><NotificationProvider>
+      <GitHistoryBrowser currentPath="/workspace/repo" repoInfo={{ available: true, repoRootPath: '/workspace/repo' }} selectedCommitHash="abc123"
+        onSwitchDetached={() => {}} onAskFlower={() => {}} />
+    </NotificationProvider></LayoutProvider>, host);
+    await expect.poll(() => host.querySelectorAll('[role="option"]').length).toBe(24);
+    const header = host.querySelector<HTMLElement>('.git-commit-overview')!;
+    expect(header.getBoundingClientRect().height).toBeLessThanOrEqual(56);
+    const row = host.querySelectorAll<HTMLButtonElement>('[role="option"]')[1];
+    await userEvent.click(row, { button: 'right' });
+    await userEvent.click(page.getByRole('menuitem', { name: 'View Diff', exact: true }));
+    const detail = host.querySelector<HTMLElement>('.git-diff-split__detail')!;
+    await expect.poll(() => detail.getBoundingClientRect().height).toBeGreaterThan(500);
+    expect(detail.textContent).toContain('file1Line0');
+    expect(host.scrollWidth).toBe(host.clientWidth);
+    const captureDirectory = import.meta.env.VITE_GIT_MOBILE_CAPTURE_DIR;
+    if (captureDirectory) await page.screenshot({ path: `${captureDirectory}/git-mobile-detail.png` });
+    await userEvent.click(detail.querySelector<HTMLButtonElement>('[data-git-diff-back]')!);
+    expect(document.activeElement).toBe(row);
+    if (captureDirectory) await page.screenshot({ path: `${captureDirectory}/git-mobile-files.png` });
   });
 
   it('respects reduced motion while retaining immediate keyboard navigation', async () => {

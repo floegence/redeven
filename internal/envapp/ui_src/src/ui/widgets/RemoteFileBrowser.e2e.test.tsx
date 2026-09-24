@@ -18,6 +18,8 @@ import type { EnvViewMode } from '../envViewMode';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
 import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
 
+const mobileLayout = vi.hoisted(() => ({ value: false }));
+
 const widgetStateStore = vi.hoisted(() => ({
   values: {} as Record<string, Record<string, unknown>>,
   updateCalls: [] as Array<{ widgetId: string; key: string; value: unknown }>,
@@ -309,7 +311,7 @@ vi.mock('@floegence/floe-webapp-core', async () => {
       },
     }),
     useLayout: () => ({
-      isMobile: () => false,
+      isMobile: () => mobileLayout.value,
     }),
     useNotification: () => ({
       error: (title: string, message?: string) => {
@@ -512,6 +514,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     onPreviewGitMode?: () => void;
     onResize?: (delta: number) => void;
     onNavigate?: (path: string) => void;
+    onPathChange?: (path: string, source: 'user') => void;
     onOpen?: (item: FileItem) => void;
     onDragMove?: (items: FileItem[], targetPath: string) => void;
     onPathSubmit?: (path: string) => Promise<{ status: string; committedPath?: string; message?: string }>;
@@ -693,7 +696,8 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <button type="button" onClick={() => props.onModeChange?.('git')}>mock-to-git</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo')}>mock-nav-repo</button>
-        <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/src')}>mock-nav-src</button>
+        <button type="button" onClick={() => { props.onNavigate?.('/workspace/repo/src'); props.onPathChange?.('/workspace/repo/src', 'user'); }}>mock-nav-src</button>
+        <button type="button" onClick={() => { props.onNavigate?.('/workspace/repo/src/components'); props.onPathChange?.('/workspace/repo/src/components', 'user'); }}>mock-nav-components</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/first')}>mock-nav-first</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/second')}>mock-nav-second</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/missing')}>mock-nav-missing</button>
@@ -1350,6 +1354,7 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canWrit
 }
 
 beforeEach(() => {
+  mobileLayout.value = false;
   protocolClientStore.client = { connected: true };
   protocolClientStore.read = () => protocolClientStore.client;
   delete window.redevenDesktopSessionContext;
@@ -1699,6 +1704,26 @@ afterEach(() => {
 });
 
 describe('RemoteFileBrowser persistence', () => {
+  it('retains the mobile directory drawer across successive user path selections', async () => {
+    mobileLayout.value = true;
+    const [open, setOpen] = createSignal(true);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={{ ...createEnvContext(), filesSidebarOpen: open, setFilesSidebarOpen: setOpen }}>
+      <RemoteFileBrowser />
+    </EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush(); await flush();
+      expect(open()).toBe(true);
+      const button = [...host.querySelectorAll('button')].find(node => node.textContent === 'mock-nav-src')!;
+      button.click(); await flush();
+      expect(open()).toBe(true);
+      const nestedButton = [...host.querySelectorAll('button')].find(node => node.textContent === 'mock-nav-components')!;
+      nestedButton.click(); await flush();
+      expect(open()).toBe(true);
+    } finally { dispose(); }
+  });
+
   it.each([
     ['/Volumes/Removed/project', 404, 'not found'],
     ['/workspace', 404, 'not found'],

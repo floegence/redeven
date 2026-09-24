@@ -1,12 +1,38 @@
-import { Show, type JSX } from 'solid-js';
+import '../../styles/git-review.css';
+import { createContext, createEffect, createSignal, on, Show, useContext, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useI18n } from '../i18n';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitContentSkeleton } from './GitWorkbenchPrimitives';
 
-/** Keep the Git file rail and its diff in the same constrained browsing surface. */
-export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element; filesHeader?: JSX.Element; loading?: boolean; class?: string }) {
+export interface GitDiffNavigation { openDetail: () => void; showFiles: () => void }
+const GitDiffNavigationContext = createContext<GitDiffNavigation>();
+export const useGitDiffNavigation = () => useContext(GitDiffNavigationContext);
+
+/** Retain both views while narrow surfaces show one navigation step at a time. */
+export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element; filesHeader?: JSX.Element; loading?: boolean; resetKey?: string; ref?: (navigation: GitDiffNavigation) => void; class?: string }) {
   const i18n = useI18n();
+  const [pane, setPane] = createSignal<'files' | 'detail'>('files');
+  let root: HTMLDivElement | undefined;
+  createEffect(on(() => props.resetKey, () => setPane('files')));
+  const navigation = {
+    openDetail: () => {
+      setPane('detail');
+      queueMicrotask(() => {
+        const back = root?.querySelector<HTMLButtonElement>('[data-git-diff-back]');
+        if (back?.getClientRects().length) back.focus({ preventScroll: true });
+      });
+    },
+    showFiles: () => {
+      setPane('files');
+      queueMicrotask(() => {
+        const row = root?.querySelector<HTMLElement>('[aria-selected="true"]');
+        const target = row?.matches('button') ? row : row?.querySelector<HTMLButtonElement>('td:first-child button');
+        target?.focus({ preventScroll: true });
+      });
+    },
+  };
+  props.ref?.(navigation);
   const navigateFiles: JSX.EventHandler<HTMLDivElement, KeyboardEvent> = (event) => {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     const target = event.target as HTMLElement;
@@ -33,16 +59,18 @@ export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element
     nextRow?.scrollIntoView?.({ block: 'nearest' });
   };
   return (
-    <div data-git-diff-split class={cn('git-diff-split rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass(), props.class)}>
-      <div class="git-diff-split__layout">
-        <div class="git-diff-split__files" onKeyDown={navigateFiles}>
-          <div class="git-diff-split__files-header">{props.filesHeader ?? i18n.t('uiCopy.git.changedFiles')}</div>
-          <Show when={!props.loading} fallback={<GitContentSkeleton variant="file-rail" rows={8} label={i18n.t('uiCopy.git.loadingChangedFiles')} />}>
-            {props.children}
-          </Show>
+    <GitDiffNavigationContext.Provider value={navigation}>
+      <div ref={root} data-git-diff-split class={cn('git-diff-split rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass(), props.class)}>
+        <div class="git-diff-split__layout" data-mobile-pane={pane()}>
+          <div class="git-diff-split__files" onKeyDown={navigateFiles}>
+            <div class="git-diff-split__files-header">{props.filesHeader ?? i18n.t('uiCopy.git.changedFiles')}</div>
+            <Show when={!props.loading} fallback={<GitContentSkeleton variant="file-rail" rows={8} label={i18n.t('uiCopy.git.loadingChangedFiles')} />}>
+              {props.children}
+            </Show>
+          </div>
+          <div class="git-diff-split__detail">{props.detail}</div>
         </div>
-        <div class="git-diff-split__detail">{props.detail}</div>
       </div>
-    </div>
+    </GitDiffNavigationContext.Provider>
   );
 }

@@ -11,6 +11,8 @@ Redeven owns Flower's mobile product navigation. Below 768 CSS pixels, the
 conversation list opens in a large bottom drawer over the retained detail.
 Released Floe Dialog owns placement, presence, focus containment, and motion.
 Opening or closing the drawer retains the detail DOM, draft, and selection.
+The detail header and ancestor scroll stay stationary through every animation
+frame; released Floe owns scroll-preserving automatic entry and return focus.
 The covered detail is inert and cannot acknowledge reads until exit completes.
 Desktop keeps its side-by-side layout.
 
@@ -21,6 +23,7 @@ the tab again closes it; the tab remains reachable outside the surface-local
 modal boundary and announces its expanded state. The chat header also opens the
 drawer. Its heading, new-conversation action, and close control remain visible
 above one search-and-refresh row and a separately scrolling conversation list.
+The new-conversation action has a centered icon in a 44px square.
 The search input and refresh target are at least 44px high; the drawer does not
 repeat the list title or generic sorting description. A handle, rounded
 corners, scrim, and shared bottom-drawer motion distinguish navigation from the

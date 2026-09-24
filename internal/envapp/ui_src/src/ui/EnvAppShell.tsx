@@ -4089,9 +4089,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
   let mobileFlowerTrigger: HTMLButtonElement | null = null;
   const [mobileFlowerThreadsOpen, setMobileFlowerThreadsOpen] = createSignal(false);
+  let mobileTerminalTrigger: HTMLButtonElement | null = null;
+  const [mobileTerminalSessionsOpen, setMobileTerminalSessionsOpen] = createSignal(false);
   createEffect(() => {
     if (!layout.isMobile() || viewMode() !== 'activity' || layout.sidebarActiveTab() !== 'ai') {
       setMobileFlowerThreadsOpen(false);
+    }
+    if (!layout.isMobile() || viewMode() !== 'activity' || layout.sidebarActiveTab() !== 'terminal') {
+      setMobileTerminalSessionsOpen(false);
     }
   });
 
@@ -4118,7 +4123,18 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     if (!layout.isMobile()) items.push(pluginPanelItem);
 
     items.push(
-      { id: 'terminal', icon: ActivityBarTerminalIcon, label: i18n.t('shell.nav.terminal'), collapseBehavior: 'preserve' },
+      {
+        id: 'terminal', icon: ActivityBarTerminalIcon, label: i18n.t('shell.nav.terminal'), collapseBehavior: 'preserve',
+        buttonRef: (trigger) => { mobileTerminalTrigger = trigger; },
+        ariaExpanded: () => layout.isMobile() && mobileTerminalSessionsOpen(),
+        ariaHasPopup: layout.isMobile() ? 'dialog' : undefined,
+        onClick: () => {
+          if (layout.isMobile()) mobileTerminalTrigger?.focus({ preventScroll: true });
+          const nextOpen = layout.sidebarActiveTab() !== 'terminal' || !mobileTerminalSessionsOpen();
+          activateActivitySurface('terminal');
+          if (layout.isMobile()) setMobileTerminalSessionsOpen(nextOpen);
+        },
+      },
       { id: 'browser', icon: ActivityBarBrowserIcon, label: i18n.t('shell.nav.remoteBrowser'), collapseBehavior: 'preserve' },
       { id: 'monitor', icon: ActivityBarMonitorIcon, label: i18n.t('shell.nav.monitoring'), collapseBehavior: 'preserve' },
       layout.isMobile()
@@ -5093,6 +5109,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         workbenchFilePreviewActivation,
         consumeWorkbenchFilePreviewActivation,
         filesSidebarOpen: filesMobileSidebarOpen,
+        terminalSessionsOpen: mobileTerminalSessionsOpen,
+        setTerminalSessionsOpen: setMobileTerminalSessionsOpen,
+        terminalSessionsTrigger: () => mobileTerminalTrigger,
         setFilesSidebarOpen: setFilesMobileSidebarOpen,
         toggleFilesSidebar: toggleFilesMobileSidebar,
         settingsSeq,
