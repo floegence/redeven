@@ -18,6 +18,22 @@ owns toolbar presentation.
 
 # Contract
 
+## Browser launch admission
+
+The catalog reserves a browser tab in the initiating click and keeps application
+identity visible while launch and route admission run. A rejected launch or entry
+route leaves that tab open with localized error text, explicit retry in the same
+tab, and user-controlled dismissal. Retry uses the host's existing launch
+deduplication; closing the tab while admission is pending never cancels or kills
+a session that the host may have admitted. A refresh failure is not evidence that
+the application ended. Desktop preparation retains its own window ownership.
+
+Launch copy is a typed wire contract. Every field in the Env App presentation
+mapping, including touch guidance, must survive the strict Runtime decoder in
+every shipped locale. Tests exercise the generated catalog through the actual
+launch handler, independently of frontend API mocks. Browser loading documents
+explicitly omit Desktop chrome and must not depend on Node globals.
+
 ## Connection and terminal presentation
 
 The localized bootstrap owns connection presentation. It uses the host application's
@@ -194,7 +210,8 @@ and browser dismissal permissions remain authoritative.
 - `internal/codeapp/appserver/host_application_viewer/`: connection reconciliation, first-frame, terminal and geometry adapters.
 - `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts` and `macHostApplicationViewer.test.ts`: backend events, stale callbacks, first-pixel, pointer gestures and reconnect acceptance.
 - `internal/envapp/ui_src/src/styles/hostApplicationDisplay.browser.test.tsx`: responsive density feedback, localization, keyboard dismissal and control-free display updates.
-- `internal/codeapp/appserver/host_applications_test.go`: owner-authorized terminal snapshots and retained state routes.
+- `internal/codeapp/appserver/host_applications_test.go`: complete localized launch requests, owner-authorized terminal snapshots and retained state routes.
+- `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx` and `src/styles/hostApplicationLaunch.browser.test.tsx`: same-tab failure recovery and localized browser layout.
 - `scripts/check_host_application_input.mjs` and `internal/hostapps/client_input_test.go`: released PNG preparation, hotspot coordinates and real application input receipts.
 
 - `internal/hostapps/client_assets_test.go` and `internal/codeapp/appserver/host_application_assets_test.go`: stable resource references, gzip, cache validators, origin/owner/version and revoked permission boundaries.

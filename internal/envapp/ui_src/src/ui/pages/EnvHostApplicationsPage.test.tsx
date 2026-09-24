@@ -3,14 +3,14 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ cacheScope: '', generation: 0, full: true, running: vi.fn(), quit: vi.fn(), terminate: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupPlan: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
+const state = vi.hoisted(() => ({ desktop: true, cacheScope: '', generation: 0, full: true, running: vi.fn(), quit: vi.fn(), terminate: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupPlan: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
   resourceCacheAccess: () => ({ phase: 'ready' as const, generation: state.generation, scope: state.cacheScope }),
   env_id: () => 'host', localRuntime: () => ({}),
 }) }));
 vi.mock('../services/hostApplicationsApi', async importOriginal => ({ ...await importOriginal<object>(), cancelHostApplicationSetup: state.setupCancel, uploadHostApplicationSetup: state.setupUpload, getHostApplicationSetup: state.setupStatus, getHostApplicationTransferPlan: state.setupPlan, startHostApplicationSetup: state.setupStart, observeHostApplicationSetup: state.setupObserve, listHostApplications: state.catalog, listRunningHostApplications: state.running, quitHostApplication: state.quit, terminateHostApplication: state.terminate, detachHostApplication: state.detach, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, stopHostApplication: state.stop, addHostApplication: state.add, requestHostApplicationPermission: state.permission }));
-vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => true }));
+vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => state.desktop }));
 vi.mock('../services/desktopSessionContext', () => ({ readDesktopSessionContextSnapshot: () => state.localMac ? {target_kind: 'local_environment',target_route:'local_host'} : null }));
 vi.mock('../services/webServiceWindows', () => ({ resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
 
@@ -25,7 +25,7 @@ let dispose: (() => void) | undefined;
 const settle = () => new Promise(resolve => setTimeout(resolve, 30));
 function button(label: string) { return [...host.querySelectorAll('button')].find(el => el.getAttribute('aria-label') === label)!; }
 beforeEach(() => {
-  vi.clearAllMocks(); state.generation = 0; state.cacheScope = ''; state.full = true; state.localMac = false;
+  vi.clearAllMocks(); state.desktop = true; state.generation = 0; state.cacheScope = ''; state.full = true; state.localMac = false;
   state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
   state.sessions.mockResolvedValue([{ id: 'session', application: app, state: 'running', forward }]);
   state.launch.mockResolvedValue({ id: 'session', application: app, state: 'starting', forward });
@@ -40,7 +40,7 @@ beforeEach(() => {
   Object.defineProperty(window, 'redevenDesktopShell', { configurable: true, value: { applicationPreparation: state.preparation } });
   host = document.createElement('div'); document.body.append(host);
 });
-afterEach(() => { dispose?.(); host.remove(); });
+afterEach(() => { dispose?.(); host.remove(); vi.restoreAllMocks(); });
 
 function textButton(text: string, root: ParentNode = document) { return [...root.querySelectorAll('button')].find(el => el.textContent === text)!; }
 async function inspectUpdate() {
@@ -617,4 +617,26 @@ it('requests normal Linux window closure without escalating cancelled save dialo
   expect(state.terminate).not.toHaveBeenCalled();
   expect(host.textContent).toContain('Background processes may keep running.');
   expect(button('Close all windows · Text Editor')).toBeDefined();
+});
+
+
+describe('browser launch recovery', () => {
+  it.each(['launch', 'route'] as const)('keeps a failed %s open and retries in the same browser tab', async stage => {
+    state.desktop = false;
+    state.sessions.mockResolvedValue([]);
+    const popup = { document: document.implementation.createHTMLDocument(), closed: false, close: vi.fn(), focus: vi.fn() };
+    const windowOpen = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+    state[stage === 'launch' ? 'launch' : 'open'].mockRejectedValueOnce(new Error('Temporary failure'));
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    button('Open in new window · Text Editor').click(); await settle();
+    expect(popup.close).not.toHaveBeenCalled();
+    expect(popup.document.title).toBe('Text Editor');
+    expect(popup.document.querySelector('[role="alert"]')?.textContent).toContain('The application could not be opened');
+    expect(button('Open in new window · Text Editor').disabled).toBe(false);
+    textButton('Try again', popup.document).click(); await settle();
+    expect(state.launch).toHaveBeenCalledTimes(2);
+    expect(windowOpen).toHaveBeenCalledOnce();
+    expect(state.open).toHaveBeenLastCalledWith(expect.anything(), 'one', 'http://127.0.0.1:40201', 'unified_proxy', '/_redeven_host_app/', false, expect.any(Function), expect.anything(), popup, 'application');
+    expect(popup.close).not.toHaveBeenCalled();
+  });
 });

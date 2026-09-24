@@ -63,6 +63,9 @@ type Session struct {
 // document renders these bounded strings as text, never as markup or script.
 type Presentation struct {
 	Keyboard                string `json:"keyboard,omitempty"`
+	TouchHelp               string `json:"touchHelp,omitempty"`
+	TouchHelpTitle          string `json:"touchHelpTitle,omitempty"`
+	TouchHelpDescription    string `json:"touchHelpDescription,omitempty"`
 	InputUnavailable        string `json:"inputUnavailable,omitempty"`
 	InputUnavailableHint    string `json:"inputUnavailableHint,omitempty"`
 	InputVersionUnsupported string `json:"inputVersionUnsupported,omitempty"`
