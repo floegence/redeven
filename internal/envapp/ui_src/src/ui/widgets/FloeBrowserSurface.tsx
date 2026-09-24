@@ -1,5 +1,5 @@
 import '../../styles/browserWorkspace.css';
-import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import type { BrowserSourceMessages } from '../i18n/browserSourceMessages';
 import type { BrowserSourceSelection, BrowserSourceService } from '../services/browserSourceContract';
 import type { BrowserFailureCode } from '../services/browserWorkspaceController';
@@ -31,12 +31,16 @@ export function FloeBrowserSurface(props: FloeBrowserSurfaceProps) {
   let host: ReturnType<typeof createBrowserWindow> | undefined;
   const [loading, setLoading] = createSignal(true);
   const [failure, setFailure] = createSignal(false);
-  createEffect(on(() => [props.view, props.session] as const, () => {
+  // Workspace progress can invalidate the prop getter without changing this
+  // view. Only a new identity may retire its document and outstanding actions.
+  const view = createMemo(() => props.view);
+  const session = createMemo(() => props.session);
+  createEffect(on([view, session], ([view, session]) => {
     const previous = host; host = undefined; previous?.close();
     setLoading(true); setFailure(false);
     const nonce = crypto.randomUUID();
     try {
-      const url = browserDocumentURL(props.view, nonce);
+      const url = browserDocumentURL(view, nonce);
       const style = getComputedStyle(document.documentElement);
       const colors: Record<string, string> = {
         '--floe-background': '--background', '--floe-foreground': '--foreground',
@@ -45,7 +49,7 @@ export function FloeBrowserSurface(props: FloeBrowserSurfaceProps) {
       };
       const theme = Object.fromEntries(Object.entries(colors).map(([name, token]) => [name, style.getPropertyValue(token).trim()]).filter(([, value]) => value));
       const current = createBrowserWindow({
-        session: props.session, view: props.view, child: () => frame.contentWindow,
+        session, view, child: () => frame.contentWindow,
         configuration: { type: 'redeven-browser-ports', nonce, title: props.title, locale: props.locale, messages: props.messages, theme,
           sources: { messages: props.sources.messages, current: props.sources.current, desktop: Boolean(props.sources.service.management.browserDesktopAvailable) }, openWindow: true },
         sources: { service: props.sources.service, select: props.sources.select },

@@ -51,6 +51,10 @@ popups remain outside its grants until the user explicitly selects that page.
 Each controller keeps one current open intent. Late results can only release
 their own view; they cannot replace a newer choice. A Session interruption
 revokes the old view and ports while preserving the independent window shell.
+Progress notifications with the same view and Session retain the current
+document and its in-flight source-selection request. A committed replacement
+changes the document exactly once; retiring the old document cannot cancel or
+restore a preceding selection after that commit.
 Reconnection uses a confirmed source, never an earlier new-tab operation. Theme
 configuration refreshes with unchanged effective values do not reopen a view.
 Actual locale or palette changes acquire a new view of the selected target;
@@ -118,6 +122,8 @@ without `allow-forms` and its `form-action 'none'` policy.
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FloeBrowserSurface.tsx` - Shared viewer mount and generation-bound cleanup.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FloeBrowserSurface.test.tsx` - Source-selection progress retains the current document until replacement.
+- `redeven:internal/envapp/ui_src/scripts/checkBrowserProjection.mjs` - Real component, Session and Runtime profile switching in inline and independent documents.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWorkspaceController.ts` - Single view intent and release owner.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvBrowserPage.test.tsx` - Effective presentation changes without repeated source opens.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWorkspaceWindows.test.ts` - Retained window shells and independent cleanup.
