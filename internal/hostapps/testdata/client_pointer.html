@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><title>Redeven pointer acceptance</title>
+<style>
+body{margin:0;background:#eef2f8;font:16px sans-serif}
+#outer{position:absolute;inset:0;overflow:auto}#content{width:2000px;height:3000px;background:linear-gradient(#eef2f8,#6b8bad)}
+button,input{position:absolute;left:20px;box-sizing:border-box;font:inherit}
+button{top:220px;width:180px;height:60px}#field{top:350px}#drag{top:100px;width:260px;height:50px}
+#inner{position:absolute;left:340px;top:70px;width:240px;height:240px;overflow:auto;border:2px solid #345}
+#inner>div{width:1400px;height:1800px;background:repeating-linear-gradient(#abc 0 40px,#def 40px 80px)}
+</style>
+<div id="outer"><div id="content"><button id="tap">Tap target</button><input id="field" value="Select this text"><input type="range" id="drag" value="20"></div></div>
+<div id="inner"><div>Nested scrolling</div></div>
+<script>
+const outer=document.querySelector('#outer'),inner=document.querySelector('#inner'),drag=document.querySelector('#drag');
+const state={clicks:0,doubles:0,rights:0,drag:20,releases:0};let pending=Promise.resolve();
+function save(){state.inset=outerHeight-innerHeight;state.width=outerWidth;state.height=outerHeight;state.outer=[outer.scrollLeft,outer.scrollTop];state.inner=[inner.scrollLeft,inner.scrollTop];const body=JSON.stringify(state);pending=pending.then(()=>fetch('/receipt',{method:'POST',body}));}
+document.addEventListener('pointerup',()=>{state.releases++;save();});
+for(const el of [outer,inner])el.addEventListener('scroll',save);
+document.querySelector('#tap').onclick=()=>{state.clicks++;save();};
+document.querySelector('#tap').ondblclick=()=>{state.doubles++;save();};
+document.addEventListener('contextmenu',e=>{e.preventDefault();state.rights++;save();});
+drag.oninput=()=>{state.drag=Number(drag.value);save();};
+window.addEventListener('load',save);window.addEventListener('resize',save);
+</script>

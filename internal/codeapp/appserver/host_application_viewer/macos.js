@@ -657,18 +657,29 @@
     return target === current && Boolean(target?.window) && renderedGeneration === target.generation
       && socket?.readyState === WebSocket.OPEN && document.body.dataset.state === 'active';
   }
+  let scrollRemainder;
   const pointerController = hostApplicationPointer.createRemotePointer({
     surface: canvas,
     resolveTarget: () => validPointerTarget(current) ? current : null,
     isTargetValid: validPointerTarget,
     sendPointer(command, target) {
       if (!validPointerTarget(target)) return false;
-      const {kind, button, clicks, dx, dy} = command;
+      const {kind, button, clicks} = command;
+      let {dx, dy} = command;
+      if (kind === 'scroll') {
+        // CoreGraphics pixel wheel packets require integers. Keep fractions
+        // within this target until another event crosses a pixel boundary.
+        if (scrollRemainder?.target !== target) scrollRemainder = {target, x:0, y:0};
+        scrollRemainder.x += dx; scrollRemainder.y += dy;
+        dx = Math.trunc(scrollRemainder.x); dy = Math.trunc(scrollRemainder.y);
+        scrollRemainder.x -= dx; scrollRemainder.y -= dy;
+        if (!dx && !dy) return true;
+      }
       send({action:'input', kind, button, clicks, dx, dy, ...point(command)});
     },
-    // The controller sends individual ups for its held buttons. There is no
-    // platform wheel remainder; a pointer cancel must not release keyboard input.
-    release() {},
+    // The controller sends individual button ups; cancellation must not
+    // release keyboard input or retain the previous gesture's wheel fractions.
+    release(target) { if (scrollRemainder?.target === target) scrollRemainder = null; },
     onActivate(position) {
       collapseControls();
       inputController.setAnchor(position.clientX, position.clientY);

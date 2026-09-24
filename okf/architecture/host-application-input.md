@@ -12,7 +12,7 @@ Host Application viewer. The client chooses its input method, preedit and candid
 the host delivers confirmed Unicode or key transitions to the current application.
 One user operation has one owner and one output. Binding loss cancels composition
 and releases held keys; reconnect never replays input. Old input protocols require
-saving and reopening the application, without automatically ending its process.
+saving, quitting and reopening the application, without automatically ending its process.
 This contract does not change Flower, terminal widgets or editor input.
 
 # Client ownership
@@ -44,33 +44,10 @@ local geometry, never connection identity or the input element. Toolbar focus, p
 blur, window replacement, disposal and reconnect cancel pending composition. A late
 browser commit cannot acquire the next window's token.
 
-## Remote pointer ownership
-
-The published `remote-pointer` controller is the sole owner of pointer events,
-wheel input, touch gestures and compatibility mouse suppression inside remote
-pixels. It emits only pointer movement, button transitions or scroll deltas to
-the platform adapter; the platform adapter performs coordinate mapping and
-protocol encoding. The keyboard controller remains independent, and pointer
-reset never releases its composition or held keys.
-
-Touch starts in a pending state without sending a button. A move beyond 8 CSS
-pixels becomes scroll; a 450 ms hold becomes long-press feedback, then a later
-move begins a left-button drag at the original point. A stationary long press
-releases as one right click. A light tap sends one click immediately, and a
-second tap on the same target within 350 ms and 16 CSS pixels is marked as a
-double click. A second touch, pointer cancellation, capture loss, focus or
-viewport change cancels the gesture and releases only buttons owned by this
-controller. Scroll deltas are CSS pixels and retain both axes; cancellation
-discards unsent remainder.
-
-The remote content surface allows browser pinch zoom while preventing browser
-single-finger panning. Local toolbar, lists and text controls keep their normal
-browser interaction. A gesture locks its target token (connection generation
-and window instance), so crossing a popup or reused window number cannot retarget
-the stream. First decoded pixels gate input; stale generations, hidden windows,
-reconnects and canvas replacement invalidate the token. A local help panel
-describes touch actions without becoming an input overlay, and the keyboard
-button remains the explicit way to open a mobile soft keyboard.
+Pointer gestures have a separate [canonical contract](host-application-pointer.md).
+Pointer cancellation releases only its buttons and wheel remainder, never keyboard
+composition. Platform adapters flush pending pointer output before sending keys,
+text or clipboard actions to preserve input order.
 
 # Linux delivery
 

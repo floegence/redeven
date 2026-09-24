@@ -224,7 +224,10 @@
   }, true);
   frame.addEventListener('focus', () => collapseControls());
   window.addEventListener('resize', positionPopover);
-  for (const type of ['blur', 'pagehide', 'resize', 'orientationchange']) window.addEventListener(type, () => pointerController?.reset());
+  // Focusing the child input also blurs the parent window. Only leaving the
+  // viewer document invalidates its gesture; the child owns its own blur.
+  window.addEventListener('blur', () => { if (!document.hasFocus()) pointerController?.reset(); });
+  for (const type of ['pagehide', 'resize', 'orientationchange']) window.addEventListener(type, () => pointerController?.reset());
   document.addEventListener('visibilitychange', () => { if (document.hidden) pointerController?.reset(); });
   for (const type of ['resize', 'scroll']) window.visualViewport?.addEventListener(type, () => pointerController?.reset());
 
@@ -300,17 +303,16 @@
     const adapter = xpra.floeInput;
     const pointer = xpra.floePointer;
     const surface = doc.getElementById('screen') || doc.body;
-    surface.setAttribute('data-floe-remote-pointer', '');
     inputController = hostApplicationInput.createRemoteInput({
       surface, label: config.copy.input,
-      commitText(text, target) { pointerController.flush(); adapter.commitText(text, target); },
-      sendKey(key, target) { pointerController.flush(); adapter.sendKey(key, target); },
+      commitText(text, target) { gestures.flush(); adapter.commitText(text, target); },
+      sendKey(key, target) { gestures.flush(); adapter.sendKey(key, target); },
       release: target => adapter.release(target),
-      clipboard(event, target) { pointerController.flush(); return adapter.clipboard(event, target); },
+      clipboard(event, target) { gestures.flush(); return adapter.clipboard(event, target); },
       onKeyboardVisibilityChange(visible) { keyboardVisible = visible; keyboard.setAttribute('aria-pressed', String(visible)); },
     });
     const controller = inputController;
-    controller.element.addEventListener('paste', event => { pointerController.flush(); adapter.paste(event, adapter.target); });
+    controller.element.addEventListener('paste', event => { gestures.flush(); adapter.paste(event, adapter.target); });
     adapter.onError = () => { if (attempt === generation) finish('inputUnavailable'); };
     function syncInput() {
       if (attempt !== generation) return;

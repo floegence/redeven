@@ -136,6 +136,12 @@ describe('host application viewer', () => {
     expect(v.client.send).toHaveBeenCalledTimes(calls);
   });
 
+  it('keeps native input and local chrome outside the remote pixel touch policy', async () => {
+    const v = await viewer();
+    expect(v.doc.body.hasAttribute('data-floe-remote-pointer')).toBe(false);
+    expect(v.doc.querySelector('.floe-remote-input')?.closest('[data-floe-remote-pointer]')).toBeNull();
+  });
+
   it('restores clarity on attachment through the published display API without reconnecting', async () => {
     const v = await viewer(false, false, false, undefined, undefined, 'clarity');
     expect(v.client.set_display_density).toHaveBeenCalledWith('native');
@@ -606,13 +612,13 @@ it('routes an Xpra touch drag to the shared pointer adapter as scroll', async ()
   expect(v.client.floePointer.sendPointer.mock.calls.some(([command]) => command.kind === 'down' || command.kind === 'up')).toBe(false);
 });
 
-it('restores editor focus even when the Xpra pointer target stops propagation', async () => {
+it('binds editor focus and one button pair through explicit pointer activation', async () => {
   const v = await inputViewer(); v.paint();
   const target = v.doc.querySelector('div')!;
-  target.addEventListener('pointerup', event => event.stopPropagation());
   target.dispatchEvent(Object.assign(new dom.window.Event('pointerdown', {bubbles:true, cancelable:true}), {pointerType:'mouse', button:0, clientX:40, clientY:40}));
   target.dispatchEvent(Object.assign(new dom.window.Event('pointerup', {bubbles:true}), {pointerType:'mouse'}));
   expect(v.doc.activeElement).toBe(v.input);
+  expect(v.client.floePointer.sendPointer.mock.calls.map(([command])=>command.kind)).toEqual(['down','up']);
 });
 
 it('routes clipboard to the published adapter and never also submits its text', async () => {

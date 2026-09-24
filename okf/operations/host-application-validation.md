@@ -49,7 +49,7 @@ host application execution.
 
 # Client input qualification
 
-The current client-input contract consumes published Floe webapp core 0.77.1
+The September 23 client-input qualification used published Floe webapp core 0.77.1
 (including the released remote-input and remote-pointer controllers) and native
 apps v0.7.10. Upstream's immutable release qualification passed on native amd64
 and arm64 with managed Xpra 6.2.2 and complete system Xpra 6.5.3. GTK3, Qt5, Qt6, Chromium 145 and xterm
@@ -75,14 +75,6 @@ commits, physical typing, Backspace, pointer focus between two fields and toolba
 isolation in Chromium 145, Firefox 146.0.1 and WebKit 26.0. The installed launch/resume/stop regression also passed.
 Browser events in this driver are synthetic: it establishes controller-to-app
 delivery, not a native input-method candidate workflow or physical touch behavior.
-
-The same released stack now exposes one `remote-pointer` owner for Linux/Xpra and
-macOS viewers. The published controller's deterministic suite covers CSS-pixel
-vertical, horizontal and diagonal scroll, long-press right click and drag,
-double-click classification, pointer cancellation, capture loss, stale target
-rejection and wheel normalization. Redeven viewer tests cover scroll without a
-click, canvas-generation gating and toolbar isolation. These checks do not qualify
-a physical mobile browser or a system pointer image.
 
 Native macOS checks passed Unicode and ordinary `abc` key delivery into a disposable
 AppKit text field with both ABC and Simplified Pinyin selected on the host. The
@@ -117,6 +109,47 @@ breaks retain their Unicode payload and native Return key identity. Run
 `scripts/check_macos_host_application_input_targets.py --helper <built-helper> --output <evidence>`
 to create and close only disposable test windows in the installed applications.
 This check does not perform native candidate selection or modify personal documents.
+
+# Mobile pointer acceptance
+
+The September 24 follow-up uses the published remote-pointer controller and the
+production viewer assets. It found and fixed parent/iframe focus cancelling the
+first pointer press, an overly broad pixel touch style, reversed native horizontal
+scroll and lost fractional native wheel pixels. The Electron fixture now asserts
+one down/up pair at the adapter, including after toolbar actions and reconnection,
+instead of merely observing DOM clicks.
+
+The task-owned orange arm64 GTK application, macOS AppKit controls and a private
+Google Chrome 153.0.8010.53 application passed
+vertical scroll from a button without clicking, nested diagonal scroll at the
+initial hit point, stop on release, hardware wheel reversal, tap, double tap,
+long-press right click and slider drag with release. Application receipts and
+screenshots record the result. The AppKit fixture disables its own predominant-axis
+policy so both delivered axes can be observed. No user's application is terminated.
+
+Linux uses `TestInstalledClientInputViewer` with
+`REDEVEN_TEST_CLIENT_INPUT_TARGET=pointer-gtk` or `pointer-firefox`. macOS uses
+`TestInstalledMacPointerViewer`, a new `REDEVEN_TEST_MAC_POINTER_EVIDENCE` directory
+and the verified `REDEVEN_COMPUTER_NATIVE_HELPER_PATH`. The same Node driver accepts
+`local` instead of an SSH host for the private macOS listener. A macOS browser test
+requires `REDEVEN_TEST_MAC_POINTER_BROWSER_BUNDLE` to point at a disposable bundle
+copy, with a separate browser profile. The fixture emits a password-protected
+connection file; final evidence excludes the password.
+
+Chromium, Firefox and WebKit pointer tests cover native browser mouse clicks,
+synthetic touch scroll, composition isolation and toolbar cancellation. Electron
+41.10.5 additionally exercises the real native titlebar and preload. These checks
+are distinct from physical touch-device qualification. Run
+`pnpm --dir internal/envapp/ui_src test:host-application-browser` for the bounded
+three-engine pointer and appearance suite. Native application acceptance uses
+Chromium touch injection and actual application receipts, not a physical device.
+
+At this check, udesk26's configured SSH endpoint was unreachable. Orange's
+`/usr/bin/firefox` was an uninstalled Snap wrapper. Those corresponding live
+application checks and udesk26 deployment remain unpassed until the environments
+are available. Physical iOS/iPadOS Safari and Android Chrome touch/pinch/keyboard
+checks also remain unpassed. The previously separate real OS IME candidate checks
+remain independent of this pointer task.
 
 # Distribution validation
 

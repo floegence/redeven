@@ -102,10 +102,10 @@ final class InputTests: XCTestCase {
         XCTAssertTrue(events.allSatisfy { $0.location == point })
         let event = events[1]
         XCTAssertLessThan(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1), 0)
-        XCTAssertLessThan(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2), 0)
+        XCTAssertGreaterThan(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2), 0)
         let natural = try NativeInput.scroll(at: point, x: 10, y: 600, naturalScrolling: true)[1]
         XCTAssertGreaterThan(natural.getIntegerValueField(.scrollWheelEventPointDeltaAxis1), 0)
-        XCTAssertGreaterThan(natural.getIntegerValueField(.scrollWheelEventPointDeltaAxis2), 0)
+        XCTAssertLessThan(natural.getIntegerValueField(.scrollWheelEventPointDeltaAxis2), 0)
         XCTAssertThrowsError(try NativeInput.scroll(at: point, x: .infinity, y: 0, naturalScrolling: false))
         XCTAssertThrowsError(try NativeInput.scroll(at: point, x: 0, y: 1e20, naturalScrolling: true))
     }
