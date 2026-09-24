@@ -17,7 +17,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 
 	root := repositoryRoot(t)
 	wantMigratingOpeners := map[string]struct{}{
-		"internal/accessgate/store.go":            {},
+		"internal/accessgate/store.go":              {},
 		"internal/browserstore/store.go":            {},
 		"internal/ai/threadstore/store.go":          {},
 		"internal/codeapp/registry/registry.go":     {},
@@ -30,7 +30,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 		"internal/workbenchlayout/service.go":       {},
 	}
 	wantDirectOpeners := map[string]struct{}{
-		"internal/accessgate/store.go":            {}, // Read-only access opens after sqliteutil inspection; migration ownership remains in authSpec.
+		"internal/accessgate/store.go":              {}, // Read-only access opens after sqliteutil inspection; migration ownership remains in authSpec.
 		"internal/browserstore/schema.go":           {}, // In-memory reference DDL only; file-backed browser stores use the migration engine.
 		"internal/portforward/registry/schema.go":   {}, // In-memory reference DDL only; the migration engine owns every file-backed registry connection.
 		"internal/persistence/sqliteutil/engine.go": {}, // The migration engine owns the physical connection.
