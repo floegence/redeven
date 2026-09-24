@@ -110,7 +110,9 @@ engines rebuild without claiming a cached-display latency result.
 The source-page replay remains scriptless. Only the trusted browser chrome
 executes locally, through the environment owner's named capabilities. The
 address field's Enter key and Go button issue source commands directly, never
-a native form submission. The inline document keeps its restrictive sandbox
+a native form submission. Source profile creation and endpoint discovery use
+explicit click/Enter handlers for the same reason; composition Enter never
+submits. The inline document keeps its restrictive sandbox
 without `allow-forms` and its `form-action 'none'` policy.
 
 # Evidence

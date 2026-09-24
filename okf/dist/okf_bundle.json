@@ -13910,7 +13910,7 @@
         "title": "Remote browser surface",
         "type": "Architecture Contract"
       },
-      "body_length": 9026,
+      "body_length": 9161,
       "summary": "- Authority: the environment window owns its authenticated Session and private control token; FloeBrowser owns reusable browser chrome and inert page presentation.\n- Outcome: Desktop and Web clients browse through the same surface and can open independent windows without selecting their source again.\n- Invariants: fresh source selection and control admission precede input; child windows receive only named browser operations; cached documents confer no authority.\n- Failure boundary: replacing a source fails without destroying the current view; disconnect destroys stale presentation and never replays uncertain input.",
       "sections": [
         {
@@ -13924,8 +13924,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The source-page replay remains scriptless. Only the trusted browser chrome\nexecutes locally, through the environment owner's named capabilities. The\naddress field's Enter key and Go button issue source commands directly, never\na native form submission. The inline document keeps its restrictive sandbox\nwithout `allow-forms` and its `form-action 'none'` policy.",
-          "char_count": 361
+          "body": "The source-page replay remains scriptless. Only the trusted browser chrome\nexecutes locally, through the environment owner's named capabilities. The\naddress field's Enter key and Go button issue source commands directly, never\na native form submission. Source profile creation and endpoint discovery use\nexplicit click/Enter handlers for the same reason; composition Enter never\nsubmits. The inline document keeps its restrictive sandbox\nwithout `allow-forms` and its `form-action 'none'` policy.",
+          "char_count": 496
         }
       ],
       "evidence": [
@@ -27800,5 +27800,5 @@
       ]
     }
   ],
-  "source_sha256": "845ebc60ada49a76b7febab5385401e80af70f9289a59ac5fdfcbcfbd6d6ad34"
+  "source_sha256": "b919d58d906b642ffba93a3a03663616b74b7486104a6afc7463dd2e9dd9f5a1"
 }

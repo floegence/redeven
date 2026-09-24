@@ -220,6 +220,9 @@ try {
   await popup.getByRole('menuitem', { name: 'Browser sources', exact: true }).click();
   assert.equal(await popup.locator('.redeven-browser-document-bar').count(), 0, 'Product actions share the address row');
   await popup.getByRole('dialog').waitFor();
+  await popup.getByRole('textbox', { name: 'New profile name', exact: true }).fill('Sandbox profile');
+  await popup.getByRole('button', { name: 'Create profile', exact: true }).click();
+  await popup.getByRole('radio', { name: /Sandbox profile/ }).waitFor();
   if (extensionSource) {
     await popup.getByRole('radio', { name: /New background tab/ }).waitFor();
     assert.equal(await popup.getByRole('radio', { name: /Popup popup/ }).count(), 0, 'Private native descendants stay outside source selection after their direct opener closes');

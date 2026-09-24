@@ -126,10 +126,10 @@ export function BrowserSourceDialog(props: {
           <p class="text-xs text-muted-foreground">{copy().profileHint}</p>
           <Show when={profileError()}><p role="alert" class="text-xs text-destructive">{copy().loadFailed}</p></Show>
           <div class="redeven-browser-source-list"><For each={profiles()}>{profile => <Option request={{ managed_profile_id: profile.id }} label={profileLabel(profile)} detail={props.messages.product.managedSource} />}</For></div>
-          <form class="mt-3 flex items-center gap-2" onSubmit={event => { event.preventDefault(); void createProfile(); }}>
-            <input class="redeven-browser-source-input" aria-label={props.messages.product.profileName} placeholder={props.messages.product.profileName} maxLength={120} value={profileName()} onInput={event => setProfileName(event.currentTarget.value)} />
-            <Button class="shrink-0 whitespace-nowrap" type="submit" variant="outline" size="sm" disabled={busy() || !profileName().trim()}><Plus class="size-3.5" />{props.messages.product.createProfile}</Button>
-          </form>
+          <div class="mt-3 flex items-center gap-2">
+            <input class="redeven-browser-source-input" aria-label={props.messages.product.profileName} placeholder={props.messages.product.profileName} maxLength={120} value={profileName()} onInput={event => setProfileName(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); void createProfile(); } }} />
+            <Button class="shrink-0 whitespace-nowrap" type="button" variant="outline" size="sm" disabled={busy() || !profileName().trim()} onClick={() => void createProfile()}><Plus class="size-3.5" />{props.messages.product.createProfile}</Button>
+          </div>
         </section>
         <section><div class="redeven-browser-source-heading"><h3>{props.messages.product.chromeSource}</h3><Button size="sm" variant="ghost" onClick={() => setPage('chrome')}><Globe class="size-3.5" />{copy().setupChrome}</Button></div>
           <p class="text-xs text-muted-foreground">{copy().chromeOnlineHint}</p>
@@ -146,8 +146,8 @@ export function BrowserSourceDialog(props: {
           </Show>
         </section>
         <details><summary class="cursor-pointer text-sm font-medium">{copy().advanced}</summary><p class="my-3 text-xs leading-relaxed text-muted-foreground">{copy().advancedHint}</p>
-          <form class="flex items-center gap-2" onSubmit={event => { event.preventDefault(); void discover(); }}><input class="redeven-browser-source-input" aria-label={copy().endpoint} placeholder={copy().endpoint} value={endpoint()} onInput={event => setEndpoint(event.currentTarget.value)} />
-            <Button class="shrink-0 whitespace-nowrap" type="submit" size="sm" variant="outline" disabled={busy() || !endpoint().trim()}>{copy().listTabs}</Button></form>
+          <div class="flex items-center gap-2"><input class="redeven-browser-source-input" aria-label={copy().endpoint} placeholder={copy().endpoint} value={endpoint()} onInput={event => setEndpoint(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); void discover(); } }} />
+            <Button class="shrink-0 whitespace-nowrap" type="button" size="sm" variant="outline" disabled={busy() || !endpoint().trim()} onClick={() => void discover()}>{copy().listTabs}</Button></div>
           <div class="redeven-browser-source-list"><For each={cdpTabs()}>{tab => <Option request={{ connection: { cdp_url: discoveredEndpoint(), profile_id: tab.profile_id, tab_id: tab.id, tab_title: tab.title, tab_url: tab.url } }} label={tab.title || tab.url} detail={tab.url} />}</For></div>
           <Show when={discoveredEndpoint() && !cdpTabs().length && !busy()}><p class="mt-3 text-sm text-muted-foreground">{props.messages.product.noPages}</p></Show>
         </details>
