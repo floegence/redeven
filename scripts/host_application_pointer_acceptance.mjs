@@ -24,14 +24,17 @@ export async function checkPointer({page,frame,read,output,waitFor,backend}) {
       return {x:geometry.x+x/state.width*geometry.width,y:geometry.y+(y+state.inset)/state.height*geometry.height,id:1};
     };
   } else {
-    geometry=await frame.evaluate(()=>{
-      const client=window.floeXpraInput.getClient();
-      const win=Object.values(client.id_to_window).find(w=>client.floePointer.targetForWindow(w));
-      const rect=win.canvas.getBoundingClientRect();
-      return {x:rect.x,y:rect.y,scale:client.scale,wid:win.wid,dpr:devicePixelRatio,precise:client.server_precise_wheel};
-    });
-    const frameRect=await page.locator('#application').boundingBox();
-    point=(x,y)=>({x:frameRect.x+geometry.x+x/geometry.scale,y:frameRect.y+geometry.y+(y+inset)/geometry.scale,id:1});
+    point=async(x,y)=>{
+      const state=read();
+      geometry=await frame.evaluate(()=>{
+        const client=window.floeXpraInput.getClient();
+        const win=Object.values(client.id_to_window).find(w=>client.floePointer.targetForWindow(w));
+        const rect=win.canvas.getBoundingClientRect();
+        return {x:rect.x,y:rect.y,scale:client.scale,wid:win.wid,dpr:devicePixelRatio,precise:client.server_precise_wheel};
+      });
+      const frameRect=await page.locator('#application').boundingBox();
+      return {x:frameRect.x+geometry.x+x/geometry.scale,y:frameRect.y+geometry.y+(y+state.inset)/geometry.scale,id:1};
+    };
   }
   const cdp=await page.context().newCDPSession(page);
   const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -44,11 +47,17 @@ export async function checkPointer({page,frame,read,output,waitFor,backend}) {
   };
   await touch(80,250,0,-180);
   await wait(r=>r.outer[1]>0&&r.clicks===0,'swipe on button scrolls without click');
+  // Wait for AppKit's posted native events to reach the control before checking
+  // for extra movement; transport completion alone is not application delivery.
+  if(Array.isArray(read().wheels))await wait(r=>Math.abs(r.wheels.reduce((sum,event)=>sum+event.dy,0))===180,'complete native scroll distance received');
   await pause(250);const stopped=read();await pause(250);
   assert.deepEqual(read().outer,stopped.outer,'scroll stops on release');
   evidence.push({label:'no inertia',received:read()});
   const top=await point(80,220);await page.mouse.move(top.x,top.y);await page.mouse.wheel(0,-2400);
   await wait(r=>r.outer[1]===0,'hardware wheel returns to top');
+  // End the preceding independent hardware-wheel transaction. Firefox keeps
+  // its previous scroll target until a button event, even over a new element.
+  const blank=await point(240,50);await page.mouse.click(blank.x,blank.y);
   await touch(460,260,-240,-160);
   await wait(r=>r.inner[0]>0&&r.inner[1]>0&&r.outer[1]===0,'nested diagonal scroll remains locked');
   await touch(80,250);await wait(r=>r.clicks===1,'tap delivered exactly once');

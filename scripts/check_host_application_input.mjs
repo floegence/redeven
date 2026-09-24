@@ -106,6 +106,13 @@ try {
   if(metadata.backend!=='macos')assert(frame, 'prepared Xpra frame is missing');
   const receipt = () => JSON.parse(remote(`cat ${quote(metadata.receipt || remoteRoot + '/receipt.json')}`));
   if(pointerMode){
+    if(frame)await frame.evaluate(()=>{
+      const client=window.floeXpraInput.getClient(),send=client.send;
+      client.send=function(packet){
+        if(['pointer-position','button-action','wheel-motion'].includes(packet[0]))parent.pointerPackets.push(packet);
+        return send.call(this,packet);
+      };
+    });
     const checks=await checkPointer({page,frame,read:receipt,output,waitFor,backend:metadata.backend});
     assert.deepEqual(errors,[]);
     remote(`printf %s ${quote(JSON.stringify({passed:true}))} > ${quote(remoteRoot + '/done.json')}`);

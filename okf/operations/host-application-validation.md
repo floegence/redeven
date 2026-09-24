@@ -120,8 +120,8 @@ scroll and lost fractional native wheel pixels. The Electron fixture now asserts
 one down/up pair at the adapter, including after toolbar actions and reconnection,
 instead of merely observing DOM clicks.
 
-The task-owned orange arm64 GTK application, macOS AppKit controls and a private
-Google Chrome 153.0.8010.53 application passed
+Task-owned orange arm64 GTK, udesk26 amd64 GTK and Firefox 155.0.1 applications,
+macOS AppKit controls and a private Google Chrome 153.0.8010.53 application passed
 vertical scroll from a button without clicking, nested diagonal scroll at the
 initial hit point, stop on release, hardware wheel reversal, tap, double tap,
 long-press right click and slider drag with release. Application receipts and
@@ -145,10 +145,15 @@ are distinct from physical touch-device qualification. Run
 three-engine pointer and appearance suite. Native application acceptance uses
 Chromium touch injection and actual application receipts, not a physical device.
 
-At this check, udesk26's configured SSH endpoint was unreachable. Orange's
-`/usr/bin/firefox` was an uninstalled Snap wrapper. Those corresponding live
-application checks and udesk26 deployment remain unpassed until the environments
-are available. Physical iOS/iPadOS Safari and Android Chrome touch/pinch/keyboard
+udesk26 became reachable during final acceptance and passed on Ubuntu 26.04.1 LTS.
+Firefox retains a native wheel transaction's previous scroll container even when
+subsequent wheel events hit the nested element. The independent nested-region
+scenario follows an explicit blank-area click that ends the preceding hardware
+wheel transaction. This records normal host browser behavior; the product neither
+changes Firefox preferences nor inserts a timing workaround.
+
+Orange's `/usr/bin/firefox` was an uninstalled Snap wrapper, so its Firefox check
+remains unpassed. Physical iOS/iPadOS Safari and Android Chrome touch/pinch/keyboard
 checks also remain unpassed. The previously separate real OS IME candidate checks
 remain independent of this pointer task.
 
