@@ -2,6 +2,49 @@
 .plugin-mobile-launcher-drawer {
   width: 100%;
   max-width: 640px;
-  height: min(680px, 86%);
+  height: 86%;
   border-radius: 24px;
+}
+
+.mobile-tools-icon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mobile-tools-row {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.mobile-tools-row:hover, .mobile-tools-icon:hover,
+.mobile-tools-row:focus-visible, .mobile-tools-icon:focus-visible {
+  background: var(--muted);
+  outline: 2px solid transparent;
+}
+
+.mobile-tools-row:focus-visible, .mobile-tools-icon:focus-visible {
+  outline-color: var(--ring);
+  outline-offset: -2px;
+}
+
+.mobile-download-tasks button { min-width: 44px; min-height: 44px; }
+
+.mobile-plugin-content-host > div {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
 }

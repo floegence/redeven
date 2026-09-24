@@ -36,6 +36,35 @@ describe('LanguagePreferenceMenu', () => {
   let host: HTMLDivElement;
   let dispose: () => void;
 
+  it('changes language inside the persistent tools page without a floating menu', async () => {
+    dispose = render(() => <I18nProvider><LanguagePreferenceMenu variant="inline" /></I18nProvider>, host);
+    await flushAsync();
+    expect(host.querySelector('[data-envapp-language-trigger]')).toBeNull();
+    const option = host.querySelector<HTMLButtonElement>('[data-envapp-language-option="zh-TW"]')!;
+    option.click();
+    await vi.waitFor(() => expect(document.documentElement.lang).toBe('zh-TW'));
+    expect(host.querySelector('[data-envapp-language-menu="inline"]')).not.toBeNull();
+    expect(host.querySelector('[data-envapp-language-option="zh-TW"]')?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('keeps inline language keyboard navigation within the shared options', async () => {
+    dispose = render(() => <I18nProvider><LanguagePreferenceMenu variant="inline" /></I18nProvider>, host);
+    await flushAsync();
+    const menu = host.querySelector<HTMLElement>('[data-envapp-language-menu="inline"]')!;
+    const items = Array.from(menu.querySelectorAll<HTMLButtonElement>('[data-envapp-language-option]'));
+    items[0]!.focus();
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement).toBe(items[1]);
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+    expect(document.activeElement).toBe(items.at(-1));
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    expect(document.activeElement).toBe(items[0]);
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    menu.dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(false);
+    expect(menu.isConnected).toBe(true);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();

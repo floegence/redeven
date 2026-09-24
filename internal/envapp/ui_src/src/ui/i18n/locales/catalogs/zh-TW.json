@@ -380,6 +380,11 @@
     "fileUnavailable": "所選儲藏中已不存在此檔案。"
   },
   "shell": {
+    "mobileTools": {
+      "more": "更多",
+      "search": "搜尋與命令",
+      "back": "返回工具清單"
+    },
     "loadingPage": "正在載入頁面…",
     "accessibility": {
       "skipLinkLabel": "跳到 Redeven 環境內容",

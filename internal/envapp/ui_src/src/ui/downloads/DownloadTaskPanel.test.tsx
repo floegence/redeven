@@ -65,6 +65,20 @@ function clickAction(host: HTMLElement, title: string) {
 }
 
 describe('DownloadTaskPanel', () => {
+  it('keeps live download actions in an embedded tools region', () => {
+    const [tasks, setTasks] = createSignal([task({})]);
+    const manager = createManager(tasks);
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const dispose = render(() => <DownloadTaskPanel manager={manager} inline />, host);
+    try {
+      expect(host.querySelector('[role="dialog"]')).toBeNull();
+      expect(host.querySelector('[role="region"]')).not.toBeNull();
+      expect(host.textContent).toContain('50%');
+      setTasks([task({ status: 'failed', error: { code: 'source_unavailable', retryable: true, title: 'Failed', detail: 'Connection lost' } })]);
+      clickAction(host, 'Retry');
+      expect(manager.retry).toHaveBeenCalledWith('download-1');
+    } finally { dispose(); }
+  });
   it('shows active progress and exposes cancel', () => {
     const [tasks] = createSignal([task({})]);
     const manager = createManager(tasks);

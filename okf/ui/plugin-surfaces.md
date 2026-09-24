@@ -26,12 +26,14 @@ the current normal surface. On desktop it is the permanent first Activity Bar
 entry, followed by built-in Activities, Flower, and then user-pinned plugins in
 saved order. Desktop uses a centered modal with a search field,
 responsive icon grid and stable scrolling body without a summary footer; mobile uses a
-released Floe bottom-drawer Dialog with rounded corners, a visible handle, and
+released Floe Shell navigation panel with rounded corners, a visible handle, and
 at least 44px touch targets. Its title and actions share one row, followed by a
 full-width 16px search input. Initial focus goes to the close button so browsing
 does not open the system keyboard. Search, category, and tile nodes survive
-responsive movement and reopening. Shell content remains inert through exit
-presence, and the mobile trigger exposes the drawer disclosure state. Search normalizes Unicode with
+responsive movement and reopening. Covered Shell content remains inert through exit
+presence while the bottom bar remains usable, and the mobile trigger exposes the
+drawer disclosure state. [Mobile shell navigation](mobile-shell-navigation.md)
+owns placement, mutual exclusion, keyboard, and focus contracts. Search normalizes Unicode with
 NFKC and locale-aware case folding, matches display name, canonical keywords,
 and the locale's explicit alias key, and intersects with the selected category.
 The category set is stable (`development`, `infrastructure`, `utilities`,
@@ -42,7 +44,7 @@ installed plugins and appear at six without changing category identity. Empty re
 clear-filters action. A launchable plugin tile's primary action opens its
 declared default surface directly; plugins that cannot launch fall back to
 their exact management detail by `inventoryKey`.
-Escape clears search before closing, focus is trapped and restored, background
+Escape clears search before closing, focus stays within the active navigation boundary and is restored, background
 content is inert, and arrow/Home/End navigation remains within the visible grid.
 Each plugin is a semantic list item containing a native primary button. The
 compact launcher header exposes one market icon action for Plugin Center;
@@ -94,7 +96,7 @@ Plugin motion is progressive feedback rather than an interaction gate. The
 Launcher establishes backdrop depth before its content settles, and its panel
 uses reversible opacity and transform transitions rather than fixed keyframe
 replays. The desktop Activity Launcher derives its transform origin and small
-directional offset from the current Activity Bar trigger; the Workbench companion retains a bottom-edge origin. Mobile uses the released Dialog bottom-drawer motion and 180ms exit presence. Entry completes within 240ms,
+directional offset from the current Activity Bar trigger; the Workbench companion retains a bottom-edge origin. Mobile uses the released Shell navigation panel with shared bottom-drawer motion and 180ms exit presence. Entry completes within 240ms,
 content follows after a bounded 35ms delay, and desktop exit completes within 150ms.
 A rapid close or reopen reverses from the current visual pose without snapping,
 while the closing surface stops accepting pointer input. Directory, detail,

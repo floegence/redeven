@@ -5,8 +5,8 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
-import { LayoutProvider } from '@floegence/floe-webapp-core';
-import { ActivityBar, type BarItemContextMenuRequest } from '@floegence/floe-webapp-core/layout';
+import { CommandProvider, LayoutProvider } from '@floegence/floe-webapp-core';
+import { Shell, ActivityBar, type BarItemContextMenuRequest } from '@floegence/floe-webapp-core/layout';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import {
   DEFAULT_WORKBENCH_THEME,
@@ -266,32 +266,26 @@ function mountPanel(mobile: boolean, model: PluginPanelModel = panelModel): Read
   const host = fixedHost();
   const [trigger, setTrigger] = createSignal<HTMLButtonElement>();
   const [open, setOpen] = createSignal(true);
-  disposers.push(render(() => (
-    <>
-      <button
-        ref={setTrigger}
-        type="button"
-        data-testid="plugin-switcher-trigger"
-        class="fixed left-3 top-5 h-11 w-11"
-      >
-        Plugins
-      </button>
-      <button type="button" data-testid="after-plugin-switcher" class="fixed bottom-3 right-3 h-11">
-        After switcher
-      </button>
-      <PluginPanel
-        id="plugin-switcher-browser-test"
-        open={open()}
-        mobile={mobile}
-        trigger={trigger()}
-        model={model}
-        onClose={() => setOpen(false)}
-        onOpenCenter={() => undefined}
-        onOpenPluginSurface={() => undefined}
-        onOpenPluginDetails={() => undefined}
-      />
-    </>
-  ), host));
+  const renderPanel = () => <PluginPanel id={mobile ? undefined : 'plugin-switcher-browser-test'}
+    open={open()} mobile={mobile} contentOnly={mobile} trigger={trigger()} model={model}
+    onClose={() => setOpen(false)} onOpenCenter={() => undefined}
+    onOpenPluginSurface={() => undefined} onOpenPluginDetails={() => undefined} />;
+  const Icon = () => <span />;
+  disposers.push(render(() => {
+    const panel = renderPanel();
+    return mobile ? <LayoutProvider><CommandProvider>
+    <Shell topBarMobileMode="hidden" sidebarMode="hidden"
+      mobileNavigationActions={[{ id: 'plugins', icon: Icon, label: 'Plugins', buttonRef: (element) => setTrigger(element ?? undefined),
+        ariaExpanded: open, onClick: () => setOpen(!open()) }]}
+      mobileNavigationPanel={{ id: 'plugin-switcher-browser-test', open: open(), title: 'Applications', header: null,
+        onOpenChange: setOpen, trigger: trigger(), class: 'plugin-mobile-launcher-drawer', contentClass: 'min-h-0 flex-1 overflow-hidden',
+        children: panel }}><button>Covered page action</button></Shell>
+  </CommandProvider></LayoutProvider> : <>
+    <button ref={setTrigger} type="button" data-testid="plugin-switcher-trigger" class="fixed left-3 top-5 h-11 w-11">Plugins</button>
+    <button type="button" data-testid="after-plugin-switcher" class="fixed bottom-3 right-3 h-11">After switcher</button>
+    {panel}
+  </>;
+  }, host));
   return { host, trigger, setOpen };
 }
 
@@ -911,7 +905,7 @@ describe('plugin management browser geometry and interaction', () => {
     },
   );
 
-  it('keeps the 320 px Plugin Switcher sheet modal, contained, and touchable', async () => {
+  it('keeps the 320 px Plugin Switcher above usable navigation with touchable controls', async () => {
     const viewport = viewportCases[0];
     await page.viewport(viewport.width, viewport.height);
     mountPanel(true);
@@ -919,7 +913,10 @@ describe('plugin management browser geometry and interaction', () => {
     await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
 
     const dialog = document.querySelector<HTMLElement>('.plugin-mobile-launcher-drawer')!;
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.getAttribute('aria-modal')).toBeNull();
+    const nav = document.querySelector<HTMLElement>('[data-floe-shell-slot="mobile-tab-bar"]')!;
+    expect(dialog.getBoundingClientRect().bottom).toBeLessThan(nav.getBoundingClientRect().top);
+    expect(nav.closest('[inert]')).toBeNull();
     expectInsideViewport(dialog, viewport);
     expectNoHorizontalOverflow(dialog);
 
@@ -933,7 +930,7 @@ describe('plugin management browser geometry and interaction', () => {
     const lastAction = dialog.querySelector<HTMLButtonElement>('[data-plugin-center-market-action]')!;
     lastAction.focus();
     await userEvent.tab();
-    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(dialog.contains(document.activeElement) || nav.contains(document.activeElement)).toBe(true);
   });
 
   it('reopens the Plugin Switcher repeatedly with an immediately available tile and no visible loading state', async () => {

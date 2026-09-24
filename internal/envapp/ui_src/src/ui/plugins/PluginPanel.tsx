@@ -4,7 +4,6 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Package, Search, X } from '@floegence/floe-webapp-core/icons';
 import type { BarItemContextMenuRequest } from '@floegence/floe-webapp-core/layout';
 import { WorkbenchDockPopoverSurface, type WorkbenchCanvasWidgetPlacement, type WorkbenchExternalDockDragController } from '@floegence/floe-webapp-core/workbench';
-import { Dialog, DialogPlacementProvider } from '@floegence/floe-webapp-core/ui';
 import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 import type {
@@ -42,11 +41,13 @@ export type PluginPanelProps = {
   id?: string;
   open: boolean;
   mobile?: boolean;
+  /** Shell owns the mobile navigation surface, focus, and content isolation. */
+  contentOnly?: boolean;
+  mobileContentHost?: HTMLElement | null;
   trigger?: HTMLButtonElement | null;
   placement?: 'activity' | 'workbench';
   model: PluginPanelModel;
   onClose: () => void;
-  onMobilePresenceChange?: (present: boolean) => void;
   onOpenCenter: () => void;
   onOpenPluginSurface: (target: PluginSurfaceLaunchTarget) => void;
   onOpenPluginDetails: (inventoryKey: string) => void;
@@ -153,6 +154,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   const dismiss = () => {
     restoreFocusAfterClose = true;
     props.onClose();
+    if (props.mobile) props.trigger?.focus({ preventScroll: true });
   };
 
   createEffect(() => {
@@ -436,8 +438,19 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
 
   const contents = untrack(panelContents);
 
+  const mobileContent = () => <div class="flex min-h-0 flex-1 flex-col" onKeyDown={(event) => {
+    if (event.key === 'Escape' && query() && !event.isComposing) {
+      event.preventDefault();
+      setQuery('');
+    }
+  }}>{contents}</div>;
+
   return (
     <>
+      <Show when={props.mobile && props.contentOnly}>{mobileContent()}</Show>
+      <Show when={props.mobile && !props.contentOnly && props.mobileContentHost}>
+        <Portal mount={props.mobileContentHost!}>{mobileContent()}</Portal>
+      </Show>
       <Show when={visible() && isWorkbenchPopup() && props.trigger?.isConnected ? props.trigger : null}>
         {(trigger) => (
           <WorkbenchDockPopoverSurface
@@ -513,23 +526,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             </div>
           </div>
         </Portal>
-      </Show>
-      <Show when={props.mobile && !isWorkbenchPopup()}>
-        <DialogPlacementProvider mode="global" globalZIndex={ENV_APP_FLOATING_LAYER.pluginPanel}>
-          <Dialog open={props.open} onOpenChange={(open) => { if (!open) dismiss(); }}
-            onPresenceChange={props.onMobilePresenceChange}
-            title={i18n.t('uiCopy.plugin.launcherTitle')} header={null}
-            presentation="bottom-drawer" class="plugin-mobile-launcher-drawer"
-            contentClass="flex min-h-0 flex-col overflow-hidden p-0" escapeKeyPhase="bubble"
-            onKeyDown={(event) => {
-              if (event.key === 'Escape' && query() && !event.isComposing) {
-                event.preventDefault();
-                setQuery('');
-              }
-            }}>
-            <div id={props.id} class="flex min-h-0 flex-1 flex-col">{contents}</div>
-          </Dialog>
-        </DialogPlacementProvider>
       </Show>
       <PluginPinContextMenu
         request={pinMenu()?.request ?? null}

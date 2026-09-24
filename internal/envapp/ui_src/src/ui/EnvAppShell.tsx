@@ -28,6 +28,7 @@ import {
   Highlighter,
   Layers,
   LayoutDashboard,
+  MoreHorizontal,
   Refresh,
   Search,
   Settings,
@@ -153,6 +154,7 @@ import { ConnectionRecoveryView } from './reconnect/ConnectionRecoveryView';
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { EnvAppThemePicker } from './EnvAppThemePicker';
+import { MobileShellTools, handleMobileToolsEscape, type MobileToolsPage } from './MobileShellTools';
 import {
   EnvironmentRuntimeStatusTooltip,
   type EnvSessionIdentity,
@@ -1136,9 +1138,19 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     placement: 'activity',
     trigger: null,
   });
+  const [mobileNavigationPage, setMobileNavigationPage] = createSignal<'closed' | 'plugins' | MobileToolsPage>('closed');
+  let mobileMoreTrigger: HTMLButtonElement | null = null;
+  let afterMobileNavigationClose: (() => void) | undefined;
   const updatePluginPanel = (update: Partial<PluginPanelState>) => {
+    if (layout.isMobile() && update.open !== undefined) {
+      if (update.open) {
+        afterMobileNavigationClose = undefined;
+        setMobileNavigationPage('plugins');
+      }
+      else if (mobileNavigationPage() === 'plugins') setMobileNavigationPage('closed');
+    }
     setPluginPanelState((current) => {
-      const next = { ...current, ...update };
+      const next = { ...current, ...update, ...(layout.isMobile() ? { open: false } : {}) };
       return next.open === current.open
         && next.placement === current.placement
         && next.trigger === current.trigger
@@ -1146,7 +1158,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         : next;
     });
   };
-  const pluginsPanelOpen = () => pluginPanelState().open;
+  const pluginsPanelOpen = () => layout.isMobile() ? mobileNavigationPage() === 'plugins' : pluginPanelState().open;
   const pluginsPanelTrigger = () => pluginPanelState().trigger;
   const pluginsPanelPlacement = () => pluginPanelState().placement;
   const [externalDockDragController, setExternalDockDragController] = createSignal<WorkbenchExternalDockDragController | null>(null);
@@ -3852,6 +3864,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   };
 
   const activateActivitySurface = (surface: EnvActivitySurfaceId, opts?: { persist?: boolean }) => {
+    if (layout.isMobile()) setMobileNavigationPage('closed');
     if (opts?.persist !== false && viewMode() === 'activity') {
       transientActivityFallback = '';
       setPendingPluginRestore(undefined);
@@ -4093,6 +4106,30 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const [mobileFlowerThreadsOpen, setMobileFlowerThreadsOpen] = createSignal(false);
   let mobileTerminalTrigger: HTMLButtonElement | null = null;
   const [mobileTerminalSessionsOpen, setMobileTerminalSessionsOpen] = createSignal(false);
+  const closeMobileNavigation = (restoreFocus = false) => {
+    const trigger = mobileNavigationPage() === 'plugins' ? pluginsPanelTrigger() : mobileMoreTrigger;
+    setMobileNavigationPage('closed');
+    if (restoreFocus) trigger?.focus({ preventScroll: true });
+  };
+  const openMobileTools = (page: MobileToolsPage = 'more') => {
+    afterMobileNavigationClose = undefined;
+    setMobileNavigationPage(page);
+  };
+  const runAfterMobileNavigation = (action: () => void) => {
+    afterMobileNavigationClose = action;
+    closeMobileNavigation();
+  };
+  createEffect(() => {
+    if (!layout.isMobile() || recoveryVisible() || accessGateVisible()) {
+      setMobileNavigationPage('closed');
+      afterMobileNavigationClose = undefined;
+    }
+    if (mobileNavigationPage() !== 'closed') {
+      setMobileFlowerThreadsOpen(false);
+      setMobileTerminalSessionsOpen(false);
+      setFilesMobileSidebarOpen(false);
+    }
+  });
   createEffect(() => {
     if (!layout.isMobile() || viewMode() !== 'activity' || layout.sidebarActiveTab() !== 'ai') {
       setMobileFlowerThreadsOpen(false);
@@ -4198,7 +4235,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     }
     return items.map(item => isBuiltinActivityPage(item.id) ? {
       ...item, onClick: item.onClick ?? (() => activateActivitySurface(item.id as EnvActivitySurfaceId)),
-    } : item);
+    } : item).map(item => !layout.isMobile() || item.id === 'plugins' ? item : {
+      ...item, onClick: () => {
+        const activate = () => item.onClick?.();
+        if (mobileNavigationPage() !== 'closed' || afterMobileNavigationClose) runAfterMobileNavigation(activate);
+        else activate();
+      },
+    });
   };
 
   const activityBottomItems = (): ActivityBarItem[] => {
@@ -4472,7 +4515,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         description: i18n.t('shell.commandPalette.changeLanguageDescription'),
         category: i18n.t('language.label'),
         icon: Globe,
-        execute: () => setLanguageMenuOpenSeq((value) => value + 1),
+        execute: () => layout.isMobile() ? openMobileTools('language') : setLanguageMenuOpenSeq((value) => value + 1),
       });
     }
 
@@ -4516,7 +4559,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         category: i18n.t('shell.commandPalette.categories.view'),
         keybind: 'mod+shift+l',
         icon: Highlighter,
-        execute: () => setThemeMenuOpenSeq((value) => value + 1),
+        execute: () => layout.isMobile() ? openMobileTools('appearance') : setThemeMenuOpenSeq((value) => value + 1),
       },
       {
         id: 'redeven.env.savePreviewFile',
@@ -4804,10 +4847,86 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
 
   const renderActivityPageLoading = (page: string) => <EnvPageLoading page={page} environment={envId()} />;
 
-  const renderActivityShell = () => (
+  const [mobilePluginContentHost, setMobilePluginContentHost] = createSignal<HTMLElement | null>(null);
+  const renderPluginPanel = () => (
+      <PluginPanel
+        id="redeven-plugin-switcher"
+        open={pluginsPanelOpen()}
+        mobile={layout.isMobile()}
+        mobileContentHost={mobilePluginContentHost()}
+        trigger={pluginsPanelTrigger()}
+        placement={pluginsPanelPlacement()}
+        model={pluginPanelModel()}
+        onClose={() => updatePluginPanel({ open: false })}
+        onOpenCenter={() => void openPluginCenter().catch(reportPluginNavigationFailure)}
+        onOpenPluginDetails={(inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure)}
+        onOpenPluginSurface={(target) => openPluginSurface({
+          ...target,
+        }).catch(reportPluginNavigationFailure)}
+        onDropPlugin={(target, placement) => void openPluginSurface(target, { workbenchPlacement: placement }).catch(reportPluginNavigationFailure)}
+        externalDockDragController={externalDockDragController()}
+        pinnedInventoryKeys={pluginsPanelPlacement() === 'workbench'
+          ? pluginPlacementPins().workbenchInventoryKeys
+          : pluginPlacementPins().activityInventoryKeys}
+        onSetPluginPin={setPluginPin}
+      />
+  );
+
+  const [mobilePanelDisplayPage, setMobilePanelDisplayPage] = createSignal<'plugins' | MobileToolsPage>('more');
+  createEffect(() => {
+    const page = mobileNavigationPage();
+    if (page !== 'closed') setMobilePanelDisplayPage(page);
+  });
+  const mobilePanelContents = () => <>
+    <div ref={setMobilePluginContentHost} hidden={mobilePanelDisplayPage() !== 'plugins'} class="mobile-plugin-content-host flex min-h-0 flex-1 flex-col" />
+    <Show when={mobilePanelDisplayPage() !== 'plugins'}>
+      <MobileShellTools page={mobilePanelDisplayPage() as MobileToolsPage}
+        onPageChange={openMobileTools} onClose={() => closeMobileNavigation(true)}
+        onSearch={() => runAfterMobileNavigation(() => cmd.open())}
+        onNotes={() => runAfterMobileNavigation(toggleNotesOverlay)}
+        onDashboard={() => runAfterMobileNavigation(() => { void openDashboard(); })}
+        manager={downloadManager} notify={notify}
+        theme={{ onSourceChange: setThemeSourceWithRenderBoundary, onShellThemeChange: setShellThemeWithRenderBoundary }} />
+    </Show>
+  </>;
+
+  const renderActivityShell = () => {
+    const panelContents = mobilePanelContents();
+    return (
     <Shell
       fillParent
       hideMobileNavigationWhenKeyboardOpen
+      topBarMobileMode="hidden"
+      mobileNavigationActions={[{
+        id: 'mobile-more', icon: MoreHorizontal, label: i18n.t('shell.mobileTools.more'),
+        buttonRef: (trigger) => { mobileMoreTrigger = trigger; },
+        ariaExpanded: () => mobileNavigationPage() !== 'closed' && mobileNavigationPage() !== 'plugins',
+        ariaControls: 'redeven-mobile-tools', ariaHasPopup: 'dialog',
+        badge: () => downloadManager.activeCount() || (downloadManager.tasks().some(task => task.status === 'failed') ? '!' : undefined),
+        onClick: () => {
+          mobileMoreTrigger?.focus({ preventScroll: true });
+          if (mobileNavigationPage() !== 'closed' && mobileNavigationPage() !== 'plugins') closeMobileNavigation();
+          else openMobileTools();
+        },
+      }]}
+      mobileNavigationPanel={{
+        id: mobilePanelDisplayPage() === 'plugins' ? 'redeven-plugin-switcher' : 'redeven-mobile-tools',
+        open: mobileNavigationPage() !== 'closed',
+        title: mobilePanelDisplayPage() === 'plugins' ? i18n.t('uiCopy.plugin.launcherTitle') : i18n.t('shell.mobileTools.more'),
+        header: null,
+        class: mobilePanelDisplayPage() === 'plugins' ? 'plugin-mobile-launcher-drawer' : 'mobile-tools-drawer',
+        contentClass: 'min-h-0 flex-1 overflow-hidden',
+        trigger: mobilePanelDisplayPage() === 'plugins' ? pluginsPanelTrigger() : mobileMoreTrigger,
+        onOpenChange: (open) => { if (!open) closeMobileNavigation(); },
+        onKeyDown: (event) => handleMobileToolsEscape(event, mobileNavigationPage(), () => openMobileTools()),
+        onPresenceChange: (present) => {
+          if (present || !afterMobileNavigationClose) return;
+          const action = afterMobileNavigationClose;
+          afterMobileNavigationClose = undefined;
+          action();
+        },
+        children: panelContents,
+      }}
       activitySelectionMode="ui-first"
       onActivitySelectionEvent={handleActivitySelectionEvent}
       sidebarMode="auto"
@@ -4929,7 +5048,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         <DebugConsoleWindow controller={debugConsole} />
       </Show>
     </Shell>
-  );
+    );
+  };
 
   const renderWorkbenchContent = () => (
     <div ref={setWorkbenchNotesViewportAnchor} class="relative h-full min-h-0 overflow-hidden outline-none" tabindex={-1}>
@@ -4996,9 +5116,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     </div>
   );
 
-  const [mobilePluginDrawerPresent, setMobilePluginDrawerPresent] = createSignal(false);
   const mobilePluginModalOpen = () => (
-    mobilePluginDrawerPresent() ||
     layout.isMobile() && viewMode() === 'activity' && activityPluginWindows().length > 0
   );
 
@@ -5146,27 +5264,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         consumeAIThreadFocusRequest,
       }}
     >
-      <PluginPanel
-        onMobilePresenceChange={setMobilePluginDrawerPresent}
-        id="redeven-plugin-switcher"
-        open={pluginsPanelOpen()}
-        mobile={layout.isMobile()}
-        trigger={pluginsPanelTrigger()}
-        placement={pluginsPanelPlacement()}
-        model={pluginPanelModel()}
-        onClose={() => updatePluginPanel({ open: false })}
-        onOpenCenter={() => void openPluginCenter().catch(reportPluginNavigationFailure)}
-        onOpenPluginDetails={(inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure)}
-        onOpenPluginSurface={(target) => openPluginSurface({
-          ...target,
-        }).catch(reportPluginNavigationFailure)}
-        onDropPlugin={(target, placement) => void openPluginSurface(target, { workbenchPlacement: placement }).catch(reportPluginNavigationFailure)}
-        externalDockDragController={externalDockDragController()}
-        pinnedInventoryKeys={pluginsPanelPlacement() === 'workbench'
-          ? pluginPlacementPins().workbenchInventoryKeys
-          : pluginPlacementPins().activityInventoryKeys}
-        onSetPluginPin={setPluginPin}
-      />
+      {renderPluginPanel()}
       <PluginPinContextMenu
         request={pluginPinMenu()?.request ?? null}
         ariaLabel={i18n.t('uiCopy.plugin.pluginMenuLabel', {

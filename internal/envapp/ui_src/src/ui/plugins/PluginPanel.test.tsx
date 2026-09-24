@@ -695,24 +695,23 @@ describe('PluginPanel', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it('uses the shared mobile drawer, keeps its search manual and dismisses through its backdrop', async () => {
+  it('supplies retained mobile content without owning a global modal', async () => {
     const trigger = createTrigger();
-    trigger.focus();
-    const [open, setOpen] = createSignal(true);
+    const onClose = vi.fn();
     const mount = document.createElement('div');
     document.body.append(mount);
-    dispose = render(() => <PluginPanel open={open()} mobile trigger={trigger} model={panelModel()}
-      onClose={() => setOpen(false)} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />, mount);
-    await vi.waitFor(() => expect(document.querySelector('[data-floe-dialog-panel]')).not.toBeNull());
-    const dialog = document.querySelector('[data-floe-dialog-panel]')!;
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
-    expect(dialog.classList.contains('plugin-mobile-launcher-drawer')).toBe(true);
-    expect(dialog.querySelector('[data-floe-autofocus]')?.tagName).toBe('BUTTON');
-    expect(document.activeElement).not.toBe(document.querySelector('[data-plugin-launcher-search]'));
-    document.querySelector<HTMLElement>('[data-floe-dialog-backdrop]')!.click();
-    expect(open()).toBe(false);
-    expect(dialog.getAttribute('data-floating-presence')).toBe('exiting');
-    await vi.waitFor(() => expect(dialog.isConnected).toBe(false));
+    dispose = render(() => <PluginPanel open mobile contentOnly trigger={trigger} model={panelModel()}
+      onClose={onClose} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />, mount);
+    expect(document.querySelector('[data-floe-dialog-panel]')).toBeNull();
+    expect(mount.querySelector('[data-floe-autofocus]')?.tagName).toBe('BUTTON');
+    const search = mount.querySelector<HTMLInputElement>('[data-plugin-launcher-search]')!;
+    search.value = 'metrics';
+    search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(search.value).toBe('');
+    expect(onClose).not.toHaveBeenCalled();
+    mount.querySelector<HTMLButtonElement>('[data-floe-autofocus]')!.click();
+    expect(onClose).toHaveBeenCalledOnce();
     expect(document.activeElement).toBe(trigger);
   });
 

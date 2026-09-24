@@ -380,6 +380,11 @@
     "fileUnavailable": "Diese Datei ist im ausgewählten Stash nicht mehr verfügbar."
   },
   "shell": {
+    "mobileTools": {
+      "more": "Mehr",
+      "search": "Suche und Befehle",
+      "back": "Zurück zu den Werkzeugen"
+    },
     "loadingPage": "Seite wird geladen…",
     "accessibility": {
       "skipLinkLabel": "Zum Inhalt der Redeven-Umgebung springen",

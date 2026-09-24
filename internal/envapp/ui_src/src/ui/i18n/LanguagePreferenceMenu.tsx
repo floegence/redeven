@@ -13,7 +13,7 @@ import {
 } from './localeMeta';
 import { useI18n } from './I18nProvider';
 
-export type LanguagePreferenceMenuVariant = 'topbar' | 'access_gate';
+export type LanguagePreferenceMenuVariant = 'topbar' | 'access_gate' | 'inline';
 
 export type LanguagePreferenceMenuProps = Readonly<{
   variant: LanguagePreferenceMenuVariant;
@@ -93,6 +93,20 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
     focusOptionAt(baseIndex + delta);
   };
 
+  const handleOptionsKeyDown: JSX.EventHandler<HTMLDivElement, KeyboardEvent> = (event) => {
+    if (event.key === 'Tab' && props.variant !== 'inline') closeMenu();
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveFocus(1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveFocus(-1);
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      focusOptionAt(event.key === 'Home' ? 0 : optionButtons().length - 1);
+    }
+  };
+
   createEffect(() => {
     const nextSeq = props.openRequestSeq?.() ?? 0;
     if (nextSeq <= 0 || nextSeq === lastOpenRequestSeq) {
@@ -170,7 +184,7 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
   const selectLanguage = async (value: RedevenLocalePreference) => {
     const preference = normalizeLocalePreference(value);
     await i18n.setLocalePreference(preference);
-    closeMenu(true);
+    if (props.variant !== 'inline') closeMenu(true);
     props.notify?.success(
       i18n.t('language.updatedTitle'),
       i18n.t('language.updatedMessage', {
@@ -179,8 +193,36 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
     );
   };
 
+  const languageOptions = () => (
+            <For each={options()}>
+              {(option) => {
+                const selected = () => i18n.localePreference() === option.value;
+                return (
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={selected()}
+                    data-envapp-language-option={option.value}
+                    class={cn(
+                      'flex min-h-[44px] w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors duration-75',
+                      'hover:bg-accent focus:bg-accent focus:outline-none',
+                      selected() && 'font-medium text-foreground',
+                    )}
+                  onClick={() => void selectLanguage(option.value)}
+                  >
+                    <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                      {selected() ? <Check class="h-3 w-3" /> : null}
+                    </span>
+                    <span class="min-w-0 flex-1 truncate">{option.label}</span>
+                  </button>
+                );
+              }}
+            </For>
+  );
+
   return (
     <Show when={i18n.source() === 'browser'}>
+      <Show when={props.variant === 'inline'} fallback={
       <div ref={(el) => { rootEl = el; }} class="relative shrink-0">
         <button
           ref={(el) => { triggerEl = el; }}
@@ -216,25 +258,7 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
               'animate-in fade-in [animation-duration:150ms] transition-none',
             )}
             style={{ width: `${placement().width}px`, 'max-height': `${placement().height}px` }}
-            onKeyDown={(event) => {
-              if (event.key === 'Tab') closeMenu();
-              if (event.key === 'ArrowDown') {
-                event.preventDefault();
-                moveFocus(1);
-              } else if (event.key === 'ArrowUp') {
-                event.preventDefault();
-                moveFocus(-1);
-              } else if (event.key === 'Home') {
-                event.preventDefault();
-                focusOptionAt(0);
-              } else if (event.key === 'End') {
-                event.preventDefault();
-                const items = optionButtons();
-                if (items.length > 0) {
-                  items[items.length - 1]?.focus();
-                }
-              }
-            }}
+            onKeyDown={handleOptionsKeyDown}
           >
             <div class="px-2 py-1.5">
               <div class="text-[11px] font-semibold text-foreground">{i18n.t('language.label')}</div>
@@ -243,34 +267,17 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
               </div>
             </div>
             <div class="my-1 h-px bg-border" />
-            <For each={options()}>
-              {(option) => {
-                const selected = () => i18n.localePreference() === option.value;
-                return (
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={selected()}
-                    data-envapp-language-option={option.value}
-                    class={cn(
-                      'flex min-h-[44px] w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors duration-75',
-                      'hover:bg-accent focus:bg-accent focus:outline-none',
-                      selected() && 'font-medium text-foreground',
-                    )}
-                  onClick={() => void selectLanguage(option.value)}
-                  >
-                    <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-                      {selected() ? <Check class="h-3 w-3" /> : null}
-                    </span>
-                    <span class="min-w-0 flex-1 truncate">{option.label}</span>
-                  </button>
-                );
-              }}
-            </For>
+            {languageOptions()}
           </div>
           </SurfaceFloatingLayer>
         </Show>
       </div>
+      }>
+        <div ref={(el) => { menuEl = el; }} role="menu" aria-label={i18n.t('language.optionsLabel')}
+          data-envapp-language-menu="inline" class="p-2" onKeyDown={handleOptionsKeyDown}>
+          {languageOptions()}
+        </div>
+      </Show>
     </Show>
   );
 }
