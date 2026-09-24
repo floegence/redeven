@@ -446,7 +446,7 @@ func TestBrowserWorkspaceRestoresSavedTabsOnlyWhenExplicitlyOpened(t *testing.T)
 	// Browser loss retires live identities but must not progressively erase the
 	// durable snapshot as individual source-close events arrive.
 	runtime.connectMu.Lock()
-	runtime.managedProfiles["browser-main"].close()
+	runtime.managedProfiles["browser-main"].fault()
 	runtime.connectMu.Unlock()
 	for {
 		runtime.connectMu.Lock()
@@ -464,6 +464,12 @@ func TestBrowserWorkspaceRestoresSavedTabsOnlyWhenExplicitlyOpened(t *testing.T)
 	saved, err := runtime.BrowserLibraryTabs(ctx, meta, "browser-main")
 	if err != nil || len(saved) != 2 {
 		t.Fatalf("browser loss erased recovery state: %+v %v", saved, err)
+	}
+	if _, err := runtime.OpenBrowserWorkspace(ctx, meta, BrowserWorkspaceRequest{ManagedProfileID: "browser-main"}); BrowserErrorCode(err) != "BROWSER_SERVICE_FAILED" {
+		t.Fatalf("browser loss bypassed explicit recovery: %v", err)
+	}
+	if _, err := runtime.RecoverBrowser(ctx, meta, runtime.browserServiceSnapshot().Generation); err != nil {
+		t.Fatal(err)
 	}
 	reopened, err := runtime.OpenBrowserWorkspace(ctx, meta, BrowserWorkspaceRequest{ManagedProfileID: "browser-main"})
 	if err != nil || slices.Contains(targets, reopened.InitialTarget) {

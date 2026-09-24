@@ -59,7 +59,14 @@ protocol and the independent health deadline retire the process once. An
 uncertain tab-creation outcome is reported explicitly and never replayed.
 Unexpected managed-process loss marks the same service generation failed and
 requires explicit recovery. Intentional disablement or shutdown does not
-publish a new fault.
+publish a new fault. Discovery marks failed managed profiles
+`connection_required` and offers no default ready candidate until recovery;
+losing a single tab leaves the healthy profile available for a new selection.
+
+Source retirement retains the semantic navigation guard until the debugger
+detaches. Removing its paused-request listener while interception is still
+enabled can block restoration and cleanup; input-release failures remain
+visible and do not grant a replacement controller.
 
 ## Qualification
 
@@ -83,5 +90,6 @@ not prove installation or upgrade behavior.
 - `redeven:internal/ai/computer_browser_recovery_test.go` - Real process termination, deduplication, saved tabs and privacy barriers.
 - `redeven:internal/ai/computer_managed_browser.go` - Process-owned response reader and bounded health handling.
 - `redeven:internal/ai/computer_managed_browser_ipc_test.go` - Canceled caller and late-response isolation.
+- `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.node-test.mjs` - Navigation guard and input-release retirement ordering.
 - `redeven:internal/codeapp/appserver/browser_workspace_api.go` - Authorized recovery operation.
 - `redeven:scripts/check_browser_qualification.test.mjs` - Strict executed-test accounting.

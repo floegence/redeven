@@ -44,6 +44,30 @@ test('a source popup waits for Runtime admission before acquiring its shared ide
   assert.equal(popupOwner.source.id, 'runtime-approved-popup');
 });
 
+test('source retirement keeps navigation guards until the debugger detaches', { timeout: 10000 }, async t => {
+  const { createComputerBrowserSource } = await import('./computerBrowserSource.mjs');
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  const context = page.context();
+  const attach = context.newCDPSession.bind(context);
+  let guardListeners;
+  context.newCDPSession = async target => {
+    const transport = await attach(target);
+    const detach = transport.detach.bind(transport);
+    transport.detach = async () => {
+      guardListeners = transport.listenerCount('Fetch.requestPaused');
+      return detach();
+    };
+    return transport;
+  };
+  const owner = await createComputerBrowserSource(page, 'retiring-source');
+  await owner.setUserBrowsing(true);
+  await owner.dispose();
+  assert.ok(guardListeners > 0, 'An enabled navigation guard must survive until its debugger is detached');
+  assert.equal(owner.controller.page.sessions.size, 0);
+});
+
 test('AI and DOM projection borrow the same debugger and frame owner', { timeout: 30000 }, async t => {
   const { createComputerBrowserSource } = await import('./computerBrowserSource.mjs');
   const server = http.createServer((_request, response) => {

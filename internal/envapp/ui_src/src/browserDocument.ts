@@ -187,12 +187,12 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
     },
   });
   const chrome = document.querySelector<HTMLElement>('.floe-browser');
+  for (const [key, value] of Object.entries(configuration.theme)) {
+    if (key.startsWith('--floe-')) chrome?.style.setProperty(key, value);
+  }
   if (chrome) {
     const palette = getComputedStyle(chrome);
     for (const token of ['background', 'foreground', 'muted', 'line', 'accent', 'surface', 'field']) document.documentElement.style.setProperty(`--floe-${token}`, palette.getPropertyValue(`--floe-${token}`));
-  }
-  for (const [key, value] of Object.entries(configuration.theme)) {
-    if (key.startsWith('--floe-')) chrome?.style.setProperty(key, value);
   }
   const visibility = () => { void request({ method: 'visibility', visible: !document.hidden }).catch(() => undefined); };
   document.addEventListener('visibilitychange', visibility);
