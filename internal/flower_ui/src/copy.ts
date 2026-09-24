@@ -524,11 +524,15 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalComposerDescription: string;
     toolApprovalDetails: string;
     toolApprovalScope: string;
+    toolApprovalOnceScope: string;
+    toolApprovalExpandCommand: string;
+    toolApprovalHideCommand: string;
+    toolApprovalEligibleCount: (count: number) => string;
     toolApprovalQueueCount: (count: number) => string;
     toolApprovalPendingCount: (count: number) => string;
-    toolApprovalRejectBatch: string;
+    toolApprovalRejectBatch: (count: number) => string;
     toolApprovalRejectBatchAction: (count: number) => string;
-    toolApprovalApproveBatch: string;
+    toolApprovalApproveBatch: (count: number) => string;
     toolApprovalApproveBatchAction: (count: number) => string;
     toolApprovalOutsideWorkspaceRisk: string;
     toolApprovalWritesFilesRisk: string;
@@ -866,11 +870,15 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
     toolApprovalDetails: 'View action details',
     toolApprovalScope: 'Approval applies only to the listed actions.',
+    toolApprovalOnceScope: 'This time only',
+    toolApprovalExpandCommand: 'View full command',
+    toolApprovalHideCommand: 'Collapse',
+    toolApprovalEligibleCount: (count) => `Can approve · ${count}`,
     toolApprovalQueueCount: (count) => `${count} more approval${count === 1 ? '' : 's'} waiting`,
-    toolApprovalPendingCount: (count) => `${count} pending tool approval${count === 1 ? '' : 's'}`,
-    toolApprovalRejectBatch: 'Reject all',
+    toolApprovalPendingCount: (count) => `Approval required · ${count}`,
+    toolApprovalRejectBatch: (count) => `Reject · ${count}`,
     toolApprovalRejectBatchAction: (count) => `Reject all ${count} pending tool approvals`,
-    toolApprovalApproveBatch: 'Allow all',
+    toolApprovalApproveBatch: (count) => `Allow once · ${count}`,
     toolApprovalApproveBatchAction: (count) => `Allow all ${count} pending tool approvals`,
     toolApprovalOutsideWorkspaceRisk: 'This action may access resources outside the workspace.',
     toolApprovalWritesFilesRisk: 'This action will modify files.',

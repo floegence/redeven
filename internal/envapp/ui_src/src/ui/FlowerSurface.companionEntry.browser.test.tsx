@@ -3,7 +3,7 @@ import './flower-feature.css';
 
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { BottomBarCompanion, type BottomBarCompanionPhase } from '@floegence/floe-webapp-core/layout';
 import { FlowerSurface, createFlowerComposerDraftCoordinator, type FlowerThreadFocusRequest, type FlowerSurfaceProps } from '../../../../flower_ui/src';
@@ -12,6 +12,8 @@ import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtime
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import type { FlowerThreadSnapshot, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { adapter, inputRequest, liveBootstrap, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+
+beforeEach(async () => { await page.viewport(1280, 800); });
 
 const companionCopy = {
   label: 'Switch Flower conversation', searchPlaceholder: 'Search conversations...',
@@ -95,15 +97,16 @@ function mountCompanion(selected: FlowerThreadSnapshot, summary?: FlowerSurfaceP
       />
     </BottomBarCompanion>
   ), runtime);
-  onTestFinished(dispose);
+  onTestFinished(() => { dispose(); runtime.remove(); anchor.remove(); mount.remove(); outside.remove(); });
   return { mount, outside, open, phase, setOpen, requestOpen, setFocusRequest, surfaceAdapter, publishCurrent, setSummary };
 }
 
 type Fixture = ReturnType<typeof mountCompanion>;
 it('clears recalled history before Escape dismisses the companion', async () => {
   const fixture = mountCompanion(thread());
+  await waitFor(() => (fixture.mount.querySelector('.flower-composer textarea')?.getBoundingClientRect().width ?? 0) > 100);
   fixture.setOpen(true);
-  await waitFor(() => fixture.mount.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false'
+  await waitFor(() => fixture.phase() === 'expanded' && fixture.mount.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false'
     && Boolean(fixture.mount.querySelector('.flower-composer textarea')));
   const editor = fixture.mount.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
   editor.focus();
@@ -118,7 +121,7 @@ it('clears recalled history before Escape dismisses the companion', async () => 
 
 async function collapsedAction(fixture: Fixture): Promise<HTMLButtonElement> {
   await waitFor(() => fixture.mount.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false'
-    && Boolean(fixture.mount.querySelector('.flower-companion-collapsed-action')));
+    && (fixture.mount.querySelector('.flower-companion-collapsed-action')?.getBoundingClientRect().width ?? 0) > 100);
   return fixture.mount.querySelector<HTMLButtonElement>('.flower-companion-collapsed-action')!;
 }
 
@@ -131,8 +134,7 @@ describe('Flower companion entry with the published shell', () => {
   it('opens the selected choice request from the collapsed entry without submitting it', async () => {
     await page.viewport(1280, 800);
     const fixture = mountCompanion(choiceThread());
-    await waitFor(() => fixture.mount.querySelector('main')?.dataset.flowerSelectedThreadStatus === 'waiting_user');
-    const action = fixture.mount.querySelector<HTMLButtonElement>('.flower-companion-collapsed-action');
+    const action = await collapsedAction(fixture);
     expect(action, 'a choice request must leave a visible drawer entry').not.toBeNull();
     expect(action!.getBoundingClientRect().width).toBeGreaterThan(100);
     await userEvent.click(action!);

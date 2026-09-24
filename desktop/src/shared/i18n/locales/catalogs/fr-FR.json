@@ -495,8 +495,8 @@
       "toolApprovalDetails": "Voir les détails de l’action",
       "toolApprovalScope": "L’autorisation s’applique uniquement aux actions indiquées.",
       "toolApprovalQueueCount": "Approbations supplémentaires en attente : {count}",
-      "toolApprovalPendingCount": "{count} approbation(s) d’outil en attente",
-      "toolApprovalRejectBatch": "Tout refuser",
+      "toolApprovalPendingCount": "À approuver · {count}",
+      "toolApprovalRejectBatch": "Refuser · {count}",
       "toolApprovalRejectBatchAction": "Refuser les {count} approbations d’outils en attente",
       "toolApprovalOutsideWorkspaceRisk": "Cette action peut accéder à des ressources en dehors de l’espace de travail.",
       "toolApprovalWritesFilesRisk": "Cette action modifiera des fichiers.",
@@ -542,7 +542,7 @@
       "workingDirPickerRecent": "Récents",
       "workingDirPickerConfirm": "Choisir",
       "linkedContextLabel": "Contexte associé",
-      "toolApprovalApproveBatch": "Tout autoriser",
+      "toolApprovalApproveBatch": "Autoriser une fois · {count}",
       "toolApprovalApproveBatchAction": "Autoriser les {count} approbations d’outils en attente",
       "restoredInputTitle": "Entrée conservée après restauration",
       "restoredInputDescription": "Cette entrée ne sera pas exécutée automatiquement. Copiez-la dans une nouvelle tâche pour la relancer.",
@@ -555,7 +555,11 @@
       "computerFrameRateHint": "Une fréquence plus élevée utilise davantage de bande passante. La vitesse réelle dépend de votre appareil et de votre connexion.",
       "computerReceivedFrameRate": "Réception : {fps} FPS",
       "computerControlTaken": "Contrôle pris",
-      "computerControlNotReady": "La page n’est pas encore prête. Effectuez l’étape indiquée ci-dessus, puis réessayez."
+      "computerControlNotReady": "La page n’est pas encore prête. Effectuez l’étape indiquée ci-dessus, puis réessayez.",
+      "toolApprovalOnceScope": "Cette fois uniquement",
+      "toolApprovalExpandCommand": "Afficher la commande complète",
+      "toolApprovalHideCommand": "Réduire",
+      "toolApprovalEligibleCount": "Approbation possible · {count}"
     },
     "threadList": {
       "title": "Discussions",

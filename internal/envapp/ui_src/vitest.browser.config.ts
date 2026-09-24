@@ -400,6 +400,51 @@ export default mergeConfig(viteConfig, defineConfig({
               }));
           });
         },
+        inspectFlowerApprovalZoom: async ({ page }) => {
+          const frame = await frameForSelector(page, '.flower-approval-surface');
+          const session = await page.context().newCDPSession(page);
+          const viewport = page.viewportSize();
+          const frameElement = await frame.frameElement();
+          const frameStyle = await frameElement.getAttribute('style');
+          const hostStyle = await frameElement.evaluate(element => element.parentElement!.getAttribute('style'));
+          try {
+            // Match 200% browser zoom: halve the CSS viewport and double pixel density.
+            await session.send('Emulation.setDeviceMetricsOverride', { width: 640, height: 400, deviceScaleFactor: 2, mobile: false });
+            await frameElement.evaluate(element => {
+              element.parentElement!.style.setProperty('transform', 'none', 'important');
+              Object.assign((element as HTMLElement).style, { position: 'fixed', inset: '0', width: '640px', height: '400px', transform: 'none' });
+            });
+            await frame.waitForFunction(() => window.devicePixelRatio === 2 && window.innerWidth === 640);
+            await frame.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+            const geometry = await frame.evaluate(() => {
+              const shell = document.querySelector<HTMLElement>('[data-floe-bottom-bar-companion]')!;
+              const surface = shell.querySelector<HTMLElement>('.flower-decision-surface')!;
+              const bounds = shell.getBoundingClientRect();
+              const clippedControls = [...shell.querySelectorAll('.flower-approval-queue-footer button')].filter(button => {
+                const rect = button.getBoundingClientRect();
+                return rect.top < bounds.top || rect.bottom > bounds.bottom || rect.left < bounds.left || rect.right > bounds.right;
+              }).length;
+              return { devicePixelRatio: window.devicePixelRatio, viewportWidth: window.innerWidth,
+                overflow: surface.scrollWidth - surface.clientWidth, clippedControls };
+            });
+            const capture = await session.send('Page.captureScreenshot', { format: 'png' });
+            const screenshot = Buffer.from(capture.data, 'base64');
+            const output = path.resolve(__dirname, '.vitest-attachments');
+            await mkdir(output, { recursive: true });
+            await writeFile(path.join(output, 'approval-200-percent-zoom.png'), screenshot);
+            return { ...geometry, screenshotWidth: PNG.sync.read(screenshot).width };
+          } finally {
+            await frameElement.evaluate((element, styles) => {
+              for (const [target, style] of [[element, styles.frame], [element.parentElement!, styles.host]] as const) {
+                if (style === null) target.removeAttribute('style');
+                else target.setAttribute('style', style);
+              }
+            }, { frame: frameStyle, host: hostStyle });
+            await session.send('Emulation.clearDeviceMetricsOverride');
+            await session.detach();
+            if (viewport) await page.setViewportSize(viewport);
+          }
+        },
         inspectWebServicesZoom: async ({ page }) => {
           const frame = await frameForSelector(page, '.web-services');
           const session = await page.context().newCDPSession(page);

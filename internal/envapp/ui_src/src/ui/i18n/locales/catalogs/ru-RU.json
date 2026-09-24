@@ -5510,8 +5510,8 @@
       "toolApprovalDetails": "Показать подробности действия",
       "toolApprovalScope": "Разрешение действует только для перечисленных действий.",
       "toolApprovalQueueCount": "Еще ожидают подтверждения: {count}",
-      "toolApprovalPendingCount": "Ожидают подтверждения инструментов: {count}",
-      "toolApprovalRejectBatch": "Отклонить все",
+      "toolApprovalPendingCount": "Ожидают подтверждения · {count}",
+      "toolApprovalRejectBatch": "Отклонить · {count}",
       "toolApprovalRejectBatchAction": "Отклонить все ожидающие подтверждения инструментов ({count})",
       "toolApprovalOutsideWorkspaceRisk": "Это действие может обращаться к ресурсам за пределами рабочей области.",
       "toolApprovalWritesFilesRisk": "Это действие изменит файлы.",
@@ -5566,11 +5566,15 @@
       "workingDirPickerRecent": "Недавние",
       "workingDirPickerConfirm": "Выбрать",
       "linkedContextLabel": "Связанный контекст",
-      "toolApprovalApproveBatch": "Разрешить все",
+      "toolApprovalApproveBatch": "Разрешить один раз · {count}",
       "toolApprovalApproveBatchAction": "Разрешить все ожидающие подтверждения инструментов ({count})",
       "restoredInputTitle": "Ввод, сохранённый после восстановления",
       "restoredInputDescription": "Этот ввод не будет выполнен автоматически. Для повторного выполнения скопируйте его в новую задачу.",
-      "restoredInputCopy": "Скопировать ввод"
+      "restoredInputCopy": "Скопировать ввод",
+      "toolApprovalOnceScope": "Только в этот раз",
+      "toolApprovalExpandCommand": "Показать команду целиком",
+      "toolApprovalHideCommand": "Свернуть",
+      "toolApprovalEligibleCount": "Можно подтвердить · {count}"
     },
     "threadList": {
       "title": "Беседы",

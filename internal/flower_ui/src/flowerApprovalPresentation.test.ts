@@ -23,6 +23,12 @@ function action(input: Partial<FlowerApprovalAction> & Pick<FlowerApprovalAction
 }
 
 describe('presentFlowerApproval', () => {
+  it('preserves command whitespace for exact inspection and copying', () => {
+    const command = '  printf "first line"\n\nprintf "second line"\n';
+    expect(presentFlowerApproval(action({ tool_name: 'terminal.exec', summary: { label: command.trim(), command } }), copy)).toMatchObject({
+      command, operationLabel: 'Run command',
+    });
+  });
   it.each(['file.write', 'file.edit'])('presents %s as a file edit', (toolName) => {
     const presentation = presentFlowerApproval(action({
       tool_name: toolName,

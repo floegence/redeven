@@ -1,9 +1,12 @@
 import '../index.css';
 import './flower-feature.css';
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 import type { FlowerInputRequest, FlowerLiveStreamEnvelope, FlowerSubmitInputReceipt, FlowerApprovalCommandResult } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import { adapter, deferred, flush, inputRequest, liveBootstrap, renderSurfaceWithDraftCoordinator, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+
+beforeEach(async () => { await page.viewport(1280, 900); });
 
 function controlledStream(summaries: ReturnType<typeof thread>[]) {
   const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 1, kind: 'ready', summaries }];
@@ -139,15 +142,15 @@ it('retains a newly arrived approval during a pending batch and keeps navigation
   await waitFor(() => !!runtime.querySelector(`[data-thread-id="${waiting.thread_id}"] button`));
   (runtime.querySelector(`[data-thread-id="${waiting.thread_id}"] button`) as HTMLButtonElement).click();
   const button = (label: string) => Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision')).find((button) => button.textContent?.trim() === label);
-  await waitFor(() => !!button('Allow all'));
-  button('Allow all')!.click();
+  await waitFor(() => !!button('Allow once · 2'));
+  button('Allow once · 2')!.click();
   stream.push({ schema_version: 1, kind: 'thread.batch', thread_id: waiting.thread_id,
     current: runtimeCurrentView({ ...waiting, approval_actions: [first, second, later] }, 2) });
   await waitFor(() => runtime.querySelectorAll('[data-flower-composer-approval="true"]').length === 3);
   expect(submitApproval).toHaveBeenCalledExactlyOnceWith({ thread_id: waiting.thread_id, interaction_ids: ['first', 'second'], approved: true });
   expect(runtime.querySelector<HTMLButtonElement>('[data-flower-approval-action-id="first"] .flower-composer-approval-decision')?.disabled).toBe(true);
   expect(runtime.querySelector<HTMLButtonElement>('[data-flower-approval-action-id="later"] .flower-composer-approval-decision')?.disabled).toBe(false);
-  expect(button('Allow all')?.disabled).toBe(true);
+  expect(button('Allow once · 3')?.disabled).toBe(true);
   (runtime.querySelector(`[data-thread-id="${other.thread_id}"] button`) as HTMLButtonElement).click();
   await waitFor(() => runtime.querySelector(`[data-thread-id="${other.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
   response.resolve({ ok: true, current: runtimeCurrentView({ ...waiting, approval_actions: [later] }, 3) });

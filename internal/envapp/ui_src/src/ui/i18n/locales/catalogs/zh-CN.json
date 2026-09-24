@@ -5407,8 +5407,8 @@
       "toolApprovalDetails": "查看操作详情",
       "toolApprovalScope": "授权仅对列出的操作生效。",
       "toolApprovalQueueCount": "还有 {count} 个批准等待处理",
-      "toolApprovalPendingCount": "{count} 个工具待批准",
-      "toolApprovalRejectBatch": "拒绝全部",
+      "toolApprovalPendingCount": "待审批 · {count} 项",
+      "toolApprovalRejectBatch": "拒绝 {count} 项",
       "toolApprovalRejectBatchAction": "拒绝全部 {count} 个待批准工具",
       "toolApprovalOutsideWorkspaceRisk": "此操作可能访问工作区之外的资源。",
       "toolApprovalWritesFilesRisk": "此操作会修改文件。",
@@ -5463,11 +5463,15 @@
       "workingDirPickerRecent": "最近使用",
       "workingDirPickerConfirm": "选择",
       "linkedContextLabel": "已关联上下文",
-      "toolApprovalApproveBatch": "允许全部",
+      "toolApprovalApproveBatch": "允许 {count} 项一次",
       "toolApprovalApproveBatchAction": "允许全部 {count} 个待批准工具",
       "restoredInputTitle": "恢复后保留的输入",
       "restoredInputDescription": "此输入不会自动运行。再次运行前，请将其复制到新任务。",
-      "restoredInputCopy": "复制输入"
+      "restoredInputCopy": "复制输入",
+      "toolApprovalOnceScope": "仅限本次",
+      "toolApprovalExpandCommand": "查看完整命令",
+      "toolApprovalHideCommand": "收起",
+      "toolApprovalEligibleCount": "可处理 {count} 项"
     },
     "threadList": {
       "title": "对话",

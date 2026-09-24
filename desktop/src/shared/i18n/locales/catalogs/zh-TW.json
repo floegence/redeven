@@ -495,8 +495,8 @@
       "toolApprovalDetails": "檢視操作詳情",
       "toolApprovalScope": "授權僅適用於列出的操作。",
       "toolApprovalQueueCount": "還有 {count} 個核准等待處理",
-      "toolApprovalPendingCount": "{count} 個工具待核准",
-      "toolApprovalRejectBatch": "拒絕全部",
+      "toolApprovalPendingCount": "待核准 · {count} 項",
+      "toolApprovalRejectBatch": "拒絕 {count} 項",
       "toolApprovalRejectBatchAction": "拒絕全部 {count} 個待核准工具",
       "toolApprovalOutsideWorkspaceRisk": "此操作可能存取工作區之外的資源。",
       "toolApprovalWritesFilesRisk": "此操作會修改檔案。",
@@ -542,7 +542,7 @@
       "workingDirPickerRecent": "最近使用",
       "workingDirPickerConfirm": "選擇",
       "linkedContextLabel": "已連結內容",
-      "toolApprovalApproveBatch": "核准全部",
+      "toolApprovalApproveBatch": "允許 {count} 項一次",
       "toolApprovalApproveBatchAction": "核准全部 {count} 個待核准工具",
       "restoredInputTitle": "還原後保留的輸入",
       "restoredInputDescription": "此輸入不會自動執行。再次執行前，請將其複製到新任務。",
@@ -555,7 +555,11 @@
       "computerFrameRateHint": "提高幀率會占用更多頻寬。實際更新速度取決於裝置和網路。",
       "computerReceivedFrameRate": "實際接收 {fps} FPS",
       "computerControlTaken": "已接管",
-      "computerControlNotReady": "頁面尚未準備好。請依上方說明完成所需步驟，再重試。"
+      "computerControlNotReady": "頁面尚未準備好。請依上方說明完成所需步驟，再重試。",
+      "toolApprovalOnceScope": "僅限本次",
+      "toolApprovalExpandCommand": "檢視完整命令",
+      "toolApprovalHideCommand": "收合",
+      "toolApprovalEligibleCount": "可處理 {count} 項"
     },
     "threadList": {
       "title": "對話",

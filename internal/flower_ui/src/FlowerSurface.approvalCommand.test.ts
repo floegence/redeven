@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const stylesPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'styles', 'flower.css');
 const surfacePath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'FlowerSurface.tsx');
+const rowPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'FlowerApprovalRow.tsx');
 
 function readFile(filePath: string): string {
   return fs.readFileSync(filePath, 'utf8');
@@ -70,8 +71,10 @@ describe('Flower approval command presentation', () => {
     const actionsRule = cssRule(css, '.flower-approval-decision-group');
     const decisionRule = cssRule(css, '.flower-composer-approval-decision');
 
-    expect(surface).toContain('const FlowerApprovalDecisionActions: Component<FlowerApprovalDecisionActionsProps>');
-    expect(surface.match(/^\s+<FlowerApprovalDecisionActions/gmu)).toHaveLength(2);
+    const row = readFile(rowPath);
+    expect(row).toContain('export function FlowerApprovalDecisionActions(');
+    expect(row).toContain('<FlowerApprovalDecisionActions');
+    expect(surface).toContain('<FlowerApprovalDecisionActions');
     expect(surface).not.toContain('flower-approval-decision-divider');
     expect(actionsRule).toContain('gap: 0.5rem');
     expect(actionsRule).not.toContain('overflow: hidden');

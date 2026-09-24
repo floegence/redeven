@@ -25,6 +25,7 @@ import { useEnvContext } from './EnvContext';
 import { readDesktopSessionContextSnapshot, retryDesktopModels } from '../services/desktopSessionContext';
 import { openConnectionCenter, openFlowerSettings } from '../services/desktopShellBridge';
 import '../flower-feature.css';
+import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS, REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import type { EnvSurfaceId } from '../envViewMode';
 
@@ -185,6 +186,8 @@ export function EnvAIPage(props: EnvAIPageProps) {
         adapter={adapter()}
         filesystemScopeKey={filesystemPicker.scopeKey}
         filesystemScrollViewportProps={filesystemPicker.scrollViewportProps}
+        approvalScrollViewportProps={REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
+        approvalReadingProps={REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS}
         notify={(notice: FlowerSurfaceNotification) => {
           const title = trim(notice.title) || (notice.tone === 'error'
             ? i18n.t('flower.errorNotificationTitle')

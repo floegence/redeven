@@ -5407,8 +5407,8 @@
       "toolApprovalDetails": "Aktionsdetails anzeigen",
       "toolApprovalScope": "Die Genehmigung gilt nur für die aufgeführten Aktionen.",
       "toolApprovalQueueCount": "Weitere ausstehende Genehmigungen: {count}",
-      "toolApprovalPendingCount": "{count} ausstehende Tool-Genehmigung(en)",
-      "toolApprovalRejectBatch": "Alle ablehnen",
+      "toolApprovalPendingCount": "Freigabe erforderlich · {count}",
+      "toolApprovalRejectBatch": "Ablehnen · {count}",
       "toolApprovalRejectBatchAction": "Alle {count} ausstehenden Tool-Genehmigungen ablehnen",
       "toolApprovalOutsideWorkspaceRisk": "Diese Aktion kann auf Ressourcen außerhalb des Arbeitsbereichs zugreifen.",
       "toolApprovalWritesFilesRisk": "Diese Aktion ändert Dateien.",
@@ -5463,11 +5463,15 @@
       "workingDirPickerRecent": "Zuletzt verwendet",
       "workingDirPickerConfirm": "Auswählen",
       "linkedContextLabel": "Verknüpfter Kontext",
-      "toolApprovalApproveBatch": "Alle zulassen",
+      "toolApprovalApproveBatch": "Einmal erlauben · {count}",
       "toolApprovalApproveBatchAction": "Alle {count} ausstehenden Tool-Genehmigungen zulassen",
       "restoredInputTitle": "Nach Wiederherstellung gespeicherte Eingabe",
       "restoredInputDescription": "Diese Eingabe wird nicht automatisch ausgeführt. Kopieren Sie sie zur erneuten Ausführung in eine neue Aufgabe.",
-      "restoredInputCopy": "Eingabe kopieren"
+      "restoredInputCopy": "Eingabe kopieren",
+      "toolApprovalOnceScope": "Nur dieses Mal",
+      "toolApprovalExpandCommand": "Vollständigen Befehl anzeigen",
+      "toolApprovalHideCommand": "Zuklappen",
+      "toolApprovalEligibleCount": "Freigabe möglich · {count}"
     },
     "threadList": {
       "title": "Unterhaltungen",

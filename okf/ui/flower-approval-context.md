@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower interactions and context state
 description: Typed pending interactions, automatic context compression, and unlocked composer behavior.
 tags: [ui, flower, approval, input, context]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-25T00:00:00Z
 ---
 # Summary
 
@@ -23,13 +23,7 @@ An accepted input interaction becomes one structured user response receipt. It p
 
 ## Approving actions
 
-Approval actions share one compact action row for batch rejection, rejection, one-time approval, and Stop. Each decision is an independent Floe Button capsule with its own visible keyboard focus; Stop stays circular. The single approval leads with a quiet waiting label and the safe action label as its title; a distinct description, actual targets, complete scrollable command, and evidenced risk follow only when present. Its content forms one group, with a separator before the footer. Batch approvals retain their group heading and individual decisions. Ancillary action details use a native disclosure. A single-action footer states the one-time approval scope. Localized action labels wrap as a group at narrow widths without clipping focus or displacing actions outside the surface. After an input response advances to approval, focus prefers the first enabled decision and falls back to Stop only when no decision is available.
-
-Every pending, requested primary approval remains visible even when its action reports `can_approve=false`, the adapter cannot mutate, the selected thread is read-only, or detail is pending; those states disable every decision action and present the canonical unavailable or read-only reason instead of falling back to chat. Accept or Reject calls the typed interaction boundary and applies its current view. A resolved approval interaction never creates a standalone timeline row: its lifecycle state merges only into the canonical tool item with the same `tool_call_id`, and an unmatched resolved interaction renders no tool shell. Rejection is a quiet tool-row outcome. Batch approval and rejection submit the exact visible `interaction_ids` in one atomic Floret Respond. An in-flight single decision prevents a batch containing that decision; newly arriving approvals are not added to an already submitted set. A conflicting member rejects the whole batch. `interaction_id` and `interaction_ids` are mutually exclusive. The legacy `reject_all` request remains supported for existing API consumers only; the current UI never sends it.
-
-The approval surface does not mount the ordinary textarea, password input, attachment or reference lane, permission, model, reasoning, context-usage, or composer-footer controls. Header [working-directory browsing](flower-working-directory-navigation.md) remains available independently of the approval composer. Per-thread text, attachment, and reference drafts remain owned by `ComposerDraftStore` while unmounted and return unchanged when the last approval resolves back to chat. Stop remains available directly in the approval action row instead of depending on the ordinary composer footer. No local handoff, consumed-interaction set, approval generation, or command busy reducer controls canonical visibility.
-
-One pure presenter owns operation classification, title, description, command, targets, and risk. Operation fallbacks are independent localized strings and never extracted from translated sentences. Approval copy prefers the canonical safe label, then a distinct description, before a localized operation fallback. A label identical to the command is not repeated as a title. File and network targets remain visible, and internal tool identifiers never become titles. Generic write effects do not prove file mutation: only a known file mutation with its declared write effect uses the file warning. Command names never determine risk; computer write actions do not claim to write files. Internal tool names and target-encoding prefixes are never user-facing.
+The [Flower approval surface](flower-approval-surface.md) owns the approval list, bounded layout, disclosure, focus, exact batch membership, and presentation contract. It shares the interaction submission guard and canonical reconciliation boundary described above.
 
 ## Context and recovery
 
@@ -51,4 +45,3 @@ The decision surface owns drafts, disabled reasons, focus, and row-local command
 - `redeven:internal/ai/flower_decision_fixture_test.go` - Real provider-to-runtime presentation fixtures consumed by UI mapping and browser tests.
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.inputSubmission.browser.test.tsx` - Duplicate submission, late replies, draft preservation, and background secret cleanup.
-- `redeven:internal/ai/flower_approval_batch_test.go` - Real runtime atomic batch membership, conflicts, and replay.
