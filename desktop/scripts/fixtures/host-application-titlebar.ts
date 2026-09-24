@@ -38,7 +38,7 @@ const client={floeInput:{version:1,target:null,bindTarget(wid){if(this.target?.w
 _new_window(){},do_send_damage_sequence(_sequence,wid){painted.add(wid)},send_configure_window(){},set_display_density(){return true},send_control_refresh(){},on_last_window(){},callback_close(){},
 set_focus(win){this.focused_wid=win.wid;Object.values(this.id_to_window).forEach(w=>w.div.hidden=w!==win)},
 send(packet){window.operations.push(packet)},send_close_window(win){window.operations.push(['close-window',win.wid])},close(){}};
-client.floePointer=floePointer;window.floeXpraInput={version:1,getClient:()=>client};
+client.floePointer=floePointer;window.floeXpraInput={version:2,getClient:()=>client};
 client.set_focus(client.id_to_window[1]);
 window.paintFixture=()=>[1,2].forEach(wid=>client.do_send_damage_sequence(1,wid,800,600,1,''));`;
 const catalogSource = readFileSync(path.join(source, 'catalog.generated.js'), 'utf8');
@@ -120,7 +120,7 @@ async function run() {
         assert.equal(await dragRegion(), 'drag');
       }
     }
-    assert.equal(await evaluate(`document.querySelector('#application').contentWindow.operations.length`), 0);
+    assert.deepEqual(await evaluate(`document.querySelector('#application').contentWindow.operations`), []);
     await click('.mac-app-controls-toggle');
     await wait(`!document.querySelector('.mac-app-popover').hidden`);
     await click('.mac-app-windows-toggle');

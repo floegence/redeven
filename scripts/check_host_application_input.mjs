@@ -6,7 +6,9 @@ import {checkPointer} from './host_application_pointer_acceptance.mjs';
 import { spawn, execFileSync } from 'node:child_process';
 import { createServer, request } from 'node:http';
 import { createServer as tcpServer, connect } from 'node:net';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,8 +16,9 @@ import { fileURLToPath } from 'node:url';
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(repository, 'internal/envapp/ui_src/package.json'));
 const browserName = process.env.REDEVEN_INPUT_BROWSER || 'chromium';
-assert(['chromium','firefox','webkit'].includes(browserName), 'unsupported qualification browser');
-const browserType = require('playwright')[browserName];
+assert(['chromium','firefox','webkit','electron'].includes(browserName), 'unsupported qualification browser');
+const playwright = require('playwright');
+const browserType = playwright[browserName];
 const [host, remoteRoot, output] = process.argv.slice(2);
 assert(host && remoteRoot?.startsWith('/tmp/') && output, 'provide SSH host, task-owned /tmp fixture directory and local evidence directory');
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
@@ -41,6 +44,9 @@ const waitFor = async (check, description, timeout = 15000) => {
 };
 let browser;
 let page;
+let electronChild;
+let electronDirectory;
+let browserVersion;
 const source = path.join(repository, 'internal/codeapp/appserver/host_application_viewer');
 const asset = name => readFile(path.join(source, name), 'utf8');
 const catalogSource = await asset('catalog.generated.js');
@@ -75,8 +81,37 @@ try {
   await waitFor(() => new Promise(resolve => {const socket=connect(tunnelPort,'127.0.0.1');socket.once('connect',()=>{socket.destroy();resolve(true);});socket.once('error',()=>resolve(false));}), 'SSH tunnel did not open');
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
-  browser = await browserType.launch({headless:true, executablePath:process.env.REDEVEN_INPUT_BROWSER_EXECUTABLE || undefined});
-  page = await browser.newPage({viewport:{width:900,height:640},hasTouch:pointerMode});
+  if (browserName === 'electron') {
+    const desktop = path.join(repository, 'desktop');
+    execFileSync(path.join(repository, 'scripts/check_desktop_electron_test_runtime.sh'), [desktop], {stdio:'inherit'});
+    const desktopRequire = createRequire(path.join(desktop, 'package.json'));
+    electronDirectory = await mkdtemp(path.join(tmpdir(), 'redeven-input-electron-'));
+    const entry = path.join(electronDirectory, 'fixture.cjs');
+    const reservation = tcpServer();
+    await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
+    const cdp = reservation.address().port;
+    await new Promise(resolve => reservation.close(resolve));
+    await writeFile(entry, `const {app,BrowserWindow}=require('electron');
+app.whenReady().then(()=>{const w=new BrowserWindow({width:900,height:640,useContentSize:true,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});w.loadURL('about:blank');});
+app.on('window-all-closed',()=>app.quit());process.on('SIGTERM',()=>app.quit());`);
+    const marker = randomUUID();
+    electronChild = spawn(desktopRequire('electron'), [entry, `--user-data-dir=${electronDirectory}/profile`, '--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${cdp}`, `--redeven-input-run=${marker}`], {
+      cwd:electronDirectory, detached:process.platform !== 'win32', stdio:'ignore', env:{...process.env,ELECTRON_RUN_AS_NODE:undefined},
+    });
+    await writeFile(path.join(output,'electron-process.json'), JSON.stringify({pid:electronChild.pid,state:electronDirectory,marker,cdp}));
+    await waitFor(async()=>{
+      if(electronChild.exitCode !== null || electronChild.signalCode !== null) throw new Error(`Owned Electron exited: ${electronChild.exitCode ?? electronChild.signalCode}`);
+      return fetch(`http://127.0.0.1:${cdp}/json/version`).then(r=>r.ok).catch(()=>false);
+    },'Electron CDP did not start');
+    browser = await playwright.chromium.connectOverCDP(`http://127.0.0.1:${cdp}`);
+    await waitFor(()=>browser.contexts()[0]?.pages().length,'Electron window did not open');
+    page = browser.contexts()[0].pages()[0];
+    browserVersion = desktopRequire('electron/package.json').version;
+  } else {
+    browser = await browserType.launch({headless:true, executablePath:process.env.REDEVEN_INPUT_BROWSER_EXECUTABLE || undefined});
+    page = await browser.newPage({viewport:{width:900,height:640},hasTouch:pointerMode});
+    browserVersion = browser.version();
+  }
   if(pointerMode)await page.addInitScript(()=>{
     window.pointerPackets=[];window.nativeStates=[];
     const Socket=window.WebSocket;
@@ -120,17 +155,30 @@ try {
     await writeFile(path.join(output,'result.json'),JSON.stringify({passed:true,...identity,browser:browser.version(),checks,physicalMobile:false},null,2));
     console.log('PASS: production viewer → published pointer → actual application receipts');
   } else {
+  const editorMode = metadata.kind === 'gnome';
+  const gtk4Mode = metadata.kind?.startsWith('gtk4');
+  const shortcut = process.platform === 'darwin' ? 'Meta' : 'Control';
+  const readDocument = () => remote(`cat ${quote(remoteRoot + '/document.txt')}`);
+  const saveDocument = async expected => {
+    await page.keyboard.press(`${shortcut}+s`);
+    await waitFor(() => readDocument() === expected, 'Editor did not save the exact UTF-8 bytes');
+  };
   await frame.evaluate(() => {
     const adapter = window.floeXpraInput.getClient().floeInput;
     const previous = adapter.onError;
     adapter.onError = code => { window.parent.fixtureInputError = code; previous?.(code); };
   });
   await page.mouse.click(300, 170);
+  await page.keyboard.type('abc');
+  if (editorMode) await saveDocument('abc\n');
+  else await waitFor(() => receipt()[0] === 'abc', 'Click followed by physical typing did not reach the application');
+  let cursor = null;
+  if (!editorMode && !gtk4Mode) {
   await frame.waitForFunction(() => {
     const cursor = window.floeXpraInput.getClient().floeCursor;
     return cursor?.source?.width === 48 && cursor.current?.width === 24;
   });
-  const cursor = await frame.evaluate(async () => {
+  cursor = await frame.evaluate(async () => {
     const client = window.floeXpraInput.getClient(), owner = client.floeCursor;
     const {width,height,xhot,yhot,url,css} = owner.current;
     const image = new Image(); image.src=url; await image.decode();
@@ -140,9 +188,10 @@ try {
   });
   assert.deepEqual(cursor.source, [48,48,22,24]);
   assert.deepEqual(cursor.logical, [24,24,11,12]);
-  const pointer = () => JSON.parse(remote(`cat ${quote(remoteRoot + '/pointer.json')}`));
-  await waitFor(() => JSON.stringify(pointer()) === JSON.stringify(cursor.sent), 'Application click coordinates differ from the cursor hotspot');
-  cursor.received = pointer();
+    const pointer = () => JSON.parse(remote(`cat ${quote(remoteRoot + '/pointer.json')}`));
+    await waitFor(() => JSON.stringify(pointer()) === JSON.stringify(cursor.sent), 'Application click coordinates differ from the cursor hotspot');
+    cursor.received = pointer();
+  }
   await frame.waitForFunction(() => document.activeElement === document.querySelector('.floe-remote-input'));
   await page.screenshot({path:path.join(output,'before-input.png')});
   const input = frame.locator('.floe-remote-input');
@@ -157,29 +206,49 @@ try {
   }, text);
   const unicode = '中文日本語한글🙂👩🏽‍💻e\u0301𠮷';
   await compose(unicode); await compose(unicode);
-  await waitFor(() => receipt()[0] === unicode + unicode, 'Repeated Unicode commit was not received exactly');
+  if (editorMode) await saveDocument('abc' + unicode + unicode + '\n');
+  else await waitFor(() => receipt()[0] === 'abc' + unicode + unicode, 'Repeated Unicode commit was not received exactly');
   await page.keyboard.type('abc');
   await page.keyboard.press('Backspace');
-  await waitFor(() => receipt()[0] === unicode + unicode + 'ab', 'Physical typing or deletion failed');
+  if (editorMode) {
+    await saveDocument('abc' + unicode + unicode + 'ab\n');
+    await page.keyboard.press(`${shortcut}+a`);
+    await compose(unicode + '\nsecond line');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('last');
+    const expected = unicode + '\nsecond line\nlast\n';
+    await saveDocument(expected);
+    await page.locator('.mac-app-controls-toggle').click();
+    await page.keyboard.press('ArrowRight');
+    assert.equal(readDocument(), expected);
+    await page.screenshot({path:path.join(output,'viewer.png')});
+    assert.deepEqual(errors, []);
+    remote(`printf %s ${quote(JSON.stringify({document:expected}))} > ${quote(remoteRoot + '/done.json')}`);
+    const identity = {...metadata}; delete identity.password;
+    await writeFile(path.join(output,'result.json'), JSON.stringify({passed:true,...identity,port,browserName,browser:browserVersion,expected,
+      checks:['click then physical typing','exact repeated Unicode','Backspace','selection replacement','multiline commit then Enter','native application save','exact saved UTF-8 bytes','toolbar isolation'],systemIME:false},null,2));
+  } else {
+  await waitFor(() => receipt()[0] === 'abc' + unicode + unicode + 'ab', 'Physical typing or deletion failed');
   await page.mouse.click(300, 480);
   await compose('第二个输入框');
   await waitFor(() => receipt()[1] === '第二个输入框', 'Pointer focus did not bind the second field');
   await page.locator('.mac-app-controls-toggle').click();
   await page.keyboard.press('ArrowRight');
-  assert.deepEqual(receipt(), [unicode + unicode + 'ab', '第二个输入框']);
+  assert.deepEqual(receipt(), ['abc' + unicode + unicode + 'ab', '第二个输入框']);
   await page.mouse.click(300, 480);
   await page.screenshot({path:path.join(output,'viewer.png')});
   const expected = receipt();
   assert.deepEqual(errors, []);
   remote(`printf %s ${quote(JSON.stringify(expected))} > ${quote(remoteRoot + '/done.json')}`);
   const identity = {...metadata}; delete identity.password;
-  await writeFile(path.join(output,'result.json'), JSON.stringify({passed:true,...identity,port,browserName,browser:browser.version(),expected,cursor,checks:['actual remote PNG normalization','application click coordinates','exact repeated Unicode','physical typing','Backspace','pointer field switch','toolbar isolation'],actualOSCursor:false,systemIME:false},null,2));
+  await writeFile(path.join(output,'result.json'), JSON.stringify({passed:true,...identity,port,browserName,browser:browserVersion,expected,cursor,checks:[...(!gtk4Mode?['actual remote PNG normalization','application click coordinates']:[]),'click then physical typing','exact repeated Unicode','Backspace','pointer field switch','toolbar isolation'],actualOSCursor:false,systemIME:false},null,2));
+  }
   console.log('PASS: published controller → prepared Xpra → actual application text receipt');
   }
 } catch (error) {
   await page?.screenshot({path:path.join(output,'failure.png')}).catch(() => {});
   let received=null;
-  try { received=JSON.parse(remote(`cat ${quote(metadata.receipt || remoteRoot + '/receipt.json')}`)); } catch { /* Startup may fail before the application writes a receipt. */ }
+  try { received=metadata.kind === 'gnome' ? remote(`cat ${quote(remoteRoot + '/document.txt')}`) : JSON.parse(remote(`cat ${quote(metadata.receipt || remoteRoot + '/receipt.json')}`)); } catch { /* Startup may fail before the application writes a receipt. */ }
   await writeFile(path.join(output,'failure.json'), JSON.stringify({message:error.message,
     inputError:await page?.evaluate(() => window.fixtureInputError).catch(()=>undefined),pointerPackets:await page?.evaluate(()=>window.pointerPackets).catch(()=>undefined),nativeStates:await page?.evaluate(()=>window.nativeStates).catch(()=>undefined),received},null,2));
   // An invalid completion receipt fails the host fixture and runs its cleanup.
@@ -188,4 +257,10 @@ try {
 } finally {
   await browser?.close(); server.closeAllConnections(); await new Promise(resolve=>server.close(resolve));
   tunnel?.kill('SIGTERM');
+  if (electronChild && electronChild.exitCode === null && electronChild.signalCode === null) {
+    if (process.platform === 'win32') execFileSync('taskkill', ['/PID',String(electronChild.pid),'/T','/F']);
+    else process.kill(-electronChild.pid, 'SIGTERM');
+    await waitFor(()=>electronChild.exitCode !== null || electronChild.signalCode !== null, 'Owned Electron did not exit');
+  }
+  if (electronDirectory) await rm(electronDirectory, {recursive:true,force:true});
 }

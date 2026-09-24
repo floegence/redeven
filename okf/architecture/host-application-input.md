@@ -54,17 +54,23 @@ text or clipboard actions to preserve input order.
 ## Linux delivery
 
 Released `floe-native-apps` owns the capability probe, private input environment,
-commit-only xcb-imdkit XIM bridge, GTK3/Qt5/Qt6 context adapters, prepared HTML client
+commit-only xcb-imdkit XIM bridge, GTK3/GTK4/Qt5/Qt6 context adapters, prepared HTML client
 and authenticated Xpra input scheduler. Redeven calls its public APIs before starting
 a new application. The same implementation serves managed and supported system Xpra.
 The exact Xpra Python interpreter is probed; the catalog's host GIO interpreter remains
 independent. IBus/Fcitx configuration from the host desktop does not select input.
 
+Preparation version 2 is checked before creating input controllers, including deferred
+client initialization. Older preparation requires saving, quitting and reopening the
+application; it never silently falls back or ends the process. The text and pointer
+protocols remain version 1. GTK4 modules use a private GTK_PATH separate from the
+GTK3 cache; no generic GIO module path or global host setting is changed.
+
 The prepared HTML v20/v21 client exposes `floeXpraInput.getClient()`, `floeInput`
 and versioned `floePointer`. The pointer adapter reuses Xpra's existing pointer,
 button and fine/discrete wheel transport, owns per-connection scroll remainder,
 and clears it on cancellation or target change. Canvas, screen, touch, wheel,
-tablet and virtual-keyboard listeners from the old path are absent. Xpra retains
+tablet, intermediate window mousedown and virtual-keyboard listeners from the old path are absent. Xpra retains
 graphics, window stacking and clipboard transport. The published adapter consumes
 the controller's pointer, keys, clipboard gestures and commits; no global listener
 suppresses a competing input owner. Redeven binds only a painted, live,
@@ -78,8 +84,9 @@ Missing/stale input contexts return an explicit failure. Failed delivery revokes
 attachment input and presents reconnection guidance; pending text is discarded.
 No browser port or second reconnection path is added.
 
-Recovery retains existing backend/component identity. A session predating version 1
-cannot enter this input path; the viewer explains how to save and reopen it. Recovery
+Recovery retains existing backend/component identity and immutable prepared assets.
+A new application receives the new content digest; a live application retains its
+resource snapshot across viewer reconnects and Runtime upgrades. Recovery
 does not migrate a live input session or kill a process containing unsaved work.
 
 ## macOS delivery

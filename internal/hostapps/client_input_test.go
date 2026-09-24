@@ -23,6 +23,9 @@ var clientPointerPython string
 //go:embed testdata/client_pointer.html
 var clientPointerHTML string
 
+//go:embed testdata/client_input_gtk4.py
+var clientGTK4Python string
+
 // This opt-in fixture uses the released components and the real product launch
 // path. An external browser drives the product viewer, then writes done.json.
 // Only task-owned directories, listeners and applications are created.
@@ -105,7 +108,7 @@ Gtk.main()
 `
 	target := os.Getenv("REDEVEN_TEST_CLIENT_INPUT_TARGET")
 	if target != "" && !strings.HasPrefix(target, "pointer-") {
-		if target != "firefox" {
+		if target != "firefox" && target != "gtk4" && target != "gtk4-entry" && target != "gnome" {
 			t.Fatal("unsupported input fixture target", target)
 		}
 		source = `import json, os, subprocess, threading
@@ -152,6 +155,9 @@ finally:
     server.shutdown()
 `
 	}
+	if target == "gtk4" || target == "gtk4-entry" || target == "gnome" {
+		source = clientGTK4Python
+	}
 	if strings.HasPrefix(target, "pointer-") {
 		if target != "pointer-gtk" && target != "pointer-firefox" {
 			t.Fatal("unsupported pointer fixture", target)
@@ -190,12 +196,27 @@ finally:
 	})
 	waitUntil(t, func() bool { return m.Sessions("fixture")[0].State == "running" }, 45*time.Second)
 	metadata, _ := json.Marshal(map[string]any{"address": a.record.Address, "password": m.sessions[session.ID].password,
-		"pid": a.record.Process.PID, "state": state, "component": a.record.Component, "input_version": 1, "kind": target})
+		"pid": a.record.Process.PID, "process": a.record.Process, "state": state, "component": a.record.Component,
+		"input_version": 1, "preparation_version": 2, "assets_digest": a.assets.Digest(), "kind": target})
 	if err := os.WriteFile(filepath.Join(root, "connection.json"), metadata, 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("owned input fixture ready: pid=%d address=%s state=%s", a.record.Process.PID, a.record.Address, state)
 	waitUntil(t, func() bool { _, err := os.Stat(filepath.Join(root, "done.json")); return err == nil }, 180*time.Second)
+	if target == "gnome" {
+		var expected struct {
+			Document string `json:"document"`
+		}
+		data, err := os.ReadFile(filepath.Join(root, "done.json"))
+		if err != nil || json.Unmarshal(data, &expected) != nil || expected.Document == "" {
+			t.Fatal("invalid editor completion receipt")
+		}
+		data, err = os.ReadFile(filepath.Join(root, "document.txt"))
+		if err != nil || string(data) != expected.Document {
+			t.Fatal("editor did not save the exact expected UTF-8 bytes")
+		}
+		return
+	}
 	if strings.HasPrefix(target, "pointer-") {
 		var done struct {
 			Passed bool `json:"passed"`

@@ -4,12 +4,60 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	nativeapps "github.com/floegence/floe-native-apps"
 )
+
+func TestApplicationUpgradeKeepsPreparedSnapshotsSeparate(t *testing.T) {
+	root := t.TempDir()
+	if err := os.CopyFS(root, os.DirFS("testdata/client")); err != nil {
+		t.Fatal(err)
+	}
+	old, err := nativeapps.OpenClientAssets(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldRequest := httptest.NewRequest(http.MethodGet, "http://host/js/FloeInput.js", nil)
+	oldResponse := httptest.NewRecorder()
+	old.ServeHTTP(oldResponse, oldRequest)
+	// A new launch prepares new bytes even when the installed component recipe
+	// is unchanged. An existing application's snapshot must retain its identity.
+	if err := os.WriteFile(filepath.Join(root, "js/FloeInput.js"), []byte("// Newly published prepared input adapter.\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	current, err := nativeapps.OpenClientAssets(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if old.Digest() == current.Digest() {
+		t.Fatal("changed preparation reused the old asset cache")
+	}
+	m := New(t.TempDir(), t.TempDir(), nil)
+	m.applications["old"] = &linuxApplication{record: linuxApplicationRecord{Owner: "alice"}, assets: old}
+	m.applications["new"] = &linuxApplication{record: linuxApplicationRecord{Owner: "alice"}, assets: current}
+	if m.ClientAssets("alice", old.Digest()) != old || m.ClientAssets("alice", current.Digest()) != current || m.ClientAssets("bob", current.Digest()) != nil {
+		t.Fatal("upgrade changed resource ownership or snapshot selection")
+	}
+	oldRequest.Header.Set("If-None-Match", oldResponse.Header().Get("ETag"))
+	cached := httptest.NewRecorder()
+	old.ServeHTTP(cached, oldRequest)
+	if cached.Code != http.StatusNotModified {
+		t.Fatal("running application's cached resources changed")
+	}
+	updated := httptest.NewRecorder()
+	current.ServeHTTP(updated, oldRequest)
+	if updated.Code != http.StatusOK || updated.Body.String() == oldResponse.Body.String() {
+		t.Fatal("new application reused an old cache validator")
+	}
+	m.applications["old"].ended = true
+	if m.ClientAssets("alice", old.Digest()) != nil || m.ClientAssets("alice", current.Digest()) != current {
+		t.Fatal("ending old application revoked the new snapshot")
+	}
+}
 
 func TestApplicationProxyPreservesSharingHostAndTargetRouting(t *testing.T) {
 	requests := make(chan *http.Request, 1)

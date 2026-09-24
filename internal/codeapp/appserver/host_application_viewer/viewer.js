@@ -285,9 +285,21 @@
     } catch { if (current === generation && !controller.signal.aborted) finish('disconnected'); }
   }
 
+  function preparedClient(attempt) {
+    if (attempt !== generation) return null;
+    const prepared = frame.contentWindow.floeXpraInput;
+    if (prepared?.version !== 2 || typeof prepared.getClient !== 'function') {
+      finish('inputVersionUnsupported');
+      return null;
+    }
+    return prepared;
+  }
+
   function installClient(attempt) {
+    const prepared = preparedClient(attempt);
+    if (!prepared) return;
     const doc = frame.contentDocument;
-    const xpra = frame.contentWindow.floeXpraInput?.getClient();
+    const xpra = prepared.getClient();
     if (xpra && client === xpra) return;
     if (!xpra || typeof xpra._new_window !== 'function' || typeof xpra.do_send_damage_sequence !== 'function') throw new Error('Unsupported Xpra HTML5 client');
     if (!xpra.floeInput) { finish('inputVersionUnsupported'); return; }
@@ -506,8 +518,9 @@
       if (frame.contentWindow.location.pathname !== config.base + '/index.html') { connectionLost(attempt); return; }
       // The upstream page initializes after an asynchronous defaults request;
       // document load can precede client creation on a cached reload.
-      if (frame.contentWindow.floeXpraInput?.version !== 1) { finish('inputVersionUnsupported'); return; }
-      if (frame.contentWindow.floeXpraInput.getClient()) installClient(attempt);
+      const prepared = preparedClient(attempt);
+      if (!prepared) return;
+      if (prepared.getClient()) installClient(attempt);
       else frame.contentDocument.addEventListener('connection-established', () => {
         if (attempt !== generation) return;
         try { installClient(attempt); }

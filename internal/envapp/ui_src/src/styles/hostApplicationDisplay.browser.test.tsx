@@ -42,7 +42,7 @@ async function viewer(width: number, theme: string, locale = 'en-US') {
       send(){window.controlsSent++},send_control_refresh(){window.refreshes++},
       send_close_window:noop,set_focus:noop,close(){window.closes++},on_last_window:noop};
     window.emitDisplay=next=>{state={...state,...next};notify(state)};
-    window.floeXpraInput={version:1,getClient:()=>window.client};
+    window.floeXpraInput={version:2,getClient:()=>window.client};
   </script></body></html>`);
   const frame = document.createElement('iframe');
   frame.style.cssText = `width:${width}px;height:620px;border:0`;
