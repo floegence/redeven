@@ -15,7 +15,9 @@ resource data or authorization. Explicit access denial, navigation, an actionabl
 error, or changed authentication ends the placeholder instead of hiding recovery.
 Unavailable presentation storage must not prevent normal startup.
 
-# First paint
+# Contract
+
+## First paint
 
 The HTML head installs Floe's independent `reload-placeholder` entry before
 external application modules and styles. After an authorized Host Applications,
@@ -34,7 +36,7 @@ startup. An absent record has a small static branded loading surface in HTML;
 application mounting replaces it atomically. No resource count is invented in
 this pre-module surface.
 
-# One handoff
+## One handoff
 
 [Page loading continuity](page-loading-continuity.md) owns the shared page registry
 used by Activity, Workbench, and reload eligibility.
@@ -70,6 +72,10 @@ Resource snapshots remain subject to
 snapshots appears before the existing permission and identity confirmation.
 Activity target selection remains owned by
 [Activity navigation restoration](activity-navigation-restoration.md).
+
+# Boundaries
+
+Remembered geometry conveys neither resource data nor authority. Access denial, authentication changes, navigation and actionable errors end the placeholder. Storage unavailability cannot prevent startup or conceal the recovery state.
 
 # Evidence
 

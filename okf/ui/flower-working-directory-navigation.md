@@ -7,18 +7,15 @@ timestamp: 2026-09-21T00:00:00Z
 ---
 # Summary
 
-Flower owns the draft or conversation directory and navigation intent; Env App
-owns Activity and Workbench destinations. The header browses the displayed
-directory; the new-conversation welcome selects the draft directory. Created
-conversation directories remain immutable. Right-clicking a conversation row,
-its more button, or the current transcript exposes the same directory actions. Each open menu
-captures the target thread ID and directory, so summary replacement cannot
-retarget an action or select a different conversation. Activity opens the shared
-Files floating window or a new Terminal session. Workbench creates a new Files
-or Terminal widget at the viewport center, preserving scale. Runtime remains
-the filesystem and process authorization authority. Unavailable directories or
-permissions produce explicit disabled reasons or the existing destination error
-presentation; opening never injects commands into an existing shell.
+Flower owns draft and conversation directory intent; Env App owns Activity and
+Workbench navigation. The header browses the displayed directory, and the
+new-conversation welcome selects the draft directory. Created directories stay
+immutable. Row and transcript menus capture the exact thread and directory;
+updates cannot retarget actions. Activity opens Files or a new Terminal session;
+Workbench creates the corresponding widget without changing scale. Runtime
+retains filesystem and process authorization. Unavailable targets show explicit
+disabled reasons or destination errors, and opening never injects commands into
+an existing shell.
 
 # Contract
 

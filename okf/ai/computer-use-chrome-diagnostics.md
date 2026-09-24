@@ -16,7 +16,9 @@ instructions. Neither a successful launch nor installation acknowledgement resum
 a task; only a compatible live profile can reach the existing Floret Respond path.
 Failures preserve user guidance and never substitute a different browser.
 
-# Readiness and diagnostics
+# Contract
+
+## Readiness and diagnostics
 
 `extension/status` reports the environment hostname, platform, Runtime build
 version when available, Linux Chrome executable detection, live profiles, prior
@@ -37,7 +39,7 @@ Runtime Service epoch 30 pairs these diagnostics with Desktop and Env App.
 Epoch 29 follows the existing upgrade path. Native Messaging protocol 6, browser
 consent, website grants and database schemas are unchanged.
 
-# Recovery on the environment host
+## Recovery on the environment host
 
 The Chrome overview and connection guide share one compact readiness surface.
 Both consume the existing Runtime snapshot, including diagnostics embedded in
@@ -79,6 +81,10 @@ continuation. Closing the guide or starting another preparation retires stale
 responses. Connection observation remains bounded to the open guide; pressing
 Connect or copying the manual connection link starts a fresh observation window
 after installation, timeout or a failed check.
+
+# Boundaries
+
+A launch or installation acknowledgement cannot resume a task. Only a compatible live profile reaches the existing Floret Respond path. Unreadable status remains a distinct failure and cannot be replaced by readiness inferred from an installed executable.
 
 # Evidence
 

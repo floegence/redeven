@@ -180,7 +180,7 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 	healthy := false
 	defer func() {
 		if !healthy {
-			stopPlaywrightClient(client)
+			_ = stopPlaywrightClient(client)
 			delete(e.clients, targetID)
 		}
 	}()
@@ -326,7 +326,7 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 	ready := false
 	defer func() {
 		if !ready {
-			stopPlaywrightClient(client)
+			_ = stopPlaywrightClient(client)
 		}
 	}()
 	readyCh := make(chan []byte, 1)

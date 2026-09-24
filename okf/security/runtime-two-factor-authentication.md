@@ -9,7 +9,9 @@ timestamp: 2026-09-23T00:00:00Z
 
 Runtime `accessgate` owns environment authentication independently of Redeven Cloud. Enabling two-factor authentication requires the environment password followed by a TOTP or single-use recovery code for ordinary browser, direct URL, and Cloud data sessions. A password-only challenge grants no file, terminal, editor, plugin, or forwarding access. Authenticated native/SSH management retains its separate private host authority; loopback addresses, Cloud administrator claims, and forwarded headers do not establish that authority. Missing or damaged committed authentication state fails closed. Host recovery locks ordinary access until a new password and authenticator are committed.
 
-# Enrollment and management
+# Contract
+
+## Enrollment and management
 
 Desktop Environment Settings / Access presents one two-factor row. A running Runtime is required for Desktop management. If a different environment password has been saved for the next start, restart before configuring MFA; the old running verifier cannot overwrite the newer saved authority. Security operations take effect immediately and never save a pending address/certificate draft. Apply HTTPS and restart before enrollment: the owner endpoint checks the running public listener, and MFA-enabled startup rejects a public HTTP listener. The independently authenticated private bridge retains its isolated transport.
 
@@ -21,7 +23,7 @@ First enrollment uses the existing environment password verifier. If none exists
 
 Changing an authenticator, replacing recovery codes, and turning MFA off require the current environment password and a fresh factor. Verification authorizes only that pending operation; the commit does not ask for the same already consumed code again. Ordinary environment login cannot call `POST /v2/runtime/security`; only the existing private Runtime control authority exposes that route. A loopback address alone is insufficient. Password and HTTP downgrade changes through next-start settings are rejected while MFA is active. Disable MFA through its authenticated operation before changing that password, or use explicit host recovery to replace lost credentials.
 
-## Headless owner workflow
+### Headless owner workflow
 
 Run these commands as the owner of the exact Runtime state directory, locally or through authenticated SSH. Stop that Runtime first so the command can acquire its state lock:
 
@@ -32,11 +34,11 @@ redeven security recover --state-root /path/to/environment
 
 Setup requires saved HTTPS configuration. It reads secrets from an attached terminal, shows a manual authenticator key only on that terminal, verifies a code, writes a new recovery file with exclusive creation and mode 0600, and requires explicit activation. It never prints secrets into redirected stdout or accepts them as command arguments. Recovery requires explicit confirmation and sets `recovery_pending`; it does not downgrade to password-only access. Run setup again to set a new password and authenticator before restarting ordinary access. These commands do not alter SSH keys, sshd policy, PAM, host passwords, or execution identity.
 
-# Session authority
+## Session authority
 
 [Runtime access sessions](runtime-access-sessions.md) owns ordinary session deadlines, browser Cookie scope and refresh continuity, challenge binding, native editor delegation, and revocation. MFA management changes revoke ordinary authority through that single gate; they do not create a second browser or Desktop authentication lifecycle.
 
-# Persistence, replay and recovery
+## Persistence, replay and recovery
 
 `access-auth.sqlite` is a versioned, private SQLite authority, separate from the transport authorization database. Startup imports the existing bcrypt verifier once. The complete credential state is AEAD encrypted under the independent private `access-auth.key`, with environment/schema binding. The committed database and initialized key become the sole authority; deletion, malformed data, unsafe modes, symlinks, unknown schema, or key loss cannot fall back to the retired verifier. The old verifier is removed only after the encrypted authority commits. Keep the original complete state for recovery from storage damage; do not delete authentication files to repair an environment.
 
@@ -45,6 +47,10 @@ TOTP uses published `pquerna/otp` with 20 random secret bytes, HMAC-SHA-1, six d
 Factor failures and cooldowns persist across restart. A challenge allows at most five failures. Owner-wide cooldown grows through 30 seconds, one minute, two minutes, five minutes, and fifteen minutes; correct passwords do not reset factor failures. Pending challenge and management capacities are bounded. Enrollment/changes, factor success/failure, recovery use, and host recovery log only non-secret event, method, credential identity, and revision metadata.
 
 Independent key encryption limits exposure from a database-only disclosure. It does not protect against the same host account, root, an already compromised client, full state theft/rollback, or live phishing. MFA neither changes permissions nor isolates an already authorized shell from the host state it can access. Authentication state and secrets are not diagnostic export inputs.
+
+# Boundaries
+
+Password-only challenges grant no ordinary product data access. Loopback addresses, Cloud administrator claims and forwarded headers cannot establish private host authority. Missing committed authentication state fails closed; host recovery locks ordinary access until new credentials are committed.
 
 # Evidence
 

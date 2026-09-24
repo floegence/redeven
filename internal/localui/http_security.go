@@ -36,14 +36,14 @@ func (s *Server) configurePublicAuthorities(listeners []net.Listener) error {
 		}
 		addr, ok := listener.Addr().(*net.TCPAddr)
 		if !ok || addr == nil || addr.IP == nil {
-			return fmt.Errorf("Local UI listener must use a TCP address")
+			return fmt.Errorf("invalid Local UI listener: expected a TCP address")
 		}
 		parsed, err := netip.ParseAddr(addr.IP.String())
 		if err != nil || addr.Port <= 0 || addr.Port > 65535 || addr.Zone != "" || parsed.Is4In6() {
-			return fmt.Errorf("Local UI listener has an invalid TCP address")
+			return fmt.Errorf("invalid Local UI listener TCP address")
 		}
 		if (s.bind.port != 0 && addr.Port != s.bind.port) || (port != 0 && addr.Port != port) {
-			return fmt.Errorf("Local UI listeners must use the configured public port")
+			return fmt.Errorf("invalid Local UI listener port: must use the configured public port")
 		}
 		port = addr.Port
 		bound = append(bound, parsed)

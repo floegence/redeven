@@ -13,7 +13,9 @@ decoded images and application click receipts separately from the operating
 system's displayed pointer. A CSS declaration or ordinary page screenshot cannot
 qualify physical pointer appearance. Unavailable devices remain unpassed.
 
-# Published qualification
+# Contract
+
+## Published qualification
 
 `floe-native-apps` v0.6.2 passed its immutable release qualification on native
 Linux amd64 and arm64, including installation, legacy update, source/race/vet,
@@ -30,7 +32,7 @@ the browser executable search was ambiguous after installing Firefox. It was not
 released. v0.6.2 selects Chromium through the pinned Playwright API and passed the
 full qualification. Go proxy and checksum database readback verified the release.
 
-# Product acceptance
+## Product acceptance
 
 The opt-in `TestInstalledClientInputViewer` uses a task-owned state directory,
 private display, port and application. Its 48-by-48 red/blue PNG has hotspot
@@ -54,7 +56,7 @@ race tests, and 24 native helper tests. The real macOS disposable application
 fixture passed pixels, click, Unicode, shortcut, menu, reconnect, stale input,
 resize, window replacement and close checks.
 
-# Remaining physical acceptance
+## Remaining physical acceptance
 
 The current records do not qualify physical system-pointer appearance in shipped
 Electron, Chrome, Safari or Firefox, page zoom 80/100/125/150/200 percent, or
@@ -67,6 +69,10 @@ orange's SSH endpoint timed out repeatedly, so its native arm64 application chec
 remains unpassed. Hosted arm64 qualification is separate evidence. These limitations
 do not alter the earlier real IME/soft-keyboard acceptance assigned to the user in
 the [input validation record](host-application-validation.md).
+
+# Boundaries
+
+Decoded-image checks and application receipts do not prove the physical operating-system pointer. CSS declarations and ordinary screenshots are insufficient for that claim. Unavailable physical devices remain explicitly unqualified.
 
 # Evidence
 

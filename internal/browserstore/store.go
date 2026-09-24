@@ -201,7 +201,7 @@ func (s *Store) SaveTabs(ctx context.Context, owner, profileID string, tabs []Ta
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, `DELETE FROM browser_tabs WHERE owner_id=? AND profile_id=?`, owner, profileID); err != nil {
 		return err
 	}

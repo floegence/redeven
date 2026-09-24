@@ -11,6 +11,39 @@ import (
 	nativeapps "github.com/floegence/floe-native-apps"
 )
 
+func TestApplicationProxyPreservesSharingHostAndTargetRouting(t *testing.T) {
+	requests := make(chan *http.Request, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests <- r.Clone(r.Context())
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+	proxy, address, err := newApplicationProxy(upstream.URL+"/native?owned=1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+	request, err := http.NewRequest(http.MethodGet, "http://"+address+"/socket?view=2", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "sharing.local"
+	request.Header.Set("Origin", "http://sharing.local")
+	request.Header.Set("Accept-Encoding", "br")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	received := <-requests
+	if received.Host != request.Host || received.URL.RequestURI() != "/native/socket?owned=1&view=2" || received.Header.Get("Origin") != request.Header.Get("Origin") {
+		t.Fatalf("sharing request changed: %s %s %s", received.Host, received.URL.RequestURI(), received.Header.Get("Origin"))
+	}
+	if received.Header.Get("Accept-Encoding") == "br" {
+		t.Fatal("client compression bypassed transport decompression")
+	}
+}
+
 func TestApplicationSharesReuseAssetsWithoutCachingSessionDocuments(t *testing.T) {
 	root, _ := filepath.Abs("testdata/client")
 	assets, err := nativeapps.OpenClientAssets(root)

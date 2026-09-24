@@ -26,7 +26,8 @@ const (
 	flowersecCorePackage    = "@floegence/flowersec-core"
 	flowersecCoreVersion    = "5.4.1"
 	flowersecCodeAppVersion = "5.2.2"
-	floeWebappVersion       = "0.75.0"
+	floeWebappVersion       = "0.76.0"
+	floeEnvCoreVersion      = "0.77.1"
 )
 
 var flowersecNPMPackages = []string{
@@ -414,21 +415,21 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		},
 		"internal/envapp/ui_src/package.json": {
 			"\"@floegence/floe-webapp-boot\": \"" + floeWebappVersion + "\"",
-			"\"@floegence/floe-webapp-core\": \"" + floeWebappVersion + "\"",
+			"\"@floegence/floe-webapp-core\": \"" + floeEnvCoreVersion + "\"",
 			"\"@floegence/floe-webapp-protocol\": \"" + floeWebappVersion + "\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.19.2\"",
 			"\"@floegence/flowersec-core\": \"5.4.1\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
 			"floe-webapp-boot-" + floeWebappVersion + ".tgz",
-			"floe-webapp-core-" + floeWebappVersion + ".tgz",
+			"floe-webapp-core-" + floeEnvCoreVersion + ".tgz",
 			"floe-webapp-protocol-" + floeWebappVersion + ".tgz",
 			"floeterm-terminal-web-0.19.2.tgz",
 			"flowersec-core-5.4.1.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
 			"@floegence/floe-webapp-boot@" + floeWebappVersion,
-			"@floegence/floe-webapp-core@" + floeWebappVersion,
+			"@floegence/floe-webapp-core@" + floeEnvCoreVersion,
 			"@floegence/floe-webapp-protocol@" + floeWebappVersion,
 			"@floegence/floeterm-terminal-web@0.19.2",
 			"@floegence/flowersec-core@5.4.1",
@@ -442,8 +443,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"THIRD_PARTY_NOTICES.md": {
 			"@floegence/floe-webapp-boot | " + floeWebappVersion,
 			"@floegence/floe-webapp-core | " + floeWebappVersion,
-			"@floegence/floe-webapp-boot | " + floeWebappVersion,
-			"@floegence/floe-webapp-core | " + floeWebappVersion,
+			"@floegence/floe-webapp-core | " + floeEnvCoreVersion,
 			"@floegence/floe-webapp-protocol | " + floeWebappVersion,
 			"@floegence/floeterm-terminal-web | 0.19.2",
 			"@floegence/flowersec-core | 5.4.1",
@@ -457,6 +457,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"terminal-web v0.19.2",
 			"semantic Presentation",
 			"Floe Webapp Boot, Core, and Protocol v" + floeWebappVersion,
+			"Env App Core v" + floeEnvCoreVersion,
 			"Flowersec Core v5.4.1",
 		},
 	}
@@ -491,7 +492,11 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"internal/envapp/ui_src/pnpm-lock.yaml":    {"@floegence/floe-webapp-boot", "@floegence/floe-webapp-core", "@floegence/floe-webapp-protocol"},
 	} {
 		for _, packageName := range packages {
-			assertOnlyCurrentNPMDependency(t, root, file, packageName, floeWebappVersion)
+			version := floeWebappVersion
+			if strings.HasPrefix(file, "internal/envapp/") && packageName == "@floegence/floe-webapp-core" {
+				version = floeEnvCoreVersion
+			}
+			assertOnlyCurrentNPMDependency(t, root, file, packageName, version)
 		}
 	}
 

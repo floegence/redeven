@@ -15,7 +15,9 @@ Keyboard composition stays with [remote-input](host-application-input.md). Missi
 pointer capability requires saving, quitting and reopening the application; closing
 only its viewer does not upgrade or terminate the application process.
 
-# Gestures and event ownership
+# Contract
+
+## Gestures and event ownership
 
 A touch begins pending, without a remote button press. Movement beyond 8 CSS pixels
 starts scrolling. After 450 ms without that movement, a local hold indicator appears:
@@ -36,7 +38,7 @@ coordinates content focus; the toolbar Keyboard button explicitly opens the keyb
 Focusing the child input is internal to the Linux viewer, so the parent window's
 corresponding blur must not cancel that activation. Leaving the document does cancel.
 
-# Scroll and lifecycle
+## Scroll and lifecycle
 
 A finger moving up or left reveals content below or to the right. Both axes use CSS
 pixels independent of DPR and captured-image density. Per-frame accumulation keeps
@@ -58,12 +60,16 @@ old work. Late animation frames and timers cannot bind a new window or connectio
 Viewport changes never rebuild the connection or input element. Each viewer owns
 its controller, feedback and transient remainder independently.
 
-# Acceptance boundary
+## Acceptance boundary
 
 [Validation](../operations/host-application-validation.md) distinguishes generated
 browser events from actual native application receipts and physical mobile devices.
 Application scroll offsets, click counts and slider values prove delivery; sent
 packets alone do not. Device emulation cannot qualify a real soft keyboard or pinch.
+
+# Boundaries
+
+A gesture cannot cross painted-window or connection generations. Cancellation discards queued moves and scroll and releases only its own buttons. Reopening a viewer cannot upgrade the still-running application's pointer protocol.
 
 # Evidence
 

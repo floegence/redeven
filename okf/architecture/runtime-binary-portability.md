@@ -46,6 +46,10 @@ ID can differ, so binary byte identity is not the acceptance criterion. Users ma
 replace the C library and run the resulting local executable without a signing
 key. Redistributors must retain equivalent access to the matching source and kit.
 
+# Boundaries
+
+Missing native build tools fail preflight. Linux release artifacts must include matching source and relink materials for the statically linked LGPL library. A missing kit blocks publication; a Darwin artifact still requires the matching Apple builder.
+
 # Evidence
 
 - `scripts/build_runtime_binary.sh` and its tests: target selection, static preflight and build flags.

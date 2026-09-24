@@ -15,7 +15,9 @@ and releases held keys; reconnect never replays input. Old input protocols requi
 saving, quitting and reopening the application, without automatically ending its process.
 This contract does not change Flower, terminal widgets or editor input.
 
-# Client ownership
+# Contract
+
+## Client ownership
 
 Redeven embeds `@floegence/floe-webapp-core/remote-input` and its stylesheet from the
 published package. It supplies an immutable target token only after decoded pixels,
@@ -49,7 +51,7 @@ Pointer cancellation releases only its buttons and wheel remainder, never keyboa
 composition. Platform adapters flush pending pointer output before sending keys,
 text or clipboard actions to preserve input order.
 
-# Linux delivery
+## Linux delivery
 
 Released `floe-native-apps` owns the capability probe, private input environment,
 commit-only xcb-imdkit XIM bridge, GTK3/Qt5/Qt6 context adapters, prepared HTML client
@@ -80,7 +82,7 @@ Recovery retains existing backend/component identity. A session predating versio
 cannot enter this input path; the viewer explains how to save and reopen it. Recovery
 does not migrate a live input session or kill a process containing unsaved work.
 
-# macOS delivery
+## macOS delivery
 
 Native window snapshots advertise `input_version: 1`. Each input packet uses that
 version. Confirmed text uses the existing scoped Unicode injection; keys carry one
@@ -99,12 +101,16 @@ pointer state and held keys, keeps the stream and pixels, and permits a new deli
 It never retries the failed action. Same-window recapture can retain local focus but
 rejects input until the replacement frame is decoded.
 
-# Verification boundary
+## Verification boundary
 
 The [validation record](../operations/host-application-validation.md) distinguishes
 controller event simulation, real app text receipts, real OS IME input and actual
 mobile-device evidence. A sent packet, mobile viewport emulation or synthetic
 composition event alone does not establish system input-method acceptance.
+
+# Boundaries
+
+Binding loss cancels composition and releases held keys without replay. An incompatible input protocol requires an explicit application restart after saving. This input boundary does not change Flower, terminal or editor input.
 
 # Evidence
 

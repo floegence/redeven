@@ -16,7 +16,9 @@ normal operation. Cached facts never authorize an operation. A permission denial
 or locked access clears the affected presentation; ordinary connectivity failure
 retains it with the existing error and retry affordance.
 
-# Identity and authority
+# Contract
+
+## Identity and authority
 
 The Shell requests `GET /_redeven_proxy/api/ui-cache-scope` as soon as an
 authenticated connection is available, in parallel with current-session read
@@ -55,7 +57,7 @@ Shell distinguishes initial checking and ordinary recovery from explicit locking
 normal recovery does not unmount the established page. Container projections
 follow that same owner instead of clearing their inventory on connection changes.
 
-# Persistence and presentation
+## Persistence and presentation
 
 Browser clients use Floe's asynchronous IndexedDB adapter. Desktop exposes an
 asynchronous, root-session-only IPC adapter backed by private, atomically replaced
@@ -99,7 +101,7 @@ finishes still waits for the available snapshot before publishing its error;
 authorization rejection clears presentation immediately. Web Service list
 requests do not wait for template discovery.
 
-## Startup and loading continuity
+### Startup and loading continuity
 
 Full document reload first paint and its single handoff are owned by
 [Env App document reload presentation](document-reload-presentation.md).
@@ -131,7 +133,7 @@ missing editor or setup failure still uses the existing explicit setup activity.
 Activating a Codespaces view refreshes its shared inventory; no new polling or
 connection recovery loop is introduced.
 
-# Actions and recovery
+## Actions and recovery
 
 A stale application is resolved through current inventory before launch. Quit
 checks the current process-instance set; a replacement requires another explicit
@@ -153,6 +155,10 @@ Successful mutations invalidate affected durable snapshots before refreshing,
 preventing an older in-flight read from restoring a deleted item. Pending work
 is scoped to the operation target. Cached restoration never installs components,
 requests permissions, launches processes, or starts lifecycle operations.
+
+# Boundaries
+
+Cached snapshots never authorize mutations. Permission denial or locked access clears affected presentation, while ordinary connection failure keeps the last successful view with its error and retry controls. The cache does not own product identity confirmation.
 
 # Evidence
 

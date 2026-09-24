@@ -17,7 +17,9 @@ macOS uses a separate native backend with a logged-in graphical session; it does
 not use Xpra or Linux virtual displays. Existing
 [application permissions and lifecycle](host-applications.md) remain authoritative.
 
-# Required graphical capabilities
+# Contract
+
+## Required graphical capabilities
 
 The integration accepts Xpra 6.x with local X11 server and command-line client
 support, HTML5 client v20 or v21, Xvfb, xauth, dbus-run-session, dbus-daemon, and a
@@ -56,7 +58,7 @@ Library refresh reruns detection after installation.
 Redeven does not elevate privileges, change package repositories, install system
 packages, or disable SELinux/AppArmor automatically.
 
-# Headless initialization
+## Headless initialization
 
 Each application gets a private XDG runtime directory, X11 server, X authorization,
 D-Bus session, socket directory, and Xpra session directory. Inherited display,
@@ -78,12 +80,12 @@ integration, hardware acceleration, and privileged dialogs require separate
 application-specific verification. Application discovery follows GIO and the
 service's XDG environment, including exported package desktop entries when present.
 
-# Validation
+## Validation
 
 See the [distribution validation record](../operations/host-application-validation.md)
 for tested stacks, architecture boundaries and repeatable installed-host checks.
 
-# macOS initialization
+## macOS initialization
 
 The [native macOS contract](macos-host-applications.md) owns local launch, remote
 single-window capture, input, and graceful lifecycle. macOS 13 or newer uses the
@@ -98,6 +100,10 @@ the pending opening rechecks preflight after the user authorizes the host. Neith
 installs XQuartz or Xpra. A Mac without a graphical login cannot create a private
 headless AppKit session. Native AppKit applications do not become X11 applications
 by installing XQuartz, and Xpra desktop shadowing is not this implementation.
+
+# Boundaries
+
+Capability probes, not distribution names, determine Linux readiness. Missing support components block opening until preparation succeeds. macOS requires its native graphical session and permissions; Linux virtual-display assumptions cannot substitute for them.
 
 # Evidence
 

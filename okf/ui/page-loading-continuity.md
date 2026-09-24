@@ -16,7 +16,9 @@ canvas, or an existing successful result. Data services retain their existing
 authority. Access denial and authentication changes take precedence over retained
 content; ordinary loading does not grant permission or clear content.
 
-# One display rule
+# Contract
+
+## One display rule
 
 A page without a successful result shows its initial presentation until data or
 an actionable error is ready. Module and first-data loading use the same visual
@@ -31,7 +33,7 @@ Pages derive readiness from their authoritative data. Transient mutations,
 terminal attachment, runtime maintenance, and plugin execution retain their own
 progress and confirmation contracts; they are not directory or inventory loads.
 
-# Page ownership
+## Page ownership
 
 | Surface | Initial presentation and data authority |
 | --- | --- |
@@ -48,7 +50,7 @@ This is a common lifecycle policy, not a requirement for identical page shapes o
 persistent caches for all data. Each page's initial geometry follows its own
 content. Unknown counts, paths, or metrics are not reported as successful values.
 
-# Activity and Workbench
+## Activity and Workbench
 
 `EnvPageLoading` is the only built-in module-presentation registry. Its type must
 cover every `BuiltinActivityPage`, so adding a built-in page requires an explicit
@@ -69,6 +71,10 @@ not persist terminal content, monitoring samples, configuration, plugin content,
 or file names. [Resource snapshots](env-resource-cache.md) and
 [filesystem navigation](filesystem-picker-navigation.md) own their respective
 successful data and security boundaries.
+
+# Boundaries
+
+Loading stays inside the selected page or widget. It cannot replace an unrelated mounted page, the whole Workbench canvas or a successful retained result. Access denial and authentication changes take precedence; retained content does not grant permission.
 
 # Evidence
 

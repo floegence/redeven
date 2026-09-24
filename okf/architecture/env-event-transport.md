@@ -37,6 +37,10 @@ ReDevPlugin's released SDK owns its platform request and event contracts. Redeve
 
 Desktop Welcome's main-process Node HTTP reader is an independent maintained consumer. It uses the released SSE parser and does not consume browser connection slots. Its transport and cancellation regression coverage remain intact.
 
+# Boundaries
+
+An observer cannot choose another upstream, session identity or native HTTP transport. Session replacement cancels the old observation. Ending an observation does not cancel the feature's background business operation.
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/services/sessionHTTP.ts` - Product binding to the lifecycle's fetch and event APIs, with no retry or fallback.

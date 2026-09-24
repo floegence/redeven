@@ -17,7 +17,9 @@ rounded panels. Presentation must preserve drafts, model-source identity, and
 permission ownership. Connection failures and configured profiles needing repair
 retain their existing recovery controls instead of being described as first setup.
 
-# First-time setup
+# Contract
+
+## First-time setup
 
 The welcome replaces disabled suggestions only when no thread is selected, no
 provider is configured, no model is usable, and the Desktop source is absent,
@@ -44,7 +46,7 @@ after a 150 ms delay. It finishes at rest and does not replay on directory or
 draft edits. Reduced motion disables it. The shared icon artwork stays bare,
 without restoring the removed glow or a continuous animation.
 
-# Starter tasks
+## Starter tasks
 
 The configured new-conversation page offers four everyday tasks: understand the
 current folder's contents and how to use them, understand the connected computer,
@@ -78,7 +80,7 @@ the scrolling composer. Runtime permissions still govern all submitted work.
 The compact companion continues to omit the task grid as specified by the
 [companion presentation contract](flower-activity-companion.md).
 
-# Settings composition
+## Settings composition
 
 The settings surface edits the environment profile even when a Desktop model
 source is available. The current model and provider list come first, followed by
@@ -111,7 +113,7 @@ section; collapsing it does not destroy its address or connection result.
 Discovery, profile/tab selection, and explicit connection retain their existing
 runtime operations. The shared settings panel stays mounted when returning to chat.
 
-# Saving and ownership
+## Saving and ownership
 
 The adapter exposes independent `saveDefaultPermission`, `saveModelProfile`, and
 `persistDefaultModel` operations. Provider dialogs save directly; model choices
@@ -121,6 +123,10 @@ protects newer choices from older responses, and restores the last confirmed
 value on failure. It applies to new conversations only. Existing-thread defaults
 and admitted turns remain governed by the [model and navigation contract](flower-model-navigation.md).
 Computer-use save failures restore the confirmed switch and expose the error.
+
+# Boundaries
+
+Starter-task selection creates an editable draft, never a turn. Settings preserve drafts, model-source identity and permission ownership. Connection failures and configured profiles needing repair use their recovery controls rather than the first-time setup presentation.
 
 # Evidence
 

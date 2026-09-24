@@ -17,7 +17,9 @@ remain. Floret owns the input wait and continuation; installer status never
 becomes a second conversation lifecycle. Failed verification never publishes a
 partial package, and failures offer an explicit retry or alternative source.
 
-# User contract
+# Contract
+
+## User contract
 
 The shared Browser and desktop dialog opens Browser settings for this environment.
 A prominent switch controls permission to use the built-in headless browser.
@@ -53,7 +55,7 @@ or disabled state again before accepting either answer. No agent installation
 tool, shell fallback, automatic re-enable, target substitution, or new Floret API
 is introduced. Existing account requirements and private-control boundaries hold.
 
-# Distribution and state
+## Distribution and state
 
 Standard Runtime release suites carry `computer.zip`: official Node, published
 Playwright, QuickJS, the published FloeBrowser SDK and its native media collector,
@@ -93,7 +95,7 @@ as Node and Playwright. Historical released packages without helpers remain
 installable and report their unavailable browser capability through
 [Chrome diagnostics](computer-use-chrome-diagnostics.md).
 
-## Archive acquisition ownership
+### Archive acquisition ownership
 
 Released `floe-native-apps` v0.2.0 owns the reusable `artifactcache.Acquire` and
 `Verify` implementations. Redeven owns the Playwright-bound browser catalog,
@@ -129,6 +131,10 @@ stopped Runtime. Environment replacement retires its acquisition jobs. Closing t
 session or Desktop cancels unfinished acquisition/upload, retaining verified
 cache entries. Runtime remains authoritative after upload completion.
 No installation automatically restarts following a Runtime restart.
+
+# Boundaries
+
+Discovery, settings and agent execution cannot initiate installation. Disabling retains installed bytes and website data while canceling installation and managed processes. Verification failure never publishes a partial package; recovery requires an explicit retry or alternative source.
 
 # Evidence
 

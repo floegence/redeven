@@ -16,7 +16,9 @@ inspect settings but cannot edit administrator fields. Failed operations retain
 their input and show an actionable error. Runtime maintenance remains delegated
 to the shared maintenance controller after explicit user confirmation.
 
-# Navigation and visual hierarchy
+# Contract
+
+## Navigation and visual hierarchy
 
 The ten destinations are Config File, Connection, Runtime Status, Shell &
 Workspace, Codespaces & Tooling, Logging, Permission Policy, Flower, Skills, and
@@ -37,7 +39,7 @@ Opening runtime settings from Flower retains the existing return destination.
 Generic geometry is consumed from released `floe-webapp` components rather than
 copied into Redeven. The product adapter only supplies palette roles and content.
 
-# Configuration editing
+## Configuration editing
 
 Shell, filesystem, logging, port, and permission changes retain their existing
 autosave and restart requirements. `PUT /_redeven_proxy/api/settings` accepts flat
@@ -61,7 +63,7 @@ storage, model discovery, secret handling, and permission contracts remain the
 owners of those operations. The separate shared chat settings surface is defined
 in [Flower setup and settings](flower-setup-and-settings.md).
 
-# Skills operations
+## Skills operations
 
 Skills load their catalog and source metadata on first entry once the runtime
 connection is usable, through
@@ -90,6 +92,10 @@ validation, encoding, size limits, and truncation apply to both bundled and
 filesystem skills. Local and GitHub-installed skills retain filesystem and
 symlink containment checks. Browsing requires read permission, not administrator
 permission, and does not install or materialize bundled files on disk.
+
+# Boundaries
+
+Read access cannot edit administrator fields. All writes use existing authenticated APIs, and failed operations preserve input with an actionable error. Runtime maintenance requires explicit user confirmation through its existing shared controller.
 
 # Evidence
 

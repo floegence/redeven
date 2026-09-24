@@ -54,6 +54,10 @@ Reload uses the existing environment navigation owner: a same-origin Cloud
 bootstrap reloads its owning parent; standalone and Desktop documents reload
 themselves. This changes no authentication or Desktop process-identity contract.
 
+# Boundaries
+
+Transport readiness does not prove document assets are current or loadable. Build changes and import failures must expose recovery, but detection cannot reload over unsaved work. Redeven retains the authenticated route and explicit user reload action.
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/createEnvAppAssetRecovery.ts` - Secure-readiness trigger and authenticated document route.

@@ -66,6 +66,10 @@ newest and return to empty. Do not add a popup, focus transfer, focus border
 override or additional visible history controls. The same shared behavior
 applies to Desktop, Env App, Activity, Workbench and companion placements.
 
+# Boundaries
+
+Recall never submits, changes canonical messages, restores attachments or overwrites a nonempty draft. Composition and other keyboard owners take precedence. Scope, availability, candidate or external-draft changes end browsing while preserving current text.
+
 # Evidence
 
 - `redeven:internal/flower_ui/src/composer/flowerInputHistory.ts` - Selects canonical ordinary user text without restoring metadata or structured answers.

@@ -155,6 +155,12 @@ normal browser cache partitioning. Session documents, settings, credentials and
 control remain uncached and independently authorized even when scripts are cached.
 Detaching still closes all accepted sharing sockets without terminating the app.
 
+The private loopback proxy rewrites the target URL while preserving the sharing
+Host and Origin used by the native WebSocket origin check. The standard rewrite
+boundary removes untrusted forwarding metadata. Client compression preferences
+are removed so the transport can decode HTML before the SDK relocates resource
+references; this does not create another authorization or caching path.
+
 ## Remote cursor geometry
 
 Published `floe-native-apps` prepares the only Linux cursor owner. Remote PNG

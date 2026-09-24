@@ -18,7 +18,9 @@ and stream. Missing permissions or graphical login block streaming explicitly.
 Network loss preserves the app; reconnection attaches to the same process. Explicit
 quit is independent of sharing and binds to the selected OS process generations.
 
-# Catalog and local launch
+# Contract
+
+## Catalog and local launch
 
 AppKit discovers applications in standard system/user application directories,
 running application bundle paths, and explicit custom absolute `.app` paths.
@@ -41,7 +43,7 @@ The [application management contract](macos-application-management.md) owns live
 OS inventory, explicit quit confirmation, process-generation validation and the
 distinction between quitting an app and stopping its sharing session.
 
-# Remote window ownership and transport
+## Remote window ownership and transport
 
 The [native capture owner](macos-application-capture-owner.md) uses one Swift process
 and host-application protocol 2, separate from Computer Use. AppKit opens or activates the
@@ -96,7 +98,7 @@ keyboard transitions, candidate placement and soft-keyboard interaction. Local
 focus during same-window recapture grants no remote input authority; composition
 begun before decoded pixels cannot acquire permission by waiting for a frame.
 
-# Human control and lifecycle
+## Human control and lifecycle
 
 Remote input shares the host's real graphical session and foreground. Screen
 recording and accessibility grants are required. Explicit input activates and
@@ -169,6 +171,10 @@ Protected content, inaccessible custom controls, separate-process dialogs, and a
 with unusual window ownership require application-specific validation. macOS
 13 API compatibility is a build contract, not a claim of testing every OS version,
 Intel host or third-party application.
+
+# Boundaries
+
+Every operation and stream keeps Host Applications authorization. Missing graphical login or OS permissions block capture explicitly. Network loss preserves the application; reconnect binds the same process, and quitting remains independent of viewer closure.
 
 # Evidence
 
