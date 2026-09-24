@@ -108,7 +108,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
     >
       <button
         type="button"
-        class="flower-thread-card-select-button flex w-full cursor-pointer items-start gap-2 px-2.5 py-2 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
+        class="flower-thread-card-select-button flex w-full cursor-pointer items-start gap-2 px-2.5 py-1.5 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
         aria-label={ariaLabel()}
         aria-current={props.active ? 'true' : undefined}
         onClick={props.onSelect}
@@ -137,7 +137,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <div class="flex min-w-0 items-center gap-1">
             <span
-              class="flower-thread-list-title flex-1 truncate text-xs font-medium"
+              class="flower-thread-list-title flex-1 truncate text-[length:var(--floe-type-control)] leading-5 font-medium"
               draggable={titleDraggable()}
               title={titleDraggable() ? copy().dragPinned : undefined}
               onDragStart={(event) => props.onDragStart?.(event, props.item)}
@@ -145,12 +145,12 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
             >{title()}</span>
           </div>
           <Show when={props.busyLabel || flowerThreadIsStopping(props.item)}>
-            <span class="text-[10px] text-muted-foreground" role="status">{flowerThreadIsStopping(props.item) ? copy().stopping : props.busyLabel}</span>
+            <span class="text-[11px] text-muted-foreground" role="status">{flowerThreadIsStopping(props.item) ? copy().stopping : props.busyLabel}</span>
           </Show>
         </div>
       </button>
-      <div class="pointer-events-none absolute right-2.5 top-2 flex h-5 min-w-7 items-center justify-end">
-        <span class="flower-thread-card-time select-none text-[10px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">
+      <div class="pointer-events-none absolute right-2.5 top-1.5 flex h-5 min-w-7 items-center justify-end">
+        <span class="flower-thread-card-time select-none text-[11px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">
           {fmtFlowerShortTime(props.item.created_at_ms, copy())}
         </span>
       </div>
@@ -474,11 +474,11 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   });
 
   return (
-    <div ref={listRef} class="flower-thread-list flex min-h-0 flex-col gap-3 p-3">
-      <div class="flower-thread-list-toolbar flex flex-col gap-3">
+    <div ref={listRef} class="flower-thread-list flex min-h-0 flex-col gap-2 p-2">
+      <div class="flower-thread-list-toolbar flex flex-col gap-2">
         <div class="flower-thread-list-header flex items-center gap-2">
           <div class="flower-thread-list-heading min-w-0 flex-1">
-            <h2 class="flower-thread-list-title truncate text-sm font-semibold">{copy().title}</h2>
+            <h2 class="flower-thread-list-title truncate text-sm font-medium">{copy().title}</h2>
             <p class="flower-thread-list-description truncate text-xs">
               {props.warmup || props.loading ? copy().warmupDescription : copy().description}
             </p>
@@ -561,7 +561,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             <FlowerThreadRows keys={visibleKeys()} render={(key) => {
               if (key.startsWith('group:')) {
                 const group = () => groupByKey().get(key.slice(6));
-                return <h3 class="flower-thread-group-label px-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
+                return <h3 class="flower-thread-group-label px-1 text-[11px] font-semibold uppercase tracking-[0.08em]">
                   {group()?.kind === 'pinned' ? copy().pinnedGroup : timeGroupLabel(group()?.group ?? 'older', copy())}
                 </h3>;
               }

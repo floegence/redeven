@@ -97,13 +97,13 @@
   grid-template-columns: minmax(0, 1fr) 16px auto;
   align-items: center;
   column-gap: 8px;
-  height: 30px;
+  height: 32px;
   padding: 0 10px;
   border: 0;
   border-left: 2px solid transparent;
   box-shadow: none;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--floe-type-control);
+  line-height: var(--floe-line-control);
   transition: background-color 120ms ease-out, border-color 120ms ease-out;
 }
 .git-file-row[aria-selected='true'],
@@ -120,17 +120,17 @@
   color: var(--foreground);
 }
 .git-file-label__name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.git-file-label__directory { flex: 1 100000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--muted-foreground); opacity: .8; }
+.git-file-label__directory { flex: 1 100000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--muted-foreground); opacity: .8; }
 .git-file-status { display: inline-flex; justify-content: center; width: 16px; font: 600 10px/18px var(--font-mono, monospace); color: var(--muted-foreground); }
 .git-file-status[data-change='modified'] { color: var(--redeven-status-info-foreground); }
 .git-file-status:is([data-change='added'], [data-change='untracked']) { color: var(--redeven-status-success-foreground); }
 .git-file-status:is([data-change='deleted'], [data-change='conflicted']) { color: var(--redeven-status-error-foreground); }
 .git-file-status:is([data-change='renamed'], [data-change='copied']) { color: var(--redeven-status-warning-foreground); }
-.git-file-metrics { justify-content: flex-end; gap: 6px; min-width: 52px; white-space: nowrap; font-size: 10px; line-height: 18px; }
+.git-file-metrics { justify-content: flex-end; gap: 6px; min-width: 52px; white-space: nowrap; font-size: 11px; line-height: 18px; }
 .git-file-open { display: block; width: 100%; min-width: 0; cursor: pointer; text-align: left; }
 .git-file-open:focus-visible { outline: 1px solid var(--git-browser-focus-ring); outline-offset: 2px; border-radius: 2px; }
 .git-file-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
-.git-file-actions button { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 4px; color: var(--muted-foreground); transition: color 120ms ease-out, background-color 120ms ease-out; }
+.git-file-actions button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 4px; color: var(--muted-foreground); transition: color 120ms ease-out, background-color 120ms ease-out; }
 .git-file-actions button:hover:not(:disabled) { color: var(--foreground); background: var(--git-browser-hover-bg); }
 .git-file-actions button.text-destructive:hover:not(:disabled) { color: var(--destructive); }
 .git-file-actions button[aria-busy='true'] { opacity: .5; }
@@ -142,11 +142,11 @@
 .git-diff-file-table--actions tr { grid-template-columns: minmax(0, 1fr) auto auto auto; }
 .git-diff-file-table--actions td:nth-child(4) { display: block; position: static; box-shadow: none; }
 .git-diff-file-table--status tr { grid-template-columns: minmax(0, 1fr) auto auto auto; }
-.git-diff-file-table--status td:nth-child(2) { font-size: 10px; }
+.git-diff-file-table--status td:nth-child(2) { font-size: 11px; }
 .git-diff-file-table--status td:nth-child(4) { display: block; position: static; }
 .git-diff-file-table--status td:nth-child(5) { display: none; }
 .git-diff-panel__toolbar { display: flex; flex-shrink: 0; align-items: center; gap: 8px; min-height: 38px; padding: 4px 10px; border-bottom: 1px solid var(--border); }
-.git-diff-panel__identity { flex: 1; min-width: 0; font-size: 12px; }
+.git-diff-panel__identity { flex: 1; min-width: 0; font-size: 13px; }
 .git-diff-panel__modes { display: flex; flex-shrink: 0; gap: 2px; border-radius: 5px; padding: 2px; }
 .git-diff-panel__modes button { padding: 3px 8px; }
 .git-patch-viewer--embedded { gap: 0; padding: 0; border-radius: 0; background: transparent; }
@@ -170,8 +170,8 @@
   .git-file-open { min-height: 44px; }
 }
 @media (pointer: coarse) {
-  .git-file-row, .git-diff-file-table tr { height: 38px; }
-  .git-file-actions button { width: 30px; height: 30px; }
+  .git-file-row, .git-diff-file-table tr { min-height: 44px; }
+  .git-file-actions button { width: 44px; height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .git-file-row, .git-diff-file-table tr, .git-file-actions button, .git-diff-panel__modes button { transition: none; }

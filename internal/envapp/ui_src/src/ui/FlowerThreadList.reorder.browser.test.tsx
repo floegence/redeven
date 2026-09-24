@@ -53,6 +53,8 @@ describe('Flower pinned conversation interaction', () => {
     const ordinary = ui.row('ordinary').querySelector<HTMLElement>('.flower-thread-list-title')!;
     expect(pinned.getBoundingClientRect().left).toBe(ordinary.getBoundingClientRect().left);
     expect(pinned.getBoundingClientRect().width).toBe(ordinary.getBoundingClientRect().width);
+    expect(getComputedStyle(pinned).fontSize).toBe('13px');
+    expect(ui.row('first').querySelector('.flower-thread-card-select-button')!.getBoundingClientRect().height).toBe(32);
     expect(pinned.draggable).toBe(true);
     expect(pinned.title).toBe(copy.dragPinned);
     expect(ordinary.draggable).toBe(false);
@@ -301,7 +303,7 @@ describe('Flower sidebar selection themes', () => {
     const row=ui.row('first'),style=getComputedStyle(row);
     const title=getComputedStyle(row.querySelector('.flower-thread-list-title')!);
     expect(contrast(title.color,style.backgroundColor)).toBeGreaterThanOrEqual(4.5);
-    expect(title.fontWeight).toBe('600');
+    expect(title.fontWeight).toBe('500');
     expect(getComputedStyle(row,'::before').content).toBe('none');
     expect(style.backgroundColor).not.toBe(getComputedStyle(ui.row('second')).backgroundColor);
     expect(row.querySelector('button[aria-current="true"]')).not.toBeNull();

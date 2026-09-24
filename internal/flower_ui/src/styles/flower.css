@@ -421,7 +421,7 @@
   color: var(--foreground);
   padding: 0 0.5rem;
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 500;
   outline: none;
   transition: background-color 120ms ease, color 120ms ease;
 }
@@ -602,7 +602,7 @@
   display: inline-flex;
   width: auto;
   min-width: 0;
-  height: 2.375rem;
+  height: var(--floe-control-height-md);
   flex: 1 1 0;
   cursor: pointer;
   align-items: center;
@@ -651,7 +651,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
@@ -698,9 +698,9 @@
   flex-direction: column;
   align-items: stretch;
   gap: 0.45rem;
-  min-height: 3rem;
-  background: color-mix(in srgb, var(--flower-chat-surface) 92%, transparent);
-  padding: 0.5rem 0.75rem;
+  min-height: 2.75rem;
+  background: var(--flower-chat-surface);
+  padding: 0.375rem 1rem;
 }
 
 .flower-chat-header-row {
@@ -715,7 +715,7 @@
 .flower-chat-header-title {
   min-width: 0;
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--foreground);
 }
 
@@ -816,8 +816,8 @@
 .flower-header-icon-button {
   position: relative;
   display: inline-flex;
-  width: 1.875rem;
-  height: 1.875rem;
+  width: 1.75rem;
+  height: 1.75rem;
   flex: 0 0 auto;
   cursor: pointer;
   align-items: center;
@@ -906,11 +906,6 @@
   gap: 0.5rem;
 }
 
-/* Align action glyphs with the compact controls while preserving full-size hit targets. */
-.flower-composer:not([data-flower-companion-compact='true']) .flower-composer-actions {
-  transform: translateY(0.625rem);
-}
-
 .flower-composer-tool-cluster {
   display: inline-flex;
   flex: 0 0 auto;
@@ -970,16 +965,16 @@
 .flower-composer-more-anchor {
   position: relative;
   display: inline-flex;
-  width: 2.75rem;
-  height: 2.75rem;
-  flex: 0 0 2.75rem;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
 }
 
 .flower-composer-more-button {
   display: inline-flex;
-  width: 2.75rem;
-  height: 2.75rem;
-  flex: 0 0 2.75rem;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
   cursor: pointer;
   align-items: center;
   justify-content: center;
@@ -1039,7 +1034,7 @@
   min-width: 0;
   color: var(--muted-foreground);
   font-size: 0.6875rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1362,7 +1357,7 @@
 
 .flower-composer-reference-option-name {
   font-size: 0.8125rem;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.1rem;
 }
 
@@ -1663,7 +1658,7 @@
   display: inline-flex;
   min-width: 0;
   max-width: min(13rem, 52vw);
-  height: 1.375rem;
+  height: var(--floe-control-height-sm);
   cursor: pointer;
   align-items: center;
   justify-content: center;
@@ -1673,8 +1668,8 @@
   background: color-mix(in srgb, var(--muted) 18%, transparent);
   color: color-mix(in srgb, var(--foreground) 80%, var(--primary) 20%);
   padding: 0 0.375rem;
-  font-size: 0.6875rem;
-  font-weight: 760;
+  font-size: var(--floe-type-supporting);
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   transition:
@@ -1824,7 +1819,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .flower-permission-menu-description {
@@ -1837,7 +1832,7 @@
   flex: 0 0 auto;
   color: var(--muted-foreground);
   font-size: 0.6875rem;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .flower-model-chip {
@@ -1851,7 +1846,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.6875rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.25;
 }
 
@@ -1865,7 +1860,7 @@
   display: inline-flex;
   min-width: 0;
   max-width: min(22rem, 54vw);
-  height: 1.375rem;
+  height: var(--floe-control-height-sm);
   cursor: pointer;
   align-items: center;
   justify-content: center;
@@ -1875,8 +1870,8 @@
   background: color-mix(in srgb, var(--muted) 18%, transparent);
   color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
   padding: 0 0.35rem 0 0.45rem;
-  font-size: 0.6875rem;
-  font-weight: 680;
+  font-size: var(--floe-type-supporting);
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   transition:
@@ -1918,7 +1913,7 @@
   display: inline-flex;
   min-width: 0;
   max-width: min(26rem, 64vw);
-  height: 1.5rem;
+  height: var(--floe-control-height-sm);
   flex: 0 1 auto;
   align-items: stretch;
   overflow: visible;
@@ -1926,8 +1921,8 @@
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--muted) 17%, transparent);
   color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
-  font-size: 0.6875rem;
-  font-weight: 680;
+  font-size: var(--floe-type-supporting);
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   transition:
@@ -2067,7 +2062,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .flower-model-menu-meta {
@@ -2130,7 +2125,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.65625rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.2;
 }
 
@@ -2283,7 +2278,7 @@
   flex: 0 0 auto;
   color: var(--muted-foreground);
   font-size: 0.6875rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.2;
 }
 
@@ -2297,7 +2292,7 @@
   color: color-mix(in srgb, var(--foreground) 82%, var(--primary) 18%);
   padding: 0.125rem 0.45rem;
   font-size: 0.6875rem;
-  font-weight: 750;
+  font-weight: 500;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -2315,7 +2310,7 @@
   color: color-mix(in srgb, var(--foreground) 80%, var(--primary) 20%);
   padding: 0 0.35rem 0 0.42rem;
   font-size: 0.625rem;
-  font-weight: 760;
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   transition:
@@ -2360,7 +2355,7 @@
   color: color-mix(in srgb, var(--foreground) 82%, var(--primary) 18%);
   padding: 0 0.48rem;
   font-size: 0.6875rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
 }
@@ -2416,7 +2411,7 @@
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
   padding: 0 0.55rem;
   font-size: 0.75rem;
-  font-weight: 720;
+  font-weight: 500;
   line-height: 1;
   text-align: left;
   white-space: nowrap;
@@ -2444,7 +2439,7 @@
   color: var(--foreground);
   padding: 0 calc(0.55rem - 1px);
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .flower-reasoning-actions {
@@ -2495,7 +2490,7 @@
   color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
   padding: 0.125rem 0.42rem;
   font-size: 0.6875rem;
-  font-weight: 720;
+  font-weight: 500;
   line-height: 1.2;
   transition:
     background-color 120ms ease, color 120ms ease;
@@ -2532,7 +2527,7 @@
   color: var(--foreground);
   padding: 0.125rem 0.5rem;
   font-size: 0.6875rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.2;
 }
 
@@ -2601,7 +2596,7 @@
   color: color-mix(in srgb, var(--primary) 72%, var(--foreground) 28%);
   padding: 0.1875rem 0.5rem;
   font-size: 0.6875rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1;
 }
 
@@ -2746,7 +2741,7 @@
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: clamp(0.875rem, 1.8vw, 1.5rem) clamp(0.875rem, 4vw, 3.5rem) 1rem;
+  padding: clamp(0.875rem, 1.8vw, 1.5rem) clamp(0.875rem, 3vw, 1.5rem) 1rem;
   scrollbar-gutter: stable;
 }
 
@@ -2770,7 +2765,7 @@
   flex: 0 0 auto;
   background: transparent;
   overflow: visible;
-  padding: 0 clamp(0.875rem, 4vw, 3.5rem) calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  padding: 0 clamp(0.875rem, 3vw, 1.5rem) calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
 
 .flower-chat-bottom-dock::before {
@@ -2809,8 +2804,8 @@
 .flower-message-bubble {
   max-width: 100%;
   min-width: 0;
-  font-size: 0.875rem;
-  line-height: 1.65;
+  font-size: var(--floe-type-body);
+  line-height: var(--floe-line-body);
   letter-spacing: 0;
   user-select: text;
 }
@@ -3007,7 +3002,7 @@
 .flower-message-file-name {
   overflow: hidden;
   font-size: 0.8125rem;
-  font-weight: 650;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3214,7 +3209,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 560;
+  font-weight: 500;
   line-height: 1.3;
 }
 
@@ -3706,7 +3701,7 @@
   display: inline-block;
   color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0;
   white-space: nowrap;
 }
@@ -4199,7 +4194,7 @@
   color: inherit;
   cursor: pointer;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
@@ -4264,7 +4259,7 @@
   display: block;
   min-width: 0;
   max-width: 100%;
-  line-height: 1.75;
+  line-height: var(--floe-line-body);
   user-select: text;
 }
 
@@ -4280,7 +4275,7 @@
 }
 
 .flower-chat-md-block :is(p, ul, ol, blockquote, pre, table) {
-  margin: 0.72rem 0 0;
+  margin: 0.5rem 0 0;
 }
 
 .flower-chat-md-block hr {
@@ -4297,27 +4292,27 @@
 }
 
 .flower-chat-md-block :is(h1, h2, h3, h4, h5, h6) {
-  margin: 1.35rem 0 0.55rem;
+  margin: 1rem 0 0.5rem;
   color: inherit;
-  font-weight: 760;
+  font-weight: 600;
   line-height: 1.3;
   letter-spacing: 0;
 }
 
 .flower-chat-md-block h1 {
-  font-size: 1.28rem;
+  font-size: 1.125rem;
 }
 
 .flower-chat-md-block h2 {
-  font-size: 1.16rem;
+  font-size: 1rem;
 }
 
 .flower-chat-md-block h3 {
-  font-size: 1.03rem;
+  font-size: 0.875rem;
 }
 
 .flower-chat-md-block :is(h4, h5, h6) {
-  font-size: 0.95rem;
+  font-size: 0.875rem;
 }
 
 .flower-chat-md-block :is(ul, ol) {
@@ -4616,7 +4611,7 @@
 .flower-thread-approval-title {
   color: var(--foreground);
   font-size: 0.875rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -4644,7 +4639,7 @@
   color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
   padding: 0.125rem 0.5rem;
   font-size: 0.6875rem;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4719,7 +4714,7 @@
 
 .flower-approval-command-token-command {
   color: var(--redeven-code-token-command);
-  font-weight: 680;
+  font-weight: 500;
 }
 
 .flower-approval-command-token-flag {
@@ -4737,7 +4732,7 @@
 
 .flower-approval-command-token-operator {
   color: var(--redeven-code-token-operator);
-  font-weight: 680;
+  font-weight: 500;
 }
 
 .flower-approval-command-token-variable {
@@ -5290,11 +5285,11 @@
   gap: 0.35rem;
   overflow: hidden;
   color: currentColor;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.75rem;
-  font-weight: 560;
+  font-family: var(--font-sans);
+  font-size: var(--floe-type-control);
+  font-weight: 500;
   letter-spacing: 0;
-  line-height: 1.25;
+  line-height: var(--floe-line-control);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5332,7 +5327,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.6875rem;
-  font-weight: 560;
+  font-weight: 500;
   letter-spacing: 0;
   line-height: 1.25;
 }
@@ -5344,7 +5339,7 @@
   color: currentColor;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.6875rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.25;
   white-space: nowrap;
 }
@@ -5353,14 +5348,14 @@
   color: currentColor;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.6875rem;
-  font-weight: 620;
+  font-weight: 500;
   letter-spacing: 0;
   line-height: 1;
   white-space: nowrap;
 }
 
 .flower-activity-inline-row-running .flower-activity-inline-title {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 
@@ -5392,7 +5387,7 @@
 }
 
 .flower-activity-inline-row-subagents .flower-activity-inline-title {
-  font-weight: 680;
+  font-weight: 500;
 }
 
 .flower-activity-inline-row-subagents .flower-activity-inline-detail {
@@ -5609,7 +5604,7 @@
 .flower-activity-subagents-item-agent {
   color: color-mix(in srgb, var(--muted-foreground) 82%, transparent);
   font-size: 0.65625rem;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .flower-activity-subagents-list {
@@ -5651,7 +5646,7 @@
   min-width: 0;
   color: color-mix(in srgb, var(--foreground) 86%, var(--muted-foreground) 14%);
   font-size: 0.75rem;
-  font-weight: 720;
+  font-weight: 500;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -5660,7 +5655,7 @@
   flex: 0 0 auto;
   color: color-mix(in srgb, var(--muted-foreground) 80%, transparent);
   font-size: 0.65625rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.35;
   white-space: nowrap;
 }
@@ -5856,7 +5851,7 @@
   background: color-mix(in srgb, var(--redeven-chat-muted) 10%, transparent);
   color: var(--redeven-chat-muted);
   font-size: 0.625rem;
-  font-weight: 750;
+  font-weight: 500;
   line-height: 1;
   padding: 0 0.4375rem;
   text-overflow: ellipsis;
@@ -6098,7 +6093,7 @@
   background: color-mix(in srgb, var(--muted) 18%, transparent);
   color: color-mix(in srgb, var(--foreground) 76%, var(--muted-foreground) 24%);
   font-size: 0.6875rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.18;
   padding: 0.1875rem 0.5rem;
 }
@@ -6162,7 +6157,7 @@
   min-width: 0;
   color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
@@ -6186,7 +6181,7 @@
   color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
   background: color-mix(in srgb, var(--muted) 54%, transparent);
   font-size: 0.625rem;
-  font-weight: 680;
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
 }
@@ -6436,7 +6431,7 @@
 .flower-input-request-title {
   color: var(--foreground);
   font-size: 0.875rem;
-  font-weight: 720;
+  font-weight: 500;
   line-height: 1.35;
 }
 
@@ -6495,7 +6490,7 @@
 .flower-input-request-question-header {
   color: color-mix(in srgb, var(--foreground) 86%, var(--primary) 14%);
   font-size: 0.75rem;
-  font-weight: 760;
+  font-weight: 500;
   letter-spacing: 0;
   line-height: 1.35;
 }
@@ -6741,7 +6736,7 @@
 
 .flower-thread-card-active .flower-thread-list-title {
   color: var(--flower-thread-selected-foreground);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .dark .flower-component-shell {
@@ -7031,7 +7026,7 @@
   background: transparent;
   color: color-mix(in srgb, var(--primary) 96%, transparent);
   font-size: 0.625rem;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1;
   letter-spacing: 0;
   white-space: nowrap;
@@ -7563,15 +7558,15 @@
   max-width: 9rem;
   padding: 0.25rem;
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-supporting);
   line-height: 1.5;
   text-align: end;
   cursor: pointer;
 }
 
 .flower-approval-command :is(.flower-approval-copy-btn, .flower-approval-command-toggle) {
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 28px;
+  min-height: 28px;
 }
 
 .flower-approval-command-toggle:hover {
@@ -7810,7 +7805,7 @@
 .flower-composer-reference-chip {
   display: inline-flex;
   max-width: min(100%, 22rem);
-  min-height: 2.75rem;
+  min-height: 2rem;
   align-items: center;
   gap: 0.375rem;
   border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border) 76%);
@@ -7824,7 +7819,7 @@
   min-width: 0;
   overflow: hidden;
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.1rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -7832,8 +7827,8 @@
 
 .flower-composer-reference-chip-remove {
   display: inline-flex;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2rem;
+  height: 2rem;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -7983,7 +7978,7 @@ button.flower-attachment-preview-trigger:disabled {
   overflow: hidden;
   color: var(--foreground);
   font-size: 0.8125rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.25rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8092,8 +8087,8 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-attachment-icon-button,
 .flower-composer-attachment-button {
   display: inline-flex;
-  min-width: 2.75rem;
-  min-height: 2.75rem;
+  min-width: 2rem;
+  min-height: 2rem;
   align-items: center;
   justify-content: center;
   border: 0;
@@ -8104,9 +8099,9 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-composer-attachment-button {
-  width: 2.75rem;
-  height: 2.75rem;
-  flex: 0 0 2.75rem;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
 }
 
 .flower-attachment-icon-button:hover,
@@ -8147,6 +8142,7 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-composer[data-flower-companion-compact='true'] .flower-attachment-lane,
+.flower-composer[data-flower-companion-compact='true'] .flower-composer-reference-lane,
 .flower-composer[data-flower-companion-compact='true'] .flower-composer-over-limit {
   grid-column: 1 / -1;
 }
@@ -8167,14 +8163,14 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-composer-submit {
-  width: 2.25rem;
-  height: 2.25rem;
-  flex: 0 0 2.25rem;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
   padding: 0;
 }
 
 .flower-composer-continue {
-  min-height: 2.25rem;
+  min-height: 2rem;
   border-radius: 9999px;
   padding-inline: 0.875rem;
   white-space: nowrap;
@@ -8190,8 +8186,8 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-composer-stop-thread {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2rem;
+  height: 2rem;
   flex: 0 0 auto;
   padding: 0;
 }
@@ -8220,11 +8216,15 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-composer-approval-decision {
   width: auto;
-  min-height: 2.25rem;
   height: auto;
+  min-height: var(--floe-control-height-sm);
   border-radius: 9999px;
-  padding-inline: 0.875rem;
+  padding-inline: 0.625rem;
   white-space: nowrap;
+}
+
+.flower-approval-queue-footer :where(.flower-approval-decision-approve) {
+  min-height: var(--floe-control-height-md);
 }
 
 .flower-composer-readonly-chip {
@@ -8238,7 +8238,7 @@ button.flower-attachment-preview-trigger:disabled {
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
   padding: 0.25rem 0.625rem;
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -8278,7 +8278,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-frame {
   width: min(100%, 64rem);
   margin: 0 auto;
-  padding: 2.5rem 3rem 3rem;
+  padding: 1.5rem 1.5rem 3rem;
 }
 
 .flower-settings-title-row {
@@ -8288,7 +8288,7 @@ button.flower-attachment-preview-trigger:disabled {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  padding-bottom: 2.5rem;
+  padding-bottom: 1rem;
 }
 
 .flower-settings-title-feedback {
@@ -8307,7 +8307,7 @@ button.flower-attachment-preview-trigger:disabled {
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
   padding: 0.25rem 0.625rem;
   font: inherit;
-  font-weight: 700;
+  font-weight: 500;
   text-decoration: none;
 }
 
@@ -8330,13 +8330,13 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-title {
   margin: 0;
   color: var(--foreground);
-  font-size: 1.375rem;
-  font-weight: 650;
-  letter-spacing: -0.025em;
+  font-size: var(--floe-type-heading);
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .flower-settings-model-field { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
-.flower-settings-model-select { min-height: 2.5rem; max-width: 100%; font-size: 0.8125rem; }
+.flower-settings-model-select { min-height: 2rem; max-width: 100%; font-size: 0.8125rem; }
 
 .flower-settings-policy-radio {
   display: inline-flex;
@@ -8361,7 +8361,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-text-input {
   display: block;
   min-width: 0;
-  height: 2.25rem;
+  height: 2rem;
   border: 1px solid var(--input);
   border-radius: 0.5rem;
   background: var(--background);
@@ -8433,7 +8433,7 @@ button.flower-attachment-preview-trigger:disabled {
   gap: 0.5rem;
   color: var(--foreground);
   font-size: 0.8125rem;
-  font-weight: 680;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
@@ -8537,7 +8537,7 @@ button.flower-attachment-preview-trigger:disabled {
   color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
   padding: 0.3rem 0.875rem 0.25rem;
   font-size: 0.65625rem;
-  font-weight: 680;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
@@ -8647,7 +8647,7 @@ button.flower-attachment-preview-trigger:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.8125rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.3;
   letter-spacing: 0;
 }
@@ -8878,7 +8878,7 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-subagent-status-label {
   color: var(--flower-subagent-window-text);
-  font-weight: 680;
+  font-weight: 500;
 }
 
 .flower-subagent-status-label-running {
@@ -9158,7 +9158,7 @@ button.flower-attachment-preview-trigger:disabled {
   min-width: 0;
   overflow: hidden;
   font-size: 0.6875rem;
-  font-weight: 690;
+  font-weight: 500;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -9473,8 +9473,8 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-model-picker-label {
   min-width: 0;
   overflow: hidden;
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: var(--floe-type-body);
+  font-weight: 500;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -9504,13 +9504,13 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-settings-select {
   width: 100%;
-  height: 2.25rem;
+  height: 2rem;
   cursor: pointer;
   border: 1px solid var(--input);
   border-radius: 0.5rem;
   background: var(--background);
   padding: 0 0.75rem;
-  font-size: 0.875rem;
+  font-size: var(--floe-type-control);
   color: var(--foreground);
   outline: none;
   transition:
@@ -9596,7 +9596,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-policy-card-label {
   color: var(--foreground);
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.5;
 }
 
@@ -9612,7 +9612,7 @@ button.flower-attachment-preview-trigger:disabled {
   border-radius: 9999px;
   color: var(--muted-foreground);
   font-size: 0.6875rem;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .flower-settings-state-pill-active {
@@ -9689,10 +9689,10 @@ button.flower-attachment-preview-trigger:disabled {
   display: grid;
   grid-template-columns: 11.5rem minmax(0, 1fr);
   align-items: start;
-  gap: 3rem;
+  gap: 1.5rem;
   min-width: 0;
   border-top: 1px solid var(--flower-settings-border);
-  padding: 2.25rem 0;
+  padding: 1.25rem 0;
 }
 
 .flower-settings-subsection-header {
@@ -9716,8 +9716,8 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-subsection-title {
   margin: 0;
   color: var(--foreground);
-  font-size: 0.9375rem;
-  font-weight: 600;
+  font-size: var(--floe-type-body);
+  font-weight: 500;
   line-height: 1.5;
 }
 
@@ -9730,7 +9730,7 @@ button.flower-attachment-preview-trigger:disabled {
   max-width: 44rem;
   color: var(--muted-foreground);
   font-size: 0.75rem;
-  line-height: 1.65;
+  line-height: 1.5;
 }
 
 .flower-settings-subsection-actions {
@@ -9857,14 +9857,14 @@ button.flower-attachment-preview-trigger:disabled {
   min-width: 0;
   color: var(--muted-foreground);
   font-size: 0.8125rem;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 
 @container (max-width: 760px) {
-  .flower-settings-frame { padding: 1.5rem; }
+  .flower-settings-frame { padding: 1rem; }
   .flower-settings-section { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; padding: 1.75rem 0; }
-  .flower-settings-title-row { padding-bottom: 1.75rem; }
+  .flower-settings-title-row { padding-bottom: 1rem; }
 }
 
 .flower-settings-warning-strip,
@@ -10156,13 +10156,6 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-component-thread-rail .flower-thread-empty {
   border: 0;
   background: transparent;
-}
-
-.flower-chat-header {
-  min-height: 3.25rem;
-  border-bottom: 0;
-  background: var(--flower-chat-surface);
-  padding: 0.625rem 1.125rem;
 }
 
 .flower-chat-bottom-dock::before {
@@ -10497,4 +10490,45 @@ button.flower-attachment-preview-trigger:disabled {
   .flower-empty-state:not([data-suggestions-expanded="true"]) .flower-empty-suggestion:nth-child(n+3) { display: none; }
   .flower-empty-expand { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; margin-top: 8px; padding-inline: 12px; font-size: 12px; color: var(--muted-foreground); cursor: pointer; border-radius: 6px; }
   .flower-empty-expand:hover { background: var(--muted); }
+}
+
+@media (pointer: coarse) {
+  .flower-header-icon-button {
+    min-width: 44px;
+    min-height: 44px;
+    flex-basis: 44px;
+  }
+
+  .flower-model-reasoning-control { height: auto; }
+  .flower-model-reasoning-model-trigger,
+  .flower-reasoning-segment-button,
+  .flower-model-select-trigger,
+  .flower-permission-trigger,
+  .flower-model-menu-item,
+  .flower-permission-menu-item,
+  .flower-reasoning-menu-item {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .flower-composer textarea,
+  .flower-composer input[type='password'],
+  .flower-reasoning-menu-budget { font-size: 1rem; }
+
+  .flower-settings-model-select,
+  .flower-settings-text-input,
+  .flower-settings-select { min-height: 44px; font-size: 1rem; }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .flower-attachment-icon-button,
+  .flower-composer-attachment-button,
+  .flower-composer-more-anchor,
+  .flower-composer-more-button,
+  .flower-composer-reference-chip-remove,
+  .flower-composer-submit {
+    min-width: 44px;
+    min-height: 44px;
+    flex-basis: 44px;
+  }
 }

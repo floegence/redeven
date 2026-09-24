@@ -7474,7 +7474,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
           <header class="redeven-header-separator mb-5 space-y-4">
             <div class="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div class="min-w-0 space-y-1">
-                <h1 class="text-lg font-semibold tracking-tight text-foreground">{props.i18n.t(headerCopy().titleKey)}</h1>
+                <h1 class="text-base font-medium tracking-normal text-foreground">{props.i18n.t(headerCopy().titleKey)}</h1>
                 <p class="text-xs text-muted-foreground">
                   {props.i18n.t(headerCopy().descriptionKey)}
                 </p>
@@ -9909,7 +9909,7 @@ function QuickCreateConnectionCard(props: Readonly<{
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
-                <CardTitle class="truncate text-sm font-semibold">{props.title}</CardTitle>
+                <CardTitle class="truncate text-[length:var(--floe-type-control)] font-medium">{props.title}</CardTitle>
                 <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.detail}</div>
               </div>
               <ConsoleBadge>{props.badge}</ConsoleBadge>
@@ -11606,7 +11606,7 @@ function GatewaySourceCard(props: Readonly<{
                 {localizedGatewaySourceStatusLabel(props.i18n, row().status_label)}
               </EnvironmentStatusIndicator>
             </div>
-            <CardTitle class="truncate text-sm font-semibold leading-5 tracking-[0.01em]" title={row().label}>
+            <CardTitle class="truncate text-[length:var(--floe-type-control)] font-medium leading-5 tracking-[0.01em]" title={row().label}>
               {row().label}
             </CardTitle>
             <div class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">

@@ -22,7 +22,7 @@ export function CodespacesPageFrame(props: {
       <PanelContent class="codespaces-content p-4 space-y-4">
         <header class="codespaces-header flex items-start justify-between gap-4">
           <div class="space-y-1">
-            <div class="text-sm font-semibold">{i18n.t('codespaces.title')}</div>
+            <div class="text-sm font-medium">{i18n.t('codespaces.title')}</div>
             <div class="codespaces-description text-xs text-muted-foreground">{i18n.t('codespaces.description')}</div>
           </div>
           <div class="flex items-center gap-2 flex-shrink-0">

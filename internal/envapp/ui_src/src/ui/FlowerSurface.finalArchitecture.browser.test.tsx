@@ -1,7 +1,8 @@
 import '../index.css';
 import './flower-feature.css';
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import type {
@@ -87,6 +88,8 @@ function completedTerminalThread() {
     ],
   });
 }
+
+beforeEach(async () => { await page.viewport(1280, 900); });
 
 describe('Flower final thread cache and workspace transport', () => {
   it('keeps authoritative Stop visible after acknowledgement, navigation, and detail reload', async () => {
@@ -576,7 +579,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     (runtime.querySelector(`[data-thread-id="${peer.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector(`[data-thread-id="${peer.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
-    expect(document.querySelector('[data-flower-subagent-detail="open"]')).toBeNull();
+    await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"]') === null);
   });
 
   it('keeps the Subagent window mounted after initial failure and retries in place', async () => {

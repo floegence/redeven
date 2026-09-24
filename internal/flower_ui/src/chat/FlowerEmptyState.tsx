@@ -53,8 +53,8 @@ export const FlowerEmptyState: Component<FlowerEmptyStateProps> = (props) => {
     >
       <div class="flower-empty-hero">
         <FlowerHeroBadge />
-        <h2 class="mb-3 text-xl font-semibold text-foreground">{copy().title}</h2>
-        <p class="text-sm leading-relaxed text-muted-foreground">{copy().description}</p>
+        <h2 class="mb-2 text-base font-medium text-foreground">{copy().title}</h2>
+        <p class="text-sm leading-[22px] text-muted-foreground">{copy().description}</p>
         {props.workingDirectory}
       </div>
 
@@ -79,7 +79,7 @@ export const FlowerEmptyState: Component<FlowerEmptyStateProps> = (props) => {
                     <Icon class="h-5 w-5 text-primary" />
                   </div>
                   <div class="min-w-0 flex-1">
-                    <div class="mb-0.5 text-sm font-medium text-foreground">{item.copy.title}</div>
+                    <div class="mb-0.5 text-[length:var(--floe-type-control)] font-medium text-foreground">{item.copy.title}</div>
                     <div class="text-xs leading-relaxed text-muted-foreground">{item.copy.description}</div>
                   </div>
                 </button>

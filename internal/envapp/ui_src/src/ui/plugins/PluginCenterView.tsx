@@ -1404,7 +1404,7 @@ export function PluginCenterShell(props: {
       <header class="w-full shrink-0 border-b bg-background" data-plugin-center-toolbar>
         <div class="flex w-full min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap sm:px-4" data-plugin-center-toolbar-primary>
           <Show when={props.showTitle !== false}><div class="flex min-w-0 shrink-0 items-center gap-2">
-            <h1 class="truncate text-sm font-semibold">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
+            <h1 class="truncate text-sm font-medium">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
           </div></Show>
           <label class="relative order-last block w-full min-w-0 basis-full sm:order-none sm:ml-auto sm:max-w-[480px] sm:flex-1 sm:basis-auto">
               <span class="sr-only">{i18n.t('uiCopy.plugin.searchPlaceholder')}</span>

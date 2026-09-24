@@ -43,6 +43,8 @@ it.each([1280, 1024, 768, 390, 320])('keeps all ten pages readable without overf
   for (const item of SETTINGS_NAV_ITEMS) {
     const panel = await openSection(item.id); expectNoOverflow(panel);
     expect(panel.querySelectorAll('h1')).toHaveLength(1);
+    expect(getComputedStyle(panel.querySelector('h1')!).fontSize).toBe('16px');
+    expect(getComputedStyle(panel.querySelector('h1')!).fontWeight).toBe('500');
     if (width === 1280) await page.screenshot({ path: `runtime-settings-${item.id}.png` });
   }
 });

@@ -31,12 +31,12 @@ import { matchFilesystemRoot } from '../utils/filesystemRoots';
 import { useI18n } from '../i18n';
 
 const FILE_WORKSPACE_TOOLBAR_FIELD_CLASS =
-  cn('h-7 min-w-0 rounded-md border px-2.5', redevenSurfaceRoleClass('controlMuted'));
+  cn('h-8 min-w-0 rounded-md border px-2.5', redevenSurfaceRoleClass('controlMuted'));
 const FILE_WORKSPACE_TOOLBAR_SEGMENTED_CLASS =
   cn('h-7 shrink-0 [&_button]:h-6 [&_button]:px-2 [&_button]:py-0', redevenSurfaceRoleClass('segmented'));
-const FILE_WORKSPACE_TOOLBAR_PATH_CLASS = 'h-7 min-w-0 rounded-md border border-transparent px-2.5 flex items-center';
+const FILE_WORKSPACE_TOOLBAR_PATH_CLASS = 'h-8 min-w-0 rounded-md border border-transparent px-2.5 flex items-center';
 const FILE_WORKSPACE_TOOLBAR_FILTER_CLASS =
-  `${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex items-center gap-1.5 text-[11px] text-muted-foreground`;
+  `${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex items-center gap-1.5 text-[length:var(--floe-type-control)] text-muted-foreground`;
 
 export type FileBrowserPathSubmitResult =
   | { status: 'ready' | 'refreshed'; committedPath: string }
@@ -196,7 +196,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               onInput={(event) => browser.setFilterQuery(event.currentTarget.value)}
               placeholder={i18n.t('files.filterPlaceholder')}
               aria-label={i18n.t('files.filterPlaceholder')}
-              class="h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground"
+              class="h-full min-w-0 flex-1 border-0 bg-transparent text-[length:var(--floe-type-control)] text-foreground outline-none placeholder:text-muted-foreground"
             />
           </label>
 

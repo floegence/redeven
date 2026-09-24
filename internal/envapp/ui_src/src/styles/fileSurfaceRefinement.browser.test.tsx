@@ -2,7 +2,7 @@ import '../index.css';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { FileBrowserWorkspace } from '../ui/widgets/FileBrowserWorkspace';
 import { expectSingleInputFocus } from './inputFocus.test-support';
 
@@ -44,6 +44,12 @@ it.each(['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark'])(
   const path = host.querySelector('nav')!.parentElement!;
   expect(getComputedStyle(path).borderTopColor, 'read-only breadcrumbs are not an input').not.toBe(getComputedStyle(boundary).borderTopColor);
   noContourShadow(path);
+  expect(getComputedStyle(filter).fontSize).toBe('13px');
+  expect(boundary.getBoundingClientRect().height).toBe(32);
+  await userEvent.click(page.getByRole('radio', { name: 'List', exact: true }));
+  const row = host.querySelector('[data-file-list-row]')!;
+  expect(row.getBoundingClientRect().height).toBe(32);
+  expect(getComputedStyle(row).fontSize).toBe('13px');
   filter.value = 'Retained draft';
   expectSingleInputFocus(filter);
   filter.setSelectionRange(2, 7);
