@@ -55,7 +55,8 @@ export async function checkPointer({page,frame,read,output,waitFor,backend}) {
   await pause(400);await touch(80,250);await touch(80,250);
   await wait(r=>r.clicks===3&&r.doubles>=1,'double tap delivered');
   await touch(80,200,0,0,500);await wait(r=>r.rights>=1,'hold release opens context action');
-  await touch(80,125,120,0,500);await wait(r=>r.drag>30&&(backend!=='macos'||r.releases>=5),'hold drag moves control and releases');
+  const releasesBeforeDrag=read().releases;
+  await touch(80,125,120,0,500);await wait(r=>r.drag>30&&(backend!=='macos'||r.releases>releasesBeforeDrag),'hold drag moves control and releases');
   const before=read();
   await page.locator('.mac-app-help').click();
   await page.locator('.mac-app-touch-help').waitFor({state:'visible'});

@@ -112,9 +112,10 @@ This check does not perform native candidate selection or modify personal docume
 
 # Mobile pointer acceptance
 
-The September 24 follow-up uses the published remote-pointer controller and the
-production viewer assets. It found and fixed parent/iframe focus cancelling the
-first pointer press, an overly broad pixel touch style, reversed native horizontal
+The September 24 follow-up uses published Floe core `0.77.1` and production viewer
+assets. The pointer adapter was released in native-apps `v0.7.10`; final checks
+consume `v0.8.0`, retaining the subsequently integrated display feedback contract.
+The follow-up fixed parent/iframe focus cancelling the first pointer press, an overly broad pixel touch style, reversed native horizontal
 scroll and lost fractional native wheel pixels. The Electron fixture now asserts
 one down/up pair at the adapter, including after toolbar actions and reconnection,
 instead of merely observing DOM clicks.

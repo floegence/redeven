@@ -156,7 +156,7 @@ async function run() {
     console.log('Titlebar outside-input acceptance passed: four popovers, exactly one pointer click, internal controls and reconnect');
     await evaluate(`document.querySelector('.mac-app-windows-toggle').click();document.querySelectorAll('.mac-app-window-list button')[1].click()`);
     assert.equal(await evaluate(`document.querySelector('#application').contentWindow.floeXpraInput.getClient().focused_wid`), 2);
-    await evaluate(`document.querySelector('.mac-app-controls-toggle').click();document.querySelector('[data-picture-mode="clarity"]').click()`);
+    await evaluate(`document.querySelector('.mac-app-controls-toggle').click();document.querySelector('[data-picture-mode="auto"]').click();document.querySelector('[data-picture-mode="clarity"]').click()`);
     const operations = await evaluate(`document.querySelector('#application').contentWindow.operations`);
     assert(operations.some((v: unknown[]) => v[0] === 'quality' && v[1] === 95));
     await evaluate(`document.querySelector('.mac-app-controls-toggle').focus();if(document.querySelector('.mac-app-popover').hidden)document.querySelector('.mac-app-controls-toggle').click();Promise.all(document.getAnimations().filter(a=>a.effect.getTiming().iterations!==Infinity).map(a=>a.finished))`);
