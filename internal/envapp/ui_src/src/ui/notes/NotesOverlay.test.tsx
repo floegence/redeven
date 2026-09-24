@@ -513,6 +513,36 @@ describe('Redeven NotesOverlay adapter', () => {
     expect(host.querySelector('[data-testid="note-note-1"]')?.textContent).toBe('Primary note body');
   });
 
+  it('does not rewrite already localized mobile controls in its mutation observer', async () => {
+    const { loadEnvAppDictionary } = await import('../i18n/locales');
+    await loadEnvAppDictionary('zh-CN');
+    const NativeObserver = window.MutationObserver;
+    let notifyMutation: MutationCallback | undefined;
+    const observer = { observe: vi.fn(), disconnect: vi.fn(), takeRecords: () => [] };
+    vi.stubGlobal('MutationObserver', class {
+      constructor(callback: MutationCallback) { notifyMutation = callback; }
+      observe = observer.observe;
+      disconnect = observer.disconnect;
+    });
+    try {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      mountIntoHost(() => <NotesOverlay open onClose={() => undefined} />, host);
+      await settle();
+      const action = document.createElement('button');
+      action.className = 'notes-mobile-dock__action';
+      action.innerHTML = '<span>New</span>';
+      host.querySelector('.notes-overlay')!.append(action);
+      notifyMutation!([], observer as unknown as MutationObserver);
+      expect(action.textContent).toBe('新建');
+      const probe = new NativeObserver(() => undefined);
+      probe.observe(action, { childList: true, subtree: true });
+      notifyMutation!([], observer as unknown as MutationObserver);
+      expect(probe.takeRecords()).toEqual([]);
+      probe.disconnect();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('keeps the Redeven wrapper thin and delegates note numbering shortcuts to shared floe-webapp notes', () => {
     const source = readFileSync('src/ui/notes/NotesOverlay.tsx', 'utf8');
 

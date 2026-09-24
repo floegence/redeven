@@ -380,6 +380,11 @@
     "fileUnavailable": "Ce fichier n’est plus disponible dans le remisage sélectionné."
   },
   "shell": {
+    "mobileTools": {
+      "more": "Plus",
+      "search": "Recherche et commandes",
+      "back": "Retour aux outils"
+    },
     "loadingPage": "Chargement de la page…",
     "accessibility": {
       "skipLinkLabel": "Aller au contenu de l'environnement Redeven",

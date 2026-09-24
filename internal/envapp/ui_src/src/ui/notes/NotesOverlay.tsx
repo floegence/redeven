@@ -273,7 +273,7 @@ function updateAllMatchingAttribute(
 function replaceTextWhenOneOf(root: ParentNode, selector: string, originals: readonly string[], localized: string): void {
   const originalSet = new Set(originals.map((value) => value.trim()));
   for (const element of Array.from(root.querySelectorAll(selector))) {
-    if (originalSet.has(element.textContent?.trim() ?? '')) {
+    if (element.textContent !== localized && originalSet.has(element.textContent?.trim() ?? '')) {
       element.textContent = localized;
     }
   }

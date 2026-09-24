@@ -116,20 +116,20 @@ function DownloadTaskAction(props: {
   );
 }
 
-export function DownloadTaskPanel(props: { manager: DownloadManager }) {
+export function DownloadTaskPanel(props: { manager: DownloadManager; inline?: boolean }) {
   const i18n = useI18n();
   const tasks = () => props.manager.tasks();
   const hasFinished = createMemo(() => tasks().some((task) => !ACTIVE_STATUSES.has(task.status)));
 
   return (
     <section
-      role="dialog"
+      role={props.inline ? 'region' : 'dialog'}
       aria-label={i18n.t('uiCopy.downloads.title')}
-      class="w-[min(25rem,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl"
+      class={props.inline ? 'mobile-download-tasks min-w-0' : 'w-[min(25rem,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl'}
     >
       <div class="flex items-center justify-between gap-3 border-b border-border/70 px-3 py-2.5">
         <div class="min-w-0">
-          <h2 class="text-sm font-semibold leading-5">{i18n.t('uiCopy.downloads.title')}</h2>
+          <Show when={!props.inline}><h2 class="text-sm font-semibold leading-5">{i18n.t('uiCopy.downloads.title')}</h2></Show>
           <p class="text-[11px] text-muted-foreground">
             <Show when={props.manager.activeCount() > 0} fallback={i18n.t('uiCopy.downloads.noActive')}>
               {i18n.tn('uiCopy.downloads.activeCount', props.manager.activeCount())}
@@ -161,7 +161,7 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
           </div>
         )}
       >
-        <div class="max-h-[min(30rem,calc(100vh-8rem))] space-y-1.5 overflow-y-auto p-2">
+        <div class={props.inline ? 'space-y-1.5 p-2' : 'max-h-[min(30rem,calc(100vh-8rem))] space-y-1.5 overflow-y-auto p-2'}>
           <For each={tasks()}>
             {(task) => (
               <article

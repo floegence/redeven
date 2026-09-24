@@ -44,6 +44,21 @@ import { EnvAppThemePicker } from './EnvAppThemePicker';
 describe('EnvAppThemePicker', () => {
   let host: HTMLDivElement;
 
+  it('embeds existing appearance controls without a popover or local Escape handler', async () => {
+    const change = vi.fn(async () => true);
+    const dispose = render(() => <EnvAppThemePicker presentation="inline" onSourceChange={change} onShellThemeChange={vi.fn(async () => true)} />, host);
+    try {
+      expect(host.querySelector('[data-envapp-theme-trigger]')).toBeNull();
+      const content = host.querySelector('[data-envapp-theme-menu="inline"]')!;
+      expect(content.getAttribute('role')).toBe('region');
+      const dark = Array.from(content.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find(button => button.textContent === 'Dark')!;
+      dark.click();
+      await vi.waitFor(() => expect(change).toHaveBeenCalledWith('dark'));
+      content.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(content.isConnected).toBe(true);
+    } finally { dispose(); }
+  });
+
   beforeEach(() => {
     const [source, setSource] = createSignal<'system' | 'light' | 'dark'>('light');
     const [resolved, setResolved] = createSignal<'light' | 'dark'>('light');

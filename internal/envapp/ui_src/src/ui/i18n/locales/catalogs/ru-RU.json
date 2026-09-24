@@ -380,6 +380,11 @@
     "fileUnavailable": "Этот файл больше недоступен в выбранном отложенном изменении."
   },
   "shell": {
+    "mobileTools": {
+      "more": "Ещё",
+      "search": "Поиск и команды",
+      "back": "Назад к инструментам"
+    },
     "loadingPage": "Загрузка страницы…",
     "accessibility": {
       "skipLinkLabel": "Перейти к содержимому среды Redeven",

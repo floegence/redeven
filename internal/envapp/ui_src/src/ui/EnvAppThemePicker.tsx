@@ -16,6 +16,7 @@ import { TopBarIconButton } from '@floegence/floe-webapp-core/layout';
 import { useI18n, type EnvAppTranslationKey } from './i18n';
 
 export type EnvAppThemePickerProps = Readonly<{
+  presentation?: 'popover' | 'inline';
   openRequestSeq?: () => number;
   tooltip?: string | false;
   onSourceChange: (source: ThemeType) => boolean | Promise<boolean>;
@@ -117,7 +118,8 @@ function ThemePreview(props: Readonly<{ preset: FloeThemePreset; mode: FloeShell
 export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
   const theme = useTheme();
   const i18n = useI18n();
-  const [open, setOpen] = createSignal(false);
+  const [popoverOpen, setOpen] = createSignal(false);
+  const open = () => props.presentation === 'inline' || popoverOpen();
   const [error, setError] = createSignal('');
   const [pending, setPending] = createSignal('');
   let disposed = false;
@@ -188,7 +190,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
   });
 
   createEffect(() => {
-    if (!open()) return;
+    if (!open() || props.presentation === 'inline') return;
     const closeOnPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Node && rootEl?.contains(target)) return;
@@ -268,7 +270,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
       }}
       class="relative shrink-0"
     >
-      <TopBarIconButton
+      <Show when={props.presentation !== 'inline'}><TopBarIconButton
         ref={(element) => {
           triggerEl = element;
         }}
@@ -293,7 +295,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
             aria-hidden="true"
           />
         </span>
-      </TopBarIconButton>
+      </TopBarIconButton></Show>
 
       <Show when={open()}>
         <div
@@ -301,13 +303,14 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
             dialogEl = element;
           }}
           id={dialogID}
-          role="dialog"
-          aria-modal="false"
+          role={props.presentation === 'inline' ? 'region' : 'dialog'}
+          aria-modal={props.presentation === 'inline' ? undefined : 'false'}
           aria-label={i18n.t('shell.themePicker.title')}
           data-floe-surface="floating"
-          data-envapp-theme-menu="topbar"
-          class="absolute top-[calc(100%+0.5rem)] right-0 z-[90] w-[min(30rem,calc(100vw-1rem))] rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl max-sm:fixed max-sm:top-12 max-sm:right-2 max-sm:left-2 max-sm:w-auto"
+          data-envapp-theme-menu={props.presentation === 'inline' ? 'inline' : 'topbar'}
+          class={props.presentation === 'inline' ? 'p-4' : 'absolute top-[calc(100%+0.5rem)] right-0 z-[90] w-[min(30rem,calc(100vw-1rem))] rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl max-sm:fixed max-sm:top-12 max-sm:right-2 max-sm:left-2 max-sm:w-auto'}
           onFocusOut={(event) => {
+            if (props.presentation === 'inline') return;
             const nextTarget = event.relatedTarget;
             // A resolved system-mode change removes the focused preset before
             // the replacement side can receive focus, yielding no related target.
@@ -318,14 +321,14 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
             });
           }}
         >
-          <div class="mb-3 min-w-0 pr-9">
+          <Show when={props.presentation !== 'inline'}><div class="mb-3 min-w-0 pr-9">
             <div class="min-w-0">
               <h2 class="text-sm font-semibold text-foreground">{i18n.t('shell.themePicker.title')}</h2>
               <p class="mt-0.5 break-words text-[11px] leading-snug text-muted-foreground">
                 {selectedPreset() ? presetLabel(i18n, selectedPreset()!) : activeMode()}
               </p>
             </div>
-          </div>
+          </div></Show>
 
           <div class="mb-3">
             <div
@@ -354,6 +357,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
                       class={cn(
                         'relative h-7 cursor-pointer aria-disabled:cursor-progress rounded-md px-2 text-[11px] font-medium transition-colors',
                         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                        props.presentation === 'inline' && 'min-h-11 text-sm',
                         selected()
                           ? redevenSegmentedItemClass(true)
                           : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,
@@ -403,7 +407,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
             }}
             role="radiogroup"
             aria-labelledby={`${themeGroupID}-label`}
-            class="max-h-[min(28rem,calc(100vh-12rem))] overflow-y-auto pr-0.5"
+            class={props.presentation === 'inline' ? 'pr-0.5' : 'max-h-[min(28rem,calc(100vh-12rem))] overflow-y-auto pr-0.5'}
             onFocusIn={() => setThemeGroupFocused(true)}
             onFocusOut={(event) => {
               if (isPresetReplacedByModeChange(event.target)) return;
@@ -480,7 +484,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
               {error()}
             </p>
           </Show>
-          <button
+          <Show when={props.presentation !== 'inline'}><button
             type="button"
             class="absolute top-3 right-3 inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors motion-reduce:transition-none hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             aria-label={i18n.t('shell.themePicker.closeLabel')}
@@ -488,7 +492,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
             onClick={() => closePicker(true)}
           >
             <X class="h-4 w-4" />
-          </button>
+          </button></Show>
         </div>
       </Show>
     </div>

@@ -24,6 +24,11 @@ The product layer constants are the only authority for these bands. Published fl
 
 ## Dialog placement
 
+Mobile plugin and tools navigation is local to the released Shell content region,
+not a global launcher modal. Its bottom bar stays interactive. The
+[mobile shell navigation](mobile-shell-navigation.md) contract owns this boundary;
+global product confirmations still cover it and the navigation bar.
+
 Activity owns one global modal boundary. The Activity Shell, Activity movable windows, and the retained Flower product while placed in Activity select global Dialog placement at layer 4000. Clicking the backdrop closes only the Dialog; the first click never reaches the Activity content beneath it. Escape, focus trapping, focus restoration, and exit presence use the same published global Dialog path.
 
 Workbench selects automatic placement. A Dialog opened from a widget or projected Flower surface remains inside that owning surface: clicking the canvas or another widget neither closes nor captures the destination interaction, while clicking the surface-local backdrop closes the Dialog. Moving the retained Flower product between Activity and Workbench changes this single placement input reactively; it does not install another listener or duplicate Dialog state. Dropdowns, tooltips, and `SurfaceFloatingLayer` keep their existing surface-coordinate ownership.
