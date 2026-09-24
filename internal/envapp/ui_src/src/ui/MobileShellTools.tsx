@@ -1,4 +1,4 @@
-import { For, Show, type Component } from 'solid-js';
+import { For, Show, createEffect, type Component } from 'solid-js';
 import { ArrowLeft, Download, Globe, Highlighter, LayoutDashboard, Search, X, ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import type { EnvAppThemePickerProps } from './EnvAppThemePicker';
@@ -31,6 +31,15 @@ export function MobileShellTools(props: {
   notify: { success: (title: string, message: string) => void };
 }) {
   const i18n = useI18n();
+  let contentViewport: HTMLDivElement | undefined;
+  let closeButton: HTMLButtonElement | undefined;
+  createEffect(() => {
+    void props.page;
+    if (contentViewport) contentViewport.scrollTop = 0;
+    if (contentViewport?.closest('[data-floe-mobile-navigation-panel][data-floating-presence="open"]')) {
+      closeButton?.focus({ preventScroll: true });
+    }
+  });
   const badge = () => props.manager.activeCount() || (props.manager.tasks().some(task => task.status === 'failed') ? '!' : '');
   const title = () => props.page === 'downloads' ? i18n.t('uiCopy.downloads.title')
     : props.page === 'language' ? i18n.t('language.label')
@@ -51,10 +60,10 @@ export function MobileShellTools(props: {
           onClick={() => props.onPageChange('more')}><ArrowLeft class="h-5 w-5" /></button>
       </Show>
       <h2 class="min-w-0 flex-1 text-base font-semibold">{title()}</h2>
-      <button type="button" class="mobile-tools-icon" data-floe-autofocus aria-label={i18n.t('common.actions.close')}
+      <button ref={closeButton} type="button" class="mobile-tools-icon" data-floe-autofocus aria-label={i18n.t('common.actions.close')}
         onClick={props.onClose}><X class="h-5 w-5" /></button>
     </header>
-    <div class="min-h-0 overflow-y-auto overscroll-contain">
+    <div ref={contentViewport} class="min-h-0 overflow-y-auto overscroll-contain">
       <Show when={props.page === 'more'}><div class="p-2">
         <For each={entries()}>{entry => <button type="button" data-mobile-tool={entry.id}
           class="mobile-tools-row" onClick={() => entry.onClick()}>

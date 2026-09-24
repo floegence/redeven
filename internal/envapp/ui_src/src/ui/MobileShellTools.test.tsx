@@ -75,4 +75,13 @@ describe('MobileShellTools', () => {
     tools.setTasks([]);
     expect(row().textContent).not.toContain('!');
   });
+
+  it('returns to the top of the tools list after leaving a long subpage', () => {
+    const tools = mountTools();
+    tools.click('appearance');
+    const viewport = tools.host.querySelector<HTMLElement>('.mobile-shell-tools > div')!;
+    viewport.scrollTop = 120;
+    tools.setPage('more');
+    expect(viewport.scrollTop).toBe(0);
+  });
 });

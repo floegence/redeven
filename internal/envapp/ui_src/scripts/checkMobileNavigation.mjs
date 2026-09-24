@@ -203,6 +203,8 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
             await settle(page);
             await page.screenshot({ path: path.join(output, `${prefix}-appearance.png`) });
             await tools.press('Escape');
+            assert.equal(await tools.locator('.mobile-shell-tools > div').evaluate(element => element.scrollTop), 0);
+            await tools.locator('[data-floe-autofocus]').evaluate(element => element.blur());
             await page.screenshot({ path: path.join(output, `${prefix}-tools-dark.png`) });
             await plugins.tap(); await pluginDrawer.waitFor(); await settle(page);
             await page.screenshot({ path: path.join(output, `${prefix}-plugins-dark.png`) });
