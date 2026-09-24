@@ -119,6 +119,9 @@ func (r *ComputerUseRuntime) cdpBrowserTabs(ctx context.Context, endpoint, comma
 	var output limitedComputerOutput
 	cmd.Stdout = &output
 	if err := cmd.Run(); err != nil {
+		if command == "new_tab" {
+			return nil, errBrowserOutcomeUnknown
+		}
 		return nil, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_inventory_unavailable"}
 	}
 	var result struct {
@@ -127,6 +130,9 @@ func (r *ComputerUseRuntime) cdpBrowserTabs(ctx context.Context, endpoint, comma
 		Error           string               `json:"error"`
 	}
 	if json.Unmarshal(output.body, &result) != nil || result.ProtocolVersion != 2 || result.Error != "" || len(result.Tabs) > 128 {
+		if command == "new_tab" {
+			return nil, errBrowserOutcomeUnknown
+		}
 		return nil, errors.New("invalid browser inventory")
 	}
 	return result.Tabs, nil
@@ -204,7 +210,7 @@ func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connec
 		return r.ResolveTarget(ctx, existing)
 	}
 	if targetID == "" {
-		digest := sha256.Sum256([]byte(connection.CDPURL + "\x00" + chosen.ProfileID + "\x00" + chosen.ID))
+		digest := sha256.Sum256([]byte(r.browserServiceSnapshot().Generation + "\x00" + connection.CDPURL + "\x00" + chosen.ProfileID + "\x00" + chosen.ID))
 		targetID = "connected-" + hex.EncodeToString(digest[:16])
 	}
 	resources, err := r.managedResources()

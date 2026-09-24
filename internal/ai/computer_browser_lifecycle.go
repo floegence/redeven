@@ -10,8 +10,16 @@ import (
 // Source events retire product identities, never reconnect a browser or grant
 // its replacement. The helper's event reader preserves their source order.
 func (r *ComputerUseRuntime) browserSourceEvent(event browserHostEvent) {
+	r.browserSourceGenerationEvent(r.browserServiceSnapshot().Generation, event)
+}
+
+func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, event browserHostEvent) {
 	r.connectMu.Lock()
 	defer r.connectMu.Unlock()
+	status := r.browserServiceSnapshot()
+	if generation != status.Generation || status.State == "recovering" {
+		return
+	}
 	r.mu.RLock()
 	closed := r.closed
 	view := r.browserViews[event.View]

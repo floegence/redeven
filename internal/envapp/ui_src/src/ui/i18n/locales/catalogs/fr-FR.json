@@ -7297,6 +7297,18 @@
     "noPages": "Aucune page trouvée. Ouvrez une page dans le navigateur source, puis actualisez la liste.",
     "openSelection": "Ouvrir la sélection",
     "selectionHint": "Ouvrir une page ici ne change pas la page sélectionnée par Flower.",
-    "chromeConfirmHint": "Confirmez la connexion dans Chrome, puis sélectionnez la page à ouvrir ici."
+    "chromeConfirmHint": "Confirmez la connexion dans Chrome, puis sélectionnez la page à ouvrir ici.",
+    "installTitle": "Configurer le navigateur de l’environnement",
+    "installOpen": "Installer et ouvrir",
+    "recoverTitle": "Le service du navigateur est arrêté",
+    "recover": "Rétablir le navigateur",
+    "recoveryDescription": "Le navigateur de l’environnement sera redémarré et les onglets enregistrés seront restaurés. Le contenu non enregistré des pages peut être perdu. Les autres services de l’environnement continueront de fonctionner.",
+    "sourceUnavailable": "Cette page n’est plus disponible. Sélectionnez une source de navigateur.",
+    "disconnected": "La connexion au navigateur a été interrompue.",
+    "openFailed": "Impossible d’ouvrir le navigateur. Réessayez ou choisissez une autre source.",
+    "openTimeout": "Le navigateur n’a pas répondu à temps.",
+    "recoveryBlocked": "Terminez la session privée dans le navigateur source avant de rétablir le service.",
+    "outcomeUnknown": "L’action a peut-être déjà abouti. Sélectionnez la source pour vérifier son état actuel.",
+    "retry": "Réessayer"
   }
 }

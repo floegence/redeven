@@ -29,6 +29,7 @@ type BrowserViewRequest struct {
 }
 
 type BrowserViewDescriptor struct {
+	Generation       string `json:"generation"`
 	ID               string `json:"id"`
 	Protocol         int    `json:"protocol_version"`
 	MediaProtocol    int    `json:"media_wire_version"`
@@ -77,8 +78,11 @@ func (r *ComputerUseRuntime) OpenBrowserView(ctx context.Context, meta *session.
 	defer r.connectMu.Unlock()
 	if len(request.Targets) == 1 && request.ProfileID == "" {
 		for _, workspace := range r.browserWorkspaces {
-			if workspace.connection != nil && workspace.owner == browserLibraryOwner(meta) && slices.Contains(workspace.targets, request.Targets[0]) {
+			if workspace.owner == browserLibraryOwner(meta) && slices.Contains(workspace.targets, request.Targets[0]) {
 				request.workspace, request.Targets = workspace, slices.Clone(workspace.targets)
+				if workspace.connection == nil {
+					request.ProfileID = workspace.profile
+				}
 				break
 			}
 		}
@@ -154,7 +158,7 @@ func (r *ComputerUseRuntime) openBrowserViewLocked(ctx context.Context, meta *se
 	// its DOM carrier. The DOM stream owns the view lifetime once attached.
 	view.expiry = time.AfterFunc(time.Minute, func() { _ = view.close() })
 	context.AfterFunc(lifetime, func() { _ = view.close() })
-	return BrowserViewDescriptor{ID: view.id, Protocol: 22, MediaProtocol: 1, ProfileID: view.profile, InitialTarget: view.initial, LibraryProfileID: view.libraryProfile}, nil
+	return BrowserViewDescriptor{Generation: r.browserServiceSnapshot().Generation, ID: view.id, Protocol: 22, MediaProtocol: 1, ProfileID: view.profile, InitialTarget: view.initial, LibraryProfileID: view.libraryProfile}, nil
 }
 
 func (r *ComputerUseRuntime) browserView(meta *session.Meta, id string) (*browserView, error) {

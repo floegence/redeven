@@ -13,6 +13,8 @@ export function FlowerManagedBrowser(props: {
   onChange?: () => void;
   onContinue?: (enabled: boolean) => Promise<void>;
   continuationKey?: string;
+  installLabel?: string;
+  requireEnabledForContinue?: boolean;
 }) {
   const management = props.management;
   const [status, setStatus] = createSignal<FlowerBrowserInstallationSnapshot>();
@@ -121,11 +123,11 @@ export function FlowerManagedBrowser(props: {
             <label data-selected={source() === 'download'} data-disabled={!editable()}><input type="radio" name="browser-install-source" checked={source() === 'download'} disabled={!editable()} onChange={() => setSource('download')} /><Download aria-hidden="true" /><strong>{props.copy.browserDownloadHere}</strong><span>{props.copy.browserDownloadHereHint}</span></label>
             <label data-selected={source() === 'upload'} data-disabled={!editable() || !management.browserDesktopAvailable}><input type="radio" name="browser-install-source" checked={source() === 'upload'} disabled={!editable() || !management.browserDesktopAvailable} onChange={() => setSource('upload')} /><Upload aria-hidden="true" /><strong>{props.copy.browserUploadDesktop}</strong><span>{management.browserDesktopAvailable ? props.copy.browserUploadHint : props.copy.browserDesktopRequired}</span></label>
           </div>
-          <div class="flower-browser-consent"><p>{props.copy.browserConsentHint}</p><Button variant="primary" disabled={!editable()} onClick={() => void install()}>{source() === 'upload' ? props.copy.browserConfirmUpload : props.copy.browserConfirmDownload}</Button></div>
+          <div class="flower-browser-consent"><p>{props.copy.browserConsentHint}</p><Button variant="primary" disabled={!editable()} onClick={() => void install()}>{props.installLabel ?? (source() === 'upload' ? props.copy.browserConfirmUpload : props.copy.browserConfirmDownload)}</Button></div>
         </Show>
       </Show>
       <Show when={current().enabled && current().state === 'installed'}><div class="flower-browser-ready"><Check aria-hidden="true" /><p>{props.copy.browserReadyHint}</p></div></Show>
-      <Show when={props.onContinue && !active() && (!current().enabled || current().state === 'installed')}><Button variant="primary" disabled={!editable()} onClick={() => void continueTask()}>{current().enabled ? props.copy.browserContinue : props.copy.browserContinueWithout}</Button></Show>
+      <Show when={props.onContinue && !active() && (!props.requireEnabledForContinue || current().enabled) && (!current().enabled || current().state === 'installed')}><Button variant="primary" disabled={!editable()} onClick={() => void continueTask()}>{current().enabled ? props.copy.browserContinue : props.copy.browserContinueWithout}</Button></Show>
       <Show when={current().state === 'installed'}><details class="flower-computer-detail-card"><summary>{props.copy.browserInstallLocation}</summary><code>{current().directory}</code></details></Show>
     </>}</Show>
     <Show when={failed() || (!status()?.transfer_active && status()?.state === 'failed') || status()?.desktop_error}>

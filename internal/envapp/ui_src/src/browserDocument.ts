@@ -1,3 +1,4 @@
+import { browserFailureCode, type BrowserFailureCode } from './ui/services/browserFailure';
 import type { FlowerBrowserInstallationSnapshot } from '../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { BrowserSourceService } from './ui/services/browserSourceContract';
 import { mountBrowser, projectionPortConnection, type AddressSuggestion } from '@floegence/floebrowser/viewer';
@@ -53,14 +54,16 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
     });
   };
   const installationListeners = new Set<(status: FlowerBrowserInstallationSnapshot) => void>();
+  let showFailure: ((code: BrowserFailureCode, phase?: 'opening' | 'failed') => void) | undefined;
   product.onmessage = ({ data }) => {
+    if (data?.type === 'workspace.failure') { showFailure?.(browserFailureCode(data), data.phase === 'opening' ? 'opening' : 'failed'); return; }
     if (data?.type === 'source.installation') { for (const listener of installationListeners) listener(data.status); return; }
     if (data?.type !== 'result' || !Number.isSafeInteger(data.id)) return;
     const work = pending.get(data.id);
     if (!work) return;
     pending.delete(data.id); work.dispose();
     if (data.ok === true) work.resolve(data.value);
-    else work.reject(new Error('Browser request unavailable'));
+    else work.reject(Object.assign(new Error('Browser request unavailable'), { code: data.code }));
   };
   product.start();
   const file = async (method: 'resource' | 'download', target: string, id: string, signal: AbortSignal): Promise<Response> => {
@@ -84,7 +87,10 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
   };
   const surface = document.createElement('main'); surface.className = 'redeven-browser-document-surface'; document.body.append(surface);
   let disposeSources: (() => void) | undefined;
+  let disposeRecovery: (() => void) | undefined;
+  let recoveryRevision = 0;
   let openingSources = false, disposed = false;
+  let view: ReturnType<typeof mountBrowser> | undefined;
   if (configuration.sources) {
     const sources = configuration.sources;
     const bar = document.createElement('nav'); bar.className = 'redeven-browser-document-bar';
@@ -124,9 +130,24 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
       }).catch(() => { label.textContent = sources.messages.computer.chromeContinueFailed; label.setAttribute('role', 'alert'); })
         .finally(() => { openingSources = false; button.disabled = false; });
     });
+    showFailure = (code, phase = 'failed') => {
+      const revision = ++recoveryRevision;
+      connected = false; active = '';
+      view?.destroy(); view = undefined;
+      surface.hidden = true;
+      void import('./browserSources').then(({ mountBrowserRecovery }) => {
+        if (disposed || revision !== recoveryRevision) return;
+        disposeRecovery?.();
+        disposeRecovery = mountBrowserRecovery({ state: { phase, failure: code, selection: sources.current }, service,
+          messages: sources.messages, connected: true,
+          retry: async () => { await request({ method: 'workspace.retry' }); }, recover: async () => { await request({ method: 'workspace.recover' }); },
+          chooseSource: () => button.click() });
+      });
+    };
+    if (configuration.failure) showFailure(configuration.failure);
     bar.append(button, label); surface.before(bar);
   }
-  const view = mountBrowser(surface, {
+  view = configuration.failure ? undefined : mountBrowser(surface, {
     title: configuration.title,
     fetchResource: (url, signal) => {
       const { target, id } = browserResourceIdentity(url, location.href);
@@ -182,8 +203,8 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
     for (const work of pending.values()) { work.dispose(); work.reject(new Error('Browser document closed')); }
     pending.clear();
     product.postMessage({ type: 'closed' });
-    disposeSources?.(); installationListeners.clear();
-    view.destroy(); product.close();
+    disposeSources?.(); disposeRecovery?.(); installationListeners.clear();
+    view?.destroy(); product.close();
   }, { once: true });
 }
 

@@ -18,11 +18,11 @@ func TestBrowserViewAPIRejectsForgedGrantsWithoutAcquiringAI(t *testing.T) {
 		method, path, body string
 		status             int
 	}{
-		{http.MethodPost, "", `{"targets":["forged-target"]}`, http.StatusBadRequest},
+		{http.MethodPost, "", `{"targets":["forged-target"]}`, http.StatusConflict},
 		{http.MethodPost, "", `{"targets":["forged-target"],"owner":"another-user"}`, http.StatusBadRequest},
 		{http.MethodPost, "/forged-view/control", `{"target":"forged-target","takeover":true,"private":true}`, http.StatusConflict},
-		{http.MethodDelete, "/forged-view/control", `{"token":"old-token"}`, http.StatusBadRequest},
-		{http.MethodDelete, "/forged-view", "", http.StatusBadRequest},
+		{http.MethodDelete, "/forged-view/control", `{"token":"old-token"}`, http.StatusConflict},
+		{http.MethodDelete, "/forged-view", "", http.StatusConflict},
 		{http.MethodGet, "/forged-view/resource?target=page&id=opaque", "", http.StatusNotFound},
 		{http.MethodGet, "/forged-view/download?target=page&id=opaque", "", http.StatusNotFound},
 		{http.MethodPost, "/forged-view/upload?chooser=chooser&name=file&size=3&token=old", "abc", http.StatusNotFound},
@@ -45,9 +45,9 @@ func TestBrowserViewAPIRejectsForgedGrantsWithoutAcquiringAI(t *testing.T) {
 		status             int
 	}{
 		{http.MethodGet, "environment", "", http.StatusOK},
-		{http.MethodGet, "profiles", "", http.StatusBadRequest},
-		{http.MethodGet, "installation", "", http.StatusBadRequest},
-		{http.MethodPost, "workspace", `{"managed_profile_id":"unavailable"}`, http.StatusBadRequest},
+		{http.MethodGet, "profiles", "", http.StatusServiceUnavailable},
+		{http.MethodGet, "installation", "", http.StatusServiceUnavailable},
+		{http.MethodPost, "workspace", `{"managed_profile_id":"unavailable"}`, http.StatusServiceUnavailable},
 		{http.MethodPost, "workspace", `{"managed_profile_id":"browser-main","owner":"another"}`, http.StatusBadRequest},
 	} {
 		response := serveAIReadinessTestRequest(srv, origin, request.method, "/_redeven_proxy/api/browser/"+request.path, []byte(request.body))

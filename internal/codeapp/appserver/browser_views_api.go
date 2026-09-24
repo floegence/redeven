@@ -23,7 +23,7 @@ func (g *Server) handleBrowserViewsAPI(w http.ResponseWriter, r *http.Request) b
 		}
 		view, err := g.browserRuntime.OpenBrowserView(r.Context(), meta, request)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_view_unavailable"})
+			writeBrowserFailure(w, err)
 			return true
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
@@ -88,7 +88,7 @@ func (g *Server) handleBrowserViewsAPI(w http.ResponseWriter, r *http.Request) b
 
 func writeBrowserViewMutation(w http.ResponseWriter, err error) {
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_view_unavailable"})
+		writeBrowserFailure(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, apiResp{OK: true})

@@ -1,5 +1,6 @@
 import '../../styles/browserWorkspace.css';
 import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
+import type { BrowserFailureCode } from '../services/browserWorkspaceController';
 import type { Session } from '@floegence/flowersec-core';
 import type { BrowserMessages } from '@floegence/floebrowser/viewer';
 import type { BrowserState, TabState } from '@floegence/floebrowser/protocol';
@@ -14,6 +15,7 @@ export type FloeBrowserSurfaceProps = {
   messages: BrowserMessages;
   copy: Readonly<{ connecting: string; unavailable: string }>;
   onReconnect(): void;
+  onFailure?(code: BrowserFailureCode): void;
   onState?(state: BrowserState): void;
   onTabs?(state: TabState): void;
 };
@@ -25,8 +27,8 @@ export function FloeBrowserSurface(props: FloeBrowserSurfaceProps) {
   let host: ReturnType<typeof createBrowserWindow> | undefined;
   const [loading, setLoading] = createSignal(true);
   const [failure, setFailure] = createSignal(false);
-  createEffect(on(() => [props.view, props.session, props.locale] as const, () => {
-    host?.close(); host = undefined;
+  createEffect(on(() => [props.view, props.session] as const, () => {
+    const previous = host; host = undefined; previous?.close();
     setLoading(true); setFailure(false);
     const nonce = crypto.randomUUID();
     try {
@@ -38,18 +40,24 @@ export function FloeBrowserSurface(props: FloeBrowserSurfaceProps) {
         '--floe-accent': '--primary', '--floe-surface': '--muted', '--floe-field': '--secondary',
       };
       const theme = Object.fromEntries(Object.entries(colors).map(([name, token]) => [name, style.getPropertyValue(token).trim()]).filter(([, value]) => value));
-      host = createBrowserWindow({
+      const current = createBrowserWindow({
         session: props.session, view: props.view, child: () => frame.contentWindow,
         configuration: { type: 'redeven-browser-ports', nonce, title: props.title, locale: props.locale, messages: props.messages, theme },
-        onReconnect: () => props.onReconnect(),
-        onState: state => props.onState?.(state),
-        onTabs: state => props.onTabs?.(state),
-        onStatus: status => { if (status === 'live' || status === 'disconnected') setLoading(false); },
+        onReconnect: () => { if (host === current) props.onReconnect(); },
+        onFailure: code => { if (host === current) props.onFailure?.(code); },
+        onState: state => { if (host === current) props.onState?.(state); },
+        onTabs: state => { if (host === current) props.onTabs?.(state); },
+        onStatus: status => {
+          if (host !== current) return;
+          if (status === 'live' || status === 'disconnected') setLoading(false);
+          if (status === 'disconnected') props.onFailure?.('BROWSER_DISCONNECTED');
+        },
       });
+      host = current;
       frame.src = url;
     } catch { setLoading(false); setFailure(true); }
   }));
-  onCleanup(() => host?.close());
+  onCleanup(() => { const previous = host; host = undefined; previous?.close(); });
   return (
     <section class="redeven-floebrowser-surface" aria-label={props.title}>
       <iframe ref={frame} class="redeven-floebrowser-document" title={props.title}

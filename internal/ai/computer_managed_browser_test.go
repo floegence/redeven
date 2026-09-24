@@ -33,6 +33,7 @@ func TestManagedBrowserProfilesShareOnlyTheirOwnLogin(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": NewPlaywrightTargetExecutor(node, helper, t.TempDir())}, t.TempDir())
+	configureBrowserFixture(t, runtime)
 	t.Cleanup(func() {
 		if err := runtime.Close(); err != nil {
 			t.Error(err)
@@ -207,6 +208,7 @@ func TestManagedBrowserLostTabAndProcessNeverSelectReplacement(t *testing.T) {
 				t.Fatal(err)
 			}
 			runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": NewPlaywrightTargetExecutor(node, helper, t.TempDir())}, t.TempDir())
+			configureBrowserFixture(t, runtime)
 			t.Cleanup(func() { _ = runtime.Close() })
 			ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 			defer cancel()
@@ -272,6 +274,7 @@ func TestManagedBrowserDiscoveryRecoversLostPagesWithoutDesktopSetup(t *testing.
 			}
 			host, _, store, _ := computerBindingFixture(t)
 			host.executors["browser-main"] = NewPlaywrightTargetExecutor(node, helper, t.TempDir())
+			configureBrowserFixture(t, host)
 			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 			defer cancel()
 			target, err := host.ConnectBrowser(ctx, ComputerBrowserConnection{ManagedProfileID: "browser-main", NewTab: true})
@@ -373,6 +376,7 @@ func TestManagedBrowserPrivateRecoverySharesProfileOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{target.ID: NewPlaywrightTargetExecutor(node, helper, t.TempDir())}, t.TempDir())
+	configureBrowserFixture(t, runtime)
 	t.Cleanup(func() { _ = runtime.Close() })
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
@@ -438,6 +442,7 @@ func TestComputerFullAccessManagedBrowserUsesTaskPermission(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime.executors["browser-main"] = NewPlaywrightTargetExecutor(node, helper, t.TempDir())
+	configureBrowserFixture(t, runtime)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte("<h1>Full access fixture</h1>"))

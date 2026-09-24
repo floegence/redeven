@@ -1,0 +1,106 @@
+// @vitest-environment jsdom
+import { afterEach, expect, it, vi } from 'vitest';
+import type { Session } from '@floegence/flowersec-core';
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
+import type { BrowserSourceService } from './browserSourceContract';
+import { createBrowserWorkspaceController, type BrowserWorkspaceController } from './browserWorkspaceController';
+
+let unbind: (() => void) | undefined;
+let controller: BrowserWorkspaceController | undefined;
+afterEach(() => { controller?.close(); unbind?.(); controller = undefined; });
+const selection = { request: { managed_profile_id: 'browser-main' }, label: 'Default' };
+const view = (id: string) => ({ id, generation: 'fixture-generation', profile_id: 'browser-main', initial_target: 'tab', protocol_version: 22, media_wire_version: 1 });
+async function fixture(installed = true) {
+  const request = vi.fn(async (_path: RequestInfo | URL, _init?: RequestInit) => Response.json({ ok: true, data: view('browser-view-first') }));
+  unbind = await bindTestSessionHTTP(request);
+  const load = vi.fn(async () => ({ enabled: true, state: installed ? 'installed' : 'not_installed' }));
+  const service = { management: { loadBrowserInstallation: load } } as unknown as BrowserSourceService;
+  controller = createBrowserWorkspaceController(service, selection);
+  controller.setSession({} as Session);
+  return { controller, request, load };
+}
+
+it('requires setup before admission and never starts an installation itself', async () => {
+  const { controller, request } = await fixture(false);
+  await expect(controller.open(selection)).rejects.toMatchObject({ code: 'BROWSER_INSTALL_REQUIRED' });
+  expect(controller.snapshot()).toMatchObject({ phase: 'failed', failure: 'BROWSER_INSTALL_REQUIRED' });
+  expect(request).not.toHaveBeenCalled();
+});
+
+it('keeps the existing page when a replacement source cannot be opened', async () => {
+  const { controller, request } = await fixture();
+  await controller.open(selection);
+  request.mockResolvedValueOnce(Response.json({ ok: false, error_code: 'BROWSER_SOURCE_UNAVAILABLE' }, { status: 409 }));
+  await expect(controller.open({ request: { source_target: 'missing' }, label: 'Missing' })).rejects.toThrow();
+  expect(controller.snapshot().view?.id).toBe('browser-view-first');
+  expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(0);
+});
+
+it('retires a superseded late view without replacing or deleting the current view', async () => {
+  const { controller, request } = await fixture();
+  let late!: (value: Response) => void;
+  request.mockImplementationOnce(() => new Promise(resolve => { late = resolve; }));
+  const first = controller.open(selection).catch(() => undefined);
+  await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+  request.mockResolvedValueOnce(Response.json({ ok: true, data: view('browser-view-current') }));
+  await controller.open(selection);
+  late(Response.json({ ok: true, data: view('browser-view-late') }));
+  await first;
+  expect(controller.snapshot().view?.id).toBe('browser-view-current');
+  expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE').map(([path]) => String(path))).toEqual(['/_redeven_proxy/api/browser/views/browser-view-late']);
+});
+
+it('rebuilds presentation from the admitted target without opening another workspace', async () => {
+  const { controller, request } = await fixture();
+  await controller.open(selection);
+  controller.selectTarget('second-tab');
+  request.mockResolvedValueOnce(Response.json({ ok: true, data: view('browser-view-next') }));
+  await controller.reconnect();
+  expect(String(request.mock.calls[1]![0])).toBe('/_redeven_proxy/api/browser/views');
+  expect(JSON.parse(String(request.mock.calls[1]![1]?.body))).toEqual({ targets: ['second-tab'] });
+  controller.close(); controller.close();
+  expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(2);
+});
+
+it('does not let a late fault inspection overwrite a replacement Session', async () => {
+  const { controller, request } = await fixture();
+  await controller.open(selection);
+  let resolve!: (response: Response) => void;
+  request.mockImplementation((path, init) => {
+    if (String(path).endsWith('/environment')) return new Promise(done => { resolve = done; });
+    return Promise.resolve(Response.json({ ok: true, data: init?.method === 'DELETE' ? null : view('browser-view-next') }));
+  });
+  const failure = controller.fail();
+  await vi.waitFor(() => expect(resolve).toBeDefined());
+  controller.setSession(undefined);
+  controller.setSession({} as Session);
+  await controller.reconnect();
+  resolve(Response.json({ ok: true, data: { browser_service: { state: 'failed', generation: 'retired' } } }));
+  await failure;
+  expect(controller.snapshot()).toMatchObject({ phase: 'live', view: { id: 'browser-view-next' } });
+});
+
+it('requires a new explicit choice after an uncertain new-tab outcome', async () => {
+  const { controller, request } = await fixture();
+  request.mockResolvedValueOnce(Response.json({ ok: false, error_code: 'BROWSER_OUTCOME_UNKNOWN' }, { status: 409 }));
+  await expect(controller.open({ label: 'Personal', request: { connection: { extension_profile_id: 'personal', new_tab: true } } })).rejects.toThrow();
+  await expect(controller.reconnect()).rejects.toMatchObject({ code: 'BROWSER_OUTCOME_UNKNOWN' });
+  expect(request.mock.calls.filter(([path]) => String(path).endsWith('/workspace'))).toHaveLength(1);
+});
+
+it('restores the preceding notice when the user cancels the current selection', async () => {
+  const { controller, request, load } = await fixture(false);
+  await expect(controller.open(selection)).rejects.toThrow();
+  const before = controller.snapshot();
+  load.mockResolvedValueOnce({ enabled: true, state: 'installed' });
+  let resolve!: (response: Response) => void;
+  request.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+  const abort = new AbortController();
+  const open = controller.open(selection, abort.signal).catch(() => undefined);
+  await vi.waitFor(() => expect(resolve).toBeDefined());
+  abort.abort();
+  resolve(Response.json({ ok: true, data: view('browser-view-abandoned') }));
+  await open;
+  expect(controller.snapshot()).toEqual(before);
+  expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(1);
+});

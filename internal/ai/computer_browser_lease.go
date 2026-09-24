@@ -18,6 +18,7 @@ type browserTargetLease struct {
 	control      *computerTargetControl
 	viewID       string
 	private      bool
+	managed      bool // Owned process termination can prove this lease terminal.
 	ready        bool // guarded by control.mu
 	previous     *browserTargetLease
 	releaseInput func(context.Context) error
@@ -79,6 +80,9 @@ func (r *ComputerUseRuntime) acquireBrowserLease(ctx context.Context, targetID, 
 		return nil, errors.New("browser target is already controlled")
 	}
 	lease := &browserTargetLease{host: r, control: control, viewID: viewID, private: private, previous: control.browser, releaseInput: releaseInput, revoked: make(chan struct{})}
+	if executor, ok := r.executors[targetID].(*PlaywrightTargetExecutor); ok {
+		lease.managed = executor.ManagedAttachment
+	}
 	control.browser = lease
 	if lease.previous != nil {
 		lease.previous.revoke()

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -53,12 +54,14 @@ func (r *ComputerUseRuntime) prepareRegisteredBrowserSource(ctx context.Context,
 	return nil
 }
 
-// Called with connectMu held. A failed host remains closed until the Runtime is
-// explicitly restarted; existing source identities must not silently reconnect.
+// Called with connectMu held. Recovery is explicit and retires all old grants.
 func (r *ComputerUseRuntime) browserSourceHostLocked(ctx context.Context) (*browserSourceHost, error) {
+	if r.browserServiceSnapshot().State == "recovering" {
+		return nil, errBrowserHostFailed
+	}
 	if r.browserHost != nil {
 		if err := r.browserHost.ctx.Err(); err != nil {
-			return nil, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_failed"}
+			return nil, errBrowserHostFailed
 		}
 		return r.browserHost, nil
 	}
@@ -66,11 +69,17 @@ func (r *ComputerUseRuntime) browserSourceHostLocked(ctx context.Context) (*brow
 	if err != nil {
 		return nil, err
 	}
-	host, err := startBrowserSourceHost(ctx, resources.NodeBinary, filepath.Join(filepath.Dir(resources.HelperPath), "redevenBrowserHost.mjs"), browserHostHandlers{Directory: r.browserDirectoryCommand, Event: r.browserSourceEvent})
+	generation := r.browserServiceSnapshot().Generation
+	host, err := startBrowserSourceHost(ctx, resources.NodeBinary, filepath.Join(filepath.Dir(resources.HelperPath), "redevenBrowserHost.mjs"), browserHostHandlers{Directory: r.browserDirectoryCommand, Event: func(event browserHostEvent) { r.browserSourceGenerationEvent(generation, event) }})
 	if err != nil {
+		r.browserHostStopped(generation)
 		return nil, err
 	}
 	r.browserHost = host
+	r.mu.Lock()
+	r.browserService.State = "ready"
+	r.mu.Unlock()
+	go func() { <-host.ctx.Done(); r.browserHostStopped(generation) }()
 	return host, nil
 }
 
@@ -146,7 +155,14 @@ func startBrowserSourceHost(ctx context.Context, node, helper string, handlers b
 		_ = os.RemoveAll(directory)
 		return nil, err
 	}
-	go func() { _ = cmd.Wait(); cancel(); close(host.done) }()
+	go func() {
+		err := cmd.Wait()
+		if err != nil && lifetime.Err() == nil {
+			slog.Warn("browser source host exited", "pid", cmd.Process.Pid, "exit_code", cmd.ProcessState.ExitCode())
+		}
+		cancel()
+		close(host.done)
+	}()
 	reader := bufio.NewReader(stdout)
 	ready := make(chan error, 1)
 	go func() {
@@ -252,7 +268,7 @@ func (body *browserHostBody) Close() error {
 
 func (host *browserSourceHost) request(ctx context.Context, method, route string, body io.Reader) (*http.Response, error) {
 	if err := host.ctx.Err(); err != nil {
-		return nil, err
+		return nil, errBrowserHostFailed
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	stop := context.AfterFunc(host.ctx, cancel)

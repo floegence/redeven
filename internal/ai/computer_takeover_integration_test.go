@@ -176,6 +176,7 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 					t.Fatal(err)
 				}
 				host := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"target": executor}, filepath.Join(state, "media"))
+				installBrowserStub(t, host)
 				t.Cleanup(func() { _ = host.Close() })
 				var err error
 				svc, err = NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,
@@ -373,6 +374,7 @@ func TestSampledCaptchaStopsProductionProviderLoop(t *testing.T) {
 
 	state := t.TempDir()
 	host = NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"target": executor}, filepath.Join(state, "media"))
+	installBrowserStub(t, host)
 	defer host.Close()
 	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,
 		Config:         &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},

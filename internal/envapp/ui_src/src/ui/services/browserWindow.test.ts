@@ -42,7 +42,7 @@ async function fixture() {
   const delivered = vi.spyOn(child, 'postMessage').mockImplementation(() => undefined);
   const host = createBrowserWindow({
     session: {} as Session,
-    view: { id: 'browser-view-test', initial_target: 'first', protocol_version: 22, media_wire_version: 1 },
+    view: { generation: 'fixture-generation', id: 'browser-view-test', initial_target: 'first', protocol_version: 22, media_wire_version: 1 },
     child: () => child,
     configuration: { type: 'redeven-browser-ports', nonce: 'nonce', title: 'Browser', locale: 'en-US', messages: {} as BrowserMessages, theme: {} },
     onReconnect: vi.fn(),

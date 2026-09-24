@@ -1,3 +1,4 @@
+import { browserFailureCode, type BrowserFailureCode } from './browserFailure';
 import { readBrowserFile } from './browserFiles';
 import { browserSourcePort } from './browserSourcePort';
 import type { BrowserSourceOperation, BrowserSourceService, BrowserSourceSelection } from './browserSourceContract';
@@ -11,23 +12,25 @@ import type { BrowserDocumentConfiguration, BrowserDocumentRequest, BrowserDocum
 type LibraryEntry = { url: string; title: string };
 export type BrowserWindowOptions = Readonly<{
   session: Session;
-  view: BrowserViewDescriptor;
+  view?: BrowserViewDescriptor;
   child: () => Window | null;
   configuration: BrowserDocumentConfiguration;
-  onReconnect(): void;
+  onReconnect(): void | Promise<void>;
   sources?: { service: BrowserSourceService; select(selection: BrowserSourceSelection, signal: AbortSignal): Promise<void> };
   onState?(state: BrowserState): void;
   onTabs?(state: TabState): void;
   onStatus?(status: string): void;
   onClose?(): void;
+  onFailure?(code: BrowserFailureCode): void;
+  onRecover?(): Promise<void>;
 }>;
 
 /** The environment remains the sole Session owner. Each trusted browser document
  * gets one observation and dedicated ports; it never receives a control token. */
-export function createBrowserWindow(options: BrowserWindowOptions): { close(): void } {
+export function createBrowserWindow(options: BrowserWindowOptions): { close(): void; suspend(code: BrowserFailureCode, phase?: 'opening' | 'failed'): void } {
   const lifetime = new AbortController();
-  const root = `/_redeven_proxy/api/browser/views/${encodeURIComponent(options.view.id)}`;
-  const libraryProfile = options.view.library_profile_id ?? options.view.profile_id;
+  const root = `/_redeven_proxy/api/browser/views/${encodeURIComponent(options.view?.id ?? '')}`;
+  const libraryProfile = options.view?.library_profile_id ?? options.view?.profile_id;
   const libraryRoot = '/_redeven_proxy/api/browser/library';
   let bridge: ReturnType<typeof serveProjectionPorts> | undefined;
   let product: MessagePort | undefined;
@@ -35,25 +38,28 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
   let grant: Extract<ServerMessage, { type: 'control' }> | undefined;
   const receivers = new Set<(message: ServerMessage) => void | Promise<void>>();
   const publish = async (message: ServerMessage): Promise<void> => {
-    if (!lifetime.signal.aborted) for (const receiver of receivers) await receiver(message);
+    if (!lifetime.signal.aborted && !suspended) for (const receiver of receivers) await receiver(message);
   };
-  let selected = options.view.initial_target;
+  let selected = options.view?.initial_target ?? '';
   let connected = false;
+  let suspended = false;
+  let failure = options.configuration.failure;
+  let failurePhase: 'opening' | 'failed' = 'failed';
   let accepted = false;
   let uploads = 0;
   let control: { key: string; target: string; sourceGranted: boolean; abort: AbortController; work: Promise<BrowserDocumentResult> } | undefined;
   const sourcePort = options.sources && browserSourcePort(options.sources.service, options.sources.select, status => product?.postMessage({ type: 'source.installation', status }));
-  const requests = new Map<number, AbortController>();
+  const requests = new Map<number, { abort: AbortController; view: boolean }>();
   let readyResolve!: () => void;
   let readyReject!: (error: Error) => void;
   const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
   void ready.catch(() => undefined);
-  const setupTimer = setTimeout(() => close(), 45000);
+  const setupTimer = setTimeout(() => { suspend('BROWSER_OPEN_TIMEOUT'); options.onFailure?.('BROWSER_OPEN_TIMEOUT'); }, 45000);
 
   const api = <T>(path: string, method: string, body: unknown, signal: AbortSignal = lifetime.signal): Promise<T> =>
     fetchSessionJSON<T>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal });
   const currentToken = (message: ClientMessage): string => 'tab' in message && message.tab !== controlled ? '' : token;
-  const upload = createBrowserUpload({ session: options.session, view: options.view.id, token: target => target === controlled ? token : '', signal: lifetime.signal });
+  const upload = createBrowserUpload({ session: options.session, view: options.view?.id ?? '', token: target => target === controlled ? token : '', signal: lifetime.signal });
 
   const acquire = (request: Extract<BrowserDocumentRequest, { method: 'control' }>, signal: AbortSignal): Promise<BrowserDocumentResult> => {
     if (!request.target || request.target !== selected) return Promise.reject(new Error('Browser target changed'));
@@ -77,10 +83,13 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
   };
 
   const execute = async (operation: BrowserDocumentRequest, signal: AbortSignal): Promise<BrowserDocumentResult> => {
+    if (operation.method === 'workspace.retry') { await options.onReconnect(); return; }
+    if (operation.method === 'workspace.recover') { await options.onRecover?.(); return; }
     if (operation.method.startsWith('source.')) {
       if (!sourcePort) throw new Error('Browser source management unavailable');
       return sourcePort.execute(operation as BrowserSourceOperation, signal);
     }
+    if (suspended || !options.view) throw new Error('Browser view retired');
     await ready;
     signal.throwIfAborted();
     switch (operation.method) {
@@ -157,18 +166,18 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
     const message = event.data;
     if (lifetime.signal.aborted || !message || typeof message !== 'object') return;
     if (message.type === 'closed') { close(); return; }
-    if (message.type === 'reconnect') { options.onReconnect(); return; }
-    if (message.type === 'state') { options.onState?.(message.state); return; }
-    if (message.type === 'tabs') { options.onTabs?.(message.state); return; }
-    if (message.type === 'status') { options.onStatus?.(message.status); return; }
+    if (message.type === 'reconnect') { void Promise.resolve(options.onReconnect()).catch(() => undefined); return; }
+    if (message.type === 'state') { if (!suspended) options.onState?.(message.state); return; }
+    if (message.type === 'tabs') { if (!suspended) options.onTabs?.(message.state); return; }
+    if (message.type === 'status') { if (!suspended) options.onStatus?.(message.status); return; }
     if (!Number.isSafeInteger(message.id) || message.id <= 0) return;
-    if (message.type === 'cancel') { requests.get(message.id)?.abort(); return; }
+    if (message.type === 'cancel') { requests.get(message.id)?.abort.abort(); return; }
     if (message.type !== 'request' || requests.has(message.id) || requests.size >= 16 || !message.operation || typeof message.operation !== 'object') return;
     const abort = new AbortController();
-    requests.set(message.id, abort);
+    requests.set(message.id, { abort, view: !message.operation.method?.startsWith('source.') && !message.operation.method?.startsWith('workspace.') });
     void execute(message.operation, AbortSignal.any([lifetime.signal, abort.signal])).then(
       value => { if (!lifetime.signal.aborted && !abort.signal.aborted) product?.postMessage({ type: 'result', id: message.id, ok: true, value }, value && typeof value === 'object' && 'body' in value ? [value.body] : []); },
-      () => { if (!lifetime.signal.aborted) product?.postMessage({ type: 'result', id: message.id, ok: false }); },
+      error => { if (!lifetime.signal.aborted) product?.postMessage({ type: 'result', id: message.id, ok: false, code: browserFailureCode(error) }); },
     ).finally(() => requests.delete(message.id));
   };
 
@@ -181,9 +190,10 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
     const messages = new MessageChannel(), media = new MessageChannel(), actions = new MessageChannel();
     product = actions.port1;
     product.addEventListener('message', receive); product.start();
-    bridge = serveProjectionPorts({ messages: messages.port1, media: media.port1 }, () => {
-      const carrier = createBrowserCarrier({ session: options.session, view: options.view.id, controlToken: currentToken, onClose: () => { token = ''; controlled = ''; grant = undefined; connected = false; readyReject(new Error('Browser closed')); } });
+    if (options.view && !suspended) bridge = serveProjectionPorts({ messages: messages.port1, media: media.port1 }, () => {
+      const carrier = createBrowserCarrier({ session: options.session, view: options.view?.id ?? '', controlToken: currentToken, onClose: () => { token = ''; controlled = ''; grant = undefined; connected = false; readyReject(new Error('Browser closed')); } });
       carrier.subscribe(async message => {
+        if (suspended || lifetime.signal.aborted) return;
         if (!connected) { connected = true; clearTimeout(setupTimer); readyResolve(); }
         if (message.type === 'tabs') {
           if (selected !== message.state.active) { token = ''; controlled = ''; grant = undefined; control?.abort.abort(); }
@@ -205,7 +215,8 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
       });
       return { ...carrier, subscribe: listener => { receivers.add(listener); return () => receivers.delete(listener); } };
     });
-    child.postMessage({ ...options.configuration, library: Boolean(libraryProfile) }, location.origin, [messages.port2, media.port2, actions.port2]);
+    if (!options.view) { clearTimeout(setupTimer); suspended = true; }
+    child.postMessage({ ...options.configuration, failure, library: Boolean(libraryProfile) }, location.origin, [messages.port2, media.port2, actions.port2]);
   };
 
   function close(): void {
@@ -215,10 +226,18 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
     window.removeEventListener('message', attach);
     control?.abort.abort(); requests.clear(); sourcePort?.close();
     bridge?.close(); product?.close(); receivers.clear(); token = ''; controlled = ''; grant = undefined;
-    // An unopened or abruptly destroyed document still retires its issued view.
-    void fetchSessionJSON(root, { method: 'DELETE' }).catch(() => undefined);
     options.onClose?.();
   }
+  function suspend(code: BrowserFailureCode, phase: 'opening' | 'failed' = 'failed'): void {
+    if (lifetime.signal.aborted || suspended && failure === code && failurePhase === phase) return;
+    failure = code; failurePhase = phase;
+    suspended = true; clearTimeout(setupTimer);
+    token = ''; controlled = ''; grant = undefined; control?.abort.abort();
+    for (const request of requests.values()) if (request.view) request.abort.abort();
+    bridge?.close(); bridge = undefined;
+    readyReject(new Error('Browser view retired'));
+    product?.postMessage({ type: 'workspace.failure', code, phase });
+  }
   window.addEventListener('message', attach);
-  return { close };
+  return { close, suspend };
 }

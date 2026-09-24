@@ -77,6 +77,7 @@ func TestComputerRuntimePersistsOnlyActionKeyframes(t *testing.T) {
 	}
 	executor := newLiveFrameExecutor(t)
 	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"target": executor}, dir)
+	installBrowserStub(t, runtime)
 	result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer.screenshot"})
 	if err != nil {
 		t.Fatal(err)

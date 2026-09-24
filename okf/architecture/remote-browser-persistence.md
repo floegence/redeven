@@ -19,6 +19,8 @@ timestamp: 2026-09-23T00:00:00Z
 The browser library is owned by the environment ComputerUseRuntime and is independent of Flower thread state and AI service readiness. The AppServer mounts its `/api/browser/library/` routes directly against that owner without acquiring an AI service lease. Profiles are scoped to the authenticated user and environment, and the product store records only source kind, tab navigation metadata, bookmarks, history and zoom. It does not read Chromium databases or persist cookies, form contents, control leases, media recordings, CDP endpoints or old input. Connected CDP and extension sources are observed from their current directory after reconnect; URL-only restoration is rejected.
 
 [Browser source ownership](remote-browser-sources.md) defines admitted identities and private metadata boundaries. [The browser surface](remote-browser-surface.md) owns user-facing window operations.
+[Browser service recovery](remote-browser-recovery.md) retires process authority
+while retaining this store and the last committed restoration snapshot.
 
 Empty collection reads return explicit arrays. Admitting an already-running managed page records its current eligible URL once; another window or a title-only update does not add a visit.
 

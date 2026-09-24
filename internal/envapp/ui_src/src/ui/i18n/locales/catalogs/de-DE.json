@@ -7297,6 +7297,18 @@
     "noPages": "Keine Seiten gefunden. Öffnen Sie eine Seite im Quellbrowser und aktualisieren Sie die Liste.",
     "openSelection": "Auswahl öffnen",
     "selectionHint": "Das Öffnen einer Seite hier ändert nicht die von Flower ausgewählte Seite.",
-    "chromeConfirmHint": "Bestätigen Sie die Verbindung in Chrome und wählen Sie dann die Seite aus, die Sie hier öffnen möchten."
+    "chromeConfirmHint": "Bestätigen Sie die Verbindung in Chrome und wählen Sie dann die Seite aus, die Sie hier öffnen möchten.",
+    "installTitle": "Umgebungsbrowser einrichten",
+    "installOpen": "Installieren und öffnen",
+    "recoverTitle": "Browserdienst angehalten",
+    "recover": "Browser wiederherstellen",
+    "recoveryDescription": "Der Umgebungsbrowser wird neu gestartet und gespeicherte Tabs werden wiederhergestellt. Ungespeicherte Seiteninhalte können verloren gehen. Andere Dienste der Umgebung laufen weiter.",
+    "sourceUnavailable": "Diese Seite ist nicht mehr verfügbar. Wählen Sie eine Browserquelle.",
+    "disconnected": "Die Browserverbindung wurde unterbrochen.",
+    "openFailed": "Der Browser konnte nicht geöffnet werden. Versuchen Sie es erneut oder wählen Sie eine andere Quelle.",
+    "openTimeout": "Der Browser hat nicht rechtzeitig geantwortet.",
+    "recoveryBlocked": "Beenden Sie vor der Wiederherstellung die private Sitzung im Quellbrowser.",
+    "outcomeUnknown": "Die Aktion wurde möglicherweise bereits ausgeführt. Wählen Sie die Quelle, um den aktuellen Zustand zu prüfen.",
+    "retry": "Erneut versuchen"
   }
 }

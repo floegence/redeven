@@ -14,9 +14,36 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/browserinstall"
 	"github.com/floegence/redeven/internal/browserstore"
 	"github.com/floegence/redeven/internal/session"
 )
+
+// Tests must name a qualified installation explicitly. A Playwright cache is
+// never an implicit substitute for the product's installation contract.
+func configureBrowserFixture(t *testing.T, runtime *ComputerUseRuntime) {
+	t.Helper()
+	installation := os.Getenv("REDEVEN_BROWSER_TEST_INSTALLATION")
+	if !filepath.IsAbs(installation) {
+		t.Fatal("REDEVEN_BROWSER_TEST_INSTALLATION must name an absolute installed catalog package directory")
+	}
+	pkg, err := browserinstall.NativePackage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := t.TempDir()
+	packages := filepath.Join(state, "browser", "packages")
+	if err := os.MkdirAll(packages, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(installation, filepath.Join(packages, pkg.SHA256)); err != nil {
+		t.Fatal(err)
+	}
+	runtime.ConfigureManagedBrowser(state)
+	if _, err := runtime.requireManagedBrowser(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func browserWorkspaceFixture(t *testing.T) (*ComputerUseRuntime, *session.Meta) {
 	t.Helper()
@@ -36,10 +63,7 @@ func browserWorkspaceFixture(t *testing.T) (*ComputerUseRuntime, *session.Meta) 
 		t.Fatal(err)
 	}
 	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": NewPlaywrightTargetExecutor(node, helper, t.TempDir())}, t.TempDir())
-	runtime.browserStore, err = browserstore.Open(filepath.Join(t.TempDir(), "browser.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	configureBrowserFixture(t, runtime)
 	t.Cleanup(func() {
 		if err := runtime.Close(); err != nil {
 			t.Error(err)

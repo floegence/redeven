@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/floegence/redeven/internal/session"
@@ -27,18 +28,37 @@ type ComputerManagedProfile struct {
 
 // The Runtime owns one browser process per managed profile. Tab executors only
 // attach to an explicit page, so creating a tab never duplicates a profile lock.
+type managedBrowserReply struct {
+	ID    string               `json:"id"`
+	Error string               `json:"error"`
+	Tabs  []ComputerBrowserTab `json:"tabs"`
+	Tab   *ComputerBrowserTab  `json:"tab"`
+}
+type managedBrowserPending struct {
+	result chan managedBrowserReply
+	timer  *time.Timer
+}
 type managedBrowserProfile struct {
-	cmd      *exec.Cmd
-	input    io.WriteCloser
-	reader   *bufio.Reader
-	endpoint string
-	done     chan struct{}
-	retired  bool
-	sequence uint64
+	cmd       *exec.Cmd
+	input     io.WriteCloser
+	reader    *bufio.Reader
+	endpoint  string
+	done      chan struct{}
+	mu        sync.Mutex
+	writeMu   sync.Mutex
+	readOnce  sync.Once
+	closeOnce sync.Once
+	retired   bool
+	sequence  uint64
+	ready     chan []byte
+	pending   map[string]*managedBrowserPending
 }
 
 func (p *managedBrowserProfile) stopped() bool {
-	if p.retired {
+	p.mu.Lock()
+	retired := p.retired
+	p.mu.Unlock()
+	if retired {
 		return true
 	}
 	select {
@@ -50,82 +70,146 @@ func (p *managedBrowserProfile) stopped() bool {
 }
 
 func (p *managedBrowserProfile) close() {
-	if p.retired {
-		return
-	}
-	p.retired = true
-	_ = p.input.Close()
-	select {
-	case <-p.done:
-	case <-time.After(2 * time.Second):
-		_ = p.cmd.Process.Kill()
-		<-p.done
-	}
+	p.closeOnce.Do(func() {
+		p.mu.Lock()
+		p.retired = true
+		for _, request := range p.pending {
+			request.timer.Stop()
+		}
+		clear(p.pending)
+		p.mu.Unlock()
+		_ = p.input.Close()
+		select {
+		case <-p.done:
+		case <-time.After(2 * time.Second):
+			_ = p.cmd.Process.Kill()
+			<-p.done
+		}
+	})
+}
+
+// One process-owned reader drains every response, including abandoned requests.
+// Only the process health deadline can retire an unresponsive helper.
+func (p *managedBrowserProfile) startReader() {
+	p.readOnce.Do(func() {
+		p.ready = make(chan []byte, 1)
+		p.pending = make(map[string]*managedBrowserPending)
+		go func() {
+			defer p.close()
+			receivedReady := false
+			for {
+				body, err := readComputerLine(p.reader, 262144)
+				if err != nil {
+					return
+				}
+				var envelope struct {
+					ID   string
+					Type string
+				}
+				if json.Unmarshal(body, &envelope) != nil {
+					return
+				}
+				if envelope.ID == "" {
+					if receivedReady || envelope.Type != "ready" {
+						return
+					}
+					receivedReady = true
+					p.ready <- body
+					continue
+				}
+				var reply managedBrowserReply
+				if json.Unmarshal(body, &reply) != nil || len(reply.Tabs) > 128 {
+					return
+				}
+				p.mu.Lock()
+				request := p.pending[reply.ID]
+				if request != nil {
+					delete(p.pending, reply.ID)
+					request.timer.Stop()
+				}
+				p.mu.Unlock()
+				if request == nil {
+					return
+				}
+				request.result <- reply
+				if reply.Error == "MANAGED_BROWSER_DISCONNECTED" {
+					return
+				}
+			}
+		}()
+	})
 }
 func (p *managedBrowserProfile) receive(ctx context.Context, destination any) error {
-	value := make(chan []byte, 1)
-	failure := make(chan error, 1)
-	go func() {
-		body, err := readComputerLine(p.reader, 262144)
-		if err != nil {
-			failure <- err
-		} else {
-			value <- body
-		}
-	}()
+	p.startReader()
 	timer := time.NewTimer(20 * time.Second)
 	defer timer.Stop()
 	select {
-	case body := <-value:
-		if err := json.Unmarshal(body, destination); err != nil {
-			p.close()
-			return errors.New("invalid managed browser response")
-		}
-		return nil
+	case body := <-p.ready:
+		return json.Unmarshal(body, destination)
 	case <-ctx.Done():
-		p.close()
 		return ctx.Err()
 	case <-timer.C:
-		p.close()
 		return context.DeadlineExceeded
-	case <-failure:
-		p.close()
+	case <-p.done:
 		return errors.New("managed browser disconnected")
 	}
 }
 func (p *managedBrowserProfile) call(ctx context.Context, command string) ([]ComputerBrowserTab, error) {
-	select {
-	case <-p.done:
-		return nil, errors.New("managed browser disconnected")
-	default:
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	p.startReader()
+	p.writeMu.Lock()
+	p.mu.Lock()
+	if p.retired || len(p.pending) >= 32 {
+		p.mu.Unlock()
+		p.writeMu.Unlock()
+		return nil, errors.New("managed browser unavailable")
 	}
 	p.sequence++
 	id := fmt.Sprint(p.sequence)
+	request := &managedBrowserPending{result: make(chan managedBrowserReply, 1)}
+	request.timer = time.AfterFunc(20*time.Second, func() {
+		p.mu.Lock()
+		expired := p.pending[id] == request
+		if expired {
+			p.retired = true
+		}
+		p.mu.Unlock()
+		if expired {
+			p.close()
+		}
+	})
+	p.pending[id] = request
+	p.mu.Unlock()
 	body, _ := json.Marshal(map[string]string{"id": id, "command": command})
-	if _, err := p.input.Write(append(body, '\n')); err != nil {
+	_, err := p.input.Write(append(body, '\n'))
+	p.writeMu.Unlock()
+	if err != nil {
 		p.close()
 		return nil, err
 	}
-	var response struct {
-		ID    string               `json:"id"`
-		Error string               `json:"error"`
-		Tabs  []ComputerBrowserTab `json:"tabs"`
-		Tab   *ComputerBrowserTab  `json:"tab"`
-	}
-	if err := p.receive(ctx, &response); err != nil {
-		return nil, err
-	}
-	if response.ID == id && response.Error == "MANAGED_BROWSER_DISCONNECTED" {
-		p.close()
+	var reply managedBrowserReply
+	select {
+	case reply = <-request.result:
+	case <-ctx.Done():
+		if command == "new_tab" {
+			return nil, errors.Join(errBrowserOutcomeUnknown, ctx.Err())
+		}
+		return nil, ctx.Err()
+	case <-p.done:
+		if command == "new_tab" {
+			return nil, errBrowserOutcomeUnknown
+		}
 		return nil, errors.New("managed browser disconnected")
 	}
-	if response.ID != id || response.Error != "" || len(response.Tabs) > 128 {
+	if reply.Error != "" {
 		return nil, errors.New("managed browser command failed")
 	}
-	if response.Tab != nil {
-		return []ComputerBrowserTab{*response.Tab}, nil
+	if reply.Tab != nil {
+		return []ComputerBrowserTab{*reply.Tab}, nil
 	}
-	return response.Tabs, nil
+	return reply.Tabs, nil
 }
 func (r *ComputerUseRuntime) managedResources() (*PlaywrightTargetExecutor, error) {
 	r.mu.RLock()
@@ -243,6 +327,7 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 		Reason   string `json:"reason"`
 	}
 	if err := profile.receive(ctx, &ready); err != nil {
+		profile.close()
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}

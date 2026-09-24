@@ -10,17 +10,19 @@ import { I18nProvider, useI18n } from '../i18n';
 import { readStoredLanguagePreference, writeStoredLanguagePreference } from '../i18n/storage';
 import type { RedevenLocale } from '../i18n';
 import { BrowserSourceDialog } from './BrowserSourceDialog';
+import { bindTestSessionHTTP } from '../../test/sessionHTTPFixture';
 
-const api = vi.hoisted(() => ({ request: vi.fn() }));
-vi.mock('../services/localApi', () => ({ fetchLocalApiJSON: api.request }));
+const api = { request: vi.fn() };
+let unbind: (() => void) | undefined;
 const priorLocale = readStoredLanguagePreference();
 let cleanup: (() => void) | undefined;
-afterEach(async () => { cleanup?.(); cleanup = undefined; writeStoredLanguagePreference(priorLocale); document.documentElement.classList.remove('dark'); api.request.mockReset(); await page.viewport(1280, 800); });
+afterEach(async () => { cleanup?.(); cleanup = undefined; unbind?.(); writeStoredLanguagePreference(priorLocale); document.documentElement.classList.remove('dark'); api.request.mockReset(); await page.viewport(1280, 800); });
 const button = (label: string) => [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === label)!;
 async function mount(locale: RedevenLocale = 'en-US') {
   writeStoredLanguagePreference(locale);
   let profiles = [{ id: 'browser-main', name: 'Default' }, { id: 'work', name: 'Work accounts' }];
   api.request.mockImplementation(async (path: string, options?: { method?: string; body?: string }) => {
+    if (path.endsWith('/installation')) return { enabled: true, state: 'installed', package: { id: 'fixture', name: 'Chromium', version: '153', platform: 'darwin', architecture: 'arm64', size_bytes: 1, installed_bytes: 1 }, received_bytes: 0, directory: '/fixture' };
     if (path.endsWith('/profiles')) {
       if (options?.method === 'POST') profiles = [...profiles, { id: 'new-profile', name: JSON.parse(options.body!).name }];
       return profiles;
@@ -30,6 +32,7 @@ async function mount(locale: RedevenLocale = 'en-US') {
     if (path.endsWith('/connections/cdp')) return [{ id: 'remote', profile_id: 'default', title: 'CDP project', url: 'https://project.test/' }];
     throw new Error('Unexpected fixture request');
   });
+  unbind = await bindTestSessionHTTP(async (path, options) => Response.json({ ok: true, data: await api.request(String(path), options) }));
   const select = vi.fn(), close = vi.fn();
   const host = document.createElement('div'); document.body.append(host);
   const Chooser = () => <BrowserSourceDialog service={browserSourceService(`source-fixture-${locale}`)} messages={browserSourceMessages(useI18n())} current={{ request: { managed_profile_id: 'browser-main' }, label: 'Default profile' }} onSelect={select} onClose={close} />;
@@ -55,7 +58,7 @@ it('creates and selects an isolated profile without replacing the active page', 
   await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Client account'));
   expect(select).not.toHaveBeenCalled();
   button('Open selection').click();
-  expect(select).toHaveBeenCalledWith({ label: 'Client account', request: { managed_profile_id: 'new-profile' } }, expect.any(AbortSignal));
+  await vi.waitFor(() => expect(select).toHaveBeenCalledWith({ label: 'Client account', request: { managed_profile_id: 'new-profile' } }, expect.any(AbortSignal)));
 });
 it('discovers an advanced endpoint only on request and opens the exact discovered page', async () => {
   const { select } = await mount();

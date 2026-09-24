@@ -75,7 +75,7 @@ func TestBrowserHostCancellationDoesNotSerializeHealthyTargets(t *testing.T) {
 		t.Fatalf("peer cancellation stopped the host: %v", err)
 	}
 	stop()
-	if err := host.call(t.Context(), "healthy", nil, &result); !errors.Is(err, context.Canceled) {
+	if err := host.call(t.Context(), "healthy", nil, &result); !errors.Is(err, errBrowserHostFailed) {
 		t.Fatalf("closed host accepted a command: %v", err)
 	}
 }
