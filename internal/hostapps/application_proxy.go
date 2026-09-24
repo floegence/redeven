@@ -77,13 +77,13 @@ func newApplicationProxy(target string, assets *nativeapps.ClientAssets) (*appli
 	}
 	p := &applicationProxy{Listener: listener, connections: make(map[*applicationConnection]struct{})}
 	p.transport = http.DefaultTransport.(*http.Transport).Clone()
-	proxy := httputil.NewSingleHostReverseProxy(u)
-	proxy.Transport = p.transport
-	director := proxy.Director
-	proxy.Director = func(r *http.Request) {
-		director(r)
+	proxy := &httputil.ReverseProxy{Transport: p.transport}
+	proxy.Rewrite = func(r *httputil.ProxyRequest) {
+		r.SetURL(u)
+		// The native application's WebSocket origin check sees the sharing host.
+		r.Out.Host = r.In.Host
 		// Let the transport decompress documents before the SDK rewrites references.
-		r.Header.Del("Accept-Encoding")
+		r.Out.Header.Del("Accept-Encoding")
 	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		resp.Header.Set("Cache-Control", "no-store")

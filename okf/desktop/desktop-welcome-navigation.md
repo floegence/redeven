@@ -17,7 +17,9 @@ destination cards with a staggered fade and rise when motion is allowed. Header
 controls remain steady, and refresh or retained-page return never replay entrance
 motion.
 
-# Navigation ownership
+# Contract
+
+## Navigation ownership
 
 Local header, logo, sidebar, and contextual Flower handoff actions select the
 renderer page directly. They do not reopen the utility window, start environment
@@ -33,7 +35,7 @@ not another snapshot sequence. Main captures the navigation state after its
 asynchronous snapshot reads so an older captured destination cannot be published
 as a later request.
 
-# Environment Center tab presentation
+## Environment Center tab presentation
 
 Activating a different Environments, Redeven Cloud, or Gateways tab immediately
 selects and renders its content. Pointer and keyboard activation share one path.
@@ -55,7 +57,7 @@ The system reduced-motion preference skips entrance motion entirely. This presen
 change tab state ownership or the [Environment library](desktop-environment-library.md)
 card stability contract.
 
-# Retained pages
+## Retained pages
 
 Environments and Flower mount on their first visit and remain mounted until
 Welcome is disposed. Hiding a page removes it from layout, accessibility, and

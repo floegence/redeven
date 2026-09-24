@@ -15,7 +15,9 @@ checks; Floret's canonical message remains the only durable display source.
 Unavailable, forbidden, oversized, or mismatched resources show a retryable
 preview error without interrupting the conversation.
 
-# Authoring and interaction
+# Contract
+
+## Authoring and interaction
 
 - `![Title](source)` displays image, video, or audio. Ordinary HTTP(S) links stay
   navigable. Links whose filename identifies media or HTML display inline media.
@@ -41,7 +43,7 @@ preview error without interrupting the conversation.
   inert, and later reply text does not reload committed previews. Media near the
   viewport loads lazily. Disposal aborts pending observation and revokes blob URLs.
 
-# Resource and document boundaries
+## Resource and document boundaries
 
 The existing `/api/fs/file` route accepts `preview=1` for bounded chat previews.
 Media is limited to 64 MiB; HTML is limited to 1,000,000 bytes and served only as
@@ -60,6 +62,10 @@ assets. Existing local SVG serving remains unavailable.
 Only assistant Markdown opts into resource resolution. Fetched web content and
 user messages cannot use this adapter to read local files. Presentation creates
 no second message store, lifecycle, or Floret API.
+
+# Boundaries
+
+Canonical Floret messages remain the durable display source. Resource routes retain Redeven permission checks and released Floe HTML isolation. Unavailable, forbidden, oversized or mismatched media stays an explicit preview error without interrupting the conversation.
 
 # Evidence
 

@@ -73,7 +73,7 @@ func publicAccessHosts(bind BindSpec, bound []netip.Addr, resolve func(BindSpec)
 	}
 	for _, addr := range bound {
 		if _, ok := plan[addr.String()]; !ok {
-			return nil, fmt.Errorf("Local UI listener %s does not match bind %s", addr, bind.ListenLabel())
+			return nil, fmt.Errorf("invalid Local UI listener %s: does not match bind %s", addr, bind.ListenLabel())
 		}
 		actual[addr.String()] = true
 	}

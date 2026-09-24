@@ -16,7 +16,9 @@ without quitting native applications; a later explicit open may start a new
 helper. The [native application contract](macos-host-applications.md) owns OS
 permissions and process/window validation.
 
-# Process and channel ownership
+# Contract
+
+## Process and channel ownership
 
 The Runtime must not start a separate persistent capture helper for each
 application. On the tested macOS host, leaving one process alive after stopping
@@ -45,7 +47,7 @@ on the same process. They do not create additional AppKit helper processes. Empt
 channel inventory leaves the helper idle until the Runtime closes, so the next
 application uses the same ScreenCaptureKit process identity.
 
-# Failure and shutdown
+## Failure and shutdown
 
 Each response channel has a bounded 128-message queue, preserving the supported
 operation-result burst. A stalled consumer closes only its own channel and cannot
@@ -60,6 +62,10 @@ has been reaped. Runtime shutdown first cancels session/viewer ownership, then
 closes the helper input, allows bounded cleanup, and reaps that exact process.
 Overlapping detach and host shutdown both receive completion after the native
 capture stops. Native applications and their unsaved work survive this shutdown.
+
+# Boundaries
+
+Sharing sessions retain separate authorization, input and frame credit despite using one helper. Suspending one session cannot stop another capture. Helper failure ends its sharing sessions without quitting applications; only a later explicit open starts recovery.
 
 # Evidence
 

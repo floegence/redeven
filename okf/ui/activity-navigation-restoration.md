@@ -15,7 +15,9 @@ dynamic targets fall back to the latest available built-in page, or Terminal.
 A transient directory failure preserves the original saved target for a future
 startup or explicit retry; a late restoration never replaces user navigation.
 
-# Local record and migration
+# Contract
+
+## Local record and migration
 
 `activityNavigation` stores version 1 with a current target and `recentBuiltins`.
 The UI preference binding partitions the record by stable environment and access
@@ -43,7 +45,7 @@ migration and subsequent navigation write only the new record. Local Web
 Services is never rewritten to Codespaces. Legacy dynamic IDs remain pending
 until the current plugin directory can validate and migrate their stable target.
 
-# Dynamic Activity pages
+## Dynamic Activity pages
 
 Only plugin instance, plugin, and surface identifiers are persisted. Execution
 plans, admission credentials, temporary URLs, and management revisions are
@@ -65,6 +67,10 @@ target and current inventory owner.
 Only the top-level Activity page is owned here. File paths, sessions, editor
 contents, filters, and other page details keep their existing owners. Loading and
 cache authority follow [Env App resource snapshots](env-resource-cache.md).
+
+# Boundaries
+
+A late restoration cannot replace explicit user navigation. Invalid dynamic destinations fall back to available built-in history or Terminal. Transient directory failure preserves the saved target for later startup or explicit retry; Floe does not write the product active-tab record.
 
 # Evidence
 

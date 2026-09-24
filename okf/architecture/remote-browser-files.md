@@ -12,7 +12,9 @@ timestamp: 2026-09-24T00:00:00Z
 - Invariants: file identities belong to their admitted source; captures preserve original bytes and source request semantics; personal browser directories are never scanned.
 - Failure boundary: revoked views, expired handles and unsupported download forms fail explicitly without refetching a URL or selecting another file.
 
-# Download ownership
+# Contract
+
+## Download ownership
 
 The [remote browser surface](remote-browser-surface.md) owns source admission,
 control and view lifecycle. Its existing Fetch owner passes source response
@@ -36,16 +38,7 @@ observer preserves native URL behavior. Source disposal restores observed URL
 functions and releases retained references; it does not revoke website-owned
 URLs. Other personal tabs retain their native download behavior.
 
-Capture has explicit bounds: four receiving files, 128 retained download records,
-256 MiB per file, 512 MiB total temporary storage and five minutes per receive.
-Blob observation retains at most sixteen current frame contexts, 128 references
-and 32 MiB per context. Revoked Blob references expire after thirty seconds.
-Blobs created before observation, in unobserved workers or frames, or beyond the
-bounds are unavailable. Native downloads outside the supported response forms
-require a native source handle; neither URL refetch nor directory scanning is a
-fallback. Hosts using response capture disable duplicate Playwright handles.
-
-# Authorized transfer and cleanup
+## Authorized transfer and cleanup
 
 The browser download panel exposes source-provided names and states. Saving is
 an explicit user action. Runtime file routes validate the current view, target
@@ -67,12 +60,23 @@ temporary storage and apply only to the selected live source file input.
 Desktop save dialogs and Web browser downloads are client-side destinations;
 the replay document receives no filesystem or Desktop bridge.
 
+# Boundaries
+
+Capture has explicit bounds: four receiving files, 128 retained download records,
+256 MiB per file, 512 MiB total temporary storage and five minutes per receive.
+Blob observation retains at most sixteen current frame contexts, 128 references
+and 32 MiB per context. Revoked Blob references expire after thirty seconds.
+Blobs created before observation, in unobserved workers or frames, or beyond the
+bounds are unavailable. Native downloads outside the supported response forms
+require a native source handle; neither URL refetch nor directory scanning is a
+fallback. Hosts using response capture disable duplicate Playwright handles.
+
 # Evidence
 
-- `floebrowser:src/host/response-downloads.ts` - Original response capture, bounded temporary files and disposal.
-- `floebrowser:src/host/blob-downloads.ts` - Frame-scoped immutable Blob observation and native IO handles.
-- `floebrowser:test/blob-downloads.e2e.ts` - Repeat exports, unrelated pages, iframe replacement and cleanup.
-- `floebrowser:test/response-downloads.e2e.ts` - Original POST bytes, cancellation and immediate Blob revocation.
+- [FloeBrowser v0.1.12: src/host/response-downloads.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/host/response-downloads.ts) — Original response capture, bounded temporary files and disposal.
+- [FloeBrowser v0.1.12: src/host/blob-downloads.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/host/blob-downloads.ts) — Frame-scoped immutable Blob observation and native IO handles.
+- [FloeBrowser v0.1.12: test/blob-downloads.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/test/blob-downloads.e2e.ts) — Repeat exports, unrelated pages, iframe replacement and cleanup.
+- [FloeBrowser v0.1.12: test/response-downloads.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/test/response-downloads.e2e.ts) — Original POST bytes, cancellation and immediate Blob revocation.
 - `redeven:internal/envapp/ui_src/scripts/computerManagedDownloads.mjs` - Managed native handles with exact-file validation.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.mjs` - Shared source adapter and file capture owner.
 - `redeven:browser-extension/background.mjs` - Native IO handles restricted to the admitted binding.

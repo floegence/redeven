@@ -19,7 +19,9 @@ does not run these privileged installation commands automatically.
 The [platform contract](../architecture/host-application-platforms.md) owns
 capability detection, isolation, application restrictions and validation evidence.
 
-# Arch Linux
+# Contract
+
+## Arch Linux
 
 Use Arch's official x86_64 repositories and perform a complete system upgrade:
 
@@ -34,7 +36,7 @@ separate distribution and is not covered by the official Arch x86_64 package
 result. XTerm is an optional small application for the installed-stack tests:
 `sudo pacman -S --needed xterm`.
 
-# RHEL, Rocky Linux and AlmaLinux 9
+## RHEL, Rocky Linux and AlmaLinux 9
 
 This route targets x86_64, where Xpra publishes Enterprise Linux 9 packages.
 The tested upstream repositories do not publish EL9 aarch64 packages. Do not
@@ -94,7 +96,7 @@ particular, the tested UBI 9 repositories lacked Xvfb. UBI initialization is not
 evidence of full RHEL validation. SELinux policy remains enabled and owned by
 the administrator; image tests do not certify a booted RHEL host's policy.
 
-# Alpine Linux 3.23
+## Alpine Linux 3.23
 
 Enable the matching release's official `main` and `community` repositories:
 
@@ -115,7 +117,7 @@ path resolution and breaks discovery of the adjacent plugin runtime.
 The [runtime dependency contract](../architecture/runtime-transport-dependencies.md)
 owns the static build, resolver and library distribution boundaries.
 
-# Install a compatible upstream HTML5 client
+## Install a compatible upstream HTML5 client
 
 Prefer the distribution/upstream signed `xpra-html5` package when it supplies
 v20 or v21. Otherwise install the separately released upstream source using its
@@ -141,7 +143,7 @@ resource root. Do not change another package's managed files without first
 resolving package ownership. Keep the client updated within the validated major
 versions; a new major requires adapter verification.
 
-# Verify the prepared host
+## Verify the prepared host
 
 Run as the same account and with the same PATH as Redeven:
 
@@ -158,7 +160,7 @@ nonempty X11 window inventory, resume, explicit termination, and exclusion of
 unrelated host Xpra configuration. Finally open an installed application in
 Redeven and verify input, reconnect and application-initiated window closure.
 
-# macOS
+## macOS
 
 Use the packaged native helper on macOS 13 or newer. Local Desktop opens the
 installed app directly. Remote capture requires a logged-in, unlocked desktop and
@@ -167,6 +169,10 @@ permission actions. Refresh after changing macOS Privacy & Security settings.
 See the [native Mac contract](../architecture/macos-host-applications.md) for shared
 foreground input, singleton and capture limitations. Linux package commands above
 do not apply to macOS.
+
+# Boundaries
+
+These administrator commands are an explicit setup route, not automatic Runtime actions. Package names alone cannot establish readiness. Missing or incompatible Xpra, HTML5 or GIO/GTK capabilities block launch and remain visible in the application library.
 
 # Evidence
 

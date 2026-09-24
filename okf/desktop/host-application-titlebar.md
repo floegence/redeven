@@ -9,7 +9,9 @@ timestamp: 2026-09-23T08:00:00Z
 
 The Redeven bootstrap owns host application toolbar presentation; macOS capture and Xpra remain the command and session authorities. Desktop provides native window geometry through the restricted [application presentation boundary](web-service-browser-window.md#host-application-presentation). One compact titlebar exposes window selection, picture settings and normal close actions without another connection or startup wait. Disconnection disables unavailable actions while preserving the native window and retry path.
 
-# Layout
+# Contract
+
+## Layout
 
 The first-party host-application bootstrap places its controls in one 40-pixel
 Desktop titlebar, alongside platform-owned traffic lights or caption buttons.
@@ -46,7 +48,7 @@ The [client input contract](../architecture/host-application-input.md) owns the
 Keyboard action, touch focus and candidate placement. The control is unavailable
 until its selected target has decoded pixels.
 
-# Appearance and language
+## Appearance and language
 
 The bootstrap consumes published Floe `standalone.css`: primitive sizing and
 fonts, all 26 shell presets, shared floating material and input focus rules. It
@@ -69,7 +71,7 @@ window and native menu names remain host content. Picture selections, active
 window, keyboard focus and transport ownership survive presentation changes.
 The inline assets add no request or connection wait.
 
-# Backend commands
+## Backend commands
 
 The shared toolbar and picture-preset presentation do not own backend state.
 macOS retains native menu, window-generation, frame credit and capture-quality
@@ -86,6 +88,10 @@ It never sends server shutdown or force-kills the application. macOS quit retain
 its existing application-wide confirmation. The native outer close button still
 closes only the viewer and preserves the session. These distinct actions must not
 be collapsed into one destructive command.
+
+# Boundaries
+
+Toolbar presentation does not own the capture or Xpra session. Native window geometry uses only the restricted application presentation bridge. Disconnection disables unavailable actions while preserving the window and existing retry path.
 
 # Evidence
 

@@ -12,7 +12,9 @@ timestamp: 2026-09-23T00:00:00Z
 - Invariants: viewing, input and media subscriptions are separate; source tracks remain website-owned; bounded media credit includes partial frames; clients never establish WebRTC.
 - Failure boundary: retired source/subscription identities are rejected, media loss stays scoped to its lane, and navigation never revives stale media or input.
 
-# Authenticated lanes
+# Contract
+
+## Authenticated lanes
 
 DOM, resources, files and media travel through the authenticated transport. The client never fetches the source site or opens a raw CDP/media port. Background audio may continue under an explicit viewing subscription; hidden video picture delivery can pause without changing website playback. Flow control remains bounded per lane so media backlog cannot block tab selection or input.
 
@@ -27,7 +29,7 @@ source-local encoded-media wire remains version 1.
 
 Source and view admission follows [browser source ownership](remote-browser-sources.md). Original uploads and downloads follow [browser files](remote-browser-files.md).
 
-# Element capture ownership
+## Element capture ownership
 
 Websites execute and play media at the source. The upstream collector accepts
 only source-host loopback WebRTC and emits encoded element frames through the
@@ -61,7 +63,7 @@ may pause while authorized background audio remains active. Playback commands ac
 on the source element and admission never starts playback. Returned video requests
 a fresh keyframe and does not replay queued old pictures.
 
-# Presentation timing
+## Presentation timing
 
 The upstream collector maps audio and video RTP clocks onto one source timeline.
 Client decoding and presentation preserve their relative timestamps even if the
@@ -122,18 +124,22 @@ edges must retain both halves of each measured pulse. Local overlays provide
 debugging evidence only; release acceptance uses the published dependency and
 built product assets.
 
+# Boundaries
+
+Viewing, input and media subscriptions remain distinct grants. Retired source or subscription identities reject further delivery. Media failure stays within its lane, and navigation cannot revive old media or replay input.
+
 # Evidence
 
 - `redeven:internal/ai/computer_browser_streams.go` - Authorized DOM, input, media and file lanes.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserTransport.ts` - Borrowed Flowersec Session and progressive byte acknowledgements.
 - `redeven:internal/codeapp/appserver/browser_projection_test.go` - Real Runtime and source-site-blocked product transport.
-- `floebrowser:src/host/media-source.ts` - Owned capture tracks and picture subscriptions.
-- `floebrowser:src/host/media-audio.ts` - Bounded native audio timestamp correction and owned endpoint disposal.
-- `floebrowser:src/host/media-carrier.ts` - Bounded lane scheduling and cumulative byte credit.
-- `floebrowser:test/media-source-lifetime.e2e.ts` - Source playback survives collection and observation disposal.
-- `floebrowser:src/viewer/media.ts` - Identity-fenced decoding and element composition.
-- `floebrowser:test/media-presentation.e2e.ts` - Future picture deadlines, credit return and selection cleanup.
-- `floebrowser:test/audio-timestamps.e2e.ts` - Opus packet gaps and source-clock corrections across decoder implementations.
-- `floebrowser:test/media-sync.e2e.ts` - Displayed and audible pulse synchronization, including delayed initial video.
+- [FloeBrowser v0.1.12: src/host/media-source.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/host/media-source.ts) — Owned capture tracks and picture subscriptions.
+- [FloeBrowser v0.1.12: src/host/media-audio.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/host/media-audio.ts) — Bounded native audio timestamp correction and owned endpoint disposal.
+- [FloeBrowser v0.1.12: src/host/media-carrier.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/host/media-carrier.ts) — Bounded lane scheduling and cumulative byte credit.
+- [FloeBrowser v0.1.12: test/media-source-lifetime.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/test/media-source-lifetime.e2e.ts) — Source playback survives collection and observation disposal.
+- [FloeBrowser v0.1.12: src/viewer/media.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/viewer/media.ts) — Identity-fenced decoding and element composition.
+- [FloeBrowser v0.1.12: test/media-presentation.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/test/media-presentation.e2e.ts) — Future picture deadlines, credit return and selection cleanup.
+- [FloeBrowser v0.1.12: test/audio-timestamps.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/test/audio-timestamps.e2e.ts) — Opus packet gaps and source-clock corrections across decoder implementations.
+- [FloeBrowser v0.1.12: test/media-sync.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/test/media-sync.e2e.ts) — Displayed and audible pulse synchronization, including delayed initial video.
 - `redeven:internal/envapp/ui_src/scripts/browserProjectionMediaSync.mjs` - Product presentation timing through Flowersec.
 - `redeven:internal/envapp/ui_src/scripts/browserProjectionSites.mjs` - Same-source Canvas pixel comparisons and paired site screenshots after input.

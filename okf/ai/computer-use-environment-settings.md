@@ -108,6 +108,10 @@ store, schema migration, or new Floret API is introduced. Published Floe compone
 already supply the required UI primitives, so this change is product integration
 rather than an upstream platform extension.
 
+# Boundaries
+
+Inspection never selects a page, grants authority, starts a task or installs components. Failed observations remain unknown. A lost selection stays unavailable until it is recovered or explicitly replaced; the settings dialog does not own Floret lifecycle.
+
 # Evidence
 
 - `redeven:internal/flower_ui/src/FlowerComputerConnections.tsx` - shared dialog and staged operations.

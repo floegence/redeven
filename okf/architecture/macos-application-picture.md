@@ -16,7 +16,9 @@ Hardware or browser video unavailability selects the explicit image transport;
 the quality panel reports the transport actually producing frames. A real capture
 failure retains the session's existing reconnect boundary.
 
-# Resolution and picture controls
+# Contract
+
+## Resolution and picture controls
 
 Capture dimensions use the smaller of the viewer's device-pixel ratio, the native
 window's pixel density, and the chosen longest-edge limit. Retina windows are not
@@ -70,7 +72,7 @@ Remote input remains rejected until that generation has decoded pixels. A same-w
 No option requires an application restart or changes the user's system display
 configuration. Limits are bounded and validated by the native helper.
 
-# Encoders and delivery
+## Encoders and delivery
 
 A browser advertising H.264 WebCodecs software decoding can receive VideoToolbox
 hardware video. The viewer requests software decoding with latency optimization:
@@ -108,7 +110,7 @@ serialized, and a replacement waits for the preceding `startCapture` and
 desired generation; obsolete callbacks and intentional stop errors cannot publish
 failure for the successor. Unchanged resize requests retain frame credit.
 
-# Observable statistics and limits
+## Observable statistics and limits
 
 Runtime diagnostics record connection-to-first-frame duration and generation;
 the browser debug log measures connection-to-first-decoded-frame duration. These
@@ -121,6 +123,10 @@ from the configured limit. A static application may legitimately show zero FPS
 and no bandwidth after its final lossless refresh. High latency, host capture,
 encoding, browser decoding and network capacity can reduce achieved frame rate;
 a 60 FPS limit is not a guarantee of 60 FPS delivery.
+
+# Boundaries
+
+Decoded frames acknowledge only the current capture generation. Picture preferences cannot change process or permission ownership. Video unavailability uses the declared image transport, while a capture failure retains the existing session recovery boundary.
 
 # Evidence
 

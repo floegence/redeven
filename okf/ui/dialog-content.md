@@ -38,6 +38,10 @@ their meaning and text.
 placement, focus, dismissal, and Workbench boundaries. This contract changes no
 application connection, process, or window lifecycle.
 
+# Boundaries
+
+Headers contain identity and controls only. Missing guidance must be repaired in the body through the shared Dialog contract; a custom header, hidden description or restored subtitle is not a recovery path.
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Uses the published Dialog and ConfirmDialog contracts.

@@ -39,7 +39,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [macOS application capture ownership](architecture/macos-application-capture-owner.md) - Keep suspended and active application channels independent under one native capture process.
 - [macOS application management and graceful quit](architecture/macos-application-management.md): Manage live host applications, distinguish quit from sharing, and reject stale process targets.
 - [Host Application Setup](operations/host-application-setup.md) - Install compatible Arch, Enterprise Linux and Alpine packages and verify native application startup.
-- [Host Application Validation](operations/host-application-validation.md) - Check distribution and architecture evidence and repeat the native session acceptance tests.
+- [Host Application Validation](operations/host-application-validation.md) - Qualify managed components, native client input and mobile pointer behavior.
+- [Host application platform validation](operations/host-application-platform-validation.md) - Verify Linux userspace and native macOS evidence while retaining hardware, translation and policy limits.
 - [Host application cursor acceptance](operations/host-application-cursor-validation.md) - Verify transported cursor geometry and application clicks while tracking physical pointer and device limitations.
 - [Host Application Lifecycle](operations/host-application-lifecycle.md) - Diagnose startup, window, access and transport transitions using the focused acceptance matrix.
 - [Runtime Binary Portability](architecture/runtime-binary-portability.md) - Build native Linux/macOS runtimes and preserve static library source and relink access.
@@ -69,6 +70,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Plugin market consumption](architecture/plugin-market-consumption.md) - Discover one verified latest release per channel while GitHub Releases and ReDevPlugin retain artifact and trust authority.
 - [Native container operation observation](architecture/containers-operation-observation.md) - Keep endpoint-bound native mutations locked until authoritative reconciliation proves a terminal outcome.
 - [Native container resources](architecture/container-resources-capability.md) - Manage Docker and Podman through one native engine, operation, permission, and product boundary.
+- [Container runtime execution](architecture/container-runtime-execution.md) - Discover active engine endpoints and bind typed Docker or Podman observations without changing host selection.
 - [Volume usage observation](architecture/container-volume-usage.md) - Distinguish referenced, unused, and unknown volumes while loading engine-reported disk usage independently.
 - [Container service management](architecture/container-service-management.md) - Detect, control, and configure the active local Docker or Podman implementation without endpoint selection or elevation.
 - [Native container console](architecture/container-resources-console.md) - Present stable aggregated inventory, structured Compose input, and exact-target resource navigation.
@@ -186,7 +188,9 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Semantic desktop operations](ai/computer-use-desktop.md) - Use window AX and isolated AT-SPI with explicit foreground authority and user input priority.
 - [Computer target selection across threads](ai/computer-use-target-selection.md) - Preserve authorized target choices across turns and restart without inheriting control on fork.
 - [Computer use safety pauses and user control](ai/computer-use-takeover.md) - Pause canonical tool execution, keep private browser input out of history, and require fresh observation on handback.
+- [Private browser observation and input](ai/computer-use-private-browser-control.md) - Fence secret-surface observation, user-only frames, ordered input and explicit handback recovery.
 - [Computer use media and visual requests](ai/computer-use-media.md) - Separate durable keyframes from live samples and verify decoded Stage pixels and visual request budgets.
+- [Flower computer viewer presentation](ui/flower-computer-viewer.md) - Present decoded Stage pixels, restore viewer geometry and apply canonical status without changing media authority.
 - [Computer use qualification](ai/computer-use-qualification.md) - Verify real pixels, input, handback, target scope and isolated cleanup.
 - [Computer use qualification evidence](ai/computer-use-qualification-evidence.md) - Assess measured native, browser and private-recovery outcomes within their tested scope.
 - [Computer use paired model measurements](ai/computer-use-performance.md) - Compare semantic scripts with visual primitives and reject incomplete performance evidence.

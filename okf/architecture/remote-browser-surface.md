@@ -12,7 +12,9 @@ timestamp: 2026-09-24T00:00:00Z
 - Invariants: fresh source selection and control admission precede input; child windows receive only named browser operations; cached documents confer no authority.
 - Failure boundary: replacing a source fails without destroying the current view; disconnect destroys stale presentation and never replays uncertain input.
 
-# Window ownership
+# Contract
+
+## Window ownership
 
 The shared `FloeBrowserSurface` mounts the released `@floegence/floebrowser` viewer against a Runtime-issued authenticated projection endpoint. Its endpoint is an opaque carrier identity. The viewer can request takeover, but the host decides whether control is granted and revokes it before draining in-flight input. A disconnected or stale generation destroys the previous view before mounting a new one, so old DOM and notices cannot flash over a new tab.
 
@@ -61,11 +63,8 @@ changes remain immediate; a delayed token cannot revive a revoked grant.
 Address submissions additionally wait for idle-control admission. HTTP responses and DOM/control messages may
 arrive in either order. A changed tab, newer address or disconnected view cancels
 an unsubmitted navigation; previously submitted input is never retried.
-The address field's Enter key and Go button issue source commands directly.
-They never submit a native form, so the inline document keeps its restrictive
-sandbox without `allow-forms` and its `form-action 'none'` policy.
 
-# Tab presentation
+## Tab presentation
 
 The viewer keeps at most three complete inert tab documents for immediate visual
 feedback. Cached presentation grants no input: only fresh source selection,
@@ -74,10 +73,18 @@ Background URL changes, removed directory grants and disconnect evict caches.
 Only browsers with state-preserving DOM moves retain iframe documents; other
 engines rebuild without claiming a cached-display latency result.
 
+# Boundaries
+
+The source-page replay remains scriptless. Only the trusted browser chrome
+executes locally, through the environment owner's named capabilities. The
+address field's Enter key and Go button issue source commands directly, never
+a native form submission. The inline document keeps its restrictive sandbox
+without `allow-forms` and its `form-action 'none'` policy.
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FloeBrowserSurface.tsx` - Shared viewer mount and generation-bound cleanup.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.ts` - Environment-owned window, source replacement and private control admission.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.test.ts` - Grant/token ordering, immediate revocation and stale selection rejection.
-- `floebrowser:src/viewer/replay-pages.ts` - Bounded inert document retention.
-- `floebrowser:test/tab-cache.e2e.ts` - Immediate presentation without stale input authority.
+- [FloeBrowser v0.1.12: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/viewer/replay-pages.ts) — Bounded inert document retention.
+- [FloeBrowser v0.1.12: test/tab-cache.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/test/tab-cache.e2e.ts) — Immediate presentation without stale input authority.

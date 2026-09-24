@@ -16,7 +16,9 @@ An unavailable or stale target returns an actionable error and preserves sharing
 The [native session contract](macos-host-applications.md) owns capture, input and
 physical viewer closure.
 
-# Running applications and explicit quit
+# Contract
+
+## Running applications and explicit quit
 
 **Running applications** uses AppKit's current regular application processes,
 including direct native launches, windowless applications and apps opened outside
@@ -64,6 +66,10 @@ quit cancellation or an unknown request outcome. A sharing stop never requests a
 termination; only the explicit Quit application action may request graceful
 termination of the exact selected process generation. A failed viewer opening
 also never rolls back a host session based on stale catalog state.
+
+# Boundaries
+
+Quit remains an explicit native request, bound to the original process generations. It cannot force-kill or retarget another process. Acceptance is not evidence of exit, and stale or unavailable targets retain sharing while reporting an actionable failure.
 
 # Evidence
 

@@ -12,7 +12,9 @@ timestamp: 2026-09-23T00:00:00Z
 - Invariants: one debugger and one ordered input path exist per page; discovery is not admission; private opener ancestry remains authoritative after intermediate pages close.
 - Failure boundary: source overflow or loss retires only affected bindings and never replays input or silently broadens grants.
 
-# Personal Chrome admission
+# Contract
+
+## Personal Chrome admission
 
 
 Native Messaging protocol 7 carries debugger commands and events for an opaque,
@@ -50,7 +52,7 @@ target metadata after that notification and updates admitted directory titles,
 including unselected pages. Neither directory discovery nor title observation
 starts projection or executes website-provided JavaScript.
 
-# Directory lifetime
+## Directory lifetime
 
 The Runtime registers an observation and its initial grants under the directory lock before accepting directory updates for that view. The stream body does not hold this lock. Source closure removes the Runtime target, executor and observation grants while retaining independent sources and the base browser installation configuration. A close decision reserves only its target input gate; it must not hold the directory lock while a person answers `beforeunload`. An exact pending directory decision is separate from page input authority.
 
@@ -79,6 +81,10 @@ the final granted tab creates one explicitly scoped blank replacement. External
 directory order and selection remain Runtime-only, and closed-page restoration
 is disabled at both the component and Runtime boundaries.
 
+# Boundaries
+
+Discovery is not source admission. Source loss or overflow retires affected bindings without replay or broader grants. Private opener ancestry remains authoritative after intermediate pages close, and each admitted page retains one ordered debugger input path.
+
 # Evidence
 
 - `redeven:internal/ai/computer_extension_source.go` - Bounded private source carrier and native binding lifetime.
@@ -87,4 +93,4 @@ is disabled at both the component and Runtime boundaries.
 - `redeven:internal/ai/computer_browser_privacy.go` - Native identity and opener ancestry privacy.
 - `redeven:internal/ai/computer_browser_lifecycle.go` - Source identity and grant retirement.
 - `redeven:internal/ai/computer_browser_workspace_test.go` - Directory, private descendants and source isolation.
-- `floebrowser:src/host/session.ts` - Directory observation and controller lifecycle.
+- [FloeBrowser v0.1.12: src/host/session.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/host/session.ts) — Directory observation and controller lifecycle.

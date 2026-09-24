@@ -17,7 +17,9 @@ remain usable during an optional update and after failure or cancellation. A new
 installation activates only after verification and real graphical qualification.
 Closing a pending viewer prevents automatic application opening.
 
-# Component ownership and admission
+# Contract
+
+## Component ownership and admission
 
 Redeven consumes `github.com/floegence/floe-native-apps` v0.6.0 as a published Go
 module, built with the same Go 1.27.1 toolchain. Its embedded catalog pins original
@@ -43,7 +45,7 @@ contracts rather than equating readiness with the newest digest.
 The [host application contract](host-applications.md) owns restoration of the
 application's environment, private display isolation and host-owned dependencies.
 
-# Preparation execution and recovery
+## Preparation execution and recovery
 
 Reading status, explicitly inspecting a transfer plan and observing events requires read permission. Starting,
 transferring or cancelling requires read/write/execute permission through the same
@@ -102,7 +104,7 @@ select an upstream-generated ZIP in the preparation panel. Uploaded chunks have 
 256 KiB bound and the complete archive has the pinned package's bounded ZIP overhead.
 The user's local ZIP path is never sent to the host.
 
-# Window and permission interaction
+## Window and permission interaction
 
 Selecting an unavailable application presents preparation for that actual app.
 The confirming click reserves its physical Desktop window or browser popup before
@@ -118,6 +120,10 @@ and cannot be claimed by another document. The
 macOS never enters Linux component preparation. Its bundled helper, native local
 opening and explicit remote screen-recording/accessibility authorization follow the
 [macOS contract](macos-host-applications.md); a graphical login is still required.
+
+# Boundaries
+
+Preparation does not install the user's applications or require administrator credentials. Failed or canceled updates retain the compatible active component. Closing a pending viewer withdraws automatic opening, and unqualified staged bytes never become active.
 
 # Evidence
 

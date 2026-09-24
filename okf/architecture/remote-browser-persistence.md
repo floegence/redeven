@@ -12,7 +12,9 @@ timestamp: 2026-09-23T00:00:00Z
 - Invariants: only managed profiles restore URLs; current source events own recovery snapshots; metadata excludes private pages, credentials, form contents and control tokens.
 - Failure boundary: incompatible product schemas fail read-only; browser failure retains the last eligible snapshot, and restoration requires a new explicit open.
 
-# Product storage
+# Contract
+
+## Product storage
 
 The browser library is owned by the environment ComputerUseRuntime and is independent of Flower thread state and AI service readiness. The AppServer mounts its `/api/browser/library/` routes directly against that owner without acquiring an AI service lease. Profiles are scoped to the authenticated user and environment, and the product store records only source kind, tab navigation metadata, bookmarks, history and zoom. It does not read Chromium databases or persist cookies, form contents, control leases, media recordings, CDP endpoints or old input. Connected CDP and extension sources are observed from their current directory after reconnect; URL-only restoration is rejected.
 
@@ -20,7 +22,7 @@ The browser library is owned by the environment ComputerUseRuntime and is indepe
 
 Empty collection reads return explicit arrays. Admitting an already-running managed page records its current eligible URL once; another window or a title-only update does not add a visit.
 
-# Library and restoration
+## Library and restoration
 
 The shared FloeBrowser library panel reads product bookmarks and history and
 stores origin zoom through the environment owner's restricted product port.
@@ -38,6 +40,10 @@ Source metadata and Runtime directory actions own managed-profile recovery snaps
 Snapshots contain restorable HTTP/HTTPS GET addresses, titles, ordering, pins and the most recently selected page. They exclude credentials embedded in URLs, script/data URLs, form contents, input tokens and prior Runtime target identities. Browser startup does not visit recovery addresses. An explicit profile-open request restores a stopped managed profile using fresh source identities; a second view of an already running profile observes its existing sources.
 
 Restoration first admits a blank page, then starts one source-owned GET navigation under user-browsing policy. Directory admission does not wait for the website response or restore an input controller. The source projection owns visible loading and failure states; cancellation follows the published source lifecycle. Later title changes update history metadata without creating another visit. Source closure preserves the last snapshot if the whole live directory disappears, so a browser failure does not erase the next explicit-open recovery input.
+
+# Boundaries
+
+Only managed profiles restore URLs, and restoration requires an explicit open. Private pages, credentials, form contents and control tokens never enter product metadata. Incompatible schemas remain unchanged, while browser failure retains the last eligible snapshot.
 
 # Evidence
 

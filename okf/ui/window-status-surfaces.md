@@ -29,6 +29,10 @@ Access-gate language menus use the shared floating layer and clamp to the visibl
 
 Generic loading curtains, dialogs and local Workbench error boundaries retain their existing material. A whole-window layout must not become a shared fallback for components that can be moved onto a canvas.
 
+# Boundaries
+
+Glass is limited to the fixed host-window layer over a retained inert workspace. Standalone documents and access gates stay opaque; draggable surfaces do not inherit this material. Appearance neither grants authority nor introduces another recovery owner.
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/ConnectionRecoveryView.tsx` — Host recovery placement and real retry/stop actions.

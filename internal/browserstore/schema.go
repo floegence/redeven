@@ -118,7 +118,7 @@ func verifySchema(tx *sql.Tx) error {
 	if err != nil {
 		return err
 	}
-	defer expected.Rollback()
+	defer func() { _ = expected.Rollback() }()
 	if err := createSchema(expected); err != nil {
 		return err
 	}
