@@ -2478,7 +2478,7 @@ html.dark .git-changes-table-pending {
 
 
 .redeven-file-list-compact [data-file-list-header] {
-  font-size: 0.625rem;
+  font-size: var(--floe-type-caption);
 }
 
 .redeven-file-list-compact [data-file-list-header] button {
@@ -2486,12 +2486,13 @@ html.dark .git-changes-table-pending {
 }
 
 .redeven-file-list-compact [data-file-list-row] {
-  height: 2rem;
-  font-size: 0.75rem;
+  height: var(--floe-row-height);
+  font-size: var(--floe-type-control);
+  line-height: var(--floe-line-control);
 }
 
 .redeven-file-list-compact [data-file-list-row] > div {
-  padding: 0.375rem 0.625rem;
+  padding: 0.3125rem 0.625rem;
 }
 
 .redeven-file-list-compact [data-file-list-row] > div:first-child {

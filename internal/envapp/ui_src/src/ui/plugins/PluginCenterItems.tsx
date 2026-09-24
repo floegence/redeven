@@ -128,7 +128,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         <span class="flex min-w-0 items-start gap-3 overflow-hidden">
           <PluginIcon item={props.item} size="card" class="redeven-plugin-directory-card-icon" />
           <span class="min-w-0 flex-1 pt-0.5">
-            <span class="line-clamp-2 break-words text-sm font-semibold leading-5" title={displayName()} lang={presentation()?.resolved_locale} dir="auto">{displayName()}</span>
+            <span class="line-clamp-2 break-words text-[length:var(--floe-type-control)] font-medium leading-5" title={displayName()} lang={presentation()?.resolved_locale} dir="auto">{displayName()}</span>
             <span class="mt-1 flex flex-wrap gap-1">
               <PluginTrustBadge item={props.item} />
             </span>

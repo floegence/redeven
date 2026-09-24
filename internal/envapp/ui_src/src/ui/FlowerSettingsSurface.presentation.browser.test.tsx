@@ -70,6 +70,8 @@ for (const [locale, dark, width] of [
     document.documentElement.classList.toggle('dark', dark);
     const frame = host.querySelector<HTMLElement>('.flower-settings-frame')!;
     expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth);
+    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontSize).toBe('16px');
+    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontWeight).toBe('500');
     const sections = [...frame.querySelectorAll<HTMLElement>(':scope > section')];
     expect(sections).toHaveLength(4);
     for (let index = 0; index < sections.length; index++) {
@@ -115,8 +117,8 @@ it('aligns section headings separately from controls and discloses provider deta
   const contentEdges = sections.map(section => {
     const heading = section.querySelector<HTMLElement>('.flower-settings-subsection-header')!;
     const content = section.querySelector<HTMLElement>('.flower-settings-section-content')!;
-    expect(content.getBoundingClientRect().left - heading.getBoundingClientRect().right).toBeGreaterThanOrEqual(32);
-    expect(parseFloat(getComputedStyle(section).paddingTop)).toBeGreaterThanOrEqual(32);
+    expect(content.getBoundingClientRect().left - heading.getBoundingClientRect().right).toBeGreaterThanOrEqual(24);
+    expect(parseFloat(getComputedStyle(section).paddingTop)).toBeGreaterThanOrEqual(20);
     return content.getBoundingClientRect().left;
   });
   expect(new Set(contentEdges).size).toBe(1);

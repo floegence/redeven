@@ -164,7 +164,7 @@ describe('Flower mobile navigation', () => {
     const button = runtime.querySelector<HTMLButtonElement>('.flower-composer-submit')!;
     const assertCircle = () => {
       const bounds = button.getBoundingClientRect();
-      expect(bounds.width).toBeGreaterThanOrEqual(36);
+      expect(bounds.width).toBeGreaterThanOrEqual(44);
       expect(bounds.width).toBeCloseTo(bounds.height, 0);
       expect(bounds.right).toBeLessThanOrEqual(width);
       expect(Number.parseFloat(getComputedStyle(button).borderRadius)).toBeGreaterThanOrEqual(bounds.width / 2);

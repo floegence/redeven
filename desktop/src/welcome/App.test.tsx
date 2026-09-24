@@ -2558,7 +2558,9 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toContain('data-floe-dialog-mode');
     expect(dialogSrc).toMatch(/return \w+\(\) \? "surface" : "global";/);
     expect(dialogSrc).toContain('"global"');
-    expect(dialogSrc).toContain('"fixed inset-0 box-border p-4"');
+    expect(dialogSrc).toContain('"fixed box-border p-4"');
+    expect(dialogSrc).toMatch(/observeViewport as \w+, viewportStyle as \w+/u);
+    expect(dialogSrc).toContain('"--floe-dialog-safe-top"');
     expect(dialogSrc).toMatch(/\w+\(\) === void 0 && "z-50"/u);
     expect(dialogSrc).toMatch(/"z-index": \w+\(\)/u);
     expect(dialogSrc).toContain('data-floe-dialog-backdrop');

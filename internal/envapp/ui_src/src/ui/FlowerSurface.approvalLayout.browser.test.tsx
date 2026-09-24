@@ -91,6 +91,20 @@ it('keeps every approval footer control inside the published companion shell', a
   expect(fixture.mount.querySelector<HTMLElement>('.flower-decision-surface')!.getBoundingClientRect().height).toBeLessThanOrEqual(300);
 });
 
+it('uses compact desktop decisions and a quiet full-page header without reducing command text', async () => {
+  await page.viewport(1280, 800);
+  const fixture = mountApprovals(2, { full: true });
+  await waitFor(() => Boolean(fixture.mount.querySelector('.flower-approval-queue-footer')));
+  const height = (selector: string) => fixture.mount.querySelector(selector)!.getBoundingClientRect().height;
+  expect.soft(height('.flower-chat-header')).toBe(44);
+  expect.soft(height('.flower-approval-queue-row .flower-composer-approval-decision')).toBe(28);
+  expect.soft(height('.flower-approval-queue-footer .flower-approval-decision-approve')).toBe(32);
+  expect.soft(getComputedStyle(fixture.mount.querySelector('.flower-approval-command-text')!).fontSize).toBe('12px');
+  expect.soft(getComputedStyle(fixture.mount.querySelector('.flower-chat-header-title')!).fontWeight).toBe('500');
+  await document.fonts.ready;
+  expect(getComputedStyle(fixture.mount.querySelector('.flower-chat-header-title')!).fontFamily).toContain('Inter Variable');
+});
+
 function expectFooterInside(mount: HTMLElement) {
   const shell = mount.querySelector<HTMLElement>('[data-floe-bottom-bar-companion]') ?? mount;
   const surface = mount.querySelector<HTMLElement>('.flower-decision-surface')!;

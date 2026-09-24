@@ -105,6 +105,7 @@ async function mountFixture() {
     listThreads: vi.fn(async () => [snapshot]),
     loadThread: vi.fn(async () => liveBootstrap(snapshot, 1)),
   });
+  runtime.style.height = '680px';
   await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`)));
   (runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`) as HTMLButtonElement).click();
   await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="wait-three"]')));
@@ -116,9 +117,8 @@ async function mountFixture() {
 
 async function sampleDisclosure(
   runtime: HTMLElement,
-  transcript: HTMLDivElement,
   itemID: string,
-): Promise<Readonly<{ titleOffsets: readonly number[]; heights: readonly number[]; scrollTops: readonly number[] }>> {
+): Promise<Readonly<{ titleOffsets: readonly number[]; heights: readonly number[]; interpolationErrors: readonly number[] }>> {
   const row = runtime.querySelector(`[data-flower-activity-item-id="${itemID}"]`) as HTMLDivElement;
   const button = row.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
   const titleTop = button.getBoundingClientRect().top;
@@ -126,20 +126,33 @@ async function sampleDisclosure(
   await waitFor(() => Boolean(row.querySelector('.flower-activity-inline-details')));
   const titleOffsets: number[] = [];
   const heights: number[] = [];
-  const scrollTops: number[] = [];
+  const interpolationErrors: number[] = [];
   for (let index = 0; index < 32; index += 1) {
     await nextFrame();
     titleOffsets.push(button.getBoundingClientRect().top - titleTop);
-    heights.push((row.querySelector('.flower-activity-inline-details') as HTMLDivElement).getBoundingClientRect().height);
-    scrollTops.push(transcript.scrollTop);
+    const details = row.querySelector('.flower-activity-inline-details') as HTMLDivElement;
+    const height = details.getBoundingClientRect().height;
+    heights.push(height);
+    const effect = details.getAnimations()[0]?.effect as KeyframeEffect | undefined;
+    const progress = effect?.getComputedTiming().progress;
+    if (effect && typeof progress === 'number') {
+      const keyframes = effect.getKeyframes();
+      const from = Number.parseFloat(String(keyframes[0]?.height));
+      const to = Number.parseFloat(String(keyframes.at(-1)?.height));
+      if (Number.isFinite(from) && Number.isFinite(to)) {
+        interpolationErrors.push(Math.abs(height - (from + (to - from) * progress)));
+      }
+    }
   }
-  return { titleOffsets, heights, scrollTops };
+  return { titleOffsets, heights, interpolationErrors };
 }
 
-function maximumStep(values: readonly number[]): number {
-  return values.reduce((maximum, value, index) => (
-    index === 0 ? maximum : Math.max(maximum, Math.abs(value - values[index - 1]!))
-  ), 0);
+function expectContinuousInterpolation(sample: Awaited<ReturnType<typeof sampleDisclosure>>) {
+  // Equal easing covers different pixel distances for one and three targets.
+  // Verify the rendered keyframes rather than imposing a content-size limit.
+  expect(sample.interpolationErrors.length).toBeGreaterThanOrEqual(4);
+  expect(Math.max(...sample.interpolationErrors)).toBeLessThanOrEqual(1);
+  expect(new Set(sample.heights.map(height => Math.round(height))).size).toBeGreaterThanOrEqual(5);
 }
 
 afterEach(async () => {
@@ -173,11 +186,11 @@ describe('Flower Subagent disclosure motion', () => {
     const oneButton = runtime.querySelector('[data-flower-activity-item-id="wait-one"] .flower-activity-inline-button') as HTMLButtonElement;
     transcript.scrollTop += oneButton.getBoundingClientRect().top - (transcriptBounds.top + transcript.clientHeight / 2);
     await nextFrame();
-    const one = await sampleDisclosure(runtime, transcript, 'wait-one');
+    const one = await sampleDisclosure(runtime, 'wait-one');
     expect(Math.max(...one.titleOffsets.map(Math.abs))).toBeLessThanOrEqual(1);
     expect(one.heights[0]).toBeLessThan(one.heights.at(-1)!);
     expect(one.heights.every((height, index) => index === 0 || height + 0.5 >= one.heights[index - 1]!)).toBe(true);
-    expect(maximumStep(one.heights)).toBeLessThan(32);
+    expectContinuousInterpolation(one);
 
     const oneRow = runtime.querySelector('[data-flower-activity-item-id="wait-one"]') as HTMLDivElement;
     const oneTop = oneButton.getBoundingClientRect().top;
@@ -190,12 +203,12 @@ describe('Flower Subagent disclosure motion', () => {
 
     transcript.scrollTop = transcript.scrollHeight;
     await nextFrame();
-    const three = await sampleDisclosure(runtime, transcript, 'wait-three');
+    const three = await sampleDisclosure(runtime, 'wait-three');
     expect(Math.max(...three.titleOffsets.map(Math.abs))).toBeLessThanOrEqual(1);
     expect(three.heights[0]).toBeLessThan(three.heights.at(-1)!);
     expect(three.heights.every((height, index) => index === 0 || height + 0.5 >= three.heights[index - 1]!)).toBe(true);
-    expect(maximumStep(three.heights)).toBeLessThan(32);
-    expect(maximumStep(three.scrollTops)).toBeLessThan(32);
+    expectContinuousInterpolation(three);
+    expect(transcript.scrollHeight).toBeGreaterThan(transcript.clientHeight);
   });
 
   it('yields the viewport anchor to manual scrolling and uses an immediate stable height for reduced motion', async () => {

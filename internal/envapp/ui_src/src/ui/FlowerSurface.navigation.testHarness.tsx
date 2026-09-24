@@ -195,7 +195,9 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
     );
   },
   FloatingWindow: (props: any) => {
-    if (props.class === 'flower-computer-stage') return <Dynamic component={actual.FloatingWindow} {...props} />;
+    if (props.class === 'flower-computer-stage' || (props.class === 'flower-subagent-detail-window' && typeof window.matchMedia === 'function')) {
+      return <Dynamic component={actual.FloatingWindow} {...props} />;
+    }
     const presence = actual.createFloatingPresence({
       open: () => Boolean(props.open),
       exitDurationMs: 0,

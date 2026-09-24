@@ -170,6 +170,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower streaming stability](ui/flower-streaming-stability.md) - Preserve complete interaction subtrees, bound rendering work, and reproduce streaming performance acceptance.
 - [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Render safe terminal operation facts and bounded output.
 - [Flower interactions and context state](ui/flower-approval-context.md) - Reconcile questions, shared decision guards, and context recovery.
+- [Shared interface scale](ui/interface-scale.md) - Align desktop text, controls, and spacing while preserving touch targets and content-viewer scale.
 - [Flower approval surface](ui/flower-approval-surface.md) - Review bounded approval queues, inspect commands, and decide exact one-time batches.
 - [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.
 

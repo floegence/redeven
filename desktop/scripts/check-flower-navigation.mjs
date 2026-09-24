@@ -63,6 +63,12 @@ try {
     await page.evaluate(() => window.navigationFixture.releaseRuntime());
     await page.locator('[data-flower-engaged]').waitFor();
     assert.equal(await page.locator('[data-flower-runtime-availability]').count(), 0, 'AI readiness replaces preparation automatically');
+    const scale = await page.locator('.flower-chat-header').evaluate(header => ({
+      height: header.getBoundingClientRect().height,
+      family: getComputedStyle(header).fontFamily,
+    }));
+    assert.equal(scale.height, 44, 'Desktop Flower uses the shared 44px header');
+    assert.ok(scale.family.includes('Inter Variable'), 'Desktop and Env App use the same UI font');
     assert.equal(await page.getByText('AI service is unavailable', { exact: false }).count(), 0);
     try {
       await page.locator('[data-thread-id="navigation-thread"] button').first().click({ timeout: 5000 });

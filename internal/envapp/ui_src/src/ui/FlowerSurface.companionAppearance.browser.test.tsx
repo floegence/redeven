@@ -1,8 +1,8 @@
 import '../index.css';
 import './flower-feature.css';
 
-import { describe, expect, it, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { commands, page, userEvent } from 'vitest/browser';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import {
   adapter,
@@ -139,4 +139,64 @@ describe('Flower production companion appearance', () => {
     runtime.dataset.companionPhase = 'collapsed';
     expectSingleOutline(runtime);
   });
+});
+
+it.each(['light', 'dark'] as const)('uses the shared reading scale and aligned composer in %s', async mode => {
+  await page.viewport(1280, 900);
+  const previousClass = document.documentElement.className;
+  document.documentElement.classList.toggle('dark', mode === 'dark');
+  document.documentElement.classList.toggle('light', mode === 'light');
+  onTestFinished(() => { document.documentElement.className = previousClass; });
+  const selected = thread({ thread_id: 'scale-reading', messages: [{
+    id: 'scale-reply', role: 'assistant', status: 'complete', turn_id: 'turn-scale', created_at_ms: 2,
+    content: '## Workspace review\n\nThe runtime and toolchain are ready. Review the changes before continuing.\n\n- Keep commands readable.\n- Preserve the current draft and selection.\n\n`node --version`',
+  }] });
+  const runtime = renderSurfaceWithAdapterProps({ ...adapter(true),
+    listThreads: async () => [selected], loadThread: async () => liveBootstrap(selected),
+  }, { focusThreadRequest: { request_id: 'scale-reading', thread_id: selected.thread_id } });
+  Object.assign(runtime.style, { width: '1200px', height: '800px' });
+  await waitFor(() => Boolean(runtime.querySelector('.flower-chat-md-block p')));
+  await document.fonts.ready;
+  const paragraph = runtime.querySelector('.flower-chat-md-block p')!;
+  expect(getComputedStyle(paragraph).fontSize).toBe('14px');
+  expect(getComputedStyle(paragraph).lineHeight).toBe('22px');
+  expect(getComputedStyle(paragraph).fontFamily).toContain('Inter Variable');
+  const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+  await userEvent.fill(editor, 'Retained draft 中文');
+  editor.setSelectionRange(2, 8);
+  const send = runtime.querySelector('.flower-composer-submit')!.getBoundingClientRect();
+  const attach = runtime.querySelector('.flower-composer-attachment-button')!.getBoundingClientRect();
+  expect(send.height).toBe(32);
+  expect(attach.height).toBe(32);
+  expect(Math.abs(send.bottom - attach.bottom)).toBeLessThanOrEqual(1);
+  expect(runtime.scrollWidth).toBeLessThanOrEqual(runtime.clientWidth);
+  await page.screenshot({ element: runtime, path: `__screenshots__/interface-scale-${mode}.png` });
+  runtime.style.width = '900px';
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
+  expect(editor.value).toBe('Retained draft 中文');
+  expect([editor.selectionStart, editor.selectionEnd]).toEqual([2, 8]);
+});
+
+it('retains usable composer targets and editable text with coarse input', async () => {
+  await page.viewport(1280, 900);
+  const touch = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+  await touch.emulateTouchInput(true);
+  onTestFinished(() => touch.emulateTouchInput(false));
+  const runtime = renderSurfaceWithAdapterProps(adapter(true), {});
+  Object.assign(runtime.style, { width: '1200px', height: '800px' });
+  await waitFor(() => Boolean(runtime.querySelector('.flower-model-reasoning-model-trigger')));
+  const selectors = [
+    '.flower-composer-submit', '.flower-composer-attachment-button',
+    '.flower-model-reasoning-model-trigger', '.flower-permission-trigger',
+  ];
+  for (const selector of selectors) {
+    const control = runtime.querySelector(selector)!;
+    expect(control, selector).not.toBeNull();
+    expect(control.getBoundingClientRect().height, selector).toBeGreaterThanOrEqual(44);
+    expect(control.getBoundingClientRect().width, selector).toBeGreaterThanOrEqual(44);
+  }
+  const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+  expect(Number.parseFloat(getComputedStyle(editor).fontSize)).toBeGreaterThanOrEqual(16);
+  expect(runtime.scrollWidth).toBeLessThanOrEqual(runtime.clientWidth);
 });

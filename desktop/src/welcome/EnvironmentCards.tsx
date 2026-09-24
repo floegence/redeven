@@ -617,7 +617,7 @@ function EnvironmentLibrarySection(props: Readonly<{
       <Show when={props.title}>
         {(title) => (
           <div class="px-1">
-            <h2 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title()}</h2>
+            <h2 class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{title()}</h2>
           </div>
         )}
       </Show>
@@ -748,7 +748,7 @@ function EnvironmentOwnerSurface(
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
             <CardTitle
-              class="truncate pt-1 text-sm font-semibold leading-5 tracking-[0.01em]"
+              class="truncate pt-1 text-[length:var(--floe-type-control)] font-medium leading-5"
               title={props.environment.label}
             >
               {props.environment.label}

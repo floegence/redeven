@@ -58,7 +58,7 @@ export function FileBrowserPathControl(props: FileBrowserPathControlProps) {
         aria-label={goToPathLabel()}
         aria-invalid={Boolean(String(props.error ?? '').trim())}
         class={cn(
-          'h-full w-full min-w-0 border-0 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/70',
+          'h-full w-full min-w-0 border-0 bg-transparent text-[length:var(--floe-type-control)] text-foreground outline-none placeholder:text-muted-foreground/70',
           props.class,
         )}
         onInput={(event) => props.onDraftChange(event.currentTarget.value)}

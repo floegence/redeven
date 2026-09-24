@@ -70,8 +70,8 @@ html:not(.dark) .redeven-welcome-surface {
 
 .redeven-flower-topbar-button {
   display: inline-flex;
-  width: 1.875rem;
-  height: 1.875rem;
+  width: 1.75rem;
+  height: 1.75rem;
   cursor: pointer;
   align-items: center;
   justify-content: center;
@@ -707,8 +707,8 @@ html:not(.dark) .redeven-environment-card--open {
 
 .redeven-environment-card__flower-button {
   display: inline-flex;
-  width: 1.875rem;
-  height: 1.875rem;
+  width: 1.75rem;
+  height: 1.75rem;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
@@ -783,9 +783,9 @@ html:not(.dark) .redeven-new-environment-card:hover {
   overflow-wrap: anywhere;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  font-size: var(--floe-type-caption);
+  font-weight: 500;
+  letter-spacing: 0.025em;
   text-transform: uppercase;
   color: var(--muted-foreground);
 }
@@ -809,8 +809,8 @@ html:not(.dark) .redeven-new-environment-card:hover {
   min-width: 0;
   text-align: right;
   white-space: nowrap;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: var(--floe-type-control);
+  font-weight: 500;
   color: var(--foreground);
 }
 
@@ -1565,9 +1565,9 @@ html:not(.dark) .redeven-endpoint-qr-panel {
   border: 1px solid transparent;
   border-radius: 0.375rem;
   background: transparent;
-  padding: 0.38rem 0.72rem;
-  font-size: 0.8rem;
-  font-weight: 600;
+  padding: 0.3125rem 0.625rem;
+  font-size: var(--floe-type-control);
+  font-weight: 500;
   color: var(--muted-foreground);
   transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
 }
@@ -2448,8 +2448,8 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-action-popover__title {
   min-width: 0;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: var(--floe-type-body);
+  font-weight: 500;
   line-height: 1.3;
   color: var(--popover-foreground);
   margin-bottom: 0.15rem;
@@ -4467,9 +4467,10 @@ pre,
 
 .redeven-center-actions { width: 100%; justify-content: flex-end; }
 .redeven-center-search { flex: 1 1 14.5rem; min-width: 0; }
+.redeven-center-search input { height: 2rem; font-size: var(--floe-type-control); }
 .redeven-center-action-group { flex: none; }
 .redeven-center-action-group > [data-redeven-tooltip-anchor] { display: inline-flex; flex: none; }
-.redeven-center-actions button { height: 1.75rem; gap: .375rem; white-space: nowrap; }
+.redeven-center-actions button { height: 2rem; gap: .375rem; white-space: nowrap; }
 @media (min-width: 1024px) {
   .redeven-center-actions { width: 28rem; max-width: 50%; flex: none; }
 }
@@ -4490,7 +4491,7 @@ pre,
 .redeven-cloud-source-header button > svg { flex-shrink: 0; }
 .redeven-environment-card .redeven-split-action-primary button {
   height: auto;
-  min-height: 1.75rem;
+  min-height: 2rem;
   padding-block: .3rem;
   white-space: normal;
 }
@@ -4505,4 +4506,15 @@ pre,
 @keyframes environment-settings-section-enter {
   from { opacity: .45; }
   to { opacity: 1; }
+}
+
+@media (pointer: coarse) {
+  .redeven-flower-topbar-button,
+  .redeven-environment-card__flower-button,
+  .redeven-console-tab,
+  .redeven-center-actions button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .redeven-center-search input { min-height: 44px; font-size: 1rem; }
 }

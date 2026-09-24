@@ -31,6 +31,7 @@ try {
     await page.goto(new URL('environment-settings.html', report.url).href);
     await page.locator('[data-environment-group]').first().waitFor();
     await page.evaluate(() => document.fonts.ready);
+    assert.equal(await page.locator('h1').evaluate(node => getComputedStyle(node).fontSize), '16px', 'Welcome page title uses the shared heading tier');
     for (const [width, fontSize] of [[320, 16], [390, 16], [768, 16], [1367, 16], [1024, 24]]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.evaluate(size => { document.documentElement.style.fontSize = `${size}px`; }, fontSize);
@@ -46,6 +47,7 @@ try {
         });
         const label = `${locale}:${width}:${fontSize}:tab-${tab}`;
         const primary = geometry.buttons.at(-1);
+        if (width >= 640 && fontSize === 16) assert.equal(geometry.input.height, 32, `${label}: desktop toolbar uses the shared 32px scale`);
         for (const button of geometry.buttons) {
           assert.ok(Math.abs(button.y - geometry.input.y) < 1 && Math.abs(button.height - geometry.input.height) < 1, `${label}: search and actions share one aligned row`);
           assert.ok(button.x >= geometry.input.right && button.right <= geometry.toolbar.right + 1, `${label}: actions fit beside search`);

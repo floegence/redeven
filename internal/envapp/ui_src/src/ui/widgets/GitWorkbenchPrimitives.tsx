@@ -44,14 +44,14 @@ export function GitSection(props: GitSectionProps) {
         <div class="min-w-0 space-y-1">
           <div class="flex items-center gap-2">
             <span class={cn('h-2 w-2 shrink-0 rounded-full ring-1 ring-current/20', gitToneDotClass(props.tone))} aria-hidden="true" />
-            <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">{props.label}</div>
+            <div class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/75">{props.label}</div>
           </div>
           <Show when={props.description}>
             <div class="pl-0 text-xs leading-relaxed text-muted-foreground sm:pl-4">{props.description}</div>
           </Show>
         </div>
         <Show when={props.aside}>
-          <div class="flex max-w-full flex-wrap items-center gap-1.5 text-[10px] font-medium leading-5 text-muted-foreground sm:min-w-fit sm:justify-end sm:text-right">{props.aside}</div>
+          <div class="flex max-w-full flex-wrap items-center gap-1.5 text-[11px] font-medium leading-5 text-muted-foreground sm:min-w-fit sm:justify-end sm:text-right">{props.aside}</div>
         </Show>
       </div>
 
@@ -76,7 +76,7 @@ export function GitLabelBlock(props: GitLabelBlockProps) {
     <div class={cn('space-y-1', props.class)}>
       <div class="flex flex-wrap items-center gap-2">
         <span class={cn('h-2 w-2 shrink-0 rounded-full ring-1 ring-current/20', gitToneDotClass(props.tone))} aria-hidden="true" />
-        <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">{props.label}</div>
+        <div class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/75">{props.label}</div>
         <Show when={props.meta}>
           <div class="flex min-w-0 flex-wrap items-center gap-1.5">{props.meta}</div>
         </Show>
@@ -140,10 +140,10 @@ export function GitStatStrip(props: GitStatStripProps) {
       <For each={props.items}>
         {(item) => (
           <div class="rounded px-2.5 py-2 transition-colors duration-150 hover:bg-muted/[0.14]">
-            <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">{item.label}</div>
+            <div class="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/70">{item.label}</div>
             <div class="mt-1 text-xs font-semibold tracking-tight text-foreground">{item.value}</div>
             <Show when={item.hint}>
-              <div class="mt-1 text-[10px] text-muted-foreground">{item.hint}</div>
+              <div class="mt-1 text-[11px] text-muted-foreground">{item.hint}</div>
             </Show>
           </div>
         )}
@@ -535,7 +535,7 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
       </div>
 
       <div class="min-w-0 justify-self-stretch sm:justify-self-end">
-        <GitSubtleNote class={cn('w-full px-2 py-1 text-[10px] leading-4 sm:max-w-full', redevenSurfaceRoleClass('controlMuted'))}>
+        <GitSubtleNote class={cn('w-full px-2 py-1 text-[11px] leading-4 sm:max-w-full', redevenSurfaceRoleClass('controlMuted'))}>
           {props.summary}
         </GitSubtleNote>
       </div>
@@ -566,7 +566,7 @@ export function GitChecklistItem(props: GitChecklistItemProps) {
   return (
     <div class={cn('rounded-md px-3 py-3', gitToneInsetClass(statusTone()), props.class)}>
       <div class="flex items-start gap-3">
-        <div class={cn('mt-0.5 inline-flex min-h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold', gitToneBadgeClass(statusTone()))}>
+        <div class={cn('mt-0.5 inline-flex min-h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold', gitToneBadgeClass(statusTone()))}>
           {props.index ?? '•'}
         </div>
 
@@ -649,11 +649,11 @@ export function GitStatePane(props: GitStatePaneProps) {
 
 export const GIT_CHANGED_FILES_TABLE_CLASS = 'w-full text-[11px] leading-4';
 export const GIT_CHANGED_FILES_HEAD_CLASS = cn('sticky top-0 z-10', redevenSurfaceRoleClass('panel'));
-export const GIT_CHANGED_FILES_HEADER_ROW_CLASS = cn('border-b text-left text-[10px] uppercase tracking-[0.14em] text-muted-foreground', redevenDividerRoleClass());
+export const GIT_CHANGED_FILES_HEADER_ROW_CLASS = cn('border-b text-left text-[11px] uppercase tracking-[0.14em] text-muted-foreground', redevenDividerRoleClass());
 export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-3 py-1.5 font-medium';
 export const GIT_CHANGED_FILES_CELL_CLASS = 'px-3 py-2.5 align-top';
 export const GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS = cn('sticky right-0 z-20 border-l px-3 py-1.5 text-right font-medium', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
-export const GIT_CHANGED_FILES_SECONDARY_PATH_CLASS = 'mt-px truncate text-[10px] leading-3.5 text-muted-foreground';
+export const GIT_CHANGED_FILES_SECONDARY_PATH_CLASS = 'mt-px truncate text-[11px] leading-3.5 text-muted-foreground';
 export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex cursor-pointer items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-45';
 export const GIT_CHANGED_FILES_CELL_MIDDLE_CLASS = 'px-3 py-2.5 align-middle';
 
@@ -661,7 +661,7 @@ export function GitTableBadge(props: { tone?: GitChromeTone; children: JSX.Eleme
   return (
     <span class={cn(
       gitToneBadgeClass(props.tone),
-      'inline-flex items-center whitespace-nowrap rounded-[3px] px-1.5 py-px text-[10px] font-semibold leading-none',
+      'inline-flex items-center whitespace-nowrap rounded-[3px] px-1.5 py-px text-[11px] font-semibold leading-none',
       props.class,
     )}>
       {props.children}
