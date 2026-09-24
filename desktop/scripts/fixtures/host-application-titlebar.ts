@@ -40,7 +40,7 @@ set_focus(win){this.focused_wid=win.wid;Object.values(this.id_to_window).forEach
 send(packet){window.operations.push(packet)},send_close_window(win){window.operations.push(['close-window',win.wid])},close(){}};
 client.floePointer=floePointer;window.floeXpraInput={version:1,getClient:()=>client};
 client.set_focus(client.id_to_window[1]);
-addEventListener('load',()=>setTimeout(()=>[1,2].forEach(wid=>client.do_send_damage_sequence(1,wid,800,600,1,'')),80));`;
+window.paintFixture=()=>[1,2].forEach(wid=>client.do_send_damage_sequence(1,wid,800,600,1,''));`;
 const catalogSource = readFileSync(path.join(source, 'catalog.generated.js'), 'utf8');
 const catalog = JSON.parse(catalogSource.slice(catalogSource.indexOf(' = ') + 3).trim().slice(0, -1));
 const html = readFileSync(path.join(source, 'viewer.html'), 'utf8').replaceAll('{{.Name}}', 'Text Editor').replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Nonce}}', 'fixture')
@@ -86,7 +86,12 @@ async function run() {
       if (await evaluate(expression)) return;
       await new Promise(resolve => setTimeout(resolve, 25));
     }
-    throw new Error('Timed out: ' + expression + ': ' + JSON.stringify(await evaluate(`({state:document.body.dataset.state,operations:document.querySelector('#application').contentWindow.operations,focus:document.querySelector('#application').contentDocument.activeElement?.className})`)));
+    throw new Error('Timed out: ' + expression + ': ' + JSON.stringify(await evaluate(`({visibility:document.visibilityState,raf:window.fixtureFrameReached,state:document.body.dataset.state,operations:document.querySelector('#application').contentWindow.operations,focus:document.querySelector('#application').contentDocument.activeElement?.className})`)));
+  };
+  const activate = async () => {
+    await wait(`document.querySelector('#application').contentWindow.floeXpraInput?.getClient().reconnect===false`);
+    await evaluate(`window.fixtureFrameReached=false;requestAnimationFrame(()=>window.fixtureFrameReached=true);document.querySelector('#application').contentWindow.paintFixture()`);
+    await wait(`document.body.dataset.state==='active'`);
   };
   const click = async (selector: string, content = false) => {
     const position = await evaluate(`(()=>{const frame=document.querySelector('#application');const element=${content ? 'frame.contentDocument' : 'document'}.querySelector(${JSON.stringify(selector)});const rect=element.getBoundingClientRect();const offset=${content ? 'frame.getBoundingClientRect()' : '{left:0,top:0}'};return {x:Math.round(offset.left+rect.left+rect.width/2),y:Math.round(offset.top+rect.top+Math.min(rect.height/2,100))};})()`);
@@ -95,7 +100,7 @@ async function run() {
   };
   try {
     await view.webContents.loadURL(url);
-    await wait(`document.body.dataset.state==='active'`);
+    await activate();
     const geometry = await evaluate(`(()=>{const frame=document.querySelector('#application');return {toolbar:document.querySelector('.mac-app-controls').getBoundingClientRect().height,left:document.querySelector('.host-app-identity').getBoundingClientRect().left,content:frame.getBoundingClientRect().top,bridge:Object.keys(window.redevenHostApplicationWindow),childBridge:typeof frame.contentWindow.redevenHostApplicationWindow};})()`);
     assert.equal(geometry.toolbar, 40);
     assert.equal(geometry.content, 40);
@@ -131,7 +136,7 @@ async function run() {
         await evaluate(`document.querySelector('#application').contentWindow.floeXpraInput.getClient().callback_close()`);
         await wait(`document.body.dataset.state==='disconnected'`);
         await click('#retry');
-        await wait(`document.body.dataset.state==='active'`);
+        await activate();
       }
       for (const selector of ['.mac-app-controls-toggle', '.mac-app-windows-toggle', '.mac-app-help', '.mac-app-quit']) {
         await click(selector);

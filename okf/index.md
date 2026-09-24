@@ -35,6 +35,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Host Application Platforms](architecture/host-application-platforms.md) - Prepare a headless host, diagnose missing capabilities, and distinguish Linux capability requirements from native macOS initialization.
 - [macOS Application Picture](architecture/macos-application-picture.md) - Adjust Retina resolution and streaming quality, and understand actual frame rate and bandwidth.
 - [Native macOS Applications](architecture/macos-host-applications.md) - Open local Mac apps directly or operate owned remote windows with capture, input and reconnection.
+- [macOS application window lifecycle](architecture/macos-application-window-lifecycle.md) - Distinguish living windows, unavailable capture and confirmed closure before ending a viewer.
 - [macOS application menus](architecture/macos-application-menus.md) — Determine which native menu operations a single-application viewer exposes and how live handles are validated.
 - [macOS application capture ownership](architecture/macos-application-capture-owner.md) - Keep suspended and active application channels independent under one native capture process.
 - [macOS application management and graceful quit](architecture/macos-application-management.md): Manage live host applications, distinguish quit from sharing, and reject stale process targets.

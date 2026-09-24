@@ -9,7 +9,7 @@ timestamp: 2026-09-21T07:00:00Z
 
 This matrix records observable lifecycle acceptance for Host Applications. The
 [shared authorization contract](../architecture/host-applications.md) and
-[macOS session owner](../architecture/macos-host-applications.md) remain normative.
+[macOS window lifecycle owner](../architecture/macos-application-window-lifecycle.md) remain normative.
 A live process, an available window, a decoded frame and an authenticated viewer
 are separate facts. Only explicit closure evidence ends the physical viewer.
 A missing or inaccessible surface must preserve the app and provide an accurate
@@ -36,7 +36,9 @@ for aligned operations and unavoidable OS differences.
 | User chooses an existing window or switches rapidly | Preserve explicit choice across inventory refresh; the latest selection wins | Real multiple-window fixture |
 | Close cancelled by app | Retain process and session; do not close viewer optimistically | Real close-cancellation fixture |
 | Window replaced during animation | Allow replacement interval; discard prior generation | Real replacement fixture, Swift presence tests |
-| Window list temporarily unreadable | Cannot conclude application closure | Swift inventory tests |
+| Window list temporarily unreadable or AX omits a known offscreen window | Retain lifetime evidence; uncertain results never expire into closure | Swift inventory and presence tests |
+| Exact window destruction or invalid AX object with absent native surface | Retire the exact identity; child-control events cannot close the viewer | Swift destruction tests |
+| Capture surface replacement or reused WindowServer number | Preserve AX lifetime across rebinding; a different window receives a new identity | Swift identity and native recovery tests |
 | Window minimized or app hidden | Keep session; explicit reconnect restores owned window | Real fixture with a sustained hidden/minimized interval |
 | Linux application opens only a dialog | Reveal decoded dialog; retain its native dimensions | Xpra adapter test |
 | Final window actually closes | Close established physical viewer | Native fixture and viewer tests |
@@ -66,6 +68,7 @@ for aligned operations and unavoidable OS differences.
 | Permission revoked or console locked/unavailable | Invalidate capture/input; give distinct permission or unlock guidance | Swift access classification and viewer event tests |
 | Permission restored | Explicit reconnect rebuilds capture and input receipt listener | Native reconnect path; actual OS permission toggling is not part of automated acceptance |
 | Helper unexpectedly exits | Sharing failure, not proof of application exit; reclaim route, credential, frame buffers and helper process before terminal state | Go helper and viewer tests |
+| Unknown terminal reason | Retain the terminal page without automatic physical closure | Both viewer suites |
 | Terminal sharing status | Keep owner-protected state route and native end reason; clear stream credential | Go route/ownership tests |
 | Reload after app quit / final window close / detach | Immediate distinct terminal page, no stream, no spinner, no relaunch; dismiss when the window permits it | Real native terminal fixture, both viewer suites and browser layout tests |
 | Disconnect races host exit | Check host state before presenting an outcome | Viewer reconciliation tests |
@@ -107,6 +110,8 @@ constraints require separate validation. See the
 [distribution record](host-application-validation.md) for actual tested targets.
 
 # Evidence
+
+- `scripts/check_host_application_lifecycle.mjs`: Chromium, Firefox and WebKit popup closure with production viewer assets and a controlled host stream; records first-frame acknowledgment, state response, close call stack and actual page close. This does not certify native window capture.
 
 - `scripts/check_macos_host_application_waiting.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable lifecycle scenarios.
 - `scripts/check_macos_host_application_termination.py`: host-driven exit before/after a window, last-window closure with a live process, and explicit detachment.

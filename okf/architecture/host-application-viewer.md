@@ -54,8 +54,14 @@ Reloading a completed session renders its outcome immediately, without a state
 request, stream connection, progress animation or futile reconnect action. The page
 explains how to open a new session from Host Applications. Close window is offered
 only when the Desktop bridge or browser opener permits programmatic dismissal.
-An established viewer still closes automatically on confirmed session end; a newly
-loaded terminal page remains readable until dismissed. Refresh never launches an app.
+The shared connection owner permits automatic dismissal only for the recognized
+`application_exited`, `windows_closed` and `sharing_stopped` reasons, after displayed
+pixels or an explicit viewer quit request. Unknown end reasons retain the terminal
+page; a directly opened tab is never asked to close itself. A close request alone,
+removal of one child window and transport loss cannot close the viewer. Save/cancel
+prompts remain authoritative. A newly loaded terminal page stays readable until
+dismissed, and closing the viewer itself preserves the application. Refresh never
+launches an app.
 
 After a stream closes, the viewer briefly shows Checking application status while
 reconciling once with the authenticated state endpoint. A six-second deadline bounds
@@ -101,12 +107,9 @@ Pinch zoom remains a browser gesture; toolbar, window lists and the keyboard
 control remain local owners. The Xpra adapter receives only normalized pointer,
 button and wheel commands and never runs a second touch recognizer.
 
-After Xpra confirms destruction of the final application window, or an established
-application session is confirmed ended, the viewer closes its
-native window or script-opened browser popup. A close request alone, removal of one
-child window, or a lost connection never closes the viewer. Applications retain
-their normal save/cancel prompts; cancelling keeps both the session and its viewer.
-Closing the outer viewer still preserves the application session.
+Xpra's confirmed destruction of its final application window uses the same
+terminal close policy above. The adapter does not infer closure from a missing
+paint, a close request or a transport failure.
 
 ## LAN decoding and resource reuse
 

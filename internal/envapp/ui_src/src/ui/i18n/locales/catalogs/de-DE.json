@@ -7044,7 +7044,7 @@
     "macStopSharing": "Freigabe beenden",
     "macStopSharingDescription": "Trenne diese App von Redeven. Ihre Fenster und ungespeicherten Arbeiten bleiben auf dem Mac geöffnet.",
     "macOperationFailed": "Die App konnte diese Aktion nicht ausführen. Versuche es erneut, sobald ihr Fenster bereit ist.",
-    "macWaitingHint": "Die App läuft, aber noch ist kein Fenster zum Teilen verfügbar. Öffnen Sie über das App-Menü in der oberen Symbolleiste ein Fenster oder verbinden Sie sich erneut.",
+    "macWaitingHint": "Die Anwendung läuft, aber ein freigebbares Fenster ist vorübergehend nicht verfügbar. Stellen Sie auf dem Host ein Fenster wieder her oder öffnen Sie eines, nutzen Sie das Anwendungsmenü oben oder verbinden Sie sich erneut.",
     "macWaiting": "Warten auf das App-Fenster…",
     "macPermissionRequired": "Berechtigung auf dem Host erforderlich",
     "macPermissionHint": "Erlaube Redeven auf dem Mac die Bildschirmaufnahme und Bedienungshilfen und verbinde dich dann erneut.",

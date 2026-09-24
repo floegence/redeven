@@ -7044,7 +7044,7 @@
     "macStopSharing": "Parar de compartilhar",
     "macStopSharingDescription": "Desconecte este aplicativo do Redeven. As janelas e o trabalho não salvo permanecerão abertos no Mac.",
     "macOperationFailed": "O aplicativo não conseguiu concluir esta ação. Tente novamente quando a janela estiver pronta.",
-    "macWaitingHint": "O aplicativo está em execução, mas ainda não há uma janela disponível para compartilhar. Abra uma pelo menu do aplicativo na barra de ferramentas superior ou reconecte-se.",
+    "macWaitingHint": "O aplicativo está em execução, mas no momento não é possível obter uma janela para compartilhar. Restaure ou abra uma janela no host, use o menu do aplicativo acima ou reconecte-se.",
     "macWaiting": "Aguardando a janela do aplicativo…",
     "macPermissionRequired": "É necessária permissão no host",
     "macPermissionHint": "No Mac, permita a gravação de tela e a acessibilidade para o Redeven e conecte-se novamente.",

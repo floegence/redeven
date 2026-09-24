@@ -157,6 +157,7 @@ final class HostApplicationSession {
     private var knownWindowIDs = Set<String>()
     private var waiting = false
     private var selected: NativeWindow?
+    private var preferredWindowID: String?
     private var capture: HostApplicationStream?
     private var delivery: HostApplicationDelivery?
     private var timer: Timer?
@@ -167,6 +168,7 @@ final class HostApplicationSession {
     private var starting = false
     private var captureFailed = false
     private var lastInventory = ""
+    private var lastWindowState = ""
     private var extra: [URL] = []
     private var heldButtons = Set<Int>()
     private var heldKeys: [CGKeyCode: CGEvent] = [:]
@@ -235,7 +237,7 @@ final class HostApplicationSession {
                 captureFailed = false
                 // Minimized windows can lose their old WindowServer surface.
                 // Restore through AX, then resolve a fresh owned capture source.
-                if let selected { AXUIElementSetAttributeValue(selected.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse) }
+                inventory.restore(preferredWindowID)
                 generation += 1
                 menu.invalidate()
                 selected = nil
@@ -329,7 +331,7 @@ final class HostApplicationSession {
             updateCapture()
             captureFailed = false
             waiting = false
-            _ = presence.observe(windowCount: nil, at: Date())
+            _ = presence.observe(.unknown, at: ProcessInfo.processInfo.systemUptime)
             self.output(["type": "blocked", "code": reason, "generation": generation])
         }
         return false
@@ -350,17 +352,28 @@ final class HostApplicationSession {
         self.output(["type": "windows", "windows": [[String: String]]()])
         self.output(["type": "waiting", "generation": generation])
     }
+    private func observeWindowState(_ state: HostApplicationWindowState, windows: [NativeWindow], retained: Int, reason: String) -> Bool {
+        let bindings = windows.map { "\($0.id):\($0.windowID)" }.joined(separator: ",")
+        let transition = "\(state.rawValue):\(bindings):\(retained):\(reason)"
+        if transition != lastWindowState {
+            lastWindowState = transition
+            self.output(["type": "lifecycle", "state": state.rawValue, "reason": reason, "generation": generation,
+                         "pid": app?.processIdentifier ?? 0, "retained_windows": retained,
+                         "windows": windows.map { ["id": $0.id, "surface": $0.windowID] as [String: Any] }])
+        }
+        return presence.observe(state, at: ProcessInfo.processInfo.systemUptime)
+    }
     private func refresh() {
         let snapshot: HostApplicationWindows.Snapshot
         do { snapshot = try currentWindows() }
         catch {
-            _ = presence.observe(windowCount: nil, at: Date())
-            if selected == nil { suspendWindow() }
-            // A failed AX read is not proof of closure. Keep the capture and
-            // binding until an authoritative inventory or process exit arrives.
+            _ = observeWindowState(.unknown, windows: [], retained: 0, reason: "inventory_unavailable")
+            suspendWindow()
             return
         }
-        if presence.observe(windowCount: snapshot.count, at: Date()) { end(reason: "windows_closed"); return }
+        if observeWindowState(snapshot.state, windows: snapshot.windows, retained: snapshot.retainedCount, reason: "native_inventory") {
+            end(reason: "windows_closed"); return
+        }
         let windows = snapshot.windows
         guard !windows.isEmpty else { suspendWindow(); return }
         let list = windows.map { ["id": $0.id, "title": axString($0.element, kAXTitleAttribute)] }
@@ -370,7 +383,7 @@ final class HostApplicationSession {
         // explicit choice among windows that were already available.
         let newlyFocused = windows.first { $0.id == snapshot.focusedID && !knownWindowIDs.contains($0.id) }
         knownWindowIDs = Set(windows.map(\.id))
-        if let next = newlyFocused ?? (selected == nil || !windows.contains(where: { $0.id == selected?.id }) ? windows.first : nil) {
+        if let next = newlyFocused ?? (selected == nil || !windows.contains(where: { $0.id == selected?.id && $0.windowID == selected?.windowID }) ? windows.first : nil) {
             captureFailed = false
             try? select(next)
         } else if let selected, !selectionInFlight && !captureFailed && capture == nil { try? select(selected) }
@@ -389,10 +402,12 @@ final class HostApplicationSession {
     }
     private func select(_ window: NativeWindow) throws {
         guard viewerReady, checkAccess() else { return }
+        guard !window.destructionObserved else { throw NativeInput.unavailable() }
         try window.validate()
         AXUIElementSetAttributeValue(window.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
         _ = resizeWindow(window)
         selected = window
+        preferredWindowID = window.id
         generation += 1
         menu.invalidate()
         releaseInput()
@@ -456,7 +471,7 @@ final class HostApplicationSession {
     }
     private func target(_ request: [String: Any]) throws -> NativeWindow {
         guard viewerReady, checkAccess(),
-              let selected, request["window"] as? String == selected.id,
+              let selected, !selected.destructionObserved, request["window"] as? String == selected.id,
               request["generation"] as? Int == generation else { throw HostFailure(code: "STALE_WINDOW", message: "Wait for the current window.") }
         try selected.validate()
         return selected
@@ -579,6 +594,8 @@ final class HostApplicationSession {
         releaseInput()
         app = nil
         selected = nil
+        inventory.reset()
+        preferredWindowID = nil
         delivery = nil
         menu.invalidate()
         timer?.invalidate()

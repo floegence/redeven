@@ -123,47 +123,9 @@ Window closure, sharing detachment and application quit follow the
 [application management contract](macos-application-management.md): ordinary
 closure preserves save/cancel dialogs, and only confirmed final-window loss
 closes the viewer. Closing the viewer itself preserves the application.
-A running process without its first shareable window remains attached indefinitely;
-there is no first-window termination deadline. Explicitly stopping sharing during
-this wait ends normally; missing pixels do not turn a user-requested stop into a
-launch failure. The helper-launch deadline ends when
-the bound process is reported, independently of pixel readiness. The viewer cancels
-its connection deadline on a waiting event, shows explicit waiting guidance and
-reconnect, and starts a separate bounded pixel deadline when a window appears.
-Every new viewer receives the current waiting state. An unexpected helper exit
-is a failed sharing session, not evidence that the host application ended.
-
-An unreadable accessibility inventory cannot confirm closure. The helper checks
-both accessibility and visible WindowServer inventories and allows a one-second window
-replacement interval before ending a previously visible session. A disappearing
-ScreenCaptureKit source enters window-waiting state; it is not a capture fault.
-Window matching prefers a unique visible surface over retired offscreen surfaces
-with identical bounds. A proven window retains its opaque identity across inventory
-refreshes and resize; input generations change only when capture is rebound.
-Explicit reconnect restores a hidden or minimized application through AppKit/AX,
-then resolves its current WindowServer source rather than validating a retired
-pre-minimization surface. Single-operation failures retain the connection and current pixels with a localized
-nonblocking notice. A capture failure preserves the control connection so another owned window or
-native menu can still be selected; reconnect rebuilds capture and input delivery
-for the same process. Locked/non-console sessions and revoked permissions invalidate
-input, menus and capture once per transition and present distinct recovery guidance.
-A confirmed process exit ends sharing normally even before the first window.
-Failure to launch and unexpected helper loss remain failures; missing pixels do
-not change a confirmed process exit into a failed launch.
-
-Terminal state retains the native end reason: `application_exited` confirms the
-bound process exited, `windows_closed` confirms its last shared window closed,
-and `sharing_stopped` confirms detachment. Closing windows and stopping sharing
-never claim the process has quit. An unknown reason stays a generic ended session.
-The helper is the authority; a quit request itself never supplies the end reason.
-The [shared viewer recovery contract](host-applications.md) owns terminal page
-reload, status reconciliation, access failures and physical viewer closure.
-The [lifecycle validation matrix](../operations/host-application-lifecycle.md)
-separates automated recovery evidence from OS/application compatibility limits.
-
-Runtime shutdown releases capture, route and input ownership but preserves native
-applications and unsaved data. A new Runtime lists them from the OS, but sharing
-requires another explicit open action.
+The [native window lifecycle contract](macos-application-window-lifecycle.md)
+owns window-presence evidence, replacement grace, unavailable capture and terminal
+reasons. It separates a surviving native window from a currently shareable surface.
 
 The integration does not provide a separate logged-out/headless AppKit session,
 audio, remote file transfer, clipboard synchronization or secure desktop control.

@@ -3,6 +3,84 @@ import AppKit
 @testable import RedevenComputerHost
 
 final class HostApplicationTests: XCTestCase {
+    func testRegistrySurvivesOmissionRestoresAndRetiresDestroyedSurfaces() throws {
+        let app = NSRunningApplication.current
+        let element = AXUIElementCreateApplication(app.processIdentifier)
+        let child = AXUIElementCreateApplication(app.processIdentifier + 1)
+        let registry = HostApplicationWindows()
+        let bounds = CGRect(x: 10, y: 20, width: 640, height: 480)
+        func read(_ elements: [AXUIElement], surface: Int = 42, visible: Bool = true, status: AXError = .success) -> HostApplicationWindows.Snapshot {
+            registry.reconcile(app, application: element, elements: elements, candidates: [
+                [kCGWindowNumber as String: NSNumber(value: surface), kCGWindowBounds as String: bounds.dictionaryRepresentation,
+                 kCGWindowIsOnscreen as String: visible, kCGWindowLayer as String: 0]
+            ], focused: nil, bounds: { _ in bounds }, passive: { _, _ in false }, roleStatus: { _ in status })
+        }
+        let first = try XCTUnwrap(read([element]).windows.first)
+        first.observeDestruction(element: child, notification: kAXUIElementDestroyedNotification)
+        for _ in 0..<5 {
+            let missing = read([], visible: false, status: .cannotComplete)
+            XCTAssertEqual(missing.state, .present)
+            XCTAssertTrue(missing.windows.isEmpty, "Missing AX authority revokes capture/input, not lifetime")
+            XCTAssertEqual(missing.retainedCount, 1)
+        }
+        let restored = try XCTUnwrap(read([element], surface: 43).windows.first)
+        XCTAssertEqual(restored.id, first.id)
+        XCTAssertEqual(restored.windowID, 43)
+        restored.observeDestruction(element: element, notification: kAXUIElementDestroyedNotification)
+        XCTAssertEqual(read([element], surface: 43).state, .confirmedEmpty, "A stale AX list must not resurrect a destroyed instance")
+        for _ in 0..<5 {
+            XCTAssertEqual(read([], surface: 43).state, .confirmedEmpty, "Cached visible surfaces must not block final closure")
+        }
+        let replacement = try XCTUnwrap(read([child], surface: 43).windows.first)
+        XCTAssertNotEqual(replacement.id, restored.id, "Reused surface IDs do not reuse window authority")
+        restored.observeDestruction(element: element, notification: kAXUIElementDestroyedNotification)
+        XCTAssertEqual(read([child], surface: 43).windows.first?.id, replacement.id)
+        registry.reset()
+        XCTAssertNotEqual(read([child], surface: 43).windows.first?.id, replacement.id)
+    }
+    func testRegistryRequiresInvalidAXAndAbsentSurfaceWithoutNotification() {
+        let app = NSRunningApplication.current
+        let element = AXUIElementCreateApplication(app.processIdentifier)
+        let registry = HostApplicationWindows()
+        func read(_ elements: [AXUIElement], _ status: AXError) -> HostApplicationWindows.Snapshot {
+            registry.reconcile(app, application: element, elements: elements, candidates: [], focused: nil,
+                bounds: { _ in nil }, passive: { _, _ in false }, roleStatus: { _ in status })
+        }
+        XCTAssertEqual(read([element], .success).state, .present)
+        XCTAssertEqual(read([], .cannotComplete).state, .unknown)
+        XCTAssertEqual(read([], .apiDisabled).state, .unknown)
+        XCTAssertEqual(read([], .invalidUIElement).state, .confirmedEmpty)
+        XCTAssertEqual(read([], .success).retainedCount, 0)
+    }
+    func testKnownOffscreenWindowCannotConfirmClosureWhenAXOmitsIt() {
+        XCTAssertEqual(HostApplicationWindows.retainedState(destructionObserved: false, axStatus: .cannotComplete, surfaceExists: true), .present)
+        XCTAssertEqual(HostApplicationWindows.retainedState(destructionObserved: false, axStatus: .invalidUIElement, surfaceExists: true), .present)
+    }
+    func testDestructionRequiresExactEvidenceAndRetiresCachedSurfaces() {
+        XCTAssertEqual(HostApplicationWindows.retainedState(destructionObserved: true, axStatus: .invalidUIElement, surfaceExists: true), .confirmedEmpty)
+        XCTAssertEqual(HostApplicationWindows.retainedState(destructionObserved: false, axStatus: .invalidUIElement, surfaceExists: false), .confirmedEmpty)
+        for status in [AXError.cannotComplete, .apiDisabled, .attributeUnsupported, .failure] {
+            XCTAssertEqual(HostApplicationWindows.retainedState(destructionObserved: false, axStatus: status, surfaceExists: false), .unknown)
+        }
+        XCTAssertEqual(HostApplicationWindows.retainedState(destructionObserved: false, axStatus: .success, surfaceExists: false), .present)
+    }
+    func testOnlyTheRegisteredWindowDestructionUpdatesItsLifetime() {
+        let app = NSRunningApplication.current
+        let element = AXUIElementCreateApplication(app.processIdentifier)
+        let another = AXUIElementCreateApplication(app.processIdentifier + 1)
+        let window = NativeWindow(app: app, application: element, element: element, windowID: 42)
+        window.observeDestruction(element: another, notification: kAXUIElementDestroyedNotification)
+        window.observeDestruction(element: element, notification: kAXWindowCreatedNotification)
+        XCTAssertFalse(window.destructionObserved)
+        window.observeDestruction(element: element, notification: kAXUIElementDestroyedNotification)
+        XCTAssertTrue(window.destructionObserved)
+        let replacement = NativeWindow(app: app, application: element, element: another, windowID: 42)
+        XCTAssertNotEqual(window.id, replacement.id)
+        XCTAssertFalse(replacement.destructionObserved)
+        let rebound = NativeWindow(app: app, application: element, element: another, windowID: 43, identity: replacement.id)
+        XCTAssertEqual(rebound.id, replacement.id)
+        XCTAssertNotEqual(rebound.windowID, replacement.windowID)
+    }
     func testPassiveCaptureChromeRequiresPositiveEvidenceAndPreservesDialogs() {
         let bounds = CGRect(x: 100, y: 100, width: 500, height: 400)
         func passive(point: CGPoint? = CGPoint(x: -1, y: 1441), main: Bool? = false, focused: Bool? = false, modal: Bool? = false, controls: Bool = false) -> Bool {
@@ -54,21 +132,33 @@ final class HostApplicationTests: XCTestCase {
 
     func testUnreadableInventoryCannotConfirmClosure() {
         var presence = HostApplicationWindowPresence()
-        let now = Date()
-        XCTAssertFalse(presence.observe(windowCount: 1, at: now))
-        XCTAssertFalse(presence.observe(windowCount: 0, at: now))
-        XCTAssertFalse(presence.observe(windowCount: nil, at: now.addingTimeInterval(2)))
-        XCTAssertFalse(presence.observe(windowCount: 0, at: now.addingTimeInterval(3)))
-        XCTAssertTrue(presence.observe(windowCount: 0, at: now.addingTimeInterval(4)))
+        let now: TimeInterval = 100
+        XCTAssertFalse(presence.observe(.present, at: now))
+        XCTAssertFalse(presence.observe(.confirmedEmpty, at: now))
+        XCTAssertFalse(presence.observe(.unknown, at: now + 2))
+        XCTAssertFalse(presence.observe(.confirmedEmpty, at: now + 3))
+        XCTAssertTrue(presence.observe(.confirmedEmpty, at: now + 4))
+    }
+    func testUncertainOrOffscreenWindowsNeverExpireAndSessionsAreIndependent() {
+        var first = HostApplicationWindowPresence(), second = HostApplicationWindowPresence()
+        XCTAssertFalse(first.observe(.present, at: 0))
+        XCTAssertFalse(first.observe(.confirmedEmpty, at: 1))
+        XCTAssertFalse(first.observe(.unknown, at: 2))
+        XCTAssertFalse(first.observe(.unknown, at: 100))
+        XCTAssertFalse(first.observe(.present, at: 101))
+        XCTAssertFalse(second.observe(.confirmedEmpty, at: 1000))
+        XCTAssertFalse(first.observe(.confirmedEmpty, at: 102))
+        XCTAssertFalse(first.observe(.confirmedEmpty, at: 102.999))
+        XCTAssertTrue(first.observe(.confirmedEmpty, at: 103))
     }
     func testWindowReplacementDoesNotEndSession() {
         var presence = HostApplicationWindowPresence()
-        let now = Date()
-        XCTAssertFalse(presence.observe(windowCount: 0, at: now))
-        XCTAssertFalse(presence.observe(windowCount: 1, at: now))
-        XCTAssertFalse(presence.observe(windowCount: 0, at: now))
-        XCTAssertFalse(presence.observe(windowCount: 1, at: now.addingTimeInterval(0.5)))
-        XCTAssertFalse(presence.observe(windowCount: 0, at: now.addingTimeInterval(2)))
+        let now: TimeInterval = 100
+        XCTAssertFalse(presence.observe(.confirmedEmpty, at: now))
+        XCTAssertFalse(presence.observe(.present, at: now))
+        XCTAssertFalse(presence.observe(.confirmedEmpty, at: now))
+        XCTAssertFalse(presence.observe(.present, at: now + 0.5))
+        XCTAssertFalse(presence.observe(.confirmedEmpty, at: now + 2))
     }
 
     func testCatalogUsesBundleMetadataAndCanonicalIdentity() throws {
