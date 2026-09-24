@@ -106,6 +106,11 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        hostApplicationDisplayFixture: async ({ page }, html: string | null) => {
+          const route = '**/__host_display_fixture__/index.html';
+          await page.unroute(route);
+          if (html !== null) await page.route(route, request => request.fulfill({contentType:'text/html', body:html}));
+        },
         savePdfEvidence: async (_context, base64: string, script: 'latin' | 'cjk') => {
           const output = path.resolve(__dirname, '.cache/pdf-document-surface');
           await mkdir(output, { recursive: true });

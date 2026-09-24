@@ -138,6 +138,7 @@ function createHostApplicationPictureModes(picture, changed) {
     button.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8"/></svg>');
     button.setAttribute('aria-pressed', String(picture.mode === mode));
     button.onclick = () => {
+      if (picture.mode === mode) return;
       picture.mode = mode;
       for (const [value, control] of modeButtons) control.setAttribute('aria-pressed', String(value === mode));
       changed();

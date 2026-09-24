@@ -96,6 +96,9 @@ body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; 
 .mac-app-picture-statistics { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px 16px; border-top:1px solid var(--border); padding-top:14px; font-size:11px; color:var(--muted-foreground); }
 .mac-app-picture-statistics>div { display:flex; flex-direction:column; gap:3px; min-width:0; }
 .mac-app-picture-statistics output { color:var(--foreground); font-size:12px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.mac-app-picture .host-app-display-notice { margin:12px 0; padding:10px 12px; border:1px solid var(--border); border-radius:var(--floe-radius-control); background:var(--muted); }
+.host-app-display-notice strong { font-size:11px; font-weight:600; }
+.mac-app-picture .host-app-display-notice p { margin:4px 0 0; }
 
 @media(max-height:420px) { main { padding:16px 28px; } .app-identity { width:48px; height:48px; margin-bottom:12px; } .app-identity>img { width:48px; height:48px; } #hint { margin-top:10px; } #retry { margin-top:14px; } }
 

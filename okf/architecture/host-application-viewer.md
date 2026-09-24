@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Host application viewer state and geometry
 description: Present authoritative application state, first pixels, recovery and Xpra window geometry without conflating viewer closure with application termination.
 tags: [applications, ui, desktop, runtime]
-timestamp: 2026-09-23T14:40:00Z
+timestamp: 2026-09-24T03:00:00Z
 ---
 # Summary
 
@@ -107,6 +107,21 @@ quality encoding nor HTTPS alone can restore detail absent from the source raste
 Extra pixels consume bandwidth and encoding time, so the picture panel explains
 that motion can slow. Application support for live DPI changes remains authoritative.
 
+The picture panel observes the SDK's resolved display notifications and shows its
+configured render resolution. This value is not a measured remote frame size or
+proof that an application honored live DPI changes. A reduced native density
+shows a localized explanation: host display limits suggest making the viewer
+smaller; the SDK density ceiling has its own message. Resize and monitor changes
+update the same view without polling, quality commands, or refresh requests.
+Disconnect revokes the subscription and clears its presentation. Retained clients
+without this observation API omit the resolution rather than guessing it.
+
+Saved picture preferences and decoder availability are applied once the client
+connects, including when document load precedes the handshake. Selecting the
+already selected mode is a no-op. Theme and language updates preserve selection
+and focus without sending controls. Limit notices stay inside the scrollable
+picture panel and remain readable in narrow or short viewports.
+
 Applications retain their prepared assets across viewer closure and Runtime
 updates. If the released display API is unavailable, Clarity first remains usable
 and tells high-density viewers to save their work, quit the application and reopen
@@ -172,6 +187,7 @@ and browser dismissal permissions remain authoritative.
 
 - `internal/codeapp/appserver/host_application_viewer/`: connection reconciliation, first-frame, terminal and geometry adapters.
 - `internal/envapp/ui_src/src/ui/services/hostApplicationViewer.test.ts` and `macHostApplicationViewer.test.ts`: backend events, stale callbacks, first-pixel, pointer gestures and reconnect acceptance.
+- `internal/envapp/ui_src/src/styles/hostApplicationDisplay.browser.test.tsx`: responsive density feedback, localization, keyboard dismissal and control-free display updates.
 - `internal/codeapp/appserver/host_applications_test.go`: owner-authorized terminal snapshots and retained state routes.
 - `scripts/check_host_application_input.mjs` and `internal/hostapps/client_input_test.go`: released PNG preparation, hotspot coordinates and real application input receipts.
 
