@@ -57,6 +57,9 @@ wait; it does not terminate the shared process. The reader consumes abandoned
 responses so another caller cannot receive them. Process exit, malformed
 protocol and the independent health deadline retire the process once. An
 uncertain tab-creation outcome is reported explicitly and never replayed.
+Unexpected managed-process loss marks the same service generation failed and
+requires explicit recovery. Intentional disablement or shutdown does not
+publish a new fault.
 
 ## Qualification
 

@@ -198,6 +198,33 @@ func TestBrowserRecoveryFailureNeverPublishesPartialReadiness(t *testing.T) {
 	}
 }
 
+func TestBrowserManagedProcessFailureRequiresExplicitRecovery(t *testing.T) {
+	runtime, meta := browserWorkspaceFixture(t)
+	view, err := runtime.OpenBrowserWorkspace(t.Context(), meta, BrowserWorkspaceRequest{ManagedProfileID: "browser-main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	process := runtime.managedProfiles["browser-main"]
+	if err := process.cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	<-process.done
+	deadline := time.After(2 * time.Second)
+	for runtime.browserServiceSnapshot().State != "failed" {
+		select {
+		case <-deadline:
+			t.Fatal("managed process failure did not mark the service failed")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	if _, err := runtime.OpenBrowserWorkspace(t.Context(), meta, BrowserWorkspaceRequest{ManagedProfileID: "browser-main"}); !errors.Is(err, errBrowserHostFailed) {
+		t.Fatalf("failed process silently restarted: %v", err)
+	}
+	if _, err := runtime.RecoverBrowser(t.Context(), meta, view.Generation); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBrowserFailureCodesPreserveActionableReasons(t *testing.T) {
 	for _, test := range []struct {
 		err  error

@@ -52,6 +52,18 @@ type managedBrowserProfile struct {
 	sequence  uint64
 	ready     chan []byte
 	pending   map[string]*managedBrowserPending
+	onFailure func()
+}
+
+func (p *managedBrowserProfile) fault() {
+	p.mu.Lock()
+	unexpected := !p.retired
+	p.retired = true
+	p.mu.Unlock()
+	if unexpected && p.onFailure != nil {
+		p.onFailure()
+	}
+	p.close()
 }
 
 func (p *managedBrowserProfile) stopped() bool {
@@ -95,7 +107,7 @@ func (p *managedBrowserProfile) startReader() {
 		p.ready = make(chan []byte, 1)
 		p.pending = make(map[string]*managedBrowserPending)
 		go func() {
-			defer p.close()
+			defer p.fault()
 			receivedReady := false
 			for {
 				body, err := readComputerLine(p.reader, 262144)
@@ -177,6 +189,9 @@ func (p *managedBrowserProfile) call(ctx context.Context, command string) ([]Com
 		}
 		p.mu.Unlock()
 		if expired {
+			if p.onFailure != nil {
+				p.onFailure()
+			}
 			p.close()
 		}
 	})
@@ -278,6 +293,10 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 	if err != nil {
 		return nil, err
 	}
+	status := r.browserServiceSnapshot()
+	if status.State == "failed" || status.State == "recovering" {
+		return nil, errBrowserHostFailed
+	}
 	profiles, err := r.managedProfilesLocked()
 	if err != nil {
 		return nil, err
@@ -317,7 +336,7 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 		_ = input.Close()
 		return nil, err
 	}
-	profile := &managedBrowserProfile{cmd: cmd, input: input, reader: bufio.NewReader(output), done: make(chan struct{})}
+	profile := &managedBrowserProfile{cmd: cmd, input: input, reader: bufio.NewReader(output), done: make(chan struct{}), onFailure: func() { r.browserHostStopped(status.Generation) }}
 	go func() { _ = cmd.Wait(); close(profile.done) }()
 	var ready struct {
 		Type     string `json:"type"`
