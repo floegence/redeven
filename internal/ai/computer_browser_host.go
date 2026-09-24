@@ -56,7 +56,8 @@ func (r *ComputerUseRuntime) prepareRegisteredBrowserSource(ctx context.Context,
 
 // Called with connectMu held. Recovery is explicit and retires all old grants.
 func (r *ComputerUseRuntime) browserSourceHostLocked(ctx context.Context) (*browserSourceHost, error) {
-	if r.browserServiceSnapshot().State == "recovering" {
+	status := r.browserServiceSnapshot()
+	if status.State == "recovering" || status.State == "failed" {
 		return nil, errBrowserHostFailed
 	}
 	if r.browserHost != nil {
