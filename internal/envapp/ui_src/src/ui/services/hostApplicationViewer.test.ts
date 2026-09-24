@@ -11,10 +11,11 @@ const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeap
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '').replace('{{.Locale}}', 'en-US');
 const copy = {videoDecoding:'Video decoding', videoAvailable:'Available', videoUnavailable:'Unavailable', httpsPerformanceHint:'Enable HTTPS', starting:'Starting', connecting:'Connecting', reconnecting:'Reconnecting', disconnected:'Disconnected', failed:'Failed', ended:'Ended', retry:'Retry', reconnect:'Reconnect', connectionHint:'Return to your application'};
 let dom: InstanceType<typeof JSDOM>;
+type DisplayState = {available:boolean; policy:string; density:number; width:number; height:number; limit:null | 'display' | 'density'};
 const drain = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.close(); });
 
-async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }, savedPicture?: string, pointerVersion = 1) {
+async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }, savedPicture?: string, pointerVersion = 1, connected = true) {
   dom = new JSDOM(html, { url:'http://localhost/pf/test/_redeven_host_app/', runScripts:'dangerously', pretendToBeVisual:true });
   const fetch = vi.fn().mockResolvedValue({ok:true, json:async () => ({state:'running', password:'private'})});
   dom.window.fetch = fetch;
@@ -59,15 +60,23 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
     release: vi.fn(),
     onInvalidate: undefined as undefined | (() => void),
   };
+  let displayState: DisplayState = {available:true, policy:'logical', density:1, width:1000, height:680, limit:null};
+  let displayListener: (state: DisplayState) => void = () => {};
+  const unsubscribeDisplay = vi.fn();
   const client = {
     supported_encodings: video?.encodings ?? ['webp'],
     floeInput: {version:1, target:null as {wid:number} | null,
       bindTarget(wid: number | null) { if (this.target?.wid !== wid) this.target = wid ? {wid} : null; return this.target; },
       commitText:vi.fn(), sendKey:vi.fn(), release:vi.fn(), clipboard:vi.fn(), paste:vi.fn(), onError:undefined as undefined | (() => void)},
-    _get_desktop_size:() => [1000, 680], id_to_window:windows, connected:true, reconnect:true, reconnect_count:5,
+    _get_desktop_size:() => [1000, 680], id_to_window:windows, connected, reconnect:true, reconnect_count:5,
     floePointer,
     _new_window:vi.fn(), do_send_damage_sequence:vi.fn((...args: [number, number, number, number, number, string]) => { painted.add(args[1]); }), send_configure_window:vi.fn(),
     set_display_density:vi.fn().mockReturnValue(true), scale:1,
+    subscribe_display:vi.fn((listener: (state: DisplayState) => void) => {
+      displayListener = listener;
+      listener(displayState);
+      return unsubscribeDisplay;
+    }),
     send_control_refresh:vi.fn(), send:vi.fn(), send_close_window:vi.fn(), focused_wid:1, set_focus:vi.fn((win: {wid:number}) => { client.focused_wid = win.wid; }), close:vi.fn(), callback_close:() => {}, on_last_window:vi.fn(),
   };
   Object.assign(frame.contentWindow!, {floeXpraInput:{version:1,getClient:() => (frame.contentWindow as unknown as {client?:unknown}).client}});
@@ -76,15 +85,64 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
     if (lexicalClient) Object.assign(frame.contentWindow!, {floeXpraInput:{version:1,getClient:()=>client}});
   }
   frame.dispatchEvent(new dom.window.Event('load'));
-  return {frame, doc, client, appWindow, fetch, nativeWindow, windowStateChanged: (state: { maximized: boolean; minimized: boolean }) => windowStateChanged(state), state:() => dom.window.document.body.dataset.state};
+  return {frame, doc, client, appWindow, fetch, nativeWindow, unsubscribeDisplay,
+    displayChanged: (state: Partial<DisplayState>) => { displayState = {...displayState, ...state}; displayListener(displayState); },
+    windowStateChanged: (state: { maximized: boolean; minimized: boolean }) => windowStateChanged(state), state:() => dom.window.document.body.dataset.state};
 }
 
 describe('host application viewer', () => {
+  it('restores saved clarity after a slow handshake and ignores reselecting the active mode', async () => {
+    const v = await viewer(false, false, false, undefined, undefined, 'clarity', 1, false);
+    expect(v.client.set_display_density).not.toHaveBeenCalled();
+    v.client.connected = true;
+    v.client.supported_encodings = ['h264'];
+    v.appWindow(1); v.client._new_window(1);
+    v.doc.dispatchEvent(new dom.window.Event('connection-established'));
+    expect(v.client.set_display_density).toHaveBeenCalledWith('native');
+    expect(dom.window.document.querySelector('.host-app-video-status')?.getAttribute('data-app-copy')).toBe('videoAvailable');
+    v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
+    dom.window.document.querySelector<HTMLButtonElement>('[data-picture-mode="clarity"]')!.click();
+    expect(v.client.set_display_density).toHaveBeenCalledOnce();
+    expect(v.client.send_control_refresh).toHaveBeenCalledOnce();
+  });
+
+  it('explains resolved display limits and clears them after resize without sending controls', async () => {
+    const v = await viewer(false, false, false, undefined, undefined, 'clarity');
+    const sent = v.client.send.mock.calls.length, refreshed = v.client.send_control_refresh.mock.calls.length;
+    v.displayChanged({policy:'native', density:1, width:2200, height:1254, limit:'display'});
+    const notice = dom.window.document.querySelector<HTMLElement>('.host-app-display-notice')!;
+    expect(notice.hidden).toBe(false);
+    expect(notice.querySelector('[data-app-copy="pictureDisplayLimitHint"]')).not.toBeNull();
+    expect(dom.window.document.querySelector('.host-app-render-resolution')!.textContent).toBe('2,200 × 1,254');
+    v.displayChanged({density:2, width:2560, height:1508, limit:null});
+    expect(notice.hidden).toBe(true);
+    expect(dom.window.document.querySelector('.host-app-render-resolution')!.textContent).toBe('2,560 × 1,508');
+    expect(v.client.send).toHaveBeenCalledTimes(sent);
+    expect(v.client.send_control_refresh).toHaveBeenCalledTimes(refreshed);
+    expect(v.client.close).not.toHaveBeenCalled();
+    v.client.callback_close();
+    expect(v.unsubscribeDisplay).toHaveBeenCalledOnce();
+    v.displayChanged({limit:'display'});
+    expect(notice.hidden).toBe(true);
+  });
+
+  it('distinguishes density safety limits and preserves selection when copy changes', async () => {
+    const v = await viewer(false, false, false, undefined, undefined, 'clarity');
+    v.displayChanged({policy:'native', density:4, limit:'density'});
+    expect(dom.window.document.querySelector('[data-app-copy="pictureDensityLimitHint"]')).not.toBeNull();
+    const calls = v.client.send.mock.calls.length;
+    dom.window.document.documentElement.lang = 'zh-CN'; await drain();
+    expect(dom.window.document.querySelector('[data-picture-mode="clarity"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(v.client.send).toHaveBeenCalledTimes(calls);
+  });
+
   it('restores clarity on attachment through the published display API without reconnecting', async () => {
     const v = await viewer(false, false, false, undefined, undefined, 'clarity');
     expect(v.client.set_display_density).toHaveBeenCalledWith('native');
     expect(v.client.send_control_refresh).toHaveBeenCalledTimes(1);
     expect(v.client.send_control_refresh).toHaveBeenCalledWith(100, {'refresh-now':true});
+    v.doc.dispatchEvent(new dom.window.Event('connection-established'));
+    expect(v.client.send_control_refresh).toHaveBeenCalledOnce();
     expect(v.client.close).not.toHaveBeenCalled();
   });
 

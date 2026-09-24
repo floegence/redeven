@@ -10,6 +10,8 @@
   let deadline;
   let request;
   let client;
+  let displayState;
+  let unsubscribeDisplay;
   let inputController;
   let pointerController;
   let pointerFeedback;
@@ -77,10 +79,19 @@
   const decodingStatus = document.createElement('output'); decodingStatus.className = 'host-app-video-status';
   hostApplicationAppearance.copy(decodingStatus, 'videoUnavailable');
   decodingRow.append(decodingLabel, decodingStatus); decoding.append(decodingRow);
+  const resolutionRow = document.createElement('div'); resolutionRow.hidden = true;
+  const resolutionLabel = document.createElement('span'); hostApplicationAppearance.copy(resolutionLabel, 'pictureRenderResolution');
+  const resolution = document.createElement('output'); resolution.className = 'host-app-render-resolution';
+  resolutionRow.append(resolutionLabel, resolution); decoding.prepend(resolutionRow);
+  const displayNotice = document.createElement('div'); displayNotice.className = 'host-app-display-notice';
+  displayNotice.hidden = true; displayNotice.setAttribute('role', 'status');
+  const displayNoticeTitle = document.createElement('strong'); hostApplicationAppearance.copy(displayNoticeTitle, 'pictureLimited');
+  const displayNoticeHint = document.createElement('p');
+  displayNotice.append(displayNoticeTitle, displayNoticeHint);
   const httpsHint = document.createElement('p'); httpsHint.className = 'host-app-https-hint';
   hostApplicationAppearance.copy(httpsHint, 'httpsPerformanceHint');
   httpsHint.hidden = window.isSecureContext;
-  picturePanel.append(pictureTitle, modes, pictureHint, decoding, httpsHint);
+  picturePanel.append(pictureTitle, modes, pictureHint, displayNotice, decoding, httpsHint);
   popover.append(windowPanel, picturePanel, helpPanel, quitPanel);
   const panels = {windows:windowPanel, picture:picturePanel, help:helpPanel, quit:quitPanel};
   const toggles = {windows:windowToggle, picture:controlsButton, help, quit};
@@ -134,15 +145,30 @@
     }
   }
   hostApplicationAppearance.subscribe(() => {
-    syncToolbar(); positionPopover();
+    syncToolbar(); renderDisplay();
     inputController?.element.setAttribute('aria-label', config.copy.input);
   });
+  function renderDisplay() {
+    resolutionRow.hidden = !displayState?.available;
+    if (displayState?.available) {
+      const text = `${hostApplicationAppearance.number(displayState.width)} × ${hostApplicationAppearance.number(displayState.height)}`;
+      if (resolution.textContent !== text) resolution.textContent = text;
+    }
+    const limited = picture.mode === 'clarity' && displayState?.available && displayState.limit;
+    displayNotice.hidden = !limited;
+    if (limited) {
+      const key = limited === 'display' ? 'pictureDisplayLimitHint' : 'pictureDensityLimitHint';
+      if (displayNoticeHint.getAttribute('data-app-copy') !== key) hostApplicationAppearance.copy(displayNoticeHint, key);
+    }
+    positionPopover();
+  }
   function applyPicture() {
     if (!client?.connected) return;
     const [quality, speed] = {auto:[-1,-1], clarity:[95,-1], smooth:[65,90], data:[40,75]}[picture.mode];
     const clarity = picture.mode === 'clarity';
     const densityAvailable = client.set_display_density?.(clarity ? 'native' : 'logical');
     hostApplicationAppearance.copy(pictureHint, clarity && devicePixelRatio > 1 && !densityAvailable ? 'pictureReopenHint' : 'pictureHint');
+    renderDisplay();
     client.send(['quality', quality]); client.send(['speed', speed]);
     client.send_control_refresh(100, {'refresh-now':true});
   }
@@ -212,6 +238,8 @@
   }
 
   function stopClient() {
+    unsubscribeDisplay?.(); unsubscribeDisplay = undefined;
+    displayState = undefined; renderDisplay();
     const previous = client;
     pointerController?.dispose(); pointerController = null;
     pointerFeedback?.dispose(); pointerFeedback = null;
@@ -265,9 +293,10 @@
     if (!xpra.floeInput) { finish('inputVersionUnsupported'); return; }
     if (xpra.floePointer?.version !== 1) { finish('inputVersionUnsupported'); return; }
     client = xpra;
-    // The negotiated decoder list is authoritative; HTTPS alone is insufficient.
-    const videoAvailable = xpra.supported_encodings?.some(codec => ['h264', 'vp8', 'vp9', 'av1'].includes(codec));
-    hostApplicationAppearance.copy(decodingStatus, videoAvailable ? 'videoAvailable' : 'videoUnavailable');
+    unsubscribeDisplay = xpra.subscribe_display?.(state => {
+      if (attempt !== generation || client !== xpra) return;
+      displayState = state; renderDisplay();
+    });
     const adapter = xpra.floeInput;
     const pointer = xpra.floePointer;
     const surface = doc.getElementById('screen') || doc.body;
@@ -322,8 +351,11 @@
     xpra.reconnect_count = 0;
     xpra.callback_close = () => connectionLost(attempt);
     doc.addEventListener('connection-lost', () => connectionLost(attempt));
+    let pictureConfigured = false;
     doc.addEventListener('connection-established', () => {
-      if (attempt !== generation || !checkInputVersion() || Object.keys(xpra.id_to_window).length) return;
+      if (attempt !== generation || !checkInputVersion()) return;
+      configureConnectedPicture();
+      if (Object.keys(xpra.id_to_window).length) return;
       clearTimeout(deadline);
       present('waiting');
     });
@@ -456,8 +488,16 @@
         frame.focus();
       });
     };
-    if (picture.mode !== 'auto') applyPicture();
-    else if (xpra.connected && checkInputVersion()) xpra.send_control_refresh(100, {'refresh-now':true});
+    function configureConnectedPicture() {
+      if (pictureConfigured) return;
+      pictureConfigured = true;
+      // Decoder capabilities and saved preferences become authoritative after startup.
+      const videoAvailable = xpra.supported_encodings?.some(codec => ['h264', 'vp8', 'vp9', 'av1'].includes(codec));
+      hostApplicationAppearance.copy(decodingStatus, videoAvailable ? 'videoAvailable' : 'videoUnavailable');
+      if (picture.mode !== 'auto') applyPicture();
+      else xpra.send_control_refresh(100, {'refresh-now':true});
+    }
+    if (xpra.connected && checkInputVersion()) configureConnectedPicture();
   }
 
   frame.addEventListener('load', () => {

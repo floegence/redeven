@@ -98,27 +98,31 @@ type Presentation struct {
 	ReopenHint         string `json:"reopenHint,omitempty"`
 	CaptureHint        string `json:"captureHint,omitempty"`
 
-	Controls             string `json:"controls,omitempty"`
-	PicturePixels        string `json:"picturePixels,omitempty"`
-	Picture              string `json:"picture,omitempty"`
-	PictureAuto          string `json:"pictureAuto,omitempty"`
-	PictureClarity       string `json:"pictureClarity,omitempty"`
-	PictureSmooth        string `json:"pictureSmooth,omitempty"`
-	PictureData          string `json:"pictureData,omitempty"`
-	PictureHint          string `json:"pictureHint,omitempty"`
-	PictureReopenHint    string `json:"pictureReopenHint,omitempty"`
-	PictureAdvanced      string `json:"pictureAdvanced,omitempty"`
-	PictureResolution    string `json:"pictureResolution,omitempty"`
-	PictureFrameRate     string `json:"pictureFrameRate,omitempty"`
-	PictureActualRate    string `json:"pictureActualRate,omitempty"`
-	PictureBandwidth     string `json:"pictureBandwidth,omitempty"`
-	PictureTransport     string `json:"pictureTransport,omitempty"`
-	PictureVideo         string `json:"pictureVideo,omitempty"`
-	PictureImages        string `json:"pictureImages,omitempty"`
-	VideoDecoding        string `json:"videoDecoding,omitempty"`
-	VideoAvailable       string `json:"videoAvailable,omitempty"`
-	VideoUnavailable     string `json:"videoUnavailable,omitempty"`
-	HttpsPerformanceHint string `json:"httpsPerformanceHint,omitempty"`
+	Controls                string `json:"controls,omitempty"`
+	PicturePixels           string `json:"picturePixels,omitempty"`
+	Picture                 string `json:"picture,omitempty"`
+	PictureAuto             string `json:"pictureAuto,omitempty"`
+	PictureClarity          string `json:"pictureClarity,omitempty"`
+	PictureSmooth           string `json:"pictureSmooth,omitempty"`
+	PictureData             string `json:"pictureData,omitempty"`
+	PictureHint             string `json:"pictureHint,omitempty"`
+	PictureReopenHint       string `json:"pictureReopenHint,omitempty"`
+	PictureRenderResolution string `json:"pictureRenderResolution,omitempty"`
+	PictureLimited          string `json:"pictureLimited,omitempty"`
+	PictureDisplayLimitHint string `json:"pictureDisplayLimitHint,omitempty"`
+	PictureDensityLimitHint string `json:"pictureDensityLimitHint,omitempty"`
+	PictureAdvanced         string `json:"pictureAdvanced,omitempty"`
+	PictureResolution       string `json:"pictureResolution,omitempty"`
+	PictureFrameRate        string `json:"pictureFrameRate,omitempty"`
+	PictureActualRate       string `json:"pictureActualRate,omitempty"`
+	PictureBandwidth        string `json:"pictureBandwidth,omitempty"`
+	PictureTransport        string `json:"pictureTransport,omitempty"`
+	PictureVideo            string `json:"pictureVideo,omitempty"`
+	PictureImages           string `json:"pictureImages,omitempty"`
+	VideoDecoding           string `json:"videoDecoding,omitempty"`
+	VideoAvailable          string `json:"videoAvailable,omitempty"`
+	VideoUnavailable        string `json:"videoUnavailable,omitempty"`
+	HttpsPerformanceHint    string `json:"httpsPerformanceHint,omitempty"`
 
 	OperationFailed    string `json:"operationFailed,omitempty"`
 	WaitingHint        string `json:"waitingHint,omitempty"`

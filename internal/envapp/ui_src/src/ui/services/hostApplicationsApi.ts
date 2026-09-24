@@ -90,6 +90,10 @@ export type HostApplicationPresentation = Readonly<{
   pictureData?: string;
   pictureHint?: string;
   pictureReopenHint?: string;
+  pictureRenderResolution?: string;
+  pictureLimited?: string;
+  pictureDisplayLimitHint?: string;
+  pictureDensityLimitHint?: string;
   pictureAdvanced?: string;
   pictureResolution?: string;
   pictureFrameRate?: string;
