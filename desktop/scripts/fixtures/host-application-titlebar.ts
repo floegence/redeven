@@ -23,24 +23,24 @@ copy.quitDescription = enUS.hostApplications.sessionQuitDescription;
 copy.pictureHint = enUS.hostApplications.sessionPictureHint;
 const clientScript = `
 window.operations=[];
-window.contentInput=[];
+
 const pointerTargets=new Map();const painted=new Set();
 function remoteWindow(wid,title){
 const div=document.createElement('article');div.innerHTML='<small>HOST APPLICATION</small><h1></h1><p>Window content stays below the native titlebar.</p>';
 div.querySelector('h1').textContent=title;document.body.append(div);
-const target={wid,window:{wid,div}};pointerTargets.set(wid,target);
-for(const type of ['pointerdown','pointerup','click'])div.addEventListener(type,event=>{window.contentInput.push([type,event.defaultPrevented]);event.stopPropagation()});
-return {wid,div,metadata:{title},windowtype:['NORMAL'],override_redirect:false,tray:false,
-has_windowtype:types=>types.includes('NORMAL'),screen_resized(){},set_maximized(){},set_minimized(){},initiate_moveresize(){},move_resize(){},update_metadata(value){Object.assign(this.metadata,value)},destroy(){div.remove()}};
+div.setAttribute('data-floe-remote-pointer','');
+const win={wid,div,metadata:{title},windowtype:['NORMAL'],override_redirect:false,tray:false,
+has_windowtype:types=>types.includes('NORMAL'),screen_resized(){},set_maximized(){},set_minimized(){},initiate_moveresize(){},move_resize(){},update_metadata(value){Object.assign(this.metadata,value)},destroy(){painted.delete(wid);pointerTargets.delete(wid);div.remove()}};
+pointerTargets.set(wid,{wid,window:win});return win;
 }
-const floePointer={version:1,targetForWindow:win=>painted.has(win.wid)?pointerTargets.get(win.wid):null,resolveTarget:event=>[...pointerTargets.values()].find(target=>target.window.div.contains(event.target)),isTargetValid:target=>Boolean(target&&painted.has(target.wid)&&pointerTargets.get(target.wid)===target),sendPointer(command,target){window.operations.push(['pointer',target.wid,command]);return true},release(target){window.operations.push(['pointer-release',target?.wid])}};
+const floePointer={version:1,targetForWindow:win=>painted.has(win.wid)?pointerTargets.get(win.wid):null,resolveTarget:event=>[...pointerTargets.values()].find(target=>target.window.div.contains(event.target))??null,isTargetValid:target=>Boolean(target&&painted.has(target.wid)&&pointerTargets.get(target.wid)===target),sendPointer(command,target){window.operations.push(['pointer',target.wid,command]);return true},release(target){window.operations.push(['pointer-release',target?.wid])}};
 const client={floeInput:{version:1,target:null,bindTarget(wid){if(this.target?.wid!==wid)this.target=wid?{wid}:null;return this.target},commitText(text,target){window.operations.push(['text',target.wid,text])},sendKey(key,target){window.operations.push(['key',target.wid,key])},release(){},clipboard(){return false},paste(){}},connected:true,focused_wid:1,id_to_window:{1:remoteWindow(1,'Research notes'),2:remoteWindow(2,'Project brief')},
-_new_window(){},do_send_damage_sequence(_sequence,wid){painted.add(wid)},send_configure_window(){},send_control_refresh(){},on_last_window(){},callback_close(){},
+_new_window(){},do_send_damage_sequence(_sequence,wid){painted.add(wid)},send_configure_window(){},set_display_density(){return true},send_control_refresh(){},on_last_window(){},callback_close(){},
 set_focus(win){this.focused_wid=win.wid;Object.values(this.id_to_window).forEach(w=>w.div.hidden=w!==win)},
 send(packet){window.operations.push(packet)},send_close_window(win){window.operations.push(['close-window',win.wid])},close(){}};
 client.floePointer=floePointer;window.floeXpraInput={version:1,getClient:()=>client};
 client.set_focus(client.id_to_window[1]);
-addEventListener('load',()=>setTimeout(()=>client.do_send_damage_sequence(1,1,800,600,1,''),80));`;
+addEventListener('load',()=>setTimeout(()=>[1,2].forEach(wid=>client.do_send_damage_sequence(1,wid,800,600,1,'')),80));`;
 const catalogSource = readFileSync(path.join(source, 'catalog.generated.js'), 'utf8');
 const catalog = JSON.parse(catalogSource.slice(catalogSource.indexOf(' = ') + 3).trim().slice(0, -1));
 const html = readFileSync(path.join(source, 'viewer.html'), 'utf8').replaceAll('{{.Name}}', 'Text Editor').replaceAll('{{.Locale}}', 'en-US').replaceAll('{{.Nonce}}', 'fixture')
@@ -86,7 +86,7 @@ async function run() {
       if (await evaluate(expression)) return;
       await new Promise(resolve => setTimeout(resolve, 25));
     }
-    throw new Error('Timed out: ' + expression);
+    throw new Error('Timed out: ' + expression + ': ' + JSON.stringify(await evaluate(`({state:document.body.dataset.state,operations:document.querySelector('#application').contentWindow.operations,focus:document.querySelector('#application').contentDocument.activeElement?.className})`)));
   };
   const click = async (selector: string, content = false) => {
     const position = await evaluate(`(()=>{const frame=document.querySelector('#application');const element=${content ? 'frame.contentDocument' : 'document'}.querySelector(${JSON.stringify(selector)});const rect=element.getBoundingClientRect();const offset=${content ? 'frame.getBoundingClientRect()' : '{left:0,top:0}'};return {x:Math.round(offset.left+rect.left+rect.width/2),y:Math.round(offset.top+rect.top+Math.min(rect.height/2,100))};})()`);
@@ -104,7 +104,7 @@ async function run() {
     assert.equal(geometry.childBridge, 'undefined');
     const dragRegion = () => evaluate(`getComputedStyle(document.querySelector('.mac-app-toolbar')).getPropertyValue('app-region')`);
     assert.equal(await dragRegion(), 'drag');
-    for (const toggle of ['.mac-app-controls-toggle', '.mac-app-windows-toggle', '.mac-app-quit']) {
+    for (const toggle of ['.mac-app-controls-toggle', '.mac-app-windows-toggle', '.mac-app-help', '.mac-app-quit']) {
       for (const outside of ['.mac-app-toolbar-spacer', '.mac-app-toolbar-separator', '.host-app-identity']) {
         await click(toggle);
         await wait(`!document.querySelector('.mac-app-popover').hidden`);
@@ -133,7 +133,7 @@ async function run() {
         await click('#retry');
         await wait(`document.body.dataset.state==='active'`);
       }
-      for (const selector of ['.mac-app-controls-toggle', '.mac-app-windows-toggle', '.mac-app-quit']) {
+      for (const selector of ['.mac-app-controls-toggle', '.mac-app-windows-toggle', '.mac-app-help', '.mac-app-quit']) {
         await click(selector);
         await wait(`!document.querySelector('.mac-app-popover').hidden`);
         if (selector === '.mac-app-controls-toggle') {
@@ -145,15 +145,15 @@ async function run() {
           await click(selector);
           await wait(`!document.querySelector('.mac-app-popover').hidden`);
         }
-        await evaluate(`document.querySelector('#application').contentWindow.contentInput=[]`);
+        await evaluate(`document.querySelector('#application').contentWindow.operations=[]`);
         await click('article:not([hidden]) p', true);
-        await wait(`document.querySelector('#application').contentWindow.contentInput.length===3`);
+        await wait(`document.querySelector('#application').contentWindow.operations.filter(v=>v[0]==='pointer' && ['down','up'].includes(v[2].kind)).length===2`);
         assert.equal(await evaluate(`document.querySelector('.mac-app-popover').hidden`), true);
         assert.equal(await evaluate(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-expanded')`), 'false');
-        assert.deepEqual(await evaluate(`document.querySelector('#application').contentWindow.contentInput`), [['pointerdown', false], ['pointerup', false], ['click', false]]);
+        assert.deepEqual(await evaluate(`document.querySelector('#application').contentWindow.operations.filter(v=>v[0]==='pointer' && ['down','up'].includes(v[2].kind)).map(v=>[v[1],v[2].kind,v[2].button])`), [[1,'down',0],[1,'up',0]]);
       }
     }
-    console.log('Titlebar outside-input acceptance passed: three popovers, preserved clicks, internal controls and reconnect');
+    console.log('Titlebar outside-input acceptance passed: four popovers, exactly one pointer click, internal controls and reconnect');
     await evaluate(`document.querySelector('.mac-app-windows-toggle').click();document.querySelectorAll('.mac-app-window-list button')[1].click()`);
     assert.equal(await evaluate(`document.querySelector('#application').contentWindow.floeXpraInput.getClient().focused_wid`), 2);
     await evaluate(`document.querySelector('.mac-app-controls-toggle').click();document.querySelector('[data-picture-mode="clarity"]').click()`);

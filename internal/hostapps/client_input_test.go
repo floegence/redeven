@@ -4,6 +4,7 @@ package hostapps
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"image"
 	"image/color"
@@ -11,9 +12,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
+
+//go:embed testdata/client_pointer.py
+var clientPointerPython string
+
+//go:embed testdata/client_pointer.html
+var clientPointerHTML string
 
 // This opt-in fixture uses the released components and the real product launch
 // path. An external browser drives the product viewer, then writes done.json.
@@ -95,7 +103,8 @@ save()
 (root / 'environment.json').write_text(json.dumps({key:os.environ.get(key) for key in ['DISPLAY','DBUS_SESSION_BUS_ADDRESS','GTK_IM_MODULE','QT_IM_MODULE','XMODIFIERS']}))
 Gtk.main()
 `
-	if target := os.Getenv("REDEVEN_TEST_CLIENT_INPUT_TARGET"); target != "" {
+	target := os.Getenv("REDEVEN_TEST_CLIENT_INPUT_TARGET")
+	if target != "" && !strings.HasPrefix(target, "pointer-") {
 		if target != "firefox" {
 			t.Fatal("unsupported input fixture target", target)
 		}
@@ -143,10 +152,19 @@ finally:
     server.shutdown()
 `
 	}
+	if strings.HasPrefix(target, "pointer-") {
+		if target != "pointer-gtk" && target != "pointer-firefox" {
+			t.Fatal("unsupported pointer fixture", target)
+		}
+		source = clientPointerPython
+		if err := os.WriteFile(filepath.Join(root, "pointer.html"), []byte(clientPointerHTML), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.WriteFile(fixture, []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Add(context.Background(), AddRequest{Name: "Client input acceptance", Executable: "/usr/bin/python3", Arguments: quoteArgv([]string{fixture})}); err != nil {
+	if err := m.Add(context.Background(), AddRequest{Name: "Client input acceptance", Executable: "/usr/bin/python3", Arguments: quoteArgv([]string{fixture, root, target})}); err != nil {
 		t.Fatal(err)
 	}
 	catalog, err := m.Catalog(context.Background(), "fixture", "en-US")
@@ -172,12 +190,33 @@ finally:
 	})
 	waitUntil(t, func() bool { return m.Sessions("fixture")[0].State == "running" }, 45*time.Second)
 	metadata, _ := json.Marshal(map[string]any{"address": a.record.Address, "password": m.sessions[session.ID].password,
-		"pid": a.record.Process.PID, "state": state, "component": a.record.Component, "input_version": 1})
+		"pid": a.record.Process.PID, "state": state, "component": a.record.Component, "input_version": 1, "kind": target})
 	if err := os.WriteFile(filepath.Join(root, "connection.json"), metadata, 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("owned input fixture ready: pid=%d address=%s state=%s", a.record.Process.PID, a.record.Address, state)
 	waitUntil(t, func() bool { _, err := os.Stat(filepath.Join(root, "done.json")); return err == nil }, 180*time.Second)
+	if strings.HasPrefix(target, "pointer-") {
+		var done struct {
+			Passed bool `json:"passed"`
+		}
+		data, err := os.ReadFile(filepath.Join(root, "done.json"))
+		if err != nil || json.Unmarshal(data, &done) != nil || !done.Passed {
+			t.Fatal("invalid pointer completion receipt")
+		}
+		var receipt struct {
+			Clicks  int       `json:"clicks"`
+			Doubles int       `json:"doubles"`
+			Rights  int       `json:"rights"`
+			Drag    float64   `json:"drag"`
+			Inner   []float64 `json:"inner"`
+		}
+		data, err = os.ReadFile(filepath.Join(root, "receipt.json"))
+		if err != nil || json.Unmarshal(data, &receipt) != nil || receipt.Clicks != 3 || receipt.Doubles < 1 || receipt.Rights < 1 || receipt.Drag <= 30 || len(receipt.Inner) != 2 || receipt.Inner[0] <= 0 || receipt.Inner[1] <= 0 {
+			t.Fatalf("invalid application pointer receipt: %s", data)
+		}
+		return
+	}
 	var expected, actual []string
 	data, err := os.ReadFile(filepath.Join(root, "done.json"))
 	if err != nil || json.Unmarshal(data, &expected) != nil || len(expected) != 2 {

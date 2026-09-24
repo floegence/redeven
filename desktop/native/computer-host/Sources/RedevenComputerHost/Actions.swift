@@ -47,12 +47,13 @@ enum NativeInput {
         }
         // macOS applies the user's natural-scrolling preference to posted
         // wheel events. Compensate once so positive viewport deltas always
-        // move down/right, matching the browser target.
+        // move down/right, matching the browser target. WindowServer reverses
+        // horizontal pixel wheels on delivery, so axis 2 needs the opposite sign.
         let direction = naturalScrolling ? 1.0 : -1.0
         guard let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
                                  mouseCursorPosition: point, mouseButton: .left),
               let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
-                                  wheelCount: 2, wheel1: Int32(direction * y), wheel2: Int32(direction * x), wheel3: 0) else {
+                                  wheelCount: 2, wheel1: Int32(direction * y), wheel2: Int32(-direction * x), wheel3: 0) else {
             throw unavailable()
         }
         // CGEvent captures the current pointer at construction. The move has

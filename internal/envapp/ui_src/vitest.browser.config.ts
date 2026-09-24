@@ -111,6 +111,10 @@ export default mergeConfig(viteConfig, defineConfig({
           await page.unroute(route);
           if (html !== null) await page.route(route, request => request.fulfill({contentType:'text/html', body:html}));
         },
+        clickHostApplicationPointer: async ({page}) => {
+          const frame=await frameForSelector(page,'.mac-app-canvas');
+          await frame.locator('.mac-app-canvas').click();
+        },
         savePdfEvidence: async (_context, base64: string, script: 'latin' | 'cjk') => {
           const output = path.resolve(__dirname, '.cache/pdf-document-surface');
           await mkdir(output, { recursive: true });

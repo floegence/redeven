@@ -86,6 +86,7 @@ function createHostApplicationToolbar() {
   const helpPanel = document.createElement('section');
   helpPanel.className = 'mac-app-touch-help';
   helpPanel.tabIndex = -1;
+  helpPanel.hidden = true;
   const helpTitle = document.createElement('strong');
   hostApplicationAppearance.copy(helpTitle, 'touchHelpTitle');
   const helpDescription = document.createElement('p');

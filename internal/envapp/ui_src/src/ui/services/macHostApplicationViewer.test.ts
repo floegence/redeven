@@ -928,3 +928,20 @@ it('refuses an old native input version while retaining the application process'
   expect(dom.window.document.querySelector<HTMLButtonElement>('#retry')!.hidden).toBe(true);
   expect(v.native.request).not.toHaveBeenCalled();
 });
+
+it('retains fractional native wheel pixels until delivery and discards them on cancellation', async () => {
+  const v = await viewer(); await v.activate();
+  const canvas=dom.window.document.querySelector('canvas')!;
+  const frames: FrameRequestCallback[]=[];
+  dom.window.requestAnimationFrame=callback=>{frames.push(callback);return frames.length;};
+  const wheel=()=>{
+    canvas.dispatchEvent(new dom.window.WheelEvent('wheel',{deltaX:0.4,deltaY:0.6,clientX:200,clientY:200,bubbles:true,cancelable:true}));
+    frames.shift()?.(0);
+  };
+  wheel();wheel();wheel();
+  const sent=()=>v.socket().send.mock.calls.map(([raw])=>JSON.parse(raw)).filter(p=>p.kind==='scroll');
+  expect(sent()).toEqual([expect.objectContaining({dx:0,dy:1}),expect.objectContaining({dx:1,dy:0})]);
+  dom.window.dispatchEvent(new dom.window.Event('blur'));
+  v.socket().send.mockClear();wheel();
+  expect(sent()).toEqual([]);
+});
