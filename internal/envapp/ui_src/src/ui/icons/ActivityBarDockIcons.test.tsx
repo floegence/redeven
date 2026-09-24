@@ -49,12 +49,13 @@ describe('Activity Bar bottom icons', () => {
     expect(icon.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('uses a browser window with a globe for FloeBrowser', () => {
+  it('uses a distinct browser window with a remote arrow for FloeBrowser', () => {
     const icon = renderIcon(ActivityBarBrowserIcon);
 
     expect(icon.getAttribute('data-activity-bar-icon')).toBe('floebrowser');
     expect(icon.querySelector('rect')).not.toBeNull();
-    expect(icon.querySelectorAll('circle')).toHaveLength(3);
+    expect(icon.querySelectorAll('circle')).toHaveLength(0);
+    expect(icon.querySelector('path[stroke-linejoin="round"]')).not.toBeNull();
     expect(icon.querySelector('line')).toBeNull();
     expect(icon.getAttribute('aria-hidden')).toBe('true');
   });

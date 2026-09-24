@@ -91,7 +91,8 @@ request headers. This works without a Service Worker on direct Local UI clients.
 Selecting the current source explicitly opens a fresh view, including after
 browser installation or a failed initial open. Browser chrome consumes the host
 palette in welcome, navigation and disconnected states. Web Services retains its
-globe icon; Remote Browser uses a browser-window icon.
+globe icon; Remote Browser uses a rounded browser-window outline with a compact
+outward arrow, with consistent current-color styling in both themes.
 
 The environment window forwards input readiness only after both the private
 control token and the matching source control grant arrive. Revocation and tab
@@ -99,6 +100,16 @@ changes remain immediate; a delayed token cannot revive a revoked grant.
 Address submissions additionally wait for idle-control admission. HTTP responses and DOM/control messages may
 arrive in either order. A changed tab, newer address or disconnected view cancels
 an unsubmitted navigation; previously submitted input is never retried.
+
+The released viewer suspends page gestures from explicit navigation intent through
+control admission and source completion. It discards unsent input and reports
+readiness only when input can resume. A canceled before-unload decision restores
+the original page; late completion cannot release a newer navigation's input
+fence. Browser chrome, stop and dialog replies remain available throughout.
+Repeated clicks on an already focused text field receive a fresh source focus
+confirmation and restore the visible native caret without replaying a click.
+Chrome and Electron product qualification exercises this behavior through the
+same authorized Flowersec Session, including Unicode text insertion.
 
 ## Tab presentation
 
@@ -120,6 +131,9 @@ submits. The inline document keeps its restrictive sandbox
 without `allow-forms` and its `form-action 'none'` policy.
 
 # Evidence
+
+- [FloeBrowser v0.1.14: test/input-focus.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/input-focus.e2e.ts) — Repeated source focus and native caret continuity.
+- [FloeBrowser v0.1.14: test/navigation-input.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/navigation-input.e2e.ts) — Input fencing through navigation admission and completion.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FloeBrowserSurface.tsx` - Shared viewer mount and generation-bound cleanup.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FloeBrowserSurface.test.tsx` - Source-selection progress retains the current document until replacement.
