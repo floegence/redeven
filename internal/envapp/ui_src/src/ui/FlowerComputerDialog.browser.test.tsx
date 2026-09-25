@@ -221,6 +221,7 @@ it('explains the headless browser before offering optional account groups', asyn
   (details.querySelector('summary') as HTMLElement).click();
   await waitFor(() => management.listManagedProfiles.mock.calls.length === 1 && !document.querySelector('[aria-busy="true"]'));
   expect(details.textContent).toContain(copy.profileDefault);
+  expect(getComputedStyle(details.querySelector('.flower-computer-profile')!).fontSize).toBe('12px');
   expect(details.textContent).toContain(copy.profileIsolationHint);
   expect(management.createManagedProfile).not.toHaveBeenCalled();
 });

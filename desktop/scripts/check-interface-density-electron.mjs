@@ -44,26 +44,32 @@ try {
   page.on('pageerror', error => report.errors.push(error.message));
   await page.addInitScript(snapshot => {
     window.navigationSnapshot = { ...snapshot, navigation_revision: 1 };
+    const material = new URL(location.href).searchParams.get('material');
+    localStorage.setItem('redeven-desktop-shell-theme-surface-style', JSON.stringify(material));
     const language = { preference: 'zh-CN', resolved_locale: 'zh-CN', source: 'explicit', system_candidates: [] };
     window.redevenDesktopLanguage = { getSnapshot: () => language, setPreference: () => language, subscribe: () => () => {} };
   }, snapshot);
-  await page.goto(new URL('flower-navigation.html', server.resolvedUrls.local[0]).href);
-  await page.locator('.redeven-flower-topbar-button').click();
-  await page.evaluate(() => window.navigationFixture.releaseRuntime());
-  await page.locator('[data-thread-id="navigation-thread"] .flower-thread-card-select-button').click();
-  await page.locator('.flower-message-bubble-assistant p').first().waitFor();
-  await page.evaluate(() => document.fonts.ready);
-  await page.evaluate(() => { window.densityComposer = document.querySelector('.flower-composer textarea'); });
-  for (const mode of ['light', 'dark']) {
-    for (const material of ['flat', 'soft-neumorphic']) {
+  for (const material of ['standard', 'soft-neumorphic']) {
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
+    const url = new URL('flower-navigation.html', server.resolvedUrls.local[0]);
+    url.searchParams.set('material', material);
+    await page.goto(url.href);
+    await page.locator('.redeven-flower-topbar-button').click();
+    await page.evaluate(() => window.navigationFixture.releaseRuntime());
+    await page.locator('[data-thread-id="navigation-thread"] .flower-thread-card-select-button').click();
+    await page.locator('.flower-message-bubble-assistant p').first().waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(() => { window.densityComposer = document.querySelector('.flower-composer textarea'); });
+    for (const mode of ['light', 'dark']) {
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
+      await page.locator('button[aria-controls^="redeven-desktop-theme-picker-"]').click();
+      await page.locator(`.redeven-theme-picker__mode[id$="-${mode}"]`).click();
+      await page.locator(`[data-desktop-theme-preset="porcelain-${mode}"]`).click();
+      await page.locator('.redeven-theme-picker__close').click();
+      await page.locator('.flower-message-bubble-assistant p').first().click();
+      await page.getByRole('tooltip').waitFor({ state: 'hidden' });
       for (const zoom of [1, 1.25, 2]) {
         await app.evaluate(({ BrowserWindow }, zoom) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(zoom), zoom);
-        await page.evaluate(({ mode, material }) => {
-          document.documentElement.classList.toggle('dark', mode === 'dark');
-          document.documentElement.classList.toggle('light', mode === 'light');
-          document.documentElement.dataset.floeShellTheme = `porcelain-${mode}`;
-          document.documentElement.dataset.floeSurfaceStyle = material;
-        }, { mode, material });
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const metrics = await page.evaluate(() => {
           const paragraph = document.querySelector('.flower-message-bubble-assistant p');
@@ -72,7 +78,9 @@ try {
           const bounds = composer.getBoundingClientRect();
           const css = getComputedStyle(paragraph);
           return { root: getComputedStyle(document.documentElement).fontSize, font: css.fontFamily, size: css.fontSize, line: css.lineHeight,
-            weight: css.fontWeight, dpr: devicePixelRatio, visualScale: visualViewport.scale, width: innerWidth, height: innerHeight,
+            weight: css.fontWeight, color: css.color, background: getComputedStyle(document.body).backgroundColor,
+            shellTheme: document.documentElement.dataset.floeShellTheme, material: document.documentElement.dataset.floeSurfaceStyle,
+            composerShadow: getComputedStyle(composer).boxShadow, dpr: devicePixelRatio, visualScale: visualViewport.scale, width: innerWidth, height: innerHeight,
             header: document.querySelector('.flower-chat-header').getBoundingClientRect().height, composer: bounds.height,
             retained: window.densityComposer === composer.querySelector('textarea'),
             overflow: document.documentElement.scrollWidth > innerWidth,
@@ -82,6 +90,10 @@ try {
         report.cases.push({ mode, material, zoom: actualZoom, ...metrics });
         await page.screenshot({ path: path.join(output, `flower-${mode}-${material}-${zoom}.png`) });
         assert.equal(actualZoom, zoom);
+        assert.equal(metrics.shellTheme, `porcelain-${mode}`);
+        assert.equal(metrics.material, material);
+        const foregroundChannels = metrics.color.match(/[\d.]+/g).slice(0, 3).map(Number);
+        assert.ok(foregroundChannels.every(value => mode === 'dark' ? value > 150 : value < 100), metrics.color);
         assert.equal(metrics.root, '16px');
         assert.equal(metrics.size, '12px'); assert.equal(metrics.line, '20px'); assert.equal(metrics.weight, '400');
         assert.ok(metrics.font.includes('Inter Variable'));
@@ -90,6 +102,9 @@ try {
       }
     }
   }
+  const standard = report.cases.find(entry => entry.mode === 'light' && entry.material === 'standard' && entry.zoom === 1);
+  const soft = report.cases.find(entry => entry.mode === 'light' && entry.material === 'soft-neumorphic' && entry.zoom === 1);
+  assert.notEqual(standard.composerShadow, soft.composerShadow);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
   await page.locator('.redeven-flower-back-button').click();
   await page.screenshot({ path: path.join(output, 'welcome.png') });
