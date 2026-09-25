@@ -7759,6 +7759,7 @@ webSearch: model.web_search,
           aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}
         >
           <Show when={isComputerAssistanceInput(inputRequest())} fallback={<>
+          <Show when={!composerSurface}>
           <div class="flower-input-request-heading">
             <span class="flower-input-request-heading-icon" aria-hidden="true">
               <Clock class="flower-input-request-icon h-4 w-4" />
@@ -7767,7 +7768,8 @@ webSearch: model.web_search,
               <div class="flower-input-request-title">{chatCopyValue('inputRequestTitle', 'Waiting for your reply')}</div>
             </div>
           </div>
-          <div class="flower-input-request-questions">
+          </Show>
+          <div class="flower-input-request-questions" {...(composerSurface ? props.approvalScrollViewportProps : {})}>
             <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={visibleQuestions(inputRequest())} identity={(question) => JSON.stringify([selectedThreadID(), inputRequest().prompt_id, inputRequest().tool_id, question.id])}>
               {(question) => {
                 const selectedChoiceID = () => questionDraft(question().id).answer_kind === 'choice'

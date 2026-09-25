@@ -1,4 +1,5 @@
 import './codespaces.css';
+import './resource-header.css';
 import { For, Show, createSignal, type JSX } from 'solid-js';
 import { cn, useResizeObserver } from '@floegence/floe-webapp-core';
 import { RefreshIcon } from '@floegence/floe-webapp-core/icons';
@@ -19,29 +20,26 @@ export function CodespacesPageFrame(props: {
   const i18n = useI18n();
   return <div data-env-reload-state={props.reloadState ?? 'pending'} data-floe-reload-scroll="codespaces" {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('codespaces-page h-full min-h-0 overflow-auto', redevenSurfaceRoleClass('main'))}>
     <Panel class={cn('overflow-hidden', redevenSurfaceRoleClass('panelStrong'))} data-testid="codespaces-panel">
+      <header class="codespaces-header redeven-resource-header">
+        <h1>{i18n.t('codespaces.title')}</h1>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          {props.readiness}
+          <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={!props.onRefresh || props.refreshing}
+            aria-label={i18n.t('codespaces.actions.refresh')} title={i18n.t('codespaces.actions.refresh')}
+            aria-busy={props.refreshing ? 'true' : undefined} class={redevenSurfaceRoleClass('control')}>
+            <RefreshIcon class={cn('w-3.5 h-3.5 sm:mr-1', props.refreshing && 'animate-spin motion-reduce:animate-none')} />
+            <span class="hidden sm:inline">{i18n.t('codespaces.actions.refresh')}</span>
+          </Button>
+          <Button size="sm" variant="default" onClick={props.onCreate} disabled={!props.onCreate}
+            aria-label={i18n.t('codespaces.actions.newCodespace')} title={i18n.t('codespaces.actions.newCodespace')}>
+            <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            <span class="hidden sm:inline">{i18n.t('codespaces.actions.newCodespace')}</span>
+          </Button>
+        </div>
+      </header>
       <PanelContent class="codespaces-content p-4 space-y-4">
-        <header class="codespaces-header flex items-start justify-between gap-4">
-          <div class="space-y-1">
-            <div class="text-[length:var(--floe-type-heading)] leading-[1.375rem] font-medium">{i18n.t('codespaces.title')}</div>
-            <div class="codespaces-description text-xs text-muted-foreground">{i18n.t('codespaces.description')}</div>
-          </div>
-          <div class="flex items-center gap-2 flex-shrink-0">
-            {props.readiness}
-            <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={!props.onRefresh || props.refreshing}
-              aria-label={i18n.t('codespaces.actions.refresh')} title={i18n.t('codespaces.actions.refresh')}
-              aria-busy={props.refreshing ? 'true' : undefined} class={redevenSurfaceRoleClass('control')}>
-              <RefreshIcon class={cn('w-3.5 h-3.5 sm:mr-1', props.refreshing && 'animate-spin motion-reduce:animate-none')} />
-              <span class="hidden sm:inline">{i18n.t('codespaces.actions.refresh')}</span>
-            </Button>
-            <Button size="sm" variant="default" onClick={props.onCreate} disabled={!props.onCreate}
-              aria-label={i18n.t('codespaces.actions.newCodespace')} title={i18n.t('codespaces.actions.newCodespace')}>
-              <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              <span class="hidden sm:inline">{i18n.t('codespaces.actions.newCodespace')}</span>
-            </Button>
-          </div>
-        </header>
         {props.children}
       </PanelContent>
     </Panel>

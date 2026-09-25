@@ -14,11 +14,11 @@ import type { EnvAppTranslationKey } from './i18n/locales';
 import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS, REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS, resolveWorkbenchTextSelectionSurfaceTarget } from './workbench/surface/workbenchTextSelectionSurface';
 import { resolveWorkbenchWheelRouting } from './workbench/surface/workbenchInputRouting';
-import { adapter, deferred, liveBootstrap, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, deferred, inputRequest, liveBootstrap, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-function mountApprovals(count: number, options: { copy?: FlowerSurfaceProps['copy']; full?: boolean; command?: string; transformAction?: (action: FlowerApprovalAction, index: number) => FlowerApprovalAction } = {}) {
+function mountApprovals(count: number, options: { input?: ReturnType<typeof inputRequest>; copy?: FlowerSurfaceProps['copy']; full?: boolean; command?: string; transformAction?: (action: FlowerApprovalAction, index: number) => FlowerApprovalAction } = {}) {
   let snapshot = thread({
-    thread_id: 'approval-layout', status: 'waiting_approval',
+    thread_id: 'approval-layout', status: options.input ? 'waiting_user' : 'waiting_approval', input_request: options.input,
     approval_actions: Array.from({ length: count }, (_, index) => ({
       action_id: `approval-${index}`, turn_id: 'turn-fixture', origin: 'main_tool' as const, run_id: 'run-layout',
       tool_id: `tool-${index}`, tool_name: 'terminal.exec', state: 'requested' as const,
@@ -337,4 +337,38 @@ it('marks only the constrained approval list for selected Workbench scrolling an
   for (const button of fixture.mount.querySelectorAll<HTMLButtonElement>('.flower-approval-surface button')) {
     expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   }
+});
+
+it('bounds reply choices in the published companion and preserves them through collapse', async () => {
+  await page.viewport(1280, 600);
+  const fixture = mountApprovals(0, { input: inputRequest({ questions: [{ id: 'review', header: 'Review project', question: 'Choose the next project to inspect.', response_mode: 'select',
+    choices: Array.from({ length: 12 }, (_, index) => ({ choice_id: `project-${index}`, value: `project-${index}`, label: `Project ${index}`, description: 'Inspect the implementation and summarize the findings.', kind: 'select' })) }] }) });
+  await waitFor(() => fixture.phase() === 'expanded' && Boolean(fixture.mount.querySelector('.flower-input-request-choice')));
+  const shell = fixture.mount.querySelector<HTMLElement>('[data-floe-bottom-bar-companion]')!;
+  const surface = shell.querySelector<HTMLElement>('.flower-input-request-surface')!;
+  const first = surface.querySelector<HTMLElement>('.flower-input-request-choice')!;
+  await userEvent.click(first);
+  const scroll = surface.querySelector<HTMLElement>('.flower-input-request-questions')!;
+  for (const width of [1280, 320]) {
+    await page.viewport(width, 600);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    for (const button of shell.querySelectorAll('.flower-input-request-actions button')) {
+      expect(button.getBoundingClientRect().bottom).toBeLessThanOrEqual(shell.getBoundingClientRect().bottom);
+    }
+    expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth);
+    scroll.scrollTop = scroll.scrollHeight;
+    expect(scroll.scrollTop).toBeGreaterThan(0);
+  }
+  await page.viewport(1280, 600);
+  fixture.setOpen(false);
+  await waitFor(() => fixture.phase() === 'collapsed');
+  expect(first.getClientRects().length).toBe(0);
+  fixture.setOpen(true);
+  await waitFor(() => fixture.phase() === 'expanded');
+  expect(surface.querySelector('.flower-input-request-choice')).toBe(first);
+  expect(first.querySelector('[role="radio"]')?.getAttribute('aria-checked')).toBe('true');
+  fixture.mount.setAttribute('data-redeven-workbench-widget-root', 'true');
+  fixture.mount.setAttribute('data-redeven-workbench-widget-id', 'reply-widget');
+  expect(resolveWorkbenchWheelRouting({ target: scroll, disablePanZoom: false, selectedWidgetId: 'reply-widget' }).kind).toBe('local_surface');
+  expect(resolveWorkbenchWheelRouting({ target: scroll, disablePanZoom: false, selectedWidgetId: null }).kind).toBe('canvas_zoom');
 });

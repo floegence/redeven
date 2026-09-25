@@ -12,10 +12,8 @@
 .codespaces-page { container: codespaces / inline-size; }
 .codespace-details-toggle { display: none; }
 @container codespaces (width < 768px) {
-  .codespaces-content { padding: 0 12px 12px; }
-  .codespaces-header { align-items: center; gap: 8px; min-height: 56px; }
-  .codespaces-description { display: none; }
-  .codespaces-header button { min-width: 44px; min-height: 44px; }
+  .codespaces-content { padding: 12px; }
+
   .codespaces-header button > span { display: none; }
   .codespaces-header button > svg { margin: 0; }
   .codespaces-grid { grid-template-columns: minmax(0, 1fr); }
