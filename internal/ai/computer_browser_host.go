@@ -22,7 +22,11 @@ import (
 	"github.com/floegence/redeven/internal/browserstore"
 )
 
-const browserHostProtocolVersion = 1
+const (
+	browserHostProtocolVersion       = 1
+	browserProjectionProtocolVersion = 23
+	browserMediaWireVersion          = 1
+)
 
 // Explicit startup CDP configuration follows the same source owner as pages
 // connected later through the product UI. It cannot fall back to a page helper.
@@ -176,7 +180,7 @@ func startBrowserSourceHost(ctx context.Context, node, helper string, handlers b
 				Media   int    `json:"media_wire_version"`
 				Error   string `json:"error"`
 			}
-			if json.Unmarshal(line, &response) != nil || response.Type != "ready" || response.Version != browserHostProtocolVersion || response.Browser != 22 || response.Media != 1 || response.Error != "" {
+			if json.Unmarshal(line, &response) != nil || response.Type != "ready" || response.Version != browserHostProtocolVersion || response.Browser != browserProjectionProtocolVersion || response.Media != browserMediaWireVersion || response.Error != "" {
 				err = errors.New("browser host protocol mismatch")
 			}
 		}
