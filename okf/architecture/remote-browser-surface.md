@@ -130,11 +130,15 @@ same authorized Flowersec Session, including Unicode text insertion.
 The viewer keeps at most three complete inert tab documents for immediate visual
 feedback. The selected preview remains painted while its replacement prepares
 offscreen, and swaps only after styles and layout settle. An uncached selection
-hides the preceding page immediately. Cached presentation grants no input: only fresh source selection,
+keeps the outgoing painted document inert until its replacement is ready,
+including first visits and cache eviction. Cached presentation grants no input: only fresh source selection,
 control admission and a complete current document enable page interaction.
 Background URL changes, removed directory grants and disconnect evict caches.
 Only browsers with state-preserving DOM moves retain iframe documents; other
-engines rebuild without claiming a cached-display latency result.
+engines retain the outgoing document in place during preparation and dispose it
+after replacement. Page title changes do not invalidate a document. The same
+continuity contract applies to observers and controllers; source URL changes and
+revocation still invalidate the corresponding presentation.
 
 # Boundaries
 
@@ -170,7 +174,8 @@ is input evidence, not proof that a third-party verification challenge passes.
 - `redeven:desktop/src/main/browserProjectionWindows.test.ts` - Exact static-document loading without environment API authority.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.ts` - Environment-owned window, source replacement and private control admission.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.test.ts` - Grant/token ordering, immediate revocation and stale selection rejection.
-- [FloeBrowser v0.1.16: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.16/src/viewer/replay-pages.ts) — Bounded inert document retention.
+- [FloeBrowser v0.1.17: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.17/src/viewer/replay-pages.ts) — Bounded inert document retention.
+- [FloeBrowser v0.1.17: test/tab-continuity.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.17/test/tab-continuity.e2e.ts) — Per-frame cold, warm, evicted and renamed tab continuity across three engines and both input roles.
 - [FloeBrowser v0.1.16: test/tab-cache.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.16/test/tab-cache.e2e.ts) — Immediate presentation without stale input authority.
 
 - [FloeBrowser v0.1.13: test/browser-menu.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.13/test/browser-menu.e2e.ts) — Address-row actions, activation, focus, narrow bounds and late completion.

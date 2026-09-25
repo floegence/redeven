@@ -76,6 +76,9 @@ try {
   });
   await request('PUT', '/_redeven_proxy/api/ai/default_permission', { permission_type: 'full_access' });
   await request('PUT', '/_redeven_proxy/api/ai/computer_use', { enabled: true });
+  // Explicit setup clears only a prior failed handshake, making reruns use the
+  // same prepared-but-disconnected starting point without granting any tab.
+  await request('POST', '/_redeven_proxy/api/ai/computer/extension/setup');
   if (process.env.REDEVEN_COMPUTER_SURFACE === 'env') {
     const opened = await welcome.evaluate(() => window.redevenDesktopLauncher.performAction({ kind: 'open_local_environment', environment_id: 'local', route: 'local_host' }));
     assert(opened.ok, 'Env App must open through its actual Desktop route');
@@ -91,6 +94,7 @@ try {
   assert.equal(calls, 1); assert.equal((await request('GET', `/_redeven_proxy/api/ai/computer/target?thread_id=${threadID}`)).target_id, '');
   await page.getByRole('button', { name: 'Connect Chrome', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Connect Chrome', exact: true });
+  await dialog.getByRole('button', { name: 'Back', exact: true }).click();
   await dialog.getByRole('button', { name: 'Open Chrome extensions', exact: true }).waitFor();
   assert.equal(await dialog.getByRole('textbox').count(), 0, 'technical paths stay collapsed');
   await page.waitForFunction(() => {
@@ -120,7 +124,12 @@ try {
   const previousManifest = JSON.parse(await readFile(path.join(previousExtension, 'manifest.json'), 'utf8'));
   previousManifest.version = '1.0.0';
   await writeFile(path.join(previousExtension, 'manifest.json'), JSON.stringify(previousManifest));
-  const previousWorker = (await readFile(path.join(previousExtension, 'background.mjs'), 'utf8')).replaceAll('protocol_version === 6', 'protocol_version === 5').replaceAll('protocol_version: 6', 'protocol_version: 5');
+  const workerSource = await readFile(path.join(previousExtension, 'background.mjs'), 'utf8');
+  const hello = /type: 'hello', protocol_version: (\d+),/u;
+  const currentProtocol = Number(hello.exec(workerSource)?.[1]);
+  assert(Number.isInteger(currentProtocol) && currentProtocol > 1, 'the historical fixture must replace the current hello protocol');
+  const previousWorker = workerSource.replace(hello, `type: 'hello', protocol_version: ${currentProtocol - 1},`);
+  assert.notEqual(previousWorker, workerSource, 'the outdated-extension fixture must actually be incompatible');
   await writeFile(path.join(previousExtension, 'background.mjs'), previousWorker);
   await installChromeExtensionThroughUI(personal, previousExtension, setup.extension_id, ['Redeven', path.basename(previousExtension)]);
   const existing = await personal.newPage(); await existing.goto(origin); await existing.getByRole('textbox').fill('keep my unfinished work');
@@ -129,13 +138,14 @@ try {
   const outdatedPopup = await personal.newPage(); await outdatedPopup.goto(`chrome-extension://${setup.extension_id}/popup.html#${nativeHost}`);
   await outdatedPopup.locator('#connect-button').click();
   await wait(async () => (await request('GET', '/_redeven_proxy/api/ai/computer/extension/status')).error === 'extension_update_required', 'Runtime rejection of the outdated extension');
-  await dialog.getByText('Update extension', { exact: true }).waitFor();
+  await dialog.locator('[aria-current=step]').filter({ hasText: 'Update extension' }).waitFor();
   assert.equal(calls, 1, 'an incompatible extension must not continue the pending task');
   assert.equal((await request('GET', '/_redeven_proxy/api/ai/computer/extension/status')).profiles.length, 0);
   await page.screenshot({ path: path.join(output, 'chrome-update-guide.png') });
   const installation = await installChromeExtensionThroughUI(personal, extension, setup.extension_id, setup.extension_home_path, '1.0.0');
   await installation.screenshot({ path: path.join(output, 'chrome-installed.png') });
   const popup = await personal.newPage(); await popup.goto(`chrome-extension://${setup.extension_id}/popup.html#${nativeHost}`);
+  const originalTabs = new Set(await popup.evaluate(async () => (await chrome.tabs.query({})).map(tab => String(tab.id))));
   await popup.locator('#connect-button').click();
   await wait(async () => (await request('GET', '/_redeven_proxy/api/ai/computer/extension/status')).profiles.length === 1, 'real Native Messaging connection');
   await wait(() => release || providerFailure, 'task navigation'); if (providerFailure) throw providerFailure;
@@ -144,7 +154,11 @@ try {
   assert.equal(target.kind, 'browser.connected'); assert(!selected.startsWith('managed-'));
   assert.equal(await existing.getByRole('textbox').inputValue(), 'keep my unfinished work');
   const tabs = await request('GET', `/_redeven_proxy/api/ai/computer/extension/tabs?profile_id=${(await request('GET', '/_redeven_proxy/api/ai/computer/extension/status')).profiles[0].id}`);
-  const taskTab = tabs.find(value => selected.endsWith(`-${value.id}`)); assert(taskTab && taskTab.url === origin + '/');
+  // Product target IDs are opaque. Verify the new native page against the
+  // pre-connection inventory, then require Reveal to activate that exact page.
+  const newTabs = tabs.filter(value => !originalTabs.has(value.id));
+  assert.equal(newTabs.length, 1, 'connection continuation must create exactly one independent task tab');
+  const taskTab = newTabs[0]; assert.equal(taskTab.url, origin + '/');
   await openComputerStage(page); await wait(() => page.locator('.flower-computer-stage img').evaluateAll(images => images.some(img => img.naturalWidth > 0)), 'visible system-browser pixels');
   await page.getByRole('button', { name: 'View in browser', exact: true }).click();
   const worker = personal.serviceWorkers().find(value => value.url().endsWith('/background.mjs'));
@@ -155,6 +169,9 @@ try {
   assert.equal(calls, 6); assert.equal(await existing.getByRole('textbox').inputValue(), 'keep my unfinished work');
   await writeFile(path.join(output, 'system-browser.json'), JSON.stringify({ surface: process.env.REDEVEN_COMPUTER_SURFACE || 'desktop', source: target.kind, canonicalConnection: true, incompatibleExtensionRejected: true, updateGuideShown: true, oldInstallationReplaced: true, firstInstallThroughVisibleUI: true, sandboxEnabled: true, automaticContinuation: true, nativeMessaging: true, independentTaskTab: true, originalFormPreserved: true, visiblePixels: true, revealExactPage: true, completed: true }, null, 2));
   console.log('System-browser connection, independent task tab, Stage, reveal and verification passed.');
+} catch (error) {
+  await page.screenshot({ path: path.join(output, 'system-browser-failure.png') }).catch(() => undefined);
+  throw error;
 } finally {
   release?.();
   if (threadID) await request('DELETE', `/_redeven_proxy/api/ai/threads/${threadID}?force=true`).catch(() => undefined);

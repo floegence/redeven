@@ -15,7 +15,8 @@ export const messages = {
     "runtime_unavailable": "The environment connection ended. Keep the environment running, then click Connect in Chrome in Flower.",
     "extension_update_required": "The extension needs an update. Follow Update extension in Flower to load the current folder.",
     "connection_timeout": "The environment did not respond. Keep it running and try connecting again.",
-    "updateExtension": "Update extension"
+    "updateExtension": "Update extension",
+    "connecting": "Connecting…"
   },
   "zh-CN": {
     "intro": "将此 Chrome 配置连接到 Flower。Flower 会使用独立任务标签页，并遵循对话中的权限设置。首次连接成功后，此配置会自动重新连接到同一环境。点击“断开连接”可关闭自动重连。",
@@ -32,7 +33,8 @@ export const messages = {
     "runtime_unavailable": "环境连接已断开。确保环境正在运行，再在 Flower 中点击「前往 Chrome 连接」。",
     "extension_update_required": "扩展需要更新。请按 Flower 中「更新扩展」的步骤加载当前文件夹。",
     "connection_timeout": "环境没有响应。确保环境正在运行后重新连接。",
-    "updateExtension": "更新扩展"
+    "updateExtension": "更新扩展",
+    "connecting": "正在连接…"
   },
   "zh-TW": {
     "intro": "將此 Chrome 設定檔連線至 Flower。Flower 會使用獨立工作分頁，並遵循對話中的權限設定。首次連線成功後，此設定檔會自動重新連線至同一環境。按一下「中斷連線」即可關閉自動重連。",
@@ -49,7 +51,8 @@ export const messages = {
     "runtime_unavailable": "環境連線已中斷。確認環境正在執行，再於 Flower 中點選「前往 Chrome 連線」。",
     "extension_update_required": "擴充功能需要更新。請依 Flower 中「更新擴充功能」的步驟載入目前的資料夾。",
     "connection_timeout": "環境沒有回應。確認環境正在執行後重新連線。",
-    "updateExtension": "更新擴充功能"
+    "updateExtension": "更新擴充功能",
+    "connecting": "正在連線…"
   },
   "ja-JP": {
     "intro": "この Chrome プロファイルを Flower に接続します。Flower は専用タブを使用し、会話の権限設定に従います。接続後は、同じ環境に自動で再接続します。「切断」で自動再接続を無効にできます。",
@@ -66,7 +69,8 @@ export const messages = {
     "runtime_unavailable": "環境との接続が切れました。環境を起動した状態で、Flower の「Chrome で接続」をクリックしてください。",
     "extension_update_required": "拡張機能の更新が必要です。Flower の「拡張機能を更新」に従って現在のフォルダを読み込んでください。",
     "connection_timeout": "環境が応答しませんでした。環境を起動した状態で接続し直してください。",
-    "updateExtension": "拡張機能を更新"
+    "updateExtension": "拡張機能を更新",
+    "connecting": "接続中…"
   },
   "ko-KR": {
     "intro": "이 Chrome 프로필을 Flower에 연결합니다. Flower는 별도 작업 탭을 사용하며 대화의 권한 설정을 따릅니다. 연결된 후에는 같은 환경에 자동으로 다시 연결됩니다. 연결을 해제하면 자동 재연결이 꺼집니다.",
@@ -83,7 +87,8 @@ export const messages = {
     "runtime_unavailable": "환경 연결이 종료되었습니다. 환경을 실행한 상태에서 Flower의 ‘Chrome에서 연결’을 클릭하세요.",
     "extension_update_required": "확장 프로그램 업데이트가 필요합니다. Flower의 ‘확장 프로그램 업데이트’ 안내에 따라 현재 폴더를 로드하세요.",
     "connection_timeout": "환경이 응답하지 않았습니다. 환경을 실행한 상태에서 다시 연결하세요.",
-    "updateExtension": "확장 프로그램 업데이트"
+    "updateExtension": "확장 프로그램 업데이트",
+    "connecting": "연결 중…"
   },
   "fr-FR": {
     "intro": "Connectez ce profil Chrome à Flower. Flower utilisera un onglet dédié et respectera les autorisations de votre conversation. Une fois connecté, ce profil se reconnecte automatiquement au même environnement. Déconnectez-le pour désactiver cette fonction.",
@@ -100,7 +105,8 @@ export const messages = {
     "runtime_unavailable": "La connexion à l’environnement est terminée. Gardez l’environnement actif, puis cliquez sur « Connecter dans Chrome » dans Flower.",
     "extension_update_required": "L’extension doit être mise à jour. Suivez « Mettre à jour l’extension » dans Flower pour charger le dossier actuel.",
     "connection_timeout": "L’environnement n’a pas répondu. Gardez-le actif et réessayez de vous connecter.",
-    "updateExtension": "Mettre à jour l’extension"
+    "updateExtension": "Mettre à jour l’extension",
+    "connecting": "Connexion…"
   },
   "de-DE": {
     "intro": "Verbinden Sie dieses Chrome-Profil mit Flower. Flower verwendet einen eigenen Tab und beachtet die Berechtigungen Ihrer Unterhaltung. Nach der ersten Verbindung verbindet sich dieses Profil automatisch erneut mit derselben Umgebung. Trennen Sie die Verbindung, um dies zu deaktivieren.",
@@ -117,7 +123,8 @@ export const messages = {
     "runtime_unavailable": "Die Verbindung zur Umgebung wurde beendet. Lassen Sie die Umgebung laufen und klicken Sie in Flower auf „In Chrome verbinden“.",
     "extension_update_required": "Die Erweiterung muss aktualisiert werden. Folgen Sie „Erweiterung aktualisieren“ in Flower und laden Sie den aktuellen Ordner.",
     "connection_timeout": "Die Umgebung antwortet nicht. Lassen Sie sie laufen und versuchen Sie die Verbindung erneut.",
-    "updateExtension": "Erweiterung aktualisieren"
+    "updateExtension": "Erweiterung aktualisieren",
+    "connecting": "Verbindung wird hergestellt…"
   },
   "es-ES": {
     "intro": "Conecta este perfil de Chrome a Flower. Flower usará una pestaña independiente y respetará los permisos de tu conversación. Una vez conectado, este perfil volverá a conectarse automáticamente al mismo entorno. Desconéctalo para desactivar esta función.",
@@ -134,7 +141,8 @@ export const messages = {
     "runtime_unavailable": "La conexión con el entorno ha finalizado. Mantén el entorno en ejecución y haz clic en «Conectar en Chrome» en Flower.",
     "extension_update_required": "La extensión necesita una actualización. Sigue «Actualizar extensión» en Flower para cargar la carpeta actual.",
     "connection_timeout": "El entorno no ha respondido. Mantenlo en ejecución e intenta conectar de nuevo.",
-    "updateExtension": "Actualizar extensión"
+    "updateExtension": "Actualizar extensión",
+    "connecting": "Conectando…"
   },
   "pt-BR": {
     "intro": "Conecte este perfil do Chrome ao Flower. O Flower usará uma aba separada e seguirá as permissões da sua conversa. Após a conexão, este perfil se reconecta automaticamente ao mesmo ambiente. Desconecte para desativar essa função.",
@@ -151,7 +159,8 @@ export const messages = {
     "runtime_unavailable": "A conexão com o ambiente foi encerrada. Mantenha o ambiente em execução e clique em “Conectar no Chrome” no Flower.",
     "extension_update_required": "A extensão precisa ser atualizada. Siga “Atualizar extensão” no Flower para carregar a pasta atual.",
     "connection_timeout": "O ambiente não respondeu. Mantenha-o em execução e tente conectar novamente.",
-    "updateExtension": "Atualizar extensão"
+    "updateExtension": "Atualizar extensão",
+    "connecting": "Conectando…"
   },
   "ru-RU": {
     "intro": "Подключите этот профиль Chrome к Flower. Flower будет использовать отдельную вкладку и соблюдать разрешения вашей беседы. После подключения профиль будет автоматически подключаться к той же среде повторно. Нажмите «Отключить», чтобы отключить эту функцию.",
@@ -168,6 +177,7 @@ export const messages = {
     "runtime_unavailable": "Соединение с окружением прервано. Оставьте окружение запущенным и нажмите «Подключить в Chrome» в Flower.",
     "extension_update_required": "Расширение нужно обновить. Следуйте шагу «Обновить расширение» в Flower, чтобы загрузить текущую папку.",
     "connection_timeout": "Окружение не ответило. Оставьте его запущенным и повторите подключение.",
-    "updateExtension": "Обновить расширение"
+    "updateExtension": "Обновить расширение",
+    "connecting": "Подключение…"
   }
 };

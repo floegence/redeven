@@ -75,7 +75,10 @@ archive (`REDEVEN_BROWSER_TEST_PACKAGE`) and verified installed package
 (`REDEVEN_BROWSER_TEST_INSTALLATION`) after the Env App build. It checks pinned
 hash, size, marker and executable version, stages the published helper resources,
 and executes Runtime, storage/installation, API, UI and real Chrome/Electron
-projection cases. A skipped required test, zero assertions, missing required
+projection cases. Extension coverage includes the real Runtime Native Messaging
+bridge, incompatible-version rejection, popup progress and recovery actions,
+and the shared connection guide. Historical extension fixtures must verify that
+they actually changed the current handshake protocol. A skipped required test, zero assertions, missing required
 case or file-load failure rejects qualification. Evidence includes counts,
 source identity, dependency version and projection records. The computer
 execution gate reuses this same entry point; a missing fixture fails explicitly.

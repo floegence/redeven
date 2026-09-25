@@ -348,7 +348,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       await worker.evaluate(() => fixtureWait('hello'));
       await worker.evaluate(() => fixtureDeliver({ type: 'connection_error', code: 'extension_update_required' }));
       await popup.locator('#repair').waitFor({ state: 'visible' });
-      await popup.locator('#connect-button').waitFor({ state: 'visible' });
+      await popup.locator('#connect-button').waitFor({ state: 'hidden' });
       await worker.evaluate(async () => {
         fixtureResponses.length = 0;
         await chrome.alarms.create('redeven-native-reconnect', { when: Date.now() });
