@@ -57,7 +57,7 @@ export function DesktopFlowerRuntimeBoundary(props: {
     <div class="flex h-full min-h-0 items-center justify-center p-8" data-flower-runtime-blocker={blocked().code}>
       <div class="w-full max-w-lg space-y-4 rounded-xl border border-border/60 bg-background p-6" role="status" aria-live="polite">
         <h2 class="text-lg font-semibold">{props.i18n.t(blocked().code === 'desktop_update_required' ? 'flowerRuntime.desktopTitle' : 'flowerRuntime.runtimeTitle')}</h2>
-        <p class="text-sm leading-6 text-muted-foreground">{props.i18n.t(blocked().code === 'desktop_update_required' ? 'flowerRuntime.desktopDetail' : 'flowerRuntime.runtimeDetail')}</p>
+        <p class="text-[length:var(--floe-type-body)] leading-[var(--floe-line-body)] text-muted-foreground">{props.i18n.t(blocked().code === 'desktop_update_required' ? 'flowerRuntime.desktopDetail' : 'flowerRuntime.runtimeDetail')}</p>
         <p class="break-all font-mono text-xs text-muted-foreground">{props.i18n.t('flowerRuntime.connectedBuild', { version: props.snapshot?.runtime_version || '—', commit: props.snapshot?.runtime_commit?.slice(0, 12) || '—' })}</p>
         <div class="flex flex-wrap gap-2">
           <Button disabled={pending()} onClick={() => void recover()}>{props.i18n.t(blocked().code === 'desktop_update_required' ? 'environmentAction.updateRedevenDesktop' : 'environmentAction.updateRuntime')}</Button>

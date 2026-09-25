@@ -148,7 +148,7 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
           <Show when={props.snapshot.state === 'recovering'}>
             <div class="floe-window-status__activity" data-recovery-activity>
               <p class="floe-window-status__label">{i18n.t('connectionRecovery.automaticRetry')}</p>
-              <div class="flex items-center justify-center gap-2.5 text-sm font-medium text-foreground" role="timer" aria-live="off">
+              <div class="flex items-center justify-center gap-2.5 text-[length:var(--floe-type-body)] font-medium text-foreground" role="timer" aria-live="off">
                 <span class="tabular-nums" data-floe-progress-shimmer={!offline() && retryRemainingSeconds() === 0 ? 'text' : undefined}>{retryRemainingSeconds() > 0
                   ? i18n.t('connectionRecovery.retryIn', { seconds: retryRemainingSeconds() })
                   : props.snapshot.phase === 'secure_session'

@@ -57,6 +57,7 @@ it.each([390, 1440].flatMap(width => (['en-US', 'zh-CN'] as const).map(locale =>
     const description = document.getElementById(dialog.getAttribute('aria-describedby')!)!;
     expect(header.textContent).toBe(title);
     expect(description.parentElement).toBe(body);
+    expect(getComputedStyle(description).fontSize).toBe('12px');
     expect(body.children).toHaveLength(1);
     expect(description.textContent).toContain(locale === 'zh-CN' ? '应用窗口和未保存的工作会保留。' : 'Its windows and unsaved work stay open.');
     expect(description.getBoundingClientRect().top).toBeGreaterThan(header.getBoundingClientRect().bottom);

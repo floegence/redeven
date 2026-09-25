@@ -1238,16 +1238,16 @@ describe('EnvPortForwardsPage', () => {
     expect(inputShell?.className).toContain('flex-1');
   });
 
-  it('keeps header actions beside a readable description and places the address icon in the input', async () => {
+  it('keeps the header limited to identity and actions and places the address icon in the input', async () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    const header = host.querySelector<HTMLElement>('[data-testid="web-services-panel"] > div');
-    const description = header?.querySelector('p');
+    const header = host.querySelector<HTMLElement>('header[data-testid="web-services-panel"]');
     const inputShell = host.querySelector<HTMLElement>('[data-testid="web-service-address-input-shell"]');
 
     expect(header?.className).not.toContain('flex-wrap');
-    expect(description?.className).not.toContain('truncate');
+    expect(header?.querySelector('h1')?.textContent).toBe('Web Services');
+    expect(header?.querySelector('p')).toBeNull();
     expect(host.querySelector('#web-service-address-label')).toBeNull();
     expect(inputShell?.className).toContain('relative');
     expect(host.querySelector<HTMLInputElement>('[data-testid="web-service-address-input"]')?.className).toContain('pl-10');

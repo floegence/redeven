@@ -196,7 +196,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                       <Show when={ctx.settings.error}>
                         <div class="flex items-start gap-2.5 p-4 rounded-lg bg-destructive/10 border border-destructive/20 mb-6">
                           <div class="w-1 h-full min-h-4 rounded-full bg-destructive/60 flex-shrink-0" />
-                          <div class="text-sm text-destructive">
+                          <div class="text-[length:var(--floe-type-body)] text-destructive">
                             {ctx.settings.error instanceof Error ? ctx.settings.error.message : String(ctx.settings.error)}
                           </div>
                         </div>

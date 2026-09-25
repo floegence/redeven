@@ -50,7 +50,7 @@ function WorkbenchBodyNotice(props: {
           <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">{props.eyebrow}</div>
         </Show>
         <div class="mt-2 text-base font-semibold text-foreground">{props.title}</div>
-        <p class="mt-2 text-sm leading-6 text-muted-foreground">{props.description}</p>
+        <p class="mt-2 text-[length:var(--floe-type-body)] leading-[var(--floe-line-body)] text-muted-foreground">{props.description}</p>
         <Show when={props.action}>
           <div class="mt-4 flex items-center gap-2">{props.action}</div>
         </Show>

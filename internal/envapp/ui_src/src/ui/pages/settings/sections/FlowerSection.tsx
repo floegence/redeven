@@ -405,7 +405,7 @@ export function FlowerSection() {
                     <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--redeven-status-info-soft)]">
                       <PermissionTypeIcon kind={kind} class="h-4 w-4 text-[var(--redeven-status-info)]" />
                     </div>
-                    <span class="text-sm font-semibold text-foreground">{copy().title}</span>
+                    <span class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{copy().title}</span>
                   </div>
                   <span class={cn('text-[11px] font-medium', permissionType() === kind ? 'text-success' : 'text-muted-foreground')}>
                     {permissionType() === kind ? i18n.t('flowerSettings.defaultPermissionBadge') : ''}
@@ -434,7 +434,7 @@ export function FlowerSection() {
       >
         <Show when={activeTab() !== 'health' && ['blocked', 'degraded'].includes(readinessController.snapshot().state)}>
           <div role="status" class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/40 bg-warning/10 p-4">
-            <span class="text-sm text-foreground">{readinessPresentation().title}</span>
+            <span class="text-[length:var(--floe-type-body)] text-foreground">{readinessPresentation().title}</span>
             <Button size="sm" variant="outline" onClick={() => setActiveTab('health')}>{i18n.t('settingsDesign.healthAndStorage')}</Button>
           </div>
         </Show>
@@ -446,7 +446,7 @@ export function FlowerSection() {
         <div hidden={activeTab() !== 'models'} data-flower-settings-panel="models" class="space-y-6">
         {/* Current model */}
         <div class="redeven-settings-choice redeven-settings-choice--selected-neutral rounded-xl border p-5">
-          <Show when={currentModelID() && !aiCurrentModelOption()}><p role="alert" class="mb-3 text-sm text-destructive">{modelCatalogCopy(i18n.locale()).unavailable}</p></Show>
+          <Show when={currentModelID() && !aiCurrentModelOption()}><p role="alert" class="mb-3 text-[length:var(--floe-type-body)] text-destructive">{modelCatalogCopy(i18n.locale()).unavailable}</p></Show>
           <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">{i18n.t('flowerSettings.currentModelTitle')}</div>
           <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
             <div class="flex min-w-0 flex-1 items-center gap-4">
@@ -456,8 +456,8 @@ export function FlowerSection() {
                 </Show>
               </div>
               <div class="min-w-0 flex-1">
-                <Show when={aiCurrentModelOption()} fallback={<div class="text-base font-semibold text-muted-foreground">{i18n.t('flowerSettings.noModelSelected')}</div>}>
-                  <div class="break-words text-base font-semibold text-foreground">{aiCurrentModelOption()!.label}</div>
+                <Show when={aiCurrentModelOption()} fallback={<div class="text-[0.8125rem] font-semibold text-muted-foreground">{i18n.t('flowerSettings.noModelSelected')}</div>}>
+                  <div class="break-words text-[0.8125rem] font-semibold text-foreground">{aiCurrentModelOption()!.label}</div>
                   <div class="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
                     <DotIndicator active label={i18n.t('flowerSettings.textCapability')} />
                     <Show when={aiCurrentModelOption()?.supportsImageInput}><DotIndicator active label={i18n.t('flowerSettings.imageInputCapability')} /></Show>
@@ -491,7 +491,7 @@ export function FlowerSection() {
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center justify-between gap-2">
                         <div class="flex items-center gap-2 min-w-0">
-                          <span class="text-sm font-semibold text-foreground truncate">{dn()}</span>
+                          <span class="text-[length:var(--floe-type-body)] font-semibold text-foreground truncate">{dn()}</span>
                           <span class="text-[11px] text-muted-foreground">{localizedProviderTypeLabel(provider.type, i18n.locale())}</span>
                           <Show when={isDef()}><span class="flex-shrink-0 rounded-full bg-[var(--redeven-settings-selection-bg)] px-1.5 py-px text-[10px] font-medium text-[var(--redeven-settings-selection-fg)]">{i18n.t('flowerSettings.activeProviderBadge')}</span></Show>
                         </div>

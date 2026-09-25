@@ -64,7 +64,7 @@ export function ContainerInventoryTableHeader(props: InventoryColumns & { sortKe
 export function ContainerInventorySkeleton(props: InventoryColumns & { header: JSX.Element }) {
   return <>
       <div class="container-resource-table-shell container-resource-table-shell--loading" data-container-resource-skeleton-table>
-        <table class="w-full text-left text-sm">
+        <table class="w-full text-left text-[length:var(--floe-type-body)]">
           {props.header}
           <tbody><For each={[0, 1, 2, 3, 4]}>{(row) => <tr data-container-skeleton-row aria-hidden="true">
             <td><div class="container-name-cell"><span class="container-skeleton container-skeleton--resource-icon" /><span class="container-skeleton container-skeleton--name" data-row={row % 3} /></div></td>

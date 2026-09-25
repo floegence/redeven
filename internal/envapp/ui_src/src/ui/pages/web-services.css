@@ -93,7 +93,7 @@
 
 [data-floe-dialog-panel].env-app-drawer-panel.service-management-panel { width: min(36rem, 100%); }
 [data-floe-dialog-overlay-root][data-floe-dialog-mode="surface"] [data-floe-dialog-panel].service-management-panel { width: min(36rem, 100%); }
-.service-management-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 4px; font-size: 13px; }
+.service-management-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 4px; font-size: var(--floe-type-body); }
 .service-management-section { display: grid; gap: 12px; }
 .service-management-section > h3, .service-management-section-heading h3 { font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
 .service-management-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
