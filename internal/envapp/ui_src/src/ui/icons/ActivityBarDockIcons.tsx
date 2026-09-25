@@ -76,10 +76,9 @@ export function ActivityBarPortsIcon(props: { class?: string }) {
 export function ActivityBarBrowserIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true" data-activity-bar-icon="floebrowser">
-      <rect x="3" y="4.5" width="18" height="15" rx="2.5" fill="currentColor" fill-opacity=".06" stroke="currentColor" stroke-opacity=".85" stroke-width="1.5" />
-      <path d="M3.75 9h16.5" stroke="currentColor" stroke-opacity=".5" stroke-width="1.25" />
-      <path d="M6.5 6.75h.01M9.5 6.75h.01" stroke="currentColor" stroke-opacity=".65" stroke-width="1.75" stroke-linecap="round" />
-      <path d="m10 16 5-4m-4 0h4v4" stroke="currentColor" stroke-opacity=".85" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      <circle cx="12" cy="12" r="8.25" fill="currentColor" fill-opacity=".04" stroke="currentColor" stroke-opacity=".85" stroke-width="1.5" />
+      <path d="m16.65 7.35-2.9 6.4-6.4 2.9 2.9-6.4Z" fill="currentColor" fill-opacity=".15" stroke="currentColor" stroke-opacity=".85" stroke-width="1.1" stroke-linejoin="round" />
+      <path d="m10.25 10.25 6.4-2.9-2.9 6.4Z" fill="currentColor" fill-opacity=".9" />
     </svg>
   );
 }
