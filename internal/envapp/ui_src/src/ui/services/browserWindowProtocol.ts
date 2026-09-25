@@ -1,3 +1,5 @@
+import { PROTOCOL_VERSION } from '@floegence/floebrowser/protocol';
+import { MEDIA_WIRE_VERSION } from '@floegence/floebrowser/media';
 import type { BrowserDocumentTheme } from './browserDocumentTheme';
 import type { BrowserFailureCode } from './browserWorkspaceController';
 import type { BrowserSourceMessages } from '../i18n/browserSourceMessages';
@@ -63,7 +65,7 @@ export type BrowserFileResult = Readonly<{ body: ArrayBuffer; contentType: strin
 export type BrowserDocumentResult = BrowserFileResult | BrowserSourceResult | string | number | readonly AddressSuggestion[] | undefined;
 
 export function browserDocumentURL(view: BrowserViewDescriptor | undefined, nonce: string): string {
-  if (view && (!/^browser-view-[A-Za-z0-9]+$/u.test(view.id) || view.protocol_version !== 22 || view.media_wire_version !== 1))
+  if (view && (!/^browser-view-[A-Za-z0-9]+$/u.test(view.id) || view.protocol_version !== PROTOCOL_VERSION || view.media_wire_version !== MEDIA_WIRE_VERSION))
     throw new Error('Browser version or identity unavailable');
   // A distinct document query forces a real navigation when replacing a source.
   // Fragment-only changes would retain the closed document and its stale ports.

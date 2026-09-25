@@ -158,7 +158,7 @@ func (r *ComputerUseRuntime) openBrowserViewLocked(ctx context.Context, meta *se
 	// its DOM carrier. The DOM stream owns the view lifetime once attached.
 	view.expiry = time.AfterFunc(time.Minute, func() { _ = view.close() })
 	context.AfterFunc(lifetime, func() { _ = view.close() })
-	return BrowserViewDescriptor{Generation: r.browserServiceSnapshot().Generation, ID: view.id, Protocol: 22, MediaProtocol: 1, ProfileID: view.profile, InitialTarget: view.initial, LibraryProfileID: view.libraryProfile}, nil
+	return BrowserViewDescriptor{Generation: r.browserServiceSnapshot().Generation, ID: view.id, Protocol: browserProjectionProtocolVersion, MediaProtocol: browserMediaWireVersion, ProfileID: view.profile, InitialTarget: view.initial, LibraryProfileID: view.libraryProfile}, nil
 }
 
 func (r *ComputerUseRuntime) browserView(meta *session.Meta, id string) (*browserView, error) {

@@ -22,7 +22,7 @@ afterEach(() => { windows?.close(); windows = undefined; release?.(); hosts.leng
 it('creates browser views through the active Session even when local HTTP has a different identity', async () => {
   const local = vi.fn(() => Promise.reject(new Error('Synthetic local-ui identity')));
   vi.stubGlobal('fetch', local);
-  const view = { generation: 'fixture-generation', id: 'browser-view-fixture', initial_target: 'first', protocol_version: 22, media_wire_version: 1 };
+  const view = { generation: 'fixture-generation', id: 'browser-view-fixture', initial_target: 'first', protocol_version: 23, media_wire_version: 1 };
   const session = vi.fn(async () => Response.json({ ok: true, data: view }));
   release = await bindTestSessionHTTP(session);
   await expect(openBrowserWorkspace({ managed_profile_id: 'browser-main' }, new AbortController().signal)).resolves.toEqual(view);
@@ -31,7 +31,7 @@ it('creates browser views through the active Session even when local HTTP has a 
 });
 
 it('replaces the document itself when selecting another source in the same window', () => {
-  const view = { generation: 'fixture-generation', id: 'browser-view-fixture', initial_target: 'first', protocol_version: 22, media_wire_version: 1 };
+  const view = { generation: 'fixture-generation', id: 'browser-view-fixture', initial_target: 'first', protocol_version: 23, media_wire_version: 1 };
   const first = new URL(browserDocumentURL(view, crypto.randomUUID()), location.origin);
   const next = new URL(browserDocumentURL(view, crypto.randomUUID()), location.origin);
   first.hash = ''; next.hash = '';
@@ -39,10 +39,20 @@ it('replaces the document itself when selecting another source in the same windo
   expect(first.pathname).toBe('/_redeven_proxy/env/browser/');
 });
 
+it.each([
+  { protocol_version: 22 },
+  { protocol_version: 24 },
+  { media_wire_version: 2 },
+  { id: 'browser-view-../other' },
+])('rejects incompatible browser documents before opening a view: %j', (invalid) => {
+  const view = { generation: 'fixture-generation', id: 'browser-view-fixture', initial_target: 'first', protocol_version: 23, media_wire_version: 1 };
+  expect(() => browserDocumentURL({ ...view, ...invalid }, 'fixture')).toThrow('Browser version or identity unavailable');
+});
+
 async function setupWindows() {
   let sequence = 0;
   const request = vi.fn(async (_path: RequestInfo | URL, init?: RequestInit) => Response.json({ ok: true, data: init?.method === 'DELETE' ? null : {
-    generation: 'generation', id: `browser-view-${++sequence}`, profile_id: 'browser-main', initial_target: 'selected-tab', protocol_version: 22, media_wire_version: 1,
+    generation: 'generation', id: `browser-view-${++sequence}`, profile_id: 'browser-main', initial_target: 'selected-tab', protocol_version: 23, media_wire_version: 1,
   } }));
   release = await bindTestSessionHTTP(request);
   const children: { close: ReturnType<typeof vi.fn>; location: { replace: ReturnType<typeof vi.fn> }; document: { title: string; body: { textContent: string } } }[] = [];

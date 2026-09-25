@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Remote browser presentation
-description: Present stable tab geometry and admit input only through current source authority.
+description: Present stable tab geometry and continuous input through current source authority.
 tags: [architecture, browser, ui, security]
 timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
 - Authority: released FloeBrowser owns document readiness, geometry and input fencing; the environment owner admits control through its private Runtime token.
-- Outcome: a first tab visit presents its settled geometry, with inert painted continuity during preparation and usable observer views when idle control is denied.
+- Outcome: a first tab visit presents its settled geometry, with inert painted continuity during preparation; transient hit-target changes preserve subsequent scrolling without rebuilding the document.
 - Invariants: host completion alone grants no input; source grants and responsive sizing precede presentation; cached documents never accept input.
 - Failure boundary: changed targets, revoked control and disconnected views cancel obsolete preparation; uncertain source input is never replayed. Websites retain their own admission decisions.
 
@@ -37,6 +37,18 @@ Repeated clicks on an already focused text field receive a fresh source focus
 confirmation and restore the visible native caret without replaying a click.
 Chrome and Electron product qualification exercises this behavior through the
 same authorized Flowersec Session, including Unicode text insertion.
+
+Pointer and wheel targets can move, disappear, be replaced or become covered
+between projection and dispatch. Published FloeBrowser reports these known
+no-effect cancellations as `target_changed`. It discards the gesture without
+retargeting or replaying it, without forcing a new snapshot, and without an
+interrupting warning. Subsequent input uses the current projected target.
+An invalid view epoch or a missing DOM sequence still requires snapshot recovery;
+authorization failures and uncertain source effects remain visible. Redeven must
+not suppress generic failures or add another input/recovery loop around the SDK.
+Source hosts and view descriptors require projection protocol 23 and media wire
+version 1. The document adapter validates against the published SDK constants;
+older or newer protocol versions fail before a view can receive input.
 
 ## Tab geometry and continuity
 
@@ -84,6 +96,8 @@ is input evidence, not proof that a third-party verification challenge passes.
 - `redeven:internal/envapp/ui_src/src/browserDocument.test.ts` - Idle admission ordering, absence of live-status reacquisition and cancellation of obsolete requests.
 - [FloeBrowser v0.1.14: test/input-focus.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/input-focus.e2e.ts) — Repeated source focus and native caret continuity.
 - [FloeBrowser v0.1.14: test/navigation-input.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/navigation-input.e2e.ts) — Input fencing through navigation admission and completion.
+- [FloeBrowser v0.1.19: test/target-change.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.19/test/target-change.e2e.ts) — Replaced, removed and covered targets cannot receive stale clicks or interrupt subsequent scrolling.
+- [FloeBrowser v0.1.19: test/input-recovery.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.19/test/input-recovery.e2e.ts) — Missing event sequences recover independently of target cancellation; current authorization and uncertain-effect failures remain visible.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.test.ts` - Grant/token ordering, immediate revocation and stale selection rejection.
 - [FloeBrowser v0.1.18: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.18/src/viewer/replay-pages.ts) — Bounded inert document retention.
 - [FloeBrowser v0.1.18: test/tab-sizing.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.18/test/tab-sizing.e2e.ts) — Per-frame source and viewer geometry across admission, cancellation, visibility and window-size changes.
