@@ -171,6 +171,30 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
                 assert.deepEqual(await editor.evaluate(element => [element.value, element.selectionStart, element.selectionEnd]), ['Retained draft 中文', 2, 7]);
               }
               await page.evaluate(() => { document.documentElement.style.transform = ''; });
+              // Physical Safari can retain document panning with an undersized
+              // visual viewport. The published document host owns its origin;
+              // coordinate compensation alone does not release that native pan.
+              await page.evaluate(height => {
+                document.body.style.minHeight = '2000px';
+                window.__setNavigationViewport({ height, offsetTop: 0 });
+                window.scrollTo({ top: 490, left: 0, behavior: 'instant' });
+              }, keyboardHeight);
+              await page.waitForFunction(() => window.scrollY === 0, undefined, { timeout: 2000 });
+              await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+              const normalizedHost = await geometry(page.locator('[data-floe-app-viewport]'));
+              const normalizedHeader = await geometry(page.locator('.flower-chat-header'));
+              const normalizedComposer = await geometry(page.locator('.flower-composer'));
+              const normalized = { cycle, phase: 'native-document-pan', host: normalizedHost, header: normalizedHeader,
+                composer: normalizedComposer, gap: normalizedHost.bottom - normalizedComposer.bottom,
+                documentScroll: await page.evaluate(() => window.scrollY) };
+              keyboard.push(normalized);
+              await writeFile(path.join(output, `${prefix}-keyboard.json`), JSON.stringify(keyboard, null, 2));
+              assert.ok(Math.abs(normalizedHeader.y) < 1 && Math.abs(normalized.gap - 12) < 1,
+                `document pan recovery must retain visible Flower geometry: ${JSON.stringify(normalized)}`);
+              assert.equal(await editor.evaluate(element => element === window.__drawerEditor && document.activeElement === element), true,
+                'document pan recovery must not dismiss the editor');
+              assert.deepEqual(await editor.evaluate(element => [element.value, element.selectionStart, element.selectionEnd]), ['Retained draft 中文', 2, 7]);
+              await page.evaluate(() => { document.body.style.minHeight = ''; });
               await editor.evaluate(element => element.blur());
               await page.evaluate(size => window.__setNavigationViewport(size), { ...viewport, offsetTop: 0 });
               await page.waitForFunction(height => {
