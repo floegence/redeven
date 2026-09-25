@@ -59,7 +59,7 @@ export function CodespaceCardFrame(props: {
     <CardHeader class="p-3 pb-1">
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
-          <CardTitle class="text-[length:var(--floe-type-body)] font-medium leading-5 truncate" title={typeof props.title === 'string' ? props.title : undefined}>{props.title}</CardTitle>
+          <CardTitle class="text-[0.8125rem] font-medium leading-5 truncate" title={typeof props.title === 'string' ? props.title : undefined}>{props.title}</CardTitle>
         </div>
         <div class="codespace-card-status flex h-5 shrink-0 items-center">{props.status}</div>
       </div>

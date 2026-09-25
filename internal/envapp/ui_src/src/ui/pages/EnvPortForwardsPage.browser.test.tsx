@@ -818,7 +818,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await update({ operation_id: 'mop-stable-band-stop', service_id: 'mws-stable-band', action: 'stop', state: 'running', stage: 'stopping', progress_current: 1, progress_total: 2 }, 'stopping');
     await update({ operation_id: 'mop-stable-band-stop', service_id: 'mws-stable-band', action: 'stop', state: 'succeeded', stage: 'completed', progress_current: 2, progress_total: 2 }, 'stopped');
 
-    expect(heights).toEqual([72, 72, 72, 72, 72, 72, 72]);
+    expect(heights).toEqual([64, 64, 64, 64, 64, 64, 64]);
 
     await page.viewport(720, 800);
     host.style.width = '680px';
