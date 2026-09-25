@@ -1,3 +1,4 @@
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { captureBrowserDocumentTheme } from '../services/browserDocumentTheme';
 import '../../styles/browserWorkspace.css';
 import { Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
@@ -71,10 +72,10 @@ export function FloeBrowserSurface(props: FloeBrowserSurfaceProps) {
       <iframe ref={frame} class="redeven-floebrowser-document" title={props.title}
         sandbox="allow-scripts allow-same-origin allow-downloads" referrerPolicy="no-referrer"
         allow="clipboard-read; clipboard-write" />
-      <Show when={loading() || failure()}>
-        <div class="redeven-floebrowser-page-loading" role={failure() ? 'alert' : 'status'}>
-          {failure() ? props.copy.unavailable : props.copy.connecting}
-        </div>
+      <RedevenLoadingCurtain visible={loading()} eyebrow={props.title} message={props.copy.connecting}
+        class="redeven-browser-loading-curtain" />
+      <Show when={failure()}>
+        <div class="redeven-floebrowser-page-failure" role="alert">{props.copy.unavailable}</div>
       </Show>
     </section>
   );

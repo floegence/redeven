@@ -1,3 +1,4 @@
+import '../../styles/loadingCurtain.css';
 import { Motion } from 'solid-motionone';
 import { Show, createMemo } from 'solid-js';
 

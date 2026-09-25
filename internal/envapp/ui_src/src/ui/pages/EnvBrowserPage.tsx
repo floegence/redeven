@@ -36,7 +36,7 @@ export function EnvBrowserPage(props: { onInteraction?(): void; onOpenWindow(req
   }, { defer: true }));
   onCleanup(() => { unsubscribe(); controller.close(); });
   return <div class="redeven-browser-page">
-    <Show when={state().view && protocol.session?.()} fallback={<Show when={!choosing()}><BrowserWorkspaceNotice state={state()} service={service} messages={sourceMessages()}
+    <Show when={state().view && protocol.session?.()} fallback={<Show when={!choosing()}><BrowserWorkspaceNotice title={i18n.t('shell.nav.remoteBrowser')} state={state()} service={service} messages={sourceMessages()}
       connected={Boolean(protocol.session?.())} retry={controller.reconnect} recover={controller.recover} chooseSource={() => setChoosing(true)} /></Show>}>
       <FloeBrowserSurface session={protocol.session!()!} view={state().view!} title={i18n.t('shell.nav.remoteBrowser')} locale={i18n.locale()} messages={messages()}
         sources={{ service, messages: sourceMessages(), current: { ...state().selection, label: label() }, select: controller.open }}

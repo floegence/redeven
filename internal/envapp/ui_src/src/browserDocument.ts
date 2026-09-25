@@ -138,7 +138,7 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
       void import('./browserSources').then(({ mountBrowserRecovery }) => {
         if (disposed || revision !== recoveryRevision) return;
         disposeRecovery?.();
-        disposeRecovery = mountBrowserRecovery({ state: { phase, failure: code, selection: sources.current }, service,
+        disposeRecovery = mountBrowserRecovery({ title: configuration.title, state: { phase, failure: code, selection: sources.current }, service,
           messages: sources.messages, connected: true,
           retry: async () => { await request({ method: 'workspace.retry' }); }, recover: async () => { await request({ method: 'workspace.recover' }); },
           chooseSource: () => { void chooseSource().catch(() => showFailure?.('BROWSER_OPEN_FAILED')); } });

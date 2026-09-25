@@ -1,4 +1,5 @@
 import { Show, createSignal } from 'solid-js';
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { FlowerManagedBrowser } from '../../../../../flower_ui/src/FlowerManagedBrowser';
 import type { BrowserSourceMessages } from '../i18n/browserSourceMessages';
@@ -23,6 +24,7 @@ export function browserFailureMessage(code: BrowserFailureCode | undefined, mess
 /** One recovery presentation for the embedded page and independent document. */
 export function BrowserWorkspaceNotice(props: {
   state: BrowserWorkspaceState;
+  title: string;
   messages: BrowserSourceMessages;
   service: BrowserSourceService;
   connected: boolean;
@@ -39,9 +41,10 @@ export function BrowserWorkspaceNotice(props: {
     setBusy(true);
     try { await action(); } catch { /* The view controller publishes the failure. */ } finally { setBusy(false); }
   };
-  return <section class="redeven-browser-notice" aria-busy={busy()}>
-    <div class="redeven-browser-notice-content">
-      <Show when={props.state.phase === 'failed'} fallback={<p role="status">{props.messages.computer.checking}</p>}>
+  return <section class="redeven-browser-notice" aria-busy={busy() || props.state.phase !== 'failed'}>
+    <Show when={props.state.phase === 'failed'} fallback={<RedevenLoadingCurtain visible
+      eyebrow={props.title} message={props.messages.computer.checking} class="redeven-browser-loading-curtain" />}>
+      <div class="redeven-browser-notice-content">
         <h2>{browserFailureMessage(props.state.failure, props.messages)}</h2>
         <Show when={setup()} fallback={<div class="redeven-browser-notice-actions">
           <Show when={props.state.failure === 'BROWSER_SERVICE_FAILED'} fallback={<Show when={canRetry()}><Button disabled={busy() || !props.connected} onClick={() => void run(props.retry)}>{props.messages.product.retry}</Button></Show>}>
@@ -54,8 +57,8 @@ export function BrowserWorkspaceNotice(props: {
             continuationKey={JSON.stringify(props.state.selection.request)} onContinue={async enabled => { if (enabled) await props.retry(); }} />
           <Button variant="ghost" onClick={props.chooseSource}>{props.messages.product.sources}</Button>
         </Show>
-      </Show>
-    </div>
+      </div>
+    </Show>
     <Show when={confirming()}><Dialog open title={props.messages.product.recover} closeLabel={props.messages.computer.close}
       bodyDescription={props.messages.product.recoveryDescription} onOpenChange={open => { if (!open) setConfirming(false); }}
       children={null} footer={<><Button variant="outline" onClick={() => setConfirming(false)}>{props.messages.computer.cancel}</Button>

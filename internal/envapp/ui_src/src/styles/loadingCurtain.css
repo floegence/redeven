@@ -1,0 +1,85 @@
+.redeven-loading-curtain {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 4vw, 3rem);
+  pointer-events: auto;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--background) 88%, transparent);
+  backdrop-filter: blur(1.5px);
+}
+
+.redeven-loading-curtain--page {
+  padding: clamp(1.5rem, 5vw, 4rem);
+  background: color-mix(in srgb, var(--background) 94%, transparent);
+}
+
+.redeven-loading-curtain--fullscreen {
+  position: fixed;
+  z-index: 50;
+}
+
+.redeven-loading-curtain--passive {
+  pointer-events: none;
+}
+
+.redeven-loading-curtain__panel {
+  width: min(24rem, 100%);
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 1rem;
+}
+
+.redeven-loading-curtain__eyebrow {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.redeven-loading-curtain__indicator {
+  width: 1.5rem;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 13%, transparent);
+  overflow: hidden;
+}
+
+.redeven-loading-curtain__indicator-bar {
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--muted-foreground);
+  animation: redeven-loading-curtain-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite;
+  will-change: transform;
+}
+
+@keyframes redeven-loading-curtain-sweep {
+  from {
+    transform: translateX(-120%);
+  }
+
+  to {
+    transform: translateX(260%);
+  }
+}
+
+.redeven-loading-curtain__message {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  font-weight: 480;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-loading-curtain__indicator-bar {
+    animation: none;
+    background: var(--muted-foreground);
+    width: 100%;
+  }
+}
