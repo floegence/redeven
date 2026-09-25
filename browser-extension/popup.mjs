@@ -13,23 +13,24 @@ let busy = false;
 function show(state) {
   if (!nativeHost && !supplied && validHost(state.nativeHost)) nativeHost = state.nativeHost;
   const connected = state.connected && state.nativeHost === nativeHost;
-  byID('status').textContent = state.error ? (copy[state.error] || copy.failed) : connected ? copy.connected : nativeHost ? copy.disconnected : copy.openFlower;
+  const updateRequired = state.error === 'extension_update_required';
+  byID('status').textContent = busy ? copy.connecting : state.error ? (copy[state.error] || copy.failed) : connected ? copy.connected : nativeHost ? copy.disconnected : copy.openFlower;
   byID('disconnect').hidden = !state.connected;
-  byID('repair').hidden = state.error !== 'extension_update_required';
-  byID('connect').hidden = connected;
+  byID('repair').hidden = !updateRequired;
+  byID('connect').hidden = connected || updateRequired;
   byID('connect-button').disabled = busy || !nativeHost;
   if (state.profileName && !byID('profile').value) byID('profile').value = state.profileName;
 }
 byID('connect').addEventListener('submit', async event => {
   event.preventDefault(); if (busy || !nativeHost) return;
-  busy = true; byID('connect-button').disabled = true;
+  busy = true; show({ connected: false });
   try {
     const state = await chrome.runtime.sendMessage({ command: 'connect', nativeHost, profileName: byID('profile').value.trim() || 'Chrome' });
     busy = false; show(state);
   } catch { busy = false; show({ error: true }); }
 });
 byID('disconnect').addEventListener('click', async () => show(await chrome.runtime.sendMessage({ command: 'disconnect' })));
-byID('repair').addEventListener('click', () => void chrome.tabs.create({ url: 'chrome://extensions/' }));
+byID('repair').addEventListener('click', () => void chrome.tabs.create({ url: `chrome://extensions/?id=${chrome.runtime.id}` }));
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (sender.id === chrome.runtime.id && message.type === 'connection_changed') {
     void chrome.runtime.sendMessage({ command: 'status' }).then(show).catch(() => show({ error: true }));

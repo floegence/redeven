@@ -209,7 +209,7 @@ for (const [locale, copy, platform] of [['en-US', computerUseEnUS, 'darwin'], ['
       expect(path.checkVisibility()).toBe(false);
       await page.viewport(390, 720);
       expect(dialog().scrollWidth).toBeLessThanOrEqual(dialog().clientWidth + 1);
-      expect(button(copy.setupInstalled).getBoundingClientRect().right).toBeLessThanOrEqual(390);
+      await expect.poll(() => button(copy.setupInstalled).getBoundingClientRect().right).toBeLessThanOrEqual(390);
       if (import.meta.env.VITE_CHROME_GUIDE_SCREENSHOT === '1') await page.screenshot({ element: dialog(), path: `__screenshots__/chrome-guide-${locale}-narrow.png` });
       button(copy.setupInstalled).click();
       expect(continued).not.toHaveBeenCalled();

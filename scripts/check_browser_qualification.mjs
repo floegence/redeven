@@ -28,6 +28,18 @@ export function verifyBrowserTests(body) {
   return report.numPassedTests;
 }
 
+export function verifyNodeTests(body) {
+  const count = name => {
+    const matches = [...body.matchAll(new RegExp(`^# ${name} (\\d+)$`, 'gm'))];
+    assert.equal(matches.length, 1, `Missing or ambiguous Node test summary: ${name}`);
+    return Number(matches[0][1]);
+  };
+  const passed = count('pass');
+  assert(passed > 0 && count('tests') === passed, 'Node qualification must execute passing tests');
+  for (const name of ['fail', 'cancelled', 'skipped', 'todo']) assert.equal(count(name), 0, `Node qualification contains ${name} tests`);
+  return passed;
+}
+
 async function main() {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const ui = path.join(root, 'internal/envapp/ui_src');
@@ -70,9 +82,14 @@ async function main() {
   await run('storage-installation', 'go', ['test', './internal/browserinstall', './internal/browserstore', '-count=1', '-json'], root, env, verifyGoTests);
   await run('api', 'go', ['test', './internal/codeapp/appserver', '-run', '^TestBrowser(WorkspaceFailure|ViewAPI|Library)', '-count=1', '-json'], root, env,
     body => verifyGoTests(body, ['TestBrowserWorkspaceFailureActionsAndRecoveryAuthorization']));
+  const bridgeBinary = path.join(staging, 'redeven');
+  const bridgeBuild = spawnSync('go', ['build', '-o', bridgeBinary, './cmd/redeven'], { cwd: root, env, encoding: 'utf8' });
+  await writeFile(path.join(evidence, 'native-bridge-build.log'), bridgeBuild.stdout + bridgeBuild.stderr);
+  assert.equal(bridgeBuild.status, 0, 'Unable to build the real Native Messaging bridge');
+  await run('chrome-extension', process.execPath, ['--test', '--test-reporter=tap', 'scripts/computerExtensionLifecycle.node-test.mjs', 'scripts/computerExtensionPopup.node-test.mjs', 'scripts/computerExtension.node-test.mjs', 'scripts/computerNativeMessaging.node-test.mjs'], ui, { ...env, REDEVEN_BROWSER_BRIDGE_BINARY: bridgeBinary }, verifyNodeTests);
   for (const [name, args] of [
     ['ui-unit', ['src/browserDocument.test.ts', 'src/ui/services/browserWorkspaceController.test.ts', 'src/ui/services/browserWindow.test.ts', 'src/ui/services/browserWorkspaceWindows.test.ts', 'src/ui/widgets/FloeBrowserSurface.test.tsx', 'src/ui/pages/EnvBrowserPage.test.tsx']],
-    ['ui-browser', ['--config', 'vitest.browser.config.ts', 'src/browserDocument.browser.test.tsx', 'src/ui/widgets/BrowserSourceDialog.browser.test.tsx', 'src/ui/FlowerManagedBrowser.browser.test.tsx']],
+    ['ui-browser', ['--config', 'vitest.browser.config.ts', 'src/browserDocument.browser.test.tsx', 'src/ui/widgets/BrowserSourceDialog.browser.test.tsx', 'src/ui/FlowerManagedBrowser.browser.test.tsx', 'src/ui/FlowerComputerConnections.browser.test.tsx']],
   ]) {
     const report = path.join(evidence, `${name}.json`);
     await run(name, 'pnpm', ['exec', 'vitest', 'run', ...args, '--reporter=json', `--outputFile=${report}`], ui, env, async () => verifyBrowserTests(await readFile(report, 'utf8')));

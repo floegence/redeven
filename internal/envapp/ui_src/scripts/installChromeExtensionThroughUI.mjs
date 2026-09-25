@@ -24,7 +24,9 @@ export async function installChromeExtensionThroughUI(context, extension, extens
   assert.equal(await card.count(), previousVersion ? 1 : 0, 'verify the exact starting installation');
   if (previousVersion) assert.equal((await card.locator('#version').textContent()).trim(), previousVersion);
   const developer = page.locator('extensions-toolbar #devMode');
-  if (await developer.getAttribute('aria-pressed') !== 'true') await developer.click();
+  const developerEnabled = await developer.evaluate(toggle => toggle.checked);
+  assert.equal(typeof developerEnabled, 'boolean', 'read Chrome’s actual Developer mode toggle state');
+  if (!developerEnabled) await developer.click();
   await page.locator('extensions-toolbar #loadUnpacked').click();
   try {
     await execute('/usr/bin/swift', [fileURLToPath(new URL('./selectChromeExtensionFolder.swift', import.meta.url)), String(pid), ...homePath], { timeout: 30000 });
