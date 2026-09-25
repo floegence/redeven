@@ -84,7 +84,9 @@ try {
   ({ targetInfo } = await probe.send('Target.getTargetInfo')); await probe.detach();
   port = (await readFile(path.join(directory, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
   }
-  const bundle = await build({ configFile: false, plugins: [solid()], resolve: { conditions: ['browser'] }, logLevel: 'silent', build: { write: false, minify: false,
+  // Library mode preserves Node environment expressions by default. This
+  // executable browser fixture needs the same production constant as the app.
+  const bundle = await build({ configFile: false, plugins: [solid()], define: { 'process.env.NODE_ENV': JSON.stringify('production') }, resolve: { conditions: ['browser'] }, logLevel: 'silent', build: { write: false, minify: false,
     lib: { entry: 'scripts/browserProjectionFixture.tsx', formats: ['es'] },
     rolldownOptions: { output: { codeSplitting: false } },
   } });
