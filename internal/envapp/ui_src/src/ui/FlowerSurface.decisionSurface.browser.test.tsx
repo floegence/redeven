@@ -95,9 +95,9 @@ describe('Flower bottom decision surface', () => {
         await waitFor(() => surface.querySelectorAll('.flower-input-request-choice').length === 2);
         const choices = Array.from(surface.querySelectorAll<HTMLElement>('.flower-input-request-choice'));
         for (const choice of choices) {
-          expect(getComputedStyle(choice).minHeight).toBe(choice.classList.contains('flower-input-request-choice-described') ? '56px' : '40px');
+          expect(getComputedStyle(choice).minHeight).toBe(choice.classList.contains('flower-input-request-choice-described') ? '40px' : '28px');
         }
-        expect(getComputedStyle(surface.querySelector('.flower-input-request-choice-grid')!).gap).toBe('4px');
+        expect(getComputedStyle(surface.querySelector('.flower-input-request-choice-grid')!).gap).toBe('2px');
       } else {
         expect(surface.querySelector('.flower-approval-operation-label')?.textContent).toBe(current.interactions![0].approval!.label);
         expect(surface.querySelector('.flower-approval-question')).toBeNull();

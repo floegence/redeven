@@ -4,16 +4,17 @@ import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { useI18n } from '../i18n';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import './web-services.css';
+import './resource-header.css';
 
 export function WebServicesHeader(props: { actions?: JSX.Element }) {
   const i18n = useI18n();
-  return <header class="web-services-header shrink-0" data-testid="web-services-panel"><div class="web-services-header-inner">
-    <div class="web-services-heading"><h1 class="text-base font-semibold tracking-tight">{i18n.t('webServices.title')}</h1><p class="web-services-description">{i18n.t('webServices.description')}</p></div>
+  return <header class="web-services-header redeven-resource-header" data-testid="web-services-panel">
+    <h1>{i18n.t('webServices.title')}</h1>
     <div class="web-services-header-actions">{props.actions ?? <>
       <Button size="sm" variant="outline" disabled class={`h-8 ${redevenSurfaceRoleClass('control')}`}><FileText class="mr-1.5 h-3.5 w-3.5" /><span>{i18n.t('webServices.managed.serviceTemplates')}</span></Button>
       <Button size="sm" disabled class="h-8"><Plus class="mr-1.5 h-3.5 w-3.5" /><span>{i18n.t('webServices.actions.addService')}</span></Button>
     </>}</div>
-  </div></header>;
+  </header>;
 }
 
 export function WebServicesListSkeleton() {

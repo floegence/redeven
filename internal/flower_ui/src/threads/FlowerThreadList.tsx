@@ -478,9 +478,9 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
         <div class="flower-thread-list-header flex items-center gap-2">
           <div class="flower-thread-list-heading min-w-0 flex-1">
             <h2 class="flower-thread-list-title truncate text-sm font-medium">{copy().title}</h2>
-            <p class="flower-thread-list-description truncate text-xs">
-              {props.warmup || props.loading ? copy().warmupDescription : copy().description}
-            </p>
+            <Show when={props.warmup || props.loading}>
+              <p class="flower-thread-list-description truncate text-xs" role="status">{copy().warmupDescription}</p>
+            </Show>
           </div>
           <button
             type="button"

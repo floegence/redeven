@@ -4,11 +4,12 @@ import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { useI18n } from '../i18n';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import './host-applications.css';
+import './resource-header.css';
 
 export function HostApplicationsHeader(props: { actions?: JSX.Element }) {
   const i18n = useI18n();
-  return <header class="host-apps-header">
-    <div class="min-w-0"><div class="host-apps-eyebrow">{i18n.t('hostApplications.eyebrow')}</div><h1>{i18n.t('hostApplications.title')}</h1><p>{i18n.t('hostApplications.description')}</p></div>
+  return <header class="host-apps-header redeven-resource-header">
+    <h1>{i18n.t('hostApplications.title')}</h1>
     <div class="flex items-center gap-2 shrink-0">{props.actions ?? <>
       <Button variant="ghost" size="sm" disabled aria-label={i18n.t('hostApplications.refresh')}><Refresh class="w-4 h-4 animate-spin motion-reduce:animate-none" /></Button>
       <Button variant="outline" size="sm" disabled><Plus class="w-3.5 h-3.5" /><span>{i18n.t('hostApplications.add')}</span></Button>

@@ -1,16 +1,13 @@
+.web-services-header-actions { display: flex; flex: 0 0 auto; gap: 0.5rem; }
 .web-services {
   container: web-services / inline-size;
   --web-service-feedback: 120ms;
   --web-service-settle: 180ms;
   --web-service-ease: cubic-bezier(.2, .8, .2, 1);
 }
-.web-services-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
-.web-services-header-inner, .web-services-content { width: 100%; max-width: 1120px; margin-inline: auto; }
-.web-services-header-inner { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 20px; }
-.web-services-heading { min-width: 0; flex: 1 1 240px; }
-.web-services-heading h1 { font-size: 16px; font-weight: 500; line-height: 24px; }
-.web-services-heading p { margin-top: 4px; font-size: 12px; line-height: 18px; color: var(--muted-foreground); }
-.web-services-header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.web-services-content { width: 100%; max-width: 1120px; margin-inline: auto; }
+
 .web-services-main { padding: 20px; scrollbar-gutter: stable; }
 .web-services-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
 .web-services-address { display: flex; align-items: start; gap: 8px; }
@@ -21,7 +18,7 @@
 .web-services-toolbar-heading h2 { font-size: 13px; font-weight: 500; }
 .web-services-toolbar-actions { flex-wrap: wrap; }
 .web-services-search { position: relative; width: 220px; min-width: 120px; flex: 1; }
-.web-services-search input { box-shadow: none; }
+.web-services-search input, .web-services-address input { height: var(--floe-control-height-md); font-size: var(--floe-type-control); box-shadow: none; }
 .web-service-list { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, max-content) minmax(4.75rem, max-content) minmax(4.75rem, max-content) 3rem; border: 1px solid var(--border); border-radius: 10px; background: var(--redeven-surface-panel); }
 .web-service-row, .web-service-managed { min-width: 0; grid-column: 1 / -1; }
 .web-service-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, max-content) minmax(4.75rem, max-content) minmax(4.75rem, max-content) 3rem; align-items: center; column-gap: 12px; row-gap: 8px; min-height: 64px; padding: 8px 16px; }
@@ -82,8 +79,8 @@
   .web-service-notice { margin-left: 16px; }
 }
 @container web-services (max-width: 32rem) {
-  .web-services-header, .web-services-main { padding: 16px; }
-  .web-services-header-actions { width: 100%; }
+  .web-services-main { padding: 16px; }
+
   .web-service-list { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 3rem; }
   .web-service-status { grid-column: 1 / -1; grid-row: 2; max-width: none; }
   .web-service-actions { grid-column: 1 / -1; grid-row: 3; }
@@ -131,17 +128,10 @@
 
 .web-services-address-help, .web-services-archive-icon { display: none; }
 @container web-services (width < 768px) {
-  .web-services-header { padding: 5px 12px; }
-  .web-services-header-inner { flex-wrap: nowrap; gap: 8px; }
-  .web-services-heading { flex: 1; }
-  .web-services-heading h1 { font-size: 16px; white-space: nowrap; }
-  .web-services-description { display: none; }
-  .web-services-header-actions { width: auto; flex-wrap: nowrap; flex-shrink: 0; }
-  .web-services-header-actions button { min-height: 44px; min-width: 44px; padding-inline: 8px; }
   .web-services-main { padding: 12px; scrollbar-gutter: auto; }
   .web-services-content { gap: 12px; }
-  .web-services-address input { height: 44px; font-size: 16px; padding-right: 48px; }
-  .web-service-address-submit { width: 44px; height: 44px; right: 0; }
+  .web-services-address input { padding-right: 2.5rem; }
+  .web-service-address-submit { width: var(--floe-control-height-md); height: var(--floe-control-height-md); right: 0; }
   .web-services-address-help { display: inline-flex; }
   .web-services-address-guidance:not([role="alert"]) { display: none; }
   .web-services-toolbar { flex-wrap: nowrap; gap: 8px; }
@@ -150,28 +140,23 @@
   .web-services-toolbar-heading > span { flex-shrink: 0; }
   .web-services-toolbar-actions { flex: 1 0 232px; flex-wrap: nowrap; gap: 8px; width: auto; }
   .web-services-search { min-width: 128px; width: auto; }
-  .web-services-search input { height: 44px; font-size: 16px; }
-  .web-services-toolbar-actions > button, .web-services-menu-trigger { height: 44px; min-width: 44px; padding: 0; justify-content: center; }
+  .web-services-toolbar-actions > button, .web-services-menu-trigger { height: var(--floe-control-height-md); min-width: var(--floe-control-height-md); padding: 0; justify-content: center; }
   .web-services-archive-icon { display: block; }
   .web-services-archive-label { display: none; }
-  .web-service-button, .web-service-actions > span { min-height: 44px; }
 }
 @container web-services (width < 360px) {
   .web-services-toolbar-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .web-services-header-actions button > span { display: none; }
-  .web-services-header-actions button > svg { margin: 0; }
 }
 
-/* Keep the page chrome stable when the surface is hosted in a narrow
- * Workbench widget as well as a phone viewport. */
-@container web-services (max-width: 768px) {
-  .web-services-header { padding: 5px 12px; }
-  .web-services-header-inner { flex-wrap: nowrap; gap: 8px; }
-  .web-services-heading { min-width: 0; flex: 1 1 auto; }
-  .web-services-heading h1 { min-width: 0; overflow: hidden; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
-  .web-services-description { display: none; }
-  .web-services-header-actions { width: auto; flex: 0 0 auto; flex-wrap: nowrap; gap: 4px; }
-  .web-services-header-actions button { width: 44px; min-width: 44px; min-height: 44px; padding: 0; justify-content: center; }
+@container web-services (width < 768px) {
   .web-services-header-actions button > span { display: none; }
   .web-services-header-actions button > svg { margin: 0; }
+  .web-services-header-actions button { width: var(--floe-control-height-sm); min-width: var(--floe-control-height-sm); padding-inline: 0; }
+}
+
+@media (pointer: coarse) {
+  .web-services-search input, .web-services-address input { height: 2.75rem; font-size: 1rem; }
+  .web-services-address input { padding-right: 3rem; }
+  .web-service-address-submit { width: 2.75rem; height: 2.75rem; }
+  .web-services-menu-trigger, .web-service-button, .web-service-actions > span { min-height: 2.75rem; }
 }
