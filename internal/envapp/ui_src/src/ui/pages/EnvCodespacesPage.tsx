@@ -471,17 +471,14 @@ function CodespaceCard(props: {
   return (
     <CodespaceCardFrame
       class={cn(
-        isRunning()
-          ? "border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]"
-          : cn(redevenSurfaceRoleClass("panelInteractive"), "codespace-card--stopped"),
+        redevenSurfaceRoleClass("panelInteractive"),
         props.contextMenuOpen ? "ring-1 ring-primary/40" : undefined,
       )}
       onContextMenu={props.onContextMenu}
       title={props.space.name || props.space.code_space_id}
       description={props.space.description}
-      descriptionTitle={props.space.description}
       status={<StatusBadge running={props.space.running} pid={props.space.pid} />}
-      path={<span title={props.space.workspace_path}>{props.space.workspace_path}</span>}
+      path={props.space.workspace_path}
       details={<>
           <div class="text-muted-foreground">{i18n.t("codespaces.fields.id")}</div>
           <div class="font-mono truncate text-right" title={props.space.code_space_id}>
@@ -498,13 +495,13 @@ function CodespaceCard(props: {
         <Show
           when={isRunning()}
           fallback={
-            <div class="flex items-center gap-2 flex-1">
+            <div class="flex items-center gap-2 min-w-0">
               <Button
                 size="sm"
                 variant="default"
                 disabled={isBusy()}
                 onClick={props.onStart}
-                class="relative flex-1 overflow-hidden"
+                class="relative overflow-hidden"
                 aria-busy={props.busyAction === "start" ? "true" : undefined}
               >
                 <Show
@@ -524,6 +521,7 @@ function CodespaceCard(props: {
                       variant="ghost"
                       disabled={isBusy()}
                       onClick={() => props.onOpen("system_browser")}
+                      aria-label={i18n.t("codespaces.actions.openWillAutoStart")}
                       class="px-2 text-muted-foreground"
                     >
                       <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-4 h-4" />}>
@@ -559,13 +557,13 @@ function CodespaceCard(props: {
             </div>
           }
         >
-          <div class="flex flex-1 min-w-0">
+          <div class="flex min-w-0">
             <Button
               size="sm"
               variant="default"
               disabled={isBusy()}
               onClick={() => props.onOpen(primaryOpenTarget())}
-              class={cn("relative flex-1 min-w-0 overflow-hidden", props.desktopOpenAvailable ? "rounded-r-none" : undefined)}
+              class={cn("relative min-w-0 overflow-hidden", props.desktopOpenAvailable ? "rounded-r-none" : undefined)}
               aria-busy={props.busyAction === "open" ? "true" : undefined}
             >
               <Show

@@ -1,8 +1,8 @@
 import '../../index.css';
 import { Suspense, lazy } from 'solid-js';
 import { render } from 'solid-js/web';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
+import { commands, page, userEvent } from 'vitest/browser';
 import { EnvCodespacesPage, type SpaceStatus } from './EnvCodespacesPage';
 import { CodespacesPageSkeleton } from './CodespacesPresentation';
 
@@ -93,6 +93,7 @@ it('restores IndexedDB after a new cache instance and preserves row, focus and s
   expect(host.querySelector('[data-generic-fallback], [data-codespace-skeleton], [data-testid="browser-editor-readiness-inline-status"]')).toBeNull();
   expect(host.querySelector('header .animate-spin')).toBeTruthy();
   const row = host.querySelector<HTMLElement>('.codespace-card')!;
+  const details = row.querySelector('details')!; details.open = true;
   const button = row.querySelector<HTMLButtonElement>('button')!; button.focus();
   const viewport = host.querySelector<HTMLElement>('.codespaces-content')!; viewport.scrollTop = 240;
   const scroll = viewport.scrollTop; expect(scroll).toBe(240);
@@ -100,7 +101,85 @@ it('restores IndexedDB after a new cache instance and preserves row, focus and s
   runtime.resolve(ready);
   await expect.poll(() => row.textContent).toContain('Workspace 0 updated');
   expect(host.querySelector('.codespace-card')).toBe(row);
+  expect(row.querySelector('details')).toBe(details);
+  expect(details.open).toBe(true);
   expect(document.activeElement).toBe(button);
   expect(viewport.scrollTop).toBe(scroll);
   expect(host.querySelector('header .animate-spin')).toBeNull();
+});
+
+it.each(['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark'])('uses the common main canvas and a quiet bounded card in %s', async preset => {
+  state.locale = 'zh-CN';
+  await page.viewport(1440, 900);
+  const original = document.documentElement.className;
+  const theme = document.documentElement.dataset.floeShellTheme;
+  const material = document.documentElement.dataset.floeSurfaceStyle;
+  onTestFinished(() => {
+  document.documentElement.className = original;
+  if (theme) document.documentElement.dataset.floeShellTheme = theme; else delete document.documentElement.dataset.floeShellTheme;
+  if (material) document.documentElement.dataset.floeSurfaceStyle = material; else delete document.documentElement.dataset.floeSurfaceStyle;
+  });
+  document.documentElement.classList.toggle('dark', preset.endsWith('dark'));
+  document.documentElement.dataset.floeShellTheme = preset;
+  document.documentElement.dataset.floeSurfaceStyle = 'soft-neumorphic';
+  const stopped = { ...space, name: 'cdk-files (2)', running: false, code_port: 0, workspace_path: '/Users/developer/Downloads/cdk-files (2)', description: 'codespace at /Users/developer/Downloads/cdk-files (2)' };
+  state.spaces.mockResolvedValue({ spaces: [stopped, { ...space, name: 'Project dashboard', code_space_id: 'running-project' }] });
+  dispose = render(() => <EnvCodespacesPage />, host);
+  await expect.poll(() => host.querySelectorAll('.codespace-card').length).toBe(2);
+  await document.fonts.ready;
+  const panel = host.querySelector('.codespaces-page') as HTMLElement;
+  const cards = [...host.querySelectorAll<HTMLElement>('.codespace-card')];
+  await page.screenshot({ element: host, path: `__screenshots__/resource-codespaces-${preset}.png` });
+  const background = document.createElement('div'); background.style.backgroundColor = 'var(--redeven-surface-main)'; panel.append(background);
+  console.info('Codespace geometry', JSON.stringify({ preset, background: getComputedStyle(panel).backgroundColor, expected: getComputedStyle(background).backgroundColor, height: cards[0].getBoundingClientRect().height }));
+  expect.soft(getComputedStyle(panel).backgroundColor).toBe(getComputedStyle(background).backgroundColor);
+  background.remove();
+  for (const card of cards) {
+    expect.soft(card.getBoundingClientRect().height).toBeLessThanOrEqual(172);
+    expect.soft(card.querySelector('details')!.open).toBe(false);
+    expect.soft(getComputedStyle(card.querySelector('h3')!).fontSize).toBe('13px');
+    expect.soft(getComputedStyle(card.querySelector('.codespace-path')!).fontSize).toBe('12px');
+    expect.soft(card.querySelector('.codespace-path')!.textContent).toMatch(/^\/workspace|^\/Users/);
+    expect.soft(getComputedStyle(card.querySelector('button')!).fontSize).toBe('12px');
+    expect.soft(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
+    const action = card.querySelector<HTMLButtonElement>('button')!;
+    expect.soft(action.getBoundingClientRect().width).toBeLessThanOrEqual(card.getBoundingClientRect().width * .5);
+  }
+
+});
+
+it.each([320, 544])('keeps long card details, actions, and disclosure identity usable at %ipx', async width => {
+  await page.viewport(1280, 800);
+  host.style.width = `${width}px`;
+  const longPath = `/workspace/${'long-project-directory/'.repeat(12)}`;
+  state.spaces.mockResolvedValue({ spaces: [{ ...space, name: 'Workspace with a complete long title', workspace_path: longPath, description: 'Complete workspace description. '.repeat(12) }, { ...space, code_space_id: 'other', running: false }] });
+  dispose = render(() => <EnvCodespacesPage />, host);
+  await expect.poll(() => host.querySelectorAll('.codespace-card').length).toBe(2);
+  const card = host.querySelector<HTMLElement>('.codespace-card')!;
+  const details = card.querySelector('details')!;
+  const summary = card.querySelector('summary')!;
+  expect(card.querySelector('.codespace-path')!.getAttribute('title')).toBe(longPath);
+  summary.focus(); await userEvent.keyboard('{Enter}');
+  expect(details.open).toBe(true);
+  expect(card.querySelector('.codespace-details-content')!.textContent).toContain(longPath);
+  expect(card.querySelector('.codespace-details-content')!.textContent).toContain('13337');
+  for (const currentWidth of [width, 900, width]) {
+    host.style.width = `${currentWidth}px`;
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
+    expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+    expect(card.querySelector('details')).toBe(details);
+    expect(details.open).toBe(true);
+  }
+  const media = commands as unknown as { emulateTouchInput: (value: boolean) => Promise<void> };
+  try {
+    await media.emulateTouchInput(true);
+    expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    for (const button of card.querySelectorAll('button')) expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
+  } finally { await media.emulateTouchInput(false); }
+  summary.focus(); await userEvent.keyboard('{Enter}');
+  expect(details.open).toBe(false);
+  expect(document.activeElement).toBe(summary);
+  expect(card.getBoundingClientRect().height).toBeLessThanOrEqual(172);
 });

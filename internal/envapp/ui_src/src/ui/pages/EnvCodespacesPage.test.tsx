@@ -1658,7 +1658,7 @@ describe('EnvCodespacesPage', () => {
     expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Ask Flower'))).toBe(false);
   });
 
-  it('uses semantic panel and card surface classes for the neutral codespace shell', async () => {
+  it('uses the shared main canvas and neutral card surfaces', async () => {
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {
         return runtimeStatusResponse;
@@ -1687,12 +1687,11 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const panel = host.querySelector('[data-testid="codespaces-panel"]') as HTMLDivElement | null;
+    const panel = host.querySelector('.codespaces-page') as HTMLDivElement | null;
     const card = host.querySelector('[data-testid="codespace-card"]') as HTMLDivElement | null;
 
-    expect(panel?.className).toContain('redeven-surface-panel--strong');
+    expect(panel?.className).toContain('redeven-surface-main');
     expect(card?.className).toContain('redeven-surface-panel--interactive');
-    expect(card?.className).toContain('codespace-card--stopped');
     expect(card?.className).not.toContain('opacity-75');
   });
 });

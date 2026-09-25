@@ -3,7 +3,7 @@ type: UI Contract
 title: Shared interface scale
 description: Apply one measured desktop reading and control scale across Flower, Env App, and Desktop without shrinking content viewers or touch targets.
 tags: [ui, flower, desktop, accessibility, typography]
-timestamp: 2026-09-25T00:00:00Z
+timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
@@ -21,7 +21,9 @@ Terminal grids, editors, file/document previews, remote applications, and chart 
 
 ## Controls and layout density
 
-Inline desktop actions use 28px targets; primary actions and ordinary fields use 32px. Flower's full-page header has a 40px minimum. An empty standard composer is 84px high at the reference scale; attachments, references, multiline drafts, status, and errors grow naturally instead of being clipped to that height. Shared settings use Floe's released geometry rather than copied product-side sizing. Codespaces, Web Services, and Host Applications share a 40px title/action band with a 14px title and no subtitle or eyebrow; body content owns operational guidance. Their touch band grows to 56px. Flower permission and model selectors are secondary controls: 24px high with 11px labels on desktop; menus use 11px desktop labels, compact padding, and complete model names. Touch selector and menu labels retain their existing 12px size. The ordinary thread heading omits static sorting guidance, while active loading keeps its status text.
+Inline desktop actions use 28px targets; primary actions and ordinary fields use 32px. Flower's full-page header has a 40px minimum. An empty standard composer is 84px high at the reference scale; attachments, references, multiline drafts, status, and errors grow naturally instead of being clipped to that height. Shared settings use Floe's released geometry rather than copied product-side sizing. Containers, Codespaces, Web Services, and Host Applications share a 40px title/action band with a 14px title and no subtitle or eyebrow; body content owns operational guidance. Their touch band grows to 56px. Container resource tabs occupy a separate row below the title band. Flower permission and model selectors are secondary controls: 24px high with 11px labels on desktop; menus use 11px desktop labels, compact padding, and complete model names. Touch selector and menu labels retain their existing 12px size. Permission descriptions wrap fully, including unbroken identifiers. The permission list scrolls within the measured host space above its anchor, stays inside horizontal host bounds, and retains keyboard focus and exact guidance across resizing. The ordinary thread heading omits static sorting guidance, while active loading keeps its status text.
+
+Codespaces uses the common main canvas without an additional full-page panel. Neutral cards prioritize name, status, and workspace path. Details starts collapsed at every width and exposes the complete description, path, identifier, port, and last-opened time. Native disclosure state remains on the retained card through resize and inventory refresh. Content-sized actions preserve separate Start, Open, Stop, and Delete behavior; running state belongs to the status badge. Loading and loaded cards share the same layout boundaries.
 
 Thread, file, and ordinary navigation rows have a 28px total pitch, with no extra per-row gap. Group separation is independent. Published Floe owns virtual file offsets and measures the same rendered row height, including fractional rem values and coarse-pointer overrides. A downstream row override must not contradict those offsets.
 
@@ -29,7 +31,7 @@ Thread cards place selection and the trailing slot in normal layout. The slot re
 
 Narrow containers change arrangement, never input modality: Files, service, and host-application filters retain 12px text and 32px height on fine-pointer desktops. Only coarse-pointer rules enlarge editable text and targets. Coarse-pointer body text retains 14px/22px and navigation retains 13px/20px. Shared and product controls retain at least 44px targets; editable touch text is at least 16px. Natural wrapping, browser zoom, and long translations may increase row height. Actions must not overlap, clip, or leave their owning surface. Input focus changes only the existing border color through Floe's published input-focus contract.
 
-## State and interaction
+# Boundaries
 
 Scale is presentation only. Existing DOM and keyed approval identities remain mounted across theme changes, navigation, companion collapse, and resize. Pending commands lock only their existing action scope. Composer drafts, permissions, atomic approval batches, focus handoff, and exact command copying remain defined by their canonical Flower contracts. [Approval geometry](flower-approval-surface.md) constrains one scrolling list while retaining header and footer actions. Workbench wheel, reading selection, and floating coordinate ownership are unchanged.
 
@@ -41,6 +43,8 @@ Tests measure actual header, composer, text, and control bounds, not just one to
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/ResourceSurfacePolish.browser.test.tsx` - Complete permission guidance, host bounds, keyboard scrolling, and container title-band parity.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.browser.test.tsx` - Shared canvas colors, compact cards, complete details, touch, and retained loading/refresh geometry.
 - `redeven:internal/envapp/ui_src/src/ui/InterfaceCoordination.browser.test.tsx` - Resource bands, narrow desktop versus touch inputs, composer menus, and compact reply geometry.
 - `redeven:internal/envapp/ui_src/src/ui/pages/resource-header.css` - Shared product header role without per-page title overrides.
 

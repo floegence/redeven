@@ -2480,9 +2480,36 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (event.key !== 'Escape') return;
       closePermissionMenu(true);
     };
+    // Measure in the menu's local coordinates so projected Workbench scale stays owned by Floe.
+    const measureMenu = () => {
+      const menu = permissionMenuRef;
+      if (!menu || !surfaceRef) return;
+      const bounds = menu.getBoundingClientRect();
+      const scale = menu.offsetWidth > 0 ? bounds.width / menu.offsetWidth : 1;
+      const surface = surfaceRef.getBoundingClientRect();
+      const viewport = window.visualViewport;
+      const top = Math.max(surface.top, viewport?.offsetTop ?? 0);
+      const left = Math.max(surface.left, viewport?.offsetLeft ?? 0) + 8;
+      const right = Math.min(surface.right, (viewport?.offsetLeft ?? 0) + (viewport?.width ?? window.innerWidth)) - 8;
+      const priorShift = Number.parseFloat(menu.style.getPropertyValue('--flower-permission-menu-shift-x')) || 0;
+      const originalLeft = bounds.left - priorShift * scale;
+      const shift = Math.max(left, Math.min(originalLeft, right - bounds.width)) - originalLeft;
+      menu.style.setProperty('--flower-permission-menu-shift-x', `${shift / (scale || 1)}px`);
+      menu.style.setProperty('--flower-permission-menu-available-height', `${Math.max(0, (bounds.bottom - top) / (scale || 1) - 8)}px`);
+    };
+    const observer = new ResizeObserver(measureMenu);
+    if (surfaceRef) observer.observe(surfaceRef);
+    if (permissionTriggerRef) observer.observe(permissionTriggerRef);
+    const frame = requestAnimationFrame(measureMenu);
+    window.addEventListener('resize', measureMenu);
+    window.visualViewport?.addEventListener('resize', measureMenu);
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown, true);
     onCleanup(() => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('resize', measureMenu);
+      window.visualViewport?.removeEventListener('resize', measureMenu);
       document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown, true);
     });
@@ -6223,6 +6250,7 @@ webSearch: model.web_search,
             id="flower-composer-permission-menu"
             ref={permissionMenuRef}
             class="flower-permission-menu"
+            data-floe-local-interaction-surface="true"
             role="listbox"
             aria-label={copy().chat.permissionSelectorLabel}
             aria-activedescendant={permissionOptionID(FLOWER_PERMISSION_TYPES[permissionMenuActiveIndex()] ?? composerPermissionType() ?? 'readonly')}

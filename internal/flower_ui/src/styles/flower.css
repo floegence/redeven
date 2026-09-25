@@ -1768,6 +1768,10 @@
   z-index: 5;
   display: grid;
   width: min(16rem, 84vw);
+  max-height: min(22rem, var(--flower-permission-menu-available-height, 50dvh));
+  transform: translateX(var(--flower-permission-menu-shift-x, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   gap: 0.125rem;
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 0.5rem;
@@ -1784,6 +1788,8 @@
 
 .flower-permission-menu-item {
   display: grid;
+  min-width: 0;
+  white-space: normal;
   width: 100%;
   cursor: pointer;
   grid-template-columns: minmax(0, 1fr);
@@ -1835,6 +1841,8 @@
 }
 
 .flower-permission-menu-description {
+  overflow-wrap: anywhere;
+  white-space: normal;
   color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 8%);
   font-size: 0.6875rem;
   line-height: 1.35;
@@ -2659,10 +2667,6 @@
   .flower-model-reasoning-control,
   .flower-model-select-trigger {
     max-width: 100%;
-  }
-
-  .flower-permission-menu {
-    width: min(21rem, calc(100vw - 2rem));
   }
 
   .flower-handler-error-card {
