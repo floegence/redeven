@@ -41,6 +41,12 @@ try {
   await writeFile(path.join(output, 'runtime.json'), JSON.stringify(report, null, 2));
   report.electron = await app.evaluate(() => process.versions.electron);
   const page = await app.firstWindow();
+  // Capture through Electron: Playwright can crop native windows at non-default zoom.
+  const screenshot = async (name) => {
+    const png = await app.evaluate(async ({ BrowserWindow }) =>
+      (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
+    await writeFile(path.join(output, name), Buffer.from(png, 'base64'));
+  };
   page.on('pageerror', error => report.errors.push(error.message));
   await page.addInitScript(snapshot => {
     window.navigationSnapshot = { ...snapshot, navigation_revision: 1 };
@@ -88,7 +94,7 @@ try {
         });
         const actualZoom = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getZoomFactor());
         report.cases.push({ mode, material, zoom: actualZoom, ...metrics });
-        await page.screenshot({ path: path.join(output, `flower-${mode}-${material}-${zoom}.png`) });
+        await screenshot(`flower-${mode}-${material}-${zoom}.png`);
         assert.equal(actualZoom, zoom);
         assert.equal(metrics.shellTheme, `porcelain-${mode}`);
         assert.equal(metrics.material, material);
@@ -107,7 +113,7 @@ try {
   assert.notEqual(standard.composerShadow, soft.composerShadow);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
   await page.locator('.redeven-flower-back-button').click();
-  await page.screenshot({ path: path.join(output, 'welcome.png') });
+  await screenshot('welcome.png');
   assert.deepEqual(report.errors, []);
   report.status = 'passed';
   console.log('Electron interface density passed:', JSON.stringify(report));
