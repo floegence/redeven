@@ -1,7 +1,7 @@
 ---
 type: Architecture Contract
 title: Remote browser surface
-description: Mount shared browser windows with current control and coherent tab presentation.
+description: Mount shared browser windows with source selection, theme and authenticated window lifetimes.
 tags: [architecture, browser, ui]
 timestamp: 2026-09-26T00:00:00Z
 ---
@@ -119,59 +119,14 @@ or successful document replacement. Opening and failure updates from a retired
 view must not unmount the chooser and cancel its replacement request. Candidate
 failures remain visible within the chooser; closing it still cancels its intent.
 
-The environment window forwards input readiness only after both the private
-control token and the matching source control grant arrive. Revocation and tab
-changes remain immediate; a delayed token cannot revive a revoked grant.
-Address submissions additionally wait for idle-control admission. HTTP responses and DOM/control messages may
-arrive in either order. A changed tab, newer address or disconnected view cancels
-an unsubmitted navigation; previously submitted input is never retried.
-
-The released viewer suspends page gestures from explicit navigation intent through
-control admission and source completion. It discards unsent input and reports
-readiness only when input can resume. A canceled before-unload decision restores
-the original page; late completion cannot release a newer navigation's input
-fence. Browser chrome, stop and dialog replies remain available throughout.
-Repeated clicks on an already focused text field receive a fresh source focus
-confirmation and restore the visible native caret without replaying a click.
-Chrome and Electron product qualification exercises this behavior through the
-same authorized Flowersec Session, including Unicode text insertion.
-
-## Tab presentation
-
-The viewer keeps at most three complete inert tab documents for immediate visual
-feedback. The selected preview remains painted while its replacement prepares
-offscreen, and swaps only after styles and layout settle. An uncached selection
-keeps the outgoing painted document inert until its replacement is ready,
-including first visits and cache eviction. Cached presentation grants no input: only fresh source selection,
-control admission and a complete current document enable page interaction.
-Background URL changes, removed directory grants and disconnect evict caches.
-Only browsers with state-preserving DOM moves retain iframe documents; other
-engines retain the outgoing document in place during preparation and dispose it
-after replacement. Page title changes do not invalidate a document. The same
-continuity contract applies to observers and controllers; source URL changes and
-revocation still invalidate the corresponding presentation.
-
-# Boundaries
-
-The source-page replay remains scriptless. Only the trusted browser chrome
-executes locally, through the environment owner's named capabilities. The
-address field's Enter key and Go button issue source commands directly, never
-a native form submission. Source profile creation and endpoint discovery use
-explicit click/Enter handlers for the same reason; composition Enter never
-submits. The inline document keeps its restrictive sandbox
-without `allow-forms` and its `form-action 'none'` policy.
-
-Website admission remains source-owned. A website may challenge or reject a
-managed automation session even when a user supplies correct input. Projection
-must preserve ordinary native input and must not alter browser identity or
-website security checks to force admission. A neutral coordinate/sequence test
-is input evidence, not proof that a third-party verification challenge passes.
+Presentation and input readiness follow the canonical
+[remote browser presentation contract](remote-browser-presentation.md), including
+tab geometry, inert previews, control admission, navigation fences and source-owned
+website verification. Window adapters consume those released capabilities.
 
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/browserDocument.test.ts` - Source selection survives retired-view progress and failure without canceling its intent.
-- [FloeBrowser v0.1.14: test/input-focus.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/input-focus.e2e.ts) — Repeated source focus and native caret continuity.
-- [FloeBrowser v0.1.14: test/navigation-input.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/navigation-input.e2e.ts) — Input fencing through navigation admission and completion.
 
 - `redeven:internal/envapp/ui_src/src/browserDocument.browser.test.tsx` - Real document handshake, native pointer dismissal through the private host port, and dialog/control theme parity in light/dark and narrow layouts.
 - [FloeBrowser v0.1.16: test/chrome-theme.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.16/test/chrome-theme.e2e.ts) — Host token preservation and readable chrome controls in both themes.
@@ -184,9 +139,5 @@ is input evidence, not proof that a third-party verification challenge passes.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWorkspaceWindows.test.ts` - Retained window shells and independent cleanup.
 - `redeven:desktop/src/main/browserProjectionWindows.test.ts` - Exact static-document loading without environment API authority.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.ts` - Environment-owned window, source replacement and private control admission.
-- `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.test.ts` - Grant/token ordering, immediate revocation and stale selection rejection.
-- [FloeBrowser v0.1.17: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.17/src/viewer/replay-pages.ts) — Bounded inert document retention.
-- [FloeBrowser v0.1.17: test/tab-continuity.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.17/test/tab-continuity.e2e.ts) — Per-frame cold, warm, evicted and renamed tab continuity across three engines and both input roles.
-- [FloeBrowser v0.1.16: test/tab-cache.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.16/test/tab-cache.e2e.ts) — Immediate presentation without stale input authority.
 
 - [FloeBrowser v0.1.13: test/browser-menu.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.13/test/browser-menu.e2e.ts) — Address-row actions, activation, focus, narrow bounds and late completion.
