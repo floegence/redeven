@@ -2776,7 +2776,8 @@
   flex: 0 0 auto;
   background: transparent;
   overflow: visible;
-  padding: 0 clamp(0.875rem, 3vw, 1.5rem) calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  /* The host owns safe areas; the dock is inside its usable content bounds. */
+  padding: 0 clamp(0.875rem, 3vw, 1.5rem) 0.75rem;
 }
 
 .flower-chat-bottom-dock::before {

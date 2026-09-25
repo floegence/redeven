@@ -21,6 +21,22 @@ async function mountMobile(width: number, height = 720) {
 }
 
 describe('Flower mobile navigation', () => {
+  it('keeps deliberate composer focus after closing More', async () => {
+    const runtime = await mountMobile(393);
+    const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    await userEvent.fill(editor, 'Keep typing 中文');
+    await userEvent.click(runtime.querySelector<HTMLButtonElement>('.flower-composer-more-button')!);
+    const panel = document.querySelector<HTMLElement>('[data-flower-composer-more-panel]')!;
+    panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    editor.focus({ preventScroll: true });
+    editor.setSelectionRange(2, 7);
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    expect(document.querySelector('[data-flower-composer-more-panel]')).toBeNull();
+    expect(document.activeElement).toBe(editor);
+    expect(editor.value).toBe('Keep typing 中文');
+    expect([editor.selectionStart, editor.selectionEnd]).toEqual([2, 7]);
+  });
+
   it.each([320, 393, 430, 667, 767])('keeps permissions in More at %i pixels and restores desktop controls without losing the draft', async (width) => {
     await page.viewport(width, width === 667 ? 390 : 720);
     const testAdapter = mutableSettingsAdapter(true);
