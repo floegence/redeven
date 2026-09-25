@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation sidebar
 description: Select conversations clearly and reorder endpoint-owned pins without interrupting live interactions.
 tags: [flower, sidebar, navigation, pins, interaction]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-09-25T00:00:00Z
 ---
 
 # Summary
@@ -18,6 +18,12 @@ existing workspace summary stream or one explicit post-command read.
 # Contract
 
 ## Selection and navigation
+
+The mobile chat header opens the conversation drawer with a list-menu icon in a
+quiet rounded-square control, with a 44px touch target and localized accessible
+name. Its dialog popup and expanded semantics identify the conversation list;
+it does not represent backward page navigation. Drawer placement and retained
+page behavior follow [mobile Shell navigation](mobile-shell-navigation.md).
 
 The selected conversation has a theme-tinted background stronger than hover and
 a semibold title, without a left-edge marker. Selection retains `aria-current`,
