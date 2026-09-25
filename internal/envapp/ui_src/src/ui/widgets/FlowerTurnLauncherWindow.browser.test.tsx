@@ -4,7 +4,7 @@ import '../flower-feature.css';
 
 import { LayoutProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -20,8 +20,10 @@ type Viewport = Readonly<{
 }>;
 
 const disposers: Array<() => void> = [];
+const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
 
-afterEach(() => {
+afterEach(async () => {
+  await media.emulateTouchInput(false);
   while (disposers.length > 0) disposers.pop()?.();
   document.documentElement.classList.remove('light', 'dark');
   document.body.innerHTML = '';
@@ -181,14 +183,17 @@ describe('Flower turn launcher send feedback', () => {
   });
 
   it('keeps the circular ArrowUp action stable while loading across themes and viewports', async () => {
-    const cases: ReadonlyArray<Readonly<{ theme: Theme; viewport: Viewport }>> = [
+    const cases: ReadonlyArray<Readonly<{ theme: Theme; viewport: Viewport; touch?: boolean }>> = [
       { theme: 'light', viewport: { width: 1440, height: 900 } },
       { theme: 'dark', viewport: { width: 1440, height: 900 } },
       { theme: 'light', viewport: { width: 390, height: 844 } },
       { theme: 'dark', viewport: { width: 390, height: 844 } },
+      { theme: 'light', viewport: { width: 1440, height: 900 }, touch: true },
+      { theme: 'dark', viewport: { width: 390, height: 844 }, touch: true },
     ];
 
     for (const testCase of cases) {
+      await media.emulateTouchInput(Boolean(testCase.touch));
       const mounted = await mountLauncher(testCase.theme, testCase.viewport);
       const textarea = document.querySelector('.flower-turn-launcher-textarea') as HTMLTextAreaElement | null;
       const editorShell = document.querySelector('[data-testid="flower-turn-launcher-editor-shell"]') as HTMLElement | null;
@@ -204,10 +209,15 @@ describe('Flower turn launcher send feedback', () => {
       const idleEditorRect = editorShell!.getBoundingClientRect();
       const idleStyle = getComputedStyle(sendButton!);
       const textareaStyle = getComputedStyle(textarea!);
-      expect(idleRect.width).toBeCloseTo(36, 0);
-      expect(idleRect.height).toBeCloseTo(36, 0);
+      const narrow = testCase.viewport.width < 768;
+      const targetSize = narrow || testCase.touch ? 44 : 32;
+      expect(idleRect.width).toBeCloseTo(targetSize, 0);
+      expect(idleRect.height).toBeCloseTo(targetSize, 0);
       expect(parseFloat(idleStyle.borderRadius)).toBeGreaterThanOrEqual(idleRect.width / 2);
-      expect(parseFloat(textareaStyle.paddingRight)).toBeGreaterThan(idleRect.width + 12);
+      const textRight = textarea!.getBoundingClientRect().right - parseFloat(textareaStyle.paddingRight);
+      expect(idleRect.left - textRight).toBeGreaterThanOrEqual(4);
+      expect(textareaStyle.fontSize).toBe(narrow || testCase.touch ? '16px' : '12px');
+      expect(getComputedStyle(document.querySelector('.flower-turn-launcher-message-surface .flower-body-copy')!).fontSize).toBe(testCase.touch ? '14px' : '12px');
       expect(sendButton!.querySelector('svg')).not.toBeNull();
       expect(sendButton!.querySelector('.animate-spin')).toBeNull();
 
