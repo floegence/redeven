@@ -96,7 +96,7 @@ it('uses compact desktop decisions and a quiet full-page header without reducing
   const fixture = mountApprovals(2, { full: true });
   await waitFor(() => Boolean(fixture.mount.querySelector('.flower-approval-queue-footer')));
   const height = (selector: string) => fixture.mount.querySelector(selector)!.getBoundingClientRect().height;
-  expect.soft(height('.flower-chat-header')).toBe(44);
+  expect.soft(height('.flower-chat-header')).toBe(40);
   expect.soft(height('.flower-approval-queue-row .flower-composer-approval-decision')).toBe(28);
   expect.soft(height('.flower-approval-queue-footer .flower-approval-decision-approve')).toBe(32);
   expect.soft(getComputedStyle(fixture.mount.querySelector('.flower-approval-command-text')!).fontSize).toBe('12px');

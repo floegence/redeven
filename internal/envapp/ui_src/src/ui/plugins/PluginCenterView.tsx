@@ -756,7 +756,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       onRetryRuntimeRecovery={props.onRetryRuntimeRecovery}
     >
       <Show when={errorMessage()}>
-        <div role="alert" data-plugin-center-error class={cn('flex flex-wrap items-center gap-3 border-b border-destructive bg-background px-4 py-3 text-sm text-destructive', PLUGIN_ENTER_MOTION_CLASS)}>
+        <div role="alert" data-plugin-center-error class={cn('flex flex-wrap items-center gap-3 border-b border-destructive bg-background px-4 py-3 text-[length:var(--floe-type-body)] text-destructive', PLUGIN_ENTER_MOTION_CLASS)}>
           <AlertTriangle class="h-4 w-4 shrink-0" />
           <div class="min-w-0 flex-1">
             <div>{errorMessage()}</div>
@@ -794,7 +794,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             <div
               role="status"
               data-plugin-center-preparing
-              class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background text-sm text-muted-foreground"
+              class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background text-[length:var(--floe-type-body)] text-muted-foreground"
             >
               <RefreshIcon class="h-4 w-4 animate-spin" />
               <span>{i18n.t('uiCopy.plugin.preparingFeatures')}</span>
@@ -863,7 +863,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               )}
             </For>
             <Show when={!loading() && visibleItems().length === 0}>
-              <div class={cn('col-span-full flex min-h-52 flex-col items-center justify-center px-4 py-10 text-center text-sm text-muted-foreground', PLUGIN_ENTER_MOTION_CLASS)}>
+              <div class={cn('col-span-full flex min-h-52 flex-col items-center justify-center px-4 py-10 text-center text-[length:var(--floe-type-body)] text-muted-foreground', PLUGIN_ENTER_MOTION_CLASS)}>
                 <Show when={activeTab() === 'updates' && updateSuccess()} fallback={<Search class="h-6 w-6" />}>
                   <CheckCircle class="h-6 w-6 text-[var(--redeven-status-success-foreground)]" />
                 </Show>
@@ -978,7 +978,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           <div class="flex w-full flex-wrap justify-end gap-2">
             <button
               type="button"
-              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted disabled:opacity-50')}
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-[length:var(--floe-type-body)] font-medium hover:bg-muted disabled:opacity-50')}
               disabled={retainedDataRecoveryPending()}
               onClick={() => setRetainedDataRecoveryItem(undefined)}
             >
@@ -987,7 +987,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             <button
               type="button"
               data-plugin-retained-data-confirm
-              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-destructive px-4 text-sm font-semibold text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50')}
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-destructive px-4 text-[length:var(--floe-type-body)] font-semibold text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50')}
               disabled={retainedDataRecoveryPending()}
               onClick={() => void confirmRetainedDataRecovery()}
             >
@@ -999,7 +999,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         )}
       >
         <Show when={retainedDataRecoveryError()}>
-          {(message) => <p role="alert" class="text-sm text-destructive">{message()}</p>}
+          {(message) => <p role="alert" class="text-[length:var(--floe-type-body)] text-destructive">{message()}</p>}
         </Show>
       </Dialog>
       <ExternalPluginInstallDialog
@@ -1127,7 +1127,7 @@ function OfficialPluginInstallDialog(props: {
           <Show when={props.previewError}>
             <button
               type="button"
-              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-[length:var(--floe-type-body)] font-medium hover:bg-muted')}
               onClick={() => props.onOpenChange(false)}
             >
               {i18n.t('common.actions.close')}
@@ -1135,7 +1135,7 @@ function OfficialPluginInstallDialog(props: {
             <button
               type="button"
               data-plugin-install-preview-retry
-              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90')}
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-[length:var(--floe-type-body)] font-semibold text-primary-foreground hover:bg-primary/90')}
               onClick={props.onRetryPreview}
             >
               {i18n.t('uiCopy.plugin.refreshOfficial')}
@@ -1144,7 +1144,7 @@ function OfficialPluginInstallDialog(props: {
           <Show when={props.previewLoading}>
             <button
               type="button"
-              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-[length:var(--floe-type-body)] font-medium hover:bg-muted')}
               onClick={() => props.onOpenChange(false)}
             >
               {i18n.t('common.actions.close')}
@@ -1153,7 +1153,7 @@ function OfficialPluginInstallDialog(props: {
           <Show when={!props.previewLoading && !props.previewError && !props.installing && !props.installed}>
             <button
               type="button"
-              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-[length:var(--floe-type-body)] font-medium hover:bg-muted')}
               onClick={() => props.onOpenChange(false)}
             >
               {i18n.t('common.actions.cancel')}
@@ -1161,7 +1161,7 @@ function OfficialPluginInstallDialog(props: {
             <button
               type="button"
               data-plugin-install-review-confirm
-              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90')}
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-[length:var(--floe-type-body)] font-semibold text-primary-foreground hover:bg-primary/90')}
               onClick={props.onConfirm}
               disabled={!props.installPreview}
             >
@@ -1171,7 +1171,7 @@ function OfficialPluginInstallDialog(props: {
           <Show when={props.installing}>
             <button
               type="button"
-              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-[length:var(--floe-type-body)] font-medium hover:bg-muted')}
               onClick={() => props.onOpenChange(false)}
             >
               {i18n.t('common.actions.close')}
@@ -1180,7 +1180,7 @@ function OfficialPluginInstallDialog(props: {
           <Show when={props.installed}>
             <button
               type="button"
-              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-[length:var(--floe-type-body)] font-medium hover:bg-muted')}
               onClick={() => props.onOpenChange(false)}
             >
               {i18n.t('common.actions.close')}
@@ -1189,7 +1189,7 @@ function OfficialPluginInstallDialog(props: {
               <button
                 type="button"
                 data-plugin-install-open
-                class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90')}
+                class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-[length:var(--floe-type-body)] font-semibold text-primary-foreground hover:bg-primary/90')}
                 onClick={props.onOpenInstalled}
               >
                 {i18n.t('common.actions.open')}
@@ -1204,13 +1204,13 @@ function OfficialPluginInstallDialog(props: {
           <div data-plugin-install-review-dialog class="space-y-4">
             <PluginIdentityHeader item={headerItem()!} description />
             <Show when={props.previewLoading}>
-              <div role="status" data-plugin-install-preview-loading class="flex items-center gap-3 rounded-md border bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
+              <div role="status" data-plugin-install-preview-loading class="flex items-center gap-3 rounded-md border bg-muted/10 px-4 py-4 text-[length:var(--floe-type-body)] text-muted-foreground">
                 <RefreshIcon class="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
                 <span>{i18n.t('uiCopy.plugin.external.loadingInstallDescription')}</span>
               </div>
             </Show>
             <Show when={props.previewError}>
-              <p role="alert" data-plugin-install-preview-error class="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">{props.previewError}</p>
+              <p role="alert" data-plugin-install-preview-error class="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-[length:var(--floe-type-body)] text-destructive">{props.previewError}</p>
             </Show>
             <Show when={!props.previewLoading && !props.previewError}>
               <Show when={props.installing || props.installed} fallback={(
@@ -1223,12 +1223,12 @@ function OfficialPluginInstallDialog(props: {
                 <span>{i18n.t('uiCopy.plugin.source')}</span>
                 <span class="text-right font-medium text-foreground">{i18n.t('uiCopy.plugin.officialSource')}</span>
               </div>
-              <h3 class="text-sm font-semibold">
+              <h3 class="text-[length:var(--floe-type-body)] font-semibold">
                 {i18n.t('uiCopy.plugin.permissionsTitle', { plugin: item().displayName })}
               </h3>
               <Show
                 when={permissions().length > 0}
-                fallback={<p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.noRequiredPermissions')}</p>}
+                fallback={<p class="mt-2 text-[length:var(--floe-type-body)] leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.noRequiredPermissions')}</p>}
               >
                 <div class="mt-2 space-y-3">
                   <For each={[true, false] as const}>
@@ -1245,7 +1245,7 @@ function OfficialPluginInstallDialog(props: {
                         <Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                         <div class="min-w-0 flex-1">
                           <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-sm font-medium">{humanizePermissionID(permission.permission_id)}</span>
+                            <span class="text-[length:var(--floe-type-body)] font-medium">{humanizePermissionID(permission.permission_id)}</span>
                             <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
                               {permission.required
                                 ? i18n.t('uiCopy.plugin.requiredToOpen')
@@ -1404,7 +1404,7 @@ export function PluginCenterShell(props: {
       <header class="w-full shrink-0 border-b bg-background" data-plugin-center-toolbar>
         <div class="flex w-full min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap sm:px-4" data-plugin-center-toolbar-primary>
           <Show when={props.showTitle !== false}><div class="flex min-w-0 shrink-0 items-center gap-2">
-            <h1 class="truncate text-sm font-medium">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
+            <h1 class="truncate text-[length:var(--floe-type-body)] font-medium">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
           </div></Show>
           <label class="relative order-last block w-full min-w-0 basis-full sm:order-none sm:ml-auto sm:max-w-[480px] sm:flex-1 sm:basis-auto">
               <span class="sr-only">{i18n.t('uiCopy.plugin.searchPlaceholder')}</span>
@@ -1417,7 +1417,7 @@ export function PluginCenterShell(props: {
                 value={props.query}
                 onInput={(event) => props.onQueryInput(event.currentTarget.value)}
                 placeholder={i18n.t('uiCopy.plugin.searchPlaceholder')}
-                class="h-[44px] w-full rounded-md border bg-muted/30 pl-8 pr-2 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 sm:h-9 motion-reduce:transition-none"
+                class="h-[44px] w-full rounded-md border bg-muted/30 pl-8 pr-2 text-[length:var(--floe-type-body)] outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 sm:h-9 motion-reduce:transition-none"
               />
           </label>
           <div class="plugin-center-compact-filter"><Dropdown align="end" triggerAriaLabel={i18n.t('uiCopy.plugin.filterPlugins')}
@@ -1498,7 +1498,7 @@ export function PluginCenterShell(props: {
               role={recovery().state === 'recovering' ? 'status' : 'alert'}
               data-plugin-runtime-recovery={recovery().state}
               class={cn(
-                'flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm',
+                'flex flex-wrap items-center gap-3 border-b px-4 py-3 text-[length:var(--floe-type-body)]',
                 recovery().state === 'recovering'
                   ? 'border-primary/30 bg-primary/5 text-foreground'
                   : 'border-destructive bg-background text-destructive',
@@ -1725,11 +1725,11 @@ function PluginAuthorContent(props: {
           <div class="min-w-0 space-y-4" lang={resolved().resolved_locale} dir="auto">
             <div class="space-y-2" data-plugin-author-description>
               <For each={resolved().description}>
-                {(paragraph) => <p class="text-sm leading-6 text-foreground">{paragraph}</p>}
+                {(paragraph) => <p class="text-[length:var(--floe-type-body)] leading-6 text-foreground">{paragraph}</p>}
               </For>
             </div>
             <Show when={resolved().highlights.length > 0}>
-              <ul class="space-y-2 text-sm leading-6 text-foreground" data-plugin-author-highlights>
+              <ul class="space-y-2 text-[length:var(--floe-type-body)] leading-6 text-foreground" data-plugin-author-highlights>
                 <For each={resolved().highlights}>
                   {(highlight) => <li class="flex items-start gap-2"><span aria-hidden="true" class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /><span>{highlight}</span></li>}
                 </For>
@@ -1916,10 +1916,10 @@ function PluginPermissionInventory(props: {
                     : i18n.t('uiCopy.plugin.confirmRevokePermission', { permission: permissionName(), plugin: props.item.displayName })}
                   footer={(
                     <div class="flex w-full justify-end gap-2">
-                      <button type="button" class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border px-3 py-1.5 text-sm hover:bg-muted')} onClick={() => setConfirmation(null)}>
+                      <button type="button" class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border px-3 py-1.5 text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)] hover:bg-muted')} onClick={() => setConfirmation(null)}>
                         {i18n.t('common.actions.cancel')}
                       </button>
-                      <button type="button" class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90')} onClick={() => submit(pending().permissionID, pending().grant)}>
+                      <button type="button" class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-3 py-1.5 text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)] font-medium text-primary-foreground hover:bg-primary/90')} onClick={() => submit(pending().permissionID, pending().grant)}>
                         {pending().grant ? i18n.t('uiCopy.plugin.grantPermission') : i18n.t('uiCopy.plugin.revokePermission')}
                       </button>
                     </div>
@@ -1927,7 +1927,7 @@ function PluginPermissionInventory(props: {
                 >
                   <div class="space-y-4" data-plugin-permission-confirmation>
                     <PluginIdentityHeader item={props.item} />
-                    <div class="flex items-start gap-3 rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
+                    <div class="flex items-start gap-3 rounded-md border bg-muted/20 p-3 text-[length:var(--floe-type-body)] text-muted-foreground">
                       <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">
                         <Shield class="h-4 w-4" />
                       </span>
@@ -1990,8 +1990,8 @@ function PluginIssueDetails(props: { item: PluginInventoryItem }): JSX.Element {
         <div class="flex items-start gap-2">
           <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-[var(--redeven-status-warning-foreground)]" />
           <div class="min-w-0 flex-1">
-            <h3 class="text-sm font-semibold">{title()}</h3>
-            <p class="mt-1 text-sm leading-5 text-muted-foreground">{recovery()}</p>
+            <h3 class="text-[length:var(--floe-type-body)] font-semibold">{title()}</h3>
+            <p class="mt-1 text-[length:var(--floe-type-body)] leading-5 text-muted-foreground">{recovery()}</p>
           </div>
         </div>
         <div class="mt-3 grid gap-2 sm:grid-cols-2">
@@ -2278,7 +2278,7 @@ function PluginActions(props: {
           data-plugin-action={primaryActionDataID(presentation().primaryAction)}
           variant={presentation().primaryAction === 'open' ? 'outline' : 'primary'}
           size="sm"
-          class={cn('min-h-[44px] min-w-0 flex-1 justify-center px-4 text-sm sm:min-h-8', presentation().primaryAction === 'review_update' && PLUGIN_UPDATE_ACTION_CLASS)}
+          class={cn('min-h-[44px] min-w-0 flex-1 justify-center px-4 text-[length:var(--floe-type-body)] sm:min-h-8', presentation().primaryAction === 'review_update' && PLUGIN_UPDATE_ACTION_CLASS)}
           loading={commandPending()}
           disabled={primaryDisabled()}
           icon={primaryActionIcon(presentation().primaryAction)}
@@ -2360,8 +2360,8 @@ function PluginUninstallDialog(props: {
     >
       <div class="space-y-4">
         <PluginIdentityHeader item={props.item} />
-        <p class="text-sm text-muted-foreground" data-plugin-uninstall-layout-impact>{i18n.t('uiCopy.plugin.continuity.uninstallImpact')}</p>
-        <Show when={props.widgetCount !== undefined}><p class="text-sm">{i18n.t('uiCopy.plugin.continuity.widgetCount', { count: props.widgetCount ?? 0 })}</p></Show>
+        <p class="text-[length:var(--floe-type-body)] text-muted-foreground" data-plugin-uninstall-layout-impact>{i18n.t('uiCopy.plugin.continuity.uninstallImpact')}</p>
+        <Show when={props.widgetCount !== undefined}><p class="text-[length:var(--floe-type-body)]">{i18n.t('uiCopy.plugin.continuity.widgetCount', { count: props.widgetCount ?? 0 })}</p></Show>
         <div class="space-y-2" role="radiogroup" aria-label={i18n.t('uiCopy.plugin.uninstallDataChoice')}>
           <DataRetentionChoice
             checked={retention() === 'keep_data'}
@@ -2419,7 +2419,7 @@ function DataRetentionChoice(props: {
         </Show>
       </span>
       <span class="min-w-0">
-        <span class={cn('block text-sm font-medium', props.destructive && 'text-destructive')}>{props.label}</span>
+        <span class={cn('block text-[length:var(--floe-type-body)] font-medium', props.destructive && 'text-destructive')}>{props.label}</span>
         <span class="mt-1 block text-xs leading-5 text-muted-foreground">{props.description}</span>
       </span>
     </button>

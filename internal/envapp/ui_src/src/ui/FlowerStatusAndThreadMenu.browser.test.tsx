@@ -236,7 +236,7 @@ describe('Flower status motion and thread menu', () => {
     expect(document.activeElement).toBe(selectButton);
   });
 
-  it.each(['waiting_user', 'waiting_approval'] as const)('shows the %s label and yields its space to hovered or focused actions', async (status) => {
+  it.each(['waiting_user', 'waiting_approval'] as const)('shows the %s label and shares a stable slot with hovered or focused actions', async (status) => {
     await page.viewport(800, 600);
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -258,31 +258,36 @@ describe('Flower status motion and thread menu', () => {
 
     const card = host.querySelector('[data-flower-thread-card]') as HTMLElement;
     const select = card.querySelector('.flower-thread-card-select-button') as HTMLButtonElement;
-    const indicator = card.querySelector('.flower-thread-card-action-indicator') as HTMLElement;
+    const summary = card.querySelector('.flower-thread-card-summary') as HTMLElement;
+    const actions = card.querySelector('.flower-thread-card-actions') as HTMLElement;
+    const title = card.querySelector('.flower-thread-list-title') as HTMLElement;
     const menuButton = card.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
-    const time = card.querySelector('.flower-thread-card-time') as HTMLElement;
+    const titleWidth = title.getBoundingClientRect().width;
     await userEvent.unhover(card);
     await nextFrame();
     expect(select.getAttribute('aria-label')).toContain(DEFAULT_FLOWER_SURFACE_COPY.threadList.statuses[status]);
-    expect(getComputedStyle(indicator).visibility).toBe('visible');
-    expect(getComputedStyle(time).visibility).toBe('hidden');
+    expect(getComputedStyle(summary).opacity).toBe('1');
+    expect(card.querySelector('.flower-thread-card-time')).toBeNull();
 
     await userEvent.hover(card);
-    expect(getComputedStyle(indicator).visibility).toBe('hidden');
+    expect(getComputedStyle(summary).opacity).toBe('0');
+    expect(title.getBoundingClientRect().width).toBe(titleWidth);
+    expect(getComputedStyle(card.querySelector('.flower-thread-status-dot')!).display).not.toBe('none');
     await userEvent.unhover(card);
-    expect(getComputedStyle(indicator).visibility).toBe('visible');
+    expect(getComputedStyle(summary).opacity).toBe('1');
 
     menuButton.focus();
     await nextFrame();
     await new Promise((resolve) => window.setTimeout(resolve, 180));
 
-    expect(getComputedStyle(indicator).visibility).toBe('hidden');
-    expect(getComputedStyle(menuButton).opacity).toBe('1');
-    expect(Number(getComputedStyle(menuButton).zIndex)).toBeGreaterThan(Number(getComputedStyle(indicator).zIndex));
+    expect(getComputedStyle(summary).opacity).toBe('0');
+    expect(title.getBoundingClientRect().width).toBe(titleWidth);
+    expect(getComputedStyle(card.querySelector('.flower-thread-status-dot')!).display).not.toBe('none');
+    expect(getComputedStyle(actions).opacity).toBe('1');
 
     menuButton.blur();
     await nextFrame();
-    expect(getComputedStyle(indicator).visibility).toBe('visible');
+    expect(getComputedStyle(summary).opacity).toBe('1');
   });
 
   it.each([false, true])('fits long titles and localized action labels with touch=%s', async (touch) => {
@@ -309,12 +314,14 @@ describe('Flower status motion and thread menu', () => {
     const button = card.querySelector<HTMLElement>('.flower-thread-card-select-button')!;
     const menu = card.querySelector<HTMLElement>('.flower-thread-card-menu-button')!;
     expect(button.getAttribute('aria-label')).toBe(`${title}, ${label}`);
-    expect(getComputedStyle(badge).textOverflow).toBe('ellipsis');
+    expect(badge.getBoundingClientRect().top).toBeGreaterThanOrEqual(titleElement.getBoundingClientRect().bottom);
+    expect(badge.scrollWidth).toBeLessThanOrEqual(badge.clientWidth + 1);
+    expect(titleElement.getBoundingClientRect().width).toBeGreaterThanOrEqual(100);
     expect(titleElement.scrollWidth).toBeGreaterThan(titleElement.clientWidth);
     expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(card.getBoundingClientRect().right);
     if (touch) {
       expect(getComputedStyle(menu).opacity).toBe('1');
-      expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(menu.getBoundingClientRect().left);
+      expect(badge.getBoundingClientRect().top).toBeGreaterThanOrEqual(menu.getBoundingClientRect().bottom);
     }
   });
 });

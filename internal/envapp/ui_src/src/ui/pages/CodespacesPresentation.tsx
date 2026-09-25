@@ -22,7 +22,7 @@ export function CodespacesPageFrame(props: {
       <PanelContent class="codespaces-content p-4 space-y-4">
         <header class="codespaces-header flex items-start justify-between gap-4">
           <div class="space-y-1">
-            <div class="text-sm font-medium">{i18n.t('codespaces.title')}</div>
+            <div class="text-[length:var(--floe-type-heading)] leading-[1.375rem] font-medium">{i18n.t('codespaces.title')}</div>
             <div class="codespaces-description text-xs text-muted-foreground">{i18n.t('codespaces.description')}</div>
           </div>
           <div class="flex items-center gap-2 flex-shrink-0">
@@ -68,7 +68,7 @@ export function CodespaceCardFrame(props: {
     <CardHeader class="pb-2">
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
-          <CardTitle class="text-sm leading-5 truncate">{props.title}</CardTitle>
+          <CardTitle class="text-[length:var(--floe-type-body)] leading-5 truncate">{props.title}</CardTitle>
           <Show when={props.description}><CardDescription class="text-xs leading-4 truncate mt-0.5" title={props.descriptionTitle}>{props.description}</CardDescription></Show>
         </div>
         <div class="codespace-card-status flex h-5 shrink-0 items-center">{props.status}</div>

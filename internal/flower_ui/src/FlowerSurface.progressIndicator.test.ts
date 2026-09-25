@@ -93,7 +93,7 @@ describe('Flower progress indicator', () => {
     expect(css).toContain('50% { width: 2ch; }');
     expect(css).toContain('75% { width: 3ch; }');
     expect(textRule).toContain('font-size: 0.75rem');
-    expect(textRule).toContain('font-weight: 600');
+    expect(textRule).toContain('font-weight: 500');
     expect(textRule).toContain('white-space: nowrap');
     expect(textRule).toContain('color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%)');
     expect(textRule).not.toContain('color: transparent');
@@ -111,10 +111,6 @@ describe('Flower progress indicator', () => {
     const css = flowerStyles();
     const src = surfaceSource();
     const actionsRule = cssRule(css, '.flower-composer-actions');
-    const alignedActionsRule = cssRule(
-      css,
-      ".flower-composer:not([data-flower-companion-compact='true']) .flower-composer-actions",
-    );
     const toolClusterRule = cssRule(css, '.flower-composer-tool-cluster');
     const attachmentButtonRule = cssRule(css, '.flower-composer-attachment-button');
     const moreAnchorRule = cssRule(css, '.flower-composer-more-anchor');
@@ -125,12 +121,13 @@ describe('Flower progress indicator', () => {
 
     expect(actionsRule).toContain('display: inline-flex');
     expect(actionsRule).toContain('justify-content: flex-end');
-    expect(alignedActionsRule).toContain('transform: translateY(0.625rem)');
+    expect(actionsRule).toContain('align-items: center');
+    expect(actionsRule).not.toContain('transform:');
     expect(toolClusterRule).toContain('gap: 0');
-    expect(attachmentButtonRule).toContain('width: 2.75rem');
-    expect(attachmentButtonRule).toContain('height: 2.75rem');
-    expect(moreAnchorRule).toContain('width: 2.75rem');
-    expect(moreAnchorRule).toContain('height: 2.75rem');
+    expect(attachmentButtonRule).toContain('width: 2rem');
+    expect(attachmentButtonRule).toContain('height: 2rem');
+    expect(moreAnchorRule).toContain('width: 2rem');
+    expect(moreAnchorRule).toContain('height: 2rem');
     const toolClusterIndex = src.indexOf('class="flower-composer-tool-cluster"');
     const attachmentButtonIndex = src.indexOf('class="flower-composer-attachment-button"', toolClusterIndex);
     const moreButtonIndex = src.indexOf('{composerMoreButton()}', attachmentButtonIndex);
@@ -165,15 +162,15 @@ describe('Flower progress indicator', () => {
     const dividerRule = cssRule(css, '.flower-model-reasoning-divider');
 
     expect(controlRule).toContain('display: inline-flex');
-    expect(controlRule).toContain('height: 1.5rem');
+    expect(controlRule).toContain('height: var(--floe-control-height-sm)');
     expect(controlRule).toContain('align-items: stretch');
-    expect(controlRule).toContain('font-size: 0.6875rem');
+    expect(controlRule).toContain('font-size: var(--floe-type-supporting)');
     expect(controlRule).toContain('line-height: 1');
     expect(modelTriggerRule).toContain('height: 100%');
     expect(modelTriggerRule).toContain('font: inherit');
     expect(modelTriggerRule).toContain('line-height: 1');
     expect(reasoningSegmentRule).toContain('height: 100%');
-    expect(reasoningSegmentRule).toContain('font-size: 0.6875rem');
+    expect(reasoningSegmentRule).toContain('font-size: var(--floe-type-supporting)');
     expect(reasoningSegmentRule).toContain('line-height: 1');
     expect(dividerRule).toContain('margin-block: 0.25rem');
     expect(css).toContain('.flower-reasoning-menu-segment');
@@ -323,10 +320,10 @@ describe('Flower progress indicator', () => {
     const submitRule = cssRule(css, '.flower-composer-submit');
     const continueRule = cssRule(css, '.flower-composer-continue');
 
-    expect(submitRule).toContain('width: 2.25rem');
-    expect(submitRule).toContain('height: 2.25rem');
+    expect(submitRule).toContain('width: 2rem');
+    expect(submitRule).toContain('height: 2rem');
     expect(submitRule).toContain('padding: 0');
-    expect(continueRule).toContain('min-height: 2.25rem');
+    expect(continueRule).toContain('min-height: 2rem');
     expect(continueRule).toContain('border-radius: 9999px');
     expect(continueRule).toContain('white-space: nowrap');
     expect(continueRule).not.toContain('width: 2.25rem');

@@ -3,6 +3,7 @@ import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from '../../src/welco
 import type { DesktopWelcomeSnapshot } from '../../src/shared/desktopLauncherIPC';
 import type { RuntimeFlowerStreamEvent } from '../../src/shared/runtimeFlowerIPC';
 import '../../src/welcome/index.css';
+import { INTERFACE_DENSITY_MARKDOWN } from '../../../internal/envapp/ui_src/src/ui/FlowerSurface.interfaceDensity.fixture';
 
 declare global {
   interface Window {
@@ -44,7 +45,7 @@ const thread = {
   created_at_unix_ms: 1, updated_at_unix_ms: 2, last_message_at_unix_ms: 2,
   read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } },
 };
-const current = { thread_id: thread.thread_id, view_version: 1, activity: 'idle', items: [{ id: 'navigation-input', kind: 'user', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 1, text: 'Inspect this workspace' }], queue: [], interactions: [] };
+const current = { thread_id: thread.thread_id, view_version: 1, activity: 'idle', items: [{ id: 'navigation-input', kind: 'user', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 1, text: 'Inspect this workspace' }, { id: 'density-reading', kind: 'assistant', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 2, text: INTERFACE_DENSITY_MARKDOWN }], queue: [], interactions: [] };
 const settings: DesktopWelcomeRuntime['settings'] = {
   async load() { return { ok: false, error: 'No environment settings in this fixture.' }; },
   async save() { return { ok: false, error: 'No settings mutations in this fixture.' }; },

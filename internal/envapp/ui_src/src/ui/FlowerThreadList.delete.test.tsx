@@ -279,7 +279,7 @@ describe('FlowerThreadList deletion entry', () => {
     expect(document.activeElement?.getAttribute('role')).toBe('menuitem');
   });
 
-  it('keeps coarse-pointer menu targets at least 44px and removes the direct pin shortcut', () => {
+  it('keeps independent coarse-pointer menu and pin targets at least 44px', () => {
     const cssPath = resolve(process.cwd(), '../../flower_ui/src/styles/flower.css');
     const css = readFileSync(cssPath, 'utf8');
     const coarsePointerRules = css.slice(css.indexOf('@media (hover: none), (pointer: coarse)'));
@@ -289,6 +289,6 @@ describe('FlowerThreadList deletion entry', () => {
     expect(coarsePointerRules).toContain('height: 2.75rem;');
     expect(coarsePointerRules).toContain('.flower-thread-menu-item');
     expect(coarsePointerRules).toContain('min-height: 2.75rem;');
-    expect(coarsePointerRules).toMatch(/\.flower-thread-card-pin-button\s*{[^}]*display:\s*none;/s);
+    expect(coarsePointerRules).toMatch(/\.flower-thread-card-pin-button\s*{[^}]*width:\s*2\.75rem;[^}]*height:\s*2\.75rem;/s);
   });
 });

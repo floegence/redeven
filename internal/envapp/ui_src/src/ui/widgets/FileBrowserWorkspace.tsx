@@ -555,7 +555,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             {props.contentNotice}
             <Show when={!props.initializing && !props.contentUnavailable}>
               <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
-                <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full redeven-file-list-compact" />
+                <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />
               </Show>
             </Show>
           </div>

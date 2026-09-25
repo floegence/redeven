@@ -35,16 +35,16 @@ describe('Flower markdown readability', () => {
     expect(codeBlockRule).toContain('overflow-wrap: normal');
   });
 
-  it('keeps assistant markdown on a wider reading rhythm', () => {
+  it('keeps assistant markdown on the shared compact reading scale', () => {
     const css = flowerStyles();
 
     expect(css).toContain('.flower-message-block-stack-assistant');
     expect(css).toContain('gap: 0.75rem');
     expect(css).toContain('.flower-message-bubble-assistant .flower-chat-md-block');
     expect(css).toContain('max-width: min(100%, 58rem)');
-    expect(css).toContain('line-height: 1.75');
+    expect(cssRule(css, '.flower-chat-md-block')).toContain('line-height: var(--floe-line-body)');
     expect(css).toContain('.flower-chat-md-block h1');
-    expect(css).toContain('font-size: 1.28rem');
+    expect(cssRule(css, '.flower-chat-md-block h1')).toContain('font-size: 1rem');
     expect(css).toContain('.flower-chat-md-block hr');
   });
 
@@ -61,13 +61,13 @@ describe('Flower markdown readability', () => {
     expect(blockRule).not.toContain('Iosevka');
     expect(dividerRule).toContain('margin: 1.7rem 0 1.05rem');
     expect(dividerRule).toContain('var(--flower-chat-surface-border) 58%');
-    expect(headingRule).toContain('margin: 1.35rem 0 0.55rem');
-    expect(inlineCodeRule).toContain('var(--flower-chat-surface-elevated) 66%, var(--foreground) 24%');
+    expect(headingRule).toContain('margin: 0.75rem 0 0.375rem');
+    expect(inlineCodeRule).toContain('background: var(--flower-chat-surface-soft)');
     expect(inlineCodeRule).toContain('font-family: var(--flower-chat-md-code-font)');
-    expect(inlineCodeRule).toContain('font-weight: 560');
+    expect(inlineCodeRule).toContain('font-weight: 500');
     expect(codeBlockRule).toContain('font-family: var(--flower-chat-md-code-font)');
-    expect(codeBlockRule).toContain('font-size: 0.8125rem');
-    expect(codeBlockRule).toContain('line-height: 1.68');
+    expect(codeBlockRule).toContain('font-size: 0.75rem');
+    expect(codeBlockRule).toContain('line-height: 1.125rem');
     expect(framedCodeBlockRule).toContain('margin-top: 0');
   });
 

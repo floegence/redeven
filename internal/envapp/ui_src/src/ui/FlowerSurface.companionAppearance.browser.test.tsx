@@ -158,8 +158,8 @@ it.each(['light', 'dark'] as const)('uses the shared reading scale and aligned c
   await waitFor(() => Boolean(runtime.querySelector('.flower-chat-md-block p')));
   await document.fonts.ready;
   const paragraph = runtime.querySelector('.flower-chat-md-block p')!;
-  expect(getComputedStyle(paragraph).fontSize).toBe('14px');
-  expect(getComputedStyle(paragraph).lineHeight).toBe('22px');
+  expect(getComputedStyle(paragraph).fontSize).toBe('13px');
+  expect(getComputedStyle(paragraph).lineHeight).toBe('20px');
   expect(getComputedStyle(paragraph).fontFamily).toContain('Inter Variable');
   const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
   await userEvent.fill(editor, 'Retained draft 中文');

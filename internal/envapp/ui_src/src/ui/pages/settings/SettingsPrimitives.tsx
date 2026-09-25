@@ -119,7 +119,7 @@ export function SettingsSection(props: SettingsSectionProps) {
 export function FieldLabel(props: { children: string; hint?: string }) {
   return (
     <div class="mb-1.5">
-      <label class="text-[length:var(--floe-type-control)] leading-5 font-medium text-foreground">{props.children}</label>
+      <label class="text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)] font-medium text-foreground">{props.children}</label>
       <Show when={props.hint}>
         <span class="redeven-settings-note ml-1.5 text-xs">({props.hint})</span>
       </Show>
@@ -147,7 +147,7 @@ export function SubSectionHeader(props: { title: string; description?: string; a
   return (
     <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <div class="text-sm font-medium text-foreground">{props.title}</div>
+        <div class="text-[length:var(--floe-type-body)] font-medium text-foreground">{props.title}</div>
         <Show when={props.description}>
           <p class="redeven-settings-note mt-0.5 text-xs">{props.description}</p>
         </Show>
@@ -213,7 +213,7 @@ export function SectionCollapse(props: {
         onClick={() => props.onOpenChange(!props.open)}
       >
         <span class="min-w-0">
-          <span class="block text-sm font-medium text-foreground">{props.title}</span>
+          <span class="block text-[length:var(--floe-type-body)] font-medium text-foreground">{props.title}</span>
           <Show when={props.description}>
             <span class="redeven-settings-note mt-0.5 block text-xs">{props.description}</span>
           </Show>
@@ -362,7 +362,7 @@ export function SummaryMetric(props: SummaryMetricDef) {
         <props.icon class="h-3.5 w-3.5" />
       </div>
       <div class="min-w-0">
-        <div class="text-sm font-medium tracking-tight text-foreground">{props.value}</div>
+        <div class="text-[length:var(--floe-type-body)] font-medium tracking-tight text-foreground">{props.value}</div>
         <div class="redeven-settings-note truncate text-[11px]">{props.label}</div>
       </div>
     </button>
@@ -521,7 +521,7 @@ export function PropertyRow(props: {
     <div class="group py-2.5 first:pt-0 last:pb-0">
       <div class="text-[11px] text-muted-foreground mb-1">{props.label}</div>
       <div class="flex items-center gap-2">
-        <div class={cn('min-w-0 flex-1 text-sm', props.mono && 'font-mono text-xs')}>{props.children}</div>
+        <div class={cn('min-w-0 flex-1 text-[length:var(--floe-type-body)]', props.mono && 'font-mono text-xs')}>{props.children}</div>
         <Show when={props.copyValue}>
           <div class="flex-shrink-0">
             <CopyButton value={props.copyValue!} />
