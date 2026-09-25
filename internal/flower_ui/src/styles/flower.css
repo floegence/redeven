@@ -63,8 +63,7 @@ body { --flower-type-body: var(--floe-type-supporting); }
 
 @media (max-width: 767px) {
   .flower-component-shell .flower-composer textarea,
-  .flower-component-shell .flower-composer input[type='password'],
-  .flower-turn-launcher-textarea {
+  .flower-component-shell .flower-composer input[type='password'] {
     /* iOS Safari zooms focused text controls below 16 CSS pixels. */
     font-size: max(16px, 1rem);
   }
@@ -4124,6 +4123,10 @@ body { --flower-type-body: var(--floe-type-supporting); }
   line-height: 1.55;
 }
 
+@media (max-width: 767px), (pointer: coarse) {
+  .flower-turn-launcher-textarea { font-size: max(16px, 1rem); }
+}
+
 .flower-turn-launcher-textarea::placeholder {
   color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
 }
@@ -4144,9 +4147,6 @@ body { --flower-type-body: var(--floe-type-supporting); }
   position: absolute;
   right: 0.5rem;
   bottom: 0.5rem;
-  width: 2.25rem;
-  height: 2.25rem;
-  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
