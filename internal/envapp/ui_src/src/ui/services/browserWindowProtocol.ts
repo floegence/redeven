@@ -1,3 +1,4 @@
+import type { BrowserDocumentTheme } from './browserDocumentTheme';
 import type { BrowserFailureCode } from './browserWorkspaceController';
 import type { BrowserSourceMessages } from '../i18n/browserSourceMessages';
 import type { BrowserSourceOperation, BrowserSourceResult, BrowserSourceSelection } from './browserSourceContract';
@@ -28,7 +29,7 @@ export type BrowserDocumentConfiguration = Readonly<{
   title: string;
   locale: string;
   messages: BrowserMessages;
-  theme: Record<string, string>;
+  theme: BrowserDocumentTheme;
   library?: boolean;
   openWindow?: boolean;
   sources?: { messages: BrowserSourceMessages; current: BrowserSourceSelection; desktop: boolean };

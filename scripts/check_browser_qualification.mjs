@@ -72,7 +72,7 @@ async function main() {
     body => verifyGoTests(body, ['TestBrowserWorkspaceFailureActionsAndRecoveryAuthorization']));
   for (const [name, args] of [
     ['ui-unit', ['src/browserDocument.test.ts', 'src/ui/services/browserWorkspaceController.test.ts', 'src/ui/services/browserWindow.test.ts', 'src/ui/services/browserWorkspaceWindows.test.ts', 'src/ui/widgets/FloeBrowserSurface.test.tsx', 'src/ui/pages/EnvBrowserPage.test.tsx']],
-    ['ui-browser', ['--config', 'vitest.browser.config.ts', 'src/ui/widgets/BrowserSourceDialog.browser.test.tsx', 'src/ui/FlowerManagedBrowser.browser.test.tsx']],
+    ['ui-browser', ['--config', 'vitest.browser.config.ts', 'src/browserDocument.browser.test.tsx', 'src/ui/widgets/BrowserSourceDialog.browser.test.tsx', 'src/ui/FlowerManagedBrowser.browser.test.tsx']],
   ]) {
     const report = path.join(evidence, `${name}.json`);
     await run(name, 'pnpm', ['exec', 'vitest', 'run', ...args, '--reporter=json', `--outputFile=${report}`], ui, env, async () => verifyBrowserTests(await readFile(report, 'utf8')));

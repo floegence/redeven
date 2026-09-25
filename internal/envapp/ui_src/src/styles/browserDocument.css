@@ -1,5 +1,6 @@
+@import '@fontsource-variable/inter';
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
-body { color: var(--floe-foreground); background: var(--floe-background); font-family: system-ui, sans-serif; }
+body { color: var(--foreground); background: var(--background); font-family: inherit; }
 
 body { display: flex; flex-direction: column; }
 .redeven-browser-document-surface { flex: 1; min-height: 0; }

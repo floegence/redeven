@@ -7,14 +7,5 @@
 @source '../../../../flower_ui/src/FlowerChromeReadiness.tsx';
 @source '../../../../flower_ui/src/FlowerManagedBrowser.tsx';
 
-:root {
-  --background: var(--floe-background);
-  --foreground: var(--floe-foreground);
-  --muted-foreground: var(--floe-muted);
-  --border: var(--floe-line);
-  --primary: var(--floe-accent);
-  --muted: var(--floe-surface);
-  --secondary: var(--floe-field);
-}
 .redeven-browser-document-recovery { position: fixed; inset: 2.75rem 0 0; display: flex; z-index: 1; background: var(--background); }
 .redeven-browser-document-surface[hidden] { display: none; }

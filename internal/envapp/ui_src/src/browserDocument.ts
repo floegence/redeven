@@ -1,3 +1,4 @@
+import { applyBrowserDocumentTheme, applyBrowserChromeTheme } from './ui/services/browserDocumentTheme';
 import { browserFailureCode, type BrowserFailureCode } from './ui/services/browserFailure';
 import type { FlowerBrowserInstallationSnapshot } from '../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { BrowserSourceService } from './ui/services/browserSourceContract';
@@ -26,9 +27,7 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
   const [messages, media, product] = event.ports as [MessagePort, MessagePort, MessagePort];
   document.title = configuration.title;
   document.documentElement.lang = configuration.locale;
-  for (const [key, value] of Object.entries(configuration.theme)) {
-    if (key.startsWith('--floe-') || key === 'color-scheme') document.documentElement.style.setProperty(key, value);
-  }
+  applyBrowserDocumentTheme(configuration.theme);
   let sequence = 0;
   let active = '';
   let connected = false;
@@ -194,13 +193,7 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
     },
   });
   const chrome = document.querySelector<HTMLElement>('.floe-browser');
-  for (const [key, value] of Object.entries(configuration.theme)) {
-    if (key.startsWith('--floe-')) chrome?.style.setProperty(key, value);
-  }
-  if (chrome) {
-    const palette = getComputedStyle(chrome);
-    for (const token of ['background', 'foreground', 'muted', 'line', 'accent', 'surface', 'field']) document.documentElement.style.setProperty(`--floe-${token}`, palette.getPropertyValue(`--floe-${token}`));
-  }
+  if (chrome) applyBrowserChromeTheme(chrome);
   const visibility = () => { void request({ method: 'visibility', visible: !document.hidden }).catch(() => undefined); };
   document.addEventListener('visibilitychange', visibility);
   visibility();
