@@ -196,7 +196,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
         </div>
       )}
     >
-      <Show when={store.draft} fallback={<div class="text-sm text-muted-foreground">{copy().providerRemoved}</div>}>
+      <Show when={store.draft} fallback={<div class="flower-body-copy text-muted-foreground">{copy().providerRemoved}</div>}>
         <div class="space-y-5">
           <section class="space-y-3">
             <FlowerSubSectionHeader
@@ -229,7 +229,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                         </div>
                         <div class="min-w-0 flex-1">
                           <div class="flex items-center justify-between gap-2">
-                            <div class="text-sm font-semibold text-foreground">{providerTypeLabel(item.value)}</div>
+                            <div class="flower-body-copy font-semibold text-foreground">{providerTypeLabel(item.value)}</div>
                             <div class="flex items-center gap-2 text-xs text-muted-foreground">
                               <Show when={active()}><span>{copy().current}</span></Show>
                               <span>{expanded() ? copy().collapse : copy().configure}</span>
@@ -345,7 +345,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                               <ModelCatalogControls copy={copy().catalog} query={query()} count={store.draft!.models.length} onQuery={setQuery} onSelectAll={addAllPresets} onClear={() => setEnabled(store.draft?.models ?? [], false)} loading={loading()} error={discoveryError()} onRefresh={props.onDiscoverModels && store.draft?.type !== 'openai_compatible' ? discover : undefined} />
                               <Show
                                 when={visibleModels().length > 0}
-                                fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{copy().catalog.empty}</div>}
+                                fallback={<div class="rounded-lg border border-dashed p-4 flower-body-copy text-muted-foreground">{copy().catalog.empty}</div>}
                               >
                                 <div class="rounded-lg border border-border">
                                   <For each={visibleModels()}>
@@ -367,7 +367,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                             />
                                             <div class="min-w-0 flex-1">
                                               <div class="flex items-center gap-2">
-                                                <span class={cn('font-mono text-sm font-semibold', enabled() ? 'text-foreground' : 'text-muted-foreground')}>{preset.display_name || modelName()}</span>
+                                                <span class={cn('font-mono flower-body-copy font-semibold', enabled() ? 'text-foreground' : 'text-muted-foreground')}>{preset.display_name || modelName()}</span>
                                                 <WebSearchCapabilityBadge availability={model().web_search} copy={copy().catalog} />
                                                 <Show when={preset.status}><FlowerSettingsPill>{preset.status === 'experimental' ? copy().catalog.experimental : copy().catalog.preview}</FlowerSettingsPill></Show>
                                                 <Show when={preset.wire_model_name}>
@@ -463,7 +463,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
 
                             <Show when={props.error}>
                               {(error) => (
-                                <div role="alert" class="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                                <div role="alert" class="rounded-lg border border-destructive/30 bg-destructive/10 p-3 flower-body-copy text-destructive">
                                   {error()}
                                 </div>
                               )}

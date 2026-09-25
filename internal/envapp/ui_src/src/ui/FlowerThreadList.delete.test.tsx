@@ -15,6 +15,8 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  MessageSquare: () => <span data-icon="reply" />,
+  ShieldCheck: () => <span data-icon="approval" />,
   Copy: () => <span data-icon="copy" />,
   Folder: () => <span data-icon="folder" />,
   GitBranch: () => <span data-icon="fork" />,

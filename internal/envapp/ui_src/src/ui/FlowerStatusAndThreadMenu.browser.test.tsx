@@ -314,14 +314,18 @@ describe('Flower status motion and thread menu', () => {
     const button = card.querySelector<HTMLElement>('.flower-thread-card-select-button')!;
     const menu = card.querySelector<HTMLElement>('.flower-thread-card-menu-button')!;
     expect(button.getAttribute('aria-label')).toBe(`${title}, ${label}`);
-    expect(badge.getBoundingClientRect().top).toBeGreaterThanOrEqual(titleElement.getBoundingClientRect().bottom);
-    expect(badge.scrollWidth).toBeLessThanOrEqual(badge.clientWidth + 1);
+    const indicator = card.querySelector<HTMLElement>('.flower-thread-card-action-indicator')!;
+    expect(indicator.getBoundingClientRect().top).toBeLessThan(titleElement.getBoundingClientRect().bottom);
+    expect(indicator.getBoundingClientRect().bottom).toBeGreaterThan(titleElement.getBoundingClientRect().top);
+    expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
+    expect(indicator.querySelector('svg')).not.toBeNull();
     expect(titleElement.getBoundingClientRect().width).toBeGreaterThanOrEqual(100);
     expect(titleElement.scrollWidth).toBeGreaterThan(titleElement.clientWidth);
     expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(card.getBoundingClientRect().right);
     if (touch) {
       expect(getComputedStyle(menu).opacity).toBe('1');
-      expect(badge.getBoundingClientRect().top).toBeGreaterThanOrEqual(menu.getBoundingClientRect().bottom);
+      expect(getComputedStyle(badge).display).toBe('none');
+      expect(indicator.getBoundingClientRect().right).toBeLessThanOrEqual(menu.getBoundingClientRect().left);
     }
   });
 });

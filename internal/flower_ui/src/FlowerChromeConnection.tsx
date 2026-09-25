@@ -112,7 +112,7 @@ export function FlowerChromeConnection(props: {
   return <section class="space-y-5" data-flower-chrome-connection>
     <FlowerChromeReadiness status={connectionStatus()} diagnostic={diagnostic()} environmentName={props.environmentName} platform={props.platform} copy={props.copy}
       onRetry={diagnostic() ? () => void prepare() : undefined} retryLabel={retryLabel()} retryDisabled={opening()} />
-    <Show when={diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}><ol class="grid grid-cols-2 gap-4 text-sm">
+    <Show when={diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}><ol class="grid grid-cols-2 gap-4 flower-body-copy">
       <li aria-current={step() === 'install' ? 'step' : undefined}
         class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'install', 'border-border text-muted-foreground': step() !== 'install' }}>
         <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs">1</span>{updateRequired() ? props.copy.setupUpdateTitle : props.copy.setupInstallTitle}
@@ -122,17 +122,17 @@ export function FlowerChromeConnection(props: {
         <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs">2</span>{props.copy.setupConfirmTitle}
       </li>
     </ol></Show>
-    <Show when={status()}><p class="text-sm" role={phase() === 'failed' ? 'alert' : 'status'} aria-live="polite">{status()}</p></Show>
+    <Show when={status()}><p class="flower-body-copy" role={phase() === 'failed' ? 'alert' : 'status'} aria-live="polite">{status()}</p></Show>
     <Show when={setup() && phase() !== 'connected' && phase() !== 'preparing' && diagnostic()?.stage !== 'continue' && diagnostic()?.stage !== 'prepare'}>
       <Show when={step() === 'install'} fallback={<>
-        <p class="text-sm leading-relaxed text-muted-foreground">{props.reuseConnected ? props.copy.setupConfirmHint : props.copy.pairingConfirmHint}</p>
+        <p class="flower-body-copy leading-relaxed text-muted-foreground">{props.reuseConnected ? props.copy.setupConfirmHint : props.copy.pairingConfirmHint}</p>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <Button size="sm" variant="ghost" disabled={opening()} onClick={() => changeStep('install')}>{props.copy.setupBack}</Button>
           <Show when={manualDesktop()} fallback={<Button disabled={opening()} onClick={() => void open('connect')}>{props.copy.openConnection}</Button>}><Button onClick={copyConnection}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</Button></Show>
         </div>
       </>}>
-        <Show when={extensionsOpened()} fallback={<p class="text-sm leading-relaxed text-muted-foreground">{updateRequired() ? props.copy.setupUpdateHint : props.copy.extensionHint}</p>}><div class="space-y-4">
-          <ol class="list-decimal space-y-3 pl-5 text-sm leading-relaxed">
+        <Show when={extensionsOpened()} fallback={<p class="flower-body-copy leading-relaxed text-muted-foreground">{updateRequired() ? props.copy.setupUpdateHint : props.copy.extensionHint}</p>}><div class="space-y-4">
+          <ol class="list-decimal space-y-3 pl-5 flower-body-copy leading-relaxed">
             <li>{props.copy.setupDeveloperMode}</li>
             <li>{props.copy.setupDragFolderHint}
               <div class="mt-2 rounded-md border border-border bg-muted/30 p-3" role="group" aria-label={props.copy.extensionPath}>

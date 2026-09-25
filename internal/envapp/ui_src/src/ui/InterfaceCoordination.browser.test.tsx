@@ -121,7 +121,7 @@ it.each([false, true])('fits four choices into a compact reply surface and prese
     await page.screenshot({ element: surface, path: `__screenshots__/coordination-question${touch ? '-touch' : ''}${dark ? '-dark' : ''}.png` });
     expect.soft(surface.getBoundingClientRect().height).toBeLessThanOrEqual(touch ? 360 : 320);
   }
-  expect.soft(getComputedStyle(surface.querySelector('.flower-input-request-question-header')!).fontSize).toBe(touch ? '14px' : '13px');
+  expect.soft(getComputedStyle(surface.querySelector('.flower-input-request-question-header')!).fontSize).toBe(touch ? '14px' : '12px');
   for (const choice of surface.querySelectorAll('.flower-input-request-choice, .flower-input-request-choice-custom')) {
     expect(choice.getBoundingClientRect().height).toBeGreaterThanOrEqual(touch ? 44 : 28);
   }

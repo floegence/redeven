@@ -2,7 +2,7 @@ import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { ArrowUp, ArrowDown, Copy, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { ArrowUp, ArrowDown, Copy, GitBranch, MessageSquare, MoreHorizontal, Pencil, Pin, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Input } from '@floegence/floe-webapp-core/ui';
 
 import { FlowerThreadRows } from './FlowerThreadRows';
@@ -77,10 +77,12 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   const itemCanRename = createMemo(() => canRenameThreadItem(props.item));
   const itemCanPin = createMemo(() => canPinThreadItem(props.item));
   const titleDraggable = () => Boolean(props.item.pinned && props.reorderable && props.onDragStart);
+  const progressLabel = () => flowerThreadIsStopping(props.item) ? copy().stopping : props.busyLabel;
   const ariaLabel = () => [
     title(),
     indicator().ariaStatus,
     indicator().attention === 'unread' ? copy().unread : '',
+    props.busyLabel,
   ].filter(Boolean).join(', ');
 
   return (
@@ -134,27 +136,26 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           </Show>
           <div class="flower-thread-status-dot h-1.5 w-1.5 rounded-full" />
         </div>
-        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div class="flex min-w-0 items-center gap-1">
-            <span
-              class="flower-thread-list-title flex-1 truncate"
-              draggable={titleDraggable()}
-              title={titleDraggable() ? copy().dragPinned : undefined}
-              onDragStart={(event) => props.onDragStart?.(event, props.item)}
-              onDragEnd={() => props.onDragEnd?.()}
-            >{title()}</span>
-          </div>
-          <Show when={props.busyLabel || flowerThreadIsStopping(props.item)}>
-            <span class="text-[11px] text-muted-foreground" role="status">{flowerThreadIsStopping(props.item) ? copy().stopping : props.busyLabel}</span>
-          </Show>
-        </div>
+        <span
+          class="flower-thread-list-title flex-1 truncate"
+          draggable={titleDraggable()}
+          title={titleDraggable() ? copy().dragPinned : undefined}
+          onDragStart={(event) => props.onDragStart?.(event, props.item)}
+          onDragEnd={() => props.onDragEnd?.()}
+        >{title()}</span>
       </button>
+      <Show when={progressLabel()}>
+        <span class="sr-only" role="status">{progressLabel()}</span>
+      </Show>
       <div class="flower-thread-card-trailing">
         <div class="flower-thread-card-summary" aria-hidden="true">
           <Show when={indicator().actionRequired} fallback={
-            <span class="flower-thread-card-time">{fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>
+            <span class="flower-thread-card-time" title={progressLabel()}>{progressLabel() || fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>
           }>
             <span class="flower-thread-card-action-indicator" title={indicator().ariaStatus}>
+              <Show when={props.item.status === 'waiting_approval'} fallback={<MessageSquare class="flower-thread-card-action-icon" />}>
+                <ShieldCheck class="flower-thread-card-action-icon" />
+              </Show>
               <span class="flower-thread-card-action-badge">{indicator().ariaStatus}</span>
             </span>
           </Show>
@@ -477,7 +478,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
       <div class="flower-thread-list-toolbar flex flex-col gap-2">
         <div class="flower-thread-list-header flex items-center gap-2">
           <div class="flower-thread-list-heading min-w-0 flex-1">
-            <h2 class="flower-thread-list-title truncate text-sm font-medium">{copy().title}</h2>
+            <h2 class="flower-thread-list-title truncate font-medium">{copy().title}</h2>
             <Show when={props.warmup || props.loading}>
               <p class="flower-thread-list-description truncate text-xs" role="status">{copy().warmupDescription}</p>
             </Show>
@@ -540,7 +541,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
           </div>
         )}>
           <Show when={!showLoadError()} fallback={(
-            <div class="flower-thread-empty rounded-lg border border-dashed p-6 text-sm" role="alert">
+            <div class="flower-thread-empty rounded-lg border border-dashed p-6 flower-body-copy" role="alert">
               <div class="font-medium">{props.errorTitle || copy().title}</div>
               <div class="mt-1 text-xs text-muted-foreground">{props.error}</div>
               <button
@@ -555,7 +556,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
           )}>
             <Show
               when={filtered().length > 0}
-              fallback={<div class="flower-thread-empty rounded-lg border border-dashed p-6 text-sm">{copy().empty}</div>}
+              fallback={<div class="flower-thread-empty rounded-lg border border-dashed p-6 flower-body-copy">{copy().empty}</div>}
             >
             <FlowerThreadRows keys={visibleKeys()} render={(key) => {
               if (key.startsWith('group:')) {

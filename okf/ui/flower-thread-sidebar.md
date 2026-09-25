@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation sidebar
 description: Select conversations clearly and reorder endpoint-owned pins without interrupting live interactions.
 tags: [flower, sidebar, navigation, pins, interaction]
-timestamp: 2026-09-25T00:00:00Z
+timestamp: 2026-09-26T00:00:00Z
 ---
 
 # Summary
@@ -47,11 +47,21 @@ unread. The existing thread indicator owns this presentation through its
 `actionRequired` and localized status values. Pending action labels do not use
 unread dots or introduce a second lifecycle state.
 
-Labels share the theme-tinted gradient and hide while the row is hovered or
-contains keyboard focus so pin and menu controls remain reachable. They return
-when hover and focus leave. Long labels truncate visually while the selection
-button's accessible name retains the complete title and status. Touch layouts
-reserve space for the always-visible menu button.
+Reply and approval labels use distinct message and shield icons with the published
+info and warning colors on soft badges. Selection uses only its tinted row
+background, without a left vertical accent. Every conversation entry stays on
+one line, including operation progress and long translations. Titles and status
+text truncate instead of wrapping. At a row width of 12.5rem or less, badges show
+only their semantic icons; the complete status remains in the selection button's
+accessible name and badge tooltip. Desktop typography is 13px for titles and
+11px for status and time.
+
+Status and pin/menu controls occupy the same bounded trailing slot on desktop.
+Hover or keyboard focus reveals actions without shifting the title; attention
+remains visible through the existing indicator. Narrow rows keep pinning in the
+menu. Touch layouts show a status icon beside the always-visible menu, with 44px
+action targets. Busy and stopping progress replaces the timestamp on the same
+line and retains a polite screen-reader announcement.
 
 Canonical runtime updates control entry and exit. Submitting a reply does not
 optimistically clear the label; a failed submission leaves it visible while the
@@ -133,6 +143,7 @@ owns the broader interaction and runtime boundaries.
 # Evidence
 
 - `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - Shared interaction and menu actions.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerCompactPresentation.browser.test.tsx` - One-line geometry from 180px to 320px, long localized statuses, enlarged text and touch.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerStatusAndThreadMenu.browser.test.tsx` - Pending labels, hover, keyboard actions and touch layout.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.inputSubmission.browser.test.tsx` - Reply submission failure and background status convergence.
 - `redeven:internal/flower_ui/src/threads/FlowerThreadRows.tsx` - Retained rows and state-preserving movement.

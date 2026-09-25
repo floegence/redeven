@@ -1,5 +1,21 @@
 @import './computer-connections.css';
 
+/* Flower maps reading copy to the released supporting scale without changing host typography. */
+body { --flower-type-body: var(--floe-type-supporting); }
+@media (pointer: coarse) {
+  body { --flower-type-body: var(--floe-type-body); }
+}
+
+.flower-body-copy {
+  font-size: var(--flower-type-body);
+  line-height: var(--floe-line-body);
+}
+
+.flower-provider-dialog [data-floe-dialog-header] h2 {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
 .flower-component-shell {
   --flower-thread-rail-base: var(--sidebar, var(--card));
   --flower-thread-rail-surface: var(--flower-thread-rail-base);
@@ -715,7 +731,7 @@
 
 .flower-chat-header-title {
   min-width: 0;
-  font-size: var(--floe-type-heading);
+  font-size: 0.8125rem;
   line-height: 1.375rem;
   font-weight: 500;
   color: var(--foreground);
@@ -1141,7 +1157,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   line-height: 1.25rem;
 }
 
@@ -1362,7 +1378,7 @@
 }
 
 .flower-composer-reference-option-name {
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   font-weight: 500;
   line-height: 1.1rem;
 }
@@ -1468,7 +1484,7 @@
   padding: 0.7rem 0.8rem;
   color: color-mix(in srgb, var(--foreground) 86%, var(--muted-foreground) 14%);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--flower-type-body);
   line-height: 1.2;
   text-align: left;
   transition:
@@ -2712,7 +2728,7 @@
   flex: 1 1 auto;
   align-items: center;
   color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   font-weight: 500;
   line-height: 1.35;
 }
@@ -2821,7 +2837,7 @@
 .flower-message-bubble {
   max-width: 100%;
   min-width: 0;
-  font-size: var(--floe-type-body);
+  font-size: var(--flower-type-body);
   line-height: var(--floe-line-body);
   letter-spacing: 0;
   user-select: text;
@@ -2900,7 +2916,7 @@
   min-width: 0;
   margin: 0;
   color: inherit;
-  font-size: 0.875rem;
+  font-size: var(--flower-type-body);
   font-weight: 650;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -3018,7 +3034,7 @@
 
 .flower-message-file-name {
   overflow: hidden;
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3404,7 +3420,7 @@
   display: grid;
   min-width: 0;
   gap: 0.15rem;
-  font-size: 0.78rem;
+  font-size: var(--flower-type-body);
   line-height: 1.45;
 }
 
@@ -3837,7 +3853,7 @@
 .flower-error-message {
   margin-top: 0.2rem;
   color: color-mix(in srgb, var(--muted-foreground) 80%, var(--foreground) 20%);
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -3858,7 +3874,7 @@
   align-items: center;
   gap: 0.45rem;
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   line-height: 1.4;
 }
 
@@ -3921,7 +3937,7 @@
 .flower-thread-loading-message,
 .flower-thread-empty-message {
   color: var(--muted-foreground);
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   font-weight: 480;
   line-height: 1.5;
 }
@@ -3970,7 +3986,7 @@
   margin: 0;
   max-width: 25rem;
   color: var(--muted-foreground);
-  font-size: 0.84375rem;
+  font-size: var(--flower-type-body);
   line-height: 1.55;
 }
 
@@ -4104,7 +4120,7 @@
   min-height: 5.25rem;
   max-height: 12rem;
   padding: 0.625rem 3.5rem 2rem 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   line-height: 1.55;
 }
 
@@ -4244,7 +4260,7 @@
   padding-left: 1.2rem;
   border-left: 2px solid color-mix(in srgb, var(--flower-chat-surface-border) 42%, transparent);
   color: color-mix(in srgb, var(--muted-foreground) 90%, var(--foreground) 10%);
-  font-size: 0.8rem;
+  font-size: var(--flower-type-body);
   line-height: var(--flower-thinking-line-height);
   scrollbar-width: none;
 }
@@ -4276,7 +4292,7 @@
   display: block;
   min-width: 0;
   max-width: 100%;
-  font-size: var(--floe-type-body);
+  font-size: var(--flower-type-body);
   line-height: var(--floe-line-body);
   user-select: text;
 }
@@ -4396,7 +4412,7 @@
   max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
 }
 
 .flower-chat-md-block :is(th, td) {
@@ -4599,7 +4615,7 @@
 .flower-approval-fallback-label {
   margin: 0.125rem 0 0;
   color: var(--foreground);
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   font-weight: 650;
 }
 
@@ -4639,7 +4655,7 @@
 .flower-approval-status {
   margin-top: 0.25rem;
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -6718,7 +6734,7 @@
 }
 
 .flower-surface {
-  font-size: var(--floe-type-body);
+  font-size: var(--flower-type-body);
   line-height: var(--floe-line-body);
   --flower-chat-surface: var(--redeven-surface-main, var(--background));
   --flower-chat-surface-soft: var(--redeven-surface-panel-soft, var(--card));
@@ -6741,9 +6757,10 @@
 }
 
 .flower-thread-card {
+  container: flower-thread-row / inline-size;
   display: flex;
   flex: 0 0 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   column-gap: 0.25rem;
   border: 0;
@@ -6779,26 +6796,27 @@
 
 .flower-thread-card-select-button {
   display: flex;
-  flex: 1 1 7.5rem;
+  flex: 1 1 0;
   min-width: 0;
   min-height: var(--floe-row-height);
   align-items: center;
   gap: 0.25rem;
-  padding: 0.3125rem;
+  padding: 0.25rem 0.3125rem;
 }
 
 .flower-thread-list-title {
-  font-size: var(--floe-type-control);
-  line-height: var(--floe-line-control);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
   font-weight: 400;
 }
 
-/* Both faces occupy one intrinsic slot, so hover cannot resize the title.
-   A long translation wraps the slot below the title through the parent flex row. */
+/* Status and actions share one bounded slot; neither hover nor long copy adds a row. */
 .flower-thread-card-trailing {
   display: grid;
-  flex: 0 0 auto;
-  max-width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 36%;
   margin-left: auto;
 }
 
@@ -6811,10 +6829,18 @@
 }
 
 .flower-thread-card-summary {
+  min-width: 0;
   padding-inline: 0.25rem;
   font-size: var(--floe-type-caption);
   line-height: 1rem;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+}
+
+.flower-thread-card-time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .flower-thread-card-actions {
@@ -7019,9 +7045,46 @@
   outline: none;
 }
 
+.flower-thread-card-action-indicator {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0 0.3125rem;
+  border: 1px solid var(--redeven-status-info-border);
+  border-radius: 0.3125rem;
+  background: var(--redeven-status-info-soft);
+  color: var(--redeven-status-info-foreground);
+}
+
+.flower-thread-card[data-flower-thread-status='waiting_approval'] .flower-thread-card-action-indicator {
+  border-color: var(--redeven-status-warning-border);
+  background: var(--redeven-status-warning-soft);
+  color: var(--redeven-status-warning-foreground);
+}
+
+.flower-thread-card-action-icon {
+  width: 0.8125rem;
+  height: 0.8125rem;
+  flex: none;
+}
+
 .flower-thread-card-action-badge {
-  color: var(--primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 500;
+}
+
+@container flower-thread-row (max-width: 12.5rem) {
+  .flower-thread-card-action-badge,
+  .flower-thread-card-pin-button { display: none; }
+  .flower-thread-card-trailing { max-width: var(--floe-control-height-sm); }
+  .flower-thread-card-action-indicator { width: 1.375rem; padding: 0; gap: 0; }
 }
 
 /* Attention remains visible while actions replace the status text. */
@@ -7053,7 +7116,7 @@
   border-radius: 0.375rem;
   padding: 0.375rem 0.5rem;
   text-align: left;
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   color: var(--foreground);
   cursor: pointer;
 }
@@ -7095,7 +7158,7 @@
   display: grid;
   gap: 0.625rem;
   color: var(--foreground);
-  font-size: 0.875rem;
+  font-size: var(--flower-type-body);
   line-height: 1.5;
 }
 
@@ -7138,10 +7201,12 @@
     height: 2.75rem;
   }
 
-  .flower-thread-card-trailing { grid-template-rows: auto auto; }
-  .flower-thread-card-summary { grid-area: 2 / 1; opacity: 1; }
+  .flower-thread-card-trailing { grid-template-columns: minmax(0, auto) auto; max-width: 55%; }
+  .flower-thread-card-summary { grid-area: 1 / 1; opacity: 1; }
   .flower-thread-card-time { display: none; }
-  .flower-thread-card-actions { opacity: 1; pointer-events: auto; }
+  .flower-thread-card-pin-button { display: none; }
+  .flower-thread-card-action-badge { display: none; }
+  .flower-thread-card-actions { grid-area: 1 / 2; opacity: 1; pointer-events: auto; }
   .flower-thread-card:hover .flower-thread-card-summary,
   .flower-thread-card:focus-within .flower-thread-card-summary { opacity: 1; }
 }
@@ -7210,7 +7275,7 @@
   min-width: 4.25rem;
   border-radius: 0.375rem;
   padding: 0.5rem 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   cursor: pointer;
 }
 
@@ -7638,7 +7703,7 @@
 .flower-input-request-surface .flower-input-request-question-header,
 .flower-input-request-surface .flower-input-request-question-text:first-child {
   color: var(--foreground);
-  font-size: var(--floe-type-body);
+  font-size: var(--flower-type-body);
   font-weight: 500;
   line-height: var(--floe-line-body);
 }
@@ -7728,7 +7793,7 @@
 .flower-composer textarea {
   display: block;
   min-height: var(--floe-line-body);
-  font-size: var(--floe-type-body);
+  font-size: var(--flower-type-body);
   line-height: var(--floe-line-body);
   resize: none;
 }
@@ -7978,7 +8043,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-attachment-name {
   overflow: hidden;
   color: var(--foreground);
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   font-weight: 500;
   line-height: 1.25rem;
   text-overflow: ellipsis;
@@ -8266,6 +8331,8 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-settings-surface {
+  font-size: var(--flower-type-body);
+  line-height: var(--floe-line-body);
   --flower-settings-panel: var(--redeven-surface-panel, var(--card));
   --flower-settings-panel-soft: var(--redeven-surface-panel-soft, var(--card));
   --flower-settings-panel-elevated: var(--redeven-surface-panel-elevated, var(--card));
@@ -8331,13 +8398,13 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-title {
   margin: 0;
   color: var(--foreground);
-  font-size: var(--floe-type-heading);
+  font-size: 0.8125rem;
   font-weight: 500;
   letter-spacing: 0;
 }
 
 .flower-settings-model-field { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
-.flower-settings-model-select { min-height: 2rem; max-width: 100%; font-size: 0.8125rem; }
+.flower-settings-model-select { min-height: 2rem; max-width: 100%; font-size: var(--flower-type-body); }
 
 .flower-settings-policy-radio {
   display: inline-flex;
@@ -8368,7 +8435,7 @@ button.flower-attachment-preview-trigger:disabled {
   background: var(--background);
   padding: 0 0.75rem;
   color: var(--foreground);
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
 }
 
 .flower-settings-text-input:disabled { cursor: not-allowed; opacity: 0.6; }
@@ -8930,7 +8997,7 @@ button.flower-attachment-preview-trigger:disabled {
   margin: 0;
   color: color-mix(in srgb, var(--flower-subagent-window-text) 84%, var(--flower-subagent-window-muted) 16%);
   overflow: hidden;
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   font-weight: 480;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -9013,7 +9080,7 @@ button.flower-attachment-preview-trigger:disabled {
   gap: 0.65rem;
   color: var(--flower-subagent-window-muted);
   padding: 1.5rem;
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
 }
 
 .flower-subagent-detail-state-error {
@@ -9260,7 +9327,7 @@ button.flower-attachment-preview-trigger:disabled {
   background: transparent;
   color: var(--flower-subagent-window-text);
   padding: 0;
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   line-height: 1.62;
 }
 
@@ -9395,7 +9462,7 @@ button.flower-attachment-preview-trigger:disabled {
   color: var(--flower-subagent-window-muted);
   padding: 2.5rem 1rem;
   text-align: center;
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
 }
 
 @media (max-width: 560px) {
@@ -9474,7 +9541,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-model-picker-label {
   min-width: 0;
   overflow: hidden;
-  font-size: var(--floe-type-body);
+  font-size: var(--flower-type-body);
   font-weight: 500;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -9535,7 +9602,7 @@ button.flower-attachment-preview-trigger:disabled {
   border-radius: 0;
   background: transparent;
   padding: 0 0.125rem;
-  font-size: 0.875rem;
+  font-size: var(--flower-type-body);
   color: var(--foreground);
   outline: none;
   transition:
@@ -9596,7 +9663,7 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-settings-policy-card-label {
   color: var(--foreground);
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   font-weight: 500;
   line-height: 1.5;
 }
@@ -9657,7 +9724,7 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-settings-model-limits dt { color: var(--muted-foreground); font-size: 0.6875rem; line-height: 1.5; }
-.flower-settings-model-limits dd { margin: 0.375rem 0 0; color: var(--foreground); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.flower-settings-model-limits dd { margin: 0.375rem 0 0; color: var(--foreground); font-size: var(--flower-type-body); font-variant-numeric: tabular-nums; }
 .flower-settings-reasoning { margin-top: 1.5rem; }
 .flower-settings-policy-copy { display: grid; min-width: 0; gap: 0.375rem; }
 .flower-settings-policy-card > .flower-settings-policy-radio { margin-top: 0.125rem; }
@@ -9717,7 +9784,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-subsection-title {
   margin: 0;
   color: var(--foreground);
-  font-size: var(--floe-type-body);
+  font-size: 0.8125rem;
   font-weight: 500;
   line-height: 1.5;
 }
@@ -9822,7 +9889,7 @@ button.flower-attachment-preview-trigger:disabled {
   border-left: 2px solid var(--flower-settings-border);
   padding: 0.625rem 1rem;
   color: var(--muted-foreground);
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
 }
 
 [data-flower-provider-brand] > svg,
@@ -9857,7 +9924,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-terminal-label {
   min-width: 0;
   color: var(--muted-foreground);
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   font-weight: 500;
 }
 
@@ -9885,7 +9952,7 @@ button.flower-attachment-preview-trigger:disabled {
   border-left-color: color-mix(in srgb, var(--destructive) 72%, var(--foreground) 4%);
   background: color-mix(in srgb, var(--destructive) 9%, transparent);
   color: var(--destructive);
-  font-size: 0.875rem;
+  font-size: var(--flower-type-body);
 }
 
 .flower-chat-main[data-setup-welcome='true'] .flower-chat-bottom-dock { display: none; }
@@ -9916,7 +9983,7 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-setup-brand > svg { width: 2.75rem; height: 2.75rem; }
 .flower-setup-welcome > h2 { margin: 0; font-size: 1.75rem; line-height: 1.25; font-weight: 600; letter-spacing: -0.035em; }
-.flower-setup-description { margin: 0.75rem 0 0; color: var(--muted-foreground); font-size: 0.875rem; line-height: 1.7; text-wrap: balance; }
+.flower-setup-description { margin: 0.75rem 0 0; color: var(--muted-foreground); font-size: var(--flower-type-body); line-height: 1.7; text-wrap: balance; }
 .flower-setup-actions { display: grid; width: 100%; gap: 0.75rem; margin-top: 1.75rem; }
 
 .flower-setup-action {
@@ -9932,7 +9999,7 @@ button.flower-attachment-preview-trigger:disabled {
   padding: 0.875rem 1rem;
   color: var(--foreground);
   text-align: left;
-  font-size: 0.8125rem;
+  font-size: var(--flower-type-body);
   font-weight: 550;
   line-height: 1.5;
   transition: background-color 120ms ease, border-color 120ms ease;
@@ -10526,6 +10593,7 @@ button.flower-attachment-preview-trigger:disabled {
 
   .flower-settings-model-select,
   .flower-settings-text-input,
+  .flower-settings-input,
   .flower-settings-select { min-height: 44px; font-size: 1rem; }
 }
 

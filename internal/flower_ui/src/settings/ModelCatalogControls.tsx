@@ -14,6 +14,6 @@ export function ModelCatalogControls(props: Readonly<{
       <Button size="sm" variant="ghost" disabled={props.disabled || props.loading || props.count === 0} onClick={props.onClear}>{props.copy.clearAll}</Button>
       <Show when={props.onRefresh}><Button size="sm" variant="outline" disabled={props.disabled || props.loading} onClick={() => props.onRefresh?.()}>{props.loading ? props.copy.loading : props.copy.refresh}</Button></Show>
     </div>
-    <Show when={props.error}><p role="alert" class="text-sm text-destructive">{props.error}</p></Show>
+    <Show when={props.error}><p role="alert" class="flower-body-copy text-destructive">{props.error}</p></Show>
   </div>;
 }

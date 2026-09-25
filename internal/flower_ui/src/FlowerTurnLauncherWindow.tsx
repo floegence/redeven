@@ -422,7 +422,7 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                   <FlowerLauncherAvatar />
                   <div class="chat-message-content-wrapper max-w-[min(100%,37rem)] gap-1">
                     <div class="flower-turn-launcher-message-surface min-w-0 rounded-[1.05rem] rounded-tl-md px-2.5 py-2 shadow-[0_14px_28px_-28px_color-mix(in_srgb,var(--foreground)_34%,transparent)] backdrop-blur sm:px-3 sm:py-2.5">
-                      <div class="text-sm leading-5 text-foreground/95">{projected()?.question}</div>
+                      <div class="flower-body-copy leading-5 text-foreground/95">{projected()?.question}</div>
 
                       <Show when={(projected()?.context_entries.length ?? 0) > 0}>
                         <div class="mt-2 border-t border-border/50 pt-2">

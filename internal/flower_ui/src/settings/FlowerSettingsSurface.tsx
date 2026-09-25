@@ -560,9 +560,9 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
             <FlowerSubSectionHeader title={copy().currentModel} />
             <div class="flower-settings-section-content">
               <Show when={currentModelID() && !activeModelOption()}>
-                <p role="alert" class="mb-3 text-sm text-destructive">{copy().dialog.catalog.unavailable}</p>
+                <p role="alert" class="mb-3 flower-body-copy text-destructive">{copy().dialog.catalog.unavailable}</p>
               </Show>
-              <Show when={modelOptions().length > 0} fallback={<p class="text-sm text-muted-foreground">{copy().noModelSelected}</p>}>
+              <Show when={modelOptions().length > 0} fallback={<p class="flower-body-copy text-muted-foreground">{copy().noModelSelected}</p>}>
                 <div class="flower-settings-model-field">
                   <Select
                     value={currentModelID()}
@@ -618,7 +618,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                         <div class="flower-settings-provider-body">
                           <div class="flower-settings-provider-topline">
                             <div class="flower-settings-provider-title">
-                              <span class="truncate text-sm font-semibold text-foreground">{providerDisplayName(provider, copy().providerTypeLabels)}</span>
+                              <span class="truncate flower-body-copy font-semibold text-foreground">{providerDisplayName(provider, copy().providerTypeLabels)}</span>
                               <Show when={providerDisplayName(provider, copy().providerTypeLabels) !== copy().providerTypeLabels[provider.type]}>
                                 <span class="text-xs text-muted-foreground">{copy().providerTypeLabels[provider.type]}</span>
                               </Show>

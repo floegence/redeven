@@ -70,8 +70,10 @@ for (const [locale, dark, width] of [
     document.documentElement.classList.toggle('dark', dark);
     const frame = host.querySelector<HTMLElement>('.flower-settings-frame')!;
     expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth);
-    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontSize).toBe('16px');
+    expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontSize).toBe('13px');
     expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontWeight).toBe('500');
+    expect(getComputedStyle(frame.querySelector('.flower-settings-subsection-description')!).fontSize).toBe('12px');
+    expect(getComputedStyle(frame.querySelector('.flower-settings-model-select')!).fontSize).toBe('12px');
     const sections = [...frame.querySelectorAll<HTMLElement>(':scope > section')];
     expect(sections).toHaveLength(4);
     for (let index = 0; index < sections.length; index++) {
@@ -154,4 +156,17 @@ it('saves permission by keyboard and restores the computer switch after a failed
   await userEvent.keyboard('{Enter}');
   await expect.poll(() => toggle.getAttribute('aria-checked')).toBe('false');
   expect(saveComputer).toHaveBeenLastCalledWith(false);
+});
+
+it('keeps the independently portaled provider dialog on the Flower reading scale', async () => {
+  await mount();
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-add')!);
+  await expect.poll(() => document.querySelector('.flower-provider-dialog')).not.toBeNull();
+  const dialog = document.querySelector<HTMLElement>('.flower-provider-dialog')!;
+  expect(getComputedStyle(dialog.querySelector('[data-floe-dialog-header] h2')!).fontSize).toBe('13px');
+  expect(getComputedStyle(dialog.querySelector('.flower-settings-subsection-description')!).fontSize).toBe('12px');
+  for (const copy of dialog.querySelectorAll('.flower-body-copy')) {
+    expect(getComputedStyle(copy).fontSize).toBe('12px');
+  }
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
 });

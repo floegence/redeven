@@ -13,6 +13,8 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  MessageSquare: () => <span data-icon="reply" />,
+  ShieldCheck: () => <span data-icon="approval" />,
   MoreHorizontal: (props: { class?: string }) => <span data-icon="more" class={props.class} />,
 }));
 
