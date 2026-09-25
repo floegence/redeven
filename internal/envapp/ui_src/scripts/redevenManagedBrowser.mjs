@@ -11,7 +11,7 @@ try {
   if (!path.isAbsolute(profile)) throw new Error('invalid profile');
   const executablePath = process.argv[3];
   if (!executablePath || !path.isAbsolute(executablePath)) throw new Error('browser installation required');
-  context = await chromium.launchPersistentContext(profile, { executablePath, chromiumSandbox: true, headless: true, viewport: { width: 1280, height: 800 }, args: ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1'] });
+  context = await chromium.launchPersistentContext(profile, { executablePath, chromiumSandbox: true, headless: true, viewport: null, args: ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1'] });
   // This launcher owns the process, not page decisions. A listener disables
   // Playwright's default auto-dismiss; the source host owns every dialog reply.
   context.on('dialog', () => {});

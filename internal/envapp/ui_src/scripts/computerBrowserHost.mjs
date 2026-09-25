@@ -212,6 +212,7 @@ export async function createComputerBrowserHost(options) {
       owner = await createComputerBrowserSource(selected, id, {
         captureDownloads: !descriptor.managed,
         nativeDownloads: false,
+        windowViewport: descriptor.managed === true,
         onPopup: async popup => {
           // Only the owned managed profile has directory-wide product authority.
           // External pages remain explicitly selected. Managed popups inherit

@@ -3,10 +3,10 @@ import { BrowserComputerController } from './computerBrowserController.mjs';
 
 // The target helper owns one source adapter. Semantic tools and DOM projection
 // borrow its root and child transports; neither creates another debugger owner.
-export async function createComputerBrowserSource(page, targetID, { onPopup = () => {}, captureDownloads = false, nativeDownloads = !captureDownloads } = {}) {
+export async function createComputerBrowserSource(page, targetID, { onPopup = () => {}, captureDownloads = false, nativeDownloads = !captureDownloads, windowViewport = false } = {}) {
   // The Runtime admits popups explicitly. A source adapter never assigns a
   // second identity or grants observation merely because a page opened it.
-  const browser = new PlaywrightSourceBrowser({ onPopup, nativeDownloads });
+  const browser = new PlaywrightSourceBrowser({ onPopup, nativeDownloads, windowViewport });
   try {
     const source = await browser.adopt(page, targetID);
     return await createSourceOwner(source, () => browser.dispose(), captureDownloads);
