@@ -117,8 +117,10 @@ request headers. This works without a Service Worker on direct Local UI clients.
 Selecting the current source explicitly opens a fresh view, including after
 browser installation or a failed initial open. Browser chrome consumes the host
 palette in welcome, navigation and disconnected states. Web Services retains its
-globe icon; Remote Browser uses a rounded browser-window outline with a compact
-outward arrow, with consistent current-color styling in both themes.
+globe icon; Remote Browser uses a purpose-drawn navigation compass: a single
+round bezel and a split-tone diagonal needle remain legible at the 24 px dock
+size. All shapes inherit the navigation color in both themes and all interaction
+states; the icon is decorative and the owning control supplies its localized name.
 
 The source chooser owns its draft and pending selection until explicit dismissal
 or successful document replacement. Opening and failure updates from a retired
