@@ -239,6 +239,7 @@ try {
     await page.getByRole('radio', { name: 'Password', exact: true }).click();
     await page.locator('#ssh-settings-release_base_url').fill(`https://mirror.example.com/${'release/'.repeat(18)}`);
     await page.setViewportSize({ width: 480, height: 640 });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const scrolling = await page.locator('.redeven-environment-settings-dialog').evaluate(panel => {
       const body = panel.querySelector('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-scroll');
       const header = panel.firstElementChild.getBoundingClientRect();
@@ -253,11 +254,13 @@ try {
         headerStable: header.top === panel.firstElementChild.getBoundingClientRect().top,
         footerStable: footer.bottom === panel.querySelector('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-actions').getBoundingClientRect().bottom,
         actionsVisible: footer.bottom <= innerHeight,
+        footerBottom: footer.bottom,
+        viewportHeight: innerHeight,
       };
     });
     assert.ok(scrolling.overflow > 0 && scrolling.scrollTop > 0, `${mode}: real body scrolling`);
     assert.equal(scrolling.panelScroll, 0, `${mode}: only the body scrolls`);
-    assert.ok(scrolling.headerStable && scrolling.footerStable && scrolling.actionsVisible);
+    assert.ok(scrolling.headerStable && scrolling.footerStable && scrolling.actionsVisible, JSON.stringify(scrolling));
     if (mode === 'Always') assert.ok(scrolling.gutter > 0, 'native persistent scrollbar reserves space');
     if (mode === 'WhenScrolling') assert.equal(scrolling.gutter, 0, 'native overlay scrollbar reserves no space');
     console.log(`SSH scrollbar mode ${mode} passed (gutter ${scrolling.gutter}px).`);
@@ -265,7 +268,10 @@ try {
   await page.close();
   page = await browser.newPage({ viewport: { width: 390, height: 800 }, hasTouch: true });
   page.on('pageerror', error => errors.push(error.message));
-  await open();
+  await page.goto(`${base}/ssh-settings.html?locale=en-US&theme=classic-light`);
+  await page.locator('#fixture-open').click();
+  await page.locator('.ssh-settings-form input').first().waitFor();
+  await page.evaluate(() => document.fonts.ready);
   const touchFields = await page.locator('.ssh-settings-form input:not([type="checkbox"]), .ssh-settings-form select').evaluateAll(fields => fields.map(field => ({
     size: getComputedStyle(field).fontSize,
     height: field.getBoundingClientRect().height,
