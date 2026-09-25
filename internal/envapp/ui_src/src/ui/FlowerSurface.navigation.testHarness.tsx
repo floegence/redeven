@@ -138,6 +138,8 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
     GripVertical: Icon,
     Info: Icon,
     Menu: actual.Menu,
+    MessageSquare: actual.MessageSquare,
+    ShieldCheck: actual.ShieldCheck,
     MoreHorizontal: Icon,
     Link: actual.Link,
     MonitorPointer: actual.MonitorPointer,

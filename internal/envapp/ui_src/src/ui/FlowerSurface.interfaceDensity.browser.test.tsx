@@ -32,7 +32,7 @@ it.each([434, 758])('keeps the mixed-script reading sample compact at %ipx', asy
     font: getComputedStyle(paragraph).fontFamily, root: getComputedStyle(document.documentElement).fontSize, dpr: devicePixelRatio, scale: visualViewport?.scale };
   console.info('Interface density reading geometry', JSON.stringify(geometry));
   await page.screenshot({ element: host, path: `__screenshots__/density-reading-${width}.png` });
-  expect.soft(geometry.size).toBe('13px');
+  expect.soft(geometry.size).toBe('12px');
   expect.soft(geometry.line).toBe('20px');
   expect.soft(geometry.weight).toBe('400');
   expect.soft(getComputedStyle(content.querySelector('strong')!).fontWeight).toBe('600');
@@ -83,6 +83,8 @@ it('keeps the empty composer at 84px and the header at 40px', async () => {
   Object.assign(runtime.style, { width: '1200px', height: '800px' });
   await waitFor(() => Boolean(runtime.querySelector('.flower-composer')));
   await document.fonts.ready; await frame();
+  expect.soft(getComputedStyle(runtime.querySelector('.flower-chat-header-title')!).fontSize).toBe('13px');
+  expect.soft(getComputedStyle(runtime.querySelector('.flower-composer textarea')!).fontSize).toBe('12px');
   expect.soft(runtime.querySelector('.flower-chat-header')!.getBoundingClientRect().height).toBe(40);
   expect.soft(runtime.querySelector('.flower-composer')!.getBoundingClientRect().height).toBe(84);
 });
@@ -108,11 +110,12 @@ it.each([false, true])('keeps thread controls and reading roles usable with coar
     document.documentElement.style.fontSize = `${root}px`;
     await document.fonts.ready; await frame();
     const paragraph = host.querySelector('p')!;
-    expect(parseFloat(getComputedStyle(title).fontSize)).toBe(root * (touch ? 0.8125 : 0.75));
-    expect(parseFloat(getComputedStyle(paragraph).fontSize)).toBe(root * (touch ? 0.875 : 0.8125));
+    expect(parseFloat(getComputedStyle(title).fontSize)).toBe(root * 0.8125);
+    expect(parseFloat(getComputedStyle(paragraph).fontSize)).toBe(root * (touch ? 0.875 : 0.75));
     expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
     for (const button of host.querySelectorAll('button')) {
       const box = button.getBoundingClientRect();
+      if (getComputedStyle(button).display === 'none') continue;
       expect(box.height).toBeGreaterThanOrEqual(touch ? 44 : root * 1.75);
       expect(box.width).toBeGreaterThanOrEqual(touch ? 44 : root * 1.75);
     }

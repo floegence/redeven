@@ -54,7 +54,7 @@ export const FlowerEmptyState: Component<FlowerEmptyStateProps> = (props) => {
       <div class="flower-empty-hero">
         <FlowerHeroBadge />
         <h2 class="mb-2 text-base font-medium text-foreground">{copy().title}</h2>
-        <p class="text-sm leading-[22px] text-muted-foreground">{copy().description}</p>
+        <p class="flower-body-copy leading-[22px] text-muted-foreground">{copy().description}</p>
         {props.workingDirectory}
       </div>
 

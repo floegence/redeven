@@ -83,7 +83,7 @@ try {
         await page.screenshot({ path: path.join(output, `flower-${mode}-${material}-${zoom}.png`) });
         assert.equal(actualZoom, zoom);
         assert.equal(metrics.root, '16px');
-        assert.equal(metrics.size, '13px'); assert.equal(metrics.line, '20px'); assert.equal(metrics.weight, '400');
+        assert.equal(metrics.size, '12px'); assert.equal(metrics.line, '20px'); assert.equal(metrics.weight, '400');
         assert.ok(metrics.font.includes('Inter Variable'));
         assert.equal(metrics.retained, true); assert.equal(metrics.overflow, false); assert.equal(metrics.controlsContained, true);
         if (zoom === 1) { assert.equal(metrics.header, 40); assert.equal(metrics.composer, 84); }

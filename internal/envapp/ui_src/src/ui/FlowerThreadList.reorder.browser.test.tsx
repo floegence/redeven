@@ -53,7 +53,7 @@ describe('Flower pinned conversation interaction', () => {
     const ordinary = ui.row('ordinary').querySelector<HTMLElement>('.flower-thread-list-title')!;
     expect(pinned.getBoundingClientRect().left).toBe(ordinary.getBoundingClientRect().left);
     expect(pinned.getBoundingClientRect().width).toBe(ordinary.getBoundingClientRect().width);
-    expect(getComputedStyle(pinned).fontSize).toBe('12px');
+    expect(getComputedStyle(pinned).fontSize).toBe('13px');
     expect(ui.row('first').querySelector('.flower-thread-card-select-button')!.getBoundingClientRect().height).toBe(28);
     expect(pinned.draggable).toBe(true);
     expect(pinned.title).toBe(copy.dragPinned);

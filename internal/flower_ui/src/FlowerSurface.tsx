@@ -11037,7 +11037,7 @@ webSearch: model.web_search,
             composerAutosizeController = createFlowerComposerAutosizeController(el);
             if (companionCollapsed()) composerAutosizeController.suspend();
           }}
-          class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
+          class="w-full flower-body-copy leading-6 text-foreground placeholder:text-muted-foreground"
           placeholder={composerPlaceholder()}
           value={composerTextValue()}
           disabled={composerTextareaDisabled()}
@@ -11104,7 +11104,7 @@ webSearch: model.web_search,
           composerRef = el;
         }}
         type="password"
-        class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
+        class="w-full flower-body-copy leading-6 text-foreground placeholder:text-muted-foreground"
         placeholder={composerPlaceholder()}
         value={composerTextValue()}
         disabled={composerTextareaDisabled()}
@@ -12164,7 +12164,7 @@ webSearch: model.web_search,
         <Show when={sidePanel() === 'chat'}>{chatPanel()}</Show>
         <div class={cn('h-full min-h-0', sidePanel() !== 'settings' && 'hidden')} aria-hidden={sidePanel() !== 'settings'}>
           <Show when={settingsOpened()}>
-            <Suspense fallback={<div class="p-4 text-sm text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
+            <Suspense fallback={<div class="p-4 flower-body-copy text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
               <FlowerSettingsSurface
                 onDiscoverModels={props.adapter.discoverProviderModels}
                 snapshot={snapshot()}

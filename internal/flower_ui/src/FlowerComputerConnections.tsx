@@ -183,7 +183,7 @@ export function FlowerComputerConnections(props: {
     <Show when={!props.connectionOnly} fallback={<Show when={management()?.loadExtensionStatus && management()?.setupExtension && management()?.openExtension && props.adapter.canMutate !== false} fallback={<p role="alert">{props.copy.setupRequired}</p>}>
       <Show when={guideKey()} keyed>{_key => <FlowerChromeConnection environmentName={environment()?.hostname || props.adapter.runtime.display_name} reuseConnected management={management()!} copy={props.copy} onConnected={async () => { await props.onContinue?.(); }} />}</Show>
     </Show>}>
-      <div class={`flower-computer-panel text-sm${page() === 'targets' ? ' flower-computer-picker' : ' space-y-5'}`} data-flower-computer-panel={page()} aria-busy={loading() || busy()}>
+      <div class={`flower-computer-panel flower-body-copy${page() === 'targets' ? ' flower-computer-picker' : ' space-y-5'}`} data-flower-computer-panel={page()} aria-busy={loading() || busy()}>
         <Show when={page() !== 'chrome' && page() !== 'setup'}><div class="flower-computer-environment"><span>{props.copy.environmentTitle}</span><span class="flower-computer-host"><MonitorPointer aria-hidden="true" />{environment()?.hostname || props.adapter.runtime.display_name}</span><Show when={environment()?.platform}><span class="flower-computer-platform">{environment()!.platform === 'darwin' ? 'macOS' : environment()!.platform === 'linux' ? 'Linux' : environment()!.platform}</span></Show></div></Show>
         <Show when={page() === 'overview'}>
           <Show when={props.threadID} fallback={<p class="text-xs text-muted-foreground">{props.copy.noThread}</p>}>

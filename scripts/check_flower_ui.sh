@@ -174,6 +174,7 @@ main() {
         src/ui/FlowerSurface.streamingStability.browser.test.tsx \
         src/ui/FlowerMarkdown.streamingStability.browser.test.tsx \
         src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \
+        src/ui/FlowerCompactPresentation.browser.test.tsx \
         src/ui/FlowerDirectoryMenus.browser.test.tsx \
         src/ui/FlowerWorkingDirectory.browser.test.tsx \
         src/ui/FlowerSurface.directoryPicker.browser.test.tsx \
