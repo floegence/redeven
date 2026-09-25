@@ -71,7 +71,7 @@ async function main() {
   await run('api', 'go', ['test', './internal/codeapp/appserver', '-run', '^TestBrowser(WorkspaceFailure|ViewAPI|Library)', '-count=1', '-json'], root, env,
     body => verifyGoTests(body, ['TestBrowserWorkspaceFailureActionsAndRecoveryAuthorization']));
   for (const [name, args] of [
-    ['ui-unit', ['src/ui/services/browserWorkspaceController.test.ts', 'src/ui/services/browserWindow.test.ts', 'src/ui/services/browserWorkspaceWindows.test.ts', 'src/ui/widgets/FloeBrowserSurface.test.tsx', 'src/ui/pages/EnvBrowserPage.test.tsx']],
+    ['ui-unit', ['src/browserDocument.test.ts', 'src/ui/services/browserWorkspaceController.test.ts', 'src/ui/services/browserWindow.test.ts', 'src/ui/services/browserWorkspaceWindows.test.ts', 'src/ui/widgets/FloeBrowserSurface.test.tsx', 'src/ui/pages/EnvBrowserPage.test.tsx']],
     ['ui-browser', ['--config', 'vitest.browser.config.ts', 'src/ui/widgets/BrowserSourceDialog.browser.test.tsx', 'src/ui/FlowerManagedBrowser.browser.test.tsx']],
   ]) {
     const report = path.join(evidence, `${name}.json`);

@@ -7303,7 +7303,7 @@
     "installOpen": "安装并打开",
     "recoverTitle": "浏览器服务已停止",
     "recover": "恢复浏览器",
-    "recoveryDescription": "将重启环境浏览器并恢复已保存的标签页。页面中未保存的内容可能丢失，其他环境服务将继续运行。",
+    "recoveryDescription": "将重启环境浏览器并恢复已保存的标签页。未提交的表单和页面中未保存的内容可能丢失，其他环境服务将继续运行。",
     "sourceUnavailable": "此页面已不可用，请重新选择浏览器来源。",
     "disconnected": "浏览器连接已中断。",
     "openFailed": "无法打开浏览器，请重试或选择其他来源。",

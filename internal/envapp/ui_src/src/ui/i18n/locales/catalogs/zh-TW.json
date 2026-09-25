@@ -7303,7 +7303,7 @@
     "installOpen": "安裝並開啟",
     "recoverTitle": "瀏覽器服務已停止",
     "recover": "復原瀏覽器",
-    "recoveryDescription": "將重新啟動環境瀏覽器並還原已儲存的分頁。頁面中未儲存的內容可能遺失，其他環境服務將繼續執行。",
+    "recoveryDescription": "將重新啟動環境瀏覽器並還原已儲存的分頁。尚未送出的表單及頁面中未儲存的內容可能遺失，其他環境服務將繼續執行。",
     "sourceUnavailable": "此頁面已無法使用，請重新選擇瀏覽器來源。",
     "disconnected": "瀏覽器連線已中斷。",
     "openFailed": "無法開啟瀏覽器，請重試或選擇其他來源。",
