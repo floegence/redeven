@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { MessageChannel } from 'node:worker_threads';
+import { englishMessages } from '@floegence/floebrowser/viewer';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { BrowserDocumentConfiguration } from './ui/services/browserWindowProtocol';
 import type { mountBrowserRecovery, mountBrowserSources } from './browserSources';
@@ -9,7 +10,8 @@ const state = vi.hoisted(() => ({
   sources: undefined as Parameters<typeof mountBrowserSources>[0] | undefined,
   disposeSources: vi.fn(),
 }));
-vi.mock('@floegence/floebrowser/viewer', () => ({
+vi.mock('@floegence/floebrowser/viewer', async importOriginal => ({
+  englishMessages: (await importOriginal<typeof import('@floegence/floebrowser/viewer')>()).englishMessages,
   mountBrowser: vi.fn(),
   projectionPortConnection: vi.fn(() => ({})),
 }));
@@ -36,7 +38,7 @@ it('keeps source-selection intent alive while a retired document reports opening
   await import('./browserDocument');
   const ports = Array.from({ length: 3 }, () => { const channel = new MessageChannel(); channels.push(channel); return channel; });
   const configuration = {
-    type: 'redeven-browser-ports', nonce, title: 'Remote Browser', locale: 'en-US', messages: {}, theme: { tokens: {}, dark: false, surfaceStyle: '', shellTheme: '', fontFamily: 'sans-serif' },
+    type: 'redeven-browser-ports', nonce, title: 'Remote Browser', locale: 'en-US', messages: englishMessages, theme: { tokens: {}, dark: false, surfaceStyle: '', shellTheme: '', fontFamily: 'sans-serif' },
     failure: 'BROWSER_SERVICE_FAILED',
     sources: { desktop: false, current: { label: 'Default', request: { managed_profile_id: 'browser-main' } }, messages: { product: {}, computer: {} } },
   } as BrowserDocumentConfiguration;
@@ -64,4 +66,48 @@ it('keeps source-selection intent alive while a retired document reports opening
   state.sources!.close();
   expect(state.disposeSources).toHaveBeenCalledOnce();
   expect(lifetime.signal.aborted).toBe(true);
+});
+
+it('prepares idle control before presentation and never reacquires from live or tab notifications', async () => {
+  const { mountBrowser } = await import('@floegence/floebrowser/viewer');
+  const owner = { postMessage: vi.fn() };
+  vi.stubGlobal('opener', owner);
+  const nonce = 'browser-preparation-fixture';
+  history.replaceState(null, '', `/#${nonce}`);
+  await import('./browserDocument');
+  const ports = Array.from({ length: 3 }, () => { const channel = new MessageChannel(); channels.push(channel); return channel; });
+  const configuration: BrowserDocumentConfiguration = {
+    type: 'redeven-browser-ports', nonce, title: 'Remote Browser', locale: 'en-US', messages: englishMessages,
+    theme: { tokens: {}, dark: false, surfaceStyle: '', shellTheme: '', fontFamily: 'sans-serif' },
+  };
+  const events: Array<{ type: string; id: number; operation?: { method: string; target?: string; takeover?: boolean; private?: boolean } }> = [];
+  const product = ports[2]!.port1;
+  product.onmessage = event => { events.push(event.data); };
+  window.dispatchEvent(new MessageEvent('message', { source: owner as unknown as Window, origin: location.origin, data: configuration, ports: ports.map(channel => channel.port2) as unknown as MessagePort[] }));
+  await vi.waitFor(() => expect(mountBrowser).toHaveBeenCalledOnce());
+  const options = vi.mocked(mountBrowser).mock.calls[0]![1];
+  options.onTabs!({ active: 'first', tabs: [] });
+  options.onStatus!('live');
+  await vi.waitFor(() => expect(events.some(event => event.type === 'status')).toBe(true));
+  expect(events.filter(event => event.operation?.method === 'control')).toHaveLength(0);
+  const abort = new AbortController();
+  const preparing = options.onPrepareView!('first', abort.signal);
+  await vi.waitFor(() => expect(events.filter(event => event.operation?.method === 'control')).toHaveLength(1));
+  const operation = events.find(event => event.operation?.method === 'control')!;
+  expect(operation.operation).toEqual({ method: 'control', target: 'first', takeover: false, private: false });
+  product.postMessage({ type: 'result', id: operation.id, ok: true });
+  expect(await preparing).toBe(true);
+  options.onStatus!('live');
+  const canceled = options.onPrepareView!('second', abort.signal).catch(error => error);
+  await vi.waitFor(() => expect(events.filter(event => event.operation?.method === 'control')).toHaveLength(2));
+  const second = events.find(event => event.operation?.target === 'second')!;
+  abort.abort();
+  expect(await canceled).toBeInstanceOf(Error);
+  await vi.waitFor(() => expect(events).toContainEqual({ type: 'cancel', id: second.id }));
+  // A late host result cannot resume the canceled preparation or request takeover.
+  product.postMessage({ type: 'result', id: second.id, ok: true });
+  options.onTabs!({ active: 'third', tabs: [] });
+  options.onStatus!('live');
+  await vi.waitFor(() => expect(events.filter(event => event.type === 'status')).toHaveLength(3));
+  expect(events.filter(event => event.operation?.method === 'control')).toHaveLength(2);
 });

@@ -29,8 +29,6 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
   document.documentElement.lang = configuration.locale;
   applyBrowserDocumentTheme(configuration.theme);
   let sequence = 0;
-  let active = '';
-  let connected = false;
   let mounted = false;
   const pending = new Map<number, { resolve(value: BrowserDocumentResult): void; reject(error: Error): void; dispose(): void }>();
   const notify = (message: BrowserDocumentEvent) => product.postMessage(message);
@@ -81,9 +79,6 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
       await saveBrowserDownload(await file('download', target, id, signal), signal);
     },
   });
-  const acquireIdle = () => {
-    if (connected && active) void request({ method: 'control', target: active, takeover: false, private: false }).catch(() => undefined);
-  };
   const surface = document.createElement('main'); surface.className = 'redeven-browser-document-surface'; document.body.append(surface);
   let disposeSources: (() => void) | undefined;
   let disposeRecovery: (() => void) | undefined;
@@ -136,7 +131,6 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
     ] };
     showFailure = (code, phase = 'failed') => {
       const revision = ++recoveryRevision;
-      connected = false; active = '';
       // The chooser owns its pending selection. View-state updates must not
       // unmount it and abort the source request that is replacing this view.
       view?.destroy(); view = undefined;
@@ -177,20 +171,15 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
       load: async (origin, signal) => await request({ method: 'zoom.load', origin }, signal) as number,
       save: async (origin, factor, signal) => { await request({ method: 'zoom.save', origin, factor }, signal); },
     } : undefined,
+    onPrepareView: async (target, signal) => {
+      await request({ method: 'control', target, takeover: false, private: false }, signal);
+      return true;
+    },
     onRequestControl: async (target, signal) => { await request({ method: 'control', target, takeover: false, private: false }, signal); },
     onTakeControl: async target => { await request({ method: 'control', target, takeover: true, private: false }); },
-    onTabs: state => {
-      const changed = active !== state.active;
-      active = state.active;
-      notify({ type: 'tabs', state });
-      if (changed) acquireIdle();
-    },
+    onTabs: state => notify({ type: 'tabs', state }),
     onState: state => notify({ type: 'state', state }),
-    onStatus: status => {
-      connected = status === 'live';
-      notify({ type: 'status', status });
-      if (connected) acquireIdle();
-    },
+    onStatus: status => notify({ type: 'status', status }),
   });
   const chrome = document.querySelector<HTMLElement>('.floe-browser');
   if (chrome) applyBrowserChromeTheme(chrome);
