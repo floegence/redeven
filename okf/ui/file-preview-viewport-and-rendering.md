@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview viewport and rendering
 description: Fit documents and images to their actual reading area and isolate asynchronous renderer work.
 tags: [ui, files, preview, viewport, rendering]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
@@ -94,10 +94,20 @@ the matching page into the virtualized viewport. Search and annotation controls
 float separately from zoom; the annotation history menu uses Floe's local floating
 layer. Host catalogs supply labels for PDF controls and native annotation UI.
 
+The released Floe surface uses the official PDF.js legacy engine, viewer,
+localization runtime, styles, and worker so embedded font conversion works in the
+pinned Desktop browser. Compatibility belongs upstream; Redeven must not patch
+browser APIs or substitute a host-owned font renderer. Acceptance covers real
+worker execution without newer JavaScript APIs, loaded embedded fonts, actual
+Chinese glyph pixels, and absence of font conversion or fallback warnings.
+Successful text extraction alone does not prove correct rendering.
+
 Worker, CMaps, standard fonts, WASM codecs, ICC profiles, and annotation images
-come from the same pinned upstream PDF.js version and are emitted by the upstream
-Vite asset plugin beneath the configured application base. They are served locally,
-without a public CDN. PDF scripting and XFA are not enabled. The notices generator
+come from the same pinned upstream PDF.js version. The upstream Vite asset plugin
+uses `pdf-assets/<version>/legacy/` beneath the configured application base in
+development and production, keeping the worker cache identity distinct from the
+modern build. They are served locally, without a public CDN. PDF scripting and
+XFA are not enabled. The notices generator
 verifies the exact engine resource licenses, including the Liberation font
 exception, and preserves original notices beside distributed assets. Scanned
 image-only PDFs need OCR to gain selectable text; this surface does not add OCR.
