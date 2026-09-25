@@ -7111,12 +7111,15 @@ webSearch: model.web_search,
     composerReferenceMutationCount() > 0
   ));
 
-  const focusComposerFromBlankArea = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+  const handleComposerBlankClick = (event: MouseEvent & { currentTarget: HTMLDivElement }) => {
     if (event.button !== 0 || event.defaultPrevented) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.closest('textarea, input, label, button, a, select, [role="button"], [role="option"], [contenteditable="true"]')) return;
-    if (companionCollapsed()) return;
+    if (companionCollapsed()) {
+      activateCompanionEntry(event);
+      return;
+    }
     const field = composerRef;
     if (
       !(field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement)
@@ -11405,12 +11408,7 @@ webSearch: model.web_search,
                 data-flower-attachment-drag={attachmentDragActive() ? 'true' : undefined}
                 data-flower-text-entry={(bottomActionMode() === 'chat' || (bottomActionMode() === 'input_request' && activeInputQuestionUsesTextEditor())) && !composerTextareaDisabled() ? 'true' : undefined}
                 ref={composerSurfaceRef}
-                onPointerDown={focusComposerFromBlankArea}
-                onClick={(event) => {
-                  if (!(event.target instanceof Element)
-                    || event.target.closest('textarea, input, label, button, a, select, [role="button"], [role="option"], [contenteditable="true"]')) return;
-                  activateCompanionEntry(event);
-                }}
+                onClick={handleComposerBlankClick}
                 onDragEnter={(event) => {
                   if (!event.dataTransfer?.types.includes('Files')) return;
                   event.preventDefault();

@@ -117,6 +117,7 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
             await editor.evaluate(element => { window.__drawerEditor = element; element.setSelectionRange(2, 7); });
             stage = 'flower keyboard geometry';
             const keyboard = [];
+            const restingHeader = await geometry(page.locator('.flower-chat-header'));
             const cdp = name === 'chromium' ? await context.newCDPSession(page) : null;
             const keyboardHeight = Math.min(320, viewport.height - 140);
             for (const [cycle, inset] of [34, 0, 34].entries()) {
@@ -127,15 +128,17 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
               for (const [phase, height] of [keyboardHeight, keyboardHeight - 24, keyboardHeight + 20].entries()) {
                 const offsetTop = phase === 1 ? 18 : 0;
                 await page.evaluate(size => window.__setNavigationViewport(size), { height, offsetTop });
-                await page.waitForFunction(({ height, offsetTop }) => {
+                await page.waitForFunction(({ height }) => {
                   const host = document.querySelector('[data-floe-app-viewport]');
                   return host.getAttribute('data-keyboard-open') === 'true'
                     && Math.abs(host.getBoundingClientRect().height - height) < 1
-                    && Math.abs(host.getBoundingClientRect().top - offsetTop) < 1;
+                    && Math.abs(host.getBoundingClientRect().top) < 1;
                 }, { height, offsetTop });
                 const host = await geometry(page.locator('[data-floe-app-viewport]'));
-                const composer = await geometry(page.locator('.flower-composer'));
                 const header = await geometry(page.locator('.flower-chat-header'));
+                assert.ok(Math.abs(header.height - restingHeader.height) < 1,
+                  `opening the keyboard must not compress Flower tools: ${JSON.stringify({ restingHeader, header, height })}`);
+                const composer = await geometry(page.locator('.flower-composer'));
                 const gap = host.bottom - composer.bottom;
                 const evidence = { cycle, phase, nativeInset: cdp ? inset : 0, height, offsetTop, host, header, composer, gap };
                 keyboard.push(evidence);
@@ -149,53 +152,51 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
               }
               if (cycle === 0) await page.screenshot({ path: path.join(output, `${prefix}-keyboard.png`),
                 clip: { x: 0, y: 0, width: viewport.width, height: keyboardHeight + 20 } });
-              // Native Safari pans the fixed origin before reporting the matching
-              // visual offset. Reproduce both event orders and intermediate values.
-              for (const offsetTop of [0, 60, 120]) {
-                await page.evaluate(({ height, offsetTop }) => {
-                  document.documentElement.style.transform = 'translateY(-120px)';
-                  window.__setNavigationViewport({ height, offsetTop });
-                }, { height: keyboardHeight, offsetTop });
+              // Establish a settled keyboard mode before replaying its transient
+              // contraction; a genuine additional mode change remains supported.
+              await page.evaluate(height => window.__setNavigationViewport({ height, offsetTop: 0 }), keyboardHeight);
+              await page.waitForFunction(height => Math.abs(document.querySelector('[data-floe-app-viewport]').getBoundingClientRect().height - height) < 1, keyboardHeight);
+              // Replay physical Safari's document pan, delayed offset, and
+              // transient double clipping. A CSS root transform cannot reproduce
+              // the document scroll lifecycle or the native keyboard animation.
+              await page.evaluate(height => {
+                window.__originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+                Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
+                document.body.style.minHeight = '2000px';
+              }, keyboardHeight);
+              for (const [height, offsetTop] of [[keyboardHeight, 398], [65, 398], [-128, 399], [keyboardHeight, 0]]) {
+                await page.evaluate(({ size, nativeHeight }) => {
+                  Object.defineProperty(window, 'innerHeight', { configurable: true, value: nativeHeight });
+                  window.__setNavigationViewport(size);
+                  window.scrollTo({ top: 490, left: 0, behavior: 'instant' });
+                }, { size: { height, offsetTop }, nativeHeight: height === keyboardHeight && offsetTop === 398 ? keyboardHeight : viewport.height });
+                await page.waitForFunction(() => window.scrollY === 0, undefined, { timeout: 2000 });
                 await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
                 const host = await geometry(page.locator('[data-floe-app-viewport]'));
                 const header = await geometry(page.locator('.flower-chat-header'));
                 const composer = await geometry(page.locator('.flower-composer'));
-                const evidence = { cycle, phase: 'delayed-safari-offset', offsetTop, host, header, composer, gap: keyboardHeight - composer.bottom };
+                const evidence = { cycle, phase: 'native-keyboard-transition', height, offsetTop, host, header, composer,
+                  gap: host.bottom - composer.bottom, documentScroll: await page.evaluate(() => window.scrollY) };
                 keyboard.push(evidence);
                 await writeFile(path.join(output, `${prefix}-keyboard.json`), JSON.stringify(keyboard, null, 2));
-                assert.ok(Math.abs(host.y) < 1 && Math.abs(header.y) < 1,
-                  `Safari focus panning must retain the header: ${JSON.stringify(evidence)}`);
+                assert.ok(Math.abs(host.y) < 1 && Math.abs(header.y) < 1 && Math.abs(host.height - keyboardHeight) < 1
+                  && Math.abs(header.height - restingHeader.height) < 1,
+                  `native keyboard animation must retain Flower geometry: ${JSON.stringify(evidence)}`);
                 assert.ok(Math.abs(evidence.gap - 12) < 1,
-                  `Safari focus panning must not expose a blank region: ${JSON.stringify(evidence)}`);
-                assert.equal(await editor.evaluate(element => element === window.__drawerEditor && document.activeElement === element), true);
+                  `native keyboard animation must not expose a blank region: ${JSON.stringify(evidence)}`);
+                assert.equal(await page.locator('[data-floe-shell-slot="mobile-tab-bar"]').isVisible(), false);
+                assert.equal(await editor.evaluate(element => element === window.__drawerEditor && document.activeElement === element), true,
+                  'document pan recovery must not dismiss the editor');
                 assert.deepEqual(await editor.evaluate(element => [element.value, element.selectionStart, element.selectionEnd]), ['Retained draft 中文', 2, 7]);
               }
-              await page.evaluate(() => { document.documentElement.style.transform = ''; });
-              // Physical Safari can retain document panning with an undersized
-              // visual viewport. The published document host owns its origin;
-              // coordinate compensation alone does not release that native pan.
-              await page.evaluate(height => {
-                document.body.style.minHeight = '2000px';
-                window.__setNavigationViewport({ height, offsetTop: 0 });
-                window.scrollTo({ top: 490, left: 0, behavior: 'instant' });
-              }, keyboardHeight);
-              await page.waitForFunction(() => window.scrollY === 0, undefined, { timeout: 2000 });
-              await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-              const normalizedHost = await geometry(page.locator('[data-floe-app-viewport]'));
-              const normalizedHeader = await geometry(page.locator('.flower-chat-header'));
-              const normalizedComposer = await geometry(page.locator('.flower-composer'));
-              const normalized = { cycle, phase: 'native-document-pan', host: normalizedHost, header: normalizedHeader,
-                composer: normalizedComposer, gap: normalizedHost.bottom - normalizedComposer.bottom,
-                documentScroll: await page.evaluate(() => window.scrollY) };
-              keyboard.push(normalized);
-              await writeFile(path.join(output, `${prefix}-keyboard.json`), JSON.stringify(keyboard, null, 2));
-              assert.ok(Math.abs(normalizedHeader.y) < 1 && Math.abs(normalized.gap - 12) < 1,
-                `document pan recovery must retain visible Flower geometry: ${JSON.stringify(normalized)}`);
-              assert.equal(await editor.evaluate(element => element === window.__drawerEditor && document.activeElement === element), true,
-                'document pan recovery must not dismiss the editor');
-              assert.deepEqual(await editor.evaluate(element => [element.value, element.selectionStart, element.selectionEnd]), ['Retained draft 中文', 2, 7]);
-              await page.evaluate(() => { document.body.style.minHeight = ''; });
+              await page.evaluate(() => {
+                Object.defineProperty(window, 'innerHeight', window.__originalInnerHeight);
+                document.body.style.minHeight = '';
+              });
               await editor.evaluate(element => element.blur());
+              await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+              assert.equal(await page.locator('[data-floe-shell-slot="mobile-tab-bar"]').isVisible(), false,
+                'focusout must not reveal navigation before the keyboard finishes closing');
               await page.evaluate(size => window.__setNavigationViewport(size), { ...viewport, offsetTop: 0 });
               await page.waitForFunction(height => {
                 const host = document.querySelector('[data-floe-app-viewport]');

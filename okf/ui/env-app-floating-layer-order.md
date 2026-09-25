@@ -45,13 +45,26 @@ while long content scrolls locally. Geometry changes retain the live content and
 input owner. Product CSS must not bypass this boundary with fixed panel positions,
 viewport-unit heights plus removed maximums, or forced transforms.
 
-The document-level AppViewport uses that same published boundary. Safari can
-move its fixed origin before reporting the matching visual viewport offset.
-During this delay, client-space visible bounds must remain on screen: the page
-header stays at the visible top and the composer follows the visible bottom.
-Floe owns this coordinate conversion and its intermediate states. Redeven must
-not compensate by resetting scroll, reclaiming focus, adding keyboard padding,
-or installing a second viewport observer.
+The document-level AppViewport owns the document scroll origin at normal zoom.
+Safari's native focus pan can leave an undersized visual viewport; restoring the
+origin must preserve nested reading scroll, the live editor, and its selection.
+The host must not then apply a delayed visual offset a second time. Pinch zoom
+keeps native panning and shared coordinate conversion. On coarse-pointer devices,
+the published host acquires the same native editor without scrolling at completed
+pointer activation; native caret placement remains available. Flower composer
+padding activates on click, never on pointerdown: opening the keyboard before
+touch release can retarget Safari's compatibility click and dismiss the editor.
+
+Safari can also transiently clip visual height twice during keyboard animation.
+Floe measures every native event and publishes the first keyboard size immediately.
+Further contractions in the same layout must remain stable for 100ms; recovery
+cancels the pending contraction. This bounded settling does not use window height
+as a floor. Expansion, orientation changes and pinch zoom remain immediate.
+Focus loss alone does not reveal navigation before keyboard occlusion ends.
+Flower's title tools do not flex-shrink; the reading area absorbs the reduced
+height. The header stays at the visible top and the composer follows the lower edge.
+Redeven consumes this published behavior and must not reset scroll, reclaim
+focus, add keyboard padding, or install a second viewport observer itself.
 
 EnvAppDrawer selects the published side-drawer presentation. Redeven supplies its
 business width and the Desktop titlebar gap inside the available region. Preview
@@ -77,7 +90,8 @@ This contract governs cross-surface Env App stacking and the Activity-versus-Wor
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/scripts/checkMobileNavigation.mjs` - Checks the retained header and composer against delayed Safari visual offsets, as well as settled keyboard geometry.
+- `redeven:internal/envapp/ui_src/scripts/checkMobileNavigation.mjs` - Replays native document panning, stale visual offsets, and transient keyboard heights while checking fixed header size, composer bounds, retained editor, and selection.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Checks completed padding activation, cancelled gestures, and retained selection.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/OverlayViewport.browser.test.tsx` - Checks mobile preview, editor, drawer, and plugin boundaries with retained content in light and dark themes.
 - `redeven:internal/envapp/ui_src/src/ui/utils/envAppLayers.ts` - Defines the five product bands.
 - `redeven:internal/envapp/ui_src/src/ui/utils/envAppFloatingWindowStack.ts` - Maintains compact shared movable-window ordering.
