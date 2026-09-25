@@ -26,7 +26,7 @@ async function mountHistory(options: { companion?: boolean; projected?: boolean;
     && runtime.querySelector('.flower-composer textarea') !== null);
   const editor = runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
   editor.focus();
-  await waitFor(() => editor.placeholder.includes('↑'));
+  expect(editor.placeholder).toBe('Ask Flower...');
   return { runtime, editor, host };
 }
 

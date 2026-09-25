@@ -65,7 +65,7 @@ describe('Flower empty-state presentation', () => {
     expect(trigger.dataset.flowerCompanionEmptySelection).toBe('true');
     expect(trigger.getAttribute('aria-label')).toBe(companionCopy.label);
     expect(trigger.title).toBe(companionCopy.label);
-    expect(runtime.querySelector('textarea')?.getAttribute('placeholder')).toBe('Ask Flower anything...');
+    expect(runtime.querySelector('textarea')?.getAttribute('placeholder')).toBe('Ask Flower...');
 
     trigger.click();
 

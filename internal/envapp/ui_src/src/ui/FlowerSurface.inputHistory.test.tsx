@@ -3,6 +3,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
+import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
+import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
+import type { EnvAppTranslationKey } from './i18n/locales';
 import {
   adapter, inputRequest, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps,
   renderSurfaceWithDraftCoordinator, thread, waitFor,
@@ -42,6 +45,21 @@ function press(editor: HTMLTextAreaElement | HTMLInputElement, key: string, extr
 }
 
 describe('Flower input history', () => {
+  it('uses the concise Chinese placeholder while retaining history recall', async () => {
+    const i18n = createTestI18nHelpers('zh-CN');
+    const copy = createLocalizedFlowerSurfaceCopy({ locale: 'zh-CN',
+      t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
+      tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
+    });
+    const editor = await selectComposer(renderSurfaceWithAdapterProps(historyAdapter(), { copy }));
+    expect(editor.placeholder).toBe('询问Flower...');
+    press(editor, 'ArrowUp');
+    expect(editor.value).toBe('Latest input');
+    press(editor, 'Escape');
+    expect(editor.value).toBe('');
+    expect(editor.placeholder).toBe('询问Flower...');
+  });
+
   it('recalls only user text, traverses both ends and never sends implicitly', async () => {
     const host = historyAdapter();
     const editor = await selectComposer(renderSurfaceWithAdapter(host));

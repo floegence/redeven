@@ -346,7 +346,6 @@ export type FlowerSurfaceCopy = Readonly<{
     needsProviderNotice: string;
     openSettings: string;
     placeholder: string;
-    inputHistoryHint: string;
     inputHistoryPosition: (position: number, total: number) => string;
     inputHistoryCleared: string;
     fromSource: (source: string) => string;
@@ -656,8 +655,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     settingsLabel: 'Flower settings',
     needsProviderNotice: 'Choose a provider, model, and API key once. Flower uses the same Local AI Profile from Welcome and Local Environment.',
     openSettings: 'Open Settings',
-    placeholder: 'Ask Flower anything...',
-    inputHistoryHint: '↑ Previous input',
+    placeholder: 'Ask Flower...',
     inputHistoryPosition: (position, total) => `Previous input ${position} of ${total}. Use Up or Down to browse, or Escape to clear.`,
     inputHistoryCleared: 'Returned to empty input.',
     fromSource: (source) => `From ${source}`,

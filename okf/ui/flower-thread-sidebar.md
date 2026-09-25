@@ -56,7 +56,10 @@ only their semantic icons; the complete status remains in the selection button's
 accessible name and badge tooltip. Desktop typography is 13px for titles and
 11px for status and time.
 
-Status and pin/menu controls occupy the same bounded trailing slot on desktop.
+Status and pin/menu controls occupy the same trailing slot on desktop. Relative
+times and dates retain their intrinsic width even on narrow rows; the title
+yields space instead of truncating the timestamp. Status and progress text keep
+their bounded width so longer translations cannot consume the whole row.
 Hover or keyboard focus reveals actions without shifting the title; attention
 remains visible through the existing indicator. Narrow rows keep pinning in the
 menu. Touch layouts show a status icon beside the always-visible menu, with 44px

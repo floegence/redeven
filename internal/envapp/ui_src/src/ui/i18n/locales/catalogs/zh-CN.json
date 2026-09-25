@@ -5094,7 +5094,6 @@
       "modelSupportUnavailable": "无法检查附件支持情况"
     },
     "chat": {
-      "inputHistoryHint": "↑ 调用上一条输入",
       "inputHistoryPosition": "历史输入第 {position} 条，共 {total} 条。按上下键浏览，按 Esc 清空。",
       "inputHistoryCleared": "已返回空输入。",
       "media": {
@@ -5150,7 +5149,7 @@
       "settingsLabel": "Flower 设置",
       "needsProviderNotice": "选择模型提供商、模型和 API 密钥一次。Flower 使用欢迎页和本地环境中相同的本地 AI 配置文件。",
       "openSettings": "打开设置",
-      "placeholder": "询问 Flower...",
+      "placeholder": "询问Flower...",
       "fromSource": "来自 {source}",
       "modelLabel": "模型",
       "reasoningLabel": "推理等级",

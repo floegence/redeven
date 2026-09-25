@@ -5190,7 +5190,6 @@
       "modelSupportUnavailable": "Не удалось проверить поддержку вложений"
     },
     "chat": {
-      "inputHistoryHint": "↑ Предыдущий ввод",
       "inputHistoryPosition": "Предыдущий ввод {position} из {total}. Используйте стрелки вверх и вниз для просмотра или Escape для очистки.",
       "inputHistoryCleared": "Поле ввода снова пусто.",
       "media": {
