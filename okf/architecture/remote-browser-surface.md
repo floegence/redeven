@@ -59,6 +59,13 @@ Reconnection uses a confirmed source, never an earlier new-tab operation. Theme
 configuration refreshes with unchanged effective values do not reopen a view.
 Actual locale or palette changes acquire a new view of the selected target;
 callbacks from the retired document cannot change current presentation.
+One product theme adapter captures the parent's resolved design-system token
+catalog, effective dark mode, surface style, shell preset and font family. The
+trusted browser document applies that presentation before mounting recovery or
+source dialogs. Engine chrome derives its seven palette values from those same
+semantic tokens. The child has no separate theme provider, stored preference or
+reverse palette aliases; light and dark dialogs, buttons and fields must match
+the environment in both embedded and independent windows.
 
 Structured error codes select installation, enablement, source selection,
 reconnection or explicit [service recovery](remote-browser-recovery.md).
@@ -119,7 +126,9 @@ same authorized Flowersec Session, including Unicode text insertion.
 ## Tab presentation
 
 The viewer keeps at most three complete inert tab documents for immediate visual
-feedback. Cached presentation grants no input: only fresh source selection,
+feedback. The selected preview remains painted while its replacement prepares
+offscreen, and swaps only after styles and layout settle. An uncached selection
+hides the preceding page immediately. Cached presentation grants no input: only fresh source selection,
 control admission and a complete current document enable page interaction.
 Background URL changes, removed directory grants and disconnect evict caches.
 Only browsers with state-preserving DOM moves retain iframe documents; other
@@ -135,12 +144,20 @@ explicit click/Enter handlers for the same reason; composition Enter never
 submits. The inline document keeps its restrictive sandbox
 without `allow-forms` and its `form-action 'none'` policy.
 
+Website admission remains source-owned. A website may challenge or reject a
+managed automation session even when a user supplies correct input. Projection
+must preserve ordinary native input and must not alter browser identity or
+website security checks to force admission. A neutral coordinate/sequence test
+is input evidence, not proof that a third-party verification challenge passes.
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/browserDocument.test.ts` - Source selection survives retired-view progress and failure without canceling its intent.
 - [FloeBrowser v0.1.14: test/input-focus.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/input-focus.e2e.ts) — Repeated source focus and native caret continuity.
 - [FloeBrowser v0.1.14: test/navigation-input.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/navigation-input.e2e.ts) — Input fencing through navigation admission and completion.
 
+- `redeven:internal/envapp/ui_src/src/browserDocument.browser.test.tsx` - Real document handshake, dialog and control theme parity in light/dark and narrow layouts.
+- `redeven:internal/envapp/ui_src/src/ui/services/browserDocumentTheme.ts` - Single parent-to-document presentation adapter.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FloeBrowserSurface.tsx` - Shared viewer mount and generation-bound cleanup.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FloeBrowserSurface.test.tsx` - Source-selection progress retains the current document until replacement.
 - `redeven:internal/envapp/ui_src/scripts/checkBrowserProjection.mjs` - Real component, Session and Runtime profile switching in inline and independent documents.
@@ -150,7 +167,7 @@ without `allow-forms` and its `form-action 'none'` policy.
 - `redeven:desktop/src/main/browserProjectionWindows.test.ts` - Exact static-document loading without environment API authority.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.ts` - Environment-owned window, source replacement and private control admission.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.test.ts` - Grant/token ordering, immediate revocation and stale selection rejection.
-- [FloeBrowser v0.1.12: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/viewer/replay-pages.ts) — Bounded inert document retention.
-- [FloeBrowser v0.1.12: test/tab-cache.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/test/tab-cache.e2e.ts) — Immediate presentation without stale input authority.
+- [FloeBrowser v0.1.15: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.15/src/viewer/replay-pages.ts) — Bounded inert document retention.
+- [FloeBrowser v0.1.15: test/tab-cache.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.15/test/tab-cache.e2e.ts) — Immediate presentation without stale input authority.
 
 - [FloeBrowser v0.1.13: test/browser-menu.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.13/test/browser-menu.e2e.ts) — Address-row actions, activation, focus, narrow bounds and late completion.

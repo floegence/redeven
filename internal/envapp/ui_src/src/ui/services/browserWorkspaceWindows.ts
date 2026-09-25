@@ -1,3 +1,4 @@
+import { captureBrowserDocumentTheme } from './browserDocumentTheme';
 import { browserSourceService } from './browserSourceManagement';
 import type { BrowserSourceMessages } from '../i18n/browserSourceMessages';
 import type { BrowserSourceSelection, BrowserSourceService } from './browserSourceContract';
@@ -36,9 +37,7 @@ export function createBrowserWorkspaceWindows(configuration: () => { title: stri
     const url = new URL(browserDocumentURL(state.view, nonce), location.href).href;
     if (desktopShellBridgeAvailable() && !(await prepareDesktopBrowserWindow(url))) throw new Error('Desktop browser window unavailable');
     if (entry.closed || entry.revision !== revision || !session) return;
-    const style = getComputedStyle(document.documentElement);
-    const tokens = { '--floe-background': '--background', '--floe-foreground': '--foreground', '--floe-muted': '--muted-foreground', '--floe-line': '--border', '--floe-accent': '--primary', '--floe-surface': '--muted', '--floe-field': '--secondary' };
-    const theme = Object.fromEntries(Object.entries(tokens).map(([key, value]) => [key, style.getPropertyValue(value).trim()]).filter(([, value]) => value));
+    const theme = captureBrowserDocumentTheme();
     const current: BrowserSourceSelection = { ...state.selection, label: state.selection.label || copy.sources.messages.product.defaultProfile };
     const previous = entry.host;
     const host = createBrowserWindow({ session, view: state.view, child: () => entry.child,

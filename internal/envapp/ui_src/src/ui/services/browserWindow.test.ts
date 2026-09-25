@@ -44,7 +44,7 @@ async function fixture(onOpenWindow?: () => Promise<void>) {
     session: {} as Session,
     view: { generation: 'fixture-generation', id: 'browser-view-test', initial_target: 'first', protocol_version: 22, media_wire_version: 1 },
     child: () => child,
-    configuration: { type: 'redeven-browser-ports', nonce: 'nonce', title: 'Browser', locale: 'en-US', messages: {} as BrowserMessages, theme: {} },
+    configuration: { type: 'redeven-browser-ports', nonce: 'nonce', title: 'Browser', locale: 'en-US', messages: {} as BrowserMessages, theme: { tokens: {}, dark: false, surfaceStyle: '', shellTheme: '', fontFamily: 'sans-serif' } },
     onReconnect: vi.fn(), onOpenWindow,
   });
   window.dispatchEvent(new MessageEvent('message', { source: child, origin: location.origin, data: { type: 'redeven-browser-ready', nonce: 'nonce' } }));

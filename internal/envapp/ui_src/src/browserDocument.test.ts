@@ -36,7 +36,7 @@ it('keeps source-selection intent alive while a retired document reports opening
   await import('./browserDocument');
   const ports = Array.from({ length: 3 }, () => { const channel = new MessageChannel(); channels.push(channel); return channel; });
   const configuration = {
-    type: 'redeven-browser-ports', nonce, title: 'Remote Browser', locale: 'en-US', messages: {}, theme: {},
+    type: 'redeven-browser-ports', nonce, title: 'Remote Browser', locale: 'en-US', messages: {}, theme: { tokens: {}, dark: false, surfaceStyle: '', shellTheme: '', fontFamily: 'sans-serif' },
     failure: 'BROWSER_SERVICE_FAILED',
     sources: { desktop: false, current: { label: 'Default', request: { managed_profile_id: 'browser-main' } }, messages: { product: {}, computer: {} } },
   } as BrowserDocumentConfiguration;

@@ -1,3 +1,4 @@
+import { captureBrowserDocumentTheme } from '../services/browserDocumentTheme';
 import '../../styles/browserWorkspace.css';
 import { Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import type { BrowserSourceMessages } from '../i18n/browserSourceMessages';
@@ -41,13 +42,7 @@ export function FloeBrowserSurface(props: FloeBrowserSurfaceProps) {
     const nonce = crypto.randomUUID();
     try {
       const url = browserDocumentURL(view, nonce);
-      const style = getComputedStyle(document.documentElement);
-      const colors: Record<string, string> = {
-        '--floe-background': '--background', '--floe-foreground': '--foreground',
-        '--floe-muted': '--muted-foreground', '--floe-line': '--border',
-        '--floe-accent': '--primary', '--floe-surface': '--muted', '--floe-field': '--secondary',
-      };
-      const theme = Object.fromEntries(Object.entries(colors).map(([name, token]) => [name, style.getPropertyValue(token).trim()]).filter(([, value]) => value));
+      const theme = captureBrowserDocumentTheme();
       const current = createBrowserWindow({
         session, view, child: () => frame.contentWindow,
         configuration: { type: 'redeven-browser-ports', nonce, title: props.title, locale: props.locale, messages: props.messages, theme,
