@@ -55,7 +55,9 @@ Dialog; actions on existing resources always reuse their source target.
 
 ## Resource presentation and navigation
 
-One compact header owns refresh and Operations. It never exposes engine or
+One compact header owns refresh and Operations. Its title/action band follows the
+[shared resource-header scale](../ui/interface-scale.md); resource tabs stay in a
+separate row below that band. It never exposes engine or
 endpoint selection, and Workbench hides a duplicate product title. Published
 Floe Tabs own resource and detail keyboard navigation. A single toolbar owns
 search, status filters, a Filter-icon column control, and one primary action.

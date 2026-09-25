@@ -228,19 +228,8 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.container-command-header {
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  background: color-mix(in srgb, var(--card) 64%, var(--redeven-surface-main));
-}
-
-.container-header-main {
-  display: flex;
-  min-height: 52px;
-  align-items: center;
-  gap: 12px;
-}
-
-.container-page-title { font-size: 18px; font-weight: 600; letter-spacing: -.025em; }
+.container-command-header { background: var(--redeven-surface-main); }
+.container-resource-tabs { padding-inline: 1rem; }
 
 .redeven-containers[data-variant="workbench"] .container-header-main > :first-child {
   display: none;
@@ -266,7 +255,6 @@
   background: var(--redeven-status-warning-foreground);
 }
 
-.container-product-mark,
 .container-resource-icon,
 .container-empty-state__mark {
   display: inline-flex;
@@ -275,14 +263,6 @@
   justify-content: center;
   color: var(--redeven-status-primary-foreground);
   background: var(--redeven-status-primary-soft);
-}
-
-.container-product-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--muted-foreground);
 }
 
 .container-resource-icon {
@@ -926,9 +906,8 @@
 }
 
 @container (width < 768px) {
-  .redeven-containers button { min-height: 44px; }
+  .redeven-containers button:where(:not(.container-header-main button)) { min-height: 44px; }
   .container-resource-tabs__tab { min-height: 44px; }
-  .container-header-main { padding: 8px 0; }
   .container-list-page { padding: 12px; }
   .container-filter-switch { max-width: 100%; overflow-x: auto; }
   .container-resource-table-shell { display: none; }

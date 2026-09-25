@@ -7,6 +7,7 @@ import { sanitizePersistedState } from './containerPageState';
 import { readUIStorageJSON } from '../services/uiStorage';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import './env-containers.css';
+import './resource-header.css';
 
 export function ContainerViewIcon(props: { view: ContainerResourceView; class?: string }) {
   return <Show when={props.view === 'images'} fallback={<Show when={props.view === 'volumes'} fallback={<Show when={props.view === 'compose-projects'} fallback={<Show when={props.view === 'pods'} fallback={<Layers class={props.class} />}><Activity class={props.class} /></Show>}><FileText class={props.class} /></Show>}><Database class={props.class} /></Show>}><Package class={props.class} /></Show>;
@@ -14,8 +15,8 @@ export function ContainerViewIcon(props: { view: ContainerResourceView; class?: 
 
 export function ContainersHeader(props: { controls?: JSX.Element; tabs: JSX.Element }) {
   const i18n = useI18n();
-  return <header class="container-command-header shrink-0 px-3 md:px-5"><div class="container-header-main">
-    <div class="flex min-w-0 items-center gap-2.5"><div class="container-product-mark"><Layers class="h-5 w-5" aria-hidden="true" /></div><h1 class="container-page-title truncate">{i18n.t('containers.title')}</h1></div>
+  return <header class="container-command-header shrink-0"><div class="container-header-main redeven-resource-header">
+    <h1 class="container-page-title truncate">{i18n.t('containers.title')}</h1>
     <div class="container-header-controls">{props.controls ?? <>
       <Button size="sm" variant="ghost" class="container-icon-action container-services-entry" disabled aria-label={i18n.t('containers.services.title')}><Settings class="h-4 w-4" /></Button>
       <Button size="sm" variant="ghost" class="container-icon-action" disabled aria-label={i18n.t('containers.actions.refresh')}><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" /></Button>
