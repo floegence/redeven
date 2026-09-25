@@ -92,7 +92,7 @@ export function CodespacesListSkeleton() {
         status={<Bar class="h-4 w-14" />}
         path={<Bar class="h-2 w-36 max-w-full" />}
         details={<For each={[0, 1, 2]}>{() => <><div class="h-4"><Bar class="h-2 w-12" /></div><div class="h-4 text-right"><Bar class="h-2 w-20 max-w-full" /></div></>}</For>}
-        actions={<><Bar class="h-7 w-20" /><Bar class="h-7 w-8 shrink-0" /><Bar class="h-7 w-8 shrink-0" /></>}
+        actions={<><Bar class="h-7 flex-1" /><Bar class="h-7 w-8 shrink-0" /><Bar class="h-7 w-8 shrink-0" /></>}
       />}</For>
     </CodespacesGrid>
   </div>;
