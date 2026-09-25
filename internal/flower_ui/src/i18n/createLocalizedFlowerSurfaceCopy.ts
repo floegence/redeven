@@ -96,7 +96,6 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       needsProviderNotice: t(i18n, k('chat.needsProviderNotice')),
       openSettings: t(i18n, k('chat.openSettings')),
       placeholder: t(i18n, k('chat.placeholder')),
-      inputHistoryHint: t(i18n, k('chat.inputHistoryHint')),
       inputHistoryPosition: (position, total) => t(i18n, k('chat.inputHistoryPosition'), { position, total }),
       inputHistoryCleared: t(i18n, k('chat.inputHistoryCleared')),
       fromSource: (source) => t(i18n, k('chat.fromSource'), { source }),

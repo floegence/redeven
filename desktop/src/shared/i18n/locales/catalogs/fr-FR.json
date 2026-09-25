@@ -168,7 +168,6 @@
       "modelSupportUnavailable": "Impossible de vérifier la prise en charge des pièces jointes"
     },
     "chat": {
-      "inputHistoryHint": "↑ Saisie précédente",
       "inputHistoryPosition": "Saisie précédente {position} sur {total}. Utilisez les flèches haut et bas pour parcourir, ou Échap pour effacer.",
       "inputHistoryCleared": "Le champ de saisie est à nouveau vide.",
       "media": {
@@ -233,7 +232,7 @@
       "settingsLabel": "Paramètres Flower",
       "needsProviderNotice": "Choisissez une fois un fournisseur de modèles, un modèle d’IA et une clé API. Flower utilise le même profil d’IA local dans l’accueil et l’environnement local.",
       "openSettings": "Ouvrir les paramètres",
-      "placeholder": "Demandez ce que vous voulez à Flower…",
+      "placeholder": "Demandez à Flower…",
       "fromSource": "Depuis {source}",
       "modelLabel": "Modèle",
       "reasoningLabel": "Raisonnement",

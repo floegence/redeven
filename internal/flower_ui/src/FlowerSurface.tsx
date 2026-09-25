@@ -6242,7 +6242,6 @@ webSearch: model.web_search,
             <Show when={permissionPatchPending()}>
               <span class="flower-permission-saving-dot" aria-hidden="true" />
             </Show>
-            <ChevronDown class="flower-permission-chevron" aria-hidden="true" />
           </button>
         </Show>
         <Show when={permissionMenuOpen()}>
@@ -7099,9 +7098,7 @@ webSearch: model.web_search,
   const composerPlaceholder = createMemo(() => {
     if (selectedThreadReadOnly()) return selectedThreadReadOnlyDisplay();
     if (surfaceWarmupActive() && !selectedInputRequest()) return copy().chat.warmupComposerPlaceholder;
-    if (!selectedInputRequest()) return composerHistoryEnabled() && composerHistoryEntries().length > 0
-      ? `${copy().chat.placeholder} · ${copy().chat.inputHistoryHint}`
-      : copy().chat.placeholder;
+    if (!selectedInputRequest()) return copy().chat.placeholder;
     const question = activeInputQuestion();
     if (!question || !questionAllowsText(question)) {
       return chatCopyValue('inputRequestChoicePlaceholder', 'Choose an option to continue.');
@@ -10639,7 +10636,6 @@ webSearch: model.web_search,
       )}
     >
       <div
-        data-floe-input-surface
         class={cn('flower-model-reasoning-control', `flower-composer-control-${location}`)}
         data-flower-composer-control="model_reasoning"
         data-has-reasoning={composerReasoningEnabled() || composerReasoningLoading() ? 'true' : 'false'}
@@ -10723,7 +10719,6 @@ webSearch: model.web_search,
           <span class="flower-permission-trigger flower-composer-control-measure" data-permission-type={composerPermissionType()}>
             <Shield class="flower-permission-icon" />
             <span class="flower-permission-label">{composerPermissionCopy()?.label ?? copy().chat.permissionSelectorLabel}</span>
-            <ChevronDown class="flower-permission-chevron" aria-hidden="true" />
           </span>
         );
       case 'model_reasoning':

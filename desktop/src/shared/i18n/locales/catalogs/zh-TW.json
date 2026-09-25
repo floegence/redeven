@@ -168,7 +168,6 @@
       "modelSupportUnavailable": "無法確認附件支援狀態"
     },
     "chat": {
-      "inputHistoryHint": "↑ 帶入上一筆輸入",
       "inputHistoryPosition": "歷史輸入第 {position} 筆，共 {total} 筆。按上下鍵瀏覽，按 Esc 清空。",
       "inputHistoryCleared": "已返回空白輸入。",
       "media": {

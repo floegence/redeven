@@ -5,7 +5,7 @@ import { For } from 'solid-js';
 import { render } from 'solid-js/web';
 import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
-import { FlowerThreadCard } from '../../../../flower_ui/src/threads/FlowerThreadList';
+import { FlowerThreadCard, fmtFlowerShortTime } from '../../../../flower_ui/src/threads/FlowerThreadList';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { thread } from './FlowerSurface.navigation.testHarness';
 
@@ -16,6 +16,49 @@ afterEach(async () => {
   dispose?.(); host?.remove();
   document.documentElement.style.removeProperty('font-size');
   await media.emulateTouchInput(false);
+});
+
+it('shows complete timestamps on narrow rows without moving titles on hover', async () => {
+  await page.viewport(1100, 800);
+  await media.emulateTouchInput(false);
+  host = document.createElement('div');
+  host.className = 'flower-surface flower-component-shell';
+  host.style.display = 'block';
+  document.body.append(host);
+  // Chinese relative times reproduce the clipped numeric prefixes in the product.
+  const copy = { ...DEFAULT_FLOWER_SURFACE_COPY.threadList,
+    minutes: (count: number) => `${count} 分钟前`, hours: (count: number) => `${count} 小时前`, days: (count: number) => `${count} 天前`,
+  };
+  const items = [4 * 60_000, 59 * 60_000, 23 * 3600_000, 6 * 86400_000, 9 * 86400_000].map((age, index) => ({
+    ...thread({ thread_id: `time-${index}`, title: 'A long title that yields space to the full timestamp', created_at_ms: Date.now() - age }), pinned: false, preview: '',
+  }));
+  dispose = render(() => <For each={items}>{item => <FlowerThreadCard
+    item={item} active={false} copy={copy} onSelect={vi.fn()} onPin={vi.fn()} onContextMenu={vi.fn()}
+  />}</For>, host);
+  await document.fonts.ready;
+  for (const root of [16, 20, 32]) {
+    document.documentElement.style.fontSize = `${root}px`;
+    for (const width of [160, 180, 200, 240, 320]) {
+      host.style.width = `${width}px`;
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      for (const [index, row] of [...host.querySelectorAll<HTMLElement>('[data-flower-thread-card]')].entries()) {
+        const time = row.querySelector<HTMLElement>('.flower-thread-card-time')!;
+        const title = row.querySelector<HTMLElement>('.flower-thread-list-title')!;
+        expect.soft(time.textContent).toBe(fmtFlowerShortTime(items[index].created_at_ms, copy));
+        expect.soft(time.scrollWidth, `complete time at ${width}px / root ${root}px`).toBeLessThanOrEqual(time.clientWidth);
+        expect.soft(time.getBoundingClientRect().right).toBeLessThanOrEqual(row.getBoundingClientRect().right);
+        expect.soft(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+        expect.soft(title.getBoundingClientRect().width).toBeGreaterThan(0);
+        expect.soft(title.getBoundingClientRect().right).toBeLessThanOrEqual(time.getBoundingClientRect().left);
+      }
+    }
+  }
+  document.documentElement.style.fontSize = '16px'; host.style.width = '180px';
+  const first = host.querySelector<HTMLElement>('[data-flower-thread-card]')!;
+  const title = first.querySelector<HTMLElement>('.flower-thread-list-title')!;
+  const before = title.getBoundingClientRect().width;
+  await userEvent.hover(first);
+  expect(title.getBoundingClientRect().width).toBe(before);
 });
 
 it.each([false, true])('keeps every sidebar entry on one line with touch=%s', async touch => {

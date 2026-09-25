@@ -147,10 +147,10 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       <Show when={progressLabel()}>
         <span class="sr-only" role="status">{progressLabel()}</span>
       </Show>
-      <div class="flower-thread-card-trailing">
+      <div class="flower-thread-card-trailing" data-has-timestamp={!indicator().actionRequired && !progressLabel() ? 'true' : undefined}>
         <div class="flower-thread-card-summary" aria-hidden="true">
           <Show when={indicator().actionRequired} fallback={
-            <span class="flower-thread-card-time" title={progressLabel()}>{progressLabel() || fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>
+            <span class="flower-thread-card-time" data-progress={progressLabel() ? 'true' : undefined} title={progressLabel()}>{progressLabel() || fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>
           }>
             <span class="flower-thread-card-action-indicator" title={indicator().ariaStatus}>
               <Show when={props.item.status === 'waiting_approval'} fallback={<MessageSquare class="flower-thread-card-action-icon" />}>

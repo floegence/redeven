@@ -65,9 +65,11 @@ it.each([false, true])('separates narrow file toolbar layout from touch sizing, 
   }
 });
 
-it.each([false, true])('keeps composer selectors and menus small with full labels and accessible touch=%s', async touch => {
+it.each([
+  [false, 'approval_required'], [true, 'approval_required'], [false, 'full_access'], [true, 'full_access'],
+] as const)('keeps composer selectors and menus small with full labels and accessible touch=%s, permission=%s', async (touch, permissionType) => {
   await prepare(touch);
-  const selected = thread({ messages: [], permission_type: 'approval_required' });
+  const selected = thread({ messages: [], permission_type: permissionType });
   const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [selected], loadThread: async () => liveBootstrap(selected), setThreadModel: async () => liveBootstrap(selected), setThreadPermissionType: async () => liveBootstrap(selected) },
     { focusThreadRequest: { request_id: 'coordination', thread_id: selected.thread_id } });
   Object.assign(runtime.style, { width: '1200px', height: '800px' });
@@ -79,8 +81,15 @@ it.each([false, true])('keeps composer selectors and menus small with full label
     if (touch) expect.soft(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     else expect.soft(control.getBoundingClientRect().height).toBe(24);
     expect.soft(getComputedStyle(control).fontSize).toBe(touch ? '12px' : '11px');
+    await expect.poll(() => getComputedStyle(control).backgroundColor).toMatch(/(?:,\s*0|\/\s*0)\)$/);
+    expect.soft(getComputedStyle(control).borderTopWidth).toBe('0px');
   }
   const trigger = runtime.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger')!;
+  const slot = trigger.closest('.flower-composer-control-slot')!;
+  expect(getComputedStyle(slot, '::before').width).toBe('1px');
+  expect(getComputedStyle(slot, '::before').height).toBe('10px');
+  const composer = runtime.querySelector<HTMLElement>('.flower-composer')!;
+  await page.screenshot({ element: composer, path: `__screenshots__/composer-minimal-${permissionType}-${touch ? 'touch' : 'desktop'}.png` });
   const name = trigger.getAttribute('aria-label');
   await userEvent.click(trigger);
   const menu = runtime.querySelector<HTMLElement>('.flower-model-menu')!;

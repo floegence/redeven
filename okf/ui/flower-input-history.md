@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower input history
 description: Recall canonical user text into an empty Flower draft with terminal-style arrow keys while preserving ordinary editor ownership.
 tags: [ui, flower, composer, keyboard, drafts]
-timestamp: 2026-09-21T00:00:00Z
+timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
@@ -60,8 +60,10 @@ while each thread's ordinary draft remains in its existing scope.
 
 ## Presentation
 
-When eligible history exists, append a localized arrow-key hint to the empty
-ordinary editor's placeholder. A polite live region announces position from
+The ordinary editor uses the concise localized "Ask Flower..." placeholder
+regardless of available history, without keyboard instructions. Warmup,
+read-only and structured-answer placeholders retain their contextual meaning.
+A polite live region announces position from
 newest and return to empty. Do not add a popup, focus transfer, focus border
 override or additional visible history controls. The same shared behavior
 applies to Desktop, Env App, Activity, Workbench and companion placements.

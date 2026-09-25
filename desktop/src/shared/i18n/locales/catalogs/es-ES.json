@@ -168,7 +168,6 @@
       "modelSupportUnavailable": "No se pudo comprobar la compatibilidad con archivos adjuntos"
     },
     "chat": {
-      "inputHistoryHint": "↑ Entrada anterior",
       "inputHistoryPosition": "Entrada anterior {position} de {total}. Usa las flechas arriba y abajo para navegar, o Escape para vaciar el campo.",
       "inputHistoryCleared": "El campo de entrada vuelve a estar vacío.",
       "media": {
@@ -233,7 +232,7 @@
       "settingsLabel": "Configuración de Flower",
       "needsProviderNotice": "Elige una vez un proveedor de modelos, un modelo y una clave API. Flower usa el mismo perfil de IA local en Bienvenida y Entorno local.",
       "openSettings": "Abrir configuración",
-      "placeholder": "Pregúntale lo que quieras a Flower...",
+      "placeholder": "Pregúntale a Flower...",
       "fromSource": "Desde {source}",
       "modelLabel": "Modelo",
       "reasoningLabel": "Razonamiento",
