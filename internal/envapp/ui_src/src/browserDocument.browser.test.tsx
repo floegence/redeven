@@ -12,7 +12,7 @@ import type { BrowserDocumentConfiguration } from './ui/services/browserWindowPr
 let cleanup: (() => void) | undefined;
 afterEach(async () => { cleanup?.(); cleanup = undefined; document.documentElement.classList.remove('dark'); document.documentElement.removeAttribute('data-floe-surface-style'); await page.viewport(1280, 850); });
 
-for (const [dark, surfaceStyle, width] of [[false, 'standard', 1280], [true, 'standard', 1280], [false, 'soft-neumorphic', 390], [true, 'soft-neumorphic', 390]] as const) it(`inherits the parent ${dark ? 'dark' : 'light'} ${surfaceStyle} dialog theme at ${width}px across the browser document boundary`, async () => {
+for (const failed of [false, true]) for (const [dark, surfaceStyle, width] of [[false, 'standard', 1280], [true, 'standard', 1280], [false, 'soft-neumorphic', 390], [true, 'soft-neumorphic', 390]] as const) it(`inherits the parent ${failed ? 'recovery' : 'live'} ${dark ? 'dark' : 'light'} ${surfaceStyle} dialog theme at ${width}px across the browser document boundary`, async () => {
   await page.viewport(width, 850);
   document.documentElement.classList.toggle('dark', dark);
   document.documentElement.setAttribute('data-floe-surface-style', surfaceStyle);
@@ -23,8 +23,7 @@ for (const [dark, surfaceStyle, width] of [[false, 'standard', 1280], [true, 'st
   frame.style.cssText = 'width:min(900px, 100%);height:760px;border:0';
   frame.sandbox.add('allow-scripts', 'allow-same-origin');
   const nonce = crypto.randomUUID();
-  const configuration: BrowserDocumentConfiguration = { type: 'redeven-browser-ports', nonce, title: 'Remote Browser', locale: 'en-US', messages: browserMessages(copy), theme,
-    failure: 'BROWSER_SOURCE_UNAVAILABLE',
+  const configuration: BrowserDocumentConfiguration = { ...(failed ? { failure: 'BROWSER_SOURCE_UNAVAILABLE' as const } : {}), type: 'redeven-browser-ports', nonce, title: 'Remote Browser', locale: 'en-US', messages: browserMessages(copy), theme,
     sources: { desktop: false, current: { label: 'Default', request: { managed_profile_id: 'browser-main' } }, messages: browserSourceMessages(copy) },
   };
   const ready = (event: MessageEvent) => {
@@ -45,11 +44,27 @@ for (const [dark, surfaceStyle, width] of [[false, 'standard', 1280], [true, 'st
   cleanup = () => { window.removeEventListener('message', ready); frame.remove(); channels.forEach(channel => { channel.port1.close(); channel.port2.close(); }); };
   frame.src = `/browser.html#${nonce}`;
   document.body.append(frame);
-  await vi.waitFor(() => expect(frame.contentDocument?.querySelector('.redeven-browser-notice-actions button')).toBeTruthy());
-  frame.contentDocument!.querySelector<HTMLButtonElement>('.redeven-browser-notice-actions button')!.click();
-  await vi.waitFor(() => expect(frame.contentDocument?.querySelector('[role="dialog"] input')).toBeTruthy());
+  if (failed) {
+    await vi.waitFor(() => expect(frame.contentDocument?.querySelector('.redeven-browser-notice-actions button')).toBeTruthy());
+    frame.contentDocument!.querySelector<HTMLButtonElement>('.redeven-browser-notice-actions button')!.click();
+  } else {
+    await vi.waitFor(() => expect(frame.contentDocument?.querySelector('[data-floe-ui="more"]')).toBeTruthy());
+    const chrome = frame.contentDocument!.querySelector<HTMLElement>('.floe-browser')!;
+    const strip = frame.contentDocument!.querySelector<HTMLElement>('.tab-strip')!;
+    const expectedStrip = document.createElement('div');
+    expectedStrip.style.cssText = 'background:var(--muted);color:var(--foreground)';
+    document.body.append(expectedStrip);
+    try {
+      expect(frame.contentWindow!.getComputedStyle(strip).backgroundColor).toBe(getComputedStyle(expectedStrip).backgroundColor);
+      expect(frame.contentWindow!.getComputedStyle(strip).color).toBe(getComputedStyle(expectedStrip).color);
+      expect(frame.contentWindow!.getComputedStyle(chrome).fontFamily).toBe(getComputedStyle(document.body).fontFamily);
+    } finally { expectedStrip.remove(); }
+    frame.contentDocument!.querySelector<HTMLButtonElement>('[data-floe-ui="more"]')!.click();
+    frame.contentDocument!.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click();
+  }
+  await vi.waitFor(() => expect(frame.contentDocument?.querySelector('.redeven-browser-sources-dialog input')).toBeTruthy());
   const child = frame.contentWindow!, doc = frame.contentDocument!;
-  const dialog = doc.querySelector<HTMLElement>('[role="dialog"]')!;
+  const dialog = doc.querySelector<HTMLElement>('.redeven-browser-sources-dialog')!;
   await vi.waitFor(() => expect(child.getComputedStyle(dialog).opacity).toBe('1'));
   // Compare the same surface and controls in both realms, including material
   // styles applied by the design system rather than assuming a flat token.
@@ -70,5 +85,5 @@ for (const [dark, surfaceStyle, width] of [[false, 'standard', 1280], [true, 'st
     expect(child.getComputedStyle(doc.documentElement).getPropertyValue(token).trim()).toBe(theme.tokens[token]);
   }
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
-  if (import.meta.env.VITE_REDEVEN_BROWSER_SOURCE_SCREENSHOTS === '1') await page.screenshot({ element: frame, path: `__screenshots__/browser-document-${dark ? 'dark' : 'light'}-${width}.png` });
+  if (import.meta.env.VITE_REDEVEN_BROWSER_SOURCE_SCREENSHOTS === '1') await page.screenshot({ element: frame, path: `__screenshots__/browser-document-${failed ? 'recovery' : 'live'}-${dark ? 'dark' : 'light'}-${width}.png` });
 });
