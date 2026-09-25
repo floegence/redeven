@@ -52,6 +52,18 @@ older or newer protocol versions fail before a view can receive input.
 
 ## Tab geometry and continuity
 
+Managed profiles launch with a native viewport. Only Runtime-owned managed
+sources grant the released Playwright adapter `windowViewport` authority: each
+authorized viewport update sizes the native window contents as well as the
+selected target. New tabs therefore inherit the current display dimensions
+before website scripts initialize or cache click geometry. Target emulation
+still owns each tab's zoom; resizing the native window does not reset another
+controlled tab's viewport. Borrowed personal Chrome pages and extension sources
+never receive authority to resize the user's native window. This fixes unintended
+initial layout changes without rewriting website coordinates, reloading an
+existing page or replaying input. Websites own their response to an intentional
+user resize after initialization.
+
 The viewer keeps at most three complete inert tab documents for immediate visual
 feedback. The selected preview remains painted while its replacement prepares
 offscreen, and swaps only after styles, selection acknowledgement, idle-control
@@ -99,6 +111,8 @@ is input evidence, not proof that a third-party verification challenge passes.
 - [FloeBrowser v0.1.19: test/target-change.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.19/test/target-change.e2e.ts) — Replaced, removed and covered targets cannot receive stale clicks or interrupt subsequent scrolling.
 - [FloeBrowser v0.1.19: test/input-recovery.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.19/test/input-recovery.e2e.ts) — Missing event sequences recover independently of target cancellation; current authorization and uncertain-effect failures remain visible.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.test.ts` - Grant/token ordering, immediate revocation and stale selection rejection.
+- `redeven:internal/envapp/ui_src/scripts/computerManagedSandbox.node-test.mjs` - Real managed launcher and source host preserve sandbox isolation and new-tab initialization geometry.
+- [FloeBrowser v0.1.20: test/popup-viewport.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.20/test/popup-viewport.e2e.ts) — Initial popup dimensions and visible source/projected click markers at desktop and narrow sizes, with opener zoom and borrowed-window isolation.
 - [FloeBrowser v0.1.18: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.18/src/viewer/replay-pages.ts) — Bounded inert document retention.
 - [FloeBrowser v0.1.18: test/tab-sizing.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.18/test/tab-sizing.e2e.ts) — Per-frame source and viewer geometry across admission, cancellation, visibility and window-size changes.
 - [FloeBrowser v0.1.18: test/tab-continuity.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.18/test/tab-continuity.e2e.ts) — Per-frame cold, warm, evicted and renamed tab continuity across three engines and both input roles.
