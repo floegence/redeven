@@ -13,6 +13,7 @@ const chromeTokens = {
   '--floe-background': '--background', '--floe-foreground': '--foreground',
   '--floe-muted': '--muted-foreground', '--floe-line': '--border',
   '--floe-accent': '--primary', '--floe-surface': '--muted', '--floe-field': '--secondary',
+  '--floe-accent-foreground': '--primary-foreground',
 };
 
 /** The parent owns presentation; browser documents inherit its resolved theme. */
@@ -44,4 +45,5 @@ export function applyBrowserDocumentTheme(theme: BrowserDocumentTheme): void {
 
 export function applyBrowserChromeTheme(element: HTMLElement): void {
   for (const [name, token] of Object.entries(chromeTokens)) element.style.setProperty(name, `var(${token})`);
+  element.style.setProperty('--floe-font-family', getComputedStyle(document.body).fontFamily);
 }

@@ -62,8 +62,10 @@ callbacks from the retired document cannot change current presentation.
 One product theme adapter captures the parent's resolved design-system token
 catalog, effective dark mode, surface style, shell preset and font family. The
 trusted browser document applies that presentation before mounting recovery or
-source dialogs. Engine chrome derives its seven palette values from those same
-semantic tokens. The child has no separate theme provider, stored preference or
+source dialogs. Engine chrome derives its palette and primary-button foreground from those same
+semantic tokens and uses the captured font. FloeBrowser uses only namespaced CSS
+properties, preserving host background and text token meanings across tab bars,
+libraries, menus, media controls and navigation errors. The child has no separate theme provider, stored preference or
 reverse palette aliases; light and dark dialogs, buttons and fields must match
 the environment in both embedded and independent windows.
 
@@ -157,6 +159,7 @@ is input evidence, not proof that a third-party verification challenge passes.
 - [FloeBrowser v0.1.14: test/navigation-input.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/navigation-input.e2e.ts) — Input fencing through navigation admission and completion.
 
 - `redeven:internal/envapp/ui_src/src/browserDocument.browser.test.tsx` - Real document handshake, dialog and control theme parity in light/dark and narrow layouts.
+- [FloeBrowser v0.1.16: test/chrome-theme.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.16/test/chrome-theme.e2e.ts) — Host token preservation and readable chrome controls in both themes.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserDocumentTheme.ts` - Single parent-to-document presentation adapter.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FloeBrowserSurface.tsx` - Shared viewer mount and generation-bound cleanup.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FloeBrowserSurface.test.tsx` - Source-selection progress retains the current document until replacement.
@@ -167,7 +170,7 @@ is input evidence, not proof that a third-party verification challenge passes.
 - `redeven:desktop/src/main/browserProjectionWindows.test.ts` - Exact static-document loading without environment API authority.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.ts` - Environment-owned window, source replacement and private control admission.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.test.ts` - Grant/token ordering, immediate revocation and stale selection rejection.
-- [FloeBrowser v0.1.15: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.15/src/viewer/replay-pages.ts) — Bounded inert document retention.
-- [FloeBrowser v0.1.15: test/tab-cache.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.15/test/tab-cache.e2e.ts) — Immediate presentation without stale input authority.
+- [FloeBrowser v0.1.16: src/viewer/replay-pages.ts](https://github.com/floegence/floebrowser/blob/v0.1.16/src/viewer/replay-pages.ts) — Bounded inert document retention.
+- [FloeBrowser v0.1.16: test/tab-cache.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.16/test/tab-cache.e2e.ts) — Immediate presentation without stale input authority.
 
 - [FloeBrowser v0.1.13: test/browser-menu.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.13/test/browser-menu.e2e.ts) — Address-row actions, activation, focus, narrow bounds and late completion.
