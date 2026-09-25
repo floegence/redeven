@@ -115,6 +115,55 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
             await page.screenshot({ path: path.join(output, `${prefix}-suggestions.png`) });
             await editor.fill('Retained draft 中文');
             await editor.evaluate(element => { window.__drawerEditor = element; element.setSelectionRange(2, 7); });
+            stage = 'flower keyboard geometry';
+            const keyboard = [];
+            const cdp = name === 'chromium' ? await context.newCDPSession(page) : null;
+            const keyboardHeight = Math.min(320, viewport.height - 140);
+            for (const [cycle, inset] of [34, 0, 34].entries()) {
+              // Some mobile browsers retain the home-indicator inset while the
+              // visual viewport already ends above the software keyboard.
+              await cdp?.send('Emulation.setSafeAreaInsetsOverride', { insets: { bottom: inset } });
+              await editor.focus();
+              for (const [phase, height] of [keyboardHeight, keyboardHeight - 24, keyboardHeight + 20].entries()) {
+                const offsetTop = phase === 1 ? 18 : 0;
+                await page.evaluate(size => window.__setNavigationViewport(size), { height, offsetTop });
+                await page.waitForFunction(({ height, offsetTop }) => {
+                  const host = document.querySelector('[data-floe-app-viewport]');
+                  return host.getAttribute('data-keyboard-open') === 'true'
+                    && Math.abs(host.getBoundingClientRect().height - height) < 1
+                    && Math.abs(host.getBoundingClientRect().top - offsetTop) < 1;
+                }, { height, offsetTop });
+                const host = await geometry(page.locator('[data-floe-app-viewport]'));
+                const composer = await geometry(page.locator('.flower-composer'));
+                const gap = host.bottom - composer.bottom;
+                const evidence = { cycle, phase, nativeInset: cdp ? inset : 0, height, offsetTop, host, composer, gap };
+                keyboard.push(evidence);
+                await writeFile(path.join(output, `${prefix}-keyboard.json`), JSON.stringify(keyboard, null, 2));
+                assert.ok(Math.abs(gap - 12) < 1, `keyboard must leave only the composer spacing: ${JSON.stringify(evidence)}`);
+                assert.equal(await page.locator('[data-floe-shell-slot="mobile-tab-bar"]').isVisible(), false);
+                assert.equal(await editor.evaluate(element => element === window.__drawerEditor && document.activeElement === element), true);
+                assert.equal(await editor.inputValue(), 'Retained draft 中文');
+                assert.deepEqual(await editor.evaluate(element => [element.selectionStart, element.selectionEnd]), [2, 7]);
+              }
+              if (cycle === 0) await page.screenshot({ path: path.join(output, `${prefix}-keyboard.png`),
+                clip: { x: 0, y: 0, width: viewport.width, height: keyboardHeight + 20 } });
+              await editor.evaluate(element => element.blur());
+              await page.evaluate(size => window.__setNavigationViewport(size), { ...viewport, offsetTop: 0 });
+              await page.waitForFunction(height => {
+                const host = document.querySelector('[data-floe-app-viewport]');
+                const navigation = document.querySelector('[data-floe-shell-slot="mobile-tab-bar"]');
+                return !host.hasAttribute('data-keyboard-open') && !navigation.hidden
+                  && Math.abs(host.getBoundingClientRect().height - height) < 1;
+              }, viewport.height);
+              const restoredGap = await page.evaluate(() => document.querySelector('[data-floe-shell-slot="mobile-tab-bar"]').getBoundingClientRect().top
+                - document.querySelector('.flower-composer').getBoundingClientRect().bottom);
+              assert.ok(Math.abs(restoredGap - 12) < 1,
+                `the navigation owns the safe area after keyboard dismissal: ${restoredGap}`);
+            }
+            await cdp?.send('Emulation.setSafeAreaInsetsOverride', { insets: {} });
+            await cdp?.detach();
+            await page.evaluate(size => window.__setNavigationViewport(size), viewport);
+            stage = 'flower navigation';
             const conversationTrigger = page.locator('.flower-chat-header .flower-mobile-navigation-button');
             const conversationBounds = await geometry(conversationTrigger);
             assert.ok(conversationBounds.width >= 44 && conversationBounds.height >= 44);
@@ -249,6 +298,21 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
             await page.screenshot({ path: path.join(output, `${prefix}-composer-permissions-dark.png`) });
             await permissionMenu.press('Escape'); await permissionMenu.waitFor({ state: 'detached' });
             await permissionTrigger.press('Escape'); await composerPanel.waitFor({ state: 'detached' });
+            await page.waitForFunction(() => document.activeElement?.classList.contains('flower-composer-more-button'));
+            await editor.focus();
+            await page.evaluate(height => window.__setNavigationViewport({ height }), keyboardHeight);
+            await page.waitForFunction(() => document.querySelector('[data-floe-app-viewport]').getAttribute('data-keyboard-open') === 'true');
+            await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+            assert.equal(await editor.evaluate(element => document.activeElement === element), true,
+              'closing More must not reclaim focus after the user returns to typing');
+            assert.equal(await navigation.isVisible(), false);
+            assert.ok(Math.abs((await geometry(page.locator('[data-floe-app-viewport]'))).bottom
+              - (await geometry(page.locator('.flower-composer'))).bottom - 12) < 1);
+            await page.screenshot({ path: path.join(output, `${prefix}-keyboard-dark.png`),
+              clip: { x: 0, y: 0, width: viewport.width, height: keyboardHeight } });
+            await editor.evaluate(element => element.blur());
+            await page.evaluate(size => window.__setNavigationViewport(size), viewport);
+            await navigation.waitFor({ state: 'visible' });
             await more.tap(); await tools.waitFor();
             await tools.locator('[data-mobile-tool="appearance"]').tap();
             await tools.locator('[id$="-mode-light"]').tap();
@@ -373,7 +437,7 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
             await tools.locator('[data-mobile-tool="dashboard"]').tap();
             await page.waitForURL('**/dashboard');
             assert.deepEqual(errors, []);
-            results.push({ browser: name, viewport, flower, composer: { conversationTrigger: conversationBounds, permissions: permissionBounds }, plugin, navigation: navigationBounds, more: moreBounds, terminal: terminalBounds, errors });
+            results.push({ browser: name, viewport, flower, composer: { conversationTrigger: conversationBounds, permissions: permissionBounds, keyboard }, plugin, navigation: navigationBounds, more: moreBounds, terminal: terminalBounds, errors });
           } catch (error) {
             failures.push({ browser: name, viewport, stage, error: error.stack, errors });
             await page.screenshot({ path: path.join(output, `${prefix}-failure.png`) }).catch(() => {});

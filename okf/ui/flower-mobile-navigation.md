@@ -49,6 +49,18 @@ Mobile composer, conversation search, and contextual launcher text fields use
 at least 16 CSS pixels so Safari focus does not zoom the page or change its
 visible width. Explicit host settings navigation reveals the detail pane.
 
+The composer dock reserves only its 12 CSS pixel content spacing below the
+input surface. Its host owns device safe areas: the mobile Shell navigation
+protects the home indicator while visible, and the shared viewport ends above
+the software keyboard during editing. The dock must not add a second raw
+`safe-area-inset-bottom`, including when a browser retains that inset while
+the keyboard is open. Keyboard opening, dismissal, height changes, and page
+panning retain the editor node, draft, selection, and current focus.
+Closing composer More restores its current trigger after responsive controls
+settle only if focus was left in the closing panel or document body. A later
+focus choice, especially returning to the composer, wins; restoration must not
+reclaim focus, scroll the page, or interrupt the keyboard session.
+
 # Boundaries
 
 The [Activity companion](flower-activity-companion.md) owns product placement.

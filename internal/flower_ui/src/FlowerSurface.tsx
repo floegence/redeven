@@ -2978,16 +2978,18 @@ webSearch: model.web_search,
     });
   });
   const closeComposerMore = (restoreFocus: boolean) => {
+    const closingPanel = composerMorePanelRef;
     setComposerMoreOpen(false);
     if (restoreFocus) {
       queueMicrotask(() => {
-        let remainingFrames = 2;
-        const restoreCurrentButton = () => {
-          if (composerMoreButtonRef?.isConnected) composerMoreButtonRef.focus();
-          remainingFrames -= 1;
-          if (remainingFrames > 0) window.requestAnimationFrame(restoreCurrentButton);
-        };
-        window.requestAnimationFrame(restoreCurrentButton);
+        // Restore after responsive controls settle; a newer focus choice wins.
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+          const active = document.activeElement;
+          if (!composerMoreOpen() && composerMoreButtonRef?.isConnected
+            && (!active || active === document.body || closingPanel?.contains(active))) {
+            composerMoreButtonRef.focus({ preventScroll: true });
+          }
+        }));
       });
     }
   };
