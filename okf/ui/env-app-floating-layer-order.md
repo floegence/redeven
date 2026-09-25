@@ -3,7 +3,7 @@ type: UI Contract
 title: Env App floating layer order
 description: One product-owned stacking contract orders movable windows, Flower, plugin surfaces, blocking modals, and command UI.
 tags: [ui, floating-windows, flower, plugins, dialogs, focus]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
@@ -45,6 +45,14 @@ while long content scrolls locally. Geometry changes retain the live content and
 input owner. Product CSS must not bypass this boundary with fixed panel positions,
 viewport-unit heights plus removed maximums, or forced transforms.
 
+The document-level AppViewport uses that same published boundary. Safari can
+move its fixed origin before reporting the matching visual viewport offset.
+During this delay, client-space visible bounds must remain on screen: the page
+header stays at the visible top and the composer follows the visible bottom.
+Floe owns this coordinate conversion and its intermediate states. Redeven must
+not compensate by resetting scroll, reclaiming focus, adding keyboard padding,
+or installing a second viewport observer.
+
 EnvAppDrawer selects the published side-drawer presentation. Redeven supplies its
 business width and the Desktop titlebar gap inside the available region. Preview
 windows supply preferred sizes and a desktop edge margin rather than subscribing
@@ -69,6 +77,7 @@ This contract governs cross-surface Env App stacking and the Activity-versus-Wor
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/scripts/checkMobileNavigation.mjs` - Checks the retained header and composer against delayed Safari visual offsets, as well as settled keyboard geometry.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/OverlayViewport.browser.test.tsx` - Checks mobile preview, editor, drawer, and plugin boundaries with retained content in light and dark themes.
 - `redeven:internal/envapp/ui_src/src/ui/utils/envAppLayers.ts` - Defines the five product bands.
 - `redeven:internal/envapp/ui_src/src/ui/utils/envAppFloatingWindowStack.ts` - Maintains compact shared movable-window ordering.

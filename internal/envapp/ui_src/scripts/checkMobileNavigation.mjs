@@ -135,11 +135,13 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
                 }, { height, offsetTop });
                 const host = await geometry(page.locator('[data-floe-app-viewport]'));
                 const composer = await geometry(page.locator('.flower-composer'));
+                const header = await geometry(page.locator('.flower-chat-header'));
                 const gap = host.bottom - composer.bottom;
-                const evidence = { cycle, phase, nativeInset: cdp ? inset : 0, height, offsetTop, host, composer, gap };
+                const evidence = { cycle, phase, nativeInset: cdp ? inset : 0, height, offsetTop, host, header, composer, gap };
                 keyboard.push(evidence);
                 await writeFile(path.join(output, `${prefix}-keyboard.json`), JSON.stringify(keyboard, null, 2));
                 assert.ok(Math.abs(gap - 12) < 1, `keyboard must leave only the composer spacing: ${JSON.stringify(evidence)}`);
+                assert.ok(Math.abs(header.y - host.y) < 1, 'keyboard must retain the Flower header at the visible top');
                 assert.equal(await page.locator('[data-floe-shell-slot="mobile-tab-bar"]').isVisible(), false);
                 assert.equal(await editor.evaluate(element => element === window.__drawerEditor && document.activeElement === element), true);
                 assert.equal(await editor.inputValue(), 'Retained draft 中文');
@@ -147,6 +149,28 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
               }
               if (cycle === 0) await page.screenshot({ path: path.join(output, `${prefix}-keyboard.png`),
                 clip: { x: 0, y: 0, width: viewport.width, height: keyboardHeight + 20 } });
+              // Native Safari pans the fixed origin before reporting the matching
+              // visual offset. Reproduce both event orders and intermediate values.
+              for (const offsetTop of [0, 60, 120]) {
+                await page.evaluate(({ height, offsetTop }) => {
+                  document.documentElement.style.transform = 'translateY(-120px)';
+                  window.__setNavigationViewport({ height, offsetTop });
+                }, { height: keyboardHeight, offsetTop });
+                await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+                const host = await geometry(page.locator('[data-floe-app-viewport]'));
+                const header = await geometry(page.locator('.flower-chat-header'));
+                const composer = await geometry(page.locator('.flower-composer'));
+                const evidence = { cycle, phase: 'delayed-safari-offset', offsetTop, host, header, composer, gap: keyboardHeight - composer.bottom };
+                keyboard.push(evidence);
+                await writeFile(path.join(output, `${prefix}-keyboard.json`), JSON.stringify(keyboard, null, 2));
+                assert.ok(Math.abs(host.y) < 1 && Math.abs(header.y) < 1,
+                  `Safari focus panning must retain the header: ${JSON.stringify(evidence)}`);
+                assert.ok(Math.abs(evidence.gap - 12) < 1,
+                  `Safari focus panning must not expose a blank region: ${JSON.stringify(evidence)}`);
+                assert.equal(await editor.evaluate(element => element === window.__drawerEditor && document.activeElement === element), true);
+                assert.deepEqual(await editor.evaluate(element => [element.value, element.selectionStart, element.selectionEnd]), ['Retained draft 中文', 2, 7]);
+              }
+              await page.evaluate(() => { document.documentElement.style.transform = ''; });
               await editor.evaluate(element => element.blur());
               await page.evaluate(size => window.__setNavigationViewport(size), { ...viewport, offsetTop: 0 });
               await page.waitForFunction(height => {
