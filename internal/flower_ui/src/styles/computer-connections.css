@@ -571,7 +571,7 @@
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--floe-type-body);
 }
 
 .flower-computer-profile > svg {
