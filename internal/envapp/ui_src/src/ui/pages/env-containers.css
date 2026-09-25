@@ -33,7 +33,7 @@
 }
 
 .container-services-page__header h2 { margin: 0; font-size: 20px; font-weight: 600; }
-.container-services-page__header p { margin: 4px 0 0; color: var(--muted-foreground); font-size: 13px; }
+.container-services-page__header p { margin: 4px 0 0; color: var(--muted-foreground); font-size: var(--floe-type-body); }
 
 .container-services-grid {
   display: grid;

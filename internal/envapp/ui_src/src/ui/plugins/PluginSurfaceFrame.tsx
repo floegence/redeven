@@ -247,13 +247,13 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       <div class="relative min-h-0 flex-1 bg-muted/20">
         <Show when={loadState() === 'opening' && openingProgress()}>
           {(progress) => <div role="status" aria-live="polite" data-plugin-surface-opening
-            class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground">
+            class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-[length:var(--floe-type-body)] text-muted-foreground">
             <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" />
             <span>{i18n.t(surfaceOpeningStageKeys[progress().stage])}</span>
           </div>}
         </Show>
         <Show when={loadState() === 'closing'}>
-          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground animate-in fade-in duration-150 motion-reduce:animate-none">
+          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-[length:var(--floe-type-body)] text-muted-foreground animate-in fade-in duration-150 motion-reduce:animate-none">
             <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" />
             <span>{i18n.t('uiCopy.plugin.closingSurface')}</span>
           </div>
@@ -266,12 +266,12 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
               </span>
               <h2 class="mt-3 text-sm font-semibold">{i18n.t('uiCopy.plugin.surfaceFailed')}</h2>
               <Show when={errorCode() === 'PLUGIN_BRIDGE_TIMEOUT'}>
-                <p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceTimedOut')}</p>
+                <p class="mt-2 text-[length:var(--floe-type-body)] leading-[var(--floe-line-body)] text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceTimedOut')}</p>
               </Show>
               <Show when={cleanupPending()}>
-                <p role="status" class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceRetryCleanup')}</p>
+                <p role="status" class="mt-2 text-[length:var(--floe-type-body)] leading-[var(--floe-line-body)] text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceRetryCleanup')}</p>
               </Show>
-              <details class="mt-2 break-words text-sm leading-6 text-muted-foreground">
+              <details class="mt-2 break-words text-[length:var(--floe-type-body)] leading-[var(--floe-line-body)] text-muted-foreground">
                 <summary class="cursor-pointer">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
                 <p>{errorMessage()}</p>
                 <Show when={errorCode() || openingFailure()}>

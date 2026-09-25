@@ -5,7 +5,7 @@
 .host-apps-dialog>.border-b h2 { font-size:16px; letter-spacing:-.015em; }
 .host-apps-dialog>.border-t { padding:0 24px 20px; border-top:0; }
 .host-apps-dialog .host-apps-dialog-content { padding:0 24px 24px; }
-.host-apps-dialog-content>div>p { font-size:13px; line-height:1.7; }
+.host-apps-dialog-content>div>p { font-size: var(--floe-type-body); line-height:1.7; }
 .host-apps-dialog-identity { display:flex; align-items:center; gap:10px; min-width:0; }
 .host-apps-dialog-identity .host-app-icon { width:28px; height:28px; }
 .host-apps-dialog-identity>span:last-child { overflow-wrap:anywhere; }
@@ -18,7 +18,7 @@
 .host-apps-preparation-method label>div:last-child { gap:3px; }
 .host-apps-preparation-method label>div:last-child>span:last-child { line-height:1.6; }
 .host-apps-preparation h2 { font-size: 15px; font-weight: 600; letter-spacing: -.02em; margin: 0 0 8px; }
-.host-apps-preparation p { font-size: 13px; line-height: 1.65; color: var(--muted-foreground); margin: 0; max-width: 68ch; }
+.host-apps-preparation p { font-size: var(--floe-type-body); line-height: 1.65; color: var(--muted-foreground); margin: 0; max-width: 68ch; }
 .host-apps-preparation .host-apps-preparation-target { margin-top: 8px; color: var(--foreground); }
 .host-apps-preparation-track { height: 2px; background: var(--border); overflow: hidden; margin-top: 22px; }
 .host-apps-preparation-track span { display: block; height: 100%; background: var(--primary); transition: width .2s ease; }

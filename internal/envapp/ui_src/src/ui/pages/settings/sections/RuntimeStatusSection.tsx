@@ -114,7 +114,7 @@ export function RuntimeStatusSection() {
             <span class={cn('flex h-8 w-8 items-center justify-center rounded-lg', statusOnline() ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground')}>
               <Activity class="h-4 w-4" />
             </span>
-            <span class="text-sm font-semibold text-foreground">{statusLabel()}</span>
+            <span class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{statusLabel()}</span>
           </div>
           <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.statusLabel')}</div>
         </div>
@@ -123,7 +123,7 @@ export function RuntimeStatusSection() {
             <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <Cpu class="h-4 w-4" />
             </span>
-            <div class="text-sm font-semibold font-mono text-foreground">{version()}</div>
+            <div class="text-[length:var(--floe-type-body)] font-semibold font-mono text-foreground">{version()}</div>
           </div>
           <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.currentVersion')}</div>
         </div>
@@ -132,7 +132,7 @@ export function RuntimeStatusSection() {
             <span class={cn('flex h-8 w-8 items-center justify-center rounded-lg', compatOk() ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning')}>
               <ShieldCheck class="h-4 w-4" />
             </span>
-            <span class="text-sm font-semibold text-foreground">{compatLabel()}</span>
+            <span class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{compatLabel()}</span>
           </div>
           <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.compatibilityLabel')}</div>
         </div>
@@ -227,9 +227,9 @@ export function RuntimeStatusSection() {
       title={maintenanceAction() === 'restart' ? i18n.t('runtimeStatus.restartAction') : upgradeActionLabel()}
       confirmText={maintenanceAction() === 'restart' ? i18n.t('runtimeStatus.restartAction') : upgradeActionLabel()}
       onConfirm={async () => { const action = maintenanceAction(); setMaintenanceAction(null); if (action === 'restart') await ctx.startRestart(); else if (action === 'upgrade') await ctx.startUpgrade(); }}>
-      <p class="text-sm">{i18n.t('settingsDesign.maintenanceWarning')}</p>
+      <p class="text-[length:var(--floe-type-body)]">{i18n.t('settingsDesign.maintenanceWarning')}</p>
       <p class="mt-3 text-xs text-muted-foreground">{activeWorkSummary()}</p>
-      <Show when={maintenanceAction() === 'upgrade' && ctx.targetUpgradeVersion()}><code class="mt-3 block text-sm">{ctx.targetUpgradeVersion()}</code></Show>
+      <Show when={maintenanceAction() === 'upgrade' && ctx.targetUpgradeVersion()}><code class="mt-3 block text-[length:var(--floe-type-body)]">{ctx.targetUpgradeVersion()}</code></Show>
     </ConfirmDialog>
     </>
   );

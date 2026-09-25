@@ -226,7 +226,7 @@ export function SkillsSection() {
             <Button size="sm" variant="default" onClick={() => void installSkillsFromGitHub()} loading={skillInstallSaving()} disabled={!canMutateCatalog() || !installValidated() || skillInstallValidating()}>{i18n.t('skillsSettings.install')}</Button>
           </div>
         }>
-        <Show when={skillInstallError()}><p role="alert" class="mb-4 text-sm text-destructive">{skillInstallError()}</p></Show>
+        <Show when={skillInstallError()}><p role="alert" class="mb-4 text-[length:var(--floe-type-body)] text-destructive">{skillInstallError()}</p></Show>
         <fieldset disabled={!canManage() || skillInstallSaving() || skillInstallValidating()} class="space-y-4 min-w-0">
           <div><FieldLabel>{i18n.t('skillsSettings.scopeLabel')}</FieldLabel><Select value={skillInstallScope()} onChange={(v) => setSkillInstallScope(v as any)} options={[{ value: 'user', label: i18n.t('skillsSettings.scopeUserRedeven') }, { value: 'user_agents', label: i18n.t('skillsSettings.scopeUserAgents') }]} class="w-full" /></div>
           <div><FieldLabel hint={i18n.t('skillsSettings.preferredHint')}>{i18n.t('skillsSettings.githubUrlLabel')}</FieldLabel><Input value={skillInstallURL()} onInput={(e) => setSkillInstallURL(e.currentTarget.value)} placeholder="https://github.com/openai/skills/tree/main/skills/.curated/skill-installer" size="sm" class="w-full" /></div>
@@ -238,7 +238,7 @@ export function SkillsSection() {
           <Checkbox checked={skillInstallOverwrite()} onChange={(v) => setSkillInstallOverwrite(v)} label={i18n.t('skillsSettings.overwriteExisting')} size="sm" disabled={!ctx.canInteract() || !ctx.canAdmin()} />
           <Show when={installValidated()}><div class="redeven-settings-inset rounded-lg border p-4">
             <h3 class="text-sm font-medium">{i18n.t('settingsDesign.validatedSkills')}</h3>
-            <For each={skillInstallResolved()}>{(item) => <div class="mt-3"><div class="text-sm">{item.name}</div><code class="break-all text-xs text-muted-foreground">{item.target_dir}</code></div>}</For>
+            <For each={skillInstallResolved()}>{(item) => <div class="mt-3"><div class="text-[length:var(--floe-type-body)]">{item.name}</div><code class="break-all text-xs text-muted-foreground">{item.target_dir}</code></div>}</For>
           </div></Show>
         </fieldset>
       </Dialog>
@@ -246,7 +246,7 @@ export function SkillsSection() {
       {/* Create dialog */}
       <Dialog open={skillCreateOpen()} onOpenChange={(open) => { if (!skillCreateSaving()) setSkillCreateOpen(open); }} title={i18n.t('skillsSettings.createDialogTitle')} class="redeven-settings-dialog w-[min(42rem,94vw)]"
         footer={<><Button variant="outline" onClick={() => setSkillCreateOpen(false)} disabled={skillCreateSaving()}>{i18n.t('common.actions.cancel')}</Button><Button onClick={() => void createSkill()} loading={skillCreateSaving()} disabled={!canMutateCatalog() || !skillCreateName().trim() || !skillCreateDescription().trim()}>{i18n.t('skillsSettings.create')}</Button></>}>
-        <Show when={skillCreateError()}><p role="alert" class="mb-4 text-sm text-destructive">{skillCreateError()}</p></Show>
+        <Show when={skillCreateError()}><p role="alert" class="mb-4 text-[length:var(--floe-type-body)] text-destructive">{skillCreateError()}</p></Show>
         <fieldset disabled={!canManage() || skillCreateSaving()} class="space-y-3 min-w-0">
           <div><FieldLabel>{i18n.t('skillsSettings.scopeLabel')}</FieldLabel><Select value={skillCreateScope()} onChange={(v) => setSkillCreateScope(v as any)} options={[{ value: 'user', label: i18n.t('skillsSettings.scopeUserRedeven') }, { value: 'user_agents', label: i18n.t('skillsSettings.scopeUserAgents') }]} class="w-full" /></div>
           <div><FieldLabel>{i18n.t('skillsSettings.nameLabel')}</FieldLabel><Input value={skillCreateName()} onInput={(e) => setSkillCreateName(e.currentTarget.value)} placeholder="incident-response" size="sm" class="w-full" /></div>
@@ -258,8 +258,8 @@ export function SkillsSection() {
         title={pendingAction()?.kind === 'delete' ? i18n.t('common.actions.delete') : i18n.t('skillsSettings.reinstall')}
         confirmText={pendingAction()?.kind === 'delete' ? i18n.t('common.actions.delete') : i18n.t('skillsSettings.reinstall')}
         variant="destructive" loading={actionSaving()} onConfirm={confirmAction}>
-        <p class="text-sm">{i18n.t(pendingAction()?.kind === 'delete' ? 'settingsDesign.skillDeleteDescription' : 'settingsDesign.skillReinstallDescription', { name: pendingAction()?.entry.name ?? '' })}</p>
-        <Show when={actionError()}><p role="alert" class="mt-3 text-sm text-destructive">{actionError()}</p></Show>
+        <p class="text-[length:var(--floe-type-body)]">{i18n.t(pendingAction()?.kind === 'delete' ? 'settingsDesign.skillDeleteDescription' : 'settingsDesign.skillReinstallDescription', { name: pendingAction()?.entry.name ?? '' })}</p>
+        <Show when={actionError()}><p role="alert" class="mt-3 text-[length:var(--floe-type-body)] text-destructive">{actionError()}</p></Show>
       </ConfirmDialog>
       <SkillFilesDialog entry={browsingSkill()} onClose={() => setBrowsingSkill(null)} canInteract={ctx.canInteract()} />
     </>

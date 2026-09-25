@@ -160,6 +160,17 @@ afterEach(async () => {
 });
 
 describe('AIReadinessBoundary browser layout', () => {
+  it('uses the shared twelve-pixel reading role for blocked guidance and actions', async () => {
+    const host = mount();
+    await sizeReadinessSurface(544, 720);
+    await document.fonts.ready;
+    for (const selector of ['.ai-readiness-description', '.ai-readiness-data-statement', '.ai-readiness-action']) {
+      const element = host.querySelector<HTMLElement>(selector);
+      expect(element, selector).not.toBeNull();
+      expect(getComputedStyle(element!).fontSize, selector).toBe('12px');
+    }
+  });
+
   it.each(['inspecting', 'backing_up', 'verifying'] as const)('keeps %s compact and reveals explanations only on request', async (state) => {
     const { host } = mountHarness(blockedReason('', { state }));
     await sizeReadinessSurface(1280, 720);

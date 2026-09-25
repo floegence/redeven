@@ -327,7 +327,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         <div
           role="status"
           aria-live="polite"
-          class="absolute inset-0 z-20 flex items-center justify-center bg-background/95 px-6 text-center text-sm text-muted-foreground animate-in fade-in duration-150 motion-reduce:animate-none"
+          class="absolute inset-0 z-20 flex items-center justify-center bg-background/95 px-6 text-center text-[length:var(--floe-type-body)] text-muted-foreground animate-in fade-in duration-150 motion-reduce:animate-none"
           data-plugin-surface-close-queued
         >
           {i18n.t('uiCopy.plugin.closingSurface')}
@@ -350,7 +350,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
           <div class="max-w-md text-center animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none">
             <AlertTriangle class="mx-auto h-6 w-6 text-destructive" />
             <h2 id={`plugin-surface-recovery-title-${props.instanceID}`} class="mt-3 text-sm font-semibold">{i18n.t('uiCopy.plugin.needsAttention')}</h2>
-            <p id={`plugin-surface-recovery-description-${props.instanceID}`} class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceCleanupFailed')}</p>
+            <p id={`plugin-surface-recovery-description-${props.instanceID}`} class="mt-2 text-[length:var(--floe-type-body)] leading-[var(--floe-line-body)] text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceCleanupFailed')}</p>
             <div class="mt-5 flex flex-col-reverse items-stretch justify-center gap-2 sm:flex-row">
               <Button
                 type="button"
@@ -420,7 +420,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
           </div>
         )}
       >
-        <div class="text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceCleanupFailed')}</div>
+        <div class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceCleanupFailed')}</div>
       </Dialog>
     </PersistentFloatingWindow>
   );

@@ -329,7 +329,7 @@ export function ManagedServiceManagementDrawer(props: {
           <Show when={props.operation}>
             {(operation) => (
               <div
-                class="space-y-2 rounded-lg border p-3 text-sm"
+                class="space-y-2 rounded-lg border p-3 text-[length:var(--floe-type-body)]"
                 role="status"
               >
                 <p>
@@ -468,7 +468,7 @@ export function ManagedServiceManagementDrawer(props: {
         <section class="service-management-section">
           <h3 class="text-sm font-semibold">{text('nextAction')}</h3>
           <div class="service-management-section-heading">
-            <span class="text-sm font-medium">{text(`actions.${request().action}`)}</span>
+            <span class="text-[length:var(--floe-type-body)] font-medium">{text(`actions.${request().action}`)}</span>
             <Dropdown align="end" triggerAriaLabel={text('otherActions')} disabled={executing()} triggerClass="web-services-menu-trigger"
               items={[
                 { id: 'uninstall', label: text(retainedArchive() ? 'cleanupRetained' : 'actions.uninstall') },
@@ -562,12 +562,12 @@ export function ManagedServiceManagementDrawer(props: {
             </Show>
           </Show>
           <Show when={request().action === 'detach'}>
-            <p class="rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm">
+            <p class="rounded-lg border border-warning/30 bg-warning/5 p-3 text-[length:var(--floe-type-body)]">
               {text('detachImpact')}
             </p>
           </Show>
           <Show when={error()}>
-            <p role="alert" class="text-sm text-destructive">
+            <p role="alert" class="text-[length:var(--floe-type-body)] text-destructive">
               {problem(error())}
             </p>
           </Show>

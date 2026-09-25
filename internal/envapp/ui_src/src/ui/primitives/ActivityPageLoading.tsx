@@ -4,7 +4,7 @@ export function ActivityPageLoading() {
   const i18n = useI18n();
   return (
     <div
-      class="flex h-full min-h-0 items-center justify-center bg-background text-sm text-muted-foreground"
+      class="flex h-full min-h-0 items-center justify-center bg-background text-[length:var(--floe-type-body)] text-muted-foreground"
       data-env-page-loading
       role="status"
       aria-live="polite"

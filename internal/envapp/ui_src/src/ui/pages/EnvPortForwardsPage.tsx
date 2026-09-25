@@ -763,7 +763,7 @@ export function PortForwardRow(props: {
           <Globe class="h-4 w-4" aria-hidden="true" />
         </div>
         <div class="web-service-identity-content min-w-0">
-          <div class="truncate text-sm font-semibold leading-5">{props.forward.name || i18n.t('webServices.card.fallbackName', { id: props.forward.forward_id })}</div>
+          <div class="truncate text-[length:var(--floe-type-body)] font-semibold leading-5">{props.forward.name || i18n.t('webServices.card.fallbackName', { id: props.forward.forward_id })}</div>
           <div class="mt-0.5 truncate font-mono text-xs leading-4 text-muted-foreground" title={forwardDefaultURL(props.forward)}>{forwardDefaultURL(props.forward)}</div>
       <div class="web-service-metadata web-service-forward-meta" data-testid="port-forward-secondary">
         <Tooltip content={fmtTime(props.forward.last_opened_at_unix_ms, i18n)} placement="top">
@@ -1424,7 +1424,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
 				</div>
 			</div>
 			<div class="flex min-h-0 flex-1 flex-col gap-2">
-				<Show when={props.result} fallback={<div class={cn('flex min-h-0 flex-1 items-center justify-center rounded-lg border p-3 text-sm', props.error ? 'border-destructive/30 bg-destructive/[0.06] text-destructive' : 'text-muted-foreground')}>{props.error || i18n.t('common.status.loading')}</div>}>
+				<Show when={props.result} fallback={<div class={cn('flex min-h-0 flex-1 items-center justify-center rounded-lg border p-3 text-[length:var(--floe-type-body)]', props.error ? 'border-destructive/30 bg-destructive/[0.06] text-destructive' : 'text-muted-foreground')}>{props.error || i18n.t('common.status.loading')}</div>}>
 					<div
 						{...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
 						ref={(element) => { scrollViewport = element; scheduleViewportScan(); }}
@@ -1448,7 +1448,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
               const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length;
               items[next]?.focus(); items[next]?.click();
             }}>
-						<For each={candidates()} fallback={<div class="py-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noReleaseMatches')}</div>}>{(candidate) => {
+						<For each={candidates()} fallback={<div class="py-8 text-center text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('webServices.managed.noReleaseMatches')}</div>}>{(candidate) => {
 			const isSelected = () => props.selectedID === candidate.candidate_id;
 			const isChecking = () => checkingVerificationIDs().has(candidate.candidate_id);
 			const isQueued = () => queuedVerificationIDs().has(candidate.candidate_id);
@@ -1461,7 +1461,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
 									props.onSelect(candidate.candidate_id);
 								}
 							}} data-release-id={candidate.candidate_id} data-verification-status={candidate.verification_status}>
-								<div class="flex min-w-0 items-start gap-2"><span class={cn('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border', isSelected() ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/50 text-transparent')} aria-hidden="true"><Check class="h-3 w-3" /></span><div class="min-w-0"><div class="truncate font-mono text-sm font-semibold text-foreground" title={candidate.version || candidate.tag} data-testid="managed-release-version-label">{candidate.version || candidate.tag}</div><div class={cn("mt-0.5 truncate text-[10px] text-muted-foreground", props.compact && "hidden")} title={`${candidate.source}${candidate.registry ? ` · ${candidate.registry}` : ''} · ${candidate.platform || i18n.t('webServices.managed.platformAny')}`}>{candidate.source}<Show when={candidate.registry}>{(registry) => ` · ${registry()}`}</Show> · {candidate.platform || i18n.t('webServices.managed.platformAny')}</div></div></div>
+								<div class="flex min-w-0 items-start gap-2"><span class={cn('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border', isSelected() ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/50 text-transparent')} aria-hidden="true"><Check class="h-3 w-3" /></span><div class="min-w-0"><div class="truncate font-mono text-[length:var(--floe-type-body)] font-semibold text-foreground" title={candidate.version || candidate.tag} data-testid="managed-release-version-label">{candidate.version || candidate.tag}</div><div class={cn("mt-0.5 truncate text-[10px] text-muted-foreground", props.compact && "hidden")} title={`${candidate.source}${candidate.registry ? ` · ${candidate.registry}` : ''} · ${candidate.platform || i18n.t('webServices.managed.platformAny')}`}>{candidate.source}<Show when={candidate.registry}>{(registry) => ` · ${registry()}`}</Show> · {candidate.platform || i18n.t('webServices.managed.platformAny')}</div></div></div>
 								<div class={cn("col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1", props.compact && "hidden")}><div class="truncate text-[10px] text-muted-foreground">{releaseTrustLabel(candidate.trust, i18n)}<Show when={candidate.published_at_unix_ms}>{(published) => ` · ${i18n.t('webServices.managed.releasePublishedAt', { date: i18n.formatDateTime(published(), { dateStyle: 'medium' }) })}`}</Show></div><Show when={candidate.integrity || candidate.digest}>{(exactIdentity) => <code class="mt-0.5 block truncate text-[10px] text-muted-foreground" title={exactIdentity()}>{exactIdentity()}</code>}</Show></div>
 				<div class="col-start-2 row-start-1 flex min-w-0 flex-wrap items-center justify-end gap-1 sm:col-start-3 sm:max-w-52"><Show when={candidate.verification_status === 'pending'}><Tag size="sm" variant="neutral" tone="soft">{i18n.t(`webServices.managed.releaseVerification.${isChecking() ? 'active' : isQueued() ? 'queued' : 'pending'}` as EnvAppTranslationKey)}</Tag></Show><Show when={candidate.is_current}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.current')}</Tag></Show><Show when={candidate.is_recommended && candidate.recommendation_status === 'available'}><Tag size="sm" variant="info" tone="soft">{i18n.t(props.defaultKind === 'template' ? 'webServices.managed.defaultVersion' : 'webServices.managed.releaseBadge.recommended')}</Tag></Show><Show when={candidate.recommendation_status === 'unavailable'}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.recommendedUnavailable')}</Tag></Show><Show when={candidate.digest_verified}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.verifiedDigest')}</Tag></Show><Show when={candidate.is_latest_stable && (!props.compact || !candidate.is_recommended)}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestStable')}</Tag></Show><Show when={candidate.is_latest_preview}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestPreview')}</Tag></Show><Show when={!props.compact || (candidate.channel !== 'stable' && !candidate.is_latest_preview)}><Tag size="sm" variant={candidate.channel === 'preview' ? 'warning' : 'neutral'} tone="soft">{i18n.t(`webServices.managed.releaseChannel.${candidate.channel}` as EnvAppTranslationKey)}</Tag></Show><Show when={candidate.deprecated}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.deprecated')}</Tag></Show></div>
 								<Show when={candidate.tag_moved}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{i18n.t('webServices.managed.releaseTagMoved')}</p></Show>
@@ -1474,7 +1474,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
             <Show when={props.renderSelectedContent && selected() && !selectedVisible()}>
               <div class="border-t bg-primary/[0.04] px-3 pt-3 shadow-[inset_3px_0_0_0_var(--primary)]">
                 <div class="text-[11px] text-muted-foreground">{i18n.t('webServices.managed.targetRelease')}</div>
-                <div class="mt-1 break-all font-mono text-sm font-semibold">{selected()?.version || selected()?.tag}</div>
+                <div class="mt-1 break-all font-mono text-[length:var(--floe-type-body)] font-semibold">{selected()?.version || selected()?.tag}</div>
                 <div class="py-4">{props.renderSelectedContent?.()}</div>
               </div>
             </Show>
@@ -3378,7 +3378,7 @@ export function EnvPortForwardsPage() {
                     spellcheck={false}
                     size="sm"
                     class={cn(
-                      'h-10 w-full pl-10 pr-12 font-mono text-sm',
+                      'h-10 w-full pl-10 pr-12 font-mono text-[length:var(--floe-type-body)]',
                       addressValidationVisible() && 'border-warning/45',
                     )}
                     autofocus
@@ -3524,7 +3524,7 @@ export function EnvPortForwardsPage() {
                 <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !ctx.env()?.permissions?.can_execute} />}>
                   <Show when={filteredForwards().length > 0 || filteredManagedServices().length > 0} fallback={
                     <div class="flex flex-col items-center justify-center px-4 py-12">
-                      <p class="text-sm text-muted-foreground">{searchQuery() ? i18n.t('webServices.search.noMatches', { query: searchQuery() }) : i18n.t('webServices.collection.archiveEmpty')}</p>
+                      <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{searchQuery() ? i18n.t('webServices.search.noMatches', { query: searchQuery() }) : i18n.t('webServices.collection.archiveEmpty')}</p>
                       <Show when={searchQuery()}><Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">{i18n.t('webServices.search.clear')}</Button></Show>
                     </div>
                   }>
@@ -3613,7 +3613,7 @@ export function EnvPortForwardsPage() {
         canReinstall={Boolean(managementTarget() && templateByID(managementTarget()!.service.template_id)?.available)}
         onReinstall={() => { const target = managementTarget(); if (!target) return; const template = templateByID(target.service.template_id); if (!template) return; setManagementTarget(null); beginTemplateInstall(template); setTemplateDrawerOpen(true); }}
         onLegacyRestore={() => { const target = managementTarget(); if (target) void reviewManagement(target.service); }}
-		ownershipReview={<Show when={managementReview()?.service_id === managementTarget()?.service.service_id && managementReview()}>{(review) => <div class="space-y-3 rounded-lg border p-3"><p class="text-sm">{i18n.t('webServices.managed.restoreManagementHelp')}</p><p class="break-all font-mono text-xs">{i18n.t('webServices.managed.processFacts', { pid: review().pid, group: review().process_group, executable: review().executable, user: review().user_id, birth: review().birth })}</p><Button size="sm" onClick={() => void restoreManagement()} disabled={managementRestoreBusy()}>{i18n.t('webServices.managed.confirmProcess')}</Button></div>}</Show>}
+		ownershipReview={<Show when={managementReview()?.service_id === managementTarget()?.service.service_id && managementReview()}>{(review) => <div class="space-y-3 rounded-lg border p-3"><p class="text-[length:var(--floe-type-body)]">{i18n.t('webServices.managed.restoreManagementHelp')}</p><p class="break-all font-mono text-xs">{i18n.t('webServices.managed.processFacts', { pid: review().pid, group: review().process_group, executable: review().executable, user: review().user_id, birth: review().birth })}</p><Button size="sm" onClick={() => void restoreManagement()} disabled={managementRestoreBusy()}>{i18n.t('webServices.managed.confirmProcess')}</Button></div>}</Show>}
         onExecute={async (request: ManagementRequest & { plan_digest: string }) => {
           const target = managementTarget(); if (!target) return;
           const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(target.service.service_id)}/operations`, { method: 'POST', body: JSON.stringify({ ...request, request_id: managedRequestID() }) });
@@ -3713,7 +3713,7 @@ export function EnvPortForwardsPage() {
 
           <Show when={templateDrawerView() === 'install' && selectedTemplate()} keyed>{(template) => (
             <div class="space-y-5">
-				<Show when={installReview()}><p role="status" class="rounded-md border p-3 text-sm">{i18n.t('webServices.management.installReviewed')}</p></Show>
+				<Show when={installReview()}><p role="status" class="rounded-md border p-3 text-[length:var(--floe-type-body)]">{i18n.t('webServices.management.installReviewed')}</p></Show>
 				<For each={template.effective_spec?.parameters ?? template.spec?.parameters ?? []}>{(parameter) => <div class="space-y-1"><label class="block text-xs font-medium" for={`install-parameter-${parameter.name}`}>{parameter.label || parameter.name}{parameter.required ? ' *' : ''}</label><Input id={`install-parameter-${parameter.name}`} type={parameter.type==='secret' ? 'password' : 'text'} autocomplete="off" required={parameter.required} value={installParameters()[parameter.name] ?? selectedTemplateRelease()?.parameters[parameter.name] ?? parameter.default ?? ''} onInput={(event) => setInstallParameters((current) => ({...current,[parameter.name]:event.currentTarget.value}))} /><Show when={parameter.description}><p class="text-xs text-muted-foreground">{parameter.description}</p></Show></div>}</For>
               <Show when={selectedTemplatePresentation()} keyed>{(presentation) => (
                 <div class="service-template-install-identity rounded-xl border p-4">
@@ -3725,7 +3725,7 @@ export function EnvPortForwardsPage() {
 					<div><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.versions')}</h3><p class="mt-1 text-xs text-muted-foreground">{i18n.t('webServices.managed.releaseSelectionDescription')}</p></div>
 					<Button size="sm" variant="outline" onClick={() => openTemplateReleasePicker(template.template_id)} disabled={managedInstallSubmitting()}>{i18n.t('webServices.managed.chooseVersion')}</Button>
 				</div>
-				<div class="mt-3 rounded-lg border bg-muted/20 p-3"><div class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{template.source === 'builtin' ? i18n.t('webServices.managed.recommendedVersion') : i18n.t('webServices.managed.defaultVersion')}</div><div class="mt-1 font-mono text-sm text-foreground">{selectedTemplateRelease()?.candidate.version || selectedTemplateRelease()?.candidate.tag || (template.recommended_release ? releaseIdentityLabel(template.recommended_release) : '—')}</div></div>
+				<div class="mt-3 rounded-lg border bg-muted/20 p-3"><div class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{template.source === 'builtin' ? i18n.t('webServices.managed.recommendedVersion') : i18n.t('webServices.managed.defaultVersion')}</div><div class="mt-1 font-mono text-[length:var(--floe-type-body)] text-foreground">{selectedTemplateRelease()?.candidate.version || selectedTemplateRelease()?.candidate.tag || (template.recommended_release ? releaseIdentityLabel(template.recommended_release) : '—')}</div></div>
 				<Show when={templateRecommendationUnavailable()}><p class="mt-2 text-xs text-warning">{i18n.t('webServices.managed.releaseSourceError.RECOMMENDED_RELEASE_UNAVAILABLE')}</p></Show>
 				<Show when={installReleaseRiskHints().length > 0}><div class="mt-3"><ManagedReleaseRiskHints riskIDs={installReleaseRiskHints()} /></div></Show>
 			  </section>
@@ -4031,9 +4031,9 @@ export function EnvPortForwardsPage() {
         }}
         serviceName={(id) => managedState().find((item) => item.service_id === id)?.name || id}
       />
-      <Dialog open={templateDuplicate() !== null} onOpenChange={(open) => { if (!open && !templateSaving()) setTemplateDuplicate(null); }} title={i18n.t('webServices.managed.duplicateTemplate')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setTemplateDuplicate(null)} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={() => void duplicateTemplate()} disabled={templateSaving() || !templateDuplicateName().trim()}>{i18n.t('webServices.managed.duplicate')}</Button></div>}><div class="space-y-3"><p class="text-sm text-muted-foreground">{i18n.t('webServices.managed.duplicateNote')}</p><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={templateDuplicateName()} onInput={(event) => setTemplateDuplicateName(event.currentTarget.value)} autofocus /></div></div></Dialog>
+      <Dialog open={templateDuplicate() !== null} onOpenChange={(open) => { if (!open && !templateSaving()) setTemplateDuplicate(null); }} title={i18n.t('webServices.managed.duplicateTemplate')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setTemplateDuplicate(null)} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={() => void duplicateTemplate()} disabled={templateSaving() || !templateDuplicateName().trim()}>{i18n.t('webServices.managed.duplicate')}</Button></div>}><div class="space-y-3"><p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('webServices.managed.duplicateNote')}</p><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={templateDuplicateName()} onInput={(event) => setTemplateDuplicateName(event.currentTarget.value)} autofocus /></div></div></Dialog>
 
-      <ConfirmDialog open={templateDelete() !== null} onOpenChange={(open) => { if (!open) setTemplateDelete(null); }} title={i18n.t('webServices.managed.deleteTemplate')} confirmText={i18n.t('webServices.actions.delete')} variant="destructive" loading={templateSaving()} onConfirm={() => void deleteTemplate()}><p class="text-sm">{i18n.t('webServices.managed.deleteTemplateQuestion', { name: templateDelete()?.name ?? '' })}</p></ConfirmDialog>
+      <ConfirmDialog open={templateDelete() !== null} onOpenChange={(open) => { if (!open) setTemplateDelete(null); }} title={i18n.t('webServices.managed.deleteTemplate')} confirmText={i18n.t('webServices.actions.delete')} variant="destructive" loading={templateSaving()} onConfirm={() => void deleteTemplate()}><p class="text-[length:var(--floe-type-body)]">{i18n.t('webServices.managed.deleteTemplateQuestion', { name: templateDelete()?.name ?? '' })}</p></ConfirmDialog>
 
       <Dialog open={managedLogs() !== null} onOpenChange={(open) => { if (!open) setManagedLogs(null); }} title={i18n.t('webServices.managed.logsTitle')} footer={<div class="flex justify-end"><Button size="sm" variant="outline" onClick={() => setManagedLogs(null)}>{i18n.t('webServices.actions.cancel')}</Button></div>}><Show when={managedLogIsHost()}><p class="mb-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.logScope')}</p></Show><pre class="max-h-96 overflow-auto rounded-md bg-muted/40 p-3 text-[11px] whitespace-pre-wrap">{(managedLogs() ?? []).join('\n') || i18n.t('webServices.managed.noLogs')}</pre></Dialog>
 
@@ -4049,9 +4049,9 @@ export function EnvPortForwardsPage() {
               <div class="space-y-2" aria-live="polite">
                 <Show when={selectedReleaseCandidate()} fallback={<p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.chooseUpdateVersion')}</p>}>
                   <div class="managed-release-change">
-                    <div class="min-w-0"><span class="block text-[11px] text-muted-foreground">{i18n.t('webServices.managed.currentRelease')}</span><span class="block truncate font-mono text-sm" title={releasePickerService()?.release_status.current_release ? releaseIdentityLabel(releasePickerService()!.release_status.current_release!) : ''}>{releasePickerService()?.release_status.current_release ? releaseIdentityLabel(releasePickerService()!.release_status.current_release!) : '—'}</span></div>
+                    <div class="min-w-0"><span class="block text-[11px] text-muted-foreground">{i18n.t('webServices.managed.currentRelease')}</span><span class="block truncate font-mono text-[length:var(--floe-type-body)]" title={releasePickerService()?.release_status.current_release ? releaseIdentityLabel(releasePickerService()!.release_status.current_release!) : ''}>{releasePickerService()?.release_status.current_release ? releaseIdentityLabel(releasePickerService()!.release_status.current_release!) : '—'}</span></div>
                     <span class="text-muted-foreground" aria-hidden="true">→</span>
-                    <div class="min-w-0"><span class="block text-[11px] text-muted-foreground">{i18n.t('webServices.managed.targetRelease')}</span><span class="block truncate font-mono text-sm font-semibold" title={selectedVersionLabel()}>{selectedVersionLabel()}</span></div>
+                    <div class="min-w-0"><span class="block text-[11px] text-muted-foreground">{i18n.t('webServices.managed.targetRelease')}</span><span class="block truncate font-mono text-[length:var(--floe-type-body)] font-semibold" title={selectedVersionLabel()}>{selectedVersionLabel()}</span></div>
                   </div>
                   <p class="text-xs leading-5 text-muted-foreground" data-testid="managed-release-impact">{selectedReleaseCandidate()?.is_current || selectedReleaseCandidate()?.relation === 'same'
                     ? i18n.t('webServices.managed.updateNotRequired')
@@ -4116,7 +4116,7 @@ export function EnvPortForwardsPage() {
         onConfirm={() => void doDelete(deleteID() || '')}
       >
         <div class="space-y-2">
-          <p class="text-sm">
+          <p class="text-[length:var(--floe-type-body)]">
             {i18n.t('webServices.dialog.deleteQuestionPrefix')}{' '}
             <span class="font-semibold">"{deleteTarget()?.name || deleteTarget()?.forward_id}"</span>?
           </p>

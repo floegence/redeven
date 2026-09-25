@@ -71,7 +71,7 @@
 .host-app-quit:hover:not(:disabled) { color:var(--destructive); background:color-mix(in srgb,var(--destructive) 8%,transparent); }
 .host-app-quit:focus-visible, .host-app-session-open:focus-visible, .host-app-stop:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
 .host-app-quit-notice { padding:0 12px 12px; font-size:11px; line-height:1.6; color:var(--muted-foreground); }
-.host-app-quit-description { font-size:13px; line-height:1.8; color:var(--muted-foreground); }
+.host-app-quit-description { font-size: var(--floe-type-body); line-height:1.8; color:var(--muted-foreground); }
 
 .host-apps-mobile-filters, .host-app-mobile-actions { display: none; }
 @container host-apps (width < 768px) {

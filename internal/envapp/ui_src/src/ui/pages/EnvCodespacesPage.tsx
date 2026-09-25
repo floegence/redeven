@@ -1392,7 +1392,7 @@ export function EnvCodespacesPage() {
             data-testid="codespaces-list-region"
           >
             <Show when={initialSpacesLoading()}><CodespacesListSkeleton /></Show>
-            <Show when={inventory.snapshot().error}>{error => <div class="flex items-center gap-2 text-sm text-destructive" role="alert">
+            <Show when={inventory.snapshot().error}>{error => <div class="flex items-center gap-2 text-[length:var(--floe-type-body)] text-destructive" role="alert">
               <AlertTriangle class="h-4 w-4 shrink-0" /><span>{String(error())}</span>
               <Button size="sm" variant="outline" onClick={() => void refetch().catch(() => undefined)}>{i18n.t('common.actions.retry')}</Button>
             </div>}</Show>
@@ -1456,7 +1456,7 @@ export function EnvCodespacesPage() {
         }
       >
         <div class="space-y-2">
-          <p class="text-sm">
+          <p class="text-[length:var(--floe-type-body)]">
             {i18n.t("codespaces.dialog.deleteQuestionPrefix")} <span class="font-semibold">"{deleteTarget()?.name || deleteTarget()?.code_space_id}"</span>?
           </p>
           <p class="text-xs text-muted-foreground">

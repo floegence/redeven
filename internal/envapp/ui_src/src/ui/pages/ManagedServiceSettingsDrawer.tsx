@@ -618,7 +618,7 @@ export function ManagedServiceSettingsDrawer(props: {
         <Show
           when={!loading() && draft()}
           fallback={
-            <div class="flex min-h-[20rem] items-center justify-center gap-2 text-sm text-muted-foreground">
+            <div class="flex min-h-[20rem] items-center justify-center gap-2 text-[length:var(--floe-type-body)] text-muted-foreground">
               <ManagedServiceShapingOrb />
               <span>{settingText("loading")}</span>
             </div>

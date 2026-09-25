@@ -144,7 +144,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
         </div>
       }
     >
-      <Show when={props.provider} fallback={<div class="text-sm text-muted-foreground">{i18n.t('flowerProviderDialog.providerRemoved')}</div>}>
+      <Show when={props.provider} fallback={<div class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('flowerProviderDialog.providerRemoved')}</div>}>
         {(providerAccessor) => {
           const provider = () => providerAccessor();
           const providerID = () => String(provider().id ?? '').trim();
@@ -193,7 +193,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                       <ProviderBrandIcon type={provider().type} class="h-5 w-5" />
                     </span>
                     <div class="min-w-0">
-                      <div class="truncate text-sm font-semibold text-foreground">{providerTypeDisplayLabel(provider().type)}</div>
+                      <div class="truncate text-[length:var(--floe-type-body)] font-semibold text-foreground">{providerTypeDisplayLabel(provider().type)}</div>
                       <div class="truncate text-[11px] text-muted-foreground">{providerID() || i18n.t('flowerProviderDialog.providerIdPending')}</div>
                     </div>
                   </div>
@@ -265,7 +265,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                 </span>
                                 <span class="min-w-0">
                                   <span class="flex items-center gap-2">
-                                    <span class="text-sm font-semibold text-foreground">{providerTypeDisplayLabel(item.value)}</span>
+                                    <span class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{providerTypeDisplayLabel(item.value)}</span>
                                     <Show when={active()}>
                                       <SettingsPill tone="success">{i18n.t('flowerProviderDialog.currentProviderType')}</SettingsPill>
                                     </Show>
@@ -381,7 +381,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                       <ModelCatalogControls copy={catalogCopy()} query={query()} count={props.provider?.models.length ?? 0} onQuery={setQuery} onSelectAll={props.onApplyAllPresets} onClear={props.onClearModels} onRefresh={props.onDiscoverModels} loading={props.discoveringModels} error={props.discoveryError} disabled={!props.canInteract} />
                       <Show
                         when={filterFlowerModels(props.recommendedModels, query()).length > 0}
-                        fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{catalogCopy().empty}</div>}
+                        fallback={<div class="rounded-lg border border-dashed p-4 text-[length:var(--floe-type-body)] text-muted-foreground">{catalogCopy().empty}</div>}
                       >
                         <div class="grid grid-cols-1 gap-2 xl:grid-cols-2">
                           <For each={filterFlowerModels(props.recommendedModels, query())}>
@@ -391,7 +391,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                 <div class={cn('redeven-settings-choice rounded-lg border p-3', selected() && 'redeven-settings-choice--selected')}>
                                   <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0">
-                                      <div class="break-all font-mono text-sm font-semibold text-foreground">{preset.display_name || preset.model_name} <Show when={preset.status}><SettingsPill>{preset.status === 'experimental' ? catalogCopy().experimental : catalogCopy().preview}</SettingsPill></Show></div>
+                                      <div class="break-all font-mono text-[length:var(--floe-type-body)] font-semibold text-foreground">{preset.display_name || preset.model_name} <Show when={preset.status}><SettingsPill>{preset.status === 'experimental' ? catalogCopy().experimental : catalogCopy().preview}</SettingsPill></Show></div>
                                       <div class="mt-1 text-xs text-muted-foreground">
                                         {i18n.t('flowerProviderDialog.contextTokens', { count: formatTokenCount(preset.context_window) })}
                                         <Show when={preset.max_output_tokens}> · {i18n.t('flowerProviderDialog.outputTokens', { count: formatTokenCount(Number(preset.max_output_tokens ?? 0)) })}</Show>
@@ -447,7 +447,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                       />
                       <Show
                         when={hasSelectedModels()}
-                        fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{i18n.t('flowerProviderDialog.noSelectedModels')}</div>}
+                        fallback={<div class="rounded-lg border border-dashed p-4 text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('flowerProviderDialog.noSelectedModels')}</div>}
                       >
                         <div class="grid grid-cols-1 gap-2 xl:grid-cols-2">
                           <For each={filterFlowerModels(models(), query())}>
@@ -455,7 +455,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                               <div class="redeven-settings-inset rounded-lg border p-3">
                                 <div class="flex items-start justify-between gap-3">
                                   <div class="min-w-0">
-                                    <div class="break-all font-mono text-sm font-semibold text-foreground">{normalizeModelName(model.model_name) || i18n.t('flowerProviderDialog.unnamedModel')}</div>
+                                    <div class="break-all font-mono text-[length:var(--floe-type-body)] font-semibold text-foreground">{normalizeModelName(model.model_name) || i18n.t('flowerProviderDialog.unnamedModel')}</div>
                                     <div class="mt-1 text-xs text-muted-foreground">
                                       {modalitySummary(model.input_modalities)} · {i18n.t('flowerProviderDialog.contextTokens', { count: formatTokenCount(Number(model.context_window ?? 0)) })}
                                     </div>
@@ -499,7 +499,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                     </Show>
                     <Show
                       when={hasSelectedModels()}
-                      fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{i18n.t('flowerProviderDialog.noSelectedModels')}</div>}
+                      fallback={<div class="rounded-lg border border-dashed p-4 text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('flowerProviderDialog.noSelectedModels')}</div>}
                     >
                       <div class="space-y-3">
                         <For each={models()}>

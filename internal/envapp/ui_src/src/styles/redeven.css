@@ -2128,7 +2128,7 @@ html.dark .git-changes-table-pending {
   box-shadow: none !important;
   -webkit-appearance: none;
   appearance: none;
-  font-size: 0.875rem;
+  font-size: var(--floe-type-body);
   line-height: 1.55;
 }
 
@@ -2386,7 +2386,7 @@ html.dark .git-changes-table-pending {
 
   .flower-chat-input-textarea {
     min-height: 3.5rem;
-    font-size: 0.8125rem;
+    font-size: var(--floe-type-body);
   }
 
   .flower-chat-input-send-btn {
@@ -3637,7 +3637,7 @@ a.chat-sources-cell-url:focus-visible {
 .flower-queued-turn-text {
   margin: 0;
   color: var(--foreground);
-  font-size: 0.8125rem;
+  font-size: var(--floe-type-body);
   line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -4525,7 +4525,7 @@ html.dark .git-content-skeleton__block {
 
 .browser-editor-setup__summary {
   max-width: 46rem;
-  font-size: 0.82rem;
+  font-size: var(--floe-type-body);
   line-height: 1.65;
   color: var(--muted-foreground);
   overflow-wrap: anywhere;

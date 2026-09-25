@@ -191,7 +191,7 @@ function PluginConfirmationDialogEntry(props: {
           <button
             ref={cancelButton}
             type="button"
-            class={`${PLUGIN_MOBILE_TOUCH_TARGET_CLASS} cursor-pointer rounded-md border px-4 py-2 text-sm font-medium text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none`}
+            class={`${PLUGIN_MOBILE_TOUCH_TARGET_CLASS} cursor-pointer rounded-md border px-4 py-2 text-[length:var(--floe-type-body)] font-medium text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none`}
             data-floe-autofocus
             data-plugin-confirmation-reject
             disabled={deciding()}
@@ -201,7 +201,7 @@ function PluginConfirmationDialogEntry(props: {
           </button>
           <button
             type="button"
-            class={`${PLUGIN_MOBILE_TOUCH_TARGET_CLASS} cursor-pointer rounded-md px-4 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${presentation.highRisk
+            class={`${PLUGIN_MOBILE_TOUCH_TARGET_CLASS} cursor-pointer rounded-md px-4 py-2 text-[length:var(--floe-type-body)] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${presentation.highRisk
               ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
               : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
             data-plugin-confirmation-approve
@@ -213,7 +213,7 @@ function PluginConfirmationDialogEntry(props: {
         </div>
       )}
     >
-      <div class="redeven-plugin-enter-up space-y-4 text-sm animate-in fade-in duration-200 motion-reduce:animate-none" data-plugin-confirmation-dialog>
+      <div class="redeven-plugin-enter-up space-y-4 text-[length:var(--floe-type-body)] animate-in fade-in duration-200 motion-reduce:animate-none" data-plugin-confirmation-dialog>
         <div class="flex min-w-0 items-start gap-3 rounded-md border bg-muted/20 p-3">
           <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">
             <Shield class="h-4 w-4" />

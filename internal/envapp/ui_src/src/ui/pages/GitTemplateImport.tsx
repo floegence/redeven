@@ -579,7 +579,7 @@ export function GitTemplateImport(props: {
             <Show
               when={catalog()!.templates.length > 0}
               fallback={
-                <p class="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
+                <p class="rounded-lg border border-dashed p-5 text-center text-[length:var(--floe-type-body)] text-muted-foreground">
                   {i18n.t('webServices.sources.noTemplates')}
                 </p>
               }
@@ -602,7 +602,7 @@ export function GitTemplateImport(props: {
                           <Folder class="size-4 text-muted-foreground" />
                         </span>
                         <span class="min-w-0 flex-1">
-                          <span class="block break-all text-sm font-medium">
+                          <span class="block break-all text-[length:var(--floe-type-body)] font-medium">
                             {entry.path.split('/').filter(Boolean).at(-1) ||
                               catalog()?.source.repository.split('/').at(-1)}
                           </span>
@@ -635,7 +635,7 @@ export function GitTemplateImport(props: {
                     <Package class="size-5 text-muted-foreground" />
                   </span>
                   <div class="min-w-0">
-                    <p class="break-words text-sm font-semibold">{item.template.name}</p>
+                    <p class="break-words text-[length:var(--floe-type-body)] font-semibold">{item.template.name}</p>
                     <p class="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
                       {item.template.description}
                     </p>

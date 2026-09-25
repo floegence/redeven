@@ -136,7 +136,7 @@ export function RuntimeConfigSection() {
                       </span>
                       <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2 mb-1">
-                          <code class="break-all text-sm font-mono font-medium text-foreground">{root.path}</code>
+                          <code class="break-all text-[length:var(--floe-type-body)] font-mono font-medium text-foreground">{root.path}</code>
                           <span class="text-[10px] text-muted-foreground">{root.label || root.id}</span>
                         </div>
                         <div class="flex items-center gap-2 mt-2">
@@ -176,7 +176,7 @@ export function RuntimeConfigSection() {
         onConfirm={confirmWriteAccess}
       >
         <div class="space-y-3">
-          <p class="text-sm">{i18n.t('runtimeConfig.allowWritesDialogDescription')}</p>
+          <p class="text-[length:var(--floe-type-body)]">{i18n.t('runtimeConfig.allowWritesDialogDescription')}</p>
           <p class="text-xs text-muted-foreground break-all">{i18n.t('runtimeConfig.rootLabel')}: {writeConfirmTarget()?.root.label || writeConfirmTarget()?.root.id || i18n.t('runtimeConfig.customRoot')}</p>
           <p class="text-xs text-muted-foreground break-all">{i18n.t('runtimeConfig.pathHeader')}: <span class="font-mono">{writeConfirmTarget()?.root.path || '-'}</span></p>
         </div>

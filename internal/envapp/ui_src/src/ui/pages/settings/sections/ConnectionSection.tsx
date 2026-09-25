@@ -45,7 +45,7 @@ function ConnectionInfoRow(props: Readonly<{
             <props.icon class="h-3.5 w-3.5" />
           </span>
           <div class="min-w-0">
-            <div class="text-sm font-semibold text-foreground">{props.label}</div>
+            <div class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.label}</div>
             <Show when={props.technicalLabel}>
               <div class="mt-0.5 text-[11px] font-mono text-muted-foreground">{props.technicalLabel}</div>
             </Show>
@@ -130,7 +130,7 @@ export function ConnectionSection() {
           technicalLabel={i18n.t('settings.connection.environmentId')}
           action={<OptionalCopyButton value={environmentID()} label={i18n.t('settings.copyValue', { value: i18n.t('settings.connection.environmentId') })} />}
           value={
-            <code class="block break-all font-mono text-sm leading-relaxed text-foreground">
+            <code class="block break-all font-mono text-[length:var(--floe-type-body)] leading-relaxed text-foreground">
               {valueOrEmpty(environmentID())}
             </code>
           }
@@ -141,7 +141,7 @@ export function ConnectionSection() {
           technicalLabel={i18n.t('settings.connection.controlPlaneUrl')}
           action={<OptionalCopyButton value={controlPlaneURL()} label={i18n.t('settings.copyValue', { value: i18n.t('settings.connection.controlPlaneUrl') })} />}
           value={
-            <code class="block break-all font-mono text-sm leading-relaxed text-foreground">
+            <code class="block break-all font-mono text-[length:var(--floe-type-body)] leading-relaxed text-foreground">
               {valueOrEmpty(controlPlaneURL())}
             </code>
           }
@@ -152,7 +152,7 @@ export function ConnectionSection() {
           technicalLabel={i18n.t('settings.connection.instanceId')}
           action={<OptionalCopyButton value={runtimeInstanceID()} label={i18n.t('settings.copyValue', { value: i18n.t('settings.connection.instanceId') })} />}
           value={
-            <code class="block break-all font-mono text-sm leading-relaxed text-foreground">
+            <code class="block break-all font-mono text-[length:var(--floe-type-body)] leading-relaxed text-foreground">
               {valueOrEmpty(runtimeInstanceID())}
             </code>
           }
@@ -163,7 +163,7 @@ export function ConnectionSection() {
           technicalLabel={i18n.t('settings.connection.securityKey')}
           description={i18n.t('settings.connection.securityKeyDescription')}
           value={
-            <span class={artifactReady() ? 'text-sm font-medium text-foreground' : 'text-sm text-muted-foreground'}>
+            <span class={artifactReady() ? 'text-[length:var(--floe-type-body)] font-medium text-foreground' : 'text-[length:var(--floe-type-body)] text-muted-foreground'}>
               {artifactReady() ? i18n.t('settings.connection.keyProvisioned') : i18n.t('settings.connection.keyNotProvisioned')}
             </span>
           }
@@ -173,7 +173,7 @@ export function ConnectionSection() {
       <div class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0">
-            <div class="text-sm font-semibold text-foreground">{i18n.t('settings.connection.changeConnectionTitle')}</div>
+            <div class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{i18n.t('settings.connection.changeConnectionTitle')}</div>
             <p class="mt-0.5 text-xs leading-relaxed text-muted-foreground">{i18n.t('settings.connection.changeConnectionDescription')}</p>
           </div>
           <Show when={desktopShellBridgeAvailable()}>

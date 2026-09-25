@@ -38,7 +38,7 @@ export function EnvTerminalPage() {
                 >
                   <div class="max-w-md text-center flex flex-col items-center gap-3">
                     <AlertTriangle class="h-5 w-5 text-error" aria-hidden="true" />
-                    <div class="text-sm font-medium text-foreground">{i18n.t('terminal.sessions')}</div>
+                    <div class="text-[length:var(--floe-type-body)] font-medium text-foreground">{i18n.t('terminal.sessions')}</div>
                     <div class="text-xs text-muted-foreground break-words">{error()}</div>
                     <Button
                       size="sm"

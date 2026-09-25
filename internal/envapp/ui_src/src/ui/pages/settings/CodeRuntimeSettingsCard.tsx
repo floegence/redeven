@@ -122,11 +122,11 @@ function operationLabel(status: CodeRuntimeStatus | null | undefined, i18n: I18n
 function RuntimeDetailsSection(props: { title: string; rows: readonly RuntimeDetailRow[] }) {
   return (
     <div class="space-y-2">
-      <div class="text-sm font-semibold text-foreground">{props.title}</div>
+      <div class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.title}</div>
       <dl class="redeven-settings-inset grid grid-cols-1 overflow-hidden rounded-lg border md:grid-cols-2">
         <For each={props.rows}>{(row) => <div class="min-w-0 border-b border-[var(--redeven-settings-divider)] px-4 py-4">
           <dt class="text-xs text-muted-foreground">{row.label}</dt>
-          <dd class={`mt-2 break-all text-sm text-foreground ${row.mono ? 'font-mono text-xs' : 'font-medium'}`}>{row.value}</dd>
+          <dd class={`mt-2 break-all text-[length:var(--floe-type-body)] text-foreground ${row.mono ? 'font-mono text-xs' : 'font-medium'}`}>{row.value}</dd>
           <Show when={row.note}><p class="mt-2 text-xs leading-relaxed text-muted-foreground">{row.note}</p></Show>
         </div>}</For>
       </dl>
@@ -160,7 +160,7 @@ function VersionRow(props: {
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="space-y-2">
           <div class="flex flex-wrap items-center gap-2">
-            <div class="text-sm font-semibold text-foreground">{props.version.version}</div>
+            <div class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.version.version}</div>
             <SettingsPill tone={detectionTone()}>{runtimeStatusLabel(props.version.detection_state, i18n)}</SettingsPill>
             <Show when={props.version.selected_by_local_environment}>
               <SettingsPill tone="success">{i18n.t('codeRuntime.currentEditor')}</SettingsPill>
@@ -425,7 +425,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       >
         <div class="space-y-4">
           <Show when={!props.canManage}>
-            <div class="redeven-settings-inset rounded-lg border p-4 text-sm text-muted-foreground">
+            <div class="redeven-settings-inset rounded-lg border p-4 text-[length:var(--floe-type-body)] text-muted-foreground">
               {i18n.t('codeRuntime.manageRequiresRwx')}
             </div>
           </Show>
@@ -485,12 +485,12 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
           <Show when={showRemovalOperation()}>
             <div class="redeven-settings-inset rounded-lg border p-4">
               <div class="flex flex-wrap items-center gap-2">
-                <div class="text-sm font-semibold text-foreground">{i18n.t('codeRuntime.recentRuntimeOperation')}</div>
+                <div class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{i18n.t('codeRuntime.recentRuntimeOperation')}</div>
                 <SettingsPill tone={operationRunning() ? 'warning' : operationFailed() ? 'warning' : operationCancelled() ? 'warning' : 'success'}>
                   {operationLabel(props.status, i18n)}
                 </SettingsPill>
               </div>
-              <div class="mt-2 text-sm text-muted-foreground">{removalOperationSummary()}</div>
+              <div class="mt-2 text-[length:var(--floe-type-body)] text-muted-foreground">{removalOperationSummary()}</div>
               <Show when={props.status?.operation.target_version}>
                 <div class="mt-2 text-xs text-muted-foreground">
                   {i18n.t('codeRuntime.targetVersion')}: <span class="font-mono text-foreground">{props.status?.operation.target_version}</span>
@@ -514,7 +514,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             fallback={
               <Show when={!platformUnsupported() && !showSetupActivity()}>
                 <HighlightBlock variant="warning" title={i18n.t('codeRuntime.setupRequiredTitle')}>
-                  <div class="space-y-2 text-sm text-muted-foreground">
+                  <div class="space-y-2 text-[length:var(--floe-type-body)] text-muted-foreground">
                     <div>{i18n.t('codeRuntime.setupRequiredDescription')}</div>
                     <div>{installMethodDescription()}</div>
                   </div>
@@ -523,7 +523,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             }
           >
             <div class="space-y-3">
-              <div class="flex items-center gap-2 text-sm font-semibold text-foreground">{i18n.t('codeRuntime.installedEditorVersionsSection')}<span class="text-xs font-normal text-muted-foreground">{installedVersions().length}</span></div>
+              <div class="flex items-center gap-2 text-[length:var(--floe-type-body)] font-semibold text-foreground">{i18n.t('codeRuntime.installedEditorVersionsSection')}<span class="text-xs font-normal text-muted-foreground">{installedVersions().length}</span></div>
               <SettingsList>
                 <For each={installedVersions()}>
                   {(version) => (
@@ -558,8 +558,8 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             locked={props.actionLoading}
             onChange={props.onInstallMethodChange}
           />
-          <p class="text-sm text-foreground">{installMethodDescription()}</p>
-          <p class="text-sm text-muted-foreground">{i18n.t('codeRuntime.confirm.workspaceFilesStay')}</p>
+          <p class="text-[length:var(--floe-type-body)] text-foreground">{installMethodDescription()}</p>
+          <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('codeRuntime.confirm.workspaceFilesStay')}</p>
         </div>
       </ConfirmDialog>
 
@@ -572,7 +572,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         onConfirm={() => void confirmRemoveVersion()}
       >
         <div class="space-y-3">
-          <p class="text-sm">{i18n.t('codeRuntime.removeDialogDescription')}</p>
+          <p class="text-[length:var(--floe-type-body)]">{i18n.t('codeRuntime.removeDialogDescription')}</p>
           <div class="redeven-settings-inset grid gap-2 rounded-lg border p-3 text-[11px] text-muted-foreground">
             <div>{i18n.t('codeRuntime.targetVersion')}: <span class="font-mono text-foreground">{removeVersionConfirmOpen() || '-'}</span></div>
             <div>{i18n.t('codeRuntime.sharedRuntimeRoot')}: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>

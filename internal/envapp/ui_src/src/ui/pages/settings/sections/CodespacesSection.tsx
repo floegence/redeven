@@ -108,7 +108,7 @@ export function CodespacesSection() {
             control={
               <label class={`flex items-center gap-2 ${canEdit() ? 'cursor-pointer' : ''}`}>
                 <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setError(null); setDirty(true); }} disabled={!canEdit()} />
-                <span class="text-sm text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
+                <span class="text-[length:var(--floe-type-body)] text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
               </label>
             }
           >

@@ -120,10 +120,14 @@ try {
   const typography = await page.locator('.redeven-environment-settings-dialog').evaluate((el) => ({
     title: getComputedStyle(el.querySelector('h2')).fontSize,
     field: getComputedStyle(el.querySelector('input')).fontSize,
+    label: getComputedStyle(el.querySelector('.ssh-settings-field > label')).fontSize,
+    body: getComputedStyle(el).fontSize,
     radius: parseFloat(getComputedStyle(el).borderRadius),
   }));
   assert.equal(typography.title, '16px');
-  assert.equal(typography.field, '13px');
+  assert.equal(typography.field, '12px');
+  assert.equal(typography.label, '12px');
+  assert.equal(typography.body, '12px');
   assert.ok(typography.radius <= 6, 'shared compact Dialog radius');
   await page.addScriptTag({ path: axePath });
   const accessibility = await page.evaluate(async () => {
@@ -257,6 +261,19 @@ try {
     if (mode === 'Always') assert.ok(scrolling.gutter > 0, 'native persistent scrollbar reserves space');
     if (mode === 'WhenScrolling') assert.equal(scrolling.gutter, 0, 'native overlay scrollbar reserves no space');
     console.log(`SSH scrollbar mode ${mode} passed (gutter ${scrolling.gutter}px).`);
+  }
+  await page.close();
+  page = await browser.newPage({ viewport: { width: 390, height: 800 }, hasTouch: true });
+  page.on('pageerror', error => errors.push(error.message));
+  await open();
+  const touchFields = await page.locator('.ssh-settings-form input:not([type="checkbox"]), .ssh-settings-form select').evaluateAll(fields => fields.map(field => ({
+    size: getComputedStyle(field).fontSize,
+    height: field.getBoundingClientRect().height,
+  })));
+  assert.ok(touchFields.length > 0);
+  for (const field of touchFields) {
+    assert.equal(field.size, '16px');
+    assert.ok(field.height >= 44);
   }
   assert.deepEqual(errors, []);
   console.log(

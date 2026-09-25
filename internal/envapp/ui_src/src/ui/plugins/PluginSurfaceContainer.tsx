@@ -27,7 +27,7 @@ function UnavailableSurface(props: Readonly<{
       class="flex h-full min-h-0 items-center justify-center bg-background p-5">
       <div class="max-w-sm space-y-4 text-center">
         <Package class="mx-auto h-8 w-8 text-muted-foreground" />
-        <p class="text-sm text-muted-foreground" role="status">
+        <p class="text-[length:var(--floe-type-body)] text-muted-foreground" role="status">
           {i18n.t(`uiCopy.plugin.continuity.${props.resolution.status}`)}
         </p>
         <Show when={props.resolution.action}>
@@ -62,7 +62,7 @@ export function PluginSurfaceContainer(props: PluginSurfaceBodyProps & { resolve
       </div>}
     </Show>
     <Show when={resolution().status === 'pending' && lease()}>
-      <div class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/95 text-sm text-muted-foreground" role="status" aria-live="polite">
+      <div class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/95 text-[length:var(--floe-type-body)] text-muted-foreground" role="status" aria-live="polite">
         <Loader2 class="h-4 w-4 animate-spin motion-reduce:animate-none" />
         {i18n.t('uiCopy.plugin.continuity.pending')}
       </div>
