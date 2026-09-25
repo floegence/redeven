@@ -7307,7 +7307,7 @@
     "installOpen": "Installieren und öffnen",
     "recoverTitle": "Browserdienst angehalten",
     "recover": "Browser wiederherstellen",
-    "recoveryDescription": "Der Umgebungsbrowser wird neu gestartet und gespeicherte Tabs werden wiederhergestellt. Ungespeicherte Seiteninhalte können verloren gehen. Andere Dienste der Umgebung laufen weiter.",
+    "recoveryDescription": "Der Umgebungsbrowser wird neu gestartet und gespeicherte Tabs werden wiederhergestellt. Nicht abgesendete Formulare und ungespeicherte Seiteninhalte können verloren gehen. Andere Dienste der Umgebung laufen weiter.",
     "sourceUnavailable": "Diese Seite ist nicht mehr verfügbar. Wählen Sie eine Browserquelle.",
     "disconnected": "Die Browserverbindung wurde unterbrochen.",
     "openFailed": "Der Browser konnte nicht geöffnet werden. Versuchen Sie es erneut oder wählen Sie eine andere Quelle.",

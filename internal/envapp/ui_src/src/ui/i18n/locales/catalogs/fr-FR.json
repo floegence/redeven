@@ -7307,7 +7307,7 @@
     "installOpen": "Installer et ouvrir",
     "recoverTitle": "Le service du navigateur est arrêté",
     "recover": "Rétablir le navigateur",
-    "recoveryDescription": "Le navigateur de l’environnement sera redémarré et les onglets enregistrés seront restaurés. Le contenu non enregistré des pages peut être perdu. Les autres services de l’environnement continueront de fonctionner.",
+    "recoveryDescription": "Le navigateur de l’environnement sera redémarré et les onglets enregistrés seront restaurés. Les formulaires non envoyés et le contenu non enregistré des pages peuvent être perdus. Les autres services de l’environnement continueront de fonctionner.",
     "sourceUnavailable": "Cette page n’est plus disponible. Sélectionnez une source de navigateur.",
     "disconnected": "La connexion au navigateur a été interrompue.",
     "openFailed": "Impossible d’ouvrir le navigateur. Réessayez ou choisissez une autre source.",

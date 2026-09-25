@@ -138,7 +138,8 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
     showFailure = (code, phase = 'failed') => {
       const revision = ++recoveryRevision;
       connected = false; active = '';
-      disposeSources?.(); disposeSources = undefined;
+      // The chooser owns its pending selection. View-state updates must not
+      // unmount it and abort the source request that is replacing this view.
       view?.destroy(); view = undefined;
       surface.hidden = true;
       void import('./browserSources').then(({ mountBrowserRecovery }) => {

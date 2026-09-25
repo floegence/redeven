@@ -7307,7 +7307,7 @@
     "installOpen": "Instalar e abrir",
     "recoverTitle": "O serviço do navegador foi interrompido",
     "recover": "Recuperar navegador",
-    "recoveryDescription": "O navegador do ambiente será reiniciado e as abas salvas serão restauradas. O conteúdo não salvo das páginas pode ser perdido. Os outros serviços do ambiente continuarão funcionando.",
+    "recoveryDescription": "O navegador do ambiente será reiniciado e as abas salvas serão restauradas. Os formulários não enviados e o conteúdo não salvo das páginas podem ser perdidos. Os outros serviços do ambiente continuarão funcionando.",
     "sourceUnavailable": "Esta página não está mais disponível. Selecione uma origem do navegador.",
     "disconnected": "A conexão com o navegador foi interrompida.",
     "openFailed": "Não foi possível abrir o navegador. Tente novamente ou escolha outra origem.",

@@ -94,6 +94,11 @@ palette in welcome, navigation and disconnected states. Web Services retains its
 globe icon; Remote Browser uses a rounded browser-window outline with a compact
 outward arrow, with consistent current-color styling in both themes.
 
+The source chooser owns its draft and pending selection until explicit dismissal
+or successful document replacement. Opening and failure updates from a retired
+view must not unmount the chooser and cancel its replacement request. Candidate
+failures remain visible within the chooser; closing it still cancels its intent.
+
 The environment window forwards input readiness only after both the private
 control token and the matching source control grant arrive. Revocation and tab
 changes remain immediate; a delayed token cannot revive a revoked grant.
@@ -132,6 +137,7 @@ without `allow-forms` and its `form-action 'none'` policy.
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/browserDocument.test.ts` - Source selection survives retired-view progress and failure without canceling its intent.
 - [FloeBrowser v0.1.14: test/input-focus.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/input-focus.e2e.ts) — Repeated source focus and native caret continuity.
 - [FloeBrowser v0.1.14: test/navigation-input.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/navigation-input.e2e.ts) — Input fencing through navigation admission and completion.
 
