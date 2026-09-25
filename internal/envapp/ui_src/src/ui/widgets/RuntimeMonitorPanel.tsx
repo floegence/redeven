@@ -616,14 +616,14 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
               </div>
 
               <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex-1 min-h-0 overflow-auto rounded border border-border bg-background">
-                <table class="w-full text-[length:var(--floe-type-control)] leading-5 relative">
+                <table class="w-full text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)] relative">
                   <thead class="sticky top-0 bg-background z-10">
                     <tr class="border-b border-border/60">
-                      <th class="text-left py-1.5 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.pid')}</th>
-                      <th class="text-left py-1.5 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.name')}</th>
-                      <th class="text-right py-1.5 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.cpuPercent')}</th>
-                      <th class="text-right py-1.5 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.memory')}</th>
-                      <th class="text-left py-1.5 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.user')}</th>
+                      <th class="text-left py-1 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.pid')}</th>
+                      <th class="text-left py-1 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.name')}</th>
+                      <th class="text-right py-1 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.cpuPercent')}</th>
+                      <th class="text-right py-1 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.memory')}</th>
+                      <th class="text-left py-1 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.user')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -645,29 +645,29 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                           };
                           return (
                             <tr
-                              class={`border-b border-border/40 cursor-pointer transition-colors ${selected() ? 'bg-primary/10 hover:bg-primary/10' : 'hover:bg-muted/30'}`}
+                              class={`h-[var(--floe-row-height)] border-b border-border/40 cursor-pointer transition-colors ${selected() ? 'bg-primary/10 hover:bg-primary/10' : 'hover:bg-muted/30'}`}
                               data-monitor-process-selected={selected() ? 'true' : 'false'}
                               onClick={() => setSelectedProcessPid(pid)}
                               onContextMenu={(event) => openProcessContextMenu(event, proc)}
                               title={i18n.t('runtimeMonitor.rowActionsHint')}
                             >
-                              <td class="py-1.5 px-2 font-mono text-[11px] text-muted-foreground">{proc.pid}</td>
-                              <td class="py-1.5 px-2 truncate max-w-[220px]" title={proc.name}>{proc.name}</td>
+                              <td class="py-1 px-2 font-mono text-[11px] text-muted-foreground">{proc.pid}</td>
+                              <td class="py-1 px-2 truncate max-w-[220px]" title={proc.name}>{proc.name}</td>
                               <td
-                                class={`py-1.5 px-2 text-right font-mono tabular-nums ${cpuPresentation.className}`}
+                                class={`py-1 px-2 text-right font-mono tabular-nums ${cpuPresentation.className}`}
                                 data-monitor-metric="cpu"
                                 data-monitor-metric-tone={cpuPresentation.tone}
                               >
                                 {Number(proc.cpuPercent ?? 0).toFixed(1)}
                               </td>
                               <td
-                                class={`py-1.5 px-2 text-right font-mono tabular-nums ${memoryPresentation.className}`}
+                                class={`py-1 px-2 text-right font-mono tabular-nums ${memoryPresentation.className}`}
                                 data-monitor-metric="memory"
                                 data-monitor-metric-tone={memoryPresentation.tone}
                               >
                                 {formatMonitorProcessBytes(Number(proc.memoryBytes ?? 0))}
                               </td>
-                              <td class="py-1.5 px-2 truncate max-w-[160px] text-muted-foreground" title={proc.username}>{proc.username}</td>
+                              <td class="py-1 px-2 truncate max-w-[160px] text-muted-foreground" title={proc.username}>{proc.username}</td>
                             </tr>
                           );
                         }}
@@ -703,15 +703,15 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
               </Show>
 
               <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex-1 min-h-0 overflow-auto rounded border border-border bg-background">
-                <table class="w-full text-[length:var(--floe-type-control)] leading-5 relative">
+                <table class="w-full text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)] relative">
                   <thead class="sticky top-0 bg-background z-10">
                     <tr class="border-b border-border/60">
-                      <th class="text-left py-1.5 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.user')}</th>
-                      <th class="text-left py-1.5 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.app')}</th>
-                      <th class="text-left py-1.5 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.codeSpace')}</th>
-                      <th class="text-left py-1.5 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.connected')}</th>
-                      <th class="text-center py-1.5 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.permissionShort')}</th>
-                      <th class="text-left py-1.5 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.channel')}</th>
+                      <th class="text-left py-1 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.user')}</th>
+                      <th class="text-left py-1 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.app')}</th>
+                      <th class="text-left py-1 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.codeSpace')}</th>
+                      <th class="text-left py-1 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.connected')}</th>
+                      <th class="text-center py-1 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.permissionShort')}</th>
+                      <th class="text-left py-1 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.channel')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -731,8 +731,8 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                           const codeSpace = String(sess.codeSpaceID ?? '').trim();
                           const connected = formatDateTime(sess.connectedAtUnixMs, i18n.formatDateTime);
                           return (
-                            <tr class="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                              <td class="py-1.5 px-2 min-w-0">
+                            <tr class="h-[var(--floe-row-height)] border-b border-border/40 hover:bg-muted/30 transition-colors">
+                              <td class="py-1 px-2 min-w-0">
                                 <div class="truncate max-w-[240px]" title={email || uid}>{userLabel}</div>
                                 <Show when={email && uid}>
                                   <div class="text-[11px] text-muted-foreground font-mono truncate max-w-[240px]" title={uid}>
@@ -740,11 +740,11 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                                   </div>
                                 </Show>
                               </td>
-                              <td class="py-1.5 px-2 font-mono truncate max-w-[240px]" title={sess.floeApp}>{appLabel}</td>
-                              <td class="py-1.5 px-2 font-mono truncate max-w-[160px]" title={codeSpace}>{codeSpace || '-'}</td>
-                              <td class="py-1.5 px-2 whitespace-nowrap tabular-nums">{connected || '-'}</td>
-                              <td class="py-1.5 px-2 text-center font-mono tabular-nums">{formatSessionPerm(sess)}</td>
-                              <td class="py-1.5 px-2 font-mono truncate max-w-[240px]" title={sess.channelId}>
+                              <td class="py-1 px-2 font-mono truncate max-w-[240px]" title={sess.floeApp}>{appLabel}</td>
+                              <td class="py-1 px-2 font-mono truncate max-w-[160px]" title={codeSpace}>{codeSpace || '-'}</td>
+                              <td class="py-1 px-2 whitespace-nowrap tabular-nums">{connected || '-'}</td>
+                              <td class="py-1 px-2 text-center font-mono tabular-nums">{formatSessionPerm(sess)}</td>
+                              <td class="py-1 px-2 font-mono truncate max-w-[240px]" title={sess.channelId}>
                                 <button type="button" class="hover:underline" onClick={() => void copy(i18n.t('runtimeMonitor.channelIdLabel'), sess.channelId)}>
                                   {sess.channelId}
                                 </button>

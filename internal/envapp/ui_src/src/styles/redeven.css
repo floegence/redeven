@@ -2447,15 +2447,6 @@ html.dark .git-changes-table-pending {
   object-fit: contain !important;
 }
 
-.chat-message-avatar-assistant .chat-message-avatar-custom-wrapper {
-  border-radius: 0 !important;
-}
-
-/* Subtle top-edge fade above the input toolbar to separate it from the message list. */
-.chat-toolbar-separator {
-  box-shadow: 0 -1px 3px 0 color-mix(in srgb, var(--foreground) 4%, transparent);
-}
-
 /* Prevent scroll anchoring from fighting chat auto-follow while streaming. */
 .chat-message-list-scroll,
 .chat-message-list-inner,
@@ -2476,28 +2467,6 @@ html.dark .git-changes-table-pending {
 /* Flower avatar animation while streaming: smooth playful spin -> pause -> spin. */
 
 
-
-.redeven-file-list-compact [data-file-list-header] {
-  font-size: var(--floe-type-caption);
-}
-
-.redeven-file-list-compact [data-file-list-header] button {
-  padding: 0.375rem 0.625rem;
-}
-
-.redeven-file-list-compact [data-file-list-row] {
-  height: var(--floe-row-height);
-  font-size: var(--floe-type-control);
-  line-height: var(--floe-line-control);
-}
-
-.redeven-file-list-compact [data-file-list-row] > div {
-  padding: 0.3125rem 0.625rem;
-}
-
-.redeven-file-list-compact [data-file-list-row] > div:first-child {
-  gap: 0.375rem;
-}
 
 /* Reduce global overlay loader size to better match the compact Env App style. */
 .floe-loader-ambient + [role='status'] {

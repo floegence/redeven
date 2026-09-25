@@ -624,7 +624,7 @@ describe('FileBrowserWorkspace interactions', () => {
     ), host);
 
     try {
-      expect(host.querySelector('.redeven-file-list-compact')).toBeNull();
+      expect(host.querySelector('[data-file-list-header]')).toBeNull();
 
       const listButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'List');
       expect(listButton).toBeTruthy();
@@ -632,7 +632,7 @@ describe('FileBrowserWorkspace interactions', () => {
       listButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(host.querySelector('.redeven-file-list-compact')).toBeTruthy();
+      expect(host.querySelector('[data-file-list-header]')).toBeTruthy();
     } finally {
       dispose();
     }
@@ -1350,7 +1350,7 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
-  it('uses a shared toolbar control height across actions, fields, and view switcher', () => {
+  it('uses compact inline actions and standard toolbar fields', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1381,9 +1381,9 @@ describe('FileBrowserWorkspace interactions', () => {
 
       expect(upButton?.className).toContain('h-7');
       expect(upButton?.className).not.toContain('redeven-surface-control');
-      expect(breadcrumb?.parentElement?.className).toContain('h-7');
+      expect(breadcrumb?.parentElement?.className).toContain('h-8');
       expect(breadcrumb?.parentElement?.className).not.toContain('redeven-surface-control--muted');
-      expect(filterInput?.parentElement?.className).toContain('h-7');
+      expect(filterInput?.parentElement?.className).toContain('h-8');
       expect(filterInput?.parentElement?.className).toContain('redeven-surface-control--muted');
       expect(viewSwitcher?.className).toContain('h-7');
       expect(viewSwitcher?.className).toContain('redeven-surface-segmented');

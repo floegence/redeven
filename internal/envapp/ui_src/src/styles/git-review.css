@@ -97,7 +97,7 @@
   grid-template-columns: minmax(0, 1fr) 16px auto;
   align-items: center;
   column-gap: 8px;
-  height: 32px;
+  height: var(--floe-row-height);
   padding: 0 10px;
   border: 0;
   border-left: 2px solid transparent;

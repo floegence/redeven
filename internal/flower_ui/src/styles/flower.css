@@ -698,9 +698,10 @@
   flex-direction: column;
   align-items: stretch;
   gap: 0.45rem;
-  min-height: 2.75rem;
+  min-height: 2.5rem;
+  justify-content: center;
   background: var(--flower-chat-surface);
-  padding: 0.375rem 1rem;
+  padding: 0.25rem 1rem;
 }
 
 .flower-chat-header-row {
@@ -714,7 +715,8 @@
 
 .flower-chat-header-title {
   min-width: 0;
-  font-size: 0.875rem;
+  font-size: var(--floe-type-heading);
+  line-height: 1.375rem;
   font-weight: 500;
   color: var(--foreground);
 }
@@ -729,7 +731,7 @@
   display: inline-flex;
   min-width: 0;
   max-width: 20rem;
-  min-height: 1.875rem;
+  min-height: var(--floe-control-height-sm);
   flex: 0 1 auto;
   align-items: center;
   gap: 0.4rem;
@@ -898,7 +900,7 @@
 
 /* Keep thread selection from changing the composer footprint while its detail loads. */
 .flower-surface[data-flower-selected-thread-loading='true'] .flower-composer-footer {
-  min-height: 2.75rem;
+  min-height: var(--floe-control-height-md);
 }
 
 .flower-composer-actions {
@@ -2363,7 +2365,7 @@
   background: transparent;
   color: color-mix(in srgb, var(--foreground) 82%, var(--primary) 18%);
   padding: 0 0.48rem;
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
@@ -4268,6 +4270,7 @@
   display: block;
   min-width: 0;
   max-width: 100%;
+  font-size: var(--floe-type-body);
   line-height: var(--floe-line-body);
   user-select: text;
 }
@@ -4284,7 +4287,7 @@
 }
 
 .flower-chat-md-block :is(p, ul, ol, blockquote, pre, table) {
-  margin: 0.5rem 0 0;
+  margin: 0.375rem 0 0;
 }
 
 .flower-chat-md-block hr {
@@ -4301,27 +4304,28 @@
 }
 
 .flower-chat-md-block :is(h1, h2, h3, h4, h5, h6) {
-  margin: 1rem 0 0.5rem;
+  margin: 0.75rem 0 0.375rem;
   color: inherit;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.25rem;
   letter-spacing: 0;
 }
 
 .flower-chat-md-block h1 {
-  font-size: 1.125rem;
+  font-size: 1rem;
+  line-height: 1.375rem;
 }
 
 .flower-chat-md-block h2 {
-  font-size: 1rem;
-}
-
-.flower-chat-md-block h3 {
   font-size: 0.875rem;
 }
 
-.flower-chat-md-block :is(h4, h5, h6) {
-  font-size: 0.875rem;
+.flower-chat-md-block :is(h3, h4, h5, h6) {
+  font-size: 0.8125rem;
+}
+
+.flower-chat-md-block :is(strong, b) {
+  font-weight: 600;
 }
 
 .flower-chat-md-block :is(ul, ol) {
@@ -4329,7 +4333,7 @@
 }
 
 .flower-chat-md-block li {
-  margin-top: 0.36rem;
+  margin-top: 0.125rem;
   padding-left: 0.1rem;
 }
 
@@ -4340,7 +4344,7 @@
 .flower-chat-md-link {
   cursor: pointer;
   color: color-mix(in srgb, var(--primary) 82%, var(--foreground) 18%);
-  font-weight: 560;
+  font-weight: 500;
   text-decoration-line: underline;
   text-decoration-thickness: 0.08em;
   text-underline-offset: 0.18em;
@@ -4359,19 +4363,19 @@
 .flower-chat-md-inline-code {
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, var(--foreground) 24%);
   border-radius: 0.28rem;
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 66%, var(--foreground) 24%);
+  background: var(--flower-chat-surface-soft);
   padding: 0.07rem 0.3rem;
   color: color-mix(in srgb, var(--foreground) 92%, var(--primary) 8%);
   font-family: var(--flower-chat-md-code-font);
-  font-size: 0.86em;
-  font-weight: 560;
-  line-height: 1.25;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.125rem;
   white-space: break-spaces;
 }
 
 .flower-message-bubble-user .flower-chat-md-inline-code {
   border-color: color-mix(in srgb, var(--primary) 32%, var(--foreground) 18%);
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 54%, var(--primary) 22%, var(--foreground) 10%);
+  background: var(--flower-chat-surface-soft);
 }
 
 .flower-chat-md-blockquote {
@@ -4398,13 +4402,13 @@
 
 .flower-chat-md-block th {
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 82%, var(--foreground) 5%);
-  font-weight: 680;
+  font-weight: 600;
 }
 
 .flower-chat-md-code-frame {
   position: relative;
   max-width: 100%;
-  margin-top: 0.85rem;
+  margin-top: 0.375rem;
 }
 
 .flower-chat-md-code-block {
@@ -4413,12 +4417,12 @@
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 74%, transparent);
   border-radius: 0.45rem;
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 84%, var(--foreground) 7%);
-  padding: 0.78rem 2.45rem 0.78rem 0.82rem;
+  padding: 0.5rem 2.75rem 0.5rem 0.75rem;
   color: color-mix(in srgb, var(--foreground) 90%, var(--primary) 10%);
   font-family: var(--flower-chat-md-code-font);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  line-height: 1.68;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.125rem;
   white-space: pre;
   word-break: normal;
   overflow-wrap: normal;
@@ -4711,7 +4715,7 @@
   font-family: var(--flower-approval-command-font);
   font-size: 0.75rem;
   font-variant-ligatures: none;
-  line-height: 1.55;
+  line-height: 1.125rem;
   white-space: pre;
   overflow-wrap: normal;
 }
@@ -6707,6 +6711,8 @@
 }
 
 .flower-surface {
+  font-size: var(--floe-type-body);
+  line-height: var(--floe-line-body);
   --flower-chat-surface: var(--redeven-surface-main, var(--background));
   --flower-chat-surface-soft: var(--redeven-surface-panel-soft, var(--card));
   --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated, var(--card));
@@ -6728,6 +6734,11 @@
 }
 
 .flower-thread-card {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 0.25rem;
   border: 0;
   background: transparent;
   color: var(--flower-thread-rail-foreground);
@@ -6756,7 +6767,64 @@
 .flower-thread-rows {
   display: flex;
   flex-direction: column;
+  gap: 0;
+}
+
+.flower-thread-card-select-button {
+  display: flex;
+  flex: 1 1 7.5rem;
+  min-width: 0;
+  min-height: var(--floe-row-height);
+  align-items: center;
   gap: 0.25rem;
+  padding: 0.3125rem;
+}
+
+.flower-thread-list-title {
+  font-size: var(--floe-type-control);
+  line-height: var(--floe-line-control);
+  font-weight: 400;
+}
+
+/* Both faces occupy one intrinsic slot, so hover cannot resize the title.
+   A long translation wraps the slot below the title through the parent flex row. */
+.flower-thread-card-trailing {
+  display: grid;
+  flex: 0 0 auto;
+  max-width: 100%;
+  margin-left: auto;
+}
+
+.flower-thread-card-summary,
+.flower-thread-card-actions {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.flower-thread-card-summary {
+  padding-inline: 0.25rem;
+  font-size: var(--floe-type-caption);
+  line-height: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.flower-thread-card-actions {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.flower-thread-card:hover .flower-thread-card-actions,
+.flower-thread-card:focus-within .flower-thread-card-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.flower-thread-card:hover .flower-thread-card-summary,
+.flower-thread-card:focus-within .flower-thread-card-summary {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .flower-thread-rows > .flower-thread-group-label:not(:first-child) {
@@ -6902,51 +6970,18 @@
   color: var(--flower-thread-rail-foreground);
 }
 
-.flower-thread-card-menu-button {
-  position: absolute;
-  right: 0.25rem;
-  top: 0.25rem;
-  display: flex;
-  width: 1.5rem;
-  height: 1.5rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.375rem;
-  color: var(--flower-thread-rail-subtle);
-  cursor: pointer;
-  opacity: 0;
-  z-index: 3;
-  transition:
-    opacity 120ms ease, background-color 120ms ease, color 120ms ease;
-}
-
-.flower-thread-card:hover .flower-thread-card-menu-button,
-.flower-thread-card:focus-within .flower-thread-card-menu-button,
-.flower-thread-card-menu-button:focus-visible {
-  opacity: 1;
-}
-
+.flower-thread-card-menu-button,
 .flower-thread-card-pin-button {
-  position: absolute;
-  right: 1.8125rem;
-  top: 0.25rem;
   display: flex;
-  width: 1.5rem;
-  height: 1.5rem;
+  flex: 0 0 auto;
+  width: var(--floe-control-height-sm);
+  height: var(--floe-control-height-sm);
   align-items: center;
   justify-content: center;
   border-radius: 0.375rem;
   color: var(--flower-thread-rail-subtle);
   cursor: pointer;
-  opacity: 0;
-  z-index: 3;
-  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
-}
-
-.flower-thread-card:hover .flower-thread-card-pin-button,
-.flower-thread-card:focus-within .flower-thread-card-pin-button,
-.flower-thread-card-pin-button:focus-visible {
-  opacity: 1;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .flower-thread-card-pin-button:hover,
@@ -6977,70 +7012,15 @@
   outline: none;
 }
 
-.flower-thread-card-action-indicator {
-  position: absolute;
-  inset: 0 auto 0 38%;
-  z-index: 2;
-  display: flex;
-  width: 62%;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 0.45rem 0 1.5rem;
-  overflow: hidden;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--primary) 0%, transparent) 0%,
-    color-mix(in srgb, var(--primary) 5%, transparent) 24%,
-    color-mix(in srgb, var(--primary) 12%, transparent) 58%,
-    color-mix(in srgb, var(--primary) 20%, transparent) 100%
-  );
-  pointer-events: none;
-  opacity: 1;
-  visibility: visible;
-  transition: opacity 120ms ease;
-}
-
-.flower-thread-card[data-flower-thread-action-required="true"] .flower-thread-card-select-button {
-  padding-right: 7rem;
-  transition: padding-right 120ms ease;
-}
-
-.flower-thread-card[data-flower-thread-action-required="true"]:hover .flower-thread-card-select-button,
-.flower-thread-card[data-flower-thread-action-required="true"]:focus-within .flower-thread-card-select-button {
-  padding-right: 4rem;
-}
-
-.flower-thread-card:hover .flower-thread-card-action-indicator,
-.flower-thread-card:focus-within .flower-thread-card-action-indicator {
-  opacity: 0;
-  visibility: hidden;
-}
-
-.flower-thread-card[data-flower-thread-action-required="true"] .flower-thread-card-time {
-  visibility: hidden;
-}
-
-.flower-thread-card-action-indicator span {
-  position: relative;
-  z-index: 1;
-}
-
 .flower-thread-card-action-badge {
-  display: inline-block;
-  max-width: 100%;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: color-mix(in srgb, var(--primary) 96%, transparent);
-  font-size: 0.625rem;
+  color: var(--primary);
   font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  text-shadow: none;
+}
+
+/* Attention remains visible while actions replace the status text. */
+.flower-thread-card[data-flower-thread-action-required="true"] .flower-thread-status-dot {
+  display: block;
+  background: var(--primary);
 }
 
 .flower-thread-context-menu {
@@ -7140,43 +7120,23 @@
 }
 
 @media (hover: none), (pointer: coarse) {
-  .flower-thread-card {
-    min-height: 2.75rem;
-  }
-
-  .flower-thread-card-select-button {
-    min-height: 2.75rem;
-    padding-right: 3.25rem;
-  }
-
-  .flower-thread-card-menu-button {
-    top: 0;
-    right: 0;
-    width: 2.75rem;
-    height: 2.75rem;
-    opacity: 1;
-  }
-
-  .flower-thread-card-time {
-    opacity: 0;
-  }
-
-  .flower-thread-card-pin-button {
-    display: none;
-  }
-
-  .flower-thread-card-action-indicator {
-    padding-right: 3.25rem;
-  }
-
-  .flower-thread-card[data-flower-thread-action-required="true"]:hover .flower-thread-card-select-button,
-  .flower-thread-card[data-flower-thread-action-required="true"]:focus-within .flower-thread-card-select-button {
-    padding-right: 3.25rem;
-  }
-
+  .flower-thread-card-select-button,
   .flower-thread-menu-item {
     min-height: 2.75rem;
   }
+
+  .flower-thread-card-menu-button,
+  .flower-thread-card-pin-button {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .flower-thread-card-trailing { grid-template-rows: auto auto; }
+  .flower-thread-card-summary { grid-area: 2 / 1; opacity: 1; }
+  .flower-thread-card-time { display: none; }
+  .flower-thread-card-actions { opacity: 1; pointer-events: auto; }
+  .flower-thread-card:hover .flower-thread-card-summary,
+  .flower-thread-card:focus-within .flower-thread-card-summary { opacity: 1; }
 }
 
 .flower-rename-backdrop {
@@ -7743,8 +7703,16 @@
 }
 
 .flower-composer textarea {
-  min-height: 1.5rem;
+  display: block;
+  min-height: var(--floe-line-body);
+  font-size: var(--floe-type-body);
+  line-height: var(--floe-line-body);
   resize: none;
+}
+
+.flower-surface:where(:not(.flower-surface-companion-collapsed)) .flower-composer[data-flower-bottom-mode='chat'] {
+  min-height: 5.25rem;
+  padding: 0.625rem;
 }
 
 .flower-decision-surface[data-flower-bottom-mode='input_request'] textarea,
@@ -10473,7 +10441,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-mobile-thread-drawer .flower-thread-list-header { order: 2; }
 .flower-mobile-thread-drawer .flower-thread-list-toolbar > label { flex: 1; min-width: 0; }
 .flower-mobile-thread-drawer .flower-thread-refresh-button { width: 44px; height: 44px; }
-.flower-mobile-thread-drawer .flower-thread-search-input { height: 44px; }
+.flower-mobile-thread-drawer .flower-thread-search-input { height: 44px; font-size: 1rem; }
 
 .flower-mobile-thread-drawer .flower-mobile-drawer-handle {
   display: block; flex: 0 0 4px; width: 32px; margin: 10px auto 2px;

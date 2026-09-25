@@ -108,7 +108,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
     >
       <button
         type="button"
-        class="flower-thread-card-select-button flex w-full cursor-pointer items-start gap-2 px-2.5 py-1.5 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
+        class="flower-thread-card-select-button cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
         aria-label={ariaLabel()}
         aria-current={props.active ? 'true' : undefined}
         onClick={props.onSelect}
@@ -123,7 +123,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           }
         }}
       >
-        <div class="flower-thread-indicator relative mt-1.5 flex h-2 shrink-0 items-center justify-center" aria-hidden="true" title={indicator().title}>
+        <div class="flower-thread-indicator relative flex h-2 shrink-0 items-center justify-center" aria-hidden="true" title={indicator().title}>
           <Show when={indicator().visual === 'wave'}>
             <div class="flower-thread-wave h-2 items-center gap-0.5">
               <div class="flower-thread-wave-bar" style="animation-delay: 0ms" />
@@ -137,7 +137,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <div class="flex min-w-0 items-center gap-1">
             <span
-              class="flower-thread-list-title flex-1 truncate text-[length:var(--floe-type-control)] leading-5 font-medium"
+              class="flower-thread-list-title flex-1 truncate"
               draggable={titleDraggable()}
               title={titleDraggable() ? copy().dragPinned : undefined}
               onDragStart={(event) => props.onDragStart?.(event, props.item)}
@@ -149,48 +149,47 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           </Show>
         </div>
       </button>
-      <div class="pointer-events-none absolute right-2.5 top-1.5 flex h-5 min-w-7 items-center justify-end">
-        <span class="flower-thread-card-time select-none text-[11px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">
-          {fmtFlowerShortTime(props.item.created_at_ms, copy())}
-        </span>
-      </div>
-      <Show when={props.onPin && itemCanPin()}>
-        <button
-          type="button"
-          class="flower-thread-card-pin-button"
-          disabled={props.pinBusy}
-          data-pinned={props.item.pinned ? 'true' : 'false'}
-          aria-label={props.item.pinned ? copy().unpin : copy().pin}
-          title={props.item.pinned ? copy().unpin : copy().pin}
-          onClick={(event) => {
-            event.stopPropagation();
-            props.onPin?.(props.item);
-          }}
-        >
-          <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />
-        </button>
-      </Show>
-      <button
-        type="button"
-        class="flower-thread-card-menu-button"
-        aria-label={copy().contextMenuLabel(title())}
-        title={copy().contextMenuLabel(title())}
-        onClick={(event) => {
-          event.stopPropagation();
-          props.onContextMenu?.(event, props.item);
-        }}
-      >
-        <MoreHorizontal class="h-3.5 w-3.5" />
-      </button>
-      <Show when={indicator().actionRequired}>
-        <div
-          class="flower-thread-card-action-indicator"
-          aria-hidden="true"
-          title={indicator().ariaStatus}
-        >
-          <span class="flower-thread-card-action-badge">{indicator().ariaStatus}</span>
+      <div class="flower-thread-card-trailing">
+        <div class="flower-thread-card-summary" aria-hidden="true">
+          <Show when={indicator().actionRequired} fallback={
+            <span class="flower-thread-card-time">{fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>
+          }>
+            <span class="flower-thread-card-action-indicator" title={indicator().ariaStatus}>
+              <span class="flower-thread-card-action-badge">{indicator().ariaStatus}</span>
+            </span>
+          </Show>
         </div>
-      </Show>
+        <div class="flower-thread-card-actions">
+          <Show when={props.onPin && itemCanPin()}>
+            <button
+              type="button"
+              class="flower-thread-card-pin-button"
+              disabled={props.pinBusy}
+              data-pinned={props.item.pinned ? 'true' : 'false'}
+              aria-label={props.item.pinned ? copy().unpin : copy().pin}
+              title={props.item.pinned ? copy().unpin : copy().pin}
+              onClick={(event) => {
+                event.stopPropagation();
+                props.onPin?.(props.item);
+              }}
+            >
+              <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />
+            </button>
+          </Show>
+          <button
+            type="button"
+            class="flower-thread-card-menu-button"
+            aria-label={copy().contextMenuLabel(title())}
+            title={copy().contextMenuLabel(title())}
+            onClick={(event) => {
+              event.stopPropagation();
+              props.onContextMenu?.(event, props.item);
+            }}
+          >
+            <MoreHorizontal class="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

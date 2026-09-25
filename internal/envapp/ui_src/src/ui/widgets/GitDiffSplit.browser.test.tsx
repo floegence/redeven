@@ -62,7 +62,7 @@ describe('Git inline diff browsing', () => {
     await expect.poll(() => host.querySelectorAll('[role="option"]').length).toBe(24);
     const rows = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="option"]'));
     const before = rows[1].getBoundingClientRect();
-    expect(before.height).toBe(32);
+    expect(before.height).toBe(28);
     expect(rows[0].querySelector('[title="src/feature-0.ts"]')).not.toBeNull();
     expect(rows[0].textContent).toContain('Modified');
     rows[0].focus();
@@ -80,7 +80,7 @@ describe('Git inline diff browsing', () => {
     const rail = host.querySelector<HTMLElement>('.git-diff-split__files')!;
     const detail = host.querySelector<HTMLElement>('.git-diff-split__detail')!;
     const rows = Array.from(rail.querySelectorAll<HTMLElement>('tr[aria-selected]'));
-    expect(Math.max(...rows.map((row) => row.getBoundingClientRect().height))).toBeLessThanOrEqual(32);
+    expect(Math.max(...rows.map((row) => row.getBoundingClientRect().height))).toBeLessThanOrEqual(28);
     expect(rows.filter((row) => row.getBoundingClientRect().bottom <= rail.getBoundingClientRect().bottom).length).toBeGreaterThanOrEqual(15);
     expect(rail.getBoundingClientRect().right).toBeLessThanOrEqual(detail.getBoundingClientRect().left + 1);
     expect(host.scrollWidth).toBe(host.clientWidth);

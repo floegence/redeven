@@ -67,7 +67,7 @@ try {
       height: header.getBoundingClientRect().height,
       family: getComputedStyle(header).fontFamily,
     }));
-    assert.equal(scale.height, 44, 'Desktop Flower uses the shared 44px header');
+    assert.equal(scale.height, 40, 'Desktop Flower uses the shared 40px header');
     assert.ok(scale.family.includes('Inter Variable'), 'Desktop and Env App use the same UI font');
     assert.equal(await page.getByText('AI service is unavailable', { exact: false }).count(), 0);
     try {

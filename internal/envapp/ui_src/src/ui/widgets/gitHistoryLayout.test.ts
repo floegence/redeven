@@ -89,7 +89,8 @@ describe('browser workspace layout wiring', () => {
     expect(workspaceSrc).toContain('overflow-auto overflow-x-hidden overscroll-contain');
     expect(workspaceSrc).toContain('[-webkit-overflow-scrolling:touch]');
     expect(workspaceSrc).toContain('[touch-action:pan-y_pinch-zoom]');
-    expect(workspaceSrc).toContain('redeven-file-list-compact');
+    expect(workspaceSrc).toContain('<FileListView');
+    expect(workspaceSrc).not.toContain('redeven-file-list-compact');
     expect(workspaceSrc).toContain("import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';");
     expect(workspaceSrc).toContain("redevenSurfaceRoleClass('controlMuted')");
     expect(workspaceSrc).toContain("redevenSurfaceRoleClass('segmented')");
@@ -335,7 +336,7 @@ describe('browser workspace layout wiring', () => {
     expect(changesSrc).toContain('<GitTableFrame class="flex h-full min-h-0 flex-col rounded-none border-0">');
 
     expect(historySrc).toContain('GitPanelFrame');
-    expect(historySrc).toContain('<GitPanelFrame as="section" class="!px-4 !py-3">');
+    expect(historySrc).toContain('<GitPanelFrame as="section" class="git-commit-overview__frame">');
 
     expect(branchesSrc).toContain('GitTableFrame');
     expect(branchesSrc).toContain('<GitTableFrame class="flex min-h-0 flex-1 flex-col">');

@@ -1,7 +1,9 @@
 import '../index.css';
 import './flower-feature.css';
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { page } from 'vitest/browser';
 
 import {
   adapter,
@@ -13,6 +15,7 @@ import {
 } from './FlowerSurface.navigation.testHarness';
 
 describe('Flower input response presentation', () => {
+  beforeEach(async () => { await page.viewport(1280, 900); });
   it('renders the Continue action as a capsule without reshaping the decision surface', async () => {
     const waitingThread = thread({
       thread_id: 'thread-input-capsule',

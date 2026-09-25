@@ -407,7 +407,7 @@ export function ServiceTemplateIdentity(props: {
       </div>
       <div class={cn('min-w-0 flex-1', !props.compact && 'pt-0.5')}>
         <div class={cn('flex min-w-0 items-center gap-x-2 gap-y-1', props.compact ? 'flex-nowrap' : 'flex-wrap')}>
-          <h3 class={cn('min-w-0 text-sm font-medium leading-5 text-foreground', props.compact && 'truncate')} dir="auto">{props.template.name}</h3>
+          <h3 class={cn('min-w-0 text-[length:var(--floe-type-body)] font-medium leading-5 text-foreground', props.compact && 'truncate')} dir="auto">{props.template.name}</h3>
           <Show when={!props.compact}>
             <span class="service-template-source-badge inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
               {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
@@ -513,7 +513,7 @@ export function ServiceTemplateRow(props: {
           <TemplateKindIcon kind={props.template.kind} icon={props.template.icon} class={templateIconClass(props.template.icon, true)} />
         </div>
         <div class="min-w-0 flex-1">
-          <h3 class="truncate text-sm font-medium leading-5 text-foreground" dir="auto">{props.template.name}</h3>
+          <h3 class="truncate text-[length:var(--floe-type-body)] font-medium leading-5 text-foreground" dir="auto">{props.template.name}</h3>
           <p class="service-template-row__description mt-0.5 truncate text-xs leading-4 text-muted-foreground" dir="auto">{props.template.description}</p>
           <div class="mt-1 flex min-w-0 items-center justify-between gap-3">
             <div class="flex min-w-0 items-center gap-1.5 truncate text-[10px] leading-4 text-muted-foreground" data-template-metadata>
@@ -605,7 +605,7 @@ export function ServiceTemplateDetailsPane(props: {
               <Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.developerPreview')}</Tag>
             </Show>
           </div>
-          <h2 class="service-template-details__title mt-0.5 text-base font-medium leading-6 text-foreground" dir="auto">{props.template.name}</h2>
+          <h2 class="service-template-details__title mt-0.5 text-[length:var(--floe-type-heading)] font-medium leading-[1.375rem] text-foreground" dir="auto">{props.template.name}</h2>
           <p class="mt-1 text-xs leading-5 text-muted-foreground" dir="auto">{props.template.description}</p>
         </div>
       </div>
@@ -804,13 +804,13 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
           >
             <Show
               when={!props.loading}
-              fallback={<div class="service-template-empty rounded-2xl border border-dashed px-5 py-12 text-center text-sm text-muted-foreground">{i18n.t('common.status.loading')}</div>}
+              fallback={<div class="service-template-empty rounded-2xl border border-dashed px-5 py-12 text-center text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('common.status.loading')}</div>}
             >
               <Show
                 when={props.templates.length > 0}
                 fallback={(
                   <div class="service-template-empty rounded-2xl border border-dashed px-5 py-12 text-center">
-                    <p class="text-sm font-medium text-foreground">{props.query.trim() ? i18n.t('webServices.managed.noTemplateMatches') : i18n.t('webServices.managed.noTemplates')}</p>
+                    <p class="text-[length:var(--floe-type-body)] font-medium text-foreground">{props.query.trim() ? i18n.t('webServices.managed.noTemplateMatches') : i18n.t('webServices.managed.noTemplates')}</p>
                     <Show when={props.query.trim()}>
                       <Button size="sm" variant="ghost" class="mt-2" onClick={() => props.onQueryChange('')}>{i18n.t('webServices.managed.clearTemplateSearch')}</Button>
                     </Show>
@@ -888,7 +888,7 @@ function TemplateGroup(props: {
         <div class="mb-3 px-0.5">
           <div class="min-w-0">
             <div class="flex min-w-0 items-center gap-2">
-              <h2 class="truncate text-sm font-medium leading-5 text-foreground">{props.title}</h2>
+              <h2 class="truncate text-[length:var(--floe-type-body)] font-medium leading-5 text-foreground">{props.title}</h2>
               <span class="service-template-group__count shrink-0 rounded-full px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground">{props.templates.length}</span>
             </div>
             <p class="mt-0.5 text-[11px] leading-4 text-muted-foreground">{props.description}</p>

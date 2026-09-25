@@ -6515,7 +6515,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               </>}>
                 <Show when={settingsPresentation()?.environment.managed_runtime_host_access?.kind === 'wsl_host'} fallback={(
                   <div class="space-y-4">
-                    <p class="text-sm text-muted-foreground">{i18n().t('settings.cloudManaged')}</p>
+                    <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n().t('settings.cloudManaged')}</p>
                     <p class="select-text break-all font-mono text-xs">{settingsPresentation()?.environment.provider_origin}</p>
                     <Button onClick={() => { const url = settingsPresentation()?.environment.provider_origin; if (url) void openConnectionInBrowser(url); }}>
                       {i18n().t('settings.manageCloud')}
@@ -6523,7 +6523,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   </div>
                 )}>
                   <div class="space-y-4">
-                    <label class="block text-sm" for="wsl-settings-name">{i18n().t('connectionDialog.name')}</label>
+                    <label class="block text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)]" for="wsl-settings-name">{i18n().t('connectionDialog.name')}</label>
                     <Input id="wsl-settings-name" disabled={Boolean(settingsSession()?.saving)} value={settingsPresentation()?.metadata_label ?? ''}
                       onInput={event => settingsController.update({ metadata_label: event.currentTarget.value })} />
                     <p class="select-text whitespace-pre-wrap font-mono text-xs">{wslSettingsIdentity()}</p>
@@ -6560,7 +6560,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             return <Show when={Boolean(settingsPresentation()?.access)} fallback={(
               <EnvironmentSettingsPanel footer={<Button variant="ghost" onClick={cancelSettings}>{i18n().t('common.close')}</Button>}>
                 <div class="space-y-4" role={settingsPresentation()?.access_state === 'error' ? 'alert' : 'status'}>
-                  <p class="text-sm">{i18n().t(settingsPresentation()?.access_state === 'loading' ? 'settings.loadingAccess' : 'settings.loadAccessFailed')}</p>
+                  <p class="text-[length:var(--floe-type-body)]">{i18n().t(settingsPresentation()?.access_state === 'loading' ? 'settings.loadingAccess' : 'settings.loadAccessFailed')}</p>
                   <Show when={settingsPresentation()?.access_error}>
                     <p class="select-text break-words text-xs text-muted-foreground">{settingsAccessErrorMessage()}</p>
                     <div class="flex gap-2">
@@ -6692,7 +6692,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         onConfirm={() => void deleteEnvironment()}
       >
         <div class="space-y-2">
-          <p class="text-sm">
+          <p class="text-[length:var(--floe-type-body)]">
             {deleteTargetIsGatewayEnvironment()
               ? i18n().t('confirm.deleteGatewayEnvironmentQuestion', {
                   label: deleteTarget()?.label ?? '',
@@ -6728,7 +6728,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         onConfirm={() => void signOutControlPlane()}
       >
         <div class="space-y-2">
-          <p class="text-sm">
+          <p class="text-[length:var(--floe-type-body)]">
             {i18n().t('confirm.cloudSignOutQuestion', { label: signOutControlPlaneTarget()?.account.user_display_name || signOutControlPlaneTarget()?.display_label || 'Redeven Cloud' })}
           </p>
           <p class="text-xs text-muted-foreground">{i18n().t('confirm.cloudSignOutDescription')}</p>
@@ -6749,7 +6749,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         onConfirm={() => void deleteGateway()}
       >
         <div class="space-y-2">
-          <p class="text-sm">
+          <p class="text-[length:var(--floe-type-body)]">
             {i18n().t('confirm.deleteGatewayQuestion', {
               label: deleteGatewayTarget()?.display_name ?? '',
             })}
@@ -6789,7 +6789,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
       >
         <div class="space-y-2">
-          <p class="text-sm">
+          <p class="text-[length:var(--floe-type-body)]">
             <Show
               when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}
               fallback={(
@@ -6807,7 +6807,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   {(item) => (
                     <label
                       class={cn(
-                        'flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm',
+                        'flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-[length:var(--floe-type-body)]',
                         item.canConnect
                           ? 'cursor-pointer hover:bg-muted/60'
                           : 'cursor-not-allowed bg-muted/30 opacity-70',
@@ -7026,7 +7026,7 @@ function WSLDiscoveryPanel(props: Readonly<{
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div class="space-y-1">
           <div class="flex items-center gap-2">
-            <h2 class="text-sm font-semibold text-foreground">{props.i18n.t('environmentCenter.wslDiscoveredTitle')}</h2>
+            <h2 class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.i18n.t('environmentCenter.wslDiscoveredTitle')}</h2>
             <Tag variant="neutral" tone="soft" size="sm">WSL 2</Tag>
           </div>
           <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t('environmentCenter.wslDiscoveredDescription')}</p>
@@ -7055,7 +7055,7 @@ function WSLDiscoveryPanel(props: Readonly<{
 
       <Show when={discovery()?.availability === 'wsl_missing'}>
         <div class="mt-3 rounded-md border border-warning/25 bg-warning/10 p-3">
-          <div class="text-sm font-medium text-foreground">{props.i18n.t('environmentCenter.wslMissingTitle')}</div>
+          <div class="text-[length:var(--floe-type-body)] font-medium text-foreground">{props.i18n.t('environmentCenter.wslMissingTitle')}</div>
           <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.i18n.t('environmentCenter.wslMissingDescription')}</div>
           <code class="mt-2 block rounded bg-background/80 px-2.5 py-2 text-xs text-foreground">wsl.exe --install</code>
         </div>
@@ -7079,7 +7079,7 @@ function WSLDiscoveryPanel(props: Readonly<{
           <For each={missingRegisteredEnvironments()}>
             {(environment) => (
               <div class="rounded-md border border-warning/25 bg-warning/10 p-3">
-                <div class="text-sm font-medium text-foreground">{environment.label}</div>
+                <div class="text-[length:var(--floe-type-body)] font-medium text-foreground">{environment.label}</div>
                 <div class="mt-1 text-xs leading-5 text-muted-foreground">
                   {props.i18n.t('environmentCenter.wslDistributionMissing', {
                     distribution: environment.managed_runtime_host_access?.kind === 'wsl_host'
@@ -7108,7 +7108,7 @@ function WSLDiscoveryPanel(props: Readonly<{
                 <div class="rounded-md border border-border/70 bg-background/70 p-3">
                   <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
-                      <div class="truncate text-sm font-semibold text-foreground">{distribution.distribution_name}</div>
+                      <div class="truncate text-[length:var(--floe-type-body)] font-semibold text-foreground">{distribution.distribution_name}</div>
                       <div class="mt-1 flex flex-wrap items-center gap-1.5">
                         <Tag variant={distribution.state === 'running' ? 'success' : 'neutral'} tone="soft" size="sm">
                           {distribution.state === 'running'
@@ -9945,7 +9945,7 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
           <Plus class="h-6 w-6" />
         </div>
         <div class="space-y-1 text-center">
-          <div class="text-sm font-semibold text-foreground">{props.i18n.t('environmentCenter.newEnvironmentTitle')}</div>
+          <div class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.i18n.t('environmentCenter.newEnvironmentTitle')}</div>
           <div class="text-xs text-muted-foreground">{props.i18n.t('environmentCenter.newEnvironmentDescription')}</div>
         </div>
         <div class="flex flex-wrap justify-center gap-2">
@@ -10029,7 +10029,7 @@ function ControlPlanesPanel(props: Readonly<{
         />
       </Show>
       <Show when={props.controlPlanes.length > 0 && visible().length === 0}>
-        <div class="redeven-console-empty rounded-lg px-6 py-8 text-center text-sm text-muted-foreground">
+        <div class="redeven-console-empty rounded-lg px-6 py-8 text-center text-[length:var(--floe-type-body)] text-muted-foreground">
           {props.i18n.t('environmentCenter.noCloudSearchResults')}
         </div>
       </Show>
@@ -10239,7 +10239,7 @@ function GatewaySourcesPanel(props: Readonly<{
           <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-md border border-border/70 bg-muted/20 text-muted-foreground">
             <ShieldCheck class="h-5 w-5" />
           </div>
-          <div class="mt-4 text-sm font-semibold text-foreground">{props.i18n.t('environmentCenter.noGatewaysTitle')}</div>
+          <div class="mt-4 text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.i18n.t('environmentCenter.noGatewaysTitle')}</div>
           <div class="mx-auto mt-1 max-w-md text-xs text-muted-foreground">{props.i18n.t('environmentCenter.noGatewaysDescription')}</div>
           <Button
             size="sm"
@@ -10260,7 +10260,7 @@ function GatewaySourcesPanel(props: Readonly<{
             <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-md border border-border/70 bg-muted/20 text-muted-foreground">
               <Search class="h-5 w-5" />
             </div>
-            <div class="mt-4 text-sm font-semibold text-foreground">{props.i18n.t('environmentCenter.noMatchingGatewaysTitle')}</div>
+            <div class="mt-4 text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.i18n.t('environmentCenter.noMatchingGatewaysTitle')}</div>
             <div class="mx-auto mt-1 max-w-md text-xs text-muted-foreground">{props.i18n.t('environmentCenter.noMatchingGatewaysDescription')}</div>
           </div>
         )}
@@ -12173,7 +12173,7 @@ function DesktopUpdateDialog(props: Readonly<{
             </Show>
           </div>
           <div class="min-w-0">
-            <div class="text-sm font-semibold text-foreground">
+            <div class="text-[length:var(--floe-type-body)] font-semibold text-foreground">
               {desktopUpdateStatusLabel(props.i18n, props.snapshot)}
             </div>
             <Show when={props.snapshot.state === 'blocked'}>
@@ -12466,7 +12466,7 @@ function ContainerPicker(props: Readonly<{
           aria-invalid={Boolean(props.fieldError) || undefined}
           type="button"
           class={cn(
-            'flex h-8 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-left text-sm transition-colors',
+            'flex h-8 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-left text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)] transition-colors',
             props.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-ring',
             props.fieldError && 'border-destructive',
           )}
@@ -12815,14 +12815,14 @@ function GatewayProfileSourcePicker(props: Readonly<{
               when={selectedRow()}
               fallback={(
                 <>
-                  <span class="block truncate text-sm font-semibold text-foreground">{props.i18n.t('connectionDialog.gatewayEnvironmentGateway')}</span>
+                  <span class="block truncate text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.i18n.t('connectionDialog.gatewayEnvironmentGateway')}</span>
                   <span class="mt-0.5 block truncate text-[11px] text-muted-foreground">{props.i18n.t('connectionDialog.validationGatewayRequired')}</span>
                 </>
               )}
             >
               {(row) => (
                 <>
-                  <span class="block truncate text-sm font-semibold text-foreground">{row().label}</span>
+                  <span class="block truncate text-[length:var(--floe-type-body)] font-semibold text-foreground">{row().label}</span>
                   <span class="mt-0.5 block truncate text-[11px] text-muted-foreground">
                     {[row().transport_label, row().endpoint_label].filter(Boolean).join(' · ')}
                   </span>
@@ -12934,7 +12934,7 @@ function GatewayProfileSourcePicker(props: Readonly<{
                     >
                       <span class="min-w-0">
                         <span class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                          <span class="truncate text-sm font-semibold">{row().label}</span>
+                          <span class="truncate text-[length:var(--floe-type-body)] font-semibold">{row().label}</span>
                           <Tag variant={gatewaySourceToneTagVariant(row().status_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
                             {localizedGatewaySourceStatusLabel(props.i18n, row().status_label)}
                           </Tag>
@@ -14095,7 +14095,7 @@ function OfficialProviderPicker(props: Readonly<{
               <ShieldCheck class="h-4 w-4" />
             </span>
             <span class="min-w-0">
-              <span class="block truncate text-sm font-semibold tracking-normal text-foreground">{selectedProvider()?.domain ?? ''}</span>
+              <span class="block truncate text-[length:var(--floe-type-body)] font-semibold tracking-normal text-foreground">{selectedProvider()?.domain ?? ''}</span>
               <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{selectedProvider()?.provider_origin ?? ''}</span>
             </span>
           </span>
@@ -14143,7 +14143,7 @@ function OfficialProviderPicker(props: Readonly<{
                           <Globe class="h-4 w-4" />
                         </span>
                         <span class="min-w-0">
-                          <span class="block truncate text-sm font-semibold">{option.domain}</span>
+                          <span class="block truncate text-[length:var(--floe-type-body)] font-semibold">{option.domain}</span>
                           <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{option.provider_origin}</span>
                         </span>
                       </span>

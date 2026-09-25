@@ -125,7 +125,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const timelineListIndex = src.indexOf('<For each={visibleTimelineEntryKeys()}>');
     const headerIndex = src.indexOf('flower-chat-header flower-chat-header');
     const headerRowIndex = src.indexOf('flower-chat-header-row');
-    const dockIndex = src.indexOf('flower-chat-bottom-dock-track flower-chat-bottom-dock-track', timelineListIndex);
+    const dockIndex = src.indexOf('flower-chat-bottom-dock-track', timelineListIndex);
     const statusLaneIndex = src.indexOf('flower-model-status-lane', dockIndex);
     const composerAnchorIndex = src.indexOf('flower-composer-anchor', statusLaneIndex);
     const composerIndex = src.indexOf('flower-composer p-3');
@@ -201,7 +201,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
   it('renders the scroll-to-latest control as a floating dock affordance above the composer', () => {
     const src = surfaceSource();
     const scrollTail = scrollTailSource();
-    const dockIndex = src.indexOf('flower-chat-bottom-dock flower-chat-bottom-dock');
+    const dockIndex = src.indexOf('flower-chat-bottom-dock');
     const floatIndex = src.indexOf('flower-scroll-to-latest-float', dockIndex);
     const scrollButtonIndex = src.indexOf('flower-scroll-to-latest-button', floatIndex);
     const dockTrackIndex = src.indexOf('flower-chat-bottom-dock-track', scrollButtonIndex);

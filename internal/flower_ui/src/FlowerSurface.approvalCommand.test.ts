@@ -79,7 +79,7 @@ describe('Flower approval command presentation', () => {
     expect(actionsRule).toContain('gap: 0.5rem');
     expect(actionsRule).not.toContain('overflow: hidden');
     expect(decisionRule).toContain('border-radius: 9999px');
-    expect(decisionRule).toContain('min-height: 2.25rem');
+    expect(decisionRule).toContain('min-height: var(--floe-control-height-sm)');
     expect(css).not.toContain('.flower-composer-approval-decision:focus-visible');
   });
 

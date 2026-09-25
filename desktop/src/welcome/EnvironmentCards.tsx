@@ -559,7 +559,7 @@ export function EnvironmentCardsPanel(
           <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-lg px-6 py-8 text-center">
             <Search class="h-8 w-8 text-muted-foreground/50" />
             <div class="space-y-1">
-              <div class="text-sm font-medium text-foreground">
+              <div class="text-[length:var(--floe-type-body)] font-medium text-foreground">
                 {props.i18n.t('environmentCenter.noMatchingEnvironmentsTitle')}
               </div>
               <div class="text-xs text-muted-foreground">
