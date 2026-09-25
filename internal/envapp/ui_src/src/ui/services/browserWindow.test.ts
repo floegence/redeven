@@ -34,7 +34,7 @@ import { createBrowserWindow } from './browserWindow';
 let cleanup: (() => void) | undefined;
 afterEach(() => { cleanup?.(); cleanup = undefined; vi.unstubAllGlobals(); vi.clearAllMocks(); document.body.replaceChildren(); });
 
-async function fixture(onOpenWindow?: () => Promise<void>) {
+async function fixture(onOpenWindow?: () => Promise<void>, onInteraction?: () => void) {
   vi.stubGlobal('MessageChannel', MessageChannel);
   state.api.mockImplementation(() => Promise.resolve(undefined));
   const frame = document.createElement('iframe'); document.body.append(frame);
@@ -45,7 +45,7 @@ async function fixture(onOpenWindow?: () => Promise<void>) {
     view: { generation: 'fixture-generation', id: 'browser-view-test', initial_target: 'first', protocol_version: 22, media_wire_version: 1 },
     child: () => child,
     configuration: { type: 'redeven-browser-ports', nonce: 'nonce', title: 'Browser', locale: 'en-US', messages: {} as BrowserMessages, theme: { tokens: {}, dark: false, surfaceStyle: '', shellTheme: '', fontFamily: 'sans-serif' } },
-    onReconnect: vi.fn(), onOpenWindow,
+    onReconnect: vi.fn(), onOpenWindow, onInteraction,
   });
   window.dispatchEvent(new MessageEvent('message', { source: child, origin: location.origin, data: { type: 'redeven-browser-ready', nonce: 'nonce' } }));
   const ports = (delivered.mock.calls[0] as unknown as [unknown, string, MessagePort[]])[2];
@@ -73,7 +73,7 @@ async function fixture(onOpenWindow?: () => Promise<void>) {
     product.postMessage({ type: 'request', id: ++id, operation: { method } });
     return response;
   };
-  return { acquire, received, token, request, host };
+  return { acquire, received, token, request, host, product, child };
 }
 
 it('admits source control only after its private token arrives, regardless of lane order', async () => {
@@ -127,4 +127,21 @@ it('allows only an active document to open a window and preserves the popup-bloc
   host.suspend('BROWSER_DISCONNECTED');
   expect(await request('workspace.openWindow')).toMatchObject({ ok: false, code: 'BROWSER_OPEN_FAILED' });
   expect(open).toHaveBeenCalledOnce();
+});
+
+it('reports interaction only through the live private document port, including recovery without control', async () => {
+  const interaction = vi.fn();
+  const { host, product, child, token } = await fixture(undefined, interaction);
+  window.dispatchEvent(new MessageEvent('message', { source: child, origin: location.origin, data: { type: 'interaction' } }));
+  expect(interaction).not.toHaveBeenCalled();
+  expect(token()).toBe('');
+  product.postMessage({ type: 'interaction' });
+  await vi.waitFor(() => expect(interaction).toHaveBeenCalledTimes(1));
+  host.suspend('BROWSER_DISCONNECTED');
+  product.postMessage({ type: 'interaction' });
+  await vi.waitFor(() => expect(interaction).toHaveBeenCalledTimes(2));
+  host.close();
+  product.postMessage({ type: 'interaction' });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  expect(interaction).toHaveBeenCalledTimes(2);
 });

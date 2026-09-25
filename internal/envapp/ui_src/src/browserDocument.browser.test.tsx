@@ -1,7 +1,13 @@
 import './index.css';
 import './styles/browserSources.css';
-import { afterEach, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
+import { createSignal } from 'solid-js';
+import { render } from 'solid-js/web';
+import { BottomBarCompanion } from '@floegence/floe-webapp-core/layout';
+import type { Session } from '@floegence/flowersec-core';
+import { createBrowserWindow } from './ui/services/browserWindow';
+import type { BrowserSourceService } from './ui/services/browserSourceContract';
+import { commands, page } from 'vitest/browser';
 import { captureBrowserDocumentTheme } from './ui/services/browserDocumentTheme';
 import { browserSourceMessages } from './ui/i18n/browserSourceMessages';
 import { browserMessages } from './ui/i18n/browserMessages';
@@ -12,13 +18,10 @@ import type { BrowserDocumentConfiguration } from './ui/services/browserWindowPr
 let cleanup: (() => void) | undefined;
 afterEach(async () => { cleanup?.(); cleanup = undefined; document.documentElement.classList.remove('dark'); document.documentElement.removeAttribute('data-floe-surface-style'); await page.viewport(1280, 850); });
 
-for (const failed of [false, true]) for (const [dark, surfaceStyle, width] of [[false, 'standard', 1280], [true, 'standard', 1280], [false, 'soft-neumorphic', 390], [true, 'soft-neumorphic', 390]] as const) it(`inherits the parent ${failed ? 'recovery' : 'live'} ${dark ? 'dark' : 'light'} ${surfaceStyle} dialog theme at ${width}px across the browser document boundary`, async () => {
-  await page.viewport(width, 850);
-  document.documentElement.classList.toggle('dark', dark);
-  document.documentElement.setAttribute('data-floe-surface-style', surfaceStyle);
+function mountDocument(failed = false, onInteraction?: () => void) {
+  const events: Array<{ type: string }> = [];
   const theme = captureBrowserDocumentTheme();
   const copy = createI18nHelpers('en-US', enUS);
-  const channels = Array.from({ length: 3 }, () => new MessageChannel());
   const frame = document.createElement('iframe');
   frame.style.cssText = 'width:min(900px, 100%);height:760px;border:0';
   frame.sandbox.add('allow-scripts', 'allow-same-origin');
@@ -31,19 +34,32 @@ for (const failed of [false, true]) for (const [dark, surfaceStyle, width] of [[
     // Vitest transforms dynamic imports; child documents need its loader hook,
     // while all production modules still execute in the child realm.
     Object.assign(frame.contentWindow!, { __vitest_browser_runner__: (globalThis as unknown as { __vitest_browser_runner__: unknown }).__vitest_browser_runner__ });
-    frame.contentWindow!.postMessage(configuration, location.origin, channels.map(channel => channel.port2));
     window.removeEventListener('message', ready);
   };
   window.addEventListener('message', ready);
-  channels[2]!.port1.onmessage = ({ data }) => {
-    if (data?.type !== 'request') return;
-    const value = data.operation.method === 'source.profiles' ? [{ id: 'browser-main', name: 'Default' }]
-      : data.operation.method === 'source.status' ? { profiles: [], platform: 'darwin', prepared: false } : undefined;
-    channels[2]!.port1.postMessage({ type: 'result', id: data.id, ok: true, value });
-  };
-  cleanup = () => { window.removeEventListener('message', ready); frame.remove(); channels.forEach(channel => { channel.port1.close(); channel.port2.close(); }); };
+  // No source/control authority is needed for outside interaction. Keep the
+  // actual trusted document, host bridge and private handshake in this fixture.
+  const host = createBrowserWindow({ session: {} as Session, child: () => frame.contentWindow, configuration,
+    onReconnect: () => undefined,
+    onInteraction: () => { events.push({ type: 'interaction' }); onInteraction?.(); },
+    sources: { select: async () => undefined, service: {
+      profiles: async () => [{ id: 'browser-main', name: 'Default' }],
+      status: async () => ({ profiles: [], platform: 'darwin', prepared: false }),
+      management: {},
+    } as unknown as BrowserSourceService },
+  });
+  cleanup = () => { window.removeEventListener('message', ready); host.close(); frame.remove(); };
   frame.src = `/browser.html#${nonce}`;
   document.body.append(frame);
+  return { frame, events };
+}
+
+for (const failed of [false, true]) for (const [dark, surfaceStyle, width] of [[false, 'standard', 1280], [true, 'standard', 1280], [false, 'soft-neumorphic', 390], [true, 'soft-neumorphic', 390]] as const) it(`inherits the parent ${failed ? 'recovery' : 'live'} ${dark ? 'dark' : 'light'} ${surfaceStyle} dialog theme at ${width}px across the browser document boundary`, async () => {
+  await page.viewport(width, 850);
+  document.documentElement.classList.toggle('dark', dark);
+  document.documentElement.setAttribute('data-floe-surface-style', surfaceStyle);
+  const theme = captureBrowserDocumentTheme();
+  const { frame } = mountDocument(failed);
   if (failed) {
     await vi.waitFor(() => expect(frame.contentDocument?.querySelector('.redeven-browser-notice-actions button')).toBeTruthy());
     frame.contentDocument!.querySelector<HTMLButtonElement>('.redeven-browser-notice-actions button')!.click();
@@ -86,4 +102,48 @@ for (const failed of [false, true]) for (const [dark, surfaceStyle, width] of [[
   }
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
   if (import.meta.env.VITE_REDEVEN_BROWSER_SOURCE_SCREENSHOTS === '1') await page.screenshot({ element: frame, path: `__screenshots__/browser-document-${failed ? 'recovery' : 'live'}-${dark ? 'dark' : 'light'}-${width}.png` });
+});
+
+for (const failed of [false, true]) it(`reports real pointer interaction from the ${failed ? 'recovery' : 'browser'} document without consuming its action`, async () => {
+  const [open, setOpen] = createSignal(true);
+  const { frame, events } = mountDocument(failed, () => setOpen(false));
+  const anchor = document.createElement('button');
+  anchor.style.cssText = 'position:fixed;bottom:12px;left:400px;width:360px;height:28px';
+  anchor.textContent = 'Flower'; document.body.append(anchor);
+  const mount = document.createElement('div'); document.body.append(mount);
+  const dispose = render(() => <BottomBarCompanion retained visible open={open()} anchor={anchor} mount={mount}
+    id="browser-interaction-companion" label="Flower" expandedWidth={544} onDismiss={() => setOpen(false)}>
+    <div style={{ height: '260px' }}><textarea aria-label="Flower draft">Preserved draft</textarea></div>
+  </BottomBarCompanion>, mount);
+  onTestFinished(() => { dispose(); mount.remove(); anchor.remove(); });
+  await vi.waitFor(() => expect(document.querySelector('#browser-interaction-companion')?.getAttribute('data-companion-phase')).toBe('expanded'));
+  const draft = mount.querySelector('textarea')!;
+  const selector = failed ? '.redeven-browser-notice-actions button' : '[data-floe-ui="more"]';
+  await vi.waitFor(() => expect(frame.contentDocument?.querySelector(selector)).toBeTruthy());
+  const doc = frame.contentDocument!;
+  const button = doc.querySelector<HTMLButtonElement>(selector)!;
+  const clicked = vi.fn(); button.addEventListener('click', clicked);
+  // Programmatic focus and synthetic events are not a user's outside click.
+  button.focus();
+  button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  await new Promise(resolve => setTimeout(resolve, 30));
+  expect(events.filter(event => event.type === 'interaction')).toHaveLength(0);
+  expect(open()).toBe(true);
+  const input = commands as unknown as { clickBrowserDocument(selector: string, position?: { x: number; y: number }): Promise<void> };
+  await input.clickBrowserDocument(selector);
+  await vi.waitFor(() => expect(events.filter(event => event.type === 'interaction')).toHaveLength(1));
+  expect(clicked).toHaveBeenCalledOnce();
+  expect(open()).toBe(false);
+  expect(mount.querySelector('textarea')).toBe(draft);
+  expect(draft.value).toBe('Preserved draft');
+  expect(document.activeElement).toBe(frame);
+  if (failed) await vi.waitFor(() => expect(doc.querySelector('.redeven-browser-sources-dialog input')).toBeTruthy());
+  else {
+    expect(doc.querySelector('[role="menuitem"]')).toBeTruthy();
+    setOpen(true);
+    await vi.waitFor(() => expect(document.querySelector('#browser-interaction-companion')?.getAttribute('data-companion-phase')).toBe('expanded'));
+    await input.clickBrowserDocument('.floe-browser', { x: 80, y: 300 });
+    await vi.waitFor(() => expect(events.filter(event => event.type === 'interaction')).toHaveLength(2));
+    expect(open()).toBe(false);
+  }
 });

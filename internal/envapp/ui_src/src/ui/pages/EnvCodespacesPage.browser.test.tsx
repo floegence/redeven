@@ -6,7 +6,7 @@ import { commands, page, userEvent } from 'vitest/browser';
 import { EnvCodespacesPage, type SpaceStatus } from './EnvCodespacesPage';
 import { CodespacesPageSkeleton } from './CodespacesPresentation';
 
-const state = vi.hoisted(() => ({ locale: 'en-US' as 'en-US' | 'zh-CN', scope: '', spaces: vi.fn(), runtime: vi.fn() }));
+const state = vi.hoisted(() => ({ locale: 'en-US' as 'en-US' | 'zh-CN', scope: '', desktop: false, spaces: vi.fn(), runtime: vi.fn() }));
 vi.mock('../i18n', async () => {
   const { createTestI18nHelpers } = await import('../i18n/locales/testDictionaries');
   return { useI18n: () => ({ ...createTestI18nHelpers(state.locale), locale: () => state.locale }) };
@@ -18,6 +18,7 @@ vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
   resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: state.scope }),
 }) }));
+vi.mock('../services/desktopShellBridge', async original => ({ ...await original<object>(), desktopShellCodespaceWindowOpenAvailable: () => state.desktop }));
 vi.mock('../services/filesystemPicker', () => ({ useEnvFilesystemPicker: () => ({}) }));
 vi.mock('../services/localApi', async original => ({ ...await original<object>(), fetchLocalApiJSON: (url: string) => {
   if (url.endsWith('/spaces')) return state.spaces();
@@ -38,7 +39,7 @@ function deferred<T>() {
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
 beforeEach(() => {
-  state.locale = 'en-US'; state.scope = `codespaces-browser-${crypto.randomUUID()}`;
+  state.locale = 'en-US'; state.desktop = false; state.scope = `codespaces-browser-${crypto.randomUUID()}`;
   state.spaces.mockReset(); state.runtime.mockReset().mockResolvedValue(ready);
   host = document.createElement('div'); host.style.height = '600px'; document.body.append(host);
 });
@@ -109,7 +110,7 @@ it('restores IndexedDB after a new cache instance and preserves row, focus and s
 });
 
 it.each(['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark'])('uses the common main canvas and a quiet bounded card in %s', async preset => {
-  state.locale = 'zh-CN';
+  state.locale = 'zh-CN'; state.desktop = true;
   await page.viewport(1440, 900);
   const original = document.documentElement.className;
   const theme = document.documentElement.dataset.floeShellTheme;
@@ -148,7 +149,8 @@ it.each(['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark'])(
 
 });
 
-it.each([320, 544])('keeps long card details, actions, and disclosure identity usable at %ipx', async width => {
+it.each([320, 544].flatMap(width => [false, true].map(desktop => ({ width, desktop }))))('keeps long card details, actions, and disclosure identity usable at $width px with desktop=$desktop', async ({ width, desktop }) => {
+  state.desktop = desktop; state.locale = 'zh-CN';
   await page.viewport(1280, 800);
   host.style.width = `${width}px`;
   const longPath = `/workspace/${'long-project-directory/'.repeat(12)}`;
@@ -175,7 +177,13 @@ it.each([320, 544])('keeps long card details, actions, and disclosure identity u
   try {
     await media.emulateTouchInput(true);
     expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-    for (const button of card.querySelectorAll('button')) expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    for (const button of card.querySelectorAll('button')) {
+      expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    }
+    const [primary, secondary] = [...card.querySelector('.codespace-card-actions')!.children].map(element => element.getBoundingClientRect());
+    if (secondary.top > primary.top) expect(secondary.top - primary.bottom).toBeGreaterThanOrEqual(8);
+    else expect(secondary.left - primary.right).toBe(8);
     expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
   } finally { await media.emulateTouchInput(false); }
   summary.focus(); await userEvent.keyboard('{Enter}');
@@ -183,3 +191,24 @@ it.each([320, 544])('keeps long card details, actions, and disclosure identity u
   expect(document.activeElement).toBe(summary);
   expect(card.getBoundingClientRect().height).toBeLessThanOrEqual(172);
 });
+
+it.each([false, true].flatMap(desktop => (['en-US', 'zh-CN'] as const).map(locale => ({ desktop, locale }))))(
+  'keeps card actions adjacent in $locale with desktop=$desktop', async ({ desktop, locale }) => {
+    state.desktop = desktop; state.locale = locale;
+    await page.viewport(1440, 900);
+    state.spaces.mockResolvedValue({ spaces: [space, { ...space, code_space_id: 'stopped', running: false }] });
+    dispose = render(() => <EnvCodespacesPage />, host);
+    await expect.poll(() => host.querySelectorAll('.codespace-card-actions').length).toBe(2);
+    await document.fonts.ready;
+    await page.screenshot({ element: host, path: `__screenshots__/adjacent-actions-${desktop ? 'desktop' : 'web'}-${locale}.png` });
+    for (const footer of host.querySelectorAll<HTMLElement>('.codespace-card-actions')) {
+      const [primary, secondary] = [...footer.children] as HTMLElement[];
+      const first = primary.getBoundingClientRect(), second = secondary.getBoundingClientRect();
+      console.info('Card action gap', JSON.stringify({ desktop, locale, gap: second.left - first.right }));
+      expect(second.top).toBe(first.top);
+      expect(second.left - first.right).toBeGreaterThanOrEqual(8);
+      expect(second.left - first.right).toBeLessThanOrEqual(9);
+      for (const button of footer.querySelectorAll('button')) expect(getComputedStyle(button).fontSize).toBe('12px');
+    }
+  },
+);

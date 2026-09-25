@@ -16,7 +16,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({ Button: (props: { children: u
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({ env_id: () => 'env_local' }) }));
 vi.mock('../i18n', () => ({ useI18n: () => ({ locale: () => fixture.locale(), t: (key: string) => key }) }));
 vi.mock('../services/browserSourceManagement', () => ({ browserSourceService: () => ({ management: { loadBrowserInstallation: async () => ({ enabled: true, state: 'installed' }) } }) }));
-vi.mock('../widgets/FloeBrowserSurface', () => ({ FloeBrowserSurface: () => <div data-browser-surface /> }));
+vi.mock('../widgets/FloeBrowserSurface', () => ({ FloeBrowserSurface: (props: { onInteraction?: () => void }) => <button data-browser-surface onClick={() => props.onInteraction?.()} /> }));
 vi.mock('../widgets/BrowserWorkspaceNotice', () => ({ BrowserWorkspaceNotice: () => <div /> }));
 vi.mock('../widgets/BrowserSourceDialog', () => ({ BrowserSourceDialog: () => <div /> }));
 import { EnvBrowserPage } from './EnvBrowserPage';
@@ -36,10 +36,13 @@ it('keeps the view stable when shell settings refresh without a presentation cha
   } }));
   unbind = await bindTestSessionHTTP(request);
   const root = document.createElement('div'); document.body.append(root);
-  dispose = render(() => <EnvBrowserPage onOpenWindow={async () => undefined} />, root);
+  const interaction = vi.fn();
+  dispose = render(() => <EnvBrowserPage onInteraction={interaction} onOpenWindow={async () => undefined} />, root);
   await vi.waitFor(() => expect(root.querySelector('[data-browser-surface]')).not.toBeNull());
   expect(root.querySelector('.redeven-browser-profile-bar')).toBeNull();
   expect(sequence).toBe(1);
+  root.querySelector<HTMLButtonElement>('[data-browser-surface]')!.click();
+  expect(interaction).toHaveBeenCalledOnce();
   setTheme({ mode: 'light', preset: 'default' });
   await Promise.resolve(); await Promise.resolve();
   expect(sequence).toBe(1);

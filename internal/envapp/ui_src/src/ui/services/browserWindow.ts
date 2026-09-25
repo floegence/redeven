@@ -17,6 +17,7 @@ export type BrowserWindowOptions = Readonly<{
   configuration: BrowserDocumentConfiguration;
   onReconnect(): void | Promise<void>;
   sources?: { service: BrowserSourceService; select(selection: BrowserSourceSelection, signal: AbortSignal): Promise<void> };
+  onInteraction?(): void;
   onState?(state: BrowserState): void;
   onTabs?(state: TabState): void;
   onStatus?(status: string): void;
@@ -170,6 +171,7 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
   const receive = (event: MessageEvent): void => {
     const message = event.data;
     if (lifetime.signal.aborted || !message || typeof message !== 'object') return;
+    if (message.type === 'interaction') { options.onInteraction?.(); return; }
     if (message.type === 'closed') { close(); return; }
     if (message.type === 'reconnect') { void Promise.resolve(options.onReconnect()).catch(() => undefined); return; }
     if (message.type === 'state') { if (!suspended) options.onState?.(message.state); return; }

@@ -44,20 +44,24 @@ describe('FloeBrowserSurface', () => {
     const container = document.createElement('div'); document.body.append(container);
     const descriptor = { generation: 'generation', id: 'browser-view-first', protocol_version: 22, media_wire_version: 1, initial_target: 'source' };
     const [view, setView] = createSignal(descriptor);
-    const failure = vi.fn(), reconnect = vi.fn(), tabs = vi.fn();
+    const failure = vi.fn(), reconnect = vi.fn(), tabs = vi.fn(), interaction = vi.fn();
     dispose = render(() => <FloeBrowserSurface sources={sources} onOpenWindow={async () => undefined} session={{} as Session} view={view()} title="Remote Browser" locale="en-US" messages={englishMessages}
-      copy={{ unavailable: 'Unavailable', connecting: 'Connecting' }} onReconnect={reconnect} onFailure={failure} onTabs={tabs} />, container);
+      copy={{ unavailable: 'Unavailable', connecting: 'Connecting' }} onReconnect={reconnect} onFailure={failure} onTabs={tabs} onInteraction={interaction} />, container);
     await vi.waitFor(() => expect(state.open).toHaveBeenCalledOnce());
     const old = state.open.mock.calls[0]![0] as BrowserWindowOptions;
     setView({ ...descriptor, id: 'browser-view-next' });
     await vi.waitFor(() => expect(state.open).toHaveBeenCalledTimes(2));
-    old.onStatus?.('disconnected'); old.onFailure?.('BROWSER_SERVICE_FAILED'); old.onReconnect(); old.onTabs?.({ active: 'old', tabs: [] });
-    expect(failure).not.toHaveBeenCalled(); expect(reconnect).not.toHaveBeenCalled(); expect(tabs).not.toHaveBeenCalled();
+    old.onInteraction?.(); old.onStatus?.('disconnected'); old.onFailure?.('BROWSER_SERVICE_FAILED'); old.onReconnect(); old.onTabs?.({ active: 'old', tabs: [] });
+    expect(interaction).not.toHaveBeenCalled(); expect(failure).not.toHaveBeenCalled(); expect(reconnect).not.toHaveBeenCalled(); expect(tabs).not.toHaveBeenCalled();
     const current = state.open.mock.calls[1]![0] as BrowserWindowOptions;
+    current.onInteraction?.();
+    expect(interaction).toHaveBeenCalledOnce();
     current.onStatus?.('live');
     expect(container.textContent).not.toContain('Connecting');
     current.onFailure?.('BROWSER_SERVICE_FAILED');
     expect(failure).toHaveBeenCalledExactlyOnceWith('BROWSER_SERVICE_FAILED');
+    dispose(); dispose = undefined; current.onInteraction?.();
+    expect(interaction).toHaveBeenCalledOnce();
   });
   it('keeps the current document alive while its source-selection request is pending', async () => {
     const descriptor = (id: string) => ({ generation: 'generation', id, profile_id: id === 'browser-view-first' ? 'browser-main' : 'profile-next', protocol_version: 22, media_wire_version: 1, initial_target: id + '-tab' });
