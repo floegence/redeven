@@ -840,6 +840,10 @@
   color: color-mix(in srgb, var(--primary) 80%, var(--foreground) 20%);
 }
 
+.flower-chat-header .flower-mobile-navigation-button {
+  border-radius: 0.5rem;
+}
+
 .flower-header-icon-badge {
   position: absolute;
   top: -0.25rem;
@@ -1769,6 +1773,11 @@
   padding: 0.25rem;
   box-shadow:
     0 2px 6px color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent), 0 16px 36px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent);
+}
+
+.flower-composer-more-control .flower-permission-menu {
+  right: 0;
+  left: auto;
 }
 
 .flower-permission-menu-item {
@@ -10521,6 +10530,12 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 @media (max-width: 767px), (pointer: coarse) {
+  .flower-composer-more-control :is(.flower-permission-trigger, .flower-permission-menu-item) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .flower-chat-header .flower-mobile-navigation-button,
   .flower-attachment-icon-button,
   .flower-composer-attachment-button,
   .flower-composer-more-anchor,

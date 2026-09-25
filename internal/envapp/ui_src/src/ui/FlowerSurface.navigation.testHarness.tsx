@@ -137,6 +137,7 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
     Grid: actual.Grid,
     GripVertical: Icon,
     Info: Icon,
+    Menu: actual.Menu,
     MoreHorizontal: Icon,
     Link: actual.Link,
     MonitorPointer: actual.MonitorPointer,
@@ -246,6 +247,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
     );
   },
   SurfaceFloatingLayer: (props: any) => {
+    if (props.class === 'flower-composer-more-layer') return <Dynamic component={actual.SurfaceFloatingLayer} {...props} />;
     const {
       children, layerRef, position: _position, owner: _owner, estimatedSize: _estimatedSize, clamp: _clamp,
       class: className, style, ...rest

@@ -15,7 +15,7 @@ import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, useMediaQuery } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, Link, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, Dialog, DialogPlacementProvider, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 import { createInputHistoryController, type InputHistoryEntry } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
@@ -1977,6 +1977,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!composerPermissionInteractive()) return;
     const permissionType = composerPermissionType();
     if (!permissionType) return;
+    if (composerOverflowControlIDs().includes('permission')) setComposerMoreOpen(true);
     setPermissionMenuIndexForType(permissionType);
     setPermissionMenuOpen(true);
     queueMicrotask(() => focusPermissionMenuItem(permissionMenuActiveIndex()));
@@ -2819,15 +2820,12 @@ webSearch: model.web_search,
     const ids = composerControlIDs();
     if (companionCompactComposer()) return ids;
     const availableWidth = composerControlLayout().availableWidth;
-    if (ids.length === 0 || availableWidth <= 0) return [];
-    if (composerControlWidth(ids) <= availableWidth) return [];
-
     const overflow = new Set<FlowerComposerControlID>();
+    if (mobileViewport() && ids.includes('permission')) overflow.add('permission');
     for (const id of FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER) {
-      if (!ids.includes(id)) continue;
-      overflow.add(id);
       const inlineIDs = ids.filter((candidate) => !overflow.has(candidate));
-      if (composerControlWidth(inlineIDs) <= availableWidth) break;
+      if (availableWidth <= 0 || composerControlWidth(inlineIDs) <= availableWidth) break;
+      if (ids.includes(id)) overflow.add(id);
     }
     return FLOWER_COMPOSER_CONTROL_ORDER.filter((id) => overflow.has(id));
   });
@@ -3010,6 +3008,7 @@ webSearch: model.web_search,
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      if (permissionMenuOpen() || modelMenuOpen()) return;
       event.preventDefault();
       closeComposerMore(true);
     };
@@ -11109,12 +11108,14 @@ webSearch: model.web_search,
                   ref={mobileThreadsTrigger}
                   aria-label={copy().chat.conversationsAria}
                   title={copy().chat.conversationsAria}
+                  aria-haspopup="dialog"
+                  aria-expanded={mobileThreadsOpen()}
                   onClick={(event) => {
                     event.currentTarget.focus({ preventScroll: true });
                     setMobileThreadsOpen(true);
                   }}
                 >
-                  <ChevronLeft class="h-4 w-4" />
+                  <span aria-hidden="true"><Menu class="h-5 w-5" /></span>
                 </button>
                 <FlowerIcon class="h-5 w-5 text-primary" />
                 <div class="flower-chat-header-identity min-w-0">

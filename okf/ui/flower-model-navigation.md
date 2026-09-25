@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower model and navigation presentation
 description: Model-source controls, notifications, thread selection, and staged content ownership.
 tags: [ai, flower, models, navigation]
-timestamp: 2026-09-19T00:00:00Z
+timestamp: 2026-09-25T00:00:00Z
 ---
 # Summary
 
@@ -31,6 +31,15 @@ user preferences. See [model directory ownership](../ai/model-directory-and-sele
 
 ## Permission and navigation
 
+Below the 768px viewport breakpoint, the composer keeps permission status and
+selection in its own More panel, alongside any other overflow controls. The
+footer does not repeat the permission control. Desktop retains its measured
+inline/overflow placement. Both locations use the same permission owner and
+submission path; moving between them preserves the composer DOM, draft and text
+selection. Permission options open above the panel, stay within the viewport and
+retain 44px mobile touch targets. Escape closes the options before the More
+panel, returning focus to the corresponding trigger.
+
 Existing-thread permission changes remain available during active work when the detail is loaded, the thread is writable, and its adapter supports the settings PATCH. Saving disables only the permission control, prevents duplicate requests, merges the authoritative settings response, and restores the confirmed value on failure. The confirmed displayed mode applies to the next tool authorization in the active task and queued work. Already prepared calls retain their invocation snapshot; users do not need to stop or send another message. Pending approvals and user input remain canonical interactions and are not settled or replaced by a settings response. Model and reasoning retain their busy lock. Full access uses soft fill and text color without an additional warning border; keyboard focus remains visible.
 
 Permission follows the same ownership boundary: environment `defaults.permission_type` applies only to new Threads. A new-thread draft stores `permission_type_override` only after an explicit choice and clears it when matching the loaded default; existing Threads use their own `permission_type`. While settings load, the control is a non-interactive safety placeholder and never persists `approval_required`. Launch omits `permission_type` without an override; the backend resolves and freezes the default in Thread settings. Saving the default updates unmodified new-thread drafts, never existing Threads or explicit overrides.
@@ -47,6 +56,7 @@ The Activity companion reuses this model and selection contract; its placement, 
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Mobile permission placement, draft retention, request success/failure and keyboard dismissal.
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - Flower recognizes `model_io.updated` as a model-status presentation boundary.
 - `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:380` - Flower thread snapshots expose `model_id` and `reasoning_selection`.

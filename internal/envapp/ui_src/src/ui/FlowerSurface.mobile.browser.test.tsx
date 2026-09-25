@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { createSignal } from 'solid-js';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
-import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, deferred, liveBootstrap, mutableSettingsAdapter, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 async function mountMobile(width: number, height = 720) {
   await page.viewport(width, height);
@@ -21,6 +21,87 @@ async function mountMobile(width: number, height = 720) {
 }
 
 describe('Flower mobile navigation', () => {
+  it.each([320, 393, 430, 667, 767])('keeps permissions in More at %i pixels and restores desktop controls without losing the draft', async (width) => {
+    await page.viewport(width, width === 667 ? 390 : 720);
+    const testAdapter = mutableSettingsAdapter(true);
+    const runtime = renderSurfaceWithAdapterProps(testAdapter, {});
+    Object.assign(runtime.style, { height: '100%', width: '100%' });
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea:not(:disabled)')));
+    const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    await userEvent.fill(editor, 'Keep this mobile draft 中文');
+    editor.setSelectionRange(2, 7);
+    expect(runtime.querySelector('.flower-composer-controls-inline .flower-permission-selector')).toBeNull();
+    const more = runtime.querySelector<HTMLButtonElement>('.flower-composer-more-button')!;
+    expect(more).not.toBeNull();
+    await userEvent.click(more);
+    const panel = document.querySelector<HTMLElement>('[data-flower-composer-more-panel]')!;
+    const permission = panel.querySelector<HTMLButtonElement>('.flower-permission-trigger')!;
+    expect(permission).not.toBeNull();
+    expect(permission.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    const label = permission.querySelector<HTMLElement>('.flower-permission-label')!;
+    expect(label.clientWidth).toBeGreaterThan(0);
+    expect(label.scrollWidth).toBe(label.clientWidth);
+    await userEvent.click(permission);
+    const menu = panel.querySelector<HTMLElement>('.flower-permission-menu')!;
+    const bounds = menu.getBoundingClientRect();
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(width);
+    expect(bounds.top).toBeGreaterThanOrEqual(0);
+    await userEvent.keyboard('{Escape}');
+    await vi.waitFor(() => expect(panel.querySelector('.flower-permission-menu')).toBeNull());
+    expect(panel.isConnected).toBe(true);
+    await vi.waitFor(() => expect(document.activeElement).toBe(permission));
+    await userEvent.keyboard('{Enter}');
+    await vi.waitFor(() => expect(panel.querySelector('.flower-permission-menu')).not.toBeNull());
+    await userEvent.click(panel.querySelector<HTMLButtonElement>('.flower-permission-menu [data-permission-type="full_access"]')!);
+    expect(testAdapter.saveDefaultPermission).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(permission.getAttribute('data-permission-type')).toBe('full_access'));
+    await userEvent.keyboard('{Escape}');
+    await vi.waitFor(() => expect(document.querySelector('[data-flower-composer-more-panel]')).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement).toBe(more));
+    await page.viewport(1280, 850);
+    await vi.waitFor(() => expect(runtime.querySelector('.flower-composer-controls-inline .flower-permission-trigger')?.getAttribute('data-permission-type')).toBe('full_access'));
+    expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
+    expect(editor.value).toBe('Keep this mobile draft 中文');
+    expect([editor.selectionStart, editor.selectionEnd]).toEqual([2, 7]);
+  });
+
+  it.each(['saved', 'failed'])('preserves thread permission submission and draft when a mobile change is %s', async (outcome) => {
+    await page.viewport(393, 480);
+    const selected = thread({ permission_type: 'approval_required', settings_revision: 10 });
+    const response = deferred<ReturnType<typeof liveBootstrap>>();
+    const setThreadPermissionType = vi.fn(() => response.promise);
+    const runtime = renderSurfaceWithAdapterProps({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [selected]),
+      loadThread: vi.fn(async () => liveBootstrap(selected)),
+      setThreadPermissionType,
+    }, { focusThreadRequest: { request_id: 'mobile-permission', thread_id: selected.thread_id } });
+    Object.assign(runtime.style, { height: '100%', width: '100%' });
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea:not(:disabled)')));
+    const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    await userEvent.fill(editor, 'Keep the thread draft');
+    await userEvent.click(runtime.querySelector<HTMLButtonElement>('.flower-composer-more-button')!);
+    const panel = document.querySelector<HTMLElement>('[data-flower-composer-more-panel]')!;
+    const permission = panel.querySelector<HTMLButtonElement>('.flower-permission-trigger')!;
+    await userEvent.click(permission);
+    const menu = panel.querySelector<HTMLElement>('.flower-permission-menu')!;
+    expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+    expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(393);
+    await userEvent.click(menu.querySelector<HTMLButtonElement>('[data-permission-type="full_access"]')!);
+    expect(setThreadPermissionType).toHaveBeenCalledExactlyOnceWith(selected.thread_id, 'full_access');
+    expect(permission.disabled).toBe(true);
+    expect(editor.disabled).toBe(false);
+    if (outcome === 'saved') response.resolve(liveBootstrap({ ...selected, permission_type: 'full_access', settings_revision: 11 }));
+    else response.reject(new Error('Permission save failed'));
+    await vi.waitFor(() => expect(permission.disabled).toBe(false));
+    expect(permission.getAttribute('data-permission-type')).toBe(outcome === 'saved' ? 'full_access' : 'approval_required');
+    expect(editor.value).toBe('Keep the thread draft');
+    await userEvent.click(runtime.querySelector<HTMLElement>('.flower-chat-header-identity')!);
+    expect(document.querySelector('[data-flower-composer-more-panel]')).toBeNull();
+    expect(runtime.querySelector('.flower-composer-controls-inline .flower-permission-selector')).toBeNull();
+  });
+
   it('keeps the clipped page stationary throughout repeated drawer entry and exit', async () => {
     const runtime = await mountMobile(393);
     Object.assign(runtime.style, { position: 'absolute', top: '48px', height: '600px', overflow: 'hidden' });
@@ -59,6 +140,11 @@ describe('Flower mobile navigation', () => {
     const detail = runtime.querySelector<HTMLElement>('.flower-component-main')!;
     const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
     const detailBefore = detail.getBoundingClientRect();
+    const navigation = runtime.querySelector<HTMLButtonElement>('.flower-chat-header .flower-mobile-navigation-button')!;
+    expect(navigation.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(navigation.getAttribute('aria-expanded')).toBe('false');
+    expect(navigation.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    expect(navigation.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
     expect(Number.parseFloat(getComputedStyle(editor).fontSize)).toBeGreaterThanOrEqual(16);
     expect(runtime.querySelector('.flower-component-thread-rail')).toBeNull();
     expect(detail.getBoundingClientRect().height).toBeGreaterThanOrEqual(700);
