@@ -144,7 +144,7 @@ it.each(['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark'])(
     expect.soft(getComputedStyle(card.querySelector('button')!).fontSize).toBe('12px');
     expect.soft(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
     const action = card.querySelector<HTMLButtonElement>('button')!;
-    expect.soft(action.getBoundingClientRect().width).toBeLessThanOrEqual(card.getBoundingClientRect().width * .5);
+    expect.soft(action.getBoundingClientRect().height).toBe(28);
   }
 
 });
@@ -192,23 +192,39 @@ it.each([320, 544].flatMap(width => [false, true].map(desktop => ({ width, deskt
   expect(card.getBoundingClientRect().height).toBeLessThanOrEqual(172);
 });
 
-it.each([false, true].flatMap(desktop => (['en-US', 'zh-CN'] as const).map(locale => ({ desktop, locale }))))(
-  'keeps card actions adjacent in $locale with desktop=$desktop', async ({ desktop, locale }) => {
+it.each([320, 544, 1440].flatMap(width => [false, true].flatMap(desktop => (['en-US', 'zh-CN'] as const).map(locale => ({ width, desktop, locale })))))(
+  'balances the full card action row at $width px in $locale with desktop=$desktop', async ({ width, desktop, locale }) => {
     state.desktop = desktop; state.locale = locale;
-    await page.viewport(1440, 900);
+    await page.viewport(width, 900);
     state.spaces.mockResolvedValue({ spaces: [space, { ...space, code_space_id: 'stopped', running: false }] });
     dispose = render(() => <EnvCodespacesPage />, host);
     await expect.poll(() => host.querySelectorAll('.codespace-card-actions').length).toBe(2);
     await document.fonts.ready;
-    await page.screenshot({ element: host, path: `__screenshots__/adjacent-actions-${desktop ? 'desktop' : 'web'}-${locale}.png` });
+    await page.screenshot({ element: host, path: `__screenshots__/balanced-actions-${width}-${desktop ? 'desktop' : 'web'}-${locale}.png` });
     for (const footer of host.querySelectorAll<HTMLElement>('.codespace-card-actions')) {
       const [primary, secondary] = [...footer.children] as HTMLElement[];
       const first = primary.getBoundingClientRect(), second = secondary.getBoundingClientRect();
-      console.info('Card action gap', JSON.stringify({ desktop, locale, gap: second.left - first.right }));
+      const bounds = footer.getBoundingClientRect(), css = getComputedStyle(footer);
+      const leadingInset = first.left - bounds.left, trailingInset = bounds.right - second.right;
+      console.info('Card action balance', JSON.stringify({ width, desktop, locale, leadingInset, trailingInset }));
+      expect(leadingInset).toBeCloseTo(parseFloat(css.paddingLeft), 0);
+      expect(trailingInset).toBeCloseTo(parseFloat(css.paddingRight), 0);
+      expect(primary.querySelector('button')!.getBoundingClientRect().width).toBeGreaterThan(secondary.querySelector('button')!.getBoundingClientRect().width);
+      for (const button of secondary.querySelectorAll('button')) expect(button.getBoundingClientRect().width).toBeLessThanOrEqual(40);
+      expect(footer.scrollWidth).toBeLessThanOrEqual(footer.clientWidth);
       expect(second.top).toBe(first.top);
       expect(second.left - first.right).toBeGreaterThanOrEqual(8);
       expect(second.left - first.right).toBeLessThanOrEqual(9);
-      for (const button of footer.querySelectorAll('button')) expect(getComputedStyle(button).fontSize).toBe('12px');
+      const buttons = [...footer.querySelectorAll('button')];
+      for (const [index, button] of buttons.entries()) {
+        expect(getComputedStyle(button).fontSize).toBe('12px');
+        expect(button.getBoundingClientRect().height).toBe(28);
+        if (index > 0) {
+          const gap = button.getBoundingClientRect().left - buttons[index - 1].getBoundingClientRect().right;
+          expect(gap).toBeGreaterThanOrEqual(0);
+          expect(gap).toBeLessThanOrEqual(8);
+        }
+      }
     }
   },
 );

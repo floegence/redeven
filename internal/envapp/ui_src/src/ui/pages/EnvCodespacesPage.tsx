@@ -495,13 +495,13 @@ function CodespaceCard(props: {
         <Show
           when={isRunning()}
           fallback={
-            <div class="flex items-center gap-2 min-w-0">
+            <div class="flex flex-1 items-center gap-2 min-w-0">
               <Button
                 size="sm"
                 variant="default"
                 disabled={isBusy()}
                 onClick={props.onStart}
-                class="relative overflow-hidden"
+                class="relative flex-1 min-w-0 overflow-hidden"
                 aria-busy={props.busyAction === "start" ? "true" : undefined}
               >
                 <Show
@@ -557,13 +557,13 @@ function CodespaceCard(props: {
             </div>
           }
         >
-          <div class="flex min-w-0">
+          <div class="flex flex-1 min-w-0">
             <Button
               size="sm"
               variant="default"
               disabled={isBusy()}
               onClick={() => props.onOpen(primaryOpenTarget())}
-              class={cn("relative min-w-0 overflow-hidden", props.desktopOpenAvailable ? "rounded-r-none" : undefined)}
+              class={cn("relative flex-1 min-w-0 overflow-hidden", props.desktopOpenAvailable ? "rounded-r-none" : undefined)}
               aria-busy={props.busyAction === "open" ? "true" : undefined}
             >
               <Show
@@ -590,7 +590,7 @@ function CodespaceCard(props: {
             </Show>
           </div>
         </Show>
-        <div class="flex items-center gap-1">
+        <div class="flex shrink-0 items-center gap-1">
           <Show when={isRunning()}>
             <Tooltip content={i18n.t("codespaces.actions.stopTooltip")} placement="top">
               <Button size="sm" variant="outline" disabled={isBusy()} onClick={props.onStop} aria-label={i18n.t("codespaces.actions.stopTooltip")} class={cn("px-2", redevenSurfaceRoleClass("control"))}>
