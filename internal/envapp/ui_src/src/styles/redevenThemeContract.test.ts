@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url';
 function readRedevenCss(): string {
   const here = fileURLToPath(import.meta.url);
   const dir = path.dirname(here);
-  return fs.readFileSync(path.resolve(dir, './redeven.css'), 'utf8');
+  return fs.readFileSync(path.resolve(dir, './redeven.css'), 'utf8').replace(
+    "@import './loadingCurtain.css';",
+    fs.readFileSync(path.resolve(dir, './loadingCurtain.css'), 'utf8'),
+  ) + fs.readFileSync(path.resolve(dir, './git-review.css'), 'utf8');
 }
 
 function readEnvAppEntryCss(): string {

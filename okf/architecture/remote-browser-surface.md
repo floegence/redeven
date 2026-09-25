@@ -80,6 +80,12 @@ libraries, menus, media controls and navigation errors. The child has no separat
 reverse palette aliases; light and dark dialogs, buttons and fields must match
 the environment in both embedded and independent windows.
 
+Availability checks and document connections use the shared Terminal-style
+loading curtain: a centered localized surface label, slim animated indicator and
+status text within the browser content area. Embedded and independent documents
+load the same curtain styles, follow the host palette and honor reduced motion.
+Loading never takes the place of actionable installation or recovery content.
+
 Structured error codes select installation, enablement, source selection,
 reconnection or explicit [service recovery](remote-browser-recovery.md).
 The source chooser preserves its draft and displays replacement errors locally.

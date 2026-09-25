@@ -25,7 +25,7 @@
   overflow: hidden;
 }
 
-.redeven-floebrowser-page-loading {
+.redeven-floebrowser-page-failure {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -37,12 +37,13 @@
   background: var(--background);
 }
 
-.redeven-floebrowser-surface > .redeven-floebrowser-page-loading {
+.redeven-floebrowser-surface > .redeven-floebrowser-page-failure {
   position: absolute;
   inset: 0;
 }
 
 .redeven-browser-notice {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -60,3 +61,11 @@
 .redeven-browser-notice-content > h2 { font-size: 1.15rem; font-weight: 600; line-height: 1.5; }
 .redeven-browser-notice-content > p { color: var(--muted-foreground); line-height: 1.6; }
 .redeven-browser-notice-actions { display: flex; gap: .75rem; flex-wrap: wrap; }
+
+.redeven-browser-loading-curtain {
+  background: var(--background);
+}
+.redeven-browser-loading-curtain .redeven-loading-curtain__indicator {
+  width: 11rem;
+  max-width: 100%;
+}
