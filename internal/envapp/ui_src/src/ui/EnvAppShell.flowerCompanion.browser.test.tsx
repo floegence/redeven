@@ -15,6 +15,8 @@ const EnvContextMock = createContext({} as any);
 const FilePreviewContextMock = createContext({} as any);
 const FileBrowserSurfaceContextMock = createContext({} as any);
 let floeRegistryComponents = (): any[] => [];
+let testBrowserPage = false;
+let browserPageInteraction: (() => void) | undefined;
 let testFilesMenu = false;
 let testRealFlowerLauncher = false;
 
@@ -184,6 +186,7 @@ vi.mock('@floegence/floe-webapp-core/app', async (importOriginal) => ({
         data-testid="activity-body-content"
         style={{ position: 'relative', height: testFilesMenu ? '100%' : '1200px', padding: testFilesMenu ? '0' : '12px' }}
       >
+        <Show when={testBrowserPage}>{floeRegistryComponents().find((component: any) => component.id === 'browser')?.component?.()}</Show>
         <Show when={testFilesMenu}>
           <FileBrowserWorkspace
             mode="files" onModeChange={() => {}} currentPath="/" initialPath="/"
@@ -646,6 +649,7 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
 }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
+vi.mock('./pages/EnvBrowserPage', () => ({ EnvBrowserPage: (props: { onInteraction?: () => void }) => { browserPageInteraction = () => props.onInteraction?.(); return <div data-test-browser-page />; } }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div /> }));
 vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div /> }));
 vi.mock('./pages/EnvPortForwardsPage', () => ({ EnvPortForwardsPage: () => <div /> }));
@@ -1113,7 +1117,7 @@ afterEach(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  testFilesMenu = false;
+  testFilesMenu = false; testBrowserPage = false; browserPageInteraction = undefined;
   testRealFlowerLauncher = false;
   debugConsoleEnabled = false;
   protocolSnapshot = Object.freeze({ state: 'idle', attempt: 0 });
@@ -1651,6 +1655,28 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(product?.hasAttribute('inert')).toBe(false);
     expect(document.querySelectorAll('[data-testid="env-ai-page"]')).toHaveLength(1);
     expect(envAIPageMountSequence).toBe(1);
+  });
+
+  it('collapses from the remote browser interaction while retaining the Flower draft and destination focus', async () => {
+    testBrowserPage = true;
+    await page.viewport(1280, 800);
+    const fixture = await mountShell();
+    await vi.waitFor(() => expect(browserPageInteraction).toBeDefined());
+    const browserInput = document.createElement('input');
+    fixture.host.querySelector('[data-test-browser-page]')!.append(browserInput);
+    fixture.input.value = 'Keep this draft';
+    for (let iteration = 0; iteration < 2; iteration++) {
+      await userEvent.click(fixture.input);
+      await flushAsync();
+      expect(fixture.product.dataset.presentation).toBe('expanded');
+      browserInput.focus();
+      browserPageInteraction!();
+      await flushAsync();
+      expect(fixture.product.dataset.presentation).toBe('collapsed');
+      expect(document.activeElement).toBe(browserInput);
+      expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.input);
+      expect(fixture.input.value).toBe('Keep this draft');
+    }
   });
 
   it('moves focus out before hiding on outside pointer while preserving related layers and in-panel gestures', async () => {

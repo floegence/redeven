@@ -566,7 +566,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const browserPresentation = createMemo(() => JSON.stringify([i18n.locale(), theme.resolvedTheme(), theme.shellPresetForMode(theme.resolvedTheme())?.name]));
   createEffect(on(browserPresentation, () => browserWindows.refreshPresentation(), { defer: true }));
   onCleanup(() => browserWindows.close());
-  const BrowserPage = () => <EnvBrowserPage onOpenWindow={request => browserWindows.open(request)} />;
+  const BrowserPage = () => <EnvBrowserPage onOpenWindow={request => browserWindows.open(request)}
+    onInteraction={() => dismissActivityFlowerCompanion('outside-pointer')} />;
   let remoteProxyServiceWorkerControlled = false;
   const rpc = useRedevenRpc();
   const cmd = useCommand();

@@ -12,7 +12,7 @@ import { browserSourceMessages } from '../i18n/browserSourceMessages';
 import { browserMessages } from '../i18n/browserMessages';
 import { useEnvContext } from './EnvContext';
 
-export function EnvBrowserPage(props: { onOpenWindow(request: BrowserWorkspaceRequest): Promise<void> }) {
+export function EnvBrowserPage(props: { onInteraction?(): void; onOpenWindow(request: BrowserWorkspaceRequest): Promise<void> }) {
   const i18n = useI18n();
   const theme = useTheme();
   const environment = useEnvContext();
@@ -41,6 +41,7 @@ export function EnvBrowserPage(props: { onOpenWindow(request: BrowserWorkspaceRe
       <FloeBrowserSurface session={protocol.session!()!} view={state().view!} title={i18n.t('shell.nav.remoteBrowser')} locale={i18n.locale()} messages={messages()}
         sources={{ service, messages: sourceMessages(), current: { ...state().selection, label: label() }, select: controller.open }}
         onOpenWindow={() => props.onOpenWindow(controller.currentRequest())}
+        onInteraction={() => props.onInteraction?.()}
         copy={{ unavailable: i18n.t('shell.notifications.remoteBrowserUnavailable'), connecting: i18n.t('browserEngine.connection.connecting') }}
         onFailure={code => void controller.fail(code)} onTabs={tabs => controller.selectTarget(tabs.active)} onReconnect={() => void controller.reconnect().catch(() => undefined)} />
     </Show>

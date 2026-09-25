@@ -75,7 +75,7 @@ export function CodespaceCardFrame(props: {
         </div>
       </details>
     </CardContent>
-    <CardFooter class={cn('codespace-card-actions px-3 py-2 flex items-center justify-between gap-2 border-t', redevenDividerRoleClass())}>{props.actions}</CardFooter>
+    <CardFooter class={cn('codespace-card-actions px-3 py-2 flex flex-wrap items-center justify-start gap-2 border-t', redevenDividerRoleClass())}>{props.actions}</CardFooter>
   </Card>;
 }
 

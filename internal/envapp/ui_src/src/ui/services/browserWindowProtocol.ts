@@ -52,6 +52,7 @@ export type BrowserDocumentRequest = BrowserSourceOperation
   | { method: 'visibility'; visible: boolean };
 
 export type BrowserDocumentEvent =
+  | { type: 'interaction' }
   | { type: 'reconnect' }
   | { type: 'tabs'; state: TabState }
   | { type: 'state'; state: BrowserState }

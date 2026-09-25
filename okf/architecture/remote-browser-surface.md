@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote browser surface
 description: Mount shared browser windows with current control and coherent tab presentation.
 tags: [architecture, browser, ui]
-timestamp: 2026-09-25T00:00:00Z
+timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
@@ -59,6 +59,17 @@ Reconnection uses a confirmed source, never an earlier new-tab operation. Theme
 configuration refreshes with unchanged effective values do not reopen a view.
 Actual locale or palette changes acquire a new view of the selected target;
 callbacks from the retired document cannot change current presentation.
+The trusted document captures real pointer input from browser chrome, recovery
+controls and the released engine's input surface above its inert replay iframe.
+It sends a payload-free interaction notification over the existing private
+product port. Only the current document may notify its placement owner; closing
+or replacing it retires that callback. This local notification is independent
+of source control and remains available during recovery. The Activity Browser
+page uses it to dismiss the [Flower companion](../ui/flower-activity-companion.md)
+without preventing the destination click, synthesizing input or moving focus.
+Programmatic focus, state messages and ordinary window messages do not trigger
+this route; independent browser windows have no companion-placement callback.
+
 One product theme adapter captures the parent's resolved design-system token
 catalog, effective dark mode, surface style, shell preset and font family. The
 trusted browser document applies that presentation before mounting recovery or
@@ -162,7 +173,7 @@ is input evidence, not proof that a third-party verification challenge passes.
 - [FloeBrowser v0.1.14: test/input-focus.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/input-focus.e2e.ts) — Repeated source focus and native caret continuity.
 - [FloeBrowser v0.1.14: test/navigation-input.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/navigation-input.e2e.ts) — Input fencing through navigation admission and completion.
 
-- `redeven:internal/envapp/ui_src/src/browserDocument.browser.test.tsx` - Real document handshake, dialog and control theme parity in light/dark and narrow layouts.
+- `redeven:internal/envapp/ui_src/src/browserDocument.browser.test.tsx` - Real document handshake, native pointer dismissal through the private host port, and dialog/control theme parity in light/dark and narrow layouts.
 - [FloeBrowser v0.1.16: test/chrome-theme.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.16/test/chrome-theme.e2e.ts) — Host token preservation and readable chrome controls in both themes.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserDocumentTheme.ts` - Single parent-to-document presentation adapter.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FloeBrowserSurface.tsx` - Shared viewer mount and generation-bound cleanup.

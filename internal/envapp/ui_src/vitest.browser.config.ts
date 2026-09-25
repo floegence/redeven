@@ -311,6 +311,10 @@ export default mergeConfig(viteConfig, defineConfig({
             await session.detach();
           }
         },
+        clickBrowserDocument: async ({ page }, selector: string, position?: { x: number; y: number }) => {
+          const frame = await frameForSelector(page, '.redeven-browser-document-surface');
+          await frame.locator(selector).first().click({ position });
+        },
         dismissPluginCenterBackdrop: async ({ page }) => {
           const frame = await frameForSelector(page, '[data-test-workbench-background]');
           const target = await frame.locator('[data-test-background]').boundingBox();

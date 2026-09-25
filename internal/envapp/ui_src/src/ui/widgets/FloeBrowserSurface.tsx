@@ -21,6 +21,7 @@ export type FloeBrowserSurfaceProps = {
   onOpenWindow(): Promise<void>;
   onReconnect(): void;
   onFailure?(code: BrowserFailureCode): void;
+  onInteraction?(): void;
   onState?(state: BrowserState): void;
   onTabs?(state: TabState): void;
 };
@@ -49,6 +50,7 @@ export function FloeBrowserSurface(props: FloeBrowserSurfaceProps) {
           sources: { messages: props.sources.messages, current: props.sources.current, desktop: Boolean(props.sources.service.management.browserDesktopAvailable) }, openWindow: true },
         sources: { service: props.sources.service, select: props.sources.select },
         onOpenWindow: () => props.onOpenWindow(),
+        onInteraction: () => { if (host === current) props.onInteraction?.(); },
         onReconnect: () => { if (host === current) props.onReconnect(); },
         onFailure: code => { if (host === current) props.onFailure?.(code); },
         onState: state => { if (host === current) props.onState?.(state); },

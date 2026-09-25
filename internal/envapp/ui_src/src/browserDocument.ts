@@ -195,11 +195,17 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
   const chrome = document.querySelector<HTMLElement>('.floe-browser');
   if (chrome) applyBrowserChromeTheme(chrome);
   const visibility = () => { void request({ method: 'visibility', visible: !document.hidden }).catch(() => undefined); };
+  // Pointer events stay inside this document, including the engine's trusted
+  // input surface above its scriptless replay iframe. Notify product placement
+  // without consuming the click or changing browser control authority.
+  const interaction = (event: PointerEvent) => { if (event.isTrusted) notify({ type: 'interaction' }); };
+  document.addEventListener('pointerdown', interaction, { capture: true, passive: true });
   document.addEventListener('visibilitychange', visibility);
   visibility();
   window.addEventListener('pagehide', () => {
     disposed = true;
     document.removeEventListener('visibilitychange', visibility);
+    document.removeEventListener('pointerdown', interaction, true);
     for (const work of pending.values()) { work.dispose(); work.reject(new Error('Browser document closed')); }
     pending.clear();
     product.postMessage({ type: 'closed' });
