@@ -4247,6 +4247,180 @@ pre,
   white-space: normal;
 }
 
+/* Settings hierarchy: separate identity, connection, automation, and optional details. */
+.redeven-environment-settings-dialog .ssh-settings-form {
+  gap: .875rem;
+}
+.redeven-environment-settings-dialog .ssh-settings-form > .ssh-settings-field:first-child {
+  padding: .875rem 1rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, var(--foreground) 12%);
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--card) 76%, var(--background));
+}
+.redeven-environment-settings-dialog .ssh-settings-section {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, var(--foreground) 12%);
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--card) 76%, var(--background));
+}
+.redeven-environment-settings-dialog .ssh-settings-section-heading {
+  align-items: center;
+  padding: .875rem 1rem .75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  background: color-mix(in srgb, var(--foreground) 2%, transparent);
+}
+.redeven-environment-settings-dialog .ssh-settings-section-heading h3 {
+  font-size: var(--floe-type-control);
+  font-weight: 650;
+}
+.redeven-environment-settings-dialog .ssh-settings-endpoint {
+  padding: 1rem 1rem 0;
+}
+.redeven-environment-settings-dialog .ssh-settings-section > .ssh-settings-field {
+  padding: 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+}
+.redeven-environment-settings-dialog .ssh-settings-section > .ssh-settings-field + .ssh-settings-field {
+  padding-top: 0;
+  border-top: 0;
+}
+.redeven-environment-settings-dialog .ssh-settings-probe {
+  padding: .875rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--primary) 7%, var(--card));
+}
+.redeven-environment-settings-dialog .ssh-settings-advanced {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, var(--foreground) 12%);
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--card) 76%, var(--background));
+}
+.redeven-environment-settings-dialog .ssh-settings-disclosure {
+  align-items: center;
+  min-height: 3rem;
+  padding: .75rem 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+}
+.redeven-environment-settings-dialog .ssh-settings-disclosure > span {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: .625rem;
+  min-width: 0;
+  flex: 1;
+}
+.redeven-environment-settings-dialog .ssh-settings-disclosure-title {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.redeven-environment-settings-dialog .ssh-settings-summary {
+  min-width: 0;
+  margin-top: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.redeven-environment-settings-dialog .ssh-settings-advanced-fields {
+  gap: .75rem;
+  margin-top: 0;
+  padding: 0 1rem 1rem;
+}
+
+/* Access overview reads as one surface; actions stay on the same reading edge as facts. */
+.redeven-environment-settings-dialog .environment-access-overview {
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, var(--foreground) 12%);
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--card) 76%, var(--background));
+}
+.redeven-environment-settings-dialog .environment-access-overview-header {
+  padding: .875rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  background: color-mix(in srgb, var(--foreground) 2%, transparent);
+}
+.redeven-environment-settings-dialog .redeven-settings-connections {
+  padding-inline: 1rem;
+}
+.redeven-environment-settings-dialog .redeven-settings-connections .redeven-card-endpoint-row {
+  grid-template-columns: 7rem minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: .75rem;
+  padding-block: .6875rem;
+}
+.redeven-environment-settings-dialog .redeven-settings-connections .redeven-card-endpoint-label {
+  padding-top: 0;
+  font-size: var(--floe-type-caption);
+  line-height: 1.4;
+}
+.redeven-environment-settings-dialog .redeven-settings-connections .redeven-card-endpoint-content {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+.redeven-environment-settings-dialog .redeven-settings-connections .redeven-card-endpoint-value {
+  font-size: var(--floe-type-control);
+  line-height: 1.4;
+}
+.redeven-environment-settings-dialog .redeven-settings-connections .redeven-card-endpoint-detail {
+  margin-top: .125rem;
+  font-size: var(--floe-type-caption);
+  line-height: 1.4;
+}
+.redeven-environment-settings-dialog .redeven-settings-connections .redeven-endpoint-actions {
+  grid-column: 3;
+  grid-row: 1;
+}
+.redeven-environment-settings-dialog .environment-access-overview > .redeven-endpoint-qr-panel {
+  margin: 0 1rem 1rem;
+}
+
+@media (max-width: 560px) {
+  .redeven-environment-settings-dialog .ssh-settings-section-heading {
+    align-items: flex-start;
+  }
+  .redeven-environment-settings-dialog .ssh-settings-disclosure > span {
+    grid-template-columns: minmax(0, 1fr);
+    gap: .125rem;
+  }
+  .redeven-environment-settings-dialog .ssh-settings-summary {
+    overflow: visible;
+    white-space: normal;
+  }
+  .redeven-environment-settings-dialog .redeven-settings-connections .redeven-card-endpoint-row {
+    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+    column-gap: .5rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .redeven-environment-settings-dialog .ssh-settings-endpoint {
+    grid-template-columns: minmax(0, 1fr) 5rem;
+    gap: .625rem;
+  }
+  .redeven-environment-settings-dialog .redeven-settings-connections .redeven-card-endpoint-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .redeven-environment-settings-dialog .redeven-settings-connections .redeven-card-endpoint-label {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .redeven-environment-settings-dialog .redeven-settings-connections .redeven-card-endpoint-content {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .redeven-environment-settings-dialog .redeven-settings-connections .redeven-endpoint-actions {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+
 /* Runtime facts remain separate from the guided next-start configuration. */
 .environment-access-form {
   container-type: inline-size;

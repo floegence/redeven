@@ -6,13 +6,13 @@
 .access-flow-intro h3 { font-size: 1.25rem; line-height: 1.4; font-weight: 600; letter-spacing: -.025em; outline: none; }
 .access-flow-intro > p { margin-top: .5rem; color: var(--muted-foreground); font-size: .75rem; line-height: 1.75; max-width: 38rem; }
 .access-flow-back { padding: 0; gap: .375rem; height: auto; min-height: 1.5rem; margin-bottom: 1rem; color: var(--muted-foreground); }
-.access-flow-summary { overflow: hidden; border: 1px solid var(--border); border-radius: .625rem; }
-.access-flow-summary > section { display: flex; align-items: center; gap: .875rem; padding: 1rem; min-width: 0; }
+.access-flow-summary { overflow: hidden; border: 1px solid var(--border); border-radius: .75rem; background: color-mix(in srgb, var(--card) 76%, var(--background)); }
+.access-flow-summary > section { display: flex; align-items: center; gap: .875rem; padding: .875rem 1rem; min-width: 0; }
 .access-flow-summary > section + section { border-top: 1px solid var(--border); }
 .access-flow-summary > section > div { min-width: 0; flex: 1; }
 .access-flow-summary h3 { font-size: .8125rem; font-weight: 550; }
 .access-flow-summary p { margin-top: .3rem; font-size: .75rem; line-height: 1.6; color: var(--muted-foreground); overflow-wrap: anywhere; }
-.access-flow-summary button { flex-shrink: 0; max-width: 44%; height: auto; min-height: 2rem; white-space: normal; }
+.access-flow-summary button { flex-shrink: 0; max-width: none; height: auto; min-height: 2rem; white-space: nowrap; }
 .access-flow-icon { flex: none; width: 2.125rem; height: 2.125rem; padding: .5rem; border: 1px solid var(--border); border-radius: .5rem; background: color-mix(in srgb, var(--muted) 40%, transparent); color: var(--muted-foreground); }
 .access-flow-steps { display: flex; gap: .875rem; list-style: none; padding: 0; margin: 0; }
 .access-flow-steps li { display: flex; align-items: center; gap: .5rem; flex: 1; font-size: .6875rem; line-height: 1.5; color: var(--muted-foreground); }
@@ -59,9 +59,9 @@
   .access-workflow .environment-settings-scroll { padding: 1.125rem; }
   .access-flow-options { grid-template-columns: minmax(0,1fr); }
   .access-flow-options > button { padding: .875rem; }
-  .access-flow-summary > section { padding: 1rem .875rem; gap: .625rem; }
+  .access-flow-summary > section { padding: .875rem; gap: .625rem; }
   .access-flow-icon { display: none; }
-  .access-flow-summary button { font-size: .6875rem; }
+  .access-flow-summary button { max-width: 100%; font-size: .6875rem; }
   .access-flow-review > div { grid-template-columns: minmax(6rem,1fr) 2fr; gap: .5rem; }
   .access-flow-steps { gap: .375rem; }
   .access-flow-steps li { gap: .375rem; font-size: .625rem; }
