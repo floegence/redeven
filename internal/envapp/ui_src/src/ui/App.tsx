@@ -1,3 +1,5 @@
+import { REDEVEN_BROWSER_MOBILE_QUERY } from './mobileViewportPolicy';
+import { desktopShellBridgeAvailable } from './services/desktopShellBridge';
 import { createActivityNavigation, activityTargetID, type ActivityNavigation } from './services/activityNavigation';
 import {
   BUILT_IN_SHELL_THEME_DEFAULTS,
@@ -63,7 +65,7 @@ function buildFloeConfig(t: I18nHelpers['t'], navigation: ActivityNavigation) {
         shellTheme,
       ),
     },
-    layout: { sidebar: { persistActiveTab: false, defaultActiveTab: activityTargetID(navigation.initial) } },
+    layout: { mobileQuery: desktopShellBridgeAvailable() ? 'not all' : REDEVEN_BROWSER_MOBILE_QUERY, sidebar: { persistActiveTab: false, defaultActiveTab: activityTargetID(navigation.initial) } },
     theme: {
       storageKey: 'theme',
       shellPresetStorageKey: 'theme-shell-preset',

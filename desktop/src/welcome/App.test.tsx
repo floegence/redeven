@@ -802,7 +802,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('redeven-welcome-shell--spacious');
     expect(appSrc).toContain('buildEnvironmentLibraryLayoutModel');
     expect(appSrc).toContain('data-density={layoutModel().density}');
-    expect(styles).toContain('--redeven-welcome-shell-max-width: 80rem;');
+    expect(appSrc).toContain("layout: { mobileQuery: 'not all' }");
+    expect(styles).toContain('--redeven-welcome-shell-max-width: 100rem;');
     expect(styles).not.toContain('--redeven-welcome-shell-spacious-max-width');
     expect(styles).not.toContain('.redeven-welcome-shell--spacious');
   });
@@ -871,10 +872,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('function EnvironmentLibrarySection');
     expect(appSrc).toContain('data-density={layoutModel().density}');
     expect(styles).toContain('.redeven-environment-library');
-    expect(styles).toContain('--redeven-environment-grid-min-column-size: 17rem;');
-    expect(styles).toContain('--redeven-environment-grid-spacious-column-size: 19rem;');
-    expect(styles).toContain('--redeven-environment-grid-gap: 1rem;');
-    expect(styles).toContain('--redeven-environment-grid-spacious-gap: 1.125rem;');
+    expect(styles).toContain('--redeven-environment-grid-min-column-size: 16.25rem;');
+    expect(styles).not.toContain('--redeven-environment-grid-spacious-column-size');
+    expect(styles).toContain('--redeven-environment-grid-gap: .75rem;');
+    expect(styles).not.toContain('--redeven-environment-grid-spacious-gap');
     expect(styles).toContain('grid-template-columns: repeat(var(--redeven-environment-grid-columns), minmax(0, 1fr));');
     expect(styles).not.toContain('.redeven-environment-grid__section-title');
     expect(styles).not.toContain('.redeven-environment-grid--spacious');

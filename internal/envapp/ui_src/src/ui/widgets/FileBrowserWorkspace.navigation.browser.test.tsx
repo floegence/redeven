@@ -5,6 +5,7 @@ import { batch, createSignal } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { page, userEvent } from 'vitest/browser';
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
 
 const cleanups: (() => void)[] = [];
@@ -128,5 +129,53 @@ describe('Files Activity navigation continuity', () => {
     await paint();
     setSelected('files');
     await vi.waitFor(() => expect(toolbar.dataset.toolbarLayout).toBe('inline'));
+  });
+});
+
+
+describe('Files desktop adaptive navigation', () => {
+  it('temporarily moves the existing directory tree into a left drawer without replacing file content', async () => {
+    await page.viewport(1280, 850);
+    const host = document.createElement('div');
+    host.style.cssText = 'width:1000px;height:600px';
+    document.body.append(host);
+    cleanups.push(render(() => <FloeConfigProvider config={{ layout: { mobileQuery: 'not all' } }}><LayoutProvider>
+      <FileBrowserWorkspace mode="files" onModeChange={() => {}} files={[{ id: '/workspace', name: 'workspace', path: '/workspace', type: 'folder',
+        children: Array.from({ length: 80 }, (_, index) => ({ id: `folder-${index}`, name: `folder-${index}`, path: `/workspace/folder-${index}`, type: 'folder' as const, children: [] })) }]}
+        roots={[{ id: 'home', pathAbs: '/workspace', label: 'Workspace', kind: 'home', permissions: { read: true, write: true }, system: true }]}
+        currentPath="/workspace" initialPath="/workspace" instanceId="adaptive-files" resetKey={0} width={240} open />
+    </LayoutProvider></FloeConfigProvider>, host));
+    await paint();
+    const tree = host.querySelector<HTMLElement>('[data-testid="file-tree-scroll-region"]')!;
+    const expand = tree.querySelector<HTMLButtonElement>('[data-tree-row-path="/workspace"]')!.parentElement!.querySelector<HTMLButtonElement>('[aria-expanded="false"]');
+    if (expand) await userEvent.click(expand);
+    await expect.poll(() => tree.querySelectorAll('[data-tree-row-path]').length).toBe(81);
+    tree.scrollTop = 280;
+    expect(tree.scrollTop).toBe(280);
+    const content = host.querySelector('[data-testid="file-browser-content-scroll-region"]');
+    const filter = host.querySelector<HTMLInputElement>('input[aria-label="Filter files..."]') ?? host.querySelector<HTMLInputElement>('input')!;
+    await userEvent.fill(filter, 'retained filter');
+    host.style.width = '640px';
+    await expect.poll(() => host.querySelector('[data-browser-sidebar-presentation]')?.getAttribute('data-browser-sidebar-presentation')).toBe('overlay');
+    const trigger = host.querySelector<HTMLButtonElement>('button[aria-label="Toggle browser sidebar"]')!;
+    expect(trigger).toBeTruthy();
+    await userEvent.click(trigger);
+    await expect.poll(() => host.querySelector('[data-floe-drawer-side="left"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="file-tree-scroll-region"]')).toBe(tree);
+    expect(document.activeElement).not.toBe(filter);
+    expect(tree.scrollTop).toBe(280);
+    await userEvent.keyboard('{Escape}');
+    await expect.poll(() => document.activeElement).toBe(trigger);
+    await userEvent.click(trigger);
+    await expect.poll(() => host.querySelector('[data-floe-drawer-side="left"]')).toBeTruthy();
+    await userEvent.click(host.querySelector<HTMLElement>('[data-floe-dialog-backdrop]')!);
+    await expect.poll(() => host.querySelector('[data-floe-drawer-side="left"]')).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(trigger);
+    host.style.width = '1000px';
+    await expect.poll(() => host.querySelector('[data-browser-sidebar-presentation]')?.getAttribute('data-browser-sidebar-presentation')).toBe('inline');
+    expect(host.querySelector('[data-testid="file-tree-scroll-region"]')).toBe(tree);
+    expect(host.querySelector('[data-testid="file-browser-content-scroll-region"]')).toBe(content);
+    expect(filter.value).toBe('retained filter');
+    expect(tree.scrollTop).toBe(280);
   });
 });

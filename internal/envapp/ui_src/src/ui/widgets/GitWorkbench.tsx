@@ -142,6 +142,7 @@ export interface GitWorkbenchProps {
   onPull?: () => void;
   onPush?: () => void;
   showMobileSidebarButton?: boolean;
+  sidebarExpanded?: boolean;
   onToggleSidebar?: () => void;
   onRefresh?: () => void;
   class?: string;
@@ -419,7 +420,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 icon={History}
                 class={cn('shrink-0', gitToneHeaderActionButtonClass())}
                 aria-label={i18n.t('files.sidebarToggle')}
-                onClick={props.onToggleSidebar}
+                  aria-haspopup="dialog" aria-expanded={props.sidebarExpanded}
+                onClick={event => { event.currentTarget.focus({ preventScroll: true }); props.onToggleSidebar?.(); }}
               >
                 {i18n.t('files.sidebar')}
               </Button>

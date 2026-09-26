@@ -41,21 +41,22 @@
   display: none;
 }
 
-.flower-component-shell[data-flower-mobile-pane] {
+.flower-component-shell[data-flower-sidebar-presentation="overlay"] {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
 }
 
-.flower-component-shell[data-flower-mobile-pane] .flower-mobile-navigation-button {
+.flower-component-shell[data-flower-mobile-pane] .flower-mobile-navigation-button,
+.flower-component-shell[data-flower-sidebar-presentation="overlay"] .flower-chat-header .flower-mobile-navigation-button {
   display: inline-flex;
   flex-shrink: 0;
 }
 
-.flower-component-shell[data-flower-mobile-pane] > .flower-component-rail-resizer {
+.flower-component-shell[data-flower-sidebar-presentation="overlay"] > .flower-component-rail-resizer {
   display: none;
 }
 
-@media (max-width: 767px) {
+@media (pointer: coarse) {
   .flower-component-shell .flower-composer textarea,
   .flower-component-shell .flower-composer input[type='password'] {
     /* iOS Safari zooms focused text controls below 16 CSS pixels. */
@@ -10554,6 +10555,20 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-empty-suggestion-label { display: none; }
 .flower-empty-expand { display: none; }
 @container flower-chat (width < 768px) {
+  .flower-empty-state { padding: 1rem; }
+  .flower-empty-hero { margin-bottom: 1.25rem; }
+  .flower-empty-hero-badge { margin-bottom: 1rem; }
+  .flower-empty-hint { margin-top: 1.25rem; flex-wrap: wrap; justify-content: center; }
+}
+
+.flower-desktop-thread-drawer {
+  width: min(var(--flower-thread-rail-width, 17rem), calc(100% - 48px));
+  max-width: calc(100% - 48px);
+  height: 100%;
+}
+.flower-desktop-thread-drawer .flower-component-thread-rail { height: 100%; }
+
+.flower-component-shell[data-flower-interaction-mode="mobile"] {
   .flower-empty-state { justify-content: center; padding: 12px; }
   .flower-empty-suggestion-label { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; font-size: 12px; color: var(--muted-foreground); }
   .flower-empty-hero, .flower-empty-hint { display: none; }
@@ -10566,6 +10581,7 @@ button.flower-attachment-preview-trigger:disabled {
   .flower-empty-expand { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; margin-top: 8px; padding-inline: 12px; font-size: 12px; color: var(--muted-foreground); cursor: pointer; border-radius: 6px; }
   .flower-empty-expand:hover { background: var(--muted); }
 }
+
 
 @media (pointer: coarse) {
   .flower-header-icon-button {

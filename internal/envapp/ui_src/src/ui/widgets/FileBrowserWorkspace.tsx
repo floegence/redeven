@@ -91,6 +91,7 @@ export interface FileBrowserWorkspaceProps {
 interface FileWorkspaceHeaderProps {
   initializing?: boolean;
   showMobileSidebarButton?: boolean;
+  sidebarExpanded?: boolean;
   onToggleSidebar?: () => void;
   toolbarEndActions?: JSX.Element;
   filterInputRef?: (el: HTMLInputElement) => void;
@@ -142,7 +143,8 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               icon={FilesIcon}
               {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
               aria-label={i18n.t('files.sidebarToggle')}
-              onClick={props.onToggleSidebar}
+              aria-haspopup="dialog" aria-expanded={props.sidebarExpanded}
+              onClick={event => { event.currentTarget.focus({ preventScroll: true }); props.onToggleSidebar?.(); }}
             >
               {i18n.t('files.sidebar')}
             </Button>
@@ -507,7 +509,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
           </div>
         </div>
       )}
-      content={(
+      content={(navigation) => (
         <div
           ref={(el) => {
             workspaceRootEl = el;
@@ -517,8 +519,9 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
         >
           <FileWorkspaceHeader
             initializing={props.initializing}
-            showMobileSidebarButton={props.showMobileSidebarButton}
-            onToggleSidebar={props.onToggleSidebar}
+            showMobileSidebarButton={navigation.overlay() || props.showMobileSidebarButton}
+            sidebarExpanded={navigation.overlay() ? navigation.open() : undefined}
+            onToggleSidebar={navigation.overlay() ? navigation.toggle : props.onToggleSidebar}
             toolbarEndActions={props.toolbarEndActions}
             pathControlMode={pathControlMode()}
             pathDraft={pathDraft()}

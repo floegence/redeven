@@ -8,8 +8,8 @@ timestamp: 2026-09-25T00:00:00Z
 # Summary
 
 Redeven owns mobile navigation choices; released Floe Shell owns the layout,
-visible viewport, presence, and focus boundary. Below 768 CSS pixels the framework
-toolbar is hidden and its actions remain reachable from a fixed More button.
+visible viewport, presence, and focus boundary. In the browser mobile mode defined
+by [adaptive desktop layout](adaptive-desktop-layout.md), the framework toolbar is hidden and its actions remain reachable from a fixed More button.
 Navigation panels never cover or disable the bottom bar. Covered page content
 stays inert through panel exit, and global confirmations retain full modality.
 Closing navigation preserves page content and does not cancel product operations.

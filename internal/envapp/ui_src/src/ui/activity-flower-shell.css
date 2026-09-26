@@ -500,10 +500,6 @@
     gap: 0.25rem;
   }
 
-  .flower-activity-secondary-action {
-    display: none;
-  }
-
   .flower-activity-env-identity {
     max-width: 7rem;
   }
@@ -513,7 +509,7 @@
   }
 }
 
-@media (max-width: 639px) {
+[data-redeven-interaction-mode="mobile"] {
   .flower-activity-bottom-bar-height {
     height: calc(3rem + env(safe-area-inset-bottom, 0px));
   }

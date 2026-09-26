@@ -86,7 +86,7 @@ if (process.env.REDEVEN_MOBILE_NAVIGATION_SERVE === '1') {
     for (const name of (process.env.REDEVEN_MOBILE_NAVIGATION_BROWSERS ?? 'chromium,webkit').split(',')) {
       const browser = await ({ chromium, webkit })[name].launch({ args: name === 'chromium' ? [`--ignore-certificate-errors-spki-list=${tls.certificateSPKIHash}`] : [] });
       try {
-        for (const viewport of [{ width: 320, height: 700 }, { width: 393, height: 740 }, { width: 430, height: 740 }, { width: 767, height: 740 }, { width: 667, height: 390 }].filter(size => !process.env.REDEVEN_MOBILE_NAVIGATION_WIDTH || size.width === Number(process.env.REDEVEN_MOBILE_NAVIGATION_WIDTH))) {
+        for (const viewport of [{ width: 320, height: 700 }, { width: 390, height: 740 }, { width: 393, height: 740 }, { width: 430, height: 740 }, { width: 767, height: 740 }, { width: 667, height: 390 }].filter(size => !process.env.REDEVEN_MOBILE_NAVIGATION_WIDTH || size.width === Number(process.env.REDEVEN_MOBILE_NAVIGATION_WIDTH))) {
           const context = await browser.newContext({ viewport, ignoreHTTPSErrors: true, hasTouch: true, isMobile: true });
           const page = await context.newPage();
           const errors = []; page.on('pageerror', error => errors.push(error.message));

@@ -7,14 +7,14 @@ timestamp: 2026-09-24T00:00:00Z
 ---
 # Summary
 
-Redeven owns Flower's mobile product navigation. Below 768 CSS pixels, the
-conversation list opens in a large bottom drawer over the retained detail.
+Redeven owns Flower's mobile product navigation. In the shared mobile mode
+defined by [adaptive desktop layout](adaptive-desktop-layout.md), the conversation list opens in a large bottom drawer over the retained detail.
 Released Floe Dialog owns placement, presence, focus containment, and motion.
 Opening or closing the drawer retains the detail DOM, draft, and selection.
 The detail header and ancestor scroll stay stationary through every animation
 frame; released Floe owns scroll-preserving automatic entry and return focus.
 The covered detail is inert and cannot acknowledge reads until exit completes.
-Desktop keeps its side-by-side layout.
+Desktop navigation adapts to local space under that same contract.
 
 # Contract
 

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { CommandProvider, ComponentRegistryProvider, useComponentRegistry, FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
+import { REDEVEN_BROWSER_MOBILE_QUERY } from './mobileViewportPolicy';
 import { FileBrowserWorkspace } from './widgets/FileBrowserWorkspace';
 import { FlowerTurnLauncherWindow as SharedFlowerTurnLauncherWindow } from '../../../../flower_ui/src/FlowerTurnLauncherWindow';
 
@@ -91,6 +92,7 @@ function runningActivityFlowerPresence() {
 }
 
 const mediaCommands = commands as unknown as Readonly<{
+  emulateTouchInput: (enabled: boolean) => Promise<void>;
   emulateMediaPreferences: (preferences: Readonly<{
     reducedMotion?: null | 'reduce' | 'no-preference';
   }>) => Promise<void>;
@@ -1056,12 +1058,13 @@ async function mountShell(): Promise<MountedShell> {
 }
 
 async function mountProductionMobileShell(): Promise<MountedMobileShell> {
+  await mediaCommands.emulateTouchInput(true);
   const host = document.createElement('div');
   document.body.appendChild(host);
 
   const { EnvAppShell } = await import('./EnvAppShell');
   const dispose = render(() => (
-    <FloeConfigProvider>
+    <FloeConfigProvider config={{ layout: { mobileQuery: REDEVEN_BROWSER_MOBILE_QUERY } }}>
       <LayoutProvider>
         <CommandProvider>
           <EnvAppShell />
@@ -1112,6 +1115,7 @@ afterEach(async () => {
   document.body.replaceChildren();
   document.documentElement.removeAttribute('style');
   await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+  await mediaCommands.emulateTouchInput(false);
   await page.viewport(1280, 800);
 });
 
@@ -1884,7 +1888,8 @@ describe('EnvAppShell Activity Flower browser integration', () => {
 
       await userEvent.click(fixture.input);
       visualViewport.dispatchEvent(new Event('resize'));
-      await flushAsync();
+      await vi.waitFor(() => expect(fixture.panel.dataset.companionPhase).toBe('expanded'));
+      await settleFrames(2);
 
       const panelRect = elementRect(fixture.panel);
       const safeViewportLeft = visualViewport.offsetLeft + 7;

@@ -1,0 +1,11 @@
+.redeven-adaptive-sidebar-drawer {
+  width: min(var(--redeven-sidebar-width, 286px), calc(100% - 48px));
+  max-width: calc(100% - 48px);
+  height: 100%;
+  max-height: 100%;
+}
+.redeven-adaptive-sidebar-drawer .redeven-terminal-session-sidebar {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}

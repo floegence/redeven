@@ -22,7 +22,7 @@ try {
     return { ...entry, runtime_service: service ? { ...service, compatibility_epoch: epoch, protocol_version: protocol, compatibility: 'compatible', compatibility_message: undefined, open_readiness: { state: 'openable' }, ai_readiness: { state: 'inspecting' } } : undefined };
   });
   for (const locale of ['en-US', 'zh-CN']) {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: { width: 1024, height: 720 }, reducedMotion: 'reduce' });
     const page = await context.newPage();
     page.on('pageerror', error => report.errors.push(error.message));
     await page.addInitScript(({ snapshot, locale }) => {
@@ -70,6 +70,15 @@ try {
     assert.equal(scale.height, 40, 'Desktop Flower uses the shared 40px header');
     assert.ok(scale.family.includes('Inter Variable'), 'Desktop and Env App use the same UI font');
     assert.equal(await page.getByText('AI service is unavailable', { exact: false }).count(), 0);
+    for (const width of [1024, 800, 640, 1440]) {
+      await page.setViewportSize({ width, height: 720 });
+      await page.waitForFunction(() => document.querySelector('[data-flower-interaction-mode]')?.getAttribute('data-flower-interaction-mode') === 'desktop');
+      assert.equal(await page.locator('.flower-empty-hero').isVisible(), true);
+      assert.equal(await page.locator('.flower-empty-suggestion:visible').count(), 4);
+      assert.equal(await page.locator('.flower-empty-hint').isVisible(), true);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'Desktop has no page overflow');
+      await page.screenshot({ path: `${output}/${locale}-welcome-${width}.png`, animations: 'disabled' });
+    }
     try {
       await page.locator('[data-thread-id="navigation-thread"] button').first().click({ timeout: 5000 });
     } catch (error) {
@@ -89,6 +98,24 @@ try {
       window.navigationNodes = { flower: document.querySelector('[data-flower-engaged]'),
         environment: document.querySelector('[data-environment-group]'), composer: document.querySelector('.flower-composer-content textarea') };
     });
+    await composer.evaluate(element => element.setSelectionRange(2, 7));
+    await page.setViewportSize({ width: 640, height: 720 });
+    await page.waitForFunction(() => document.querySelector('[data-flower-sidebar-presentation]')?.getAttribute('data-flower-sidebar-presentation') === 'overlay');
+    const drawerTrigger = page.locator('.flower-chat-header .flower-mobile-navigation-button');
+    await drawerTrigger.click();
+    const drawer = page.locator('[data-floe-drawer-side="left"]');
+    await drawer.waitFor();
+    await page.waitForFunction(() => Boolean(document.querySelector('[data-floe-drawer-side="left"]')?.contains(document.activeElement)));
+    assert.equal(await page.locator('.flower-thread-search-input').evaluate(element => element === document.activeElement), false, 'opening navigation does not focus search');
+    await page.screenshot({ path: `${output}/${locale}-narrow-navigation.png`, animations: 'disabled' });
+    await page.keyboard.press('Escape');
+    await drawer.waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.activeElement?.matches('.flower-chat-header .flower-mobile-navigation-button'));
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.waitForFunction(() => document.querySelector('[data-flower-sidebar-presentation]')?.getAttribute('data-flower-sidebar-presentation') === 'inline');
+    assert.equal(await composer.evaluate(element => element === window.navigationNodes.composer), true);
+    assert.equal(await composer.inputValue(), 'Keep this unsent draft');
+    assert.deepEqual(await composer.evaluate(element => [element.selectionStart, element.selectionEnd]), [2, 7]);
     for (let round = 0; round < 6; round++) {
       timings.push(await navigate(round % 2 ? '.flower-sidebar-leading-action' : '.redeven-flower-back-button', 'environments'));
       assert.equal(await page.locator('[data-desktop-page="flower"]').evaluate(el => {

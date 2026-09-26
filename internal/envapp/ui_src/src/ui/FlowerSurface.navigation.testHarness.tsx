@@ -22,9 +22,9 @@ const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (
   return <FlowerSurfaceComponent {...props} adapter={adapter} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
 };
 
-const TestProviders: Component<{ children: JSX.Element }> = (props) => {
+const TestProviders: Component<{ children: JSX.Element; mobileQuery?: string }> = (props) => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return props.children;
-  return <FloeConfigProvider><LayoutProvider>{props.children}</LayoutProvider></FloeConfigProvider>;
+  return <FloeConfigProvider config={{ layout: { mobileQuery: props.mobileQuery } }}><LayoutProvider>{props.children}</LayoutProvider></FloeConfigProvider>;
 };
 import type {
 	FlowerActivityItem,
@@ -103,6 +103,7 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => {
   return {
     ...actual,
     cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
+    useMobileLayout: () => typeof window.matchMedia === 'function' ? actual.useMobileLayout() : () => false,
     useMediaQuery: (query: string) => typeof window.matchMedia === 'function' ? actual.useMediaQuery(query) : () => false,
   };
 });
@@ -1007,6 +1008,7 @@ const mountFlowerSurface = (
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
     layout?: boolean;
+    mobileQuery?: string;
   }> = {},
 ): HTMLDivElement => {
   const runtime = document.createElement('div');
@@ -1035,7 +1037,7 @@ const mountFlowerSurface = (
       onThreadSelectionEvent={props.onThreadSelectionEvent}
     />
   );
-  disposers.push(render(() => props.layout ? <TestProviders>{surface()}</TestProviders> : surface(), runtime));
+  disposers.push(render(() => props.layout ? <TestProviders mobileQuery={props.mobileQuery}>{surface()}</TestProviders> : surface(), runtime));
   return runtime;
 };
 
@@ -1098,6 +1100,7 @@ export function renderSurfaceWithAdapterProps(
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
     layout?: boolean;
+    mobileQuery?: string;
   }>,
 ): HTMLDivElement {
   return mountFlowerSurface(surfaceAdapter, props);
