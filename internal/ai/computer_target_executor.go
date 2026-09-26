@@ -145,7 +145,7 @@ func (e *PlaywrightTargetExecutor) setBrowserPrivacy(ctx context.Context, target
 	return e.sourceHost.call(ctx, "view.privacy", map[string]any{"target": target, "view": owner}, nil)
 }
 
-func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call TargetToolCall, userControl bool) (out TargetToolResult, outErr error) {
+func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call TargetToolCall, userControl bool) (TargetToolResult, error) {
 	if e == nil || strings.TrimSpace(e.HelperPath) == "" {
 		return TargetToolResult{}, errors.New("browser target helper is unavailable")
 	}
@@ -186,36 +186,28 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
 	request := playwrightTargetRequest{FullAccess: call.fullAccess, AllowedOrigins: call.allowedOrigins, ScriptOperation: call.scriptOperation, ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, ReturnControl: call.controlReturn}
-	// Once bytes may reach the adapter, a failed mutating exchange is uncertain.
-	// Never convert it into a retryable timeout at the outer tool boundary.
-	defer func() {
-		if outErr != nil && !userControl && computerCallMutates(call) && !computerKnownRejection(outErr) {
-			outErr = errComputerEffectUnknown
-		}
-	}()
+	failedExchange := func(err error) (TargetToolResult, error) {
+		return TargetToolResult{}, computerBrowserExchangeFailure(call, userControl, err)
+	}
 	line, err := e.exchange(ctx, client, request)
 	if err != nil {
-		return TargetToolResult{}, err
+		return failedExchange(err)
 	}
 	var response playwrightTargetResponse
 	if err := json.Unmarshal(line, &response); err != nil {
-		return TargetToolResult{}, fmt.Errorf("invalid browser helper response: %w", err)
+		return failedExchange(fmt.Errorf("invalid browser helper response: %w", err))
 	}
 	if response.ID != requestID || response.TargetID != targetID {
-		return TargetToolResult{}, errors.New("browser helper response provenance mismatch")
-	}
-	if response.Error == "TARGET_OBSERVATION_UNAVAILABLE" {
-		result, err := computerObservationFailure(call, response.Result, response.Location)
-		healthy = computerKnownRejection(err)
-		return result, err
+		return failedExchange(errors.New("browser helper response provenance mismatch"))
 	}
 	if strings.TrimSpace(response.Error) != "" {
-		healthy = true
-		return TargetToolResult{}, computerTargetFailure(call, response.Error)
+		result, err, valid := computerBrowserFailure(call, userControl, response.Error, response.Result, response.Location)
+		healthy = valid && !errors.Is(err, errComputerEffectUnknown)
+		return result, err
 	}
 	if userControl && call.ToolName != "computer.screenshot" {
 		if !response.Acknowledged || response.Screenshot != nil {
-			return TargetToolResult{}, errors.New("invalid private input acknowledgement")
+			return failedExchange(errors.New("invalid private input acknowledgement"))
 		}
 		healthy = true
 		return TargetToolResult{}, nil
@@ -231,12 +223,12 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 	if response.Screenshot != nil && strings.TrimSpace(response.Screenshot.Data) != "" {
 		body, err := base64.StdEncoding.DecodeString(response.Screenshot.Data)
 		if err != nil {
-			return TargetToolResult{}, fmt.Errorf("decode browser screenshot: %w", err)
+			return failedExchange(fmt.Errorf("decode browser screenshot: %w", err))
 		}
 		result.frameBytes = body
 		if userControl {
 			if response.Screenshot.MIME != "image/png" {
-				return TargetToolResult{}, errors.New("invalid private frame media")
+				return failedExchange(errors.New("invalid private frame media"))
 			}
 			healthy = true
 			return result, nil

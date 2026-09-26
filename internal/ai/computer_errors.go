@@ -4,7 +4,87 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
+
+// Navigation acknowledgement is distinct from destination load completion.
+// This is an execution error, never an invalid-arguments or permission error.
+type computerNavigationError struct {
+	code          aitools.ErrorCode
+	stage, reason string
+}
+
+func (e *computerNavigationError) Error() string {
+	if e.code == aitools.ErrorCodeNavigationTimeout {
+		return "Browser acknowledged navigation, but the page did not finish loading. Observe the page before choosing the next action."
+	}
+	return "Browser navigation failed (" + e.reason + "). Observe the page before choosing the next action."
+}
+
+func (e *computerNavigationError) facts() map[string]any {
+	facts := map[string]any{"action_executed": true, "navigation_stage": e.stage}
+	if e.reason != "" {
+		facts["network_error"] = e.reason
+	}
+	return facts
+}
+
+func computerNavigationReason(reason string) bool {
+	switch reason {
+	case "NETWORK_ERROR", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_CONNECTION_FAILED", "ERR_CONNECTION_FAILED",
+		"ERR_CONNECTION_REFUSED", "ERR_CONNECTION_RESET", "ERR_CONNECTION_CLOSED", "ERR_NAME_NOT_RESOLVED",
+		"ERR_INTERNET_DISCONNECTED", "ERR_NETWORK_CHANGED", "ERR_TIMED_OUT", "ERR_CONNECTION_TIMED_OUT",
+		"ERR_EMPTY_RESPONSE", "ERR_TOO_MANY_REDIRECTS", "ERR_CERT_AUTHORITY_INVALID", "ERR_CERT_DATE_INVALID",
+		"ERR_CERT_COMMON_NAME_INVALID", "ERR_SSL_PROTOCOL_ERROR", "ERR_ABORTED":
+		return true
+	}
+	return false
+}
+
+// Lost or malformed exchanges cannot establish the result of a mutating call.
+// Call this only after dispatch; validated browser failures use the mapper below.
+func computerBrowserExchangeFailure(call TargetToolCall, private bool, err error) error {
+	if !private && computerCallMutates(call) {
+		return errComputerEffectUnknown
+	}
+	return err
+}
+
+// One closed result classifier for managed/CDP and extension browser channels.
+// The bool says whether the response was valid, not whether navigation succeeded.
+func computerBrowserFailure(call TargetToolCall, private bool, code string, payload map[string]any, location string) (TargetToolResult, error, bool) {
+	invalid := func() (TargetToolResult, error, bool) {
+		return TargetToolResult{}, computerBrowserExchangeFailure(call, private, errors.New("invalid browser failure result")), false
+	}
+	if code == "NAVIGATION_FAILED" || code == "NAVIGATION_TIMEOUT" {
+		if call.ToolName != "browser.navigate" && call.ToolName != "browser.back" && call.ToolName != "browser.reload" {
+			return invalid()
+		}
+		executed, _ := payload["action_executed"].(bool)
+		stage, _ := payload["navigation_stage"].(string)
+		reason, _ := payload["network_error"].(string)
+		_, hasReason := payload["network_error"]
+		if !executed || (code == "NAVIGATION_FAILED" && (stage != "response" || !computerNavigationReason(reason))) ||
+			(code == "NAVIGATION_TIMEOUT" && (stage != "load" || hasReason)) {
+			return invalid()
+		}
+		failure := &computerNavigationError{code: aitools.ErrorCode(code), stage: stage, reason: reason}
+		return TargetToolResult{TargetID: call.TargetID, ExecutionLocation: location, Result: failure.facts()}, failure, true
+	}
+	if code == "TARGET_OBSERVATION_UNAVAILABLE" {
+		result, err := computerObservationFailure(call, payload, location)
+		if !computerKnownRejection(err) {
+			return invalid()
+		}
+		return result, err, true
+	}
+	err := computerTargetFailure(call, code)
+	if !computerKnownRejection(err) {
+		err = computerBrowserExchangeFailure(call, private, err)
+	}
+	return TargetToolResult{}, err, true
+}
 
 // Both helper protocols use a closed error vocabulary. Raw browser exceptions
 // can include endpoint credentials, typed text, or page content.

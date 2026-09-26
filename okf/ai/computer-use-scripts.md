@@ -3,7 +3,7 @@ type: Execution Contract
 title: Computer script execution and semantic observations
 description: Execute bounded JavaScript against one authorized target without exposing host capabilities or replaying partial effects.
 tags: [ai, computer-use, scripts, accessibility]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
@@ -93,8 +93,9 @@ batch result is checked, even when the field has already disappeared. A changed
 document during capture or a privacy read discards the image, tree and page
 metadata and marks `observation_invalidated`. Confirmed action facts remain;
 the next observation checks the new document without repeating the action or
-inventing a private-input handoff. A scan failure without document invalidation
-still pauses. Site permissions, explicit Agent popup selection, takeover and uncertain
+inventing a private-input handoff. A persistent observation failure returns the
+closed inspection error described in the [browser contract](computer-use-browser.md).
+Site permissions, explicit Agent popup selection, takeover and uncertain
 effects retain their existing boundaries. A script also drops cached observations
 from before invalidation; its final result retains the flag until it obtains a
 fresh observation.
@@ -118,6 +119,11 @@ logs. A script that stops after a host rejection or guest exception is an
 execution failure, never a successful tool or schema-regeneration request.
 Closed diagnostic codes avoid leaking guest exception text. Output-limit
 failures mark retained output as truncated. No partial script is replayed.
+An acknowledged but failed or still-loading navigation preserves earlier
+completed steps, but is not itself listed in `completed_actions`. Its result
+retains `action_executed: true`, the navigation stage and safe network reason;
+old observations, logs and images are discarded. It remains an execution error
+with a usable target, so a new call in the same turn can observe and continue.
 The [activity contract](../ui/flower-activity-interaction.md) owns intent and
 input/result presentation. A sensitive
 pause removes previous logs, semantic content and image attachments, retaining

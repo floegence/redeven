@@ -93,9 +93,17 @@ try {
         try { await Promise.race([loginCompleted, new Promise((_, reject) => { completionTimer = setTimeout(() => reject(new Error('user form navigation did not complete')), 2000); })]); } finally { clearTimeout(completionTimer); }
         assert.equal(completions, 1, 'user did not finish the form');
         await send('user-after-submit', 'computer.screenshot', {}, { user_control: true });
-        const stillPaused = await send('still-paused', 'computer.screenshot');
+        let stillPaused = await send('still-paused', 'computer.screenshot');
+        // Receiving /done does not mean Chromium has committed its document.
+        // A discarded transition frame permits a fresh read, never form replay.
+        if (stillPaused.result?.observation_invalidated === true) {
+          assert.equal(stillPaused.result.action_executed, false);
+          assert.equal(stillPaused.screenshot, undefined);
+          assert.equal(stillPaused.safety.safe_to_send_to_model, false);
+          stillPaused = await send('after-document-change', 'computer.screenshot');
+        }
         assert.equal(stillPaused.safety?.level, 'routine', 'helper must report current page safety; Runtime controls dispatch');
-        assert.equal(Boolean(stillPaused.screenshot), true);
+        assert.equal(Boolean(stillPaused.screenshot), true, JSON.stringify(stillPaused));
         const returned = await send('return', 'computer.screenshot', {}, { return_control: true });
         assert.equal(returned.safety?.level, 'routine');
         assert.equal(Boolean(returned.screenshot), true);

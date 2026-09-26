@@ -97,6 +97,13 @@ func structuredToolResults(toolName string, data any, existing []fltools.Structu
 		rows = append(rows, toolDetailRow(title, meta, content, format, language, truncated))
 	}
 	if isComputerUseTool(toolName) {
+		if stage, _ := payload["navigation_stage"].(string); stage == "response" || stage == "load" {
+			facts := []string{"navigation_stage: " + stage}
+			if reason, _ := payload["network_error"].(string); computerNavigationReason(reason) {
+				facts = append(facts, "network_error: "+reason)
+			}
+			add("", "", strings.Join(facts, "\n"), fltools.StructuredActivityRowFormatCode, "text", false)
+		}
 		logs := []string{}
 		for _, line := range toAnySlice(payload["logs"]) {
 			if parts, ok := line.([]any); ok {

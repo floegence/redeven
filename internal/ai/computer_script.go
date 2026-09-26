@@ -190,14 +190,15 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	var fullObservation bool
 	observationInvalidated := false
 	var observationFailureStage string
+	var navigationFailure *computerNavigationError
 	operations := 0
-	effectCompleted := false
+	actionExecuted := false
 	// Prefix facts survive interpreter timeout, exhaustion and broken IPC.
 	// Never fabricate completion of the operation whose outcome is unknown.
 	defer func() {
 		if output.Result == nil {
 			output = result
-			output.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": effectCompleted, "operations": operations, "completed": false, "script_error": "SCRIPT_STOPPED"}
+			output.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_STOPPED"}
 		}
 		if pause != nil {
 			output.Safety = pause
@@ -244,6 +245,11 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if err != nil {
 				stopped = err
+				if errors.As(err, &navigationFailure) {
+					lastObservation = nil
+					result.Attachments = nil
+					p.observations = computerObservationOutput{}
+				}
 				var failure *targetToolPolicyError
 				if errors.As(err, &failure) && failure.code == "target_observation_unavailable" {
 					payload, _ := observed.Result.(map[string]any)
@@ -267,7 +273,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					p.observations = computerObservationOutput{}
 				}
 				if payload["action_executed"] == true {
-					effectCompleted = true
+					actionExecuted = true
 					lastObservation = nil
 				}
 				if observation, ok := payload["observation"]; ok {
@@ -299,7 +305,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				result.Attachments = append(result.Attachments, observed.Attachments...)
 				result.ExecutionLocation = observed.ExecutionLocation
 			}
-			if stopped != nil {
+			if stopped != nil && navigationFailure == nil {
 				if payload, ok := observed.Result.(map[string]any); ok && payload["action_executed"] == true {
 					completed = append(completed, anyToString(msg.Operation["action"]))
 				}
@@ -315,7 +321,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			if msg.ID != call.ToolCallID {
 				return result, errors.New("computer script response identity mismatch")
 			}
-			result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": effectCompleted, "operations": operations, "logs": msg.Result["logs"], "truncated": msg.Result["truncated"] == true, "observation": lastObservation, "completed": stopped == nil && msg.Type == "result"}
+			result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "logs": msg.Result["logs"], "truncated": msg.Result["truncated"] == true, "observation": lastObservation, "completed": stopped == nil && msg.Type == "result"}
 			if observationInvalidated {
 				result.Result.(map[string]any)["observation_invalidated"] = true
 			}
@@ -339,6 +345,15 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				result.Result.(map[string]any)["observation_stage"] = observationFailureStage
 				delete(result.Result.(map[string]any), "observation")
 				delete(result.Result.(map[string]any), "logs")
+			}
+			if navigationFailure != nil {
+				for key, value := range navigationFailure.facts() {
+					result.Result.(map[string]any)[key] = value
+				}
+				result.Result.(map[string]any)["script_error"] = string(navigationFailure.code)
+				delete(result.Result.(map[string]any), "observation")
+				delete(result.Result.(map[string]any), "logs")
+				return result, navigationFailure
 			}
 			if stopped != nil || msg.Type == "error" {
 				code := "SCRIPT_STOPPED"

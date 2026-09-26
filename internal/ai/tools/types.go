@@ -32,6 +32,8 @@ const (
 	ErrorCodeTakeoverRequired             ErrorCode = "TAKEOVER_REQUIRED"
 	ErrorCodeTargetObservationUnavailable ErrorCode = "TARGET_OBSERVATION_UNAVAILABLE"
 	ErrorCodeFrameUnavailable             ErrorCode = "FRAME_UNAVAILABLE"
+	ErrorCodeNavigationFailed             ErrorCode = "NAVIGATION_FAILED"
+	ErrorCodeNavigationTimeout            ErrorCode = "NAVIGATION_TIMEOUT"
 	ErrorCodeTimeout                      ErrorCode = "TIMEOUT"
 	ErrorCodeCanceled                     ErrorCode = "CANCELED"
 	ErrorCodeUnknown                      ErrorCode = "UNKNOWN"

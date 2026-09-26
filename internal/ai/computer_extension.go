@@ -661,18 +661,17 @@ func (e *extensionTargetExecutor) ExecuteComputerUserInput(ctx context.Context, 
 	result, err := e.execute(ctx, call, true)
 	return result.frameBytes, err
 }
-func (e *extensionTargetExecutor) execute(ctx context.Context, call TargetToolCall, private bool) (out TargetToolResult, outErr error) {
+func (e *extensionTargetExecutor) execute(ctx context.Context, call TargetToolCall, private bool) (TargetToolResult, error) {
+	var out TargetToolResult
 	var args map[string]any
 	if len(call.Arguments) > 0 && json.Unmarshal(call.Arguments, &args) != nil {
 		return out, computerTargetFailure(call, "INVALID_REQUEST")
 	}
-	defer func() {
-		if outErr != nil && !private && computerCallMutates(call) && !computerKnownRejection(outErr) {
-			outErr = errComputerEffectUnknown
-		}
-	}()
 	if e.sourceHost == nil || call.TargetID != e.targetID {
 		return out, computerTargetFailure(call, "TARGET_CONNECTION_REQUIRED")
+	}
+	failedExchange := func(err error) (TargetToolResult, error) {
+		return TargetToolResult{}, computerBrowserExchangeFailure(call, private, err)
 	}
 	var raw json.RawMessage
 	err := e.sourceHost.call(ctx, "source.tool", map[string]any{"target": e.targetID, "request": map[string]any{"target_id": e.targetID, "tool_name": call.ToolName, "args": args, "full_access": call.fullAccess, "allowed_origins": call.allowedOrigins, "script_operation": call.scriptOperation, "return_control": call.controlReturn, "user_control": private}}, &raw)
@@ -680,10 +679,10 @@ func (e *extensionTargetExecutor) execute(ctx context.Context, call TargetToolCa
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		drained := e.sourceHost.call(cleanup, "source.cancel", map[string]string{"target": e.targetID}, nil)
 		cancel()
-		if drained != nil {
+		if drained != nil && e.pipe != nil {
 			e.pipe.close()
 		}
-		return out, err
+		return failedExchange(err)
 	}
 
 	var response struct {
@@ -697,13 +696,11 @@ func (e *extensionTargetExecutor) execute(ctx context.Context, call TargetToolCa
 		} `json:"screenshot"`
 	}
 	if json.Unmarshal(raw, &response) != nil {
-		return out, errors.New("invalid extension result")
-	}
-	if response.Error == "TARGET_OBSERVATION_UNAVAILABLE" {
-		return computerObservationFailure(call, response.Result, "connected_browser")
+		return failedExchange(errors.New("invalid extension result"))
 	}
 	if response.Error != "" {
-		return out, computerTargetFailure(call, response.Error)
+		result, err, _ := computerBrowserFailure(call, private, response.Error, response.Result, "connected_browser")
+		return result, err
 	}
 	out = TargetToolResult{TargetID: call.TargetID, ExecutionLocation: "connected_browser", Result: response.Result, Safety: response.Safety}
 	if !private && response.Safety != nil && !response.Safety.SafeToSendToModel {
@@ -711,14 +708,14 @@ func (e *extensionTargetExecutor) execute(ctx context.Context, call TargetToolCa
 	}
 	if private && call.ToolName != "computer.screenshot" {
 		if !response.Acknowledged || response.Screenshot != nil {
-			return out, errors.New("invalid private input acknowledgement")
+			return failedExchange(errors.New("invalid private input acknowledgement"))
 		}
 		return out, nil
 	}
 	if response.Screenshot != nil {
 		body, err := base64.StdEncoding.DecodeString(response.Screenshot.Data)
 		if err != nil || len(body) > maxComputerFrameBytes || response.Screenshot.MIME != "image/png" {
-			return out, errors.New("invalid extension screenshot")
+			return failedExchange(errors.New("invalid extension screenshot"))
 		}
 		out.frameBytes = body
 		if !private {
