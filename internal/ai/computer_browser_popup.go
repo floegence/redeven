@@ -8,7 +8,8 @@ import (
 )
 
 // Caller holds connectMu. A popup joins only the explicitly opened, owned
-// managed directory of its opener. It never selects a view or a Flower target.
+// managed directory of its opener. A foreground popup selects only the view
+// that currently owns input on that opener; other views retain their selection.
 func (r *ComputerUseRuntime) admitManagedBrowserPopup(ctx context.Context, event browserHostEvent) error {
 	if event.TabID == "" || len(event.TabID) > 256 {
 		return errBrowserViewUnavailable
@@ -38,6 +39,27 @@ func (r *ComputerUseRuntime) admitManagedBrowserPopup(ctx context.Context, event
 		}
 		if err := r.refreshBrowserWorkspace(ctx, workspace); err != nil {
 			return err
+		}
+		if event.Foreground {
+			r.mu.RLock()
+			selectedViews := make([]string, 0)
+			for _, view := range r.browserViews {
+				if view.workspace != workspace || view.ctx.Err() != nil {
+					continue
+				}
+				view.mu.Lock()
+				selected := view.observing && view.target == event.Target
+				view.mu.Unlock()
+				if selected {
+					selectedViews = append(selectedViews, view.id)
+				}
+			}
+			r.mu.RUnlock()
+			for _, viewID := range selectedViews {
+				if err := r.browserHost.call(ctx, "view.select", map[string]string{"view": viewID, "target": target.ID}, nil); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	var tabs []browserstore.Tab

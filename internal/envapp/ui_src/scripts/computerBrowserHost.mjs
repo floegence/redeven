@@ -213,7 +213,7 @@ export async function createComputerBrowserHost(options) {
         captureDownloads: !descriptor.managed,
         nativeDownloads: false,
         windowViewport: descriptor.managed === true,
-        onPopup: async popup => {
+        onPopup: async (popup, _opener, foreground) => {
           // Only the owned managed profile has directory-wide product authority.
           // External pages remain explicitly selected. Managed popups inherit
           // their native ancestors' privacy before any view can observe them.
@@ -224,7 +224,7 @@ export async function createComputerBrowserHost(options) {
             probe = await popup.context().newCDPSession(popup);
             const { targetInfo } = await probe.send('Target.getTargetInfo');
             if (!closed && sources.has(id) && targetInfo.type === 'page'
-              && (targetInfo.browserContextId || 'default') === contextID) options.onSourcePopup?.(id, targetInfo.targetId);
+              && (targetInfo.browserContextId || 'default') === contextID) options.onSourcePopup?.(id, targetInfo.targetId, foreground);
           } finally { await probe?.detach().catch(() => {}); popupProbes.delete(reservation); }
         },
       });
