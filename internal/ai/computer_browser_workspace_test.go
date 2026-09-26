@@ -580,7 +580,7 @@ func (fixture *browserObservationFixture) ack(id int) {
 	}
 }
 
-func TestManagedBrowserPopupJoinsDirectoryWithoutChangingSelection(t *testing.T) {
+func TestManagedBrowserForegroundPopupSelectsOnlyItsInputOwner(t *testing.T) {
 	runtime, meta := browserWorkspaceFixture(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
 	defer cancel()
@@ -589,7 +589,7 @@ func TestManagedBrowserPopupJoinsDirectoryWithoutChangingSelection(t *testing.T)
 			_, _ = io.WriteString(w, `<title>Popup destination</title><h1>Popup page</h1>`)
 			return
 		}
-		_, _ = io.WriteString(w, `<title>Opener</title><h1>Source page</h1><script>window.addEventListener('keydown',event=>{if(event.key==='Enter')window.open('/popup','_blank')})</script>`)
+		_, _ = io.WriteString(w, `<title>Opener</title><h1>Source page</h1><script>window.addEventListener('keyup',event=>{if(event.key==='Enter')window.open('/popup','_blank')})</script>`)
 	}))
 	defer site.Close()
 	view, err := runtime.OpenBrowserWorkspace(ctx, meta, BrowserWorkspaceRequest{ManagedProfileID: "browser-main"})
@@ -597,6 +597,11 @@ func TestManagedBrowserPopupJoinsDirectoryWithoutChangingSelection(t *testing.T)
 		t.Fatal(err)
 	}
 	first := observeBrowserFixture(t, ctx, runtime, meta, view)
+	peer, err := runtime.OpenBrowserWorkspace(ctx, meta, BrowserWorkspaceRequest{ManagedProfileID: "browser-main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := observeBrowserFixture(t, ctx, runtime, meta, peer)
 	token, err := runtime.AcquireBrowserViewControl(ctx, meta, view.ID, view.InitialTarget, false, false)
 	if err != nil {
 		t.Fatal(err)
@@ -612,11 +617,8 @@ func TestManagedBrowserPopupJoinsDirectoryWithoutChangingSelection(t *testing.T)
 			return false
 		}
 		state := message["state"].(map[string]any)
-		return len(state["tabs"].([]any)) == 2
+		return len(state["tabs"].([]any)) == 2 && state["active"] != view.InitialTarget
 	})["state"].(map[string]any)
-	if tabs["active"] != view.InitialTarget {
-		t.Fatal("popup stole current selection")
-	}
 	var popup string
 	for _, item := range tabs["tabs"].([]any) {
 		id := item.(map[string]any)["id"].(string)
@@ -627,8 +629,18 @@ func TestManagedBrowserPopupJoinsDirectoryWithoutChangingSelection(t *testing.T)
 	if popup == "" {
 		t.Fatal("popup has no source identity")
 	}
-	first.send(4, view.InitialTarget, "", map[string]any{"kind": "tab_select", "tab": popup})
-	first.ack(4)
+	if tabs["active"] != popup {
+		t.Fatal("foreground popup did not select its input owner")
+	}
+	peerTabs := second.wait(func(message map[string]any) bool {
+		if message["type"] != "tabs" {
+			return false
+		}
+		return len(message["state"].(map[string]any)["tabs"].([]any)) == 2
+	})["state"].(map[string]any)
+	if peerTabs["active"] != peer.InitialTarget {
+		t.Fatal("foreground popup changed the independent observing window")
+	}
 	if _, err := runtime.AcquireBrowserViewControl(ctx, meta, view.ID, popup, false, false); err != nil {
 		t.Fatal("admitted popup cannot be controlled", err)
 	}

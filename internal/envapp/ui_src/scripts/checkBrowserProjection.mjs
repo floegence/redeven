@@ -428,6 +428,20 @@ try {
   const currentSourceWidth = await page.evaluate(() => window.innerWidth);
   await popup.waitForFunction(width => Number(document.querySelector('.floe-viewport iframe')?.width) === width, currentSourceWidth);
 
+  if (managedSource) {
+    const openerURL = await address.inputValue();
+    const backgroundPopupPromise = page.waitForEvent('popup', { timeout: 5000 });
+    await popupReplay.locator('#popup-link').click({ button: 'middle' });
+    const backgroundPopup = await backgroundPopupPromise;
+    await backgroundPopup.waitForLoadState('domcontentloaded');
+    await popup.getByRole('tab', { name: 'Popup popup', exact: true }).waitFor();
+    assert.equal(await popup.getByRole('tab').count(), 2, 'Middle click admits the new managed tab');
+    assert.equal(await popup.getByRole('tab', { name: 'Popup popup', exact: true }).getAttribute('aria-selected'), 'false', 'Middle click keeps its tab in the background');
+    assert.equal(await address.inputValue(), openerURL, 'Middle click preserves the current page');
+    await backgroundPopup.close();
+    await popup.waitForFunction(() => document.querySelectorAll('[role=tab]').length === 1);
+  }
+
   // Native external popups remain ungranted until explicitly chosen in the
   // shared source dialog. A stale selection keeps the current view intact.
   const nativePopupPromise = page.waitForEvent('popup', { timeout: 5000 });
@@ -435,7 +449,7 @@ try {
   const nativePopup = await nativePopupPromise;
   await nativePopup.waitForLoadState('domcontentloaded');
   if (managedSource) {
-    await popup.getByRole('tab', { name: 'Popup popup', exact: true }).click();
+    await popup.getByRole('tab', { name: 'Popup popup', exact: true, selected: true }).waitFor();
     assert.equal(await popup.getByRole('tab').count(), 2, 'A managed popup joins its opened profile directory');
   } else {
   const findSources = async () => {
