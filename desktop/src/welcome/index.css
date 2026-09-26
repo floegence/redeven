@@ -4577,3 +4577,71 @@ pre,
 .redeven-new-environment-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .375rem; width: 100%; }
 .redeven-new-environment-options > :last-child { grid-column: 1 / -1; }
 .redeven-new-environment-options .redeven-console-chip-button { display: flex; justify-content: center; min-width: 0; height: 1.75rem; padding: .25rem .375rem; white-space: nowrap; }
+
+
+/* ── Compact environment overlays ────────────────────────────────────────── */
+.redeven-endpoints-surface { width: min(26rem, calc(100vw - 1rem)); }
+.redeven-endpoints-popover { border-radius: .6875rem; }
+.redeven-endpoints-popover-header { gap: .5rem; padding: .625rem .75rem; }
+.redeven-endpoints-popover-mark { width: 1.75rem; height: 1.75rem; border-radius: .4375rem; }
+.redeven-endpoints-popover-heading { gap: 0; }
+.redeven-endpoints-popover-eyebrow { font-size: .625rem; line-height: 1.35; }
+.redeven-endpoints-popover-title { font-size: .8125rem; line-height: 1.3; }
+.redeven-endpoints-popover-close { width: 1.5rem; height: 1.5rem; }
+.redeven-endpoints-popover-body { padding-inline: .75rem; }
+.redeven-endpoints-popover .redeven-card-endpoint-row { grid-template-columns: 6.25rem minmax(0, 1fr) auto; column-gap: .5rem; row-gap: 0; align-items: center; padding-block: .4375rem; }
+.redeven-endpoints-popover .redeven-card-endpoint-label { grid-column: 1; grid-row: 1; padding-top: 0; font-size: .6875rem; line-height: 1.35; }
+.redeven-endpoints-popover .redeven-card-endpoint-content { grid-column: 2; grid-row: 1; min-width: 0; }
+.redeven-endpoints-popover .redeven-card-endpoint-value { font-size: .75rem; line-height: 1.35; }
+.redeven-endpoints-popover .redeven-card-endpoint-detail { margin-top: .125rem; font-size: .625rem; line-height: 1.35; }
+.redeven-endpoints-popover .redeven-endpoint-actions { grid-column: 3; grid-row: 1; gap: .125rem; }
+.redeven-endpoints-popover .redeven-endpoint-action { width: 1.375rem; height: 1.375rem; min-height: 1.375rem; }
+.redeven-endpoints-popover .redeven-address-group { padding-block: .5rem; }
+.redeven-endpoints-popover .redeven-address-list { margin-top: .25rem; }
+.redeven-endpoints-popover .redeven-address-heading { gap: .5rem; }
+.redeven-endpoints-popover .redeven-address-heading .redeven-card-endpoint-label { font-size: .6875rem; }
+.redeven-endpoints-popover .redeven-address-help { width: 1.25rem; height: 1.25rem; }
+.redeven-endpoints-popover .redeven-address-count { font-size: .625rem; }
+.redeven-endpoints-popover .redeven-card-endpoint-row + .redeven-card-endpoint-row { margin-top: 0; }
+.redeven-endpoints-popover .redeven-endpoint-listener { margin-top: .375rem; font-size: .6875rem; line-height: 1.45; }
+.redeven-endpoints-popover .redeven-endpoint-listener-content { margin-top: .375rem; padding-inline-start: .5rem; }
+.redeven-endpoints-popover .redeven-address-viewport { max-block-size: min(14rem, 34dvh); }
+.redeven-endpoints-popover .redeven-endpoint-qr-panel { margin: .375rem 0 .25rem; padding: .625rem; gap: .75rem; }
+[data-floe-dialog-panel].redeven-environment-settings-dialog { width: min(52rem, calc(100vw - 1.5rem)); max-width: 52rem; height: min(44rem, var(--redeven-welcome-dialog-panel-max-height)); }
+.redeven-environment-settings-dialog > div:first-child { padding: .875rem 1rem .5rem; }
+.redeven-environment-settings-dialog h2 { font-size: .9375rem; }
+.redeven-environment-settings-dialog > div:first-child p { margin-top: .125rem; font-size: .6875rem; line-height: 1.35; }
+.environment-settings-content > p { padding: .625rem 1rem .5rem; font-size: .6875rem; }
+.environment-settings-tabs { padding-inline: 1rem; }
+.environment-settings-tabs .environment-settings-tab-trigger { height: 2.125rem; padding-inline: .625rem; font-size: .6875rem; }
+.environment-settings-scroll { padding: .875rem 1rem 3rem; }
+.environment-settings-actions { gap: .375rem; padding: .625rem 1rem; }
+.environment-settings-actions button, .environment-access-overview-header > button { min-height: 1.625rem; padding-block: .1875rem; font-size: .6875rem; }
+.environment-access-overview { gap: .25rem; padding: .125rem 1rem 0; }
+.environment-access-overview h3 { font-size: .75rem; }
+.environment-access-status { font-size: .625rem; }
+.environment-access-control button { min-height: 1.625rem; font-size: .6875rem; }
+.environment-access-advanced { margin-top: .5rem; }
+.environment-access-advanced-content { gap: .625rem; padding-top: .625rem; }
+.environment-settings-draft-notice { gap: .375rem; padding-bottom: .5rem; font-size: .6875rem; }
+.environment-access-actions { gap: .375rem; }
+.redeven-settings-connections .redeven-card-endpoint-row { padding-block: .4375rem; }
+.redeven-settings-connections .redeven-card-endpoint-label { font-size: .6875rem; }
+.redeven-settings-connections .redeven-card-endpoint-value { font-size: .75rem; line-height: 1.35; }
+.redeven-settings-connections .redeven-card-endpoint-detail { margin-top: .125rem; font-size: .6875rem; line-height: 1.35; }
+.redeven-settings-connections .redeven-address-group { padding-block: .5rem; }
+.redeven-settings-connections .redeven-address-list { margin-top: .25rem; }
+.redeven-settings-connections .redeven-address-viewport { max-block-size: min(12rem, 30dvh); }
+.redeven-settings-connections .redeven-address-filter input { height: 1.625rem; font-size: .6875rem; }
+.redeven-settings-connections .redeven-address-filter { margin-bottom: .25rem; }
+.redeven-settings-connections .redeven-address-help { width: 1.25rem; height: 1.25rem; }
+.redeven-settings-connections .redeven-address-count { font-size: .625rem; }
+@media (max-width: 38rem) {
+  [data-floe-dialog-panel].redeven-environment-settings-dialog { width: calc(100vw - 1rem); height: min(44rem, var(--redeven-welcome-dialog-panel-max-height)); }
+  .redeven-endpoints-surface { width: min(24rem, calc(100vw - 1rem)); }
+  .redeven-endpoints-popover .redeven-card-endpoint-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .redeven-endpoints-popover .redeven-card-endpoint-label { grid-column: 1 / -1; grid-row: 1; }
+  .redeven-endpoints-popover .redeven-card-endpoint-content { grid-column: 1; grid-row: 2; }
+  .redeven-endpoints-popover .redeven-endpoint-actions { grid-column: 2; grid-row: 2; }
+}
+@media (max-height: 700px) { .redeven-environment-settings-dialog .environment-settings-scroll { padding-bottom: 5rem; } }
