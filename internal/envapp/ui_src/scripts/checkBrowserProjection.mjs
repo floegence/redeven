@@ -430,7 +430,9 @@ try {
 
   if (managedSource) {
     const openerURL = await address.inputValue();
-    const backgroundPopupPromise = page.waitForEvent('popup', { timeout: 5000 });
+    // Chromium's middle-click disposition creates a context page without a
+    // Playwright opener popup event. The managed directory must still admit it.
+    const backgroundPopupPromise = source.waitForEvent('page', { timeout: 5000 });
     await popupReplay.locator('#popup-link').click({ button: 'middle' });
     const backgroundPopup = await backgroundPopupPromise;
     await backgroundPopup.waitForLoadState('domcontentloaded');
