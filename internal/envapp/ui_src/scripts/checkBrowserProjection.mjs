@@ -74,7 +74,7 @@ try {
       response.end(fileContent);
     } else if (request.url === '/theme.css') {
       response.setHeader('Content-Type', 'text/css');
-      response.end('#counter { color: rgb(13, 87, 143); font-size: 24px; }');
+      response.end('#counter { color: rgb(13, 87, 143); font-size: 24px; } object#html-fallback { display: flex; align-items: center; gap: 8px; width: 470px; min-height: 64px; box-sizing: border-box; padding: 12px; border: 1px solid #dce2ea; background: #f6f8fb; font: 16px/24px Arial; } object#html-fallback input { width: 180px; }');
     } else {
       response.setHeader('Content-Type', 'text/html');
       response.end('<!doctype html><title>' + (request.url?.startsWith('/popup') ? 'Popup ' + request.url.slice(1) : 'Shared source fixture') + '</title><link rel="stylesheet" href="/theme.css"><h1>Source-only website</h1><object id="html-fallback"><label>Note <input id="focus-note" autofocus></label><img id="picture" src="/picture.svg"><button id="counter" onclick="this.textContent = `Count ${++window.count}`">Count 0</button></object><p><input id="upload" type="file" onchange="this.files[0].text().then(text=>document.getElementById(&quot;uploaded&quot;).textContent=text.length)"><output id="uploaded"></output></p><a id="download" href="/fixture-download">Download fixture</a> <a id="binary-download" href="/browser-binary.bin">Download binary</a> <button id="blob-download" onclick="const a=document.createElement(&quot;a&quot;);a.href=window.URL.createObjectURL(new Blob([&quot;source Blob bytes&quot;]));a.download=&quot;browser-blob.txt&quot;;a.click();window.URL.revokeObjectURL(a.href)">Download Blob</button><p><a id="popup-link" href="/popup" target="_blank">Open source popup</a></p><p><canvas id="scene" width="160" height="90"></canvas><video id="clip" width="160" height="90" autoplay muted playsinline></video></p><script>window.count=0;window.websiteExecuted=true;const scene=document.getElementById("scene"),ctx=scene.getContext("2d"),clip=document.getElementById("clip");setInterval(()=>{ctx.fillStyle=window.count<3?"#00ff00":"#0000ff";ctx.fillRect(0,0,160,90)},80);clip.srcObject=scene.captureStream(15);clip.play()</script>' + dragFixture);
@@ -216,6 +216,8 @@ try {
   await replay.locator('#counter').waitFor({ state: 'visible' });
   assert.equal(await replay.locator('#html-fallback').evaluate(element => element.localName), 'floe-object', 'Ordinary object HTML is projected as an inert container');
   assert.equal(await replay.locator('object,embed,[data-floebrowser-unsupported]').count(), 0, 'Resource-free HTML does not become an unsupported surface');
+  // Compare the authored, painted object surface rather than platform-native
+  // inline font union metrics. Source input and script isolation remain required.
   const fallbackGeometry = element => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height });
   assert.deepEqual(await replay.locator('#html-fallback').evaluate(fallbackGeometry), await page.locator('#html-fallback').evaluate(fallbackGeometry), 'Fallback HTML preserves source layout');
 
