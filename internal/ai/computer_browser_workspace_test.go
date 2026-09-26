@@ -245,6 +245,92 @@ func TestBrowserInputAdmissionDoesNotWaitForNavigationCompletion(t *testing.T) {
 	}
 }
 
+func TestBrowserInputSaturationDoesNotRetireHealthyView(t *testing.T) {
+	runtime, meta := browserWorkspaceFixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	entered, complete := make(chan struct{}, 1), make(chan struct{})
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		select {
+		case <-complete:
+			_, _ = io.WriteString(w, "<title>Ready</title>")
+		case <-r.Context().Done():
+		}
+	}))
+	defer func() { site.CloseClientConnections(); site.Close() }()
+	view, err := runtime.OpenBrowserWorkspace(ctx, meta, BrowserWorkspaceRequest{ManagedProfileID: "browser-main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation := observeBrowserFixture(t, ctx, runtime, meta, view)
+	token, err := runtime.AcquireBrowserViewControl(ctx, meta, view.ID, view.InitialTarget, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation.send(1, view.InitialTarget, token, map[string]any{"kind": "navigate", "url": site.URL})
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	// A slow navigation holds the source queue. Page input and browser-chrome
+	// commands share the product carrier, but saturation is not a broken source.
+	for id := 2; id <= 64; id++ {
+		observation.send(id, view.InitialTarget, token, map[string]any{"kind": "text", "text": "must not replay"})
+	}
+	for _, rejected := range []struct {
+		id     int
+		token  string
+		action map[string]any
+	}{
+		{65, token, map[string]any{"kind": "text", "text": "rejected input"}},
+		{66, "", map[string]any{"kind": "tab_new"}},
+	} {
+		observation.send(rejected.id, view.InitialTarget, rejected.token, rejected.action)
+		busy := observation.wait(func(message map[string]any) bool {
+			return message["type"] == "ack" && message["id"] == float64(rejected.id)
+		})
+		if busy["ok"] != false || busy["code"] != "busy" {
+			t.Fatalf("expected explicit busy acknowledgement: %v", busy)
+		}
+	}
+	// Observation repair is independent of input pressure and must remain usable.
+	if err := runtime.ReceiveBrowserView(ctx, meta, view.ID, "", json.RawMessage(`{"type":"resync"}`)); err != nil {
+		t.Fatal(err)
+	}
+	close(complete)
+	observation.ack(1)
+	for id := 2; id <= 64; id++ {
+		stale := observation.wait(func(message map[string]any) bool { return message["type"] == "ack" && message["id"] == float64(id) })
+		if stale["ok"] != false || stale["code"] != "stale_view" {
+			t.Fatalf("old-document input was replayed: %v", stale)
+		}
+	}
+	current, err := runtime.browserView(meta, view.ID)
+	if err != nil {
+		t.Fatal("saturation retired the view", err)
+	}
+	current.opMu.Lock()
+	retained := current.token == token && current.lease != nil && current.lease.current()
+	current.opMu.Unlock()
+	if !retained {
+		t.Fatal("saturation revoked healthy input control")
+	}
+	observation.send(67, view.InitialTarget, token, map[string]any{"kind": "navigate", "url": site.URL + "/after"})
+	observation.ack(67)
+	var state struct{ Tabs []struct{ ID string } }
+	if err := runtime.browserHost.call(ctx, "view.state", map[string]string{"view": view.ID}, &state); err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Tabs) != 1 {
+		t.Fatal("a rejected new-tab operation was replayed")
+	}
+}
+
 func TestBrowserSourceCloseRetiresRuntimeIdentityWithoutClosingPeer(t *testing.T) {
 	runtime, meta := browserWorkspaceFixture(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)

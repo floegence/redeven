@@ -78,7 +78,7 @@ async function main() {
     console.log(`[browser] ${name}: ${count} tests passed, zero skipped`);
   }
   await run('runtime', 'go', ['test', './internal/ai', '-run', '^TestBrowser|^TestManagedBrowser|^TestComputer(MissingBrowser|FullAccessManagedBrowser|AutonomousManaged|AutonomousProductionToolLoop|NavigationFailureContinuesProductionTurn)', '-count=1', '-json'], root, env,
-    body => verifyGoTests(body, ['TestBrowserRecoveryRebuildsOnceAndPreservesSavedTabs', 'TestBrowserRecoveryDoesNotReviveFlowerInitialTarget', 'TestBrowserDirectoryBeforeUnloadKeepsOtherWorkspaceCommandsUsable', 'TestManagedBrowserRequestCancellationPreservesProcessAndResponseOrder', 'TestManagedBrowserForegroundPopupSelectsOnlyItsInputOwner', 'TestComputerNavigationFailureContinuesProductionTurn']));
+    body => verifyGoTests(body, ['TestBrowserRecoveryRebuildsOnceAndPreservesSavedTabs', 'TestBrowserRecoveryDoesNotReviveFlowerInitialTarget', 'TestBrowserDirectoryBeforeUnloadKeepsOtherWorkspaceCommandsUsable', 'TestBrowserInputSaturationDoesNotRetireHealthyView', 'TestManagedBrowserRequestCancellationPreservesProcessAndResponseOrder', 'TestManagedBrowserForegroundPopupSelectsOnlyItsInputOwner', 'TestComputerNavigationFailureContinuesProductionTurn']));
   await run('storage-installation', 'go', ['test', './internal/browserinstall', './internal/browserstore', '-count=1', '-json'], root, env, verifyGoTests);
   await run('api', 'go', ['test', './internal/codeapp/appserver', '-run', '^TestBrowser(WorkspaceFailure|ViewAPI|Library)', '-count=1', '-json'], root, env,
     body => verifyGoTests(body, ['TestBrowserWorkspaceFailureActionsAndRecoveryAuthorization']));

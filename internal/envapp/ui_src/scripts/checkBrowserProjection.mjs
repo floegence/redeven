@@ -19,6 +19,7 @@ import { runWebDriverProjection } from './browserProjectionWebDriver.mjs';
 import { runBrowserProjectionPerformance } from './browserProjectionPerformance.mjs';
 import { runBrowserProjectionSites } from './browserProjectionSites.mjs';
 import { runBrowserProjectionMediaSync } from './browserProjectionMediaSync.mjs';
+import { checkBrowserInputCongestion } from './browserProjectionCongestion.mjs';
 
 // Driven by TestBrowserProjectionUsesOneFlowersecSession. Only startup metadata
 // and results use stdout; artifacts travel through the parent-owned stdin pipe.
@@ -206,6 +207,7 @@ try {
   }
   await viewer.keyboard.insertText('光标验收');
   await page.waitForFunction(() => document.querySelector('#focus-note').value === '光标验收');
+  await checkBrowserInputCongestion({ viewer, document, source: page });
   const inlineAddress = document.getByRole('combobox', { name: 'Website address' });
   await inlineAddress.fill(sourceOrigin + '/inline-navigation');
   await inlineAddress.press('Enter');

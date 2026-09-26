@@ -5,7 +5,7 @@ import { chmod } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import readline from 'node:readline';
 import { MediaSender, NativeMediaBridge, PROTOCOL_VERSION } from '@floegence/floebrowser';
-import { MAX_MESSAGE_BYTES } from '@floegence/floebrowser/protocol';
+import { MAX_MESSAGE_BYTES, MAX_PENDING_COMMANDS, clientMessageSchema } from '@floegence/floebrowser/protocol';
 import { MEDIA_WIRE_VERSION } from '@floegence/floebrowser/media';
 import { ExtensionTransport } from './computerExtensionTransport.mjs';
 import { createComputerBrowserHost } from './computerBrowserHost.mjs';
@@ -122,20 +122,39 @@ async function closeStream(id) {
 }
 function admitInput(params) {
   const stream = streams.get(params.view);
-  if (!stream || stream.pending >= 64) throw new Error('BROWSER_INPUT_UNAVAILABLE');
-  stream.pending++;
-  // Admission retains arrival order. The SDK owns the single source input
-  // queue and permits stop/dialog replies to release its awaited operation.
-  // Awaiting completion here would block those later messages in Flowersec.
-  void host.receive(params.view, params.token, params.message).catch(error => {
+  if (!stream) throw new Error('BROWSER_INPUT_UNAVAILABLE');
+  const message = clientMessageSchema.parse(params.message);
+  const input = message.type === 'command';
+  const ack = code => writeDOM(stream, { type: 'ack', id: message.id, ok: false, code });
+  // The Runtime admits input without waiting for its effect. Congestion rejects
+  // only this new command; it neither revokes the lease nor closes observation.
+  if (input && stream.pending >= MAX_PENDING_COMMANDS) { ack('busy'); return; }
+  if (input) stream.pending++;
+  // Resync and keyframe requests have no source input effect. The published SDK
+  // coalesces them independently, including while the input queue is occupied.
+  // An admitted stop/dialog reply can release an earlier awaited operation.
+  void host.receive(params.view, params.token, message).catch(error => {
     if (streams.get(params.view) !== stream) return;
-    if (error?.message === 'BROWSER_CONTROL_REVOKED' && params.message?.type === 'command') {
-      stream.dom.write(JSON.stringify({ type: 'ack', id: params.message.id, ok: false, code: 'not_allowed' }) + '\n');
-      return;
-    }
-    void closeStream(params.view).catch(() => emit({ type: 'view_fault', view: params.view }));
-  }).finally(() => { stream.pending--; });
+    if (error?.message === 'BROWSER_CONTROL_REVOKED' && input) { ack('not_allowed'); return; }
+    failStream(params.view, 'input_failed');
+  }).finally(() => { if (input) stream.pending--; });
 }
+function failStream(id, reason) {
+  if (!streams.has(id)) return;
+  emit({ type: 'view_fault', view: id, reason });
+  void closeStream(id).catch(() => {});
+}
+function writeDOM(stream, message) {
+  if (stream.dom.destroyed) return;
+  const line = JSON.stringify(message) + '\n';
+  const bytes = Buffer.byteLength(line);
+  if (bytes > MAX_MESSAGE_BYTES || stream.dom.writableLength + bytes > MAX_MESSAGE_BYTES * 2) {
+    failStream(stream.id, bytes > MAX_MESSAGE_BYTES ? 'dom_message_limit' : 'dom_backpressure');
+    return;
+  }
+  stream.dom.write(line);
+}
+
 async function command(method, params) {
   if (method?.startsWith('view.') && method !== 'view.close') await streams.get(params.view)?.ready;
   switch (method) {
@@ -187,20 +206,12 @@ const server = http.createServer((request, response) => {
       if (streams.has(spec.id)) throw new Error('BROWSER_VIEW_UNAVAILABLE');
       response.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store' });
       response.flushHeaders();
-      const stream = { dom: response, media: undefined, sender: undefined, ready: undefined, pending: 0 };
+      const stream = { id: spec.id, dom: response, media: undefined, sender: undefined, ready: undefined, pending: 0 };
       stream.sender = mediaSender(stream);
       streams.set(spec.id, stream);
       response.once('close', () => { void closeStream(spec.id).catch(() => emit({ type: 'view_fault', view: spec.id })); });
       try {
-        stream.ready = host.views.open(spec.id, spec.targets, message => {
-          if (response.destroyed) return;
-          const line = JSON.stringify(message) + '\n';
-          if (Buffer.byteLength(line) > MAX_MESSAGE_BYTES || response.writableLength + Buffer.byteLength(line) > MAX_MESSAGE_BYTES * 2) {
-            void closeStream(spec.id).catch(() => emit({ type: 'view_fault', view: spec.id }));
-            return;
-          }
-          response.write(line);
-        }, {
+        stream.ready = host.views.open(spec.id, spec.targets, message => writeDOM(stream, message), {
           initialTab: spec.initialTab, editable: spec.editable === true, restoreClosedTabs: spec.restoreClosedTabs === true, media: false, audio: spec.audio === true, visible: spec.visible !== false,
           onMediaFrame: frame => stream.sender.push(frame),
           onMediaRetired: scope => stream.sender.retire(scope.target, scope.view, scope.stream),
