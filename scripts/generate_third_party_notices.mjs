@@ -854,7 +854,7 @@ function renderBrowserMediaNotices() {
   const root = path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floebrowser');
   const metadata = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const licenses = fs.readFileSync(path.join(root, 'dist/THIRD_PARTY_LICENSES.txt'));
-  if (metadata.name !== '@floegence/floebrowser' || metadata.version !== '0.1.22'
+  if (metadata.name !== '@floegence/floebrowser' || metadata.version !== '0.1.23'
     || crypto.createHash('sha256').update(licenses).digest('hex') !== '8b61f4809c3faf309de96eddded6a3f47e234a01b4c1707d24e6cd74baac115e') {
     throw new Error('FloeBrowser bundled license contract changed; review the published SDK and native collector notices.');
   }
