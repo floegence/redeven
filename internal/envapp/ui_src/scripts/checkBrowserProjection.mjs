@@ -55,6 +55,12 @@ try {
   let requestedDownloads = 0;
   const fileContent = Buffer.from('Flowersec browser file fixture\n'.repeat(8192));
   const syncMedia = await readFile(new URL('./fixtures/media/browser-av-sync.webm', import.meta.url));
+  const dragFixture = `<div id="drag-track" style="position:fixed;right:24px;top:220px;width:280px;height:48px;background:#d8e5f3"><div id="drag-thumb" style="width:64px;height:48px;background:#3478bc;touch-action:none;user-select:none"></div><output id="drag-value">0</output></div><script>
+    window.dragPositions=[];window.dragX=0;let dragHeld=false,dragOrigin=0;const dragThumb=document.getElementById('drag-thumb');
+    dragThumb.onpointerdown=e=>{dragHeld=true;dragOrigin=e.clientX-window.dragX;dragThumb.setPointerCapture(e.pointerId)};
+    dragThumb.onpointermove=e=>{if(!dragHeld)return;window.dragX=Math.max(0,Math.min(216,e.clientX-dragOrigin));window.dragPositions.push(window.dragX);dragThumb.style.transform='translateX('+window.dragX+'px)';document.getElementById('drag-value').textContent=window.dragX};
+    dragThumb.onpointerup=()=>dragHeld=false;dragThumb.onlostpointercapture=()=>dragHeld=false;
+  </script>`;
   website = http.createServer((request, response) => {
     if (request.url === '/av-sync.webm') {
       response.writeHead(200, { 'Content-Type': 'video/webm', 'Content-Length': syncMedia.length });
@@ -71,7 +77,7 @@ try {
       response.end('#counter { color: rgb(13, 87, 143); font-size: 24px; }');
     } else {
       response.setHeader('Content-Type', 'text/html');
-      response.end('<!doctype html><title>' + (request.url?.startsWith('/popup') ? 'Popup ' + request.url.slice(1) : 'Shared source fixture') + '</title><link rel="stylesheet" href="/theme.css"><h1>Source-only website</h1><label>Note <input id="focus-note" autofocus></label><img id="picture" src="/picture.svg"><button id="counter" onclick="this.textContent = `Count ${++window.count}`">Count 0</button><p><input id="upload" type="file" onchange="this.files[0].text().then(text=>document.getElementById(&quot;uploaded&quot;).textContent=text.length)"><output id="uploaded"></output></p><a id="download" href="/fixture-download">Download fixture</a> <a id="binary-download" href="/browser-binary.bin">Download binary</a> <button id="blob-download" onclick="const a=document.createElement(&quot;a&quot;);a.href=window.URL.createObjectURL(new Blob([&quot;source Blob bytes&quot;]));a.download=&quot;browser-blob.txt&quot;;a.click();window.URL.revokeObjectURL(a.href)">Download Blob</button><p><a id="popup-link" href="/popup" target="_blank">Open source popup</a></p><p><canvas id="scene" width="160" height="90"></canvas><video id="clip" width="160" height="90" autoplay muted playsinline></video></p><script>window.count=0;window.websiteExecuted=true;const scene=document.getElementById("scene"),ctx=scene.getContext("2d"),clip=document.getElementById("clip");setInterval(()=>{ctx.fillStyle=window.count<3?"#00ff00":"#0000ff";ctx.fillRect(0,0,160,90)},80);clip.srcObject=scene.captureStream(15);clip.play()</script>');
+      response.end('<!doctype html><title>' + (request.url?.startsWith('/popup') ? 'Popup ' + request.url.slice(1) : 'Shared source fixture') + '</title><link rel="stylesheet" href="/theme.css"><h1>Source-only website</h1><label>Note <input id="focus-note" autofocus></label><img id="picture" src="/picture.svg"><button id="counter" onclick="this.textContent = `Count ${++window.count}`">Count 0</button><p><input id="upload" type="file" onchange="this.files[0].text().then(text=>document.getElementById(&quot;uploaded&quot;).textContent=text.length)"><output id="uploaded"></output></p><a id="download" href="/fixture-download">Download fixture</a> <a id="binary-download" href="/browser-binary.bin">Download binary</a> <button id="blob-download" onclick="const a=document.createElement(&quot;a&quot;);a.href=window.URL.createObjectURL(new Blob([&quot;source Blob bytes&quot;]));a.download=&quot;browser-blob.txt&quot;;a.click();window.URL.revokeObjectURL(a.href)">Download Blob</button><p><a id="popup-link" href="/popup" target="_blank">Open source popup</a></p><p><canvas id="scene" width="160" height="90"></canvas><video id="clip" width="160" height="90" autoplay muted playsinline></video></p><script>window.count=0;window.websiteExecuted=true;const scene=document.getElementById("scene"),ctx=scene.getContext("2d"),clip=document.getElementById("clip");setInterval(()=>{ctx.fillStyle=window.count<3?"#00ff00":"#0000ff";ctx.fillRect(0,0,160,90)},80);clip.srcObject=scene.captureStream(15);clip.play()</script>' + dragFixture);
     }
   });
   website.listen(0, '127.0.0.1'); await once(website, 'listening');
@@ -212,6 +218,23 @@ try {
   await viewer.mouse.click(button.x + button.width / 2, button.y + button.height / 2);
   await page.waitForFunction(() => window.count === 1);
   await replay.getByText('Count 1', { exact: true }).waitFor();
+  // Real trusted input traverses the same product Session as ordinary page clicks.
+  // The source and projected slider must follow both directions without rollback.
+  for (const [from, to] of [[0, 180], [180, 40]]) {
+    const thumb = await replay.locator('#drag-thumb').boundingBox(); assert.ok(thumb);
+    await page.evaluate(() => { window.dragPositions = []; });
+    await viewer.mouse.move(thumb.x + 16, thumb.y + 24);
+    await viewer.mouse.down();
+    await viewer.mouse.move(thumb.x + 16 + to - from, thumb.y + 24, { steps: 28 });
+    await page.waitForFunction(to => window.dragX === to, to);
+    await viewer.mouse.up();
+    await replay.locator('#drag-value').getByText(String(to), { exact: true }).waitFor();
+    const positions = await page.evaluate(() => window.dragPositions);
+    assert(positions.length > 0, 'Source receives real drag samples');
+    for (let i = 1; i < positions.length; i++) assert((positions[i] - positions[i - 1]) * Math.sign(to - from) >= 0, 'Continuous drag never rolls back against pointer direction');
+    assert(positions.every(value => value >= Math.min(from, to) && value <= Math.max(from, to)), 'Source drag stays within the actual pointer path');
+  }
+
   await document.getByRole('button', { name: 'Bookmarks and history', exact: true }).click();
   await document.getByRole('button', { name: 'Bookmark this page', exact: true }).click();
   await document.locator('.browser-library-entries').getByText(sourceOrigin + '/', { exact: true }).waitFor();

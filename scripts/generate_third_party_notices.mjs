@@ -854,13 +854,13 @@ function renderBrowserMediaNotices() {
   const root = path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floebrowser');
   const metadata = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const licenses = fs.readFileSync(path.join(root, 'dist/THIRD_PARTY_LICENSES.txt'));
-  if (metadata.name !== '@floegence/floebrowser' || metadata.version !== '0.1.20'
+  if (metadata.name !== '@floegence/floebrowser' || metadata.version !== '0.1.21'
     || crypto.createHash('sha256').update(licenses).digest('hex') !== '8b61f4809c3faf309de96eddded6a3f47e234a01b4c1707d24e6cd74baac115e') {
     throw new Error('FloeBrowser bundled license contract changed; review the published SDK and native collector notices.');
   }
   return `## FloeBrowser Projection and Media Collector
 
-Redeven bundles the published \`@floegence/floebrowser@0.1.20\` SDK and its native element-media collector. The following original license texts cover its JavaScript runtime components and compiled Go dependencies, including Pion WebRTC, mediacommon, the Go runtime and platform-specific modules. They are reproduced from the SDK's verified \`dist/THIRD_PARTY_LICENSES.txt\`, which is also retained in the computer-helper resource bundle.
+Redeven bundles the published \`@floegence/floebrowser@0.1.21\` SDK and its native element-media collector. The following original license texts cover its JavaScript runtime components and compiled Go dependencies, including Pion WebRTC, mediacommon, the Go runtime and platform-specific modules. They are reproduced from the SDK's verified \`dist/THIRD_PARTY_LICENSES.txt\`, which is also retained in the computer-helper resource bundle.
 
 \`\`\`\`text
 ${licenses.toString('utf8').replace(/\r\n/gu, '\n').split('\n').map(line => line.trimEnd()).join('\n').trim()}

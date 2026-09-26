@@ -42,7 +42,7 @@ async function fixture(onOpenWindow?: () => Promise<void>, onInteraction?: () =>
   const delivered = vi.spyOn(child, 'postMessage').mockImplementation(() => undefined);
   const host = createBrowserWindow({
     session: {} as Session,
-    view: { generation: 'fixture-generation', id: 'browser-view-test', initial_target: 'first', protocol_version: 23, media_wire_version: 1 },
+    view: { generation: 'fixture-generation', id: 'browser-view-test', initial_target: 'first', protocol_version: 24, media_wire_version: 1 },
     child: () => child,
     configuration: { type: 'redeven-browser-ports', nonce: 'nonce', title: 'Browser', locale: 'en-US', messages: {} as BrowserMessages, theme: { tokens: {}, dark: false, surfaceStyle: '', shellTheme: '', fontFamily: 'sans-serif' } },
     onReconnect: vi.fn(), onOpenWindow, onInteraction,
@@ -53,7 +53,7 @@ async function fixture(onOpenWindow?: () => Promise<void>, onInteraction?: () =>
   cleanup = () => { host.close(); for (const port of ports) port.close(); };
   const received: ServerMessage[] = [];
   state.connection!.subscribe(message => { received.push(message); });
-  await state.receive!({ type: 'hello', version: 23, mediaWireVersion: 1 });
+  await state.receive!({ type: 'hello', version: 24, mediaWireVersion: 1 });
   received.length = 0;
   let id = 0;
   const acquire = async (target = 'first') => {

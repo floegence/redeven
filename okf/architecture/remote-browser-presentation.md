@@ -38,7 +38,7 @@ confirmation and restore the visible native caret without replaying a click.
 Chrome and Electron product qualification exercises this behavior through the
 same authorized Flowersec Session, including Unicode text insertion.
 
-Pointer and wheel targets can move, disappear, be replaced or become covered
+Initial pointer and wheel targets can move, disappear, be replaced or become covered
 between projection and dispatch. Published FloeBrowser reports these known
 no-effect cancellations as `target_changed`. It discards the gesture without
 retargeting or replaying it, without forcing a new snapshot, and without an
@@ -46,9 +46,27 @@ interrupting warning. Subsequent input uses the current projected target.
 An invalid view epoch or a missing DOM sequence still requires snapshot recovery;
 authorization failures and uncertain source effects remain visible. Redeven must
 not suppress generic failures or add another input/recovery loop around the SDK.
-Source hosts and view descriptors require projection protocol 23 and media wire
+Source hosts and view descriptors require projection protocol 24 and media wire
 version 1. The document adapter validates against the published SDK constants;
 older or newer protocol versions fail before a view can receive input.
+
+## Continuous pointer gestures
+
+Published FloeBrowser 0.1.21 owns drag coordinates and scheduling. Pointer-down and
+ordinary click release keep source hit testing; after actual motion, held moves
+and release reference that admitted origin in its document viewport. A thumb
+moving ahead of DOM replay cannot change
+the coordinate system. The source requires the original live node, current epoch,
+held button and host authorization, and validates containing frames and occlusion.
+Chromium owns pointer capture and website event delivery. Redeven must not rewrite
+coordinates, predict slider positions or add a second input queue.
+
+The viewer retains only the latest unsent position while a move awaits confirmation.
+Release flushes that position before pointer-up; focus loss, failure, navigation and
+disconnection discard it. Late acknowledgements cannot revive an old gesture or
+cancel a newer one. These are generic pointer semantics, qualified with neutral
+sliders through the actual Chrome and Desktop Flowersec carriers. They do not
+change website verification or guarantee third-party admission.
 
 ## Tab geometry and continuity
 
