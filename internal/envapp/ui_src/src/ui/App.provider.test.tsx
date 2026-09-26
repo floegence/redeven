@@ -3,6 +3,9 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const configState = vi.hoisted(() => ({ native: false, mobileQuery: '' }));
+vi.mock('./services/desktopShellBridge', () => ({ desktopShellBridgeAvailable: () => configState.native }));
+
 vi.mock('@floegence/floe-webapp-core', async () => {
   const { createContext, useContext } = await import('solid-js');
   const NotificationContext = createContext<any>();
@@ -25,7 +28,7 @@ vi.mock('@floegence/floe-webapp-core', async () => {
     CommandProvider: (props: any) => <>{props.children}</>,
     ComponentRegistryProvider: (props: any) => <>{props.children}</>,
     FileBrowserDragProvider: (props: any) => <>{props.children}</>,
-    FloeConfigProvider: (props: any) => <>{props.children}</>,
+    FloeConfigProvider: (props: any) => { configState.mobileQuery = props.config.layout.mobileQuery; return <>{props.children}</>; },
     LayoutProvider: (props: any) => <>{props.children}</>,
     NotificationContainer: () => <div data-testid="notification-container" />,
     NotificationProvider,
@@ -114,6 +117,7 @@ describe('App provider composition', () => {
   let host: HTMLDivElement;
 
   beforeEach(() => {
+    configState.native = false;
     host = document.createElement('div');
     document.body.appendChild(host);
   });
@@ -131,4 +135,12 @@ describe('App provider composition', () => {
 
     dispose();
   });
+  it.each([false, true])('selects the product query using the native bridge with native=%s', async native => {
+    configState.native = native;
+    const { App } = await import('./App');
+    const dispose = render(() => <App />, host);
+    expect(configState.mobileQuery).toBe(native ? 'not all' : '(max-width: 767px) and (pointer: coarse) and (hover: none)');
+    dispose();
+  });
+
 });

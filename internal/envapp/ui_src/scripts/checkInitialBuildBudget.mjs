@@ -17,7 +17,9 @@ const budgets = {
   // Keep a small bounded margin for that published dependency baseline while
   // retaining the forbidden-module and total-size guards below.
   javascript: 602 * 1024,
-  css: 120 * 1024,
+  // Floe 0.79 adds shared adaptive navigation and left-drawer styles. Keep the
+  // updated CSS baseline bounded; the total and forbidden-module limits remain.
+  css: 121 * 1024,
   total: 720 * 1024,
 };
 const forbiddenInitialAssets = [

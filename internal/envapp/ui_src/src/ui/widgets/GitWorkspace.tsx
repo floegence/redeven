@@ -206,7 +206,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
           </div>
         </div>
       )}
-      content={(
+      content={(navigation) => (
         <div class="relative h-full min-h-0">
           <GitWorkbench
               class="h-full"
@@ -298,8 +298,9 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               onFetch={props.onFetch}
               onPull={props.onPull}
               onPush={props.onPush}
-              showMobileSidebarButton={props.showMobileSidebarButton}
-              onToggleSidebar={props.onToggleSidebar}
+              showMobileSidebarButton={navigation.overlay() || props.showMobileSidebarButton}
+              sidebarExpanded={navigation.overlay() ? navigation.open() : undefined}
+              onToggleSidebar={navigation.overlay() ? navigation.toggle : props.onToggleSidebar}
               onRefresh={props.onRefresh}
           />
         </div>

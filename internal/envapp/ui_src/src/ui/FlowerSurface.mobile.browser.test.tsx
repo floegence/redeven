@@ -1,11 +1,19 @@
 import '../index.css';
 import './flower-feature.css';
 
-import { describe, expect, it, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
-import { createSignal } from 'solid-js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { commands, page, userEvent } from 'vitest/browser';
+import { createSignal, mergeProps } from 'solid-js';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
-import { adapter, deferred, liveBootstrap, mutableSettingsAdapter, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, deferred, liveBootstrap, mutableSettingsAdapter, renderSurfaceWithAdapterProps as renderSurface, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+
+import { REDEVEN_BROWSER_MOBILE_QUERY } from './mobileViewportPolicy';
+
+const touchCommands = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+beforeEach(() => touchCommands.emulateTouchInput(true));
+afterEach(() => touchCommands.emulateTouchInput(false));
+const renderSurfaceWithAdapterProps: typeof renderSurface = (adapter, props) => renderSurface(adapter,
+  mergeProps({ layout: true, mobileQuery: REDEVEN_BROWSER_MOBILE_QUERY }, props));
 
 async function mountMobile(width: number, height = 720) {
   await page.viewport(width, height);

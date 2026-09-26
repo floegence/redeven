@@ -1,14 +1,16 @@
 import '../index.css';
 import './flower-feature.css';
 
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import type { EnvAppTranslationKey } from './i18n';
 import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
 import { adapter, renderSurfaceWithAdapterProps, waitFor } from './FlowerSurface.navigation.testHarness';
 
-afterEach(() => document.documentElement.classList.remove('dark'));
+import { REDEVEN_BROWSER_MOBILE_QUERY } from './mobileViewportPolicy';
+const touchCommands = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+afterEach(async () => { document.documentElement.classList.remove('dark'); await touchCommands.emulateTouchInput(false); });
 
 describe('Flower starter task interaction', () => {
   it.each([
@@ -16,6 +18,7 @@ describe('Flower starter task interaction', () => {
     ['zh-TW', 360, true], ['ja-JP', 360, false], ['ko-KR', 360, true], ['fr-FR', 360, false],
     ['es-ES', 360, true], ['pt-BR', 360, false], ['ru-RU', 360, true],
   ] as const)('keeps %s tasks readable and editable at %s px in dark=%s', async (locale, width, dark) => {
+    await touchCommands.emulateTouchInput(width < 768);
     await page.viewport(width, 1000);
     document.documentElement.classList.toggle('dark', dark);
     const i18n = createTestI18nHelpers(locale);
@@ -25,7 +28,7 @@ describe('Flower starter task interaction', () => {
       tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
     });
     const surfaceAdapter = adapter();
-    const surface = renderSurfaceWithAdapterProps(surfaceAdapter, { copy, layout: true });
+    const surface = renderSurfaceWithAdapterProps(surfaceAdapter, { copy, layout: true, mobileQuery: REDEVEN_BROWSER_MOBILE_QUERY });
     surface.style.cssText = `width:${width}px;height:950px;position:relative;`;
     await waitFor(() => surface.querySelectorAll('.flower-empty-suggestions button').length === 4);
 

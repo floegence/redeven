@@ -354,4 +354,34 @@ describe('TerminalPanel loading continuity', () => {
     runtimeState.propsBySession.get('second-session')?.onInteractive?.('second-session');
     await vi.waitFor(() => expect(secondTransition.isConnected).toBe(false));
   });
+
+  it('keeps terminal runtime and session filter while desktop navigation adapts to local width', async () => {
+    await page.viewport(1280, 850);
+    const host = renderCreateFlow(vi.fn(async () => createdSession()));
+    await expect.poll(() => host.querySelector('[data-terminal-runtime-session]')).toBeTruthy();
+    const runtime = host.querySelector('[data-terminal-runtime-session]');
+    const filter = host.querySelector<HTMLInputElement>('[data-testid="terminal-session-filter"]')!;
+    await userEvent.fill(filter, 'Workspace');
+    host.style.width = '640px';
+    await expect.poll(() => host.querySelector('[data-terminal-sidebar-presentation]')?.getAttribute('data-terminal-sidebar-presentation')).toBe('overlay');
+    expect(host.querySelector('[data-terminal-mobile-drawer]')).toBeNull();
+    const trigger = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')!;
+    await userEvent.click(trigger);
+    await expect.poll(() => host.querySelector('[data-floe-drawer-side="left"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="terminal-session-filter"]')).toBe(filter);
+    expect(document.activeElement).not.toBe(filter);
+    await userEvent.keyboard('{Escape}');
+    await expect.poll(() => document.activeElement).toBe(trigger);
+    await userEvent.click(trigger);
+    await expect.poll(() => host.querySelector('[data-floe-drawer-side="left"]')).toBeTruthy();
+    await userEvent.click(host.querySelector<HTMLElement>('[data-floe-dialog-backdrop]')!);
+    await expect.poll(() => host.querySelector('[data-floe-drawer-side="left"]')).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(trigger);
+    host.style.width = '1000px';
+    await expect.poll(() => host.querySelector('[data-terminal-sidebar-presentation]')?.getAttribute('data-terminal-sidebar-presentation')).toBe('inline');
+    expect(host.querySelector('[data-terminal-runtime-session]')).toBe(runtime);
+    expect(host.querySelector('[data-testid="terminal-session-filter"]')).toBe(filter);
+    expect(filter.value).toBe('Workspace');
+  });
+
 });

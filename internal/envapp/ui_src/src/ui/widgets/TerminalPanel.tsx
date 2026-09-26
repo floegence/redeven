@@ -1,10 +1,13 @@
-import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup } from 'solid-js';
-import { createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
+import './adaptive-sidebar.css';
+import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, untrack } from 'solid-js';
+import { cn, createAdaptiveSidebar, createRetainedContent, createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 
 import {
   Button,
   Dropdown,
+  Dialog,
+  DialogPlacementProvider,
   MobileKeyboard,
   TabPanel,
   type DropdownItem,
@@ -1031,8 +1034,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [searchQuery, setSearchQuery] = createSignal('');
   const [sessionFilterQuery, setSessionFilterQuery] = createSignal('');
   const [localSessionDrawerOpen, setLocalSessionDrawerOpen] = createSignal(false);
-  const sessionDrawerOpen = () => props.mobileSessionsOpen ?? localSessionDrawerOpen();
+  const [desktopSessionDrawerOpen, setDesktopSessionDrawerOpen] = createSignal(false);
+  const [navigationContainer, setNavigationContainer] = createSignal<HTMLDivElement>();
+  const sidebarPresentation = createAdaptiveSidebar({ container: navigationContainer, sidebarWidth: () => 286, minContentWidth: () => 480 });
+  const desktopNavigationOverlay = () => !layout.isMobile() && sidebarPresentation() === 'overlay';
+  const navigationOverlay = () => layout.isMobile() || desktopNavigationOverlay();
+  createEffect(() => { if (!desktopNavigationOverlay()) setDesktopSessionDrawerOpen(false); });
+  const sessionDrawerOpen = () => layout.isMobile() ? (props.mobileSessionsOpen ?? localSessionDrawerOpen()) : desktopSessionDrawerOpen();
   const setSessionDrawerOpen = (open: boolean) => {
+    if (!layout.isMobile() && open) { setDesktopSessionDrawerOpen(true); return; }
+    if (!open) setDesktopSessionDrawerOpen(false);
     if (props.onMobileSessionsOpenChange) props.onMobileSessionsOpenChange(open);
     else setLocalSessionDrawerOpen(open);
   };
@@ -1797,7 +1808,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const focusIntent = metadata?.restoreFocus ? metadata.focusIntent ?? null : null;
       if (!metadata?.restoreFocus) clearPendingTerminalFocusIntent();
       setActiveSessionId(sessionId);
-      if (isMobileLayout()) {
+      if (navigationOverlay()) {
         setSessionDrawerOpen(false);
       }
       if (!focusIntent) return;
@@ -2562,7 +2573,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const dismissSessionDrawer = () => {
     setSessionDrawerOpen(false);
     queueMicrotask(() => {
-      if (isMobileLayout() && sessionDrawerTriggerEl?.isConnected) {
+      if (navigationOverlay() && sessionDrawerTriggerEl?.isConnected) {
         const trigger = sessionDrawerReturnFocus?.isConnected ? sessionDrawerReturnFocus : sessionDrawerTriggerEl;
         trigger.focus({ preventScroll: true });
         return;
@@ -4819,6 +4830,78 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return i18n.t('terminal.sessions');
   });
 
+  const SessionNavigation = () => {
+    const Navigator = createRetainedContent(() => (
+      <TerminalSessionNavigator
+        accessibilityIdPrefix={accessibilityIdPrefix}
+        mobile={isMobileLayout()}
+        drawerOpen={sessionDrawerOpen()}
+        connected={connected()}
+        refreshing={refreshing()}
+        activeTitle={activeToolbarTitle()}
+        activeAvatar={activeToolbarAvatar()}
+        filterQuery={sessionFilterQuery()}
+        itemIds={sessionListItemIds()}
+        itemById={sessionListItemById()}
+        groups={navigationGroups()}
+        sidebarActiveSessionId={sidebarActiveSessionId()}
+        activeSessionId={activeDisplaySessionId()}
+        copiedPathSessionId={copiedSidebarPathSessionId()}
+        emptyListLoading={emptySessionListLoading()}
+        ownedLayerIds={[
+          ...(terminalSidebarMenu() ? [terminalSidebarMenuId] : []),
+          ...(terminalAskMenu() ? [terminalAskMenuId] : []),
+        ]}
+        isFocusWithinOwnedLayer={(target) => Boolean(
+          terminalSidebarMenuEl?.contains(target)
+          || terminalAskMenuEl?.contains(target)
+          || (target && target === props.mobileSessionsTrigger?.()),
+        )}
+        onCloseDrawer={dismissSessionDrawer}
+        onDrawerPresenceChange={setSessionDrawerPresent}
+        onCreateSessionInGroup={(groupId) => void createSessionInGroup(groupId)}
+        onCreateGroup={() => setGroupEditorTarget('create')}
+        onToggleGroup={toggleNavigationGroup}
+        onRelocateSession={relocateSession}
+        onReorderGroup={reorderTerminalGroup}
+        onOpenGroupContextMenu={openTerminalGroupMenu}
+        onOpenTreeContextMenu={openTerminalTreeMenu}
+        onRefresh={handleRefresh}
+        onFilterQueryChange={setSessionFilterQuery}
+        onPreviewSession={previewSidebarSessionSelection}
+        onResetSessionPreview={sessionSelection.resetPreview}
+        onSelectSession={commitSidebarSessionSelection}
+        onOpenKeyboardMenu={openTerminalSidebarKeyboardMenu}
+        onOpenContextMenu={openTerminalSidebarMenu}
+        onCopyPath={copySidebarItemPath}
+        onCloseSession={closeSession}
+        onOpenFiles={openSidebarItemFiles}
+      />
+    ));
+    return <Show when={desktopNavigationOverlay()} fallback={<Navigator />}>
+      <div class={cn('absolute inset-0 z-30', sessionDrawerPresent() ? 'pointer-events-auto' : 'pointer-events-none')} data-floe-dialog-surface-host="true" data-floe-surface-portal-layer="true">
+        <DialogPlacementProvider mode="auto">
+          <Dialog open={desktopSessionDrawerOpen()} onOpenChange={setDesktopSessionDrawerOpen}
+            onPresenceChange={present => {
+              const wasPresent = untrack(sessionDrawerPresent);
+              setSessionDrawerPresent(present);
+              if (wasPresent && !present) {
+                queueMicrotask(() => {
+                  if (desktopNavigationOverlay() && document.activeElement === rootEl) {
+                    sessionDrawerTriggerEl?.focus({ preventScroll: true });
+                  }
+                });
+              }
+            }} title={i18n.t('terminal.sessions')}
+            presentation="side-drawer" drawerSide="left" escapeKeyPhase="bubble"
+            class="redeven-adaptive-sidebar-drawer" contentClass="flex min-h-0 flex-col overflow-hidden p-0">
+            <Navigator />
+          </Dialog>
+        </DialogPlacementProvider>
+      </div>
+    </Show>;
+  };
+
   const body = (
     <div
       ref={(n) => (rootEl = n)}
@@ -4853,54 +4936,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         </Show>
       </div>
       <Show when={connected()} fallback={<div class="p-4 text-xs text-muted-foreground">{i18n.t('terminal.notConnected')}</div>}>
-        <div class="relative flex min-h-0 flex-1 overflow-hidden bg-background">
-          <TerminalSessionNavigator
-            accessibilityIdPrefix={accessibilityIdPrefix}
-            mobile={isMobileLayout()}
-            drawerOpen={sessionDrawerOpen()}
-            connected={connected()}
-            refreshing={refreshing()}
-            activeTitle={activeToolbarTitle()}
-            activeAvatar={activeToolbarAvatar()}
-            filterQuery={sessionFilterQuery()}
-            itemIds={sessionListItemIds()}
-            itemById={sessionListItemById()}
-            groups={navigationGroups()}
-            sidebarActiveSessionId={sidebarActiveSessionId()}
-            activeSessionId={activeDisplaySessionId()}
-            copiedPathSessionId={copiedSidebarPathSessionId()}
-            emptyListLoading={emptySessionListLoading()}
-            ownedLayerIds={[
-              ...(terminalSidebarMenu() ? [terminalSidebarMenuId] : []),
-              ...(terminalAskMenu() ? [terminalAskMenuId] : []),
-            ]}
-            isFocusWithinOwnedLayer={(target) => Boolean(
-              terminalSidebarMenuEl?.contains(target)
-              || terminalAskMenuEl?.contains(target)
-              || (target && target === props.mobileSessionsTrigger?.()),
-            )}
-            onCloseDrawer={dismissSessionDrawer}
-            onDrawerPresenceChange={setSessionDrawerPresent}
-            onCreateSessionInGroup={(groupId) => void createSessionInGroup(groupId)}
-            onCreateGroup={() => setGroupEditorTarget('create')}
-            onToggleGroup={toggleNavigationGroup}
-            onRelocateSession={relocateSession}
-            onReorderGroup={reorderTerminalGroup}
-            onOpenGroupContextMenu={openTerminalGroupMenu}
-            onOpenTreeContextMenu={openTerminalTreeMenu}
-            onRefresh={handleRefresh}
-            onFilterQueryChange={setSessionFilterQuery}
-            onPreviewSession={previewSidebarSessionSelection}
-            onResetSessionPreview={sessionSelection.resetPreview}
-            onSelectSession={commitSidebarSessionSelection}
-            onOpenKeyboardMenu={openTerminalSidebarKeyboardMenu}
-            onOpenContextMenu={openTerminalSidebarMenu}
-            onCopyPath={copySidebarItemPath}
-            onCloseSession={closeSession}
-            onOpenFiles={openSidebarItemFiles}
-          />
+        <div ref={setNavigationContainer} data-terminal-sidebar-presentation={navigationOverlay() ? 'overlay' : 'inline'}
+          class="relative flex min-h-0 flex-1 overflow-hidden bg-background">
+          <SessionNavigation />
 
-          <div class="min-w-0 min-h-0 flex flex-1 flex-col">
+          <div inert={desktopNavigationOverlay() && sessionDrawerPresent()} class="min-w-0 min-h-0 flex flex-1 flex-col">
             <div
               ref={(element) => {
                 mobileToolbarEl = element;
@@ -4908,7 +4948,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               tabIndex={-1}
               class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background px-2 outline-none"
             >
-              <Show when={isMobileLayout()}>
+              <Show when={navigationOverlay()}>
                 <Button
                   ref={(element) => {
                     sessionDrawerTriggerEl = element;
@@ -4917,7 +4957,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   variant="ghost"
                   class="relative h-7 w-7 shrink-0 p-0"
                   data-testid="terminal-session-drawer-open"
-                  onClick={() => setSessionDrawerOpen(true)}
+                  aria-haspopup="dialog" aria-expanded={sessionDrawerOpen()}
+                  onClick={event => { event.currentTarget.focus({ preventScroll: true }); setSessionDrawerOpen(true); }}
                   aria-label={mobileSessionDrawerLabel()}
                   title={mobileSessionDrawerLabel()}
                 >

@@ -4931,6 +4931,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
       activitySelectionMode="ui-first"
       onActivitySelectionEvent={handleActivitySelectionEvent}
       sidebarMode="auto"
+      sidebarMinContentWidth={480}
       slotClassNames={{
         sidebar: layout.sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
         bottomBarHeight: canUseFlower() ? 'flower-activity-bottom-bar-height' : undefined,
@@ -5128,6 +5129,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
           class="flex h-full min-h-0 flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
           inert={mobilePluginModalOpen()}
           aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}
+          data-redeven-interaction-mode={layout.isMobile() ? 'mobile' : 'desktop'}
           data-env-shell-background
         >
           <PageAssetRecoveryNotice reason={assetRecovery.reason()} ready={assetRecoveryReady()} />

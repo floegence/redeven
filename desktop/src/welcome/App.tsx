@@ -536,6 +536,7 @@ function buildDesktopFloeConfig(i18n: DesktopI18n) {
         )
         : undefined,
     },
+    layout: { mobileQuery: 'not all' },
     theme: {
       storageKey: DESKTOP_FLOE_THEME_STORAGE_KEY,
       shellPresetStorageKey: DESKTOP_FLOE_SHELL_THEME_STORAGE_KEY,

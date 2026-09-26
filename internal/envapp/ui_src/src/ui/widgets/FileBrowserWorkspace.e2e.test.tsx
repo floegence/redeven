@@ -7,6 +7,12 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// jsdom has no layout; browser acceptance owns adaptive sidebar geometry.
+vi.mock('@floegence/floe-webapp-core', async original => ({
+  ...await original<object>(),
+  createAdaptiveSidebar: () => () => 'inline',
+}));
+
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
 import {
   REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR,
