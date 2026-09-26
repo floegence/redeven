@@ -7288,7 +7288,7 @@
     "windowUnavailable": "无法打开浏览器窗口，请重试。",
     "windowBlocked": "请允许 Redeven 弹出窗口后重试。",
     "sources": "浏览器来源",
-    "sourceHint": "网站在此环境中所选的浏览器内运行。",
+    "sourceHint": "网站在此环境中所选的浏览器内运行。如果网站反复要求验证，可尝试个人 Chrome，其登录状态和浏览数据仍保留在 Chrome 中。",
     "managedSource": "环境浏览器",
     "chromeSource": "个人 Chrome",
     "profileName": "新配置档案名称",

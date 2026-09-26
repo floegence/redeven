@@ -7292,7 +7292,7 @@
     "windowUnavailable": "Das Browserfenster konnte nicht geöffnet werden. Versuchen Sie es erneut.",
     "windowBlocked": "Erlauben Sie Pop-ups für Redeven und versuchen Sie es erneut.",
     "sources": "Browserquellen",
-    "sourceHint": "Websites werden im ausgewählten Browser dieser Umgebung ausgeführt.",
+    "sourceHint": "Websites werden im ausgewählten Browser dieser Umgebung ausgeführt. Falls eine Website wiederholt eine Verifizierung verlangt, versuche Persönliches Chrome. Anmeldungen und Browserdaten bleiben in Chrome.",
     "managedSource": "Browser der Umgebung",
     "chromeSource": "Persönliches Chrome",
     "profileName": "Name des neuen Profils",

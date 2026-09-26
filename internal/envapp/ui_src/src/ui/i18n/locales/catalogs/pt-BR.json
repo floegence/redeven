@@ -7292,7 +7292,7 @@
     "windowUnavailable": "Não foi possível abrir a janela do navegador. Tente novamente.",
     "windowBlocked": "Permita pop-ups do Redeven e tente novamente.",
     "sources": "Origens do navegador",
-    "sourceHint": "Os sites são executados no navegador selecionado deste ambiente.",
+    "sourceHint": "Os sites são executados no navegador selecionado deste ambiente. Se um site solicitar verificações repetidamente, experimente o Chrome pessoal, que mantém suas próprias sessões e dados de navegação.",
     "managedSource": "Navegador do ambiente",
     "chromeSource": "Chrome pessoal",
     "profileName": "Nome do novo perfil",

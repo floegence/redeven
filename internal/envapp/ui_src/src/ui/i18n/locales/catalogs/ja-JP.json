@@ -7288,7 +7288,7 @@
     "windowUnavailable": "ブラウザーウィンドウを開けませんでした。もう一度お試しください。",
     "windowBlocked": "Redeven のポップアップを許可して、もう一度お試しください。",
     "sources": "ブラウザーの接続先",
-    "sourceHint": "ウェブサイトは、この環境で選択したブラウザー上で動作します。",
+    "sourceHint": "ウェブサイトは、この環境で選択したブラウザー上で動作します。サイトで繰り返し認証を求められる場合は、個人用 Chrome をお試しください。ログイン状態と閲覧データは Chrome に保持されます。",
     "managedSource": "環境のブラウザー",
     "chromeSource": "個人用 Chrome",
     "profileName": "新しいプロファイル名",

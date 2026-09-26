@@ -7292,7 +7292,7 @@
     "windowUnavailable": "Impossible d’ouvrir la fenêtre du navigateur. Réessayez.",
     "windowBlocked": "Autorisez les fenêtres contextuelles pour Redeven, puis réessayez.",
     "sources": "Sources du navigateur",
-    "sourceHint": "Les sites web s’exécutent dans le navigateur sélectionné de cet environnement.",
+    "sourceHint": "Les sites web s’exécutent dans le navigateur sélectionné de cet environnement. Si un site demande sans cesse une vérification, essayez Chrome personnel, qui conserve ses connexions et ses données de navigation.",
     "managedSource": "Navigateur de l’environnement",
     "chromeSource": "Chrome personnel",
     "profileName": "Nom du nouveau profil",
