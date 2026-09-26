@@ -40,8 +40,8 @@ it('replaces the document itself when selecting another source in the same windo
 });
 
 it.each([
-  { protocol_version: 22 },
-  { protocol_version: 24 },
+  { protocol_version: 23 },
+  { protocol_version: 25 },
   { media_wire_version: 2 },
   { id: 'browser-view-../other' },
 ])('rejects incompatible browser documents before opening a view: %j', (invalid) => {
