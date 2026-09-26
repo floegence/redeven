@@ -81,9 +81,13 @@ The Runtime registers an observation and its initial grants under the directory 
 Closing a view ends its carriers and input authority, not its source browser. Changing selection releases the previous input owner. Hidden navigation may continue in the source, but explicit input retirement drains the controller and its held input before a new controller is admitted.
 
 Popups from a managed source join that source's already-open managed
-workspace after Runtime validates their current native identity. They appear as
-background tabs and do not change any view selection or Flower binding. External
-popups remain subject to explicit external selection. Managed popup visibility inherits
+workspace after Runtime validates their current native identity. A foreground
+popup selects only the view that owns input on its opener; other observing
+windows and Flower bindings retain their selections. The released source adapter
+reports left-click and ordinary keyboard/script popups as foreground, while a
+middle-click creates a background tab. Runtime applies that intent only after
+admission, using the same directory and selection APIs as explicit tab changes.
+External popups remain subject to explicit external selection. Managed popup visibility inherits
 the source owner’s native opener ancestry: private descendants stay visible only
 to the private owner, including when an ancestor closes. The same source-owned
 privacy predicate redacts managed, CDP and extension inventory before another
