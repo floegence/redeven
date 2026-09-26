@@ -4249,10 +4249,10 @@ pre,
 
 /* Settings hierarchy: separate identity, connection, automation, and optional details. */
 .redeven-environment-settings-dialog .ssh-settings-form {
-  gap: .875rem;
+  gap: .75rem;
 }
 .redeven-environment-settings-dialog .ssh-settings-form > .ssh-settings-field:first-child {
-  padding: .875rem 1rem 1rem;
+  padding: .75rem .875rem;
   border: 1px solid color-mix(in srgb, var(--border) 88%, var(--foreground) 12%);
   border-radius: .75rem;
   background: color-mix(in srgb, var(--card) 76%, var(--background));
@@ -4266,7 +4266,7 @@ pre,
 }
 .redeven-environment-settings-dialog .ssh-settings-section-heading {
   align-items: center;
-  padding: .875rem 1rem .75rem;
+  padding: .75rem .875rem .625rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
   background: color-mix(in srgb, var(--foreground) 2%, transparent);
 }
@@ -4275,10 +4275,10 @@ pre,
   font-weight: 650;
 }
 .redeven-environment-settings-dialog .ssh-settings-endpoint {
-  padding: 1rem 1rem 0;
+  padding: .75rem .875rem 0;
 }
 .redeven-environment-settings-dialog .ssh-settings-section > .ssh-settings-field {
-  padding: 1rem;
+  padding: .75rem .875rem;
   border-top: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
 }
 .redeven-environment-settings-dialog .ssh-settings-section > .ssh-settings-field + .ssh-settings-field {
@@ -4286,7 +4286,7 @@ pre,
   border-top: 0;
 }
 .redeven-environment-settings-dialog .ssh-settings-probe {
-  padding: .875rem 1rem;
+  padding: .75rem .875rem;
   border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
   border-radius: .75rem;
   background: color-mix(in srgb, var(--primary) 7%, var(--card));
@@ -4301,7 +4301,7 @@ pre,
 .redeven-environment-settings-dialog .ssh-settings-disclosure {
   align-items: center;
   min-height: 3rem;
-  padding: .75rem 1rem;
+  padding: .6875rem .875rem;
   border: 0;
   background: transparent;
   color: var(--foreground);
@@ -4783,7 +4783,7 @@ pre,
 .redeven-endpoints-popover .redeven-endpoint-qr-panel { margin: .375rem 0 .25rem; padding: .625rem; gap: .75rem; }
 [data-floe-dialog-panel].redeven-environment-settings-dialog { width: min(52rem, calc(100vw - 1.5rem)); max-width: 52rem; height: min(44rem, var(--redeven-welcome-dialog-panel-max-height)); }
 .redeven-environment-settings-dialog > div:first-child { padding: .875rem 1rem .5rem; }
-.redeven-environment-settings-dialog h2 { font-size: .9375rem; }
+.redeven-environment-settings-dialog h2 { font-size: 1rem; }
 .redeven-environment-settings-dialog > div:first-child p { margin-top: .125rem; font-size: .6875rem; line-height: 1.35; }
 .environment-settings-content > p { padding: .625rem 1rem .5rem; font-size: .6875rem; }
 .environment-settings-tabs { padding-inline: 1rem; }
