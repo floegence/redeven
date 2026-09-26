@@ -80,11 +80,13 @@ it.each([
     const control = runtime.querySelector<HTMLElement>(selector)!;
     if (touch) expect.soft(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     else expect.soft(control.getBoundingClientRect().height).toBe(24);
-    expect.soft(getComputedStyle(control).fontSize).toBe(touch ? '12px' : '11px');
+    expect.soft(getComputedStyle(control).fontSize).toBe(touch ? '12px' : '10px');
     await expect.poll(() => getComputedStyle(control).backgroundColor).toMatch(/(?:,\s*0|\/\s*0)\)$/);
     expect.soft(getComputedStyle(control).borderTopWidth).toBe('0px');
   }
   const trigger = runtime.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger')!;
+  expect(getComputedStyle(trigger).fontSize).toBe(touch ? '12px' : '10px');
+  expect(getComputedStyle(runtime.querySelector('.flower-permission-label')!).fontSize).toBe(touch ? '12px' : '10px');
   const slot = trigger.closest('.flower-composer-control-slot')!;
   expect(getComputedStyle(slot, '::before').width).toBe('1px');
   expect(getComputedStyle(slot, '::before').height).toBe('10px');

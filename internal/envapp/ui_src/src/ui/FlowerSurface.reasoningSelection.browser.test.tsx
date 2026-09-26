@@ -61,6 +61,7 @@ describe('Flower reasoning settings authority', () => {
     base.loadSettings = vi.fn(async () => modelSettings);
     const surface = renderSurfaceWithDraftCoordinator(base, drafts);
     await waitFor(() => control(surface)?.textContent?.includes('Default') === true);
+    expect(getComputedStyle(control(surface)!.querySelector('button')!).fontSize).toBe('10px');
     expect(base.setThreadReasoningSelection).not.toHaveBeenCalled();
     const choose = (text: string) => {
       control(surface)!.querySelector('button')!.click();
