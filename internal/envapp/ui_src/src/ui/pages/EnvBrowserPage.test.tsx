@@ -32,7 +32,7 @@ it('keeps the view stable when shell settings refresh without a presentation cha
   const session = {} as Session;
   let sequence = 0;
   const request = vi.fn(async (_path: RequestInfo | URL, init?: RequestInit) => Response.json({ ok: true, data: init?.method === 'DELETE' ? null : {
-    id: `browser-view-${++sequence}`, generation: 'generation', profile_id: 'browser-main', initial_target: 'confirmed-tab', protocol_version: 23, media_wire_version: 1,
+    id: `browser-view-${++sequence}`, generation: 'generation', profile_id: 'browser-main', initial_target: 'confirmed-tab', protocol_version: 24, media_wire_version: 1,
   } }));
   unbind = await bindTestSessionHTTP(request);
   const root = document.createElement('div'); document.body.append(root);

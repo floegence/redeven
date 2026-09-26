@@ -24,7 +24,7 @@ import (
 
 const (
 	browserHostProtocolVersion       = 1
-	browserProjectionProtocolVersion = 23
+	browserProjectionProtocolVersion = 24
 	browserMediaWireVersion          = 1
 )
 

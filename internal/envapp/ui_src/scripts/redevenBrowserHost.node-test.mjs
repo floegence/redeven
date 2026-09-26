@@ -25,7 +25,7 @@ test('the shared browser helper negotiates private IPC, scopes views and closes 
   });
   const output = readline.createInterface({ input: child.stdout });
   const [line] = await once(output, 'line', { signal: t.signal });
-  assert.deepEqual(JSON.parse(line), { type: 'ready', protocol_version: 1, browser_protocol_version: 23, media_wire_version: 1 });
+  assert.deepEqual(JSON.parse(line), { type: 'ready', protocol_version: 1, browser_protocol_version: 24, media_wire_version: 1 });
   assert.equal((await stat(socketPath)).mode & 0o777, 0o600);
   assert.equal((await stat(directory)).mode & 0o777, 0o700);
   const open = (route, body, method = 'POST') => new Promise((resolve, reject) => {
