@@ -7768,15 +7768,17 @@ function BottomBarMetric(props: Readonly<{
 
 function ConsoleChipActionButton(props: Readonly<{
   onClick: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>;
+  title?: string;
   children: JSX.Element;
 }>) {
   return (
     <button
       type="button"
       class="redeven-console-chip-button"
+      title={props.title}
       onClick={props.onClick}
     >
-      {props.children}
+      <span class="redeven-control-label">{props.children}</span>
     </button>
   );
 }
@@ -7842,7 +7844,7 @@ export function EnvironmentCardFactsBlock(props: Readonly<{
 
           return (
           <div class="redeven-card-fact-row">
-            <div class="redeven-card-fact-label">
+            <div class="redeven-card-fact-label" title={fact().label}>
               <Show when={fact().label_icon}>
                 {(icon) => (
                   <span
@@ -7852,7 +7854,7 @@ export function EnvironmentCardFactsBlock(props: Readonly<{
                   />
                 )}
               </Show>
-              {fact().label}
+              <span class="redeven-control-label">{fact().label}</span>
             </div>
             {/* The render callback keeps this subtree owned by visibility, not snapshot reads. */}
             <Show when={!fact().action}>
@@ -9538,6 +9540,7 @@ export function EnvironmentSplitActionButton(
       style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
       loading={primaryActionLoading()}
       data-floe-progress-shimmer={primaryActionLoading() ? 'surface' : undefined}
+      title={props.presentation.primary_action.label}
       disabled={!props.presentation.primary_action.enabled}
       onClick={() => {
         closeMenu();
@@ -9546,7 +9549,7 @@ export function EnvironmentSplitActionButton(
       }}
     >
       {renderPrimaryActionIcon()}
-      {props.presentation.primary_action.label}
+      <span class="redeven-control-label">{props.presentation.primary_action.label}</span>
     </Button>
   );
   return (
@@ -9739,6 +9742,7 @@ export function EnvironmentSplitActionButton(
                   aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
                   aria-haspopup={hasPanelProgress() || popoverOverlay() ? 'dialog' : undefined}
                   aria-expanded={props.settingsRestart ? props.progressOpen : popoverOverlay() ? props.guidanceOpen : undefined}
+                  title={props.settingsRestart ? settingsProgressLabel() : props.presentation.primary_action.label}
                   aria-label={
                     blockedPrimaryActionDisabled()
                       ? blockedPrimaryActionTriggerLabel(props.i18n, props.presentation.primary_action.label)
@@ -9757,14 +9761,14 @@ export function EnvironmentSplitActionButton(
                     props.onGuidanceOpenChange(!props.guidanceOpen);
                   }}
                 >
-                  <Show when={blockedPrimaryActionDisabled()} fallback={props.settingsRestart ? settingsProgressLabel() : props.presentation.primary_action.label}>
+                  <Show when={blockedPrimaryActionDisabled()} fallback={<span class="redeven-control-label">{props.settingsRestart ? settingsProgressLabel() : props.presentation.primary_action.label}</span>}>
                     <span class="redeven-split-action-trigger__content">
                       {props.presentation.primary_action.intent === 'request_open_access' ? (
                         <ShieldCheck class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
                       ) : (
                         <Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
                       )}
-                      <span>{props.presentation.primary_action.label}</span>
+                      <span class="redeven-control-label">{props.presentation.primary_action.label}</span>
                     </span>
                   </Show>
                 </Button>
@@ -9783,6 +9787,7 @@ export function EnvironmentSplitActionButton(
                     aria-haspopup="dialog"
                     aria-expanded={props.progressOpen}
                     aria-label={presentation().ariaLabel}
+                    title={presentation().label}
                     onClick={() => {
                       closeMenu();
                       props.onProgressOpenChange(!props.progressOpen);
@@ -9790,7 +9795,7 @@ export function EnvironmentSplitActionButton(
                   >
                     <span class="redeven-split-action-trigger__content">
                       {renderEnvironmentProgressPresentationIcon(presentation())}
-                      <span>{presentation().label}</span>
+                      <span class="redeven-control-label">{presentation().label}</span>
                     </span>
                   </Button>
                 );
@@ -9820,7 +9825,7 @@ export function EnvironmentSplitActionButton(
           ariaLabel={props.presentation.menu_button_label}
           interactive
           hideArrow
-          class="redeven-split-menu z-[230] max-w-[min(16rem,calc(100vw-1rem))]"
+          class="redeven-split-menu z-[230]"
           onOverlayRef={(element) => {
             menuRef = element;
           }}
@@ -9856,7 +9861,7 @@ export function EnvironmentSplitActionButton(
                   class="redeven-split-menu-item"
                   data-tone={tone() || undefined}
                   disabled={disabled()}
-                  title={disabledReason()}
+                  title={disabledReason() ?? item.label}
                   aria-describedby={
                     disabled() && disabledReason() ? `${props.environmentID}-${item.id}-disabled-reason` : undefined
                   }
@@ -9878,7 +9883,7 @@ export function EnvironmentSplitActionButton(
                       );
                     }}
                   </Show>
-                  {item.label}
+                  <span class="redeven-control-label">{item.label}</span>
                   <Show when={disabled() && disabledReason()}>
                     <span id={`${props.environmentID}-${item.id}-disabled-reason`} class="sr-only">
                       {disabledReason()}
@@ -9940,15 +9945,15 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
     )}
       onClick={() => props.openCreateConnectionDialog()}
     >
-      <div class="flex h-full flex-col items-center justify-center gap-4 px-4 py-10">
+      <div class="redeven-new-environment-body flex h-full flex-col items-center justify-center gap-4 px-4 py-10">
         <div class="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-border/70 bg-muted/20 text-muted-foreground transition-[border-color,background-color,color,transform] duration-200 group-hover:scale-110 group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
           <Plus class="h-6 w-6" />
         </div>
-        <div class="space-y-1 text-center">
-          <div class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.i18n.t('environmentCenter.newEnvironmentTitle')}</div>
-          <div class="text-xs text-muted-foreground">{props.i18n.t('environmentCenter.newEnvironmentDescription')}</div>
+        <div class="redeven-new-environment-copy space-y-1 text-center">
+          <div class="redeven-control-label text-[length:var(--floe-type-body)] font-semibold text-foreground" title={props.i18n.t('environmentCenter.newEnvironmentTitle')}>{props.i18n.t('environmentCenter.newEnvironmentTitle')}</div>
+          <div class="redeven-new-environment-description text-xs text-muted-foreground" title={props.i18n.t('environmentCenter.newEnvironmentDescription')}>{props.i18n.t('environmentCenter.newEnvironmentDescription')}</div>
         </div>
-        <div class="flex flex-wrap justify-center gap-2">
+        <div class="redeven-new-environment-options">
           <ConsoleChipActionButton
             onClick={(event) => {
               event.stopPropagation();
@@ -9966,6 +9971,7 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
             SSH
           </ConsoleChipActionButton>
           <ConsoleChipActionButton
+            title={props.i18n.t('connectionDialog.localContainer')}
             onClick={(event) => {
               event.stopPropagation();
               props.openCreateConnectionDialog('', 'local_container_runtime');
@@ -9974,6 +9980,7 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
             {props.i18n.t('connectionDialog.localContainer')}
           </ConsoleChipActionButton>
           <ConsoleChipActionButton
+            title={props.i18n.t('connectionDialog.sshContainer')}
             onClick={(event) => {
               event.stopPropagation();
               props.openCreateConnectionDialog('', 'ssh_container_runtime');
@@ -9982,6 +9989,7 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
             {props.i18n.t('connectionDialog.sshContainer')}
           </ConsoleChipActionButton>
           <ConsoleChipActionButton
+            title={props.i18n.t('connectionDialog.throughGateway')}
             onClick={(event) => {
               event.stopPropagation();
               props.openCreateConnectionDialog('', 'gateway_url_profile');

@@ -1,0 +1,3 @@
+/* Preview-only chrome stays outside the product and its source styles. */
+.preview-toolbar{display:flex;align-items:center;gap:12px;padding:8px 14px;background:#20252b;color:#e9eef4;font:12px/1.5 system-ui;flex-wrap:wrap;border-bottom:1px solid #39414a;min-height:48px}
+.preview-toolbar label{display:flex;gap:6px;align-items:center}.preview-toolbar select,.preview-toolbar button{font:inherit;padding:4px 7px;border:1px solid #525e69;border-radius:5px;background:#2e353c;color:inherit;cursor:pointer}.preview-toolbar span{color:#aab7c2;flex:1;min-width:180px;font-size:11px}.preview-product{flex:1;min-height:0}#root{height:100dvh;display:flex;flex-direction:column}.preview-product [data-redeven-desktop-launcher-shell]{height:100%}

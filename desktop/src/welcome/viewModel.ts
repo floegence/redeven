@@ -59,7 +59,7 @@ export type DesktopWelcomeShellViewModel = Readonly<{
 
 export type EnvironmentCenterTab = 'environments' | 'control_planes' | 'gateways';
 export type EnvironmentCardTone = 'neutral' | 'primary' | 'success' | 'warning';
-export type EnvironmentLibraryLayoutDensity = 'compact' | 'spacious';
+export type EnvironmentLibraryLayoutDensity = 'compact';
 
 export type EnvironmentLibraryLayoutModel = Readonly<{
   visible_card_count: number;
@@ -274,11 +274,8 @@ export type ControlPlaneStatusModel = Readonly<{
   recovery_action: 'refresh' | 'sign_in';
 }>;
 
-export const SPACIOUS_ENVIRONMENT_GRID_CARD_THRESHOLD = 4;
-export const COMPACT_ENVIRONMENT_GRID_MIN_COLUMN_REM = 17;
-export const SPACIOUS_ENVIRONMENT_GRID_MIN_COLUMN_REM = 19;
-export const COMPACT_ENVIRONMENT_GRID_GAP_REM = 1;
-export const SPACIOUS_ENVIRONMENT_GRID_GAP_REM = 1.125;
+export const ENVIRONMENT_GRID_MIN_COLUMN_REM = 16.25;
+export const ENVIRONMENT_GRID_GAP_REM = 0.75;
 export const LOCAL_ENVIRONMENT_LIBRARY_FILTER = '__local__';
 export const PROVIDER_ENVIRONMENT_LIBRARY_FILTER = '__provider__';
 export const GATEWAY_ENVIRONMENT_LIBRARY_FILTER = '__gateway__';
@@ -358,22 +355,6 @@ function normalizePositivePixelValue(value: number): number {
   return Math.max(0, value);
 }
 
-function environmentGridMinimumColumnRem(density: EnvironmentLibraryLayoutDensity): number {
-  return density === 'spacious'
-    ? SPACIOUS_ENVIRONMENT_GRID_MIN_COLUMN_REM
-    : COMPACT_ENVIRONMENT_GRID_MIN_COLUMN_REM;
-}
-
-function environmentGridGapRem(density: EnvironmentLibraryLayoutDensity): number {
-  return density === 'spacious'
-    ? SPACIOUS_ENVIRONMENT_GRID_GAP_REM
-    : COMPACT_ENVIRONMENT_GRID_GAP_REM;
-}
-
-export function shouldUseSpaciousEnvironmentGrid(cardCount: number): boolean {
-  return normalizePositiveInteger(cardCount) >= SPACIOUS_ENVIRONMENT_GRID_CARD_THRESHOLD;
-}
-
 export function buildEnvironmentLibraryLayoutModel(args: Readonly<{
   visible_card_count: number;
   layout_reference_count: number;
@@ -382,9 +363,7 @@ export function buildEnvironmentLibraryLayoutModel(args: Readonly<{
 }>): EnvironmentLibraryLayoutModel {
   const visibleCardCount = normalizePositiveInteger(args.visible_card_count);
   const layoutReferenceCount = normalizePositiveInteger(args.layout_reference_count);
-  const density: EnvironmentLibraryLayoutDensity = shouldUseSpaciousEnvironmentGrid(layoutReferenceCount)
-    ? 'spacious'
-    : 'compact';
+  const density: EnvironmentLibraryLayoutDensity = 'compact';
 
   if (layoutReferenceCount <= 0) {
     return {
@@ -406,8 +385,8 @@ export function buildEnvironmentLibraryLayoutModel(args: Readonly<{
   }
 
   const rootFontSizePx = normalizePositivePixelValue(args.root_font_size_px ?? 16) || 16;
-  const minColumnWidthPx = environmentGridMinimumColumnRem(density) * rootFontSizePx;
-  const gapPx = environmentGridGapRem(density) * rootFontSizePx;
+  const minColumnWidthPx = ENVIRONMENT_GRID_MIN_COLUMN_REM * rootFontSizePx;
+  const gapPx = ENVIRONMENT_GRID_GAP_REM * rootFontSizePx;
   const fitColumnCount = Math.floor((containerWidthPx + gapPx) / (minColumnWidthPx + gapPx));
 
   return {

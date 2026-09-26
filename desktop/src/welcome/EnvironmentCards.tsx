@@ -516,8 +516,8 @@ export function EnvironmentCardsPanel(
       <Card class={cn("redeven-environment-card overflow-hidden", group().member_entries.find(entry => entry.id === active())?.is_open && "redeven-environment-card--open")} data-environment-group={cardProps.groupID}>
         <div class="redeven-environment-access-heading">
           <Show when={group().provider_entry} fallback={
-            <Tag variant={environmentKindTagVariant(group().primary_entry.kind)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {props.presentation.card(group().primary_entry).kind_label}
+            <Tag variant={environmentKindTagVariant(group().primary_entry.kind)} tone="soft" size="sm" class="redeven-environment-kind-tag cursor-default whitespace-nowrap" title={props.presentation.card(group().primary_entry).kind_label}>
+              <span class="redeven-control-label">{props.presentation.card(group().primary_entry).kind_label}</span>
             </Tag>
           }>
             <Tabs
@@ -528,6 +528,7 @@ export function EnvironmentCardsPanel(
               size="sm"
               features={{ indicator: { mode: 'none' }, containerBorder: false, scrollButtons: 'never' }}
               class="redeven-environment-owner-tabs"
+              title={items().map(item => item.label).join(' / ')}
               slotClassNames={{ scrollContainer: 'redeven-environment-owner-tablist', tab: 'redeven-environment-owner-tab' }}
             />
           </Show>
@@ -744,7 +745,7 @@ function EnvironmentOwnerSurface(
       data-owner-role={props.relationshipRole ?? 'standalone'}
       aria-label={ownerLabel()}
     >
-      <CardHeader class="px-4 pb-2.5 pt-1">
+      <CardHeader class="redeven-environment-owner-heading">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
             <CardTitle
@@ -802,7 +803,7 @@ function EnvironmentOwnerSurface(
           </DesktopTooltip>
         </div>
         <div class="redeven-environment-owner-status">
-          <EnvironmentStatusIndicator tone={card().status_tone}>{card().status_label}</EnvironmentStatusIndicator>
+          <EnvironmentStatusIndicator tone={card().status_tone} title={card().status_label}>{card().status_label}</EnvironmentStatusIndicator>
           <Show when={props.relationshipRole !== 'cloud'}>
             <span class="redeven-card-runtime-age" title={card().runtime_started_label}>
               <Clock aria-hidden="true" />
@@ -831,8 +832,9 @@ function EnvironmentOwnerSurface(
       </CardContent>
       <Show when={!props.environment.pinned && props.otherPinnedOwner}>
         <div class="redeven-other-owner-pin"><Pin class="h-3 w-3" />
-          {props.i18n.t('environmentCenter.pinnedThroughOwner', { owner: props.otherPinnedOwner?.kind === 'provider_environment'
-            ? props.i18n.t('environmentCenter.providerFilter') : props.i18n.t('environmentCenter.runtimeOwner') })}
+          <span class="redeven-control-label" title={props.i18n.t('environmentCenter.pinnedThroughOwner', { owner: props.otherPinnedOwner?.kind === 'provider_environment'
+            ? props.i18n.t('environmentCenter.providerFilter') : props.i18n.t('environmentCenter.runtimeOwner') })}>{props.i18n.t('environmentCenter.pinnedThroughOwner', { owner: props.otherPinnedOwner?.kind === 'provider_environment'
+            ? props.i18n.t('environmentCenter.providerFilter') : props.i18n.t('environmentCenter.runtimeOwner') })}</span>
         </div>
       </Show>
       <CardFooter class="redeven-environment-owner-footer mt-auto flex items-center gap-2 border-t border-border/60 px-4 pt-3 pb-2.5">
