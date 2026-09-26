@@ -12,7 +12,7 @@
     "prepare:macos-updater": "../scripts/prepare_desktop_macos_updater.sh",
     "prepare:windows-ssh": "node scripts/build-windows-ssh.mjs",
     "start": "npm run build && npm run prepare:bundled-runtime && npm run prepare:windows-ssh && electron .",
-    "build": "tsc -p tsconfig.json && node dist/build/buildPreloads.js && vite build --config vite.welcome.config.mjs",
+    "build": "node scripts/build-standalone-styles.mjs --check && tsc -p tsconfig.json && node dist/build/buildPreloads.js && vite build --config vite.welcome.config.mjs",
     "lint": "eslint \"src/**/*.ts\" \"src/**/*.tsx\" \"electron-builder.config.mjs\" \"eslint.config.mjs\" \"vite.welcome.config.mjs\" --max-warnings=0 && cd ../internal/flower_ui && NODE_PATH=../../desktop/node_modules ../../desktop/node_modules/.bin/eslint -c eslint.config.mjs \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.typecheck.json --noEmit",
     "test:runtime-compatibility": "vitest run src/shared/runtimeService.test.ts src/main/runtimeState.test.ts src/main/runtimeProcess.test.ts",

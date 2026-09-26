@@ -1742,7 +1742,7 @@ function BranchSelect(props: {
         <button
           type="button"
           class={cn(
-            "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors",
+            "flex w-full items-center gap-2 rounded-md px-3 py-2 text-[length:var(--floe-type-control)] text-foreground transition-colors",
             "hover:bg-muted/[0.08] focus:outline-none focus:ring-2 focus:ring-ring/70",
             redevenSurfaceRoleClass("control"),
             props.class,

@@ -3,7 +3,7 @@
 @container plugin-center (width < 768px) {
   [data-plugin-center-toolbar-primary] { display: grid; grid-template-columns: minmax(128px, 1fr) auto; gap: 8px; padding: 4px 12px; }
   [data-plugin-center-toolbar-primary] > label { grid-column: 1; grid-row: 2; order: 0; width: auto; max-width: none; margin: 0; }
-  [data-plugin-center-search] { height: 44px; font-size: 16px; }
+  [data-plugin-center-search] { height: 44px; font-size: var(--floe-type-control); }
   .plugin-center-management { grid-column: 2; grid-row: 1; gap: 8px; }
   .plugin-center-management button, .plugin-center-management button > span { min-width: 44px; height: 44px; }
   .plugin-center-management [data-plugin-center-clear-filters] { display: none; }
@@ -14,4 +14,8 @@
   [data-plugin-center-filter-scroll] { display: none; }
   [data-plugin-center-toolbar-secondary] { padding: 0 12px; }
   [data-plugin-center-toolbar-secondary] [role="tab"] { min-height: 44px; }
+}
+
+@media (pointer: coarse) {
+  [data-plugin-center-search] { min-height: 44px; font-size: max(16px, 1rem); }
 }

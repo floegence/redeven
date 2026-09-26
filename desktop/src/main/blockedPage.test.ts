@@ -5,6 +5,7 @@ import {
   buildBlockedPageHTML,
   isBlockedActionURL,
 } from './blockedPage';
+import { floeStandaloneStyleText } from '../shared/floeStandaloneStyles.generated';
 import { desktopSemanticPaletteForShellTheme } from './desktopTheme';
 
 describe('blockedPage', () => {
@@ -26,14 +27,15 @@ describe('blockedPage', () => {
     expect(html).toContain('without an attachable Local UI');
     expect(html).toContain('Default state directory: /Users/tester/.redeven');
     expect(html).toContain('Local Environment Settings');
-    expect(html).not.toContain('gradient');
+    // The published asset includes inactive theme effects; product chrome stays flat.
+    expect(html.replace(floeStandaloneStyleText, '')).not.toContain('gradient');
     expect(html).toContain('Skip to main content');
     expect(html).toContain('id="blocked-main"');
     expect(html).toContain('role="alert"');
     expect(html).toContain('aria-label="Blocked page actions"');
     expect(html).toContain('env(titlebar-area-height, 40px)');
     expect(html).toContain('data-floe-shell-theme="porcelain-light"');
-    expect(html).toContain('--bg: #F4F1ED');
+    expect(html).toContain('--blocked-bg: #F4F1ED');
   });
 
   it('renders the selected preset semantic palette instead of fixed page colors', () => {
@@ -50,9 +52,9 @@ describe('blockedPage', () => {
     expect(html).toContain('data-floe-shell-theme="dracula"');
     expect(html).toContain('data-theme-palette-version="1"');
     expect(html).toContain('color-scheme: dark');
-    expect(html).toContain('--bg: #282A36');
-    expect(html).toContain('--panel: #303341');
-    expect(html).toContain('--accent: #BD93F9');
+    expect(html).toContain('--blocked-bg: #282A36');
+    expect(html).toContain('--blocked-panel: #303341');
+    expect(html).toContain('--blocked-accent: #BD93F9');
     expect(html).not.toContain('#201917');
     expect(html).not.toContain('#f9efe8');
     expect(html).not.toContain('rgba(24, 19, 17');

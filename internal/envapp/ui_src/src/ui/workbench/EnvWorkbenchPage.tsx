@@ -3023,13 +3023,13 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
         </div>
         <Show when={layoutError()}>
           {(error) => <div class="absolute left-1/2 top-4 z-30 flex max-w-[90%] -translate-x-1/2 items-center gap-3 rounded-lg border bg-background px-4 py-3 shadow-lg" role="status" data-workbench-layout-error={error()}>
-            <span class="text-sm">{i18n.t(`uiCopy.plugin.continuity.${error()}Layout`)}</span>
+            <span class="text-[length:var(--floe-type-body)]">{i18n.t(`uiCopy.plugin.continuity.${error()}Layout`)}</span>
             <Button size="sm" onClick={() => error() === 'load' ? setLayoutLoadAttempt((n) => n + 1) : setLayoutError(null)}>{i18n.t('common.actions.retry')}</Button>
           </div>}
         </Show>
         <Show when={pluginPlacementState()}>
           {(request) => <div class="absolute bottom-20 left-1/2 z-30 flex max-w-[90%] -translate-x-1/2 items-center gap-3 rounded-lg border bg-background px-4 py-3 shadow-lg" role="status" data-workbench-plugin-placement>
-            <span class="text-sm">{i18n.t(request().pending ? 'uiCopy.plugin.continuity.placing' : 'uiCopy.plugin.continuity.placementFailed')}</span>
+            <span class="text-[length:var(--floe-type-body)]">{i18n.t(request().pending ? 'uiCopy.plugin.continuity.placing' : 'uiCopy.plugin.continuity.placementFailed')}</span>
             <Show when={!request().pending}>
               <Button size="sm" onClick={() => void pluginSurfaceController.open(request().target, request().placement).catch(props.pluginSurfaceHost?.onRetirementError)}>{i18n.t('common.actions.retry')}</Button>
               <Button size="sm" variant="ghost" onClick={() => setPluginPlacementState(null)}>{i18n.t('common.actions.cancel')}</Button>

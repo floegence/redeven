@@ -1,11 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { floeStandaloneStyleText } from '../shared/floeStandaloneStyles.generated';
 import type { DesktopThemeSnapshot } from '../shared/desktopTheme';
 import { desktopShellThemeCatalog, desktopShellThemeSemanticCatalog } from './desktopTheme';
 import { buildDesktopWindowChromeStyleText } from '../shared/windowChromeContract';
 import { resolveDesktopWindowChromeSnapshot } from '../shared/windowChromePlatform';
 import { WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT, WEB_SERVICE_BROWSER_CHROME_HEIGHT } from '../shared/webServiceBrowserLayout';
-
-const inputFocusStyleText = readFileSync(require.resolve('@floegence/floe-webapp-core/input-focus.css'), 'utf8');
 
 export type WebServiceBrowserCopy = Readonly<{
   locale: string;
@@ -59,6 +57,7 @@ export function buildWebServiceBrowserDocumentURL(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${htmlEscape(copy.title)}</title>
   <style>
+    ${floeStandaloneStyleText}
     :root {
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       --ring: var(--primary);
@@ -74,7 +73,6 @@ export function buildWebServiceBrowserDocumentURL(
       --error-soft: color-mix(in srgb, var(--error) 12%, var(--chrome));
       --error-border: color-mix(in srgb, var(--error) 38%, var(--chrome));
     }
-    ${inputFocusStyleText}
     ${browserThemeStyleText()}
     ${buildDesktopWindowChromeStyleText(resolveDesktopWindowChromeSnapshot(platform))}
     * { box-sizing: border-box; }
@@ -94,7 +92,7 @@ export function buildWebServiceBrowserDocumentURL(
     .address-input::placeholder { color: inherit; opacity: 1; }
     .route-mark { width: 16px; height: 16px; flex: 0 0 16px; color: var(--foreground); }
     .route-mark svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-    .address-input { min-width: 0; height: 100%; flex: 1 1 auto; padding: 0; border: 0; outline: 0; background: transparent; color: inherit; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; letter-spacing: 0; }
+    .address-input { min-width: 0; height: 100%; flex: 1 1 auto; padding: 0; border: 0; outline: 0; background: transparent; color: inherit; font: var(--floe-type-control)/var(--floe-line-control) ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; letter-spacing: 0; }
     .go-button { width: 30px; height: 28px; flex: 0 0 30px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--foreground); cursor: pointer; }
     .go-button:hover { background: var(--hover); }
     .go-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

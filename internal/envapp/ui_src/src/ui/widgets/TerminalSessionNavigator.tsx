@@ -1301,7 +1301,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           >
                             <span class="flex h-7 min-w-0 items-center gap-1">
                               <span
-                                class="min-w-0 flex-1 truncate text-[13px] font-semibold leading-5"
+                                class="min-w-0 flex-1 truncate text-[length:var(--floe-type-control)] font-semibold leading-5"
                                 data-terminal-session-title={sessionId}
                               >
                                 {item().title}

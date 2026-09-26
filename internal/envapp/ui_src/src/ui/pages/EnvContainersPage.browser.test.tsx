@@ -559,6 +559,8 @@ describe('native Containers responsive product surface', () => {
       expect(viewport.scrollWidth, label).toBeLessThanOrEqual(viewport.clientWidth + 1);
       const name = root.querySelector<HTMLElement>('.container-mobile-card strong')!;
       expect(name.getBoundingClientRect().width, label).toBeGreaterThan(180);
+      expect(getComputedStyle(name).fontSize, label).toBe('12px');
+      expect(getComputedStyle(root.querySelector('.container-search-control input')!).fontSize).toBe('12px');
       expect(table.querySelectorAll('tbody tr').length, label).toBeGreaterThan(0);
     }
   });

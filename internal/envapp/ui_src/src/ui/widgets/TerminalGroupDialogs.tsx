@@ -61,8 +61,8 @@ export function TerminalGroupEditorDialog(props: {
         <div class="space-y-3">
           <label class="block text-xs font-medium text-foreground">
             {i18n.t('terminal.groupName')}
-            <input
-              class="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none disabled:opacity-60"
+            <input data-floe-control="input"
+              class="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-[length:var(--floe-type-control)] outline-none disabled:opacity-60"
               value={name()}
               maxlength={64}
               disabled={props.group?.isDefault}
@@ -77,8 +77,8 @@ export function TerminalGroupEditorDialog(props: {
           <label class="block text-xs font-medium text-foreground">
             {i18n.t('terminal.groupDefaultPath')}
             <span class="mt-1 flex items-stretch gap-1.5">
-              <input
-                class="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-3 font-mono text-sm outline-none"
+              <input data-floe-control="input"
+                class="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-3 font-mono text-[length:var(--floe-type-control)] outline-none"
                 value={workingDir()}
                 onInput={(event) => updateWorkingDir(event.currentTarget.value)}
                 onKeyDown={(event) => { if (event.key === 'Enter') submit(); }}
@@ -136,7 +136,7 @@ export function TerminalGroupDeleteDialog(props: {
       variant="destructive"
       onConfirm={props.onConfirm}
     >
-      <p class="text-sm leading-5">{i18n.t('terminal.deleteGroupDescription', {
+      <p class="text-[length:var(--floe-type-body)] leading-5">{i18n.t('terminal.deleteGroupDescription', {
         group: props.group?.name ?? '',
         count: props.sessionCount,
       })}</p>

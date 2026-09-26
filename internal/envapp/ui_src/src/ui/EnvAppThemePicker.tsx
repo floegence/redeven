@@ -357,7 +357,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
                       class={cn(
                         'relative h-7 cursor-pointer aria-disabled:cursor-progress rounded-md px-2 text-[11px] font-medium transition-colors',
                         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-                        props.presentation === 'inline' && 'min-h-11 text-sm',
+                        props.presentation === 'inline' && 'min-h-11 text-[length:var(--floe-type-control)]',
                         selected()
                           ? redevenSegmentedItemClass(true)
                           : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,

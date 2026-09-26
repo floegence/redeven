@@ -1,3 +1,4 @@
+import { floeStandaloneStyleText } from '../shared/floeStandaloneStyles.generated';
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import { desktopSemanticPaletteForShellTheme } from './desktopTheme';
 import { desktopWindowTitleBarInsetCSSValue } from '../shared/windowChromePlatform';
@@ -141,28 +142,31 @@ export function buildBlockedPageHTML(
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>${escapeHTML(i18n.t('desktop.title'))}</title>
     <style>
+      ${floeStandaloneStyleText}
       :root {
         color-scheme: ${resolvedTheme};
-        --bg: ${palette.background};
-        --panel: ${palette.surface};
-        --panel-muted: ${palette.muted};
-        --text: ${palette.foreground};
-        --muted: ${palette.mutedForeground};
-        --border: ${palette.border};
-        --accent: ${palette.primary};
-        --accent-text: ${palette.primaryForeground};
-        --shadow: color-mix(in srgb, var(--text) 10%, transparent);
-        --code-bg: color-mix(in srgb, var(--bg) 84%, var(--text) 16%);
-        --code-text: var(--text);
+        --blocked-bg: ${palette.background};
+        --blocked-panel: ${palette.surface};
+        --blocked-panel-muted: ${palette.muted};
+        --blocked-text: ${palette.foreground};
+        --blocked-muted: ${palette.mutedForeground};
+        --blocked-border: ${palette.border};
+        --blocked-accent: ${palette.primary};
+        --blocked-accent-text: ${palette.primaryForeground};
+        --blocked-shadow: color-mix(in srgb, var(--blocked-text) 10%, transparent);
+        --blocked-code-bg: color-mix(in srgb, var(--blocked-bg) 84%, var(--blocked-text) 16%);
+        --blocked-code-text: var(--blocked-text);
       }
       * { box-sizing: border-box; }
       html { scroll-behavior: smooth; }
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: "Aptos", "Avenir Next", "Segoe UI Variable", sans-serif;
-        background: var(--bg);
-        color: var(--text);
+        font-size: var(--floe-type-body);
+        line-height: var(--floe-line-body);
+        font-family: "Inter Variable", "Inter", "Aptos", "Avenir Next", "Segoe UI Variable", sans-serif;
+        background: var(--blocked-bg);
+        color: var(--blocked-text);
         display: grid;
         place-items: center;
         padding: calc(24px + ${titleBarInset}) 24px 24px;
@@ -174,28 +178,28 @@ export function buildBlockedPageHTML(
         z-index: 10;
         padding: 0.6rem 0.9rem;
         border-radius: 999px;
-        background: var(--accent);
-        color: var(--accent-text);
+        background: var(--blocked-accent);
+        color: var(--blocked-accent-text);
         text-decoration: none;
         transform: translateY(-220%);
       }
       .skip-link:focus-visible {
         transform: translateY(0);
-        outline: 2px solid color-mix(in srgb, var(--accent) 66%, var(--accent-text));
+        outline: 2px solid color-mix(in srgb, var(--blocked-accent) 66%, var(--blocked-accent-text));
         outline-offset: 3px;
       }
       main {
         width: min(760px, 100%);
-        border: 1px solid var(--border);
+        border: 1px solid var(--blocked-border);
         border-radius: 24px;
-        background: var(--panel);
-        box-shadow: 0 18px 48px var(--shadow);
+        background: var(--blocked-panel);
+        box-shadow: 0 18px 48px var(--blocked-shadow);
         padding: 32px;
       }
       .eyebrow {
         margin: 0 0 12px;
-        font-size: 13px;
-        color: var(--muted);
+        font-size: var(--floe-type-caption);
+        color: var(--blocked-muted);
       }
       h1 {
         margin: 0;
@@ -204,18 +208,18 @@ export function buildBlockedPageHTML(
       }
       p {
         margin: 16px 0 0;
-        font-size: 16px;
+        font-size: var(--floe-type-body);
         line-height: 1.65;
-        color: var(--muted);
+        color: var(--blocked-muted);
       }
       .meta {
         margin-top: 18px;
         padding: 16px 18px;
         border-radius: 16px;
-        background: var(--panel-muted);
-        border: 1px solid var(--border);
-        color: var(--text);
-        font-size: 14px;
+        background: var(--blocked-panel-muted);
+        border: 1px solid var(--blocked-border);
+        color: var(--blocked-text);
+        font-size: var(--floe-type-body);
         line-height: 1.6;
       }
       .actions {
@@ -232,25 +236,26 @@ export function buildBlockedPageHTML(
         min-height: 46px;
         padding: 0 18px;
         border-radius: 999px;
-        border: 1px solid var(--border);
+        border: 1px solid var(--blocked-border);
         text-decoration: none;
-        color: var(--text);
-        background: var(--panel);
+        color: var(--blocked-text);
+        background: var(--blocked-panel);
+        font-size: var(--floe-type-control);
         font-weight: 600;
       }
       .button:focus-visible,
       summary:focus-visible {
-        outline: 2px solid color-mix(in srgb, var(--accent) 66%, var(--accent-text));
+        outline: 2px solid color-mix(in srgb, var(--blocked-accent) 66%, var(--blocked-accent-text));
         outline-offset: 2px;
       }
       .button.primary {
-        background: var(--accent);
-        color: var(--accent-text);
+        background: var(--blocked-accent);
+        color: var(--blocked-accent-text);
         border-color: transparent;
       }
       details {
         margin-top: 24px;
-        border-top: 1px solid var(--border);
+        border-top: 1px solid var(--blocked-border);
         padding-top: 18px;
       }
       summary {
@@ -261,8 +266,8 @@ export function buildBlockedPageHTML(
         margin: 14px 0 0;
         padding: 16px;
         border-radius: 14px;
-        background: var(--code-bg);
-        color: var(--code-text);
+        background: var(--blocked-code-bg);
+        color: var(--blocked-code-text);
         overflow: auto;
         font-size: 12px;
         line-height: 1.6;

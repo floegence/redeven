@@ -5190,7 +5190,7 @@
 }
 
 .flower-settings-toggle-label {
-  font-size: 0.8125rem;
+  font-size: var(--floe-type-control);
   font-weight: 500;
   color: var(--foreground);
 }
@@ -10539,7 +10539,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-mobile-thread-drawer .flower-thread-list-header { order: 2; }
 .flower-mobile-thread-drawer .flower-thread-list-toolbar > label { flex: 1; min-width: 0; }
 .flower-mobile-thread-drawer .flower-thread-refresh-button { width: 44px; height: 44px; }
-.flower-mobile-thread-drawer .flower-thread-search-input { height: 44px; font-size: 1rem; }
+.flower-mobile-thread-drawer .flower-thread-search-input { height: 44px; font-size: var(--floe-type-control); }
 
 .flower-mobile-thread-drawer .flower-mobile-drawer-handle {
   display: block; flex: 0 0 4px; width: 32px; margin: 10px auto 2px;
@@ -10621,4 +10621,8 @@ button.flower-attachment-preview-trigger:disabled {
     min-height: 44px;
     flex-basis: 44px;
   }
+}
+
+@media (pointer: coarse) {
+  .flower-mobile-thread-drawer .flower-thread-search-input { min-height: 44px; font-size: max(16px, 1rem); }
 }

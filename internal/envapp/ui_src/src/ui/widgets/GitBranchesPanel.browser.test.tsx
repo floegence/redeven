@@ -343,7 +343,8 @@ describe('GitBranchesPanel rendered branch verification stability', () => {
     expect(detail.querySelector('.git-diff-panel__modes')).not.toBeNull();
     expect(railHeader!.getBoundingClientRect().bottom).toBe(detailHeader.getBoundingClientRect().bottom);
     expect(rail.querySelector('tbody tr')!.getBoundingClientRect().top).toBe(railHeader!.getBoundingClientRect().bottom);
-    expect(rail.querySelector('tbody tr')!.getBoundingClientRect().height).toBe(30);
+    // File rows follow the published 28px desktop row contract.
+    expect(rail.querySelector('tbody tr')!.getBoundingClientRect().height).toBe(28);
   });
 
 });

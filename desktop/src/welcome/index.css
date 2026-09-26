@@ -4479,7 +4479,7 @@ pre,
   .redeven-center-action-label { display: none; }
   .redeven-center-actions button { width: 2.75rem; height: 2.75rem; padding: 0; gap: 0; }
   .redeven-center-actions button > svg { width: 1.125rem; height: 1.125rem; }
-  .redeven-center-search input { height: 2.75rem; font-size: 1rem; }
+  .redeven-center-search input { height: 2.75rem; font-size: var(--floe-type-control); }
 }
 .redeven-cloud-source-header button {
   height: auto;
@@ -4517,7 +4517,7 @@ pre,
     min-width: 44px;
     min-height: 44px;
   }
-  .redeven-center-search input { min-height: 44px; font-size: 1rem; }
+  .redeven-center-search input { min-height: 44px; font-size: max(16px, 1rem); }
   [role='dialog'] input,
   .ssh-settings-form input:not([type='checkbox']),
   .ssh-settings-form select,

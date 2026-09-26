@@ -265,12 +265,12 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
           </Show>
           <div class="flex shrink-0 flex-wrap justify-end gap-2">
             <Show when={stage() === 'review' && !commitNeedsReconciliation()}>
-              <button type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-sm font-medium transition-[background-color,border-color,color] duration-120 hover:bg-muted active:bg-muted/80 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={pending()} onClick={returnToSource}>
+              <button data-floe-control="button" type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-[length:var(--floe-type-control)] font-medium transition-[background-color,border-color,color] duration-120 hover:bg-muted active:bg-muted/80 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={pending()} onClick={returnToSource}>
                 {i18n.t('uiCopy.plugin.external.back')}
               </button>
             </Show>
             <Show when={stage() !== 'committing' && !commitNeedsReconciliation()}>
-              <button type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-sm font-medium transition-[background-color,border-color,color] duration-120 ease-out hover:bg-muted active:bg-muted/80 sm:min-h-9 motion-reduce:transition-none" onClick={close}>
+              <button data-floe-control="button" type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-[length:var(--floe-type-control)] font-medium transition-[background-color,border-color,color] duration-120 ease-out hover:bg-muted active:bg-muted/80 sm:min-h-9 motion-reduce:transition-none" onClick={close}>
                 {stage() === 'complete' ? i18n.t('common.actions.close') : i18n.t('common.actions.cancel')}
               </button>
             </Show>
@@ -280,10 +280,10 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
                   when={refreshFailed()}
                   fallback={null}
                 >
-                  <button
+                  <button data-floe-control="button"
                     type="button"
                     data-external-plugin-refresh-inventory
-                    class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9"
+                    class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-[length:var(--floe-type-control)] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9"
                     disabled={refreshPending()}
                     onClick={() => void refreshCommitted(result())}
                   >
@@ -293,12 +293,12 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
               )}
             </Show>
             <Show when={stage() === 'source'}>
-              <button data-external-plugin-inspect type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={!canInspect()} onClick={() => void inspect()}>
+              <button data-floe-control="button" data-external-plugin-inspect type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-[length:var(--floe-type-control)] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={!canInspect()} onClick={() => void inspect()}>
                 {pending() ? i18n.t('uiCopy.plugin.external.inspecting') : i18n.t('uiCopy.plugin.external.inspect')}
               </button>
             </Show>
             <Show when={stage() === 'review' && !reviewBlocked()}>
-              <button type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={!confirmed() || pending()} onClick={() => void commit()}>
+              <button data-floe-control="button" type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-[length:var(--floe-type-control)] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={!confirmed() || pending()} onClick={() => void commit()}>
                 {commitNeedsReconciliation()
                   ? i18n.t('common.actions.retry')
                   : reviewOperationActionLabel(reviewOperation(), i18n)}
@@ -312,7 +312,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
         <InstallProgress stage={stage()} operation={reviewOperation()} />
         <Show when={error()}>
           {(currentError) => (
-            <div role="alert" class="flex gap-2 rounded-md border border-destructive bg-background px-3 py-2.5 text-sm text-destructive animate-in fade-in slide-in-from-top-1 duration-200 motion-reduce:animate-none">
+            <div role="alert" class="flex gap-2 rounded-md border border-destructive bg-background px-3 py-2.5 text-[length:var(--floe-type-body)] text-destructive animate-in fade-in slide-in-from-top-1 duration-200 motion-reduce:animate-none">
               <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
               <div class="min-w-0 flex-1">
                 <div class="font-medium">{currentError().summary}</div>
@@ -372,7 +372,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
                     reviewOperationCompletionKey(reviewOperation()),
                     { plugin: result().plugin.manifest.plugin.display_name },
                   )}</div>
-                  <div class="mt-1 text-sm text-muted-foreground">{result().plugin.publisher_id} · v{result().plugin.version}</div>
+                  <div class="mt-1 text-[length:var(--floe-type-body)] text-muted-foreground">{result().plugin.publisher_id} · v{result().plugin.version}</div>
                 </div>
               </div>
               <PostInstallFacts
@@ -604,7 +604,7 @@ function SourceForm(props: {
       <div class="grid grid-cols-3 gap-1 rounded-md bg-muted p-1" role="tablist" aria-label={i18n.t('uiCopy.plugin.external.source')}>
         <For each={choices}>
           {(choice) => (
-            <button
+            <button data-floe-control="button"
               type="button"
               id={sourceTabID(choice.kind)}
               role="tab"
@@ -632,9 +632,9 @@ function SourceForm(props: {
         class="space-y-4 pt-1"
       >
       <Show when={props.sourceKind !== 'package_upload'}>
-        <label class="redeven-plugin-enter-up block space-y-1.5 text-sm font-medium animate-in fade-in duration-200 motion-reduce:animate-none">
+        <label class="redeven-plugin-enter-up block space-y-1.5 text-[length:var(--floe-type-control)] font-medium animate-in fade-in duration-200 motion-reduce:animate-none">
           <span>{props.sourceKind === 'github_repository' ? i18n.t('uiCopy.plugin.external.repositoryURL') : i18n.t('uiCopy.plugin.external.packageURL')}</span>
-          <input
+          <input data-floe-control="input"
             data-external-plugin-source-input
             type="url"
             value={props.url}
@@ -645,7 +645,7 @@ function SourceForm(props: {
             aria-invalid={validationVisible() && !validation().valid ? 'true' : undefined}
             aria-describedby={validationVisible() && !validation().valid ? 'external-plugin-source-error' : undefined}
             class={cn(
-              'h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 sm:h-10 motion-reduce:transition-none',
+              'h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-[length:var(--floe-type-control)] outline-none transition-[background-color,border-color,box-shadow] duration-150 sm:h-10 motion-reduce:transition-none',
               validationVisible() && !validation().valid && 'border-destructive',
             )}
             onInput={(event) => props.onURL(event.currentTarget.value)}
@@ -659,14 +659,14 @@ function SourceForm(props: {
         </label>
       </Show>
       <Show when={props.sourceKind === 'github_repository'}>
-        <label class="redeven-plugin-enter-up block space-y-1.5 text-sm font-medium animate-in fade-in duration-200 motion-reduce:animate-none">
+        <label class="redeven-plugin-enter-up block space-y-1.5 text-[length:var(--floe-type-control)] font-medium animate-in fade-in duration-200 motion-reduce:animate-none">
           <span>{i18n.t('uiCopy.plugin.external.releaseTag')}</span>
-          <input
+          <input data-floe-control="input"
             type="text"
             value={props.tag}
             disabled={props.pending}
             placeholder={i18n.t('uiCopy.plugin.external.latestRelease')}
-            class="h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 sm:h-10 motion-reduce:transition-none"
+            class="h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-[length:var(--floe-type-control)] outline-none transition-[background-color,border-color,box-shadow] duration-150 sm:h-10 motion-reduce:transition-none"
             onInput={(event) => props.onTag(event.currentTarget.value)}
           />
         </label>
@@ -688,7 +688,7 @@ function SourceForm(props: {
             class="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed bg-background px-4 py-5 text-center transition-colors duration-150 hover:border-primary hover:bg-muted peer-focus-visible:border-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/20 motion-reduce:transition-none"
           >
             <Upload class="h-5 w-5 text-muted-foreground" />
-            <span class="text-sm font-medium">{i18n.t('uiCopy.plugin.external.packageFile')}</span>
+            <span class="text-[length:var(--floe-type-control)] font-medium">{i18n.t('uiCopy.plugin.external.packageFile')}</span>
             <span class="text-xs text-muted-foreground">{i18n.t('common.actions.open')}</span>
           </label>
           <Show when={props.file}>
@@ -696,10 +696,10 @@ function SourceForm(props: {
               <div data-external-plugin-selected-file class="redeven-plugin-enter-up flex items-center gap-3 rounded-md border bg-background px-3 py-2.5 animate-in fade-in duration-200 motion-reduce:animate-none">
                 <Package class="h-4 w-4 shrink-0 text-muted-foreground" />
                 <div class="min-w-0 flex-1">
-                  <div class="truncate text-sm font-medium">{selectedFile().name}</div>
+                  <div class="truncate text-[length:var(--floe-type-body)] font-medium">{selectedFile().name}</div>
                   <div class="text-xs text-muted-foreground">{formatFileSize(selectedFile().size)}</div>
                 </div>
-                <button
+                <button data-floe-control="button"
                   type="button"
                   class="flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground sm:h-8 sm:w-8"
                   aria-label={i18n.t('common.actions.delete')}
@@ -786,7 +786,7 @@ function InspectionReview(props: {
           <Show when={props.displayName && props.displayName !== props.inspection.plugin_id}>
             <div class="mt-0.5 truncate text-xs text-muted-foreground">{props.inspection.plugin_id}</div>
           </Show>
-          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[length:var(--floe-type-body)] text-muted-foreground">
             <span>{props.inspection.publisher_id}</span>
             <span aria-hidden="true">·</span>
             <VersionReview
@@ -826,7 +826,7 @@ function InspectionReview(props: {
             >
               {decisionTitle()}
             </h2>
-            <div class="mt-1 text-sm leading-6 text-muted-foreground">{decisionGuidance()}</div>
+            <div class="mt-1 text-[length:var(--floe-type-body)] leading-6 text-muted-foreground">{decisionGuidance()}</div>
           </div>
         </div>
       </section>
@@ -883,17 +883,17 @@ function InspectionHighlights(props: {
       </div>
       <Show when={props.showAccessChanged} fallback={(
         <Show when={props.hasPreviousSummary && props.currentDeclarationCount > 0 && props.changes.length === 0}>
-          <p class="text-sm leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.external.accessUnchanged')}</p>
+          <p class="text-[length:var(--floe-type-body)] leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.external.accessUnchanged')}</p>
         </Show>
       )}>
-        <p class="text-sm leading-5 text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.external.accessChanged')}</p>
+        <p class="text-[length:var(--floe-type-body)] leading-5 text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.external.accessChanged')}</p>
       </Show>
 
       <div data-external-plugin-access-summary class="grid gap-2 sm:grid-cols-2">
         <Show when={props.permissions.length > 0}>
           <div data-external-plugin-requested-permissions class="flex min-w-0 items-center gap-2 rounded-md border px-3 py-2.5 transition-[background-color,border-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px hover:bg-muted/20 hover:shadow-sm motion-reduce:transform-none motion-reduce:transition-none">
             <Shield class="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span class="min-w-0 flex-1 text-sm font-medium">{i18n.t('uiCopy.plugin.external.requestedPermissions')}</span>
+            <span class="min-w-0 flex-1 text-[length:var(--floe-type-control)] font-medium">{i18n.t('uiCopy.plugin.external.requestedPermissions')}</span>
             <span class="shrink-0 text-xs font-semibold tabular-nums">{props.permissions.length}</span>
           </div>
         </Show>
@@ -905,7 +905,7 @@ function InspectionHighlights(props: {
                 (group.dangerousCount > 0 || group.effect === 'delete' || group.effect === 'admin' || group.effect === 'other')
                   && 'border-[var(--redeven-status-warning-foreground)] bg-[var(--redeven-status-warning-soft)]',
               )} style={`animation-delay: ${index() * 20}ms`}>
-                <span class="min-w-0 flex-1 text-sm font-medium">{operationEffectLabel(group.effect, i18n)}</span>
+                <span class="min-w-0 flex-1 text-[length:var(--floe-type-control)] font-medium">{operationEffectLabel(group.effect, i18n)}</span>
                 <Show when={group.preflightOnlyCount > 0}>
                   <span class="text-[10px] text-muted-foreground">
                     {i18n.tn('uiCopy.plugin.external.preflightOnlyOperations', group.preflightOnlyCount)}
@@ -918,7 +918,7 @@ function InspectionHighlights(props: {
         </div>
       </div>
       <Show when={props.currentDeclarationCount === 0}>
-        <p class="text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.external.noDeclaredAccess')}</p>
+        <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('uiCopy.plugin.external.noDeclaredAccess')}</p>
       </Show>
       <Show when={dangerousMethodCount() > 0}>
         <p class="text-xs font-medium text-[var(--redeven-status-warning-foreground)]">
@@ -937,7 +937,7 @@ function InspectionHighlights(props: {
                     <span class="min-w-0 flex-1 text-xs font-semibold text-muted-foreground">{securityCategoryLabel(declaration.category, i18n)}</span>
                     <Show when={declaration.change}>{(change) => <ChangeBadge change={change()} />}</Show>
                   </div>
-                  <div class="mt-1 text-sm font-medium">{humanizeTechnicalIdentifier(declaration.identity)}</div>
+                  <div class="mt-1 text-[length:var(--floe-type-control)] font-medium">{humanizeTechnicalIdentifier(declaration.identity)}</div>
                   <Show when={securityDeclarationHighlight(declaration)}>
                     {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground">{fact()}</code>}
                   </Show>
@@ -979,7 +979,7 @@ function InspectionReport(props: {
   const i18n = useI18n();
   return (
     <details data-external-plugin-report class="group border-t pt-1">
-      <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-3 rounded-md px-1 text-sm font-semibold transition-colors duration-150 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
+      <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-3 rounded-md px-1 text-[length:var(--floe-type-control)] font-semibold transition-colors duration-150 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
         <span class="min-w-0 flex-1">{i18n.t('uiCopy.plugin.external.fullInspectionReport')}</span>
         <Show when={props.changes.length > 0}>
           <span class="shrink-0 text-xs font-medium text-[var(--redeven-status-warning-foreground)]">
@@ -1048,13 +1048,13 @@ function InspectionReport(props: {
         <section class="space-y-3 border-t pt-4" data-external-plugin-security-declarations>
           <div>
             <h3 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredAccess')}</h3>
-            <p class="mt-1 text-sm leading-6 text-muted-foreground">
+            <p class="mt-1 text-[length:var(--floe-type-body)] leading-6 text-muted-foreground">
               {i18n.t(props.operation === 'install'
                 ? 'uiCopy.plugin.external.declaredAccessGuidance'
                 : 'uiCopy.plugin.external.declaredAccessUpdateGuidance')}
             </p>
           </div>
-          <Show when={props.categories.length > 0} fallback={<p class="text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.external.noDeclaredAccess')}</p>}>
+          <Show when={props.categories.length > 0} fallback={<p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('uiCopy.plugin.external.noDeclaredAccess')}</p>}>
             <For each={props.categories}>
               {(category) => {
                 const rows = () => props.declarations.filter((declaration) => declaration.category === category);
@@ -1063,7 +1063,7 @@ function InspectionReport(props: {
                   <details open={changed()} class="group/category border-b last:border-b-0">
                     <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <span class="min-w-0 flex-1">
-                        <span class="block text-sm font-medium">{securityCategoryLabel(category, i18n)} · {rows().length}</span>
+                        <span class="block text-[length:var(--floe-type-control)] font-medium">{securityCategoryLabel(category, i18n)} · {rows().length}</span>
                         <span class="mt-0.5 block text-xs leading-5 text-muted-foreground">{securityCategoryPurpose(category, i18n)}</span>
                       </span>
                       <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open/category:rotate-180 motion-reduce:transition-none" />
@@ -1139,7 +1139,7 @@ function InspectionConfirmation(props: {
           onChange={(event) => props.onChecked(event.currentTarget.checked)}
         />
         <span class="min-w-0 flex-1">
-          <span class="block text-sm font-semibold">{reviewOperationConfirmationTitle(props.operation, i18n)}</span>
+          <span class="block text-[length:var(--floe-type-control)] font-semibold">{reviewOperationConfirmationTitle(props.operation, i18n)}</span>
           <span class="mt-0.5 block text-xs leading-4 text-muted-foreground">
             {i18n.t(update()
               ? 'uiCopy.plugin.external.confirmUpdateGuidance'
@@ -1195,7 +1195,7 @@ function ChangeBadge(props: { change: NonNullable<SecurityDeclaration['change']>
 function ReportFact(props: { primary: string; technical: readonly string[] }): JSX.Element {
   return (
     <div class="border-l-2 border-border pl-3">
-      <div class="text-sm font-medium">{props.primary}</div>
+      <div class="text-[length:var(--floe-type-body)] font-medium">{props.primary}</div>
       <For each={props.technical}>
         {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground">{fact}</code>}
       </For>
@@ -1239,7 +1239,7 @@ function DecisionFact(props: {
   const i18n = useI18n();
   return (
     <div class={cn(
-      'flex min-h-20 items-start gap-2 rounded-md border bg-background p-3 text-sm',
+      'flex min-h-20 items-start gap-2 rounded-md border bg-background p-3 text-[length:var(--floe-type-body)]',
       props.tone === 'blocked' && 'border-destructive text-destructive',
       props.tone === 'positive' && 'border-[var(--redeven-status-success-foreground)]',
       props.tone === 'caution' && 'border-[var(--redeven-status-warning-foreground)]',
@@ -1276,11 +1276,11 @@ function PostInstallFacts(props: {
     <dl class="grid grid-cols-2 gap-3 border-y bg-muted/10 px-1 py-3 sm:grid-cols-3 sm:gap-0 sm:divide-x" data-external-plugin-install-outcome>
       <div class="min-w-0 sm:px-3 sm:first:pl-0">
         <dt class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.lifecycle')}</dt>
-        <dd class="mt-0.5 text-sm font-medium">{lifecycle()}</dd>
+        <dd class="mt-0.5 text-[length:var(--floe-type-body)] font-medium">{lifecycle()}</dd>
       </div>
       <div class="min-w-0 sm:px-3">
         <dt class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.permissions')}</dt>
-        <dd class="mt-0.5 text-sm font-medium">
+        <dd class="mt-0.5 text-[length:var(--floe-type-body)] font-medium">
           {update()
             ? i18n.t('uiCopy.plugin.external.noNewPermissionGrants')
             : props.committedEnableState === 'disabled_by_user'
@@ -1290,7 +1290,7 @@ function PostInstallFacts(props: {
       </div>
       <div class="col-span-2 min-w-0 border-t pt-3 sm:col-span-1 sm:border-t-0 sm:px-3 sm:pt-0 sm:last:pr-0">
         <dt class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.updateMode')}</dt>
-        <dd class="mt-0.5 text-sm font-medium">
+        <dd class="mt-0.5 text-[length:var(--floe-type-body)] font-medium">
           {props.updateEligibility === 'automatic_eligible'
             ? i18n.t('uiCopy.plugin.external.automaticUpdates')
             : i18n.t('uiCopy.plugin.external.manualUpdates')}
@@ -1309,7 +1309,7 @@ function CommitProgress(props: { inspection: ExternalPluginInspection | null; op
         <div>
           <div class="font-semibold">{reviewOperationProgressLabel(props.operation, i18n)}</div>
           <Show when={props.inspection}>
-            {(current) => <div class="mt-1 text-sm text-muted-foreground">{current().plugin_id} · v{current().version}</div>}
+            {(current) => <div class="mt-1 text-[length:var(--floe-type-body)] text-muted-foreground">{current().plugin_id} · v{current().version}</div>}
           </Show>
         </div>
       </div>

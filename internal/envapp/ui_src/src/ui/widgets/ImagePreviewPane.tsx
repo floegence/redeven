@@ -48,7 +48,7 @@ export function ImagePreviewPane(props: ImagePreviewPaneProps) {
         class="image-preview-viewport relative min-h-0 min-w-0 flex-1 overflow-auto p-3 [overflow-anchor:none]" tabindex="0" role="region" aria-label={i18n.t('uiCopy.preview.imageViewport')}>
         <Show when={!failed()} fallback={<FilePreviewErrorState errorType="render_error" />}>
           <div class="relative grid place-items-center" style={{ width: `${Math.max(width(), zoom.viewportSize()?.width ?? 0)}px`, height: `${Math.max(height(), zoom.viewportSize()?.height ?? 0)}px` }}>
-            <Show when={props.objectUrl} keyed fallback={<div class="text-sm text-muted-foreground">{i18n.t('uiCopy.preview.loadingImage')}</div>}>{source => (
+            <Show when={props.objectUrl} keyed fallback={<div class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('uiCopy.preview.loadingImage')}</div>}>{source => (
               <img data-preview-zoom-content src={source} alt={props.item?.name ?? i18n.t('uiCopy.preview.imageAlt')} class="block max-w-none shrink-0 select-none" draggable={false}
                 style={{ width: `${width()}px`, height: `${height()}px` }}
                 onLoad={event => {

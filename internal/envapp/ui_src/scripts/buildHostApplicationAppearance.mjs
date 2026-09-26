@@ -44,3 +44,11 @@ for (const [file, content] of Object.entries(artifacts)) {
     if (readFileSync(target, 'utf8') !== content) throw new Error(`${file} is stale; run node scripts/buildHostApplicationAppearance.mjs`);
   } else writeFileSync(target, content);
 }
+
+// Both Node and browser launchers create trusted, scriptless documents. Keep
+// their scale and focus rules sourced from the same published standalone asset.
+const standaloneTarget = path.resolve(root, '../../..', 'desktop/src/shared/floeStandaloneStyles.generated.ts');
+const standaloneSource = `// Generated from published Floe standalone.css; run internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs.\nexport const floeStandaloneStyleText = ${JSON.stringify(style.outputFiles[0].text)};\n`;
+if (process.argv.includes('--check')) {
+  if (readFileSync(standaloneTarget, 'utf8') !== standaloneSource) throw new Error('floeStandaloneStyles.generated.ts is stale');
+} else writeFileSync(standaloneTarget, standaloneSource);

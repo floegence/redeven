@@ -972,9 +972,9 @@ export function GitStashWindow(props: GitStashWindowProps) {
                         {/* Message input */}
                         <div class="space-y-2">
                           <label class="text-[11px] font-medium text-foreground">{i18n.t('uiCopy.git.stashMessage')}</label>
-                          <input
+                          <input data-floe-control="input"
                             type="text"
-                            class={cn('w-full rounded-lg border px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none transition-shadow', redevenSurfaceRoleClass('control'))}
+                            class={cn('w-full rounded-lg border px-3.5 py-2.5 text-[length:var(--floe-type-control)] text-foreground placeholder:text-muted-foreground/50 outline-none transition-shadow', redevenSurfaceRoleClass('control'))}
                             value={props.saveMessage ?? ''}
                             placeholder={i18n.t('uiCopy.git.stashMessagePlaceholder')}
                             onInput={(event) => props.onSaveMessageChange?.(event.currentTarget.value)}
@@ -1001,7 +1001,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
 
                         {/* Action */}
                         <div class="flex flex-col gap-2 pt-1">
-                          <Button variant="default" class="w-full rounded-lg py-2.5 text-sm font-semibold" icon={Save} disabled={!canSave()} loading={Boolean(props.saveBusy)} onClick={() => props.onSave?.()}>
+                          <Button variant="default" class="w-full rounded-lg py-2.5 text-[length:var(--floe-type-control)] font-semibold" icon={Save} disabled={!canSave()} loading={Boolean(props.saveBusy)} onClick={() => props.onSave?.()}>
                             {i18n.t('uiCopy.git.stashChanges')}
                           </Button>
                           <button
