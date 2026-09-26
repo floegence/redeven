@@ -1,5 +1,27 @@
 import { browserKey } from './computerBrowserKeys.mjs';
 
+const navigationNetworkErrors = new Set([
+  'ERR_TUNNEL_CONNECTION_FAILED', 'ERR_PROXY_CONNECTION_FAILED', 'ERR_CONNECTION_FAILED',
+  'ERR_CONNECTION_REFUSED', 'ERR_CONNECTION_RESET', 'ERR_CONNECTION_CLOSED',
+  'ERR_NAME_NOT_RESOLVED', 'ERR_INTERNET_DISCONNECTED', 'ERR_NETWORK_CHANGED',
+  'ERR_TIMED_OUT', 'ERR_CONNECTION_TIMED_OUT', 'ERR_EMPTY_RESPONSE',
+  'ERR_TOO_MANY_REDIRECTS', 'ERR_CERT_AUTHORITY_INVALID', 'ERR_CERT_DATE_INVALID',
+  'ERR_CERT_COMMON_NAME_INVALID', 'ERR_SSL_PROTOCOL_ERROR', 'ERR_ABORTED',
+]);
+
+// An acknowledged command can fail to load its destination. Only closed facts
+// cross the tool boundary; Chromium error text may contain private details.
+export class BrowserNavigationError extends Error {
+  constructor(stage, reason) {
+    super(stage === 'response' ? 'NAVIGATION_FAILED' : 'NAVIGATION_TIMEOUT');
+    this.result = { action_executed: true, navigation_stage: stage };
+    if (stage === 'response') {
+      const code = reason.replace(/^net::/u, '');
+      this.result.network_error = navigationNetworkErrors.has(code) ? code : 'NETWORK_ERROR';
+    }
+  }
+}
+
 // Sensitive-field transitions are observed in a CDP isolated world, including
 // fields that appear and disappear during one action. Incidental user input is
 // not a Flower pause request; explicit control remains owned by the Runtime.
@@ -218,7 +240,10 @@ export class BrowserComputerPage {
       throw error;
     }
     for (const frame of frames) {
-      const url = frame.frame.url;
+      // Chromium's error document has an opaque origin. Its failed URL remains
+      // the permission boundary; the internal page does not grant any origin.
+      const url = frame.frame.url === 'chrome-error://chromewebdata/' && frame.frame.unreachableUrl
+        ? frame.frame.unreachableUrl : frame.frame.url;
       if (url !== 'about:blank' && !url.startsWith('about:srcdoc')) {
         try { if (!this.allowsOrigin(new URL(url).origin)) { reasons.add('site_permission'); requiredOrigin ||= new URL(url).origin; } }
         catch { scanFailed = true; }
@@ -432,12 +457,18 @@ export class BrowserComputerPage {
     let timer;
     try {
       const result = await this.effect(() => this.transport.send(command, parameters));
+      if (!result || typeof result !== 'object' || Array.isArray(result)
+        || (result.errorText !== undefined && typeof result.errorText !== 'string')
+        || (result.isDownload !== undefined && typeof result.isDownload !== 'boolean')) throw new Error('INVALID_NAVIGATION_RESPONSE');
       // Content-Disposition navigations deliberately abort document loading.
       // Their completed effect is the download; waiting for DOMContentLoaded
       // would misclassify a successful export as an uncertain navigation.
       if (result.isDownload) return { download_started: true };
-      if (result.errorText) throw new Error('NAVIGATION_FAILED');
-      await Promise.race([loaded, cancelled, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('NAVIGATION_TIMEOUT')), 20000); })]);
+      // Even a failed or still-loading navigation makes previous references
+      // unsuitable for the next call. Observation must start from the page now.
+      this.invalidate();
+      if (result.errorText) throw new BrowserNavigationError('response', result.errorText);
+      await Promise.race([loaded, cancelled, new Promise((_, reject) => { timer = setTimeout(() => reject(new BrowserNavigationError('load')), 20000); })]);
       if (this.stopped || this.invalid) throw new Error('TAKEOVER_REQUIRED');
     } finally {
       clearTimeout(timer);

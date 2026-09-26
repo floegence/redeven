@@ -12,6 +12,7 @@ GOWORK=off go build -o "$temporary/redeven" ./cmd/redeven
 REDEVEN_BROWSER_BRIDGE_BINARY="$temporary/redeven" node --test \
   internal/envapp/ui_src/scripts/computerScript.node-test.mjs \
   internal/envapp/ui_src/scripts/computerBrowser.node-test.mjs \
+  internal/envapp/ui_src/scripts/computerNavigation.node-test.mjs \
   internal/envapp/ui_src/scripts/computerManagedSandbox.node-test.mjs \
   internal/envapp/ui_src/scripts/computerPopup.node-test.mjs \
   internal/envapp/ui_src/scripts/computerExtensionLifecycle.node-test.mjs \

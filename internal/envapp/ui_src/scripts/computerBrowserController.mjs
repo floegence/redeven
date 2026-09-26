@@ -1,4 +1,4 @@
-import { BrowserComputerPage } from './computerBrowserPage.mjs';
+import { BrowserComputerPage, BrowserNavigationError } from './computerBrowserPage.mjs';
 
 const rejections = new Set(['INVALID_REQUEST', 'STALE_REFERENCE', 'AMBIGUOUS_ELEMENT', 'ELEMENT_NOT_FOUND', 'CONDITION_TIMEOUT', 'TARGET_CAPABILITY_UNAVAILABLE', 'TARGET_CONNECTION_REQUIRED', 'TARGET_NOT_READY', 'TARGET_NOT_ALLOWED', 'TAKEOVER_REQUIRED']);
 
@@ -165,6 +165,7 @@ export class BrowserComputerController {
         result: { observation_invalidated: true, action_executed: dispatched(), execution_mode: 'background' },
         safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false },
       };
+      if (error instanceof BrowserNavigationError) return { error: error.message, result: error.result };
       return { error: rejections.has(error.message) ? error.message : dispatched() ? 'EFFECT_OUTCOME_UNKNOWN' : 'TARGET_ACTION_FAILED' };
     }
   }

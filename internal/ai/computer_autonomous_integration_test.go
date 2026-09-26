@@ -31,6 +31,7 @@ func computerProviderObjects(value any, visit func(map[string]any)) {
 			computerProviderObjects(child, visit)
 		}
 	case string:
+		value = strings.TrimPrefix(value, "ERROR: ")
 		if strings.HasPrefix(value, "{") || strings.HasPrefix(value, "[") {
 			var decoded any
 			if json.Unmarshal([]byte(value), &decoded) == nil {

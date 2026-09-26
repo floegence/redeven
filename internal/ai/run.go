@@ -1594,6 +1594,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Tool execution timed out", Retryable: !isComputerUseTool(toolName)}, "", partial)
 			return outcome, nil
 		}
+		var navigationErr *computerNavigationError
+		if errors.As(toolErrRaw, &navigationErr) {
+			setToolError(&aitools.ToolError{Code: navigationErr.code, Message: navigationErr.Error(), Retryable: false}, "", partial)
+			return outcome, nil
+		}
 		var scriptErr *computerScriptExecutionError
 		if errors.As(toolErrRaw, &scriptErr) {
 			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: scriptErr.Error(), Retryable: false}, "", partial)

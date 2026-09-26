@@ -3,7 +3,7 @@ type: Browser Integration Contract
 title: Managed browsers and authorized Chrome tabs
 description: Bind an explicit profile and tab to the Runtime while preserving login state and unrelated user browsing.
 tags: [ai, browser-use, chrome, profiles]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
@@ -111,6 +111,25 @@ masquerade as the user taking control. Older helper/extension protocols are
 rejected; Runtime Service epoch 25 is unchanged because its wire shapes and
 existing unavailable-frame UI contract are unchanged.
 
+Acknowledged navigation failures use `NAVIGATION_FAILED`; an acknowledged
+command whose load wait expires uses `NAVIGATION_TIMEOUT`. Both keep the page,
+connection and grants available for a new observation. `action_executed` means
+the command was acknowledged, not that its destination loaded. The shared Go
+mapper validates this fact, the failure stage and a closed network reason such
+as `ERR_TUNNEL_CONNECTION_FAILED`; arbitrary browser text never crosses the
+boundary. Logs include execution identities, operation, stage and confirmation.
+Activity retains the safe diagnosis. Chromium error documents check grants
+against their browser-reported failed URL, never against an invented grant for
+the internal error-page origin. New or revoked origins still require permission.
+
+Navigation changes invalidate old references and observations. Failed navigation
+stops the current script and returns a normal tool error, allowing the same turn
+to choose its next call. It never triggers argument regeneration, automatic retry
+or script replay. Missing acknowledgement, corrupt results and response identity
+mismatch remain unknown effects and terminal under Floret. Downloads retain their
+successful download contract. See [script continuation](computer-use-scripts.md)
+for completed-prefix semantics.
+
 Initial CDP connection requires authenticated endpoint, profile and tab selection.
 Thereafter Agent discovery can choose existing tabs or create independent task
 pages in that connected profile. Inventory and
@@ -171,6 +190,9 @@ public and installed-code comparison; no forced reload or CSP rewriting is used.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.mjs` - one managed/CDP source and shared debugger lifecycle.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.node-test.mjs` - projection disposal and repeated cross-process frame retirement.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowser.node-test.mjs` - real frames, input, downloads and navigation.
+- `redeven:internal/envapp/ui_src/scripts/computerNavigation.node-test.mjs` - network failures, acknowledged timeouts, page recovery and lost acknowledgement.
+- `redeven:internal/ai/computer_errors.go` - single browser failure classifier and safe navigation facts.
+- `redeven:internal/ai/computer_navigation_integration_test.go` - isolated Flower tool loop, failure Activity, continuation and restart without replay.
 - `redeven:internal/envapp/ui_src/scripts/computerNativeMessaging.node-test.mjs` - real Chrome native-host launch.
 - `redeven:internal/envapp/ui_src/scripts/computerExtension.node-test.mjs` - extension actions, background editing and unbound popup targets.
 - `redeven:internal/envapp/ui_src/scripts/computerPopup.node-test.mjs` - native forms, WindowProxy, cached openers, target authority and unknown effects.

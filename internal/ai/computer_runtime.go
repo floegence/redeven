@@ -366,6 +366,12 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		defer cancel()
 	}
 	result, err := executor.ExecuteTargetTool(captureCtx, call)
+	var navigationFailure *computerNavigationError
+	if errors.As(err, &navigationFailure) {
+		slog.Info("computer navigation failed", "thread_id", call.ThreadID, "turn_id", call.TurnID, "run_id", call.RunID,
+			"tool_call_id", call.ToolCallID, "target_id", call.TargetID, "operation", call.ToolName,
+			"code", navigationFailure.code, "stage", navigationFailure.stage, "network_error", navigationFailure.reason, "action_executed", true)
+	}
 	var observationFailure *targetToolPolicyError
 	if errors.As(err, &observationFailure) && observationFailure.code == "target_observation_unavailable" {
 		payload, _ := result.Result.(map[string]any)
@@ -389,7 +395,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 					target.Ready, target.State = false, failure.targetState
 					_ = r.registry.Update(target)
 				}
-			} else {
+			} else if navigationFailure == nil {
 				target.Ready, target.State = false, "stopped"
 				_ = r.registry.Update(target)
 			}
