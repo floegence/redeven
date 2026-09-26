@@ -52,7 +52,7 @@ older or newer protocol versions fail before a view can receive input.
 
 ## Continuous pointer gestures
 
-Published FloeBrowser 0.1.21 owns drag coordinates and scheduling. Pointer-down and
+Published FloeBrowser owns drag coordinates and scheduling. Pointer-down and
 ordinary click release keep source hit testing; after actual motion, held moves
 and release reference that admitted origin in its document viewport. A thumb
 moving ahead of DOM replay cannot change
@@ -104,6 +104,20 @@ after replacement. Page title changes do not invalidate a document. The same
 continuity contract applies to observers and controllers; source URL changes and
 revocation still invalidate the corresponding presentation.
 
+## Ordinary HTML inside object elements
+
+Published FloeBrowser 0.1.22 projects an `object` with absent or empty `data` and
+`type` attributes as an inert HTML container. Its source content, CSS selectors,
+DOM updates, clicks, text input and scrolling use the existing projection and
+input paths. It does not become a generic unsupported panel merely because of
+its tag name. Typed or resource-bearing objects and `embed` remain unsupported;
+the viewer never creates native embedding elements or executes site scripts.
+
+The source owns classification. Crossing the ordinary-HTML/embedding boundary
+uses the existing checkpoint and input-authority invalidation path. Ordinary
+content and style edits remain incremental. Redeven consumes this released
+behavior without an alternate renderer or site-specific DOM rewrite.
+
 ## Scriptless replay and website admission
 
 The source-page replay remains scriptless. Only the trusted browser chrome
@@ -135,3 +149,5 @@ is input evidence, not proof that a third-party verification challenge passes.
 - [FloeBrowser v0.1.18: test/tab-sizing.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.18/test/tab-sizing.e2e.ts) — Per-frame source and viewer geometry across admission, cancellation, visibility and window-size changes.
 - [FloeBrowser v0.1.18: test/tab-continuity.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.18/test/tab-continuity.e2e.ts) — Per-frame cold, warm, evicted and renamed tab continuity across three engines and both input roles.
 - [FloeBrowser v0.1.16: test/tab-cache.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.16/test/tab-cache.e2e.ts) — Immediate presentation without stale input authority.
+- [FloeBrowser v0.1.22: test/object-fallback.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.22/test/object-fallback.e2e.ts) — Ordinary object HTML, source input, CSS fidelity, dynamic embedding changes and script/network isolation across three viewer engines.
+- `redeven:internal/envapp/ui_src/scripts/checkBrowserProjection.mjs` - Object fallback layout, real clicks and Unicode input through the product's Chrome and Desktop Flowersec carriers.
