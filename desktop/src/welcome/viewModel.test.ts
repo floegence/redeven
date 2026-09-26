@@ -3360,7 +3360,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('switches to spacious density at four visible cards and keeps the shared column count stable', () => {
+  it('keeps compact density as the library grows', () => {
     expect(buildEnvironmentLibraryLayoutModel({
       visible_card_count: 4,
       layout_reference_count: 4,
@@ -3369,12 +3369,12 @@ describe('buildEnvironmentCardModel', () => {
     })).toEqual({
       visible_card_count: 4,
       layout_reference_count: 4,
-      density: 'spacious',
+      density: 'compact',
       column_count: 4,
     });
   });
 
-  it('reduces spacious environment columns when the measured width cannot fit every visible card', () => {
+  it('reduces environment columns when the measured width cannot fit every visible card', () => {
     expect(buildEnvironmentLibraryLayoutModel({
       visible_card_count: 6,
       layout_reference_count: 6,
@@ -3383,9 +3383,16 @@ describe('buildEnvironmentCardModel', () => {
     })).toEqual({
       visible_card_count: 6,
       layout_reference_count: 6,
-      density: 'spacious',
+      density: 'compact',
       column_count: 3,
     });
+  });
+
+  it('fits five complete cards in the desktop content width without changing density', () => {
+    expect(buildEnvironmentLibraryLayoutModel({ visible_card_count: 8, layout_reference_count: 8,
+      container_width_px: 1392, root_font_size_px: 16 })).toMatchObject({ density: 'compact', column_count: 5 });
+    expect(buildEnvironmentLibraryLayoutModel({ visible_card_count: 8, layout_reference_count: 8,
+      container_width_px: 1392, root_font_size_px: 20 })).toMatchObject({ column_count: 4 });
   });
 
   it('falls back to a single shared environment column before the library width is measured', () => {
@@ -3397,7 +3404,7 @@ describe('buildEnvironmentCardModel', () => {
     })).toEqual({
       visible_card_count: 5,
       layout_reference_count: 5,
-      density: 'spacious',
+      density: 'compact',
       column_count: 1,
     });
   });
@@ -3411,7 +3418,7 @@ describe('buildEnvironmentCardModel', () => {
     })).toEqual({
       visible_card_count: 1,
       layout_reference_count: 5,
-      density: 'spacious',
+      density: 'compact',
       column_count: 5,
     });
   });

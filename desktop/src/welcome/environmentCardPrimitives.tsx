@@ -3,12 +3,13 @@ import { cn } from '@floegence/floe-webapp-core';
 
 export function EnvironmentStatusIndicator(props: Readonly<{
   tone: 'neutral' | 'primary' | 'success' | 'warning';
+  title?: string;
   children: JSX.Element;
 }>) {
   return (
-    <span class="redeven-status-indicator" data-tone={props.tone}>
+    <span class="redeven-status-indicator" data-tone={props.tone} title={props.title}>
       <span class="redeven-status-indicator__dot" aria-hidden="true" />
-      {props.children}
+      <span class="redeven-control-label">{props.children}</span>
     </span>
   );
 }
