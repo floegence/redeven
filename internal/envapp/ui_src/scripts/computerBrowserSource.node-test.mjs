@@ -68,6 +68,49 @@ test('source retirement keeps navigation guards until the debugger detaches', { 
   assert.equal(owner.controller.page.sessions.size, 0);
 });
 
+test('projection preserves source identity and site storage across navigation and detach', { timeout: 15000 }, async t => {
+  const { createComputerBrowserSource } = await import('./computerBrowserSource.mjs');
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    requests.push({ ua: request.headers['user-agent'], cookie: request.headers.cookie });
+    response.setHeader('Content-Type', 'text/html');
+    response.setHeader('Set-Cookie', 'fixture=retained; HttpOnly; SameSite=Lax; Path=/');
+    response.end('<title>Source identity</title><p id=ready>Native state</p>');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const browser = await chromium.launch({ channel: 'chromium', chromiumSandbox: true });
+  let owner, projection, observation;
+  t.after(async () => {
+    await observation?.close(); await projection?.close(); await owner?.dispose();
+    await browser.close();
+    await new Promise(resolve => server.close(resolve));
+  });
+  const page = await browser.newPage();
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  await page.goto(origin);
+  await page.evaluate(() => { localStorage.setItem('fixture', 'local'); sessionStorage.setItem('fixture', 'session'); });
+  const identity = () => page.evaluate(async () => ({
+    userAgent: navigator.userAgent, webdriver: navigator.webdriver,
+    languages: [...navigator.languages],
+    hints: await navigator.userAgentData.getHighEntropyValues(['architecture', 'bitness', 'platformVersion', 'fullVersionList']),
+    local: localStorage.getItem('fixture'), session: sessionStorage.getItem('fixture'),
+  }));
+  const before = await identity();
+  owner = await createComputerBrowserSource(page, 'native-identity');
+  await owner.setUserBrowsing(true);
+  projection = await BrowserProjection.attach(owner.source, { authorize: () => false });
+  observation = await projection.observe(() => {}, { media: false });
+  await page.goto(origin + '/next');
+  assert.deepEqual(await identity(), before, 'Source attachment and recording must not emulate browser identity or replace site storage');
+  const document = requests.at(-1);
+  assert.equal(document.ua, before.userAgent);
+  assert.match(document.cookie, /fixture=retained/u);
+  await observation.close(); observation = undefined;
+  await projection.close(); projection = undefined;
+  await owner.dispose(); owner = undefined;
+  assert.deepEqual(await identity(), before, 'Detaching a view must preserve the source profile and page session');
+});
+
 test('AI and DOM projection borrow the same debugger and frame owner', { timeout: 30000 }, async t => {
   const { createComputerBrowserSource } = await import('./computerBrowserSource.mjs');
   const server = http.createServer((_request, response) => {

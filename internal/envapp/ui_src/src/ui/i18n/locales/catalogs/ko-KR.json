@@ -7288,7 +7288,7 @@
     "windowUnavailable": "브라우저 창을 열 수 없습니다. 다시 시도하세요.",
     "windowBlocked": "Redeven의 팝업을 허용한 후 다시 시도하세요.",
     "sources": "브라우저 소스",
-    "sourceHint": "웹사이트는 이 환경에서 선택한 브라우저에서 실행됩니다.",
+    "sourceHint": "웹사이트는 이 환경에서 선택한 브라우저에서 실행됩니다. 사이트에서 반복적으로 인증을 요구하면 개인 Chrome을 사용해 보세요. 로그인 상태와 탐색 데이터는 Chrome에 유지됩니다.",
     "managedSource": "환경 브라우저",
     "chromeSource": "개인 Chrome",
     "profileName": "새 프로필 이름",

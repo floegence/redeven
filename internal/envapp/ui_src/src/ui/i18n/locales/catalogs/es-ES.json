@@ -7292,7 +7292,7 @@
     "windowUnavailable": "No se pudo abrir la ventana del navegador. Inténtalo de nuevo.",
     "windowBlocked": "Permite las ventanas emergentes de Redeven e inténtalo de nuevo.",
     "sources": "Orígenes del navegador",
-    "sourceHint": "Los sitios web se ejecutan en el navegador seleccionado de este entorno.",
+    "sourceHint": "Los sitios web se ejecutan en el navegador seleccionado de este entorno. Si un sitio solicita verificaciones repetidamente, prueba Chrome personal, que conserva sus propias sesiones y datos de navegación.",
     "managedSource": "Navegador del entorno",
     "chromeSource": "Chrome personal",
     "profileName": "Nombre del nuevo perfil",

@@ -14,6 +14,28 @@ timestamp: 2026-09-23T00:00:00Z
 
 # Contract
 
+## Website compatibility and browser identity
+
+The environment browser is a persistent, managed headless Chromium process.
+It is not equivalent to a newly installed interactive Chrome. Website admission
+is decided by the source website and can depend on automation support, source
+network reputation, native browser capabilities and existing site state. A
+correctly projected click does not establish why a site requested verification
+or prove that the verification succeeded.
+
+Preserve the source browser's native identity, cookies and storage. The product
+must not infer hardware or platform metadata from a reduced User-Agent, rotate
+browser identities, replay an uncertain action or clear a profile to retry a
+challenge. Source requests remain in the selected browser; no request, cookie
+or challenge token is relayed through a second HTTP client.
+
+Personal Chrome is the existing user-selected path for normal interactive
+browsing. Its profile and login remain in Chrome. The source dialog explains
+this option when a website repeatedly requests verification; it never silently
+changes sources or grants access to another tab. Managed and personal source
+capabilities remain distinct. A successful fixture or one public-site visit
+does not imply universal CAPTCHA compatibility.
+
 ## Personal Chrome admission
 
 
