@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote browser transport and media
 description: Carry source DOM and element media through bounded authenticated lanes.
 tags: [architecture, browser, transport, media]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
@@ -17,6 +17,21 @@ timestamp: 2026-09-23T00:00:00Z
 ## Authenticated lanes
 
 DOM, resources, files and media travel through the authenticated transport. The client never fetches the source site or opens a raw CDP/media port. Background audio may continue under an explicit viewing subscription; hidden video picture delivery can pause without changing website playback. Flow control remains bounded per lane so media backlog cannot block tab selection or input.
+
+Runtime input admission retains the published 64-command pending limit. A full
+queue returns a `busy` acknowledgement for that command without accepting it,
+revoking healthy control, or closing observation. The rejected intent is never
+queued or replayed after capacity returns. Observation resynchronization and
+media keyframe requests use the released engine's independent coalescing path;
+they cannot consume the source-input budget. The engine remains the only owner
+of effect ordering and execution.
+
+Malformed input, lost authority, and actual source/carrier faults retain their
+existing checks and cleanup boundaries. Source view faults report only fixed
+categories for input failure, DOM message limits, DOM backpressure, or cleanup
+failure. Website content, URLs, credentials and helper exception text never
+enter these diagnostics. Generated acknowledgements use the same bounded DOM
+writer as projected messages.
 
 Media carrier credit counts cumulative bytes consumed by the bounded packet
 reader, including partial frames. Completed frames still await child-window
@@ -131,6 +146,9 @@ Viewing, input and media subscriptions remain distinct grants. Retired source or
 # Evidence
 
 - `redeven:internal/ai/computer_browser_streams.go` - Authorized DOM, input, media and file lanes.
+- `redeven:internal/envapp/ui_src/scripts/redevenBrowserHost.mjs` - Bounded input admission and source-view fault classification.
+- `redeven:internal/ai/computer_browser_workspace_test.go` - Saturation preserves control and never replays rejected intents.
+- `redeven:internal/envapp/ui_src/scripts/browserProjectionCongestion.mjs` - Real keyboard and tab interaction while the source main thread is busy.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserTransport.ts` - Borrowed Flowersec Session and progressive byte acknowledgements.
 - `redeven:internal/codeapp/appserver/browser_projection_test.go` - Real Runtime and source-site-blocked product transport.
 - [FloeBrowser v0.1.12: src/host/media-source.ts](https://github.com/floegence/floebrowser/blob/v0.1.12/src/host/media-source.ts) — Owned capture tracks and picture subscriptions.

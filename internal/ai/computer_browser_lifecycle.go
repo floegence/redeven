@@ -30,6 +30,14 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 	}
 	if event.Type == "view_fault" {
 		if view != nil {
+			// Only fixed diagnostic categories cross the logging boundary. Never
+			// log helper exceptions, page content, source URLs or input payloads.
+			reason := "cleanup_failed"
+			switch event.Reason {
+			case "input_failed", "dom_message_limit", "dom_backpressure":
+				reason = event.Reason
+			}
+			slog.Warn("browser view closed after source failure", "reason", reason)
 			_ = view.close()
 		}
 		return

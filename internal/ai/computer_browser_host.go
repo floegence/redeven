@@ -92,6 +92,7 @@ type browserHostEvent struct {
 	Type       string            `json:"type"`
 	ID         string            `json:"id,omitempty"`
 	View       string            `json:"view,omitempty"`
+	Reason     string            `json:"reason,omitempty"`
 	Target     string            `json:"target,omitempty"`
 	TabID      string            `json:"tab_id,omitempty"`
 	Foreground bool              `json:"foreground,omitempty"`
