@@ -644,6 +644,18 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
 }
 
 describe('buildEnvironmentDisplayStateModel', () => {
+  it('keeps observed running settings status during revalidation without hiding initial checks or failures', () => {
+    const entry = mixedEnvironmentFixture({ linkState: 'unbound' }).snapshot.environments.find(environment => environment.kind === 'ssh_environment')!;
+    const during = { ...entry, runtime_health: { ...entry.runtime_health, freshness: 'checking' as const } };
+    expect(buildEnvironmentSettingsRuntimeModel(during)).toEqual(buildEnvironmentSettingsRuntimeModel(entry));
+    expect(buildEnvironmentSettingsRuntimeModel({ ...during, runtime_health: {
+      status: 'offline', freshness: 'checking', source: 'ssh_runtime_probe', checked_at_unix_ms: 0,
+    } })).toMatchObject({ running: false, status_label: 'CHECKING' });
+    expect(buildEnvironmentSettingsRuntimeModel({ ...entry, runtime_health: {
+      status: 'offline', freshness: 'failed', source: 'ssh_runtime_probe', checked_at_unix_ms: Date.now(),
+    } })).toMatchObject({ running: false, status_label: 'CHECK FAILED' });
+  });
+
   it('keeps settings ready and animated when runtime health is online without a Local UI URL', () => {
     const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({

@@ -17,7 +17,10 @@ describe('Welcome health refresh relationship continuity', () => {
         slot: presence.kind === 'local_environment' ? 'local_environment' : 'runtime_target',
         auto_refresh_enabled: true,
         checking_health: { status: 'offline', checked_at_unix_ms: 0, source: 'local_runtime_probe' },
-        probe: async () => ({ presence, health: desktopWelcomeOnlineRuntimeHealth('local_runtime_probe', presence) }),
+        probe: async () => {
+          const startup = { ...presence, local_ui_urls: [presence.local_ui_url, 'http://127.0.0.1:23999/', 'http://192.168.1.10:23999/'] };
+          return { presence: startup, health: desktopWelcomeOnlineRuntimeHealth('local_runtime_probe', startup) };
+        },
       }));
       const openSessions: DesktopSessionSummary[] = [];
       const snapshot = () => buildDesktopWelcomeSnapshot({ ...inputs, ...store.snapshot(), openSessions });
@@ -38,7 +41,7 @@ describe('Welcome health refresh relationship continuity', () => {
         openSessions.push({
           session_key: sessionTarget.session_key, target: sessionTarget, lifecycle: 'open',
           startup: { local_ui_url: runtime.local_ui_url, local_ui_urls: [runtime.local_ui_url],
-            started_at_unix_ms: runtime.runtime_started_at_unix_ms,
+            started_at_unix_ms: runtime.runtime_started_at_unix_ms! - 60_000,
             runtime_service: { ...runtime.runtime_service!, bindings: {
               ...runtime.runtime_service!.bindings!, provider_link: { state: 'unbound', remote_enabled: false },
             } },
@@ -52,6 +55,7 @@ describe('Welcome health refresh relationship continuity', () => {
       expect(during.map(group => [group.id, group.member_ids])).toEqual(initialGroups.map(group => [group.id, group.member_ids]));
       const refreshing = during.find(group => group.id === pair.id)!;
       expect(refreshing.primary_entry.runtime_health.freshness).toBe('checking');
+      expect(refreshing.primary_entry.local_ui_urls).toEqual(pair.primary_entry.local_ui_urls);
       expect(refreshing.primary_entry.runtime_started_at_unix_ms).toBe(pair.primary_entry.runtime_started_at_unix_ms);
       expect(refreshing.provider_entry?.provider_linked_runtime_summary?.runtime_target_id).toBe(linkedTarget.key);
       expect(refreshing.primary_entry.provider_runtime_link_target?.runtime_control_status.state).toBe('missing');
@@ -70,6 +74,25 @@ describe('Welcome health refresh relationship continuity', () => {
       }) }], { force: true });
       expect(groups()).toHaveLength(initialGroups.length + 1);
       expect(groups().every(group => !group.provider_entry)).toBe(true);
+
+      // A failed or stopped probe must also override an older open-window report.
+      await store.refresh([{ ...linkedTarget, probe: async () => { throw new Error('Host unreachable'); } }], { force: true });
+      const failed = snapshot().environments.find(entry => entry.id === pair.id)!;
+      expect(failed.runtime_health.freshness).toBe('failed');
+      expect(failed.local_ui_urls).toEqual([]);
+      await store.refresh([linkedTarget], { force: true });
+      await store.refresh([{ ...linkedTarget, probe: async () => ({
+        health: { status: 'offline', checked_at_unix_ms: Date.now(), source: 'local_runtime_probe', offline_reason_code: 'not_started' },
+      }) }], { force: true });
+      expect(snapshot().environments.find(entry => entry.id === pair.id)!.local_ui_urls).toEqual([]);
+
+      // An online Runtime may explicitly report that it has no browser listener.
+      await store.refresh([{ ...linkedTarget, probe: async () => ({
+        health: desktopWelcomeOnlineRuntimeHealth('local_runtime_probe', { ...observed.presence!, local_ui_urls: [] }),
+      }) }], { force: true });
+      const withoutListener = snapshot().environments.find(entry => entry.id === pair.id)!;
+      expect(withoutListener.runtime_health.status).toBe('online');
+      expect(withoutListener.local_ui_urls).toEqual([]);
     },
   );
 });

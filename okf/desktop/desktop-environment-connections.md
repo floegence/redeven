@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop Environment connections
 description: Explain each Environment connection and apply one address namespace policy to Welcome and settings.
 tags: [desktop, environment, connection, settings]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
@@ -19,7 +19,7 @@ Only an HTTP or HTTPS public URL is an address row. Management text, Gateway nam
 
 A loopback URL on this device remains copyable and browser-openable but has no cross-device QR action. SSH, WSL, and container loopback addresses appear as an internal-only browser-access explanation naming their namespace and directing users to Open Env App in Desktop. Their literal URL is selectable only after expanding internal listening details, which explain that loopback belongs to that host and separate hosts may reuse a port. These rows have no URL copy, browser, or share controls. This-device and network addresses have explicit browser-access labels. Actual non-loopback addresses remain copyable, browser-openable, and shareable, with a network-availability explanation rather than a claim of tested client reachability. Connection information may be copied separately and never enters the QR component.
 
-An explicitly present public-address list, including an empty list, is authoritative; its singular companion is not a second fallback source. The legacy singular-only report shape is read only when no list exists. Welcome chooses one current managed report rather than merging report, private entry, and generic card text. A stopped Runtime's report overrides a stale open session. No-address presentation follows health freshness and explicit stopped reasons: not checked, checking, unconfirmed, running without a reported address, or confirmed stopped. These are presentation results, not another lifecycle state machine.
+An explicitly present public-address list, including an empty list, is authoritative; its singular companion is not a second fallback source. The legacy singular-only report shape is read only when no list exists. Welcome chooses one current managed report rather than merging report, private entry, and generic card text. Pending health probes retain the last complete public-address list and process start identity in the existing observed-health record while withdrawing live control presence. That observation takes precedence over an older open-window startup report; it supplies presentation only, never control authority. A completed stopped or failed observation clears current addresses even with a stale open session. No-address presentation follows health freshness and explicit stopped reasons: not checked, checking, unconfirmed, running without a reported address, or confirmed stopped. These are presentation results, not another lifecycle state machine.
 
 Popover sharing is keyed by Environment and address-row identity. Snapshot refresh preserves the open popover and removes only an absent or no-longer-shareable selection. Settings also clear sharing when their Environment changes. Keyboard dismissal restores trigger focus; explanatory rows retain native text selection.
 
@@ -49,6 +49,7 @@ Managed settings use the selected Runtime's private control channel, or its auth
 
 - `redeven:desktop/src/shared/desktopEnvironmentConnection.ts` - One typed connection, address, and status model for Welcome and settings.
 - `redeven:desktop/src/welcome/EnvironmentConnectionRows.tsx` - Shared scoped groups, bounded address lists, stable row identity and Environment-owned filtering.
+- `redeven:desktop/src/main/desktopWelcomeRefresh.test.ts` - Exercises real pending, failed, stopped and empty-address observations for Local, SSH and WSL, with and without an old open window.
 - `redeven:desktop/src/main/desktopWelcomeState.ts` - Selects current public reports and preserves stopped Presence authority over stale sessions.
 - `redeven:desktop/src/welcome/environmentEndpoints.test.ts` - Covers host, WSL, container, Cloud, URL and Gateway scopes and no-address states.
 - `redeven:desktop/src/welcome/EndpointsPopover.client.test.tsx` - Exercises allowed actions, invalid sharing, refresh and keyboard dismissal.

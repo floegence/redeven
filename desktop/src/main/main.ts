@@ -4651,6 +4651,7 @@ function runtimeTargetHealthFromState(
   if (state.running || state.maintenance) {
     return desktopWelcomeOnlineRuntimeHealth(source, {
       local_ui_url: state.local_ui_url,
+      local_ui_urls: state.startup?.local_ui_urls,
       runtime_service: state.runtime_service,
       pid: state.startup?.pid,
       started_at_unix_ms: state.startup?.started_at_unix_ms,

@@ -80,6 +80,7 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
   it('caches observed startup age and identity without copying live control credentials', async () => {
     const startup = {
       local_ui_url: 'http://localhost:24000/',
+      local_ui_urls: ['http://localhost:24000/', 'http://192.168.1.10:24000/'],
       started_at_unix_ms: 123456,
       pid: 123,
       local_ui_bridge_token: 'private-bridge-token',
@@ -93,12 +94,13 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
     const refreshing = store.refresh([{ ...runtimeTarget, probe: () => probe.promise }], { force: true });
     expect(store.snapshot().localRuntimeHealth.demo).toEqual({
       status: 'online', source: 'local_runtime_probe', checked_at_unix_ms: expect.any(Number),
-      local_ui_url: startup.local_ui_url, started_at_unix_ms: startup.started_at_unix_ms,
+      local_ui_url: startup.local_ui_url, local_ui_urls: startup.local_ui_urls, started_at_unix_ms: startup.started_at_unix_ms,
       runtime_pid: startup.pid, freshness: 'checking',
     });
     probe.resolve({ health: health({ status: 'offline' }) });
     await refreshing;
     expect(store.snapshot().localRuntimeHealth.demo.started_at_unix_ms).toBeUndefined();
+    expect(store.snapshot().localRuntimeHealth.demo.local_ui_urls).toBeUndefined();
   });
 
   it('resolves managed Runtime health for an Open preflight by registration id', () => {

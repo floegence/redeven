@@ -71,6 +71,7 @@ export type DesktopRuntimeHealth = Readonly<{
   source: DesktopRuntimeHealthSource;
   freshness?: DesktopRuntimeHealthFreshness;
   local_ui_url?: string;
+  local_ui_urls?: readonly string[];
   runtime_pid?: number;
   started_at_unix_ms?: number;
   runtime_service?: RuntimeServiceSnapshot;

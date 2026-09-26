@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop environment settings
 description: Open one target-bound settings session, preserve independent drafts, and save through the registered owner.
 tags: [desktop, environments, settings, interaction]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-26T00:00:00Z
 ---
 # Summary
 
@@ -48,7 +48,15 @@ saved next-start configuration.
 One opening owns the committed connection baseline, connection draft and lazily
 loaded access baseline and draft. There is no access-settings cache in Welcome
 snapshots. Live snapshots update health and actual addresses without replacing
-inputs. Access dirty state and save/discard availability use the same comparison;
+inputs. Background health revalidation preserves the observed running summary,
+connection nodes, expanded listeners, address filters, selection, scroll and QR
+panels; it never reloads access, certificate or security configuration. Completed
+observations update actual addresses and status, including failure or Stop.
+Only a newly observed Runtime start identity invalidates security state; an old
+open window cannot restore its historical start time during a probe. Runtime
+management actions still use live capability authority. Address
+observation continuity follows [Environment connections](desktop-environment-connections.md).
+Access dirty state and save/discard availability use the same comparison;
 manually restoring the baseline clears the dirty state.
 
 Switching tabs keeps both forms mounted, preserving drafts, expanded controls and
@@ -192,9 +200,9 @@ SSH field and secret details are owned by
 - `redeven:desktop/src/welcome/EnvironmentAccessWorkflow.tsx` - Task navigation, prerequisite continuation and contextual review/save feedback.
 - `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - Published modal and tabs with retained, independently scrolling panels.
 - `redeven:desktop/src/welcome/environmentSettingsSession.ts` - Opening identity, independent drafts and asynchronous result isolation.
-- `redeven:desktop/src/welcome/EnvironmentSettingsEntry.client.test.tsx` - Actual card entry, read failures, reopening, deletion and late save behavior.
+- `redeven:desktop/src/welcome/EnvironmentSettingsEntry.client.test.tsx` - Actual card entry, real health-store refresh continuity, read failures, reopening, deletion and late save behavior.
 - `redeven:desktop/src/welcome/environmentSettingsSession.test.ts` - Read/write ordering, manual revert, tab drafts and target rebinding.
 - `redeven:desktop/src/main/environmentAccessSettings.ts` - Explicit owner, WSL guard, compatibility and Runtime configuration projection.
 - `redeven:desktop/src/main/environmentAccessSettings.test.ts` - Cloud write rejection, no implicit WSL start and process-bound pending state.
-- `redeven:desktop/scripts/check-environment-settings.mjs` - Actual card openings, per-frame tab geometry and motion, successful/failed/delayed reads, rapid keyboard switching, reduced motion and retained drafts/scroll positions.
+- `redeven:desktop/scripts/check-environment-settings.mjs` - Actual card openings, per-frame tab geometry and motion, successful/failed/delayed reads, rapid keyboard switching, reduced motion, repeated health probes, and retained nodes, drafts, QR panels, selection and scroll positions.
 - `redeven:scripts/check_desktop.sh` - Full Desktop validation includes settings and endpoint browser acceptance; ordinary source checks do not launch browsers.

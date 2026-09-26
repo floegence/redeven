@@ -2284,7 +2284,11 @@ export function buildEnvironmentSettingsRuntimeModel(
   status_label: string;
   status_tone: EnvironmentCardTone;
 }> {
-  const card = buildEnvironmentCardModel(environment);
+  // Revalidation does not replace an observed running state in the settings
+  // summary. The live Environment still owns all operation availability.
+  const card = buildEnvironmentCardModel(environment.runtime_health.status === 'online' && environment.runtime_health.freshness === 'checking'
+    ? { ...environment, runtime_health: { ...environment.runtime_health, freshness: undefined } }
+    : environment);
   return {
     running: environment.runtime_health.status === 'online',
     status_label: environment.kind === 'local_environment' && environment.local_environment_runtime_state === 'not_running'
