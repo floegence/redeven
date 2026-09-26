@@ -9,6 +9,9 @@ import type { DesktopWelcomeSnapshot, DesktopLauncherActionRequest, DesktopLaunc
 import type { DesktopSettingsResult } from '../shared/settingsIPC';
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
+import { mixedEnvironmentFixture } from '../testSupport/mixedEnvironmentFixture';
+import { buildSSHDesktopTarget } from '../main/desktopTarget';
+import { DesktopWelcomeRuntimeHealthStore, desktopWelcomeOnlineRuntimeHealth, type DesktopWelcomeRuntimeHealthProbeResult, type DesktopWelcomeRuntimeHealthTarget } from '../main/desktopWelcomeRuntimeHealth';
 
 const disposers: Array<() => void> = [];
 const settle = () => new Promise(resolve => setTimeout(resolve, 40));
@@ -26,7 +29,7 @@ const id = desktopRuntimeTargetID(hostAccess, placement);
 const success: DesktopSettingsResult = { ok: true, snapshot: buildDesktopSettingsSurfaceSnapshot('environment_settings', {
   local_ui_bind: 'localhost:23998', local_ui_protocol: 'http', local_ui_password: '', local_ui_password_mode: 'keep', auto_runtime_probe_enabled: true,
 }, { environment_id: id, environment_label: 'Fixture SSH', environment_kind: 'runtime_target', runtime_connection: { host_access: hostAccess, placement } }) };
-async function mount(load: (request: { environment_id: string }) => Promise<DesktopSettingsResult>, action?: (request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>) {
+async function mount(load: (request: { environment_id: string }) => Promise<DesktopSettingsResult>, action?: (request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>, initialSnapshot?: DesktopWelcomeSnapshot) {
   document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '40px');
   HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })));
@@ -44,7 +47,7 @@ async function mount(load: (request: { environment_id: string }) => Promise<Desk
   }) });
   const other = { ...structuredClone(snapshot.environments.find(entry => entry.id === id)!),
     id: 'runtime:other', label: 'Other SSH', registration_ref: { kind: 'runtime_target' as const, id: 'runtime:other' as never } };
-  snapshot = { ...snapshot, environments: [...snapshot.environments, other] };
+  snapshot = initialSnapshot ?? { ...snapshot, environments: [...snapshot.environments, other] };
   let receive: ((value: DesktopWelcomeSnapshot) => void) | undefined;
   const performAction = vi.fn<(request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>>(action ?? (async () => ({ ok: true, outcome: 'saved_environment', environment_id: id })));
   const settings = { load: vi.fn(load), save: vi.fn(async () => success), cancel: vi.fn(),
@@ -106,6 +109,108 @@ describe('environment card settings entry', () => {
     expect(document.getElementById('local-ui-port')).toBeNull();
     expect(h.settings.load).not.toHaveBeenCalled();
     expect(h.settings.save).not.toHaveBeenCalled();
+  });
+
+  it('preserves settings content and interaction state through real background health snapshots', async () => {
+    const { inputs } = mixedEnvironmentFixture({ linkState: 'unbound' });
+    const original = Object.values(inputs.managedRuntimePresenceByTargetID).find(entry => entry.kind === 'ssh_environment')!;
+    const presence = { ...original, local_ui_urls: [original.local_ui_url, 'http://127.0.0.1:23999/', 'http://[::1]:23999/',
+      ...Array.from({ length: 8 }, (_, index) => `http://192.168.1.${index + 10}:23999/`)] };
+    const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
+    const result = { presence, health: desktopWelcomeOnlineRuntimeHealth('ssh_runtime_probe', presence) };
+    const target: DesktopWelcomeRuntimeHealthTarget = {
+      key: presence.target_id, environment_id: presence.environment_id, slot: 'runtime_target', auto_refresh_enabled: true,
+      checking_health: { status: 'offline', checked_at_unix_ms: 0, source: 'ssh_runtime_probe', offline_reason_code: 'unverified' },
+      probe: async () => result,
+    };
+    const entry = buildDesktopWelcomeSnapshot(inputs).environments.find(environment => environment.id === presence.environment_id)!;
+    const sessionTarget = buildSSHDesktopTarget(entry.ssh_details!, { environmentID: entry.id, label: entry.label });
+    const snapshot = () => buildDesktopWelcomeSnapshot({ ...inputs, ...store.snapshot(), openSessions: [{
+      session_key: sessionTarget.session_key, target: sessionTarget, lifecycle: 'open',
+      startup: { local_ui_url: presence.local_ui_url, local_ui_urls: [presence.local_ui_url],
+        started_at_unix_ms: presence.started_at_unix_ms - 60_000, runtime_service: presence.runtime_service },
+    }] });
+    await store.refresh([target]);
+    const h = await mount(async () => ({ ok: true, snapshot: { ...success.snapshot!, environment_id: presence.environment_id,
+      environment_label: presence.label, runtime_connection: { host_access: presence.host_access, placement: presence.placement },
+      runtime_started_at_unix_ms: presence.started_at_unix_ms } }), undefined, snapshot());
+    const security = vi.fn(async () => ({ https_ready: false, enabled: false, password_configured: false,
+      recovery_pending: false, recovery_codes_remaining: 0, revision: 1 }));
+    const certificate = vi.fn<NonNullable<DesktopWelcomeRuntime['settings']['certificate']>>(async () => ({
+      status: 'failed', code: 'local_ui_device_ca_missing', identity: 'missing', can_manage: true,
+    }));
+    Object.assign(h.settings, { certificate });
+    vi.stubGlobal('redevenDesktopSettings', { ...h.settings, security });
+    button(`Settings for ${presence.label}`).click(); await settle();
+    input('ssh-settings-label', 'Unsaved connection');
+    button('Access & security').click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const overview = dialog.querySelector('.environment-access-overview')!;
+    const status = overview.querySelector('.environment-access-status')!;
+    const statusLabel = status.textContent;
+    const statusTone = status.getAttribute('data-status-tone');
+    const details = dialog.querySelector<HTMLDetailsElement>('.redeven-endpoint-listener')!;
+    details.open = true;
+    const filter = dialog.querySelector<HTMLInputElement>('input[type="search"]')!;
+    filter.value = '192.168'; filter.dispatchEvent(new Event('input', { bubbles: true }));
+    filter.focus(); filter.setSelectionRange(2, 5);
+    const rows = [...dialog.querySelectorAll('[data-endpoint-id]')];
+    expect(rows.length).toBeGreaterThan(10);
+    const securityReads = security.mock.calls.length;
+    const certificateReads = certificate.mock.calls.length;
+    expect(securityReads).toBe(1);
+    expect(certificateReads).toBe(1);
+    const assertContinuity = () => {
+      expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+      expect(dialog.querySelector('.environment-access-overview')).toBe(overview);
+      expect(status.textContent).toBe(statusLabel);
+      expect(status.getAttribute('data-status-tone')).toBe(statusTone);
+      const currentRows = [...dialog.querySelectorAll('[data-endpoint-id]')];
+      expect(currentRows).toHaveLength(rows.length);
+      currentRows.forEach((row, index) => expect(row).toBe(rows[index]));
+      expect(dialog.querySelector('.redeven-endpoint-listener')).toBe(details);
+      expect(details.open).toBe(true);
+      expect(dialog.querySelector('input[type="search"]')).toBe(filter);
+      expect(document.activeElement).toBe(filter);
+      expect(filter.value).toBe('192.168');
+      expect([filter.selectionStart, filter.selectionEnd]).toEqual([2, 5]);
+      expect(h.settings.load).toHaveBeenCalledTimes(1);
+      expect(security).toHaveBeenCalledTimes(securityReads);
+      expect(certificate).toHaveBeenCalledTimes(certificateReads);
+    };
+    for (let cycle = 0; cycle < 2; cycle += 1) {
+      const probe = deferred<DesktopWelcomeRuntimeHealthProbeResult>();
+      const refresh = store.refresh([{ ...target, probe: () => probe.promise }], { force: true });
+      h.publish(snapshot()); await settle();
+      assertContinuity();
+      probe.resolve(result); await refresh;
+      h.publish(snapshot()); await settle();
+      assertContinuity();
+    }
+    button('Connection').click(); await settle();
+    expect((document.getElementById('ssh-settings-label') as HTMLInputElement).value).toBe('Unsaved connection');
+    button('Access & security').click(); await settle();
+    input('local-ui-port', '25000');
+    const port = document.getElementById('local-ui-port') as HTMLInputElement;
+    const probe = deferred<DesktopWelcomeRuntimeHealthProbeResult>();
+    const refresh = store.refresh([{ ...target, probe: () => probe.promise }], { force: true });
+    h.publish(snapshot()); await settle();
+    expect(document.getElementById('local-ui-port')).toBe(port);
+    expect(port.value).toBe('25000');
+    probe.resolve({ health: { ...target.checking_health, freshness: 'fresh', offline_reason_code: 'not_started' } });
+    await refresh; h.publish(snapshot()); await settle();
+    expect(port.value).toBe('25000');
+    expect(h.settings.load).toHaveBeenCalledTimes(1);
+    const restarted = { ...presence, started_at_unix_ms: presence.started_at_unix_ms + 1000 };
+    await store.refresh([{ ...target, probe: async () => ({
+      presence: restarted, health: desktopWelcomeOnlineRuntimeHealth('ssh_runtime_probe', restarted),
+    }) }], { force: true });
+    h.publish(snapshot()); await settle();
+    expect(document.getElementById('local-ui-port')).toBe(port);
+    expect(port.value).toBe('25000');
+    expect(security).toHaveBeenCalledTimes(securityReads + 1);
+    expect(certificate).toHaveBeenCalledTimes(certificateReads);
+    expect(h.settings.load).toHaveBeenCalledTimes(1);
   });
 });
 

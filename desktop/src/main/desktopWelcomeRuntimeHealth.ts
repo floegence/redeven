@@ -4,10 +4,11 @@ import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRunti
 import { normalizeRuntimeServiceSnapshot, runtimeServiceAIIsPreparing } from '../shared/runtimeService';
 import type { StartupReport } from './startup';
 
-/** Keep observed startup identity in health while live presence is revalidated. */
+/** Keep observed startup identity and addresses while live presence is revalidated. */
 export function desktopWelcomeOnlineRuntimeHealth(
   source: DesktopRuntimeHealth['source'],
-  startup: Pick<StartupReport, 'local_ui_url' | 'runtime_service' | 'started_at_unix_ms' | 'pid'>,
+  startup: Pick<StartupReport, 'local_ui_url' | 'runtime_service' | 'started_at_unix_ms' | 'pid'>
+    & Readonly<{ local_ui_urls?: readonly string[] }>,
   maintenance?: DesktopRuntimeMaintenanceRequirement,
 ): DesktopRuntimeHealth {
   const runtimeService = startup.runtime_service ? normalizeRuntimeServiceSnapshot(startup.runtime_service) : undefined;
@@ -17,6 +18,7 @@ export function desktopWelcomeOnlineRuntimeHealth(
     checked_at_unix_ms: Date.now(),
     source,
     local_ui_url: startup.local_ui_url,
+    ...(startup.local_ui_urls ? { local_ui_urls: [...startup.local_ui_urls] } : {}),
     ...(startup.pid ? { runtime_pid: startup.pid } : {}),
     ...(startup.started_at_unix_ms ? { started_at_unix_ms: startup.started_at_unix_ms } : {}),
     ...(runtimeService ? { runtime_service: runtimeService } : {}),

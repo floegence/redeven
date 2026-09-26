@@ -1210,16 +1210,10 @@ function buildLocalEnvironmentEntry(
       localSession?.startup ? 'running' : localRuntimeState(environment), cachedRuntimeHealth,
     );
   const runtimeRunning = resolvedLocalRuntimeState === 'running';
-  const resolvedLocalRuntimeURLs = runtimeRunning ? reportedRuntimeURLs(
-    presence ?? localSession?.startup ?? environment.local_hosting.current_runtime ?? cachedRuntimeHealth,
-  ) : [];
+  const runtimeObservation = presence ?? cachedRuntimeHealth ?? localSession?.startup ?? environment.local_hosting.current_runtime;
+  const resolvedLocalRuntimeURLs = runtimeRunning ? reportedRuntimeURLs(runtimeObservation) : [];
   const resolvedLocalRuntimeURL = resolvedLocalRuntimeURLs[0] ?? '';
-  const startedAtUnixMS = runtimeStartedAtUnixMS(
-    presence?.started_at_unix_ms,
-    localSession?.startup?.started_at_unix_ms,
-    environment.local_hosting?.current_runtime?.started_at_unix_ms,
-    cachedRuntimeHealth?.started_at_unix_ms,
-  );
+  const startedAtUnixMS = runtimeStartedAtUnixMS(runtimeObservation?.started_at_unix_ms);
   const runtimeService = preferredRuntimeService(localEnvironmentRuntimeService(environment), cachedRuntimeHealth, presence);
   const providerLink = runtimeService?.bindings?.provider_link;
   const resolvedLocalCloseBehavior = localCloseBehavior(resolvedLocalRuntimeState);
@@ -1765,11 +1759,8 @@ function buildSavedRuntimeTargetEntry(
     ?? sessionRuntimeHealth
     ?? unknownRuntimeHealth(probeSource),
   );
-  const startedAtUnixMS = runtimeStartedAtUnixMS(
-    presence?.started_at_unix_ms,
-    openSession?.startup?.started_at_unix_ms,
-    runtimeHealth.started_at_unix_ms,
-  );
+  const runtimeObservation = presence ?? cachedRuntimeHealth ?? openSession?.startup;
+  const startedAtUnixMS = runtimeStartedAtUnixMS(runtimeObservation?.started_at_unix_ms);
   const runtimeService = preferredRuntimeService(openSession?.startup?.runtime_service, runtimeHealth, presence);
   const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
   const providerRuntimeLinkTarget = buildProviderRuntimeLinkTarget({
@@ -1784,9 +1775,7 @@ function buildSavedRuntimeTargetEntry(
     runtimeService,
     redevenCloudOriginPolicy,
   });
-  const localUIURLs = presence?.running === false ? [] : reportedRuntimeURLs(
-    presence ?? openSession?.startup ?? cachedRuntimeHealth,
-  );
+  const localUIURLs = runtimeHealth.status !== 'online' ? [] : reportedRuntimeURLs(runtimeObservation);
   const localUIURL = localUIURLs[0] ?? '';
   const effectiveHostAccess = presence?.host_access ?? target.host_access;
   const effectivePlacement = presence?.placement ?? target.placement;

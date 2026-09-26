@@ -193,6 +193,105 @@ try {
     assert.equal(await page.evaluate(() => window.settingsFixture.loads), 2);
     report.cases.push(`authorization-guidance-and-retry-${locale}`);
   }
+  // Drive the real health store and snapshot builder through pending and resolved probes.
+  const { mixedEnvironmentFixture } = await server.ssrLoadModule(fileURLToPath(new URL('../src/testSupport/mixedEnvironmentFixture.ts', import.meta.url)));
+  const { DesktopWelcomeRuntimeHealthStore, desktopWelcomeOnlineRuntimeHealth } = await server.ssrLoadModule(fileURLToPath(new URL('../src/main/desktopWelcomeRuntimeHealth.ts', import.meta.url)));
+  const { inputs } = mixedEnvironmentFixture({ linkState: 'unbound' });
+  const observed = Object.values(inputs.managedRuntimePresenceByTargetID).find(entry => entry.kind === 'ssh_environment');
+  const presence = { ...observed, local_ui_urls: [observed.local_ui_url, 'http://127.0.0.1:23999/', 'http://[::1]:23999/',
+    ...Array.from({ length: 8 }, (_, index) => `http://192.168.1.${index + 10}:23999/`)] };
+  const healthStore = new DesktopWelcomeRuntimeHealthStore(() => {});
+  const probeResult = { presence, health: desktopWelcomeOnlineRuntimeHealth('ssh_runtime_probe', presence) };
+  const target = { key: presence.target_id, environment_id: presence.environment_id, slot: 'runtime_target', auto_refresh_enabled: true,
+    checking_health: { status: 'offline', checked_at_unix_ms: 0, source: 'ssh_runtime_probe', offline_reason_code: 'unverified' },
+    probe: async () => probeResult };
+  const { buildSSHDesktopTarget } = await server.ssrLoadModule(fileURLToPath(new URL('../src/main/desktopTarget.ts', import.meta.url)));
+  const currentEntry = buildDesktopWelcomeSnapshot(inputs).environments.find(entry => entry.id === presence.environment_id);
+  const oldSession = buildSSHDesktopTarget(currentEntry.ssh_details, { environmentID: currentEntry.id, label: currentEntry.label });
+  const healthSnapshot = () => buildDesktopWelcomeSnapshot({ ...inputs, ...healthStore.snapshot(), openSessions: [{
+    session_key: oldSession.session_key, target: oldSession, lifecycle: 'open',
+    startup: { local_ui_url: presence.local_ui_url, local_ui_urls: [presence.local_ui_url],
+      started_at_unix_ms: presence.started_at_unix_ms - 60_000, runtime_service: presence.runtime_service },
+  }] });
+  const publishHealth = () => page.evaluate(value => window.settingsFixture.publish(value), healthSnapshot());
+  await healthStore.refresh([target]);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(new URL('environment-settings.html?health-refresh=1', report.url).href);
+  await publishHealth();
+  await page.evaluate(() => {
+    window.securityStatusReads = 0;
+    window.redevenDesktopSettings = { security: async () => {
+      window.securityStatusReads += 1;
+      return { https_ready: false, enabled: false, password_configured: false,
+        recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
+    } };
+  });
+  await open(presence.label);
+  await page.locator('#ssh-settings-label').fill('Retained during health refresh');
+  await switchTab('Access & security');
+  await dialog.locator('.redeven-endpoint-listener summary').click();
+  await dialog.getByRole('button', { name: 'Share connection', exact: true }).first().click();
+  const addressFilter = dialog.locator('input[type="search"]');
+  await addressFilter.fill('192.168');
+  await addressFilter.evaluate(input => { input.focus(); input.setSelectionRange(2, 5); });
+  await settleMotion();
+  await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"]');
+    const body = dialog.querySelector('.environment-settings-tab:not([aria-hidden="true"]) .environment-settings-scroll');
+    body.scrollTop = 100;
+    const viewport = dialog.querySelector('.redeven-address-filter + .redeven-address-viewport');
+    if (viewport) viewport.scrollTop = 28;
+    const status = dialog.querySelector('.environment-access-status');
+    const overview = dialog.querySelector('.environment-access-overview');
+    window.healthRefreshEvidence = { dialog, body, overview, status, statusText: status.textContent, tone: status.dataset.statusTone,
+      workflow: dialog.querySelector('.access-workflow'), filter: dialog.querySelector('input[type="search"]'),
+      listener: dialog.querySelector('.redeven-endpoint-listener'), qr: dialog.querySelector('.redeven-endpoint-qr-panel'),
+      rows: [...dialog.querySelectorAll('[data-endpoint-id]')], scroll: body.scrollTop, viewport, addressScroll: viewport?.scrollTop,
+      geometry: [dialog, overview].map(node => { const r = node.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; }) };
+  });
+  async function verifyHealthContinuity() {
+    const evidence = await page.evaluate(async () => {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const old = window.healthRefreshEvidence, dialog = document.querySelector('[role="dialog"]');
+      const rows = [...dialog.querySelectorAll('[data-endpoint-id]')];
+      return { sameNodes: old.dialog === dialog && old.overview === dialog.querySelector('.environment-access-overview')
+        && old.workflow === dialog.querySelector('.access-workflow') && old.listener === dialog.querySelector('.redeven-endpoint-listener')
+        && old.qr === dialog.querySelector('.redeven-endpoint-qr-panel') && old.filter === dialog.querySelector('input[type="search"]')
+        && rows.length === old.rows.length && rows.every((row, index) => row === old.rows[index]),
+        expanded: old.listener.open, qrVisible: !!old.qr, focused: document.activeElement === old.filter,
+        filter: old.filter.value, selection: [old.filter.selectionStart, old.filter.selectionEnd],
+        statusStable: old.status.textContent === old.statusText && old.status.dataset.statusTone === old.tone,
+        orb: old.status.querySelector('canvas').dataset.runtimeOrbAnimation,
+        scrollStable: old.body.scrollTop === old.scroll && old.viewport?.scrollTop === old.addressScroll,
+        geometryStable: [dialog, old.overview].every((node, index) => {
+          const r = node.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].every((value, axis) => Math.abs(value - old.geometry[index][axis]) < 0.5);
+        }), loads: window.settingsFixture.loads, securityReads: window.securityStatusReads };
+    });
+    assert.deepEqual(evidence, { sameNodes: true, expanded: true, qrVisible: true, focused: true, filter: '192.168',
+      selection: [2, 5], statusStable: true, orb: 'running', scrollStable: true, geometryStable: true, loads: 1, securityReads: 1 });
+  }
+  await capture('health-refresh-before');
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    let resolveProbe;
+    const pending = healthStore.refresh([{ ...target, probe: () => new Promise(resolve => { resolveProbe = resolve; }) }], { force: true });
+    await publishHealth(); await verifyHealthContinuity();
+    if (cycle === 0) await capture('health-refresh-pending');
+    resolveProbe(probeResult); await pending;
+    await publishHealth(); await verifyHealthContinuity();
+  }
+  await capture('health-refresh-complete');
+  await switchTab('Connection');
+  assert.equal(await page.locator('#ssh-settings-label').inputValue(), 'Retained during health refresh');
+  await switchTab('Access & security');
+  await healthStore.refresh([{ ...target, probe: async () => { throw new Error('Host unreachable'); } }], { force: true });
+  await publishHealth();
+  await dialog.locator('[data-endpoint-kind="status"]').waitFor();
+  assert.equal(await dialog.locator('[data-endpoint-kind="address"]').count(), 0);
+  assert.equal(await dialog.locator('.redeven-endpoint-qr-panel').count(), 0);
+  assert.equal(await page.evaluate(() => window.settingsFixture.loads), 1);
+  await capture('health-refresh-failed');
+  report.cases.push('background-probes-retain-addresses-nodes-filter-selection-scroll-qr-and-drafts');
+  report.cases.push('completed-probe-failure-removes-stale-addresses-without-reloading-settings');
   assert.deepEqual(report.errors, []);
   report.status = 'passed';
   console.log(`Environment card settings passed: ${report.cases.length} browser scenarios. Evidence: ${output}`);
