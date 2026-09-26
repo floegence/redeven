@@ -534,9 +534,9 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
         <div class="space-y-3">
           <Show
             when={confirmTarget()?.kind === 'computer'}
-            fallback={<p class="text-sm">{i18n.t('files.rootWriteGenericDescription')}</p>}
+            fallback={<p class="text-[length:var(--floe-type-body)]">{i18n.t('files.rootWriteGenericDescription')}</p>}
           >
-            <p class="text-sm">{i18n.t('files.rootWriteComputerDescription')}</p>
+            <p class="text-[length:var(--floe-type-body)]">{i18n.t('files.rootWriteComputerDescription')}</p>
             <p class="text-xs text-muted-foreground">{i18n.t('files.systemPermissionPrompts')}</p>
           </Show>
           <p class="break-all text-xs text-muted-foreground">

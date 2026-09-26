@@ -1413,11 +1413,12 @@ export function PluginCenterShell(props: {
                 ref={(element) => { searchRef = element; props.searchRef?.(element); }}
                 data-floe-autofocus={props.autofocusSearch !== false ? '' : undefined}
                 data-plugin-center-search
+                data-floe-control="input"
                 type="search"
                 value={props.query}
                 onInput={(event) => props.onQueryInput(event.currentTarget.value)}
                 placeholder={i18n.t('uiCopy.plugin.searchPlaceholder')}
-                class="h-[44px] w-full rounded-md border bg-muted/30 pl-8 pr-2 text-[length:var(--floe-type-body)] outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 sm:h-9 motion-reduce:transition-none"
+                class="h-[44px] w-full rounded-md border bg-muted/30 pl-8 pr-2 text-[length:var(--floe-type-control)] outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 sm:h-9 motion-reduce:transition-none"
               />
           </label>
           <div class="plugin-center-compact-filter"><Dropdown align="end" triggerAriaLabel={i18n.t('uiCopy.plugin.filterPlugins')}

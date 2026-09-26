@@ -171,11 +171,11 @@ export function EnvironmentAccessGate(props: EnvironmentAccessGateProps) {
             <div class="space-y-2">
               <label
                 for={ACCESS_GATE_IDS.passwordInput}
-                class="text-sm font-medium text-foreground"
+                class="text-[length:var(--floe-type-control)] font-medium text-foreground"
               >
                 {accessGatePasswordLabel()}
               </label>
-              <input
+              <input data-floe-control="input"
                 ref={props.inputRef}
                 id={ACCESS_GATE_IDS.passwordInput}
                 type={props.secondFactor ? 'text' : 'password'}
@@ -201,7 +201,7 @@ export function EnvironmentAccessGate(props: EnvironmentAccessGateProps) {
                 disabled={props.pending || props.unlocking}
                 aria-describedby={accessGatePasswordDescribedBy()}
                 aria-invalid={props.feedback?.invalidInput ?? false}
-                class="h-10 w-full rounded-md border border-border bg-background px-3 text-base md:text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                class="h-10 w-full rounded-md border border-border bg-background px-3 text-[length:var(--floe-type-control)] text-foreground outline-none transition-colors placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
               />
               <p
                 id={ACCESS_GATE_IDS.passwordHelp}

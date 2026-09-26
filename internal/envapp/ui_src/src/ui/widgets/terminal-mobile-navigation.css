@@ -18,7 +18,7 @@
 [data-terminal-mobile-drawer] .terminal-session-drawer-header .text-xs { font-size: 16px; }
 [data-terminal-mobile-drawer] [data-testid='terminal-session-filter'] {
   height: 44px;
-  font-size: 16px;
+  font-size: var(--floe-type-control);
   padding-right: 44px;
 }
 [data-terminal-mobile-drawer] [data-testid='terminal-session-filter'] ~ button { width: 44px; height: 44px; right: 0; }
@@ -35,3 +35,7 @@
 [data-terminal-mobile-drawer] [data-terminal-session-path] { font-size: 12px; }
 [data-terminal-mobile-drawer] [data-terminal-output-slot] { width: 44px; height: 44px; }
 [data-terminal-mobile-drawer] [data-terminal-output-slot] button { width: 44px; height: 44px; }
+
+@media (pointer: coarse) {
+  [data-terminal-mobile-drawer] [data-testid='terminal-session-filter'] { min-height: 44px; font-size: max(16px, 1rem); }
+}

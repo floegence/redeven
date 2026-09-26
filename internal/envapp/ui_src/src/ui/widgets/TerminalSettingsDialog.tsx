@@ -103,7 +103,7 @@ function MobileInputOptionCard(props: MobileInputOptionCardProps) {
       )}
       onClick={props.onClick}
     >
-      <span class="flex w-full items-center justify-between gap-2 text-sm font-medium">
+      <span class="flex w-full items-center justify-between gap-2 text-[length:var(--floe-type-control)] font-medium">
         <span>{props.label}</span>
         <span class="text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">
           {props.selected ? props.selectedLabel : props.tapToUseLabel}
@@ -234,7 +234,7 @@ function TerminalThemeOptionCard(props: {
         )}
       >
         <span class="flex items-start justify-between gap-2">
-          <span class="min-w-0 break-words text-sm font-medium leading-5 text-foreground">{props.label}</span>
+          <span class="min-w-0 break-words text-[length:var(--floe-type-control)] font-medium leading-5 text-foreground">{props.label}</span>
           <Show when={props.selected}>
             <Check class="size-4 shrink-0 text-primary" aria-hidden="true" />
           </Show>

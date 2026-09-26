@@ -77,7 +77,7 @@ export function FileBrowserRecoveryView(props: FileBrowserRecoveryViewProps) {
               {folderName()}
             </h2>
           </Show>
-          <p class={cn('text-muted-foreground', props.unavailable ? 'mt-3 text-[13px] leading-6' : 'mt-1 text-xs leading-5')}>
+          <p class={cn('text-muted-foreground', props.unavailable ? 'mt-3 text-[length:var(--floe-type-body)] leading-6' : 'mt-1 text-xs leading-5')}>
             {props.message}
           </p>
         </div>

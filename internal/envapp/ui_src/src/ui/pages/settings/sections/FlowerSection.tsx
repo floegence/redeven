@@ -456,8 +456,8 @@ export function FlowerSection() {
                 </Show>
               </div>
               <div class="min-w-0 flex-1">
-                <Show when={aiCurrentModelOption()} fallback={<div class="text-[0.8125rem] font-semibold text-muted-foreground">{i18n.t('flowerSettings.noModelSelected')}</div>}>
-                  <div class="break-words text-[0.8125rem] font-semibold text-foreground">{aiCurrentModelOption()!.label}</div>
+                <Show when={aiCurrentModelOption()} fallback={<div class="text-[length:var(--floe-type-body)] font-semibold text-muted-foreground">{i18n.t('flowerSettings.noModelSelected')}</div>}>
+                  <div class="break-words text-[length:var(--floe-type-body)] font-semibold text-foreground">{aiCurrentModelOption()!.label}</div>
                   <div class="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
                     <DotIndicator active label={i18n.t('flowerSettings.textCapability')} />
                     <Show when={aiCurrentModelOption()?.supportsImageInput}><DotIndicator active label={i18n.t('flowerSettings.imageInputCapability')} /></Show>

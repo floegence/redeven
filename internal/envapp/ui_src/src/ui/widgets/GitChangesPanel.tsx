@@ -1277,7 +1277,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
           setDiscardTarget(null);
         }}
       >
-        <div class="text-sm leading-relaxed text-foreground">{discardDescription()}</div>
+        <div class="text-[length:var(--floe-type-body)] leading-relaxed text-foreground">{discardDescription()}</div>
       </ConfirmDialog>
     </div>
   );

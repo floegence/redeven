@@ -250,7 +250,7 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
           <div class="flex min-w-0 items-center gap-3 border-b border-border pb-3">
             <ArchiveFileIcon size={36} class="h-9 w-9 shrink-0" />
             <div class="min-w-0">
-              <div class="truncate text-sm font-medium text-foreground" title={props.request?.item.name}>
+              <div class="truncate text-[length:var(--floe-type-body)] font-medium text-foreground" title={props.request?.item.name}>
                 {props.request?.item.name}
               </div>
               <div class="mt-0.5 text-xs text-muted-foreground">
@@ -260,15 +260,15 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
           </div>
 
           <Show when={multipart()}>
-            <div class="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground" role="alert">
+            <div class="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[length:var(--floe-type-body)] text-foreground" role="alert">
               {i18n.t('files.archiveExtraction.multipartUnsupported')}
             </div>
           </Show>
 
           <label class="block text-xs font-medium text-foreground">
             {i18n.t('files.archiveExtraction.outputName')}
-            <input
-              class="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none disabled:opacity-60"
+            <input data-floe-control="input"
+              class="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-[length:var(--floe-type-control)] outline-none disabled:opacity-60"
               value={outputName()}
               disabled={busy() || multipart()}
               aria-invalid={Boolean(errorMessage() && validationError())}
@@ -284,8 +284,8 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
           <label class="block text-xs font-medium text-foreground">
             {i18n.t('files.archiveExtraction.destinationFolder')}
             <span class="mt-1 flex items-stretch gap-1.5">
-              <input
-                class="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-3 font-mono text-sm outline-none disabled:opacity-60"
+              <input data-floe-control="input"
+                class="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-3 font-mono text-[length:var(--floe-type-control)] outline-none disabled:opacity-60"
                 value={destinationParent()}
                 disabled={busy() || multipart()}
                 onInput={(event) => {
@@ -311,10 +311,10 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
           <Show when={passwordVisible()}>
             <label class="block text-xs font-medium text-foreground">
               {i18n.t('files.archiveExtraction.password')}
-              <input
+              <input data-floe-control="input"
                 type="password"
                 autocomplete="off"
-                class="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none disabled:opacity-60"
+                class="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-[length:var(--floe-type-control)] outline-none disabled:opacity-60"
                 value={password()}
                 disabled={busy()}
                 onInput={(event) => {
@@ -328,7 +328,7 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
           </Show>
 
           <Show when={errorMessage()}>
-            {(message) => <div class="text-sm text-destructive" role="alert">{message()}</div>}
+            {(message) => <div class="text-[length:var(--floe-type-body)] text-destructive" role="alert">{message()}</div>}
           </Show>
         </div>
       </Dialog>

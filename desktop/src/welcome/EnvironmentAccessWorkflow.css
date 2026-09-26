@@ -25,7 +25,7 @@
 .access-flow-options > button { display: flex; align-items: flex-start; gap: .75rem; padding: 1rem; border: 1px solid var(--border); border-radius: .625rem; text-align: start; min-width: 0; background: var(--card); cursor: pointer; }
 .access-flow-options > button:hover { border-color: var(--muted-foreground); }
 .access-flow-options > button[aria-pressed=true] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 4%, var(--card)); }
-.access-flow-options strong { display: block; font-size: .8125rem; font-weight: 550; line-height: 1.5; }
+.access-flow-options strong { display: block; font-size: var(--floe-type-control); font-weight: 550; line-height: 1.5; }
 .access-flow-options strong + span { display: block; margin-top: .375rem; font-size: .75rem; color: var(--muted-foreground); line-height: 1.7; }
 .access-flow-radio { width: 1rem; height: 1rem; border: 1px solid var(--border); border-radius: 50%; flex: none; margin-top: .2rem; }
 [aria-pressed=true] > .access-flow-radio { border: .3rem solid var(--primary); background: var(--primary-foreground); }
@@ -39,10 +39,10 @@
 .access-flow-network label, .access-flow-password label { display: grid; gap: .5rem; min-width: 0; font-size: .75rem; font-weight: 500; }
 .access-flow-network > :not(label) { grid-column: 1 / -1; }
 .access-flow-password { display: grid; gap: 1.25rem; max-width: 25rem; }
-.access-flow-password input { height: 2.5rem; font-size: .8125rem; }
+.access-flow-password input { height: 2.5rem; font-size: var(--floe-type-control); }
 .access-flow-field-error { font-size: .75rem; line-height: 1.6; color: var(--error); }
 .access-flow-card, .access-flow-review { border: 1px solid var(--border); border-radius: .625rem; padding: .25rem 1.125rem; }
-.access-flow-plan { list-style-position: inside; font-size: .8125rem; line-height: 1.75; }
+.access-flow-plan { list-style-position: inside; font-size: var(--floe-type-body); line-height: 1.75; }
 .access-flow-plan li { padding: .875rem 0; }
 .access-flow-plan li + li { border-top: 1px solid var(--border); }
 .access-flow-review > div { display: grid; grid-template-columns: minmax(8rem,1fr) 2fr; gap: 1rem; padding: .875rem 0; font-size: .75rem; }

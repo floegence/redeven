@@ -99,7 +99,7 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
 
   const renderEditFailureFallback = () => (
     <div class="flex h-full items-center justify-center p-4">
-      <div class="max-w-md rounded-md border border-warning/20 bg-warning/10 px-4 py-3 text-sm">
+      <div class="max-w-md rounded-md border border-warning/20 bg-warning/10 px-4 py-3 text-[length:var(--floe-type-body)]">
         <div class="font-medium text-foreground">{i18n.t('uiCopy.editor.unavailable')}</div>
         <div class="mt-1 text-xs text-muted-foreground">
           {i18n.t('uiCopy.editor.unavailableDescription')}
@@ -129,7 +129,7 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
               }}
             >
               <Suspense fallback={
-                <div class="flex h-full items-center justify-center text-sm text-muted-foreground">
+                <div class="flex h-full items-center justify-center text-[length:var(--floe-type-body)] text-muted-foreground">
                   {i18n.t('uiCopy.editor.loading')}
                 </div>
               }>

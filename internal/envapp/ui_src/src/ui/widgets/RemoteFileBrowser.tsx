@@ -5805,7 +5805,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         loading={deleteLoading()}
         onConfirm={() => void handleDelete(deleteDialogItems())}
       >
-        <div class="text-sm text-foreground">
+        <div class="text-[length:var(--floe-type-body)] text-foreground">
           <Show
             when={deleteDialogItems().length === 1}
             fallback={<>{i18n.tn('files.deleteManyPrompt', deleteDialogItems().length)}</>}
@@ -5852,7 +5852,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       {/* Duplicate Loading Overlay */}
       <Show when={duplicateLoading()}>
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--redeven-overlay-scrim)]">
-          <div class="bg-background border border-border rounded-lg shadow-lg px-4 py-3 text-sm">
+          <div class="bg-background border border-border rounded-lg shadow-lg px-4 py-3 text-[length:var(--floe-type-body)]">
             {i18n.t('files.duplicating')}
           </div>
         </div>

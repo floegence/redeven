@@ -171,7 +171,7 @@ export function DownloadTaskPanel(props: { manager: DownloadManager; inline?: bo
               >
                 <div class="flex items-center justify-between gap-2">
                   <div class="min-w-0 flex-1" title={taskName(task)}>
-                    <div class="truncate text-sm font-semibold leading-5">{taskName(task)}</div>
+                    <div class="truncate text-[length:var(--floe-type-body)] font-semibold leading-5">{taskName(task)}</div>
                   </div>
                   <div class="flex items-center gap-0.5 shrink-0">
                     <Show when={task.status === 'completed' && task.destination?.canReveal}>

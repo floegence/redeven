@@ -165,7 +165,7 @@ export function WindowModal(props: WindowModalProps) {
             <Show when={props.bodyDescription || props.children}>
               <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('min-h-0 flex-1 overflow-auto', props.bodyClass)}>
                 <Show when={props.bodyDescription}>
-                  <p id={descriptionId} class="px-4 py-3 text-sm leading-5 text-muted-foreground">{props.bodyDescription}</p>
+                  <p id={descriptionId} class="px-4 py-3 text-[length:var(--floe-type-body)] leading-5 text-muted-foreground">{props.bodyDescription}</p>
                 </Show>
                 {props.children}
               </div>

@@ -341,7 +341,7 @@
   min-width: 0;
   height: 2.25rem;
   background: transparent;
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
 }
 
 .flower-computer-picker-search-row > button svg {
@@ -466,7 +466,7 @@
 }
 
 .flower-computer-target-name {
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
   font-weight: 500;
   line-height: 1.5;
 }
@@ -508,7 +508,7 @@
 .flower-computer-picker-empty {
   padding: 2rem 1rem;
   text-align: center;
-  font-size: .8125rem;
+  font-size: var(--floe-type-body);
   color: var(--muted-foreground);
 }
 
@@ -676,7 +676,7 @@
 .flower-browser-source-grid label[data-disabled='true'] { cursor: not-allowed; opacity: .6; }
 .flower-browser-source-grid input { position: absolute; top: 1rem; right: 1rem; cursor: inherit; accent-color: var(--primary); }
 .flower-browser-source-grid svg { width: 1.25rem; height: 1.25rem; margin-bottom: .25rem; color: var(--primary); }
-.flower-browser-source-grid strong { font-size: .8125rem; font-weight: 600; }
+.flower-browser-source-grid strong { font-size: var(--floe-type-control); font-weight: 600; }
 .flower-browser-source-grid span { font-size: .75rem; line-height: 1.6; color: var(--muted-foreground); }
 .flower-browser-consent { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .875rem; padding-top: .25rem; }
 .flower-browser-consent p { flex: 1; min-width: 10rem; font-size: .75rem; color: var(--muted-foreground); line-height: 1.6; }
@@ -689,7 +689,7 @@
 .flower-browser-progress progress[value]::-moz-progress-bar { background: var(--primary); border-radius: 999px; }
 .flower-browser-progress p { font-size: .75rem; line-height: 1.6; color: var(--muted-foreground); }
 .flower-browser-progress button { justify-self: start; }
-.flower-browser-ready { display: flex; align-items: center; gap: .75rem; font-size: .8125rem; }
+.flower-browser-ready { display: flex; align-items: center; gap: .75rem; font-size: var(--floe-type-body); }
 .flower-browser-ready svg { width: 1.125rem; height: 1.125rem; color: var(--primary); }
 .flower-browser-install summary { cursor: pointer; font-size: .75rem; color: var(--muted-foreground); }
 .flower-browser-install code { display: block; margin-top: .75rem; font-size: .6875rem; overflow-wrap: anywhere; color: var(--muted-foreground); }
@@ -700,3 +700,7 @@
 }
 
 .dark .flower-browser-source-grid input { color-scheme: dark; }
+
+@media (pointer: coarse) {
+  .flower-computer-picker-search input { min-height: 44px; font-size: max(16px, 1rem); }
+}

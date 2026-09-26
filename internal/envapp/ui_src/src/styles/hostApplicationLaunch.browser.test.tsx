@@ -34,6 +34,7 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => ['light', 'dark'].map(mode => ({ loc
     expect(doc.querySelector('h1 test')).toBeNull();
     expect(doc.querySelector('[role=alert]')!.textContent).toBe(copy.t('hostApplications.errors.failed'));
     expect(doc.querySelector('[role=progressbar]')).toBeNull();
+    expect(popup.getComputedStyle(doc.querySelector('#heading')!).fontSize).toBe('12px');
     expect(doc.documentElement.scrollWidth).toBeLessThanOrEqual(doc.documentElement.clientWidth);
     expect(doc.documentElement.scrollHeight).toBeLessThanOrEqual(doc.documentElement.clientHeight);
     const buttons = [...doc.querySelectorAll('button')];
@@ -42,6 +43,7 @@ it.each(SUPPORTED_LOCALES.flatMap(locale => ['light', 'dark'].map(mode => ({ loc
       expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(40);
       expect(button.getBoundingClientRect().bottom).toBeLessThan(580);
       expect(popup.getComputedStyle(button).cursor).toBe('pointer');
+      expect(popup.getComputedStyle(button).fontSize).toBe('12px');
     }
     buttons[0].focus();
     expect(doc.activeElement).toBe(buttons[0]);

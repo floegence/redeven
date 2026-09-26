@@ -6,6 +6,10 @@
   .redeven-settings-breadcrumb { display: none; }
   .redeven-settings-mobile-nav { display: block; }
   .redeven-settings-header button { min-width: 44px; min-height: 44px; }
-  .redeven-settings-header select { min-height: 44px; font-size: 16px; }
+  .redeven-settings-header select { min-height: 44px; font-size: var(--floe-type-control); }
   .redeven-settings-header > button > span { display: none; }
+}
+
+@media (pointer: coarse) {
+  .redeven-settings-header select { min-height: 44px; font-size: max(16px, 1rem); }
 }

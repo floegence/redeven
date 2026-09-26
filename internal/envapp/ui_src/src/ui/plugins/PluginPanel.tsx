@@ -318,14 +318,14 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                 <label class={cn("relative min-w-0 flex-1", props.mobile && "order-last basis-full")}>
                   <span class="sr-only">{i18n.t('uiCopy.plugin.launcherSearchLabel')}</span>
                   <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
+                  <input data-floe-control="input"
                     ref={searchRef}
                     type="search"
                     data-plugin-launcher-search
                     value={query()}
                     onInput={(event) => setQuery(event.currentTarget.value)}
                     placeholder={i18n.t('uiCopy.plugin.launcherSearchPlaceholder')}
-                    class={cn('w-full rounded-md border bg-muted/40 outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 motion-reduce:transition-none', props.mobile ? 'h-11 pl-9 pr-3 text-base' : isWorkbenchPopup() ? 'h-8 pl-8 pr-2 text-xs' : 'h-10 pl-9 pr-3 text-sm')}
+                    class={cn('w-full text-[length:var(--floe-type-control)] rounded-md border bg-muted/40 outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 motion-reduce:transition-none', props.mobile ? 'h-11 pl-9 pr-3' : isWorkbenchPopup() ? 'h-8 pl-8 pr-2' : 'h-10 pl-9 pr-3')}
                   />
                 </label>
               </div>
@@ -415,13 +415,13 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
               <Show when={!props.model.loading && pluginTiles().length === 0}>
                 <div class={cn('flex min-h-40 flex-col items-center justify-center text-center', PLUGIN_ENTER_MOTION_CLASS)}>
                   <Package class="h-7 w-7 text-muted-foreground" />
-                  <p class="mt-3 max-w-sm text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.noInstalled')}</p>
+                  <p class="mt-3 max-w-sm text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('uiCopy.plugin.noInstalled')}</p>
                 </div>
               </Show>
               <Show when={!props.model.loading && pluginTiles().length > 0 && visibleTiles().length === 0}>
                 <div class={cn('flex min-h-40 flex-col items-center justify-center text-center', PLUGIN_ENTER_MOTION_CLASS)}>
                   <Search class="h-7 w-7 text-muted-foreground" />
-                  <p class="mt-3 text-sm font-medium">{i18n.t('uiCopy.plugin.launcherNoResults')}</p>
+                  <p class="mt-3 text-[length:var(--floe-type-body)] font-medium">{i18n.t('uiCopy.plugin.launcherNoResults')}</p>
                   <button
                     type="button"
                     class={cn('mt-3 min-h-[44px] cursor-pointer rounded-md border px-3 text-xs font-semibold hover:bg-muted', PLUGIN_PRESS_MOTION_CLASS)}

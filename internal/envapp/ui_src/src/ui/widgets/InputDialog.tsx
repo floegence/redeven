@@ -46,9 +46,9 @@ export function InputDialog(props: InputDialogProps) {
     >
       <div>
         <label class="block text-xs text-muted-foreground mb-1">{props.label}</label>
-        <input
+        <input data-floe-control="input"
           type="text"
-          class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground"
+          class="w-full px-3 py-2 text-[length:var(--floe-type-control)] border border-border rounded-md bg-background text-foreground"
           value={inputValue()}
           placeholder={props.placeholder}
           onInput={(e) => setInputValue(e.currentTarget.value)}
