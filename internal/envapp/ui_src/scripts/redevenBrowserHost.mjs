@@ -49,7 +49,7 @@ const host = await createComputerBrowserHost({
   resourceURL: (id, target) => `?browser_target=${encodeURIComponent(target)}&browser_resource=${encodeURIComponent(id)}`,
   onSourceClosed: target => { snapshots.delete(`source:${target}`); emit({ type: 'source_closed', target }); },
   onSourceFault: target => emit({ type: 'source_fault', target }),
-  onSourcePopup: (target, tab_id) => emit({ type: 'source_popup', target, tab_id }),
+  onSourcePopup: (target, tab_id, foreground) => emit({ type: 'source_popup', target, tab_id, foreground }),
   onSourceChanged: (target, tab) => {
     if (Buffer.byteLength(tab.url) <= 8192) snapshot(`source:${target}`, { type: 'source_changed', target, tab });
   },
@@ -150,6 +150,7 @@ async function command(method, params) {
     case 'source.cancel': return host.cancel(params.target);
     case 'source.tool': return host.tool(params.target, params.request);
     case 'view.grants': return host.views.grants(params.view, params.targets);
+    case 'view.select': return host.views.select(params.view, params.target);
     case 'view.state': return host.views.state(params.view);
     case 'view.privacy': return host.views.privacy(params.target, params.view);
     case 'view.acquire': return host.views.acquire(params.view, params.target, params.token);

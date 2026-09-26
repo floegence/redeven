@@ -89,13 +89,14 @@ func (r *ComputerUseRuntime) browserSourceHostLocked(ctx context.Context) (*brow
 }
 
 type browserHostEvent struct {
-	Type   string            `json:"type"`
-	ID     string            `json:"id,omitempty"`
-	View   string            `json:"view,omitempty"`
-	Target string            `json:"target,omitempty"`
-	TabID  string            `json:"tab_id,omitempty"`
-	Action json.RawMessage   `json:"action,omitempty"`
-	Tab    *browserstore.Tab `json:"tab,omitempty"`
+	Type       string            `json:"type"`
+	ID         string            `json:"id,omitempty"`
+	View       string            `json:"view,omitempty"`
+	Target     string            `json:"target,omitempty"`
+	TabID      string            `json:"tab_id,omitempty"`
+	Foreground bool              `json:"foreground,omitempty"`
+	Action     json.RawMessage   `json:"action,omitempty"`
+	Tab        *browserstore.Tab `json:"tab,omitempty"`
 }
 
 type browserHostHandlers struct {

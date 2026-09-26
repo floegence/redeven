@@ -84,6 +84,13 @@ export async function createComputerBrowserViews(directory, options) {
       if (view.control && !permits(view, view.control.target)) view.control = undefined;
       return Promise.all([view.connection.refreshGrants(), reconcileAudio()]);
     },
+    select(id, target) {
+      const view = requireView(id);
+      if (!permits(view, target)) throw new Error('BROWSER_SOURCE_NOT_ALLOWED');
+      return view.connection.select(target).then(() => {
+        options.onSelection?.(id, target);
+      });
+    },
     privacy(target, id) {
       // The Runtime reserves and drains this target before granting private
       // input. Observation revocation happens before this method returns a drain.
