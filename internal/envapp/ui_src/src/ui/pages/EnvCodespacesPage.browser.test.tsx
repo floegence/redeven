@@ -4,9 +4,11 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { EnvCodespacesPage, type SpaceStatus } from './EnvCodespacesPage';
+import { dictionaries, createTestI18nHelpers } from '../i18n/locales/testDictionaries';
+import type { RedevenLocale } from '../i18n/localeMeta';
 import { CodespacesPageSkeleton } from './CodespacesPresentation';
 
-const state = vi.hoisted(() => ({ locale: 'en-US' as 'en-US' | 'zh-CN', scope: '', desktop: false, spaces: vi.fn(), runtime: vi.fn() }));
+const state = vi.hoisted(() => ({ locale: 'en-US' as RedevenLocale, scope: '', desktop: false, spaces: vi.fn(), runtime: vi.fn(), start: vi.fn() }));
 vi.mock('../i18n', async () => {
   const { createTestI18nHelpers } = await import('../i18n/locales/testDictionaries');
   return { useI18n: () => ({ ...createTestI18nHelpers(state.locale), locale: () => state.locale }) };
@@ -18,9 +20,11 @@ vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
   resourceCacheAccess: () => ({ phase: 'ready' as const, generation: 0, scope: state.scope }),
 }) }));
-vi.mock('../services/desktopShellBridge', async original => ({ ...await original<object>(), desktopShellCodespaceWindowOpenAvailable: () => state.desktop }));
+vi.mock('../services/desktopShellBridge', async original => ({ ...await original<object>(), desktopShellCodespaceWindowOpenAvailable: () => state.desktop, openCodespaceWindowInDesktopShell: async () => ({ ok: true }) }));
+vi.mock('../services/controlplaneApi', async original => ({ ...await original<object>(), getEnvPublicIDFromSession: () => 'env-test', getLocalRuntime: async () => ({}) }));
 vi.mock('../services/filesystemPicker', () => ({ useEnvFilesystemPicker: () => ({}) }));
 vi.mock('../services/localApi', async original => ({ ...await original<object>(), fetchLocalApiJSON: (url: string) => {
+  if (url.endsWith('/start')) return state.start();
   if (url.endsWith('/spaces')) return state.spaces();
   if (url.endsWith('/code-runtime/status')) return state.runtime();
   throw new Error(`Unexpected local API request: ${url}`);
@@ -40,7 +44,7 @@ let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
 beforeEach(() => {
   state.locale = 'en-US'; state.desktop = false; state.scope = `codespaces-browser-${crypto.randomUUID()}`;
-  state.spaces.mockReset(); state.runtime.mockReset().mockResolvedValue(ready);
+  state.start.mockReset(); state.spaces.mockReset(); state.runtime.mockReset().mockResolvedValue(ready);
   host = document.createElement('div'); host.style.height = '600px'; document.body.append(host);
 });
 afterEach(async () => {
@@ -111,7 +115,7 @@ it('restores IndexedDB after a new cache instance and preserves row, focus and s
 
 it.each(['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark'])('uses the common main canvas and a quiet bounded card in %s', async preset => {
   state.locale = 'zh-CN'; state.desktop = true;
-  await page.viewport(1440, 900);
+  await page.viewport(1077, 900);
   const original = document.documentElement.className;
   const theme = document.documentElement.dataset.floeShellTheme;
   const material = document.documentElement.dataset.floeSurfaceStyle;
@@ -145,6 +149,7 @@ it.each(['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark'])(
     expect.soft(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
     const action = card.querySelector<HTMLButtonElement>('button')!;
     expect.soft(action.getBoundingClientRect().height).toBe(28);
+    card.querySelectorAll('button').forEach(assertButtonText);
   }
 
 });
@@ -192,7 +197,7 @@ it.each([320, 544].flatMap(width => [false, true].map(desktop => ({ width, deskt
   expect(card.getBoundingClientRect().height).toBeLessThanOrEqual(172);
 });
 
-it.each([320, 544, 1440].flatMap(width => [false, true].flatMap(desktop => (['en-US', 'zh-CN'] as const).map(locale => ({ width, desktop, locale })))))(
+it.each([320, 544, 1077, 1440].flatMap(width => [false, true].flatMap(desktop => (['en-US', 'zh-CN'] as const).map(locale => ({ width, desktop, locale })))))(
   'balances the full card action row at $width px in $locale with desktop=$desktop', async ({ width, desktop, locale }) => {
     state.desktop = desktop; state.locale = locale;
     await page.viewport(width, 900);
@@ -219,6 +224,7 @@ it.each([320, 544, 1440].flatMap(width => [false, true].flatMap(desktop => (['en
       for (const [index, button] of buttons.entries()) {
         expect(getComputedStyle(button).fontSize).toBe('12px');
         expect(button.getBoundingClientRect().height).toBe(28);
+        assertButtonText(button);
         if (index > 0) {
           const gap = button.getBoundingClientRect().left - buttons[index - 1].getBoundingClientRect().right;
           expect(gap).toBeGreaterThanOrEqual(0);
@@ -228,3 +234,86 @@ it.each([320, 544, 1440].flatMap(width => [false, true].flatMap(desktop => (['en
     }
   },
 );
+
+function assertButtonText(button: HTMLButtonElement) {
+  const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const parent = node.parentElement!;
+    if (!node.textContent?.trim() || getComputedStyle(parent).visibility !== 'visible' || !parent.getClientRects().length) continue;
+    const range = document.createRange(); range.selectNodeContents(node);
+    const text = range.getBoundingClientRect(), bounds = button.getBoundingClientRect();
+    const icon = button.querySelector(':scope > svg, :scope > span[aria-hidden="true"]')?.getBoundingClientRect();
+    if (icon) expect.soft(Math.abs(text.top + text.height / 2 - icon.top - icon.height / 2), `${node.textContent} must align with its icon`).toBeLessThanOrEqual(2);
+    expect.soft(Math.abs(text.top + text.height / 2 - bounds.top - bounds.height / 2), `${node.textContent} must remain vertically centered`).toBeLessThanOrEqual(2);
+    expect.soft(text.top, `${node.textContent} must fit vertically`).toBeGreaterThanOrEqual(bounds.top);
+    expect.soft(text.bottom, `${node.textContent} must fit vertically`).toBeLessThanOrEqual(bounds.bottom);
+    expect.soft(text.left, `${node.textContent} must fit horizontally`).toBeGreaterThanOrEqual(bounds.left);
+    expect.soft(text.right, `${node.textContent} must fit horizontally`).toBeLessThanOrEqual(bounds.right);
+  }
+}
+
+it.each([320, 544, 1077].flatMap(width => (Object.keys(dictionaries) as RedevenLocale[]).flatMap(locale => [false, true].flatMap(preparing => [false, true].map(running => ({ width, locale, preparing, running }))))))(
+  'centers complete pending labels without moving card actions at $width px in $locale with preparing=$preparing and running=$running', async ({ width, locale, preparing, running }) => {
+    state.locale = locale; state.desktop = true;
+    await page.viewport(width, 900);
+    state.spaces.mockResolvedValue({ spaces: [{ ...space, running }] });
+    const pending = deferred<SpaceStatus>(); state.start.mockReturnValue(pending.promise);
+    if (preparing) state.runtime.mockResolvedValue({
+      active_runtime: { detection_state: 'missing', present: false },
+      managed_runtime: { detection_state: 'missing', present: false },
+      managed_runtime_source: 'none', installed_versions: [],
+      operation: { action: 'prepare_workspace_engine', state: 'running', stage: 'downloading', install_method: 'remote_download' },
+    });
+    dispose = render(() => <EnvCodespacesPage />, host);
+    await expect.poll(() => host.querySelector('.codespace-card')).toBeTruthy();
+    await document.fonts.ready;
+    const footer = host.querySelector<HTMLElement>('.codespace-card-actions')!;
+    const buttons = [...footer.querySelectorAll('button')];
+    const dimensions = () => [footer.closest('.codespace-card')!, footer, ...buttons].map(element => {
+      const { left, top, width, height } = element.getBoundingClientRect();
+      return { left, top, width, height };
+    });
+    const idle = dimensions();
+    buttons.forEach(assertButtonText);
+    const row = footer.getBoundingClientRect();
+    for (const button of buttons) {
+      const rect = button.getBoundingClientRect();
+      expect.soft(Math.abs(rect.top + rect.height / 2 - row.top - row.height / 2), 'Every action stays centered in the footer').toBeLessThanOrEqual(1);
+    }
+    buttons[0].click();
+    const copy = createTestI18nHelpers(locale);
+    const label = copy.t(preparing ? 'codespaces.status.settingUpEditor' : running ? 'codespaces.actions.opening' : 'codespaces.actions.starting');
+    await expect.element(page.getByRole('button', { name: label, exact: true })).toBeVisible();
+    expect(buttons[0].getAttribute('aria-busy')).toBe('true');
+    buttons.forEach(assertButtonText);
+    expect(dimensions()).toEqual(idle);
+    if ((width === 1077 && locale === 'zh-CN') || (width === 320 && locale === 'fr-FR')) await page.screenshot({ element: footer.closest('.codespace-card')!, path: `__screenshots__/aligned-pending-${locale}-${width}-${preparing ? 'setup' : 'start'}-${running ? 'running' : 'stopped'}.png` });
+    if (!preparing) {
+      pending.resolve(space);
+      await expect.poll(() => buttons[0].disabled).toBe(false);
+      expect(dimensions()).toEqual(idle);
+      buttons.forEach(assertButtonText);
+    }
+  },
+);
+
+it('keeps compact Open menus named and keyboard accessible at intermediate desktop widths', async () => {
+  state.desktop = true;
+  await page.viewport(1077, 900);
+  state.spaces.mockResolvedValue({ spaces: [{ ...space, running: false }] });
+  dispose = render(() => <EnvCodespacesPage />, host);
+  const open = page.getByTitle('Open', { exact: true });
+  await expect.element(open).toBeVisible();
+  const button = open.element() as HTMLButtonElement;
+  expect(button.title).toBe('Open');
+  expect(getComputedStyle(button.querySelector('.codespace-open-label')!).display).toBe('none');
+  const trigger = button.closest<HTMLElement>('[data-floe-dropdown-trigger]')!;
+  expect(trigger.getAttribute('aria-label')).toBe('Open');
+  trigger.focus();
+  await userEvent.keyboard('{Enter}');
+  await expect.element(page.getByRole('menuitem', { name: 'Open in Desktop' })).toBeVisible();
+  await expect.element(page.getByRole('menuitem', { name: 'Open in Browser' })).toBeVisible();
+  await userEvent.keyboard('{Escape}');
+  expect(document.activeElement).toBe(trigger);
+});
