@@ -121,6 +121,9 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 		candidate.targets = slices.DeleteFunc(candidate.targets, func(id string) bool { return id == event.Target })
 		targets, observing := slices.Clone(candidate.targets), candidate.observing
 		candidate.mu.Unlock()
+		if candidate.retireIfEmpty() {
+			continue
+		}
 		if observing {
 			if err := candidate.host.call(ctx, "view.grants", map[string]any{"view": candidate.id, "targets": targets}, nil); err != nil {
 				_ = candidate.close()
@@ -130,4 +133,17 @@ func (r *ComputerUseRuntime) browserSourceGenerationEvent(generation string, eve
 	if closer, ok := executor.(interface{ Close() error }); ok {
 		_ = closer.Close()
 	}
+}
+
+// Caller holds connectMu. An explicit close may still create its replacement
+// tab; unexpected final-source loss must end observation and input authority.
+func (view *browserView) retireIfEmpty() bool {
+	view.mu.Lock()
+	empty := len(view.targets) == 0
+	view.mu.Unlock()
+	if !empty || view.workspace != nil && view.workspace.pendingCloses > 0 {
+		return false
+	}
+	_ = view.close()
+	return true
 }

@@ -63,6 +63,12 @@ publish a new fault. Discovery marks failed managed profiles
 `connection_required` and offers no default ready candidate until recovery;
 losing a single tab leaves the healthy profile available for a new selection.
 
+Unexpected loss of a view's last granted source retires that view and its input
+authority. The window stays open with the source-selection recovery action;
+an empty directory must not appear as indefinite loading. An explicit tab-close
+transaction retains its view until its replacement tab is ready, or retires the
+empty view if replacement fails. Other views with healthy sources remain live.
+
 Source retirement retains the semantic navigation guard until the debugger
 detaches. Removing its paused-request listener while interception is still
 enabled can block restoration and cleanup; input-release failures remain
@@ -91,6 +97,7 @@ not prove installation or upgrade behavior.
 
 - `redeven:internal/ai/computer_browser_recovery.go` - Recovery transaction, admission and error codes.
 - `redeven:internal/ai/computer_browser_recovery_test.go` - Real process termination, deduplication, saved tabs and privacy barriers.
+- `redeven:internal/ai/computer_browser_lifecycle_test.go` - Final-source retirement and healthy-peer isolation.
 - `redeven:internal/ai/computer_managed_browser.go` - Process-owned response reader and bounded health handling.
 - `redeven:internal/ai/computer_managed_browser_ipc_test.go` - Canceled caller and late-response isolation.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.node-test.mjs` - Navigation guard and input-release retirement ordering.

@@ -205,6 +205,34 @@ func TestBrowserWorkspaceOpensWithoutModelServiceAndReusesSources(t *testing.T) 
 	}
 }
 
+func TestBrowserExplicitLastTabClosePreservesViewWithReplacement(t *testing.T) {
+	runtime, meta := browserWorkspaceFixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	view, err := runtime.OpenBrowserWorkspace(ctx, meta, BrowserWorkspaceRequest{ManagedProfileID: "browser-main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observer := observeBrowserFixture(t, ctx, runtime, meta, view)
+	observer.send(1, view.InitialTarget, "", map[string]any{"kind": "tab_close", "tab": view.InitialTarget})
+	observer.ack(1)
+	var state struct {
+		Active string `json:"active"`
+	}
+	if err := runtime.browserHost.call(ctx, "view.state", map[string]string{"view": view.ID}, &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.Active == "" || state.Active == view.InitialTarget {
+		t.Fatal("explicit close did not select a replacement tab")
+	}
+	if runtime.AuthorizeBrowserView(meta, view.ID) != nil {
+		t.Fatal("explicit close retired the view before its replacement tab")
+	}
+	if err := runtime.browserHost.call(ctx, "source.ready", map[string]string{"target": state.Active}, nil); err != nil {
+		t.Fatal("replacement tab is unavailable", err)
+	}
+}
+
 func TestBrowserInputAdmissionDoesNotWaitForNavigationCompletion(t *testing.T) {
 	runtime, meta := browserWorkspaceFixture(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)

@@ -5,6 +5,19 @@ import (
 	"testing"
 )
 
+func TestBrowserLastSourceLossRetiresViewAuthority(t *testing.T) {
+	runtime, meta, _, _ := browserViewFixture(t)
+	descriptor, err := runtime.OpenBrowserView(t.Context(), meta, BrowserViewRequest{Targets: []string{"page"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := runtime.browserViews[descriptor.ID]
+	runtime.browserSourceEvent(browserHostEvent{Type: "source_closed", Target: "page"})
+	if view.ctx.Err() == nil || runtime.AuthorizeBrowserView(meta, descriptor.ID) == nil {
+		t.Fatal("last source loss left an authorized, indefinitely loading view")
+	}
+}
+
 func TestBrowserSourceCloseRemovesGrantsAfterNativeRetirement(t *testing.T) {
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), nil, t.TempDir())
 	runtime.browserHost = &browserSourceHost{ctx: t.Context()}
