@@ -2,14 +2,17 @@ package appserver
 
 import (
 	"net/http"
+	"runtime"
 
 	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/browserbridge"
+	"github.com/floegence/redeven/internal/hostapps"
 )
 
 func (g *Server) handleBrowserWorkspaceAPI(w http.ResponseWriter, r *http.Request) bool {
 	const prefix = "/_redeven_proxy/api/browser/"
 	switch r.URL.Path {
-	case prefix + "preference", prefix + "recovery", prefix + "environment", prefix + "profiles", prefix + "workspace", prefix + "installation", prefix + "connections/cdp", prefix + "extension/setup", prefix + "extension/open", prefix + "extension/status", prefix + "extension/tabs":
+	case prefix + "preference", prefix + "recovery", prefix + "environment", prefix + "profiles", prefix + "workspace", prefix + "installation", prefix + "connections/cdp", prefix + "extension/setup", prefix + "extension/open", prefix + "extension/status", prefix + "extension/tabs", prefix + "extension/remote":
 	default:
 		return false
 	}
@@ -20,6 +23,34 @@ func (g *Server) handleBrowserWorkspaceAPI(w http.ResponseWriter, r *http.Reques
 	var data any
 	var err error
 	switch {
+	case r.URL.Path == prefix+"extension/remote" && r.Method == http.MethodPost:
+		var request struct {
+			InstallationID string `json:"installation_id"`
+		}
+		if !decodeBrowserRequest(w, r, 1024, &request) {
+			return true
+		}
+		if runtime.GOOS != "linux" || g.hostApps == nil {
+			writeHostAppError(w, hostapps.ErrUnavailable)
+			return true
+		}
+		installation, resolveErr := browserbridge.ResolveInstallation(request.InstallationID)
+		if resolveErr != nil || !installation.Installed {
+			writeHostAppError(w, hostapps.ErrNotFound)
+			return true
+		}
+		var setup ai.ComputerExtensionSetup
+		setup, err = g.browserRuntime.BrowserExtensionSetup(r.Context(), meta, request.InstallationID)
+		if err != nil {
+			g.writeComputerExtensionFailure(w, err, "prepare")
+			return true
+		}
+		data, err = g.hostApps.PrepareBrowser(r.Context(), meta.UserPublicID, request.InstallationID, setup.NativeHost)
+		if err != nil {
+			writeHostAppError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "remote_browser_prepare", "success", map[string]any{"installation_id": request.InstallationID}, nil)
 	case r.URL.Path == prefix+"preference" && r.Method == http.MethodGet:
 		data, err = g.browserRuntime.BrowserPreference(r.Context(), meta)
 	case r.URL.Path == prefix+"preference" && r.Method == http.MethodPost:

@@ -51,6 +51,11 @@ func (s *hostAppsStub) Catalog(context.Context, string, string) (hostapps.Catalo
 	s.calls++
 	return hostapps.Catalog{}, nil
 }
+
+func (s *hostAppsStub) PrepareBrowser(context.Context, string, string, string) (hostapps.Application, error) {
+	s.calls++
+	return hostapps.Application{}, nil
+}
 func (s *hostAppsStub) Sessions(string) []hostapps.Session { s.calls++; return nil }
 func (s *hostAppsStub) Launch(_ context.Context, owner string, req hostapps.LaunchRequest) (hostapps.Session, error) {
 	s.calls++

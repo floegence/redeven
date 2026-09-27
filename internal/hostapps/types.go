@@ -174,6 +174,7 @@ type AddRequest struct {
 }
 
 type Backend interface {
+	PrepareBrowser(context.Context, string, string, string) (Application, error)
 	ClientAssets(string, string) *nativeapps.ClientAssets
 	SetupStatus(string) (SetupStatus, error)
 	WatchSetup() (<-chan struct{}, func(), error)
