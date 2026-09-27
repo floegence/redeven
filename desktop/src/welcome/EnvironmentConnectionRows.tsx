@@ -1,3 +1,4 @@
+import { Dynamic } from 'solid-js/web';
 import { For, Show, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { Check, ChevronRight, Copy, ExternalLink, HelpIcon, Search, ShareIcon, X } from '@floegence/floe-webapp-core/icons';
@@ -75,57 +76,66 @@ function ConnectionAddressGroup(props: ConnectionActions & Readonly<{
       </div>
     </Show>
     <div ref={viewport} class="redeven-address-viewport" role="region" aria-labelledby={headingID} tabIndex={0}>
-      <For each={visibleIDs()} fallback={<p class="redeven-address-empty" role="status">{props.i18n.t('environmentConnection.noMatchingAddresses')}</p>}>
-        {id => <ConnectionRow {...props} row={rowsByID().get(id)!} />}
-      </For>
+      <table class="redeven-address-table" aria-labelledby={headingID}>
+        <thead><tr>
+          <th scope="col" colSpan={props.rows[0].access_scope === 'environment_only' ? 2 : 1}>{props.i18n.t('environmentFacts.url')}</th>
+          <Show when={props.rows[0].access_scope !== 'environment_only'}><th scope="col">{props.i18n.t('environmentConnection.addressActions')}</th></Show>
+        </tr></thead>
+        <tbody>
+          <For each={visibleIDs()} fallback={<tr><td colSpan={2}><p class="redeven-address-empty" role="status">{props.i18n.t('environmentConnection.noMatchingAddresses')}</p></td></tr>}>
+            {id => <ConnectionRow {...props} row={rowsByID().get(id)!} />}
+          </For>
+        </tbody>
+      </table>
     </div>
   </div>;
+  const title = () => (<div class="redeven-address-title">
+    <span id={headingID} class="redeven-card-endpoint-label">{props.i18n.t(props.rows[0].label_key)}</span>
+    <Show when={props.rows[0].access_scope !== 'environment_only'}>
+      <DesktopTooltip content={props.i18n.t(props.rows[0].detail_key, props.rows[0].detail_params)} placement="top"
+        anchorClass="redeven-address-help-anchor" class="redeven-address-help-tooltip">
+        <Button type="button" size="sm" variant="ghost" class="redeven-address-help"
+          aria-labelledby={`${headingID} ${helpLabelID}`} aria-describedby={helpDescriptionID}
+          onClick={event => event.preventDefault()}>
+          <HelpIcon class="h-3.5 w-3.5" aria-hidden="true" />
+          <span id={helpLabelID} class="sr-only">{props.i18n.t('common.moreInformation')}</span>
+        </Button>
+      </DesktopTooltip>
+      <span id={helpDescriptionID} class="sr-only">{props.i18n.t(props.rows[0].detail_key, props.rows[0].detail_params)}</span>
+    </Show>
+  </div>);
   return <Show when={props.rows[0]}>{first => props.compact && first().access_scope !== 'environment_only' ? (
     <details class="redeven-address-group redeven-address-group--summary" data-address-scope={first().access_scope}>
-      <summary class="redeven-address-summary">
-        <div class="redeven-address-title">
-          <span id={headingID} class="redeven-card-endpoint-label">{props.i18n.t(first().label_key)}</span>
-        </div>
+      <summary class="redeven-address-heading redeven-address-summary">
+        {title()}
         <span class="redeven-address-summary-meta">
           <span class="redeven-address-count" aria-label={countLabel()}>{term() ? `${props.i18n.formatNumber(visibleIDs().length)} / ${props.i18n.formatNumber(props.rows.length)}` : props.i18n.formatNumber(props.rows.length)}</span>
           <ChevronRight class="h-3.5 w-3.5 redeven-address-summary-chevron" aria-hidden="true" />
         </span>
       </summary>
       <div class="redeven-address-summary-content">
-        <p class="redeven-card-endpoint-detail">{props.i18n.t(first().detail_key, first().detail_params)}</p>
         {list}
       </div>
     </details>
   ) : (<section class="redeven-address-group" data-address-scope={first().access_scope}>
     <div class="redeven-address-heading">
-      <div class="redeven-address-title">
-        <span id={headingID} class="redeven-card-endpoint-label">{props.i18n.t(first().label_key)}</span>
-        <Show when={first().access_scope !== 'environment_only'}>
-          <DesktopTooltip content={props.i18n.t(first().detail_key, first().detail_params)} placement="top"
-            anchorClass="redeven-address-help-anchor" class="redeven-address-help-tooltip">
-            <Button type="button" size="sm" variant="ghost" class="redeven-address-help"
-              aria-labelledby={`${headingID} ${helpLabelID}`} aria-describedby={helpDescriptionID}>
-              <HelpIcon class="h-3.5 w-3.5" aria-hidden="true" />
-              <span id={helpLabelID} class="sr-only">{props.i18n.t('common.moreInformation')}</span>
-            </Button>
-          </DesktopTooltip>
-          <span id={helpDescriptionID} class="sr-only">{props.i18n.t(first().detail_key, first().detail_params)}</span>
-        </Show>
-      </div>
+      {title()}
       <Show when={props.rows.length > 1 || term()}><span class="redeven-address-count" aria-label={countLabel()} title={countLabel()}>
         {term() ? `${props.i18n.formatNumber(visibleIDs().length)} / ${props.i18n.formatNumber(props.rows.length)}` : props.i18n.formatNumber(props.rows.length)}
       </span></Show>
     </div>
     <Show when={first().access_scope === 'environment_only'} fallback={list}>
-      <span class="redeven-endpoint-scope-title">{props.i18n.t(first().detail_key, first().detail_params)}</span>
-      <p class="redeven-card-endpoint-detail">{props.i18n.t('environmentConnection.openViaDesktop', { action: props.i18n.t('environmentAction.open') })}</p>
-      <details class="redeven-endpoint-listener">
-        <summary><ChevronRight class="h-3 w-3" aria-hidden="true" />{props.i18n.t('environmentConnection.listenerDetails')}</summary>
-        <div class="redeven-endpoint-listener-content">
-          {list}
-          <p>{props.i18n.t('environmentConnection.loopbackHelp', first().detail_params)}</p>
-        </div>
-      </details>
+      <div class="redeven-address-restricted">
+        <span class="redeven-endpoint-scope-title">{props.i18n.t(first().detail_key, first().detail_params)}</span>
+        <p class="redeven-card-endpoint-detail">{props.i18n.t('environmentConnection.openViaDesktop', { action: props.i18n.t('environmentAction.open') })}</p>
+        <details class="redeven-endpoint-listener">
+          <summary><ChevronRight class="h-3 w-3" aria-hidden="true" />{props.i18n.t('environmentConnection.listenerDetails')}</summary>
+          <div class="redeven-endpoint-listener-content">
+            {list}
+            <p>{props.i18n.t('environmentConnection.loopbackHelp', first().detail_params)}</p>
+          </div>
+        </details>
+      </div>
     </Show>
   </section>)}</Show>;
 }
@@ -149,31 +159,33 @@ function ConnectionRow(props: ConnectionActions & Readonly<{ row: DesktopConnect
     clearTimeout(resetTimer);
     resetTimer = setTimeout(() => setCopiedValue(null), 1500);
   };
-  return <div class="redeven-card-endpoint-row" data-endpoint-id={row().id} data-endpoint-kind={row().kind}
+  return <Dynamic component={address() ? 'tr' : 'div'} class="redeven-card-endpoint-row" data-endpoint-id={row().id} data-endpoint-kind={row().kind}
     data-selected={row().id === props.selectedID ? '' : undefined} role={row().kind === 'status' ? 'status' : undefined}>
     <Show when={!address()}><span class="redeven-card-endpoint-label">{props.i18n.t(row().label_key)}</span></Show>
-    <div class="redeven-card-endpoint-content min-w-0 select-text">
+    <Dynamic component={address() ? 'td' : 'div'} class="redeven-card-endpoint-content min-w-0 select-text">
       <span id={valueID} class="redeven-card-endpoint-value" title={row().value || undefined}>{row().value_key ? props.i18n.t(row().value_key!) : row().value}</span>
       <Show when={address() ? undefined : row().detail_key}>{key => <span class="redeven-card-endpoint-detail">{props.i18n.t(key(), row().detail_params)}</span>}</Show>
-    </div>
-    <div class="redeven-endpoint-actions">
-      <Show when={copyable()}>
-        <Button size="sm" variant="ghost" class="redeven-copy-action" data-icon-only aria-describedby={valueID} aria-label={copyLabel()}
-          title={copied() ? props.i18n.t('environmentCenter.copied') : copyLabel()} data-copied={copied() || undefined}
-          onClick={() => void copy()}>{copied() ? <Check class="h-3.5 w-3.5" /> : <Copy class="h-3.5 w-3.5" />}</Button>
-      </Show>
-      <Show when={browserOpenable()}>
-        <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0" aria-describedby={valueID}
-          aria-label={props.i18n.t('webServiceBrowser.openInBrowser')} title={props.i18n.t('webServiceBrowser.openInBrowser')}
-          onClick={() => void props.openInBrowser(row().value)}><ExternalLink class="h-3.5 w-3.5" /></Button>
-      </Show>
-      <Show when={isShareableConnectionAddress(row())}>
-        <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0" aria-describedby={valueID}
-          aria-label={props.i18n.t('settings.shareConnection')} title={props.i18n.t('settings.shareConnection')}
-          aria-expanded={row().id === props.selectedID} onClick={() => props.selectForShare(row().id === props.selectedID ? '' : row().id)}>
-          <ShareIcon class="h-3.5 w-3.5" />
-        </Button>
-      </Show>
-    </div>
-  </div>;
+    </Dynamic>
+    <Dynamic component={address() ? 'td' : 'div'} class="redeven-endpoint-action-cell">
+      <div class="redeven-endpoint-actions">
+        <Show when={copyable()}>
+          <Button size="sm" variant="ghost" class="redeven-copy-action" classList={{ 'redeven-endpoint-action': address() }} data-icon-only aria-describedby={valueID} aria-label={copyLabel()}
+            title={copied() ? props.i18n.t('environmentCenter.copied') : copyLabel()} data-copied={copied() || undefined}
+            onClick={() => void copy()}>{copied() ? <Check class="h-3.5 w-3.5" /> : <Copy class="h-3.5 w-3.5" />}</Button>
+        </Show>
+        <Show when={browserOpenable()}>
+          <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0" aria-describedby={valueID}
+            aria-label={props.i18n.t('webServiceBrowser.openInBrowser')} title={props.i18n.t('webServiceBrowser.openInBrowser')}
+            onClick={() => void props.openInBrowser(row().value)}><ExternalLink class="h-3.5 w-3.5" /></Button>
+        </Show>
+        <Show when={isShareableConnectionAddress(row())}>
+          <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0" aria-describedby={valueID}
+            aria-label={props.i18n.t('settings.shareConnection')} title={props.i18n.t('settings.shareConnection')}
+            aria-expanded={row().id === props.selectedID} onClick={() => props.selectForShare(row().id === props.selectedID ? '' : row().id)}>
+            <ShareIcon class="h-3.5 w-3.5" />
+          </Button>
+        </Show>
+      </div>
+    </Dynamic>
+  </Dynamic>;
 }

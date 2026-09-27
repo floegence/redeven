@@ -2951,6 +2951,7 @@
     "passwordHelp": "Сохраняется только на этом устройстве для автоматических проверок. Пароли, введённые по запросу при подключении, не сохраняются."
   },
   "environmentConnection": {
+    "addressActions": "Действия",
     "filterAddresses": "Фильтр адресов",
     "clearAddressFilter": "Очистить фильтр адресов",
     "noMatchingAddresses": "Нет подходящих адресов",

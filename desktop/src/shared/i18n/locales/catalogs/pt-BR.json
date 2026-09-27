@@ -2922,6 +2922,7 @@
     "passwordHelp": "Salva apenas neste dispositivo para verificações automáticas. As senhas solicitadas durante a conexão não são salvas."
   },
   "environmentConnection": {
+    "addressActions": "Ações",
     "filterAddresses": "Filtrar endereços",
     "clearAddressFilter": "Limpar filtro de endereços",
     "noMatchingAddresses": "Nenhum endereço correspondente",

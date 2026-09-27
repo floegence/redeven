@@ -2922,6 +2922,7 @@
     "passwordHelp": "Wird nur auf diesem Gerät für automatische Prüfungen gespeichert. Bei Verbindungsabfragen eingegebene Passwörter werden nicht gespeichert."
   },
   "environmentConnection": {
+    "addressActions": "Aktionen",
     "filterAddresses": "Adressen filtern",
     "clearAddressFilter": "Adressfilter löschen",
     "noMatchingAddresses": "Keine passenden Adressen",

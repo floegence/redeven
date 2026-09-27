@@ -2918,6 +2918,7 @@
     "passwordHelp": "密碼僅儲存在此裝置，供自動偵測使用。連線時臨時輸入的密碼不會儲存。"
   },
   "environmentConnection": {
+    "addressActions": "操作",
     "filterAddresses": "篩選位址",
     "clearAddressFilter": "清除位址篩選",
     "noMatchingAddresses": "沒有符合的位址",

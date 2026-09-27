@@ -2918,6 +2918,7 @@
     "passwordHelp": "自動確認用のパスワードは、このデバイスにのみ保存されます。接続時のプロンプトで入力したパスワードは保存されません。"
   },
   "environmentConnection": {
+    "addressActions": "操作",
     "filterAddresses": "アドレスを絞り込む",
     "clearAddressFilter": "アドレスの絞り込みを解除",
     "noMatchingAddresses": "一致するアドレスがありません",
