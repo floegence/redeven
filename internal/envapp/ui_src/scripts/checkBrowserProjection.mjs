@@ -61,6 +61,12 @@ try {
     dragThumb.onpointerdown=e=>{dragHeld=true;dragOrigin=e.clientX-window.dragX;dragThumb.setPointerCapture(e.pointerId)};
     dragThumb.onpointermove=e=>{if(!dragHeld)return;window.dragX=Math.max(0,Math.min(216,e.clientX-dragOrigin));window.dragPositions.push(window.dragX);dragThumb.style.transform='translateX('+window.dragX+'px)';document.getElementById('drag-value').textContent=window.dragX};
     dragThumb.onpointerup=()=>dragHeld=false;dragThumb.onlostpointercapture=()=>dragHeld=false;
+  </script><label style="position:fixed;right:24px;top:320px">Native range
+    <input id="native-range" type="range" min="0" max="100" value="10" style="width:280px"><output id="native-range-value">10</output>
+  </label><script>
+    window.rangeSamples=[];window.rangeReleases=0;const nativeRange=document.getElementById('native-range');
+    nativeRange.oninput=e=>{window.rangeSamples.push({value:Number(nativeRange.value),trusted:e.isTrusted});document.getElementById('native-range-value').textContent=nativeRange.value};
+    nativeRange.onpointerup=()=>window.rangeReleases++;
   </script>`;
   website = http.createServer((request, response) => {
     if (request.url === '/av-sync.webm') {
@@ -252,6 +258,17 @@ try {
     for (let i = 1; i < positions.length; i++) assert((positions[i] - positions[i - 1]) * Math.sign(to - from) >= 0, 'Continuous drag never rolls back against pointer direction');
     assert(positions.every(value => value >= Math.min(from, to) && value <= Math.max(from, to)), 'Source drag stays within the actual pointer path');
   }
+  const nativeRange = await replay.locator('#native-range').boundingBox(); assert.ok(nativeRange);
+  await viewer.mouse.move(nativeRange.x + 34, nativeRange.y + nativeRange.height / 2);
+  await viewer.mouse.down();
+  await viewer.mouse.move(nativeRange.x + nativeRange.width - 35, nativeRange.y + nativeRange.height / 2, { steps: 28 });
+  await viewer.mouse.up();
+  await page.waitForFunction(() => window.rangeReleases === 1 && Number(document.querySelector('#native-range').value) > 70);
+  const rangeState = await page.evaluate(() => ({ value: document.querySelector('#native-range').value, samples: window.rangeSamples }));
+  assert(rangeState.samples.length > 1 && rangeState.samples.every(sample => sample.trusted), 'Native range receives continuous trusted input');
+  for (let i = 1; i < rangeState.samples.length; i++) assert(rangeState.samples[i].value >= rangeState.samples[i - 1].value, 'Native range never rolls back during forward motion');
+  await replay.locator('#native-range-value').getByText(rangeState.value, { exact: true }).waitFor();
+  assert.equal(await replay.locator('#native-range').inputValue(), rangeState.value, 'Projected native range retains its source value');
 
   await document.getByRole('button', { name: 'Bookmarks and history', exact: true }).click();
   await document.getByRole('button', { name: 'Bookmark this page', exact: true }).click();
