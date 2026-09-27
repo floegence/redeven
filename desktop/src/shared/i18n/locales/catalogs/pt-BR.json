@@ -1156,7 +1156,11 @@
       "browserSystemCopy": "Copiar comando de configuração",
       "browserSystemCopied": "Comando de configuração copiado",
       "browserDependenciesMissing": "Faltam bibliotecas necessárias do sistema. Instale-as neste dispositivo e verifique novamente.",
-      "browserSystemFailed": "A preparação do sistema não foi concluída. Os dados do navegador foram preservados."
+      "browserSystemFailed": "A preparação do sistema não foi concluída. Os dados do navegador foram preservados.",
+      "chromeRemoteTitle": "Navegue sem desbloquear a área de trabalho",
+      "chromeRemoteHint": "Use um perfil de navegador separado com suas próprias sessões salvas.",
+      "chromeRemotePrepare": "Configurar navegador separado",
+      "chromeRemoteFailed": "Não foi possível preparar o navegador separado. Tente novamente."
     }
   },
   "common": {

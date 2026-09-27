@@ -68,7 +68,7 @@
               "browser"
             ],
             "summary": "- Authority: Runtime resolves the browser installation and owns its Native Messaging registration; Host Applications owns the prepared application identity and its process/display lifecycle.\n- Outcome: explicit preparation creates a persistent, separate Linux browser profile and a fixed application entry. Preparation does not launch a browser or establish a connection.\n- Invariants: clients cannot choose executable paths, profile directories, launch arguments or graphical backends. Existing personal browser databases remain untouched.\n- Failure boundary: unsupported platforms, absent installations, invalid registration or non-private profile directories fail before launch. Preparation is not evidence that a graphical backend can execute the application.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "architecture.remote-browser-persistence",
@@ -14508,7 +14508,7 @@
         "title": "Separate remote browser preparation",
         "type": "Architecture Contract"
       },
-      "body_length": 3626,
+      "body_length": 5405,
       "summary": "- Authority: Runtime resolves the browser installation and owns its Native Messaging registration; Host Applications owns the prepared application identity and its process/display lifecycle.\n- Outcome: explicit preparation creates a persistent, separate Linux browser profile and a fixed application entry. Preparation does not launch a browser or establish a connection.\n- Invariants: clients cannot choose executable paths, profile directories, launch arguments or graphical backends. Existing personal browser databases remain untouched.\n- Failure boundary: unsupported platforms, absent installations, invalid registration or non-private profile directories fail before launch. Preparation is not evidence that a graphical backend can execute the application.",
       "sections": [
         {
@@ -14517,6 +14517,13 @@
           "level": 1,
           "body": "The authenticated `POST /_redeven_proxy/api/browser/extension/remote` operation\nrequires read, write and execute authority. It accepts only an installation ID\nfrom Runtime discovery. Runtime prepares the existing extension registration,\nthen Host Applications prepares the profile and returns its application entry.\nThe operation neither acquires an AI provider nor creates website grants.\n\nApplication identity derives from Runtime state, the authenticated owner and the\ninstallation ID. Repeated preparation preserves browser cookies, site storage\nand extension consent. Native Chrome and Chromium profiles live in private\nRuntime state. Snap Chromium profiles live in its allowed user-data area.\nPreparation rejects linked profile directories and directories accessible to\nother operating-system users. This is process and launch ownership within the\nRuntime OS account, not a new OS-user isolation boundary.\n\nPrepared application entries are visible and launchable only through their\npreparing Runtime owner's Host Applications catalog. Ordinary application\ndiscovery is unchanged. The existing Host Applications launch, preparation,\nviewer and recovery path remains the sole lifecycle owner. Browser preparation\nmust not force an unsupported graphical backend, inject the desktop session\nbus, disable the browser sandbox or add another display/input implementation.\n\nOnly Native Messaging registration is linked into the separate browser profile.\nIts validated canonical manifest remains owned by Runtime, so an atomic\nregistration replacement after Runtime restart reaches already prepared\nprofiles without retaining retired socket paths. Runtime shutdown removes that\nregistration; it does not delete browser data. No personal browser profile,\nCookie database or site storage is copied or shared with a second process.\n\nFirst extension installation and Connect remain explicit browser operations.\nPreparing an application does not prove a handshake or grant a tab to Flower.\nThe [source admission contract](remote-browser-sources.md) continues to own\nNative Messaging, tab selection, grants and private descendants.",
           "char_count": 2122
+        },
+        {
+          "id": "product-handoff",
+          "title": "Product handoff",
+          "level": 1,
+          "body": "The shared connection guide offers separate-profile preparation on Linux when\nits carrier can navigate to Host Applications. When the existing desktop is\nunavailable, separate preparation is the primary action and desktop-only\ninstructions remain behind an explicit secondary action. Preparation failures\nstay beside that action; they do not report a successful browser connection.\n\nEmbedded browser, independent browser document and environment Flower all use\none preparation adapter. The independent document may submit only an opaque\ninstallation ID through its existing message port. It receives no generic\napplication launch, filesystem or Desktop capability. Closing the guide aborts\nthe handoff; a late response cannot navigate the user away from their new view.\n\nThe environment carries one transient application reveal request. The active\nHost Applications page refreshes its authenticated catalog before showing the\napplication identity and the existing preparation consent or Open action.\nRevealing an application does not launch it, start a component download or open\nan unrequested popup. Runtime/session changes invalidate an unfinished reveal.\nThe next explicit click owns normal launch and popup reservation. Browser\nselection and Flower control still require the existing connection handshake\nand source-selection flow.",
+          "char_count": 1336
         }
       ],
       "evidence": [
@@ -14549,6 +14556,21 @@
           "id": "redeven:internal/hostapps/browser_test.go:0:cross-owner application identity rejection.",
           "source": "redeven:internal/hostapps/browser_test.go",
           "description": "Cross-owner application identity rejection."
+        },
+        {
+          "id": "redeven:internal/flower_ui/host/remoteBrowserPreparation.ts:0:shared preparation and cancellation-aware handoff.",
+          "source": "redeven:internal/flower_ui/host/remoteBrowserPreparation.ts",
+          "description": "Shared preparation and cancellation-aware handoff."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerComputerConnections.browser.test.tsx:0:explicit setup, honest connection state and closed-guide cancellation.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerComputerConnections.browser.test.tsx",
+          "description": "Explicit setup, honest connection state and closed-guide cancellation."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx:0:catalog-scoped reveal, preparation consent and explicit launch.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx",
+          "description": "Catalog-scoped reveal, preparation consent and explicit launch."
         }
       ],
       "snippet": "- Authority: Runtime resolves the browser installation and owns its Native Messaging registration; Host Applications owns the prepared application identity and its process/display lifecycle. - Outcome: explicit preparation creates a persist",
@@ -29506,5 +29528,5 @@
       ]
     }
   ],
-  "source_sha256": "c4ca01898fe141e73371609844d99d481c7de5ef3f52b2c2e08c66069ff01208"
+  "source_sha256": "1b973135393d7acd5cd9915efa3364e6e493cbc7ced1592f32edba9808c10f2b"
 }

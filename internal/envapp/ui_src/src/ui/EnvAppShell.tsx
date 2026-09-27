@@ -565,7 +565,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   // transport establishment. Embedded and independent browser views share it.
   const browserSession = () => protocol.status() === 'connected' && (!isLocalMode() || pluginSessionReady())
     ? protocol.session?.() ?? undefined : undefined;
-  const browserWindows = createBrowserWorkspaceWindows(() => ({ title: i18n.t('shell.nav.remoteBrowser'), connecting: i18n.t('browserEngine.connection.connecting'), locale: i18n.locale(), messages: browserMessages(i18n), sources: { environment: envId() || 'env_local', messages: browserSourceMessages(i18n) } }));
+  const browserWindows = createBrowserWorkspaceWindows(() => ({ title: i18n.t('shell.nav.remoteBrowser'), connecting: i18n.t('browserEngine.connection.connecting'), locale: i18n.locale(), messages: browserMessages(i18n), sources: { environment: envId() || 'env_local', messages: browserSourceMessages(i18n) } }), id => revealHostApplication(id));
   createEffect(() => browserWindows.setSession(browserSession()));
   const browserPresentation = createMemo(() => JSON.stringify([i18n.locale(), theme.resolvedTheme(), theme.shellPresetForMode(theme.resolvedTheme())?.name]));
   createEffect(on(browserPresentation, () => browserWindows.refreshPresentation(), { defer: true }));
@@ -1118,6 +1118,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
   const openNotesOverlay = () => setNotesOverlayOpen(true);
   const closeNotesOverlay = () => setNotesOverlayOpen(false);
   const toggleNotesOverlay = () => setNotesOverlayOpen((open) => !open);
+  const [revealHostApplicationRequest, setRevealHostApplicationRequest] = createSignal<import('./pages/EnvContext').RevealHostApplicationRequest | null>(null);
+  const revealHostApplication = (applicationID: string) => {
+    setRevealHostApplicationRequest({ requestId: crypto.randomUUID(), applicationID, environmentID: envId() });
+    openSurface('applications', { reason: 'direct_navigation', focus: true, ensureVisible: true });
+  };
+  const consumeRevealHostApplicationRequest = (requestID: string) => {
+    setRevealHostApplicationRequest(current => current?.requestId === requestID ? null : current);
+  };
   const [openTerminalInDirectoryRequestSeq, setOpenTerminalInDirectoryRequestSeq] = createSignal(0);
   const [openTerminalInDirectoryRequest, setOpenTerminalInDirectoryRequest] = createSignal<OpenTerminalInDirectoryRequest | null>(null);
   const activeSurface = createMemo<EnvSurfaceId>(() => {
@@ -2600,6 +2608,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
           failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
         },
         onSettingsChanged: () => { bumpSettingsSeq(); },
+        revealHostApplication,
         openMessageFile: openFlowerMessageFile,
         openFileBrowser: openFlowerFileBrowser,
         openFilePreview: openFlowerFilePreview,
@@ -5253,6 +5262,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
         settingsFocusSeq,
         settingsFocusSection,
         openFlowerTurnLauncher,
+        revealHostApplication,
+        revealHostApplicationRequest,
+        consumeRevealHostApplicationRequest,
         openTerminalInDirectoryRequestSeq,
         openTerminalInDirectoryRequest,
         openTerminalInDirectory,

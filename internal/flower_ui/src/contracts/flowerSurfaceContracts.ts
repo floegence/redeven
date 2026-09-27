@@ -1246,6 +1246,7 @@ export type FlowerComputerManagement = Readonly<{
   createManagedProfile?: (name: string) => Promise<readonly Readonly<{ id: string; name: string }>[]>;
   openExtension?: (action: 'extensions' | 'folder' | 'connect', installationID: string) => Promise<void>;
   setupExtension?: (installationID: string) => Promise<FlowerComputerExtensionSetup>;
+  prepareRemoteBrowser?: (installationID: string, signal: AbortSignal) => Promise<void>;
   loadExtensionStatus?: () => Promise<FlowerChromeStatus>;
   loadAccess: (threadID: string) => Promise<FlowerComputerAccess>;
   saveAccess: (threadID: string, access: FlowerComputerAccess) => Promise<void>;

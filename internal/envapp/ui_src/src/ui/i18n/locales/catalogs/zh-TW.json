@@ -6055,7 +6055,11 @@
       "browserSystemCopy": "複製設定命令",
       "browserSystemCopied": "已複製設定命令",
       "browserDependenciesMissing": "缺少必要的系統程式庫。請在此裝置上安裝後重新檢查。",
-      "browserSystemFailed": "系統準備未完成。瀏覽器資料已保留。"
+      "browserSystemFailed": "系統準備未完成。瀏覽器資料已保留。",
+      "chromeRemoteTitle": "無須解鎖桌面也能瀏覽",
+      "chromeRemoteHint": "使用獨立的瀏覽器設定檔，分別儲存網站登入狀態。",
+      "chromeRemotePrepare": "設定獨立瀏覽器",
+      "chromeRemoteFailed": "無法準備獨立瀏覽器，請重試。"
     }
   },
   "uiCopy": {
@@ -7091,7 +7095,8 @@
     "touchHelp": "觸控說明",
     "touchHelpTitle": "觸控操作",
     "touchHelpDescription": "點一下即可單擊。單指滑動可捲動。長按後移動可拖曳；長按不移動後放開可按右鍵。雙指可縮放頁面。",
-    "clipboardUnavailable": "無法存取剪貼簿。請使用 HTTPS 並允許此網站存取剪貼簿，然後重新複製。"
+    "clipboardUnavailable": "無法存取剪貼簿。請使用 HTTPS 並允許此網站存取剪貼簿，然後重新複製。",
+    "openDescription": "應用程式在此環境所在的裝置上執行，你可以從「應用程式」中再次開啟。"
   },
   "settingsDesign": {
     "editDirectory": "編輯目錄",

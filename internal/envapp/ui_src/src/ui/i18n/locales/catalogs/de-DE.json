@@ -6055,7 +6055,11 @@
       "browserSystemCopy": "Einrichtungsbefehl kopieren",
       "browserSystemCopied": "Einrichtungsbefehl kopiert",
       "browserDependenciesMissing": "Erforderliche Systembibliotheken fehlen. Installieren Sie diese auf dem Gerät und prüfen Sie erneut.",
-      "browserSystemFailed": "Die Systemvorbereitung wurde nicht abgeschlossen. Ihre Browserdaten bleiben erhalten."
+      "browserSystemFailed": "Die Systemvorbereitung wurde nicht abgeschlossen. Ihre Browserdaten bleiben erhalten.",
+      "chromeRemoteTitle": "Surfen ohne Entsperren des Desktops",
+      "chromeRemoteHint": "Verwenden Sie ein separates Browserprofil mit eigenen gespeicherten Anmeldungen.",
+      "chromeRemotePrepare": "Separaten Browser einrichten",
+      "chromeRemoteFailed": "Der separate Browser konnte nicht vorbereitet werden. Versuchen Sie es erneut."
     }
   },
   "uiCopy": {
@@ -7095,7 +7099,8 @@
     "touchHelp": "Touchhilfe",
     "touchHelpTitle": "Touchsteuerung",
     "touchHelpDescription": "Tippen klickt. Mit einem Finger wischen scrollt. Nach langem Drücken bewegen Sie zum Ziehen; ohne Bewegung loslassen öffnet das Kontextmenü. Mit zwei Fingern zoomen Sie die Seite.",
-    "clipboardUnavailable": "Der Zugriff auf die Zwischenablage ist nicht verfügbar. Verwenden Sie HTTPS und erlauben Sie dieser Website den Zugriff auf die Zwischenablage. Kopieren Sie dann erneut."
+    "clipboardUnavailable": "Der Zugriff auf die Zwischenablage ist nicht verfügbar. Verwenden Sie HTTPS und erlauben Sie dieser Website den Zugriff auf die Zwischenablage. Kopieren Sie dann erneut.",
+    "openDescription": "Diese Anwendung läuft auf dem Gerät dieser Umgebung. Sie können sie unter „Anwendungen“ erneut öffnen."
   },
   "settingsDesign": {
     "editDirectory": "Verzeichnis bearbeiten",

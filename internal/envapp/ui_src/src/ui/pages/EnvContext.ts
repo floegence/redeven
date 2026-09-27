@@ -88,6 +88,8 @@ export type OpenTerminalInDirectoryRequest = {
   targetMode: EnvViewMode;
 };
 
+export type RevealHostApplicationRequest = { requestId: string; applicationID: string; environmentID: string };
+
 export type EnvContextValue = {
   resourceCacheAccess?: () => import('../services/envResourceCache').EnvResourceCacheAccess;
   flowerDraftCoordinator?: FlowerComposerDraftCoordinator;
@@ -136,6 +138,9 @@ export type EnvContextValue = {
   settingsFocusSection: () => EnvSettingsSection | null;
 
   openFlowerTurnLauncher: (intent: FlowerTurnLauncherIntent, anchor?: FlowerTurnLauncherAnchor) => void;
+  revealHostApplication?: (applicationID: string) => void;
+  revealHostApplicationRequest?: () => RevealHostApplicationRequest | null;
+  consumeRevealHostApplicationRequest?: (requestID: string) => void;
   openTerminalInDirectoryRequestSeq: () => number;
   openTerminalInDirectoryRequest: () => OpenTerminalInDirectoryRequest | null;
   openTerminalInDirectory: (

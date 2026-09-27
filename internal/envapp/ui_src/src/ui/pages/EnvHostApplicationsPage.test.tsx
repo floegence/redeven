@@ -1,14 +1,15 @@
 import { controlText } from '../../testSupport/controlText';
 // @vitest-environment jsdom
 import { render } from 'solid-js/web';
+import type { RevealHostApplicationRequest } from './EnvContext';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ desktop: true, cacheScope: '', generation: 0, full: true, running: vi.fn(), quit: vi.fn(), terminate: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupPlan: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
+const state = vi.hoisted(() => ({ reveal: null as RevealHostApplicationRequest | null, consumeReveal: vi.fn(), desktop: true, cacheScope: '', generation: 0, full: true, running: vi.fn(), quit: vi.fn(), terminate: vi.fn(), detach: vi.fn(), setupCancel: vi.fn(), setupUpload: vi.fn(), components: vi.fn(), setupPlan: vi.fn(), setupStatus: vi.fn(), setupStart: vi.fn(), setupObserve: vi.fn(), preparation: vi.fn(), localMac: false, permission: vi.fn(), catalog: vi.fn(), sessions: vi.fn(), launch: vi.fn(), stop: vi.fn(), add: vi.fn(), open: vi.fn() }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
   resourceCacheAccess: () => ({ phase: 'ready' as const, generation: state.generation, scope: state.cacheScope }),
-  env_id: () => 'host', localRuntime: () => ({}),
+  env_id: () => 'host', localRuntime: () => ({}), revealHostApplicationRequest: () => state.reveal, consumeRevealHostApplicationRequest: state.consumeReveal,
 }) }));
 vi.mock('../services/hostApplicationsApi', async importOriginal => ({ ...await importOriginal<object>(), cancelHostApplicationSetup: state.setupCancel, uploadHostApplicationSetup: state.setupUpload, getHostApplicationSetup: state.setupStatus, getHostApplicationTransferPlan: state.setupPlan, startHostApplicationSetup: state.setupStart, observeHostApplicationSetup: state.setupObserve, listHostApplications: state.catalog, listRunningHostApplications: state.running, quitHostApplication: state.quit, terminateHostApplication: state.terminate, detachHostApplication: state.detach, listHostApplicationSessions: state.sessions, launchHostApplication: state.launch, stopHostApplication: state.stop, addHostApplication: state.add, requestHostApplicationPermission: state.permission }));
 vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => state.desktop }));
@@ -26,7 +27,7 @@ let dispose: (() => void) | undefined;
 const settle = () => new Promise(resolve => setTimeout(resolve, 30));
 function button(label: string) { return [...host.querySelectorAll('button')].find(el => el.getAttribute('aria-label') === label)!; }
 beforeEach(() => {
-  vi.clearAllMocks(); state.desktop = true; state.generation = 0; state.cacheScope = ''; state.full = true; state.localMac = false;
+  vi.clearAllMocks(); state.reveal = null; state.desktop = true; state.generation = 0; state.cacheScope = ''; state.full = true; state.localMac = false;
   state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
   state.sessions.mockResolvedValue([{ id: 'session', application: app, state: 'running', forward }]);
   state.launch.mockResolvedValue({ id: 'session', application: app, state: 'starting', forward });
@@ -672,4 +673,33 @@ it('requires the cache progress capability before acquiring through an older Des
  expect(state.components).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'acquire' }));
  expect(state.setupStart).not.toHaveBeenCalled();
  expect(controlText(host)).toContain('Update Desktop or choose host download');
+});
+
+
+describe('prepared browser handoff', () => {
+  it('requires an explicit Open click after revealing a prepared application', async () => {
+    state.reveal = { requestId: 'browser-setup', applicationID: app.id, environmentID: 'host' };
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(state.consumeReveal).toHaveBeenCalledExactlyOnceWith('browser-setup');
+    const dialog = document.querySelector('[role=dialog]')!;
+    expect(dialog.textContent).toContain(app.name);
+    expect(state.launch).not.toHaveBeenCalled();
+    textButton('Open in new window', dialog).click(); await settle();
+    expect(state.launch).toHaveBeenCalledOnce();
+    expect(state.open).toHaveBeenCalledOnce();
+  });
+  it('uses the existing preparation consent instead of starting a download', async () => {
+    state.reveal = { requestId: 'browser-setup', applicationID: app.id, environmentID: 'host' };
+    state.catalog.mockResolvedValue({ availability: { supported: true, ready: false }, applications: [app], sessions: [] });
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(document.querySelector('[role=dialog]')?.textContent).toContain(app.name);
+    expect(state.setupStart).not.toHaveBeenCalled();
+    expect(state.launch).not.toHaveBeenCalled();
+  });
+  it('discards handoffs belonging to another environment', async () => {
+    state.reveal = { requestId: 'old-browser-setup', applicationID: app.id, environmentID: 'old-host' };
+    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    expect(document.querySelector('[role=dialog]')).toBeNull();
+    expect(state.launch).not.toHaveBeenCalled();
+  });
 });

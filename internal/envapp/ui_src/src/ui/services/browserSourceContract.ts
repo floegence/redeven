@@ -5,7 +5,7 @@ export type BrowserSourceTab = { id: string; profile_id: string; title: string; 
 export type BrowserSourceProfile = { id: string; name: string };
 export type BrowserSourceSelection = { request: BrowserWorkspaceRequest; label: string };
 export type BrowserSourcePreference = { preference: { profile_id: string; installation_id?: string } | null; managed_profile_id?: string; source_target?: string };
-export type BrowserSourceManagement = Pick<FlowerComputerManagement, 'browserDesktopAvailable' | 'subscribeBrowserInstallation' | 'loadBrowserInstallation' | 'saveBrowserEnabled' | 'installBrowser' | 'setupExtension' | 'openExtension' | 'loadExtensionStatus'>;
+export type BrowserSourceManagement = Pick<FlowerComputerManagement, 'browserDesktopAvailable' | 'subscribeBrowserInstallation' | 'loadBrowserInstallation' | 'saveBrowserEnabled' | 'installBrowser' | 'setupExtension' | 'openExtension' | 'loadExtensionStatus' | 'prepareRemoteBrowser'>;
 export type BrowserSourceService = {
   management: BrowserSourceManagement;
   preference(signal: AbortSignal): Promise<BrowserSourcePreference>;
@@ -20,7 +20,7 @@ export type BrowserSourceService = {
 // neither a generic fetch proxy nor Desktop/session capabilities.
 export type BrowserSourceOperation =
   | { method: 'source.profiles' | 'source.status' | 'source.installation' | 'source.preference' }
-  | { method: 'source.setup'; installationID: string }
+  | { method: 'source.setup' | 'source.remoteBrowser'; installationID: string }
   | { method: 'source.createProfile'; name: string }
   | { method: 'source.tabs'; profile: string }
   | { method: 'source.discover'; endpoint: string }

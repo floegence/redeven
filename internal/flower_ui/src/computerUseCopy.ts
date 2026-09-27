@@ -1,4 +1,9 @@
 export const computerUseEnUS = {
+  chromeRemoteTitle: "Browse without unlocking the desktop",
+  chromeRemoteHint: "Use a separate browser profile with its own saved sign-ins.",
+  chromeRemotePrepare: "Set up separate browser",
+  chromeRemoteFailed: "The separate browser could not be prepared. Try again.",
+
   browserSystemPrepare: "Complete system preparation",
   browserSystemHint: "This browser version is installed. One system authorization is needed before it can run on this device.",
   browserSystemAuthorizing: "Waiting for system authorization",

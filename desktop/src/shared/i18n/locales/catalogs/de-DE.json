@@ -1156,7 +1156,11 @@
       "browserSystemCopy": "Einrichtungsbefehl kopieren",
       "browserSystemCopied": "Einrichtungsbefehl kopiert",
       "browserDependenciesMissing": "Erforderliche Systembibliotheken fehlen. Installieren Sie diese auf dem Gerät und prüfen Sie erneut.",
-      "browserSystemFailed": "Die Systemvorbereitung wurde nicht abgeschlossen. Ihre Browserdaten bleiben erhalten."
+      "browserSystemFailed": "Die Systemvorbereitung wurde nicht abgeschlossen. Ihre Browserdaten bleiben erhalten.",
+      "chromeRemoteTitle": "Surfen ohne Entsperren des Desktops",
+      "chromeRemoteHint": "Verwenden Sie ein separates Browserprofil mit eigenen gespeicherten Anmeldungen.",
+      "chromeRemotePrepare": "Separaten Browser einrichten",
+      "chromeRemoteFailed": "Der separate Browser konnte nicht vorbereitet werden. Versuchen Sie es erneut."
     }
   },
   "common": {

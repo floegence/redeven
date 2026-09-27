@@ -42,3 +42,12 @@ it('rejects renderer executable paths and requires a discovered installation ide
   expect(setup).toHaveBeenCalledExactlyOnceWith('browser-aaaaaaaaaaaaaaaaaaaaaaaa');
   expect(open).not.toHaveBeenCalled();
 });
+
+it('limits independent browser preparation to an opaque installation and forwards cancellation', async () => {
+  const prepareRemoteBrowser = vi.fn();
+  const bridge = browserSourcePort({ management: { prepareRemoteBrowser } } as unknown as BrowserSourceService, vi.fn(), vi.fn());
+  const signal = new AbortController().signal;
+  await expect(bridge.execute({ method: 'source.remoteBrowser', installationID: '/usr/bin/chromium' } as BrowserSourceOperation, signal)).rejects.toThrow('unavailable');
+  await bridge.execute({ method: 'source.remoteBrowser', installationID: 'browser-aaaaaaaaaaaaaaaaaaaaaaaa' } as BrowserSourceOperation, signal);
+  expect(prepareRemoteBrowser).toHaveBeenCalledExactlyOnceWith('browser-aaaaaaaaaaaaaaaaaaaaaaaa', signal);
+});

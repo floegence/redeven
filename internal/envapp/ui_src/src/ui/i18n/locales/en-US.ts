@@ -7,6 +7,7 @@ import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
   hostApplications: {
+    openDescription: "This application runs on the device hosting this environment. You can return to it from Applications.",
     filterApplications: 'Filter applications',
     clearFilters: 'Clear filters',
     update: {

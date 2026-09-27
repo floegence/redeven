@@ -47,6 +47,29 @@ Preparing an application does not prove a handshake or grant a tab to Flower.
 The [source admission contract](remote-browser-sources.md) continues to own
 Native Messaging, tab selection, grants and private descendants.
 
+# Product handoff
+
+The shared connection guide offers separate-profile preparation on Linux when
+its carrier can navigate to Host Applications. When the existing desktop is
+unavailable, separate preparation is the primary action and desktop-only
+instructions remain behind an explicit secondary action. Preparation failures
+stay beside that action; they do not report a successful browser connection.
+
+Embedded browser, independent browser document and environment Flower all use
+one preparation adapter. The independent document may submit only an opaque
+installation ID through its existing message port. It receives no generic
+application launch, filesystem or Desktop capability. Closing the guide aborts
+the handoff; a late response cannot navigate the user away from their new view.
+
+The environment carries one transient application reveal request. The active
+Host Applications page refreshes its authenticated catalog before showing the
+application identity and the existing preparation consent or Open action.
+Revealing an application does not launch it, start a component download or open
+an unrequested popup. Runtime/session changes invalidate an unfinished reveal.
+The next explicit click owns normal launch and popup reservation. Browser
+selection and Flower control still require the existing connection handshake
+and source-selection flow.
+
 # Evidence
 
 - `redeven:internal/codeapp/appserver/browser_workspace_api.go` - Authenticated preparation with fixed installation identity.
@@ -55,3 +78,6 @@ Native Messaging, tab selection, grants and private descendants.
 - `redeven:internal/browserbridge/remote_profile_test.go` - Data preservation, Runtime replacement and unsafe directory rejection.
 - `redeven:internal/hostapps/browser.go` - Fixed application preparation and owner-specific catalog admission.
 - `redeven:internal/hostapps/browser_test.go` - Cross-owner application identity rejection.
+- `redeven:internal/flower_ui/host/remoteBrowserPreparation.ts` - Shared preparation and cancellation-aware handoff.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerComputerConnections.browser.test.tsx` - Explicit setup, honest connection state and closed-guide cancellation.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx` - Catalog-scoped reveal, preparation consent and explicit launch.

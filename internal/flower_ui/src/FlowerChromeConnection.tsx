@@ -9,7 +9,7 @@ import { chromeConnectionDiagnostic, chromeConnectionError } from './chromeConne
 // This guide observes Runtime connection inventory. It never binds a tab or
 // creates a conversation lifecycle; the caller resumes the original interaction.
 export function FlowerChromeConnection(props: {
-  environmentName?: string; platform?: string; preferredInstallationID?: string; reuseConnected?: boolean; management: Pick<FlowerComputerManagement, 'setupExtension' | 'openExtension' | 'loadExtensionStatus'>; copy: FlowerComputerCopy; onConnected: () => Promise<void>;
+  environmentName?: string; platform?: string; preferredInstallationID?: string; reuseConnected?: boolean; management: Pick<FlowerComputerManagement, 'setupExtension' | 'openExtension' | 'loadExtensionStatus' | 'prepareRemoteBrowser'>; copy: FlowerComputerCopy; onConnected: () => Promise<void>; onRemoteBrowserPrepared?: () => void;
 }) {
   const [installationID, setInstallationID] = createSignal('');
   const selectedInstallation = () => connectionStatus()?.installations.find(item => item.id === installationID());
@@ -18,6 +18,9 @@ export function FlowerChromeConnection(props: {
   const [step, setStep] = createSignal<'install' | 'connect'>('install');
   const [extensionsOpened, setExtensionsOpened] = createSignal(false);
   const [opening, setOpening] = createSignal(false);
+  const [remoteError, setRemoteError] = createSignal(false);
+  const [desktopGuide, setDesktopGuide] = createSignal(false);
+  let remotePreparation: AbortController | undefined;
   const [diagnostic, setDiagnostic] = createSignal<FlowerChromeDiagnostic>();
   const [connectionStatus, setConnectionStatus] = createSignal<FlowerChromeStatus>();
   const [updateRequired, setUpdateRequired] = createSignal(false);
@@ -29,7 +32,7 @@ export function FlowerChromeConnection(props: {
   let initialProfiles: Set<string> | undefined;
   let disposed = false, completing = false, deadline = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => { disposed = true; generation++; clearTimeout(timer); });
+  onCleanup(() => { disposed = true; generation++; clearTimeout(timer); remotePreparation?.abort(); });
   const check = async (epoch: number): Promise<boolean> => {
     const connection = await props.management.loadExtensionStatus!();
     if (disposed || completing || epoch !== generation) return true;
@@ -106,6 +109,20 @@ export function FlowerChromeConnection(props: {
     if (phase() === 'confirming') setPhase('waiting');
   };
   const manualDesktop = () => selectedInstallation()?.reason === 'desktop_session_unavailable';
+  const remoteAvailable = () => setup()?.platform === 'linux' && Boolean(props.management.prepareRemoteBrowser);
+  const remotePrimary = () => remoteAvailable() && manualDesktop();
+  const showDesktopGuide = () => !remotePrimary() || desktopGuide();
+  const prepareRemote = async () => {
+    if (opening() || disposed || !remoteAvailable()) return;
+    const controller = new AbortController(); remotePreparation = controller;
+    const epoch = generation;
+    setOpening(true); setRemoteError(false);
+    try {
+      await props.management.prepareRemoteBrowser!(installationID(), controller.signal);
+      if (!disposed && !controller.signal.aborted && epoch === generation) props.onRemoteBrowserPrepared?.();
+    } catch { if (!disposed && !controller.signal.aborted && epoch === generation) setRemoteError(true); }
+    finally { if (!disposed && epoch === generation) setOpening(false); }
+  };
   const connectionURL = () => setup() ? `chrome-extension://${setup()!.extension_id}/popup.html#${setup()!.native_host}` : '';
   const copyConnection = () => {
     observeConfirmation();
@@ -117,6 +134,7 @@ export function FlowerChromeConnection(props: {
   const selectInstallation = (id: string) => {
     if (opening() || id === installationID()) return;
     clearTimeout(timer); ++generation; initialProfiles = undefined; completing = false;
+    remotePreparation?.abort(); setRemoteError(false); setDesktopGuide(false);
     setInstallationID(id); setSetup(undefined); setStep('install'); setExtensionsOpened(false); setUpdateRequired(false);
     void prepare();
   };
@@ -125,8 +143,18 @@ export function FlowerChromeConnection(props: {
       <Select value={installationID()} onChange={value => { if (value) selectInstallation(value); }} disabled={opening()}
         aria-label={props.copy.chromeTitle} options={(connectionStatus()?.installations ?? []).filter(item => item.installed).map(item => ({ value: item.id, label: item.name }))} />
     </Show>
-    <FlowerChromeReadiness status={connectionStatus() ? { ...connectionStatus()!, profiles: connectionStatus()!.profiles.filter(profile => profile.installation_id === installationID()), browser_installed: selectedInstallation()?.installed } : undefined} diagnostic={diagnostic()} environmentName={props.environmentName} platform={props.platform} copy={props.copy}
+    <FlowerChromeReadiness status={connectionStatus() ? { ...connectionStatus()!, profiles: connectionStatus()!.profiles.filter(profile => profile.installation_id === installationID()), browser_installed: selectedInstallation()?.installed } : undefined} diagnostic={remotePrimary() && !showDesktopGuide() && diagnostic()?.reason === 'desktop_session_unavailable' ? undefined : diagnostic()} environmentName={props.environmentName} platform={props.platform} copy={props.copy}
       onRetry={diagnostic() ? () => void prepare() : undefined} retryLabel={retryLabel()} retryDisabled={opening()} />
+    <Show when={remoteAvailable() && phase() !== 'connected' && phase() !== 'preparing' && diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}>
+      <section class="space-y-3 rounded-lg border border-border bg-muted/20 p-4" data-remote-browser-setup>
+        <div class="space-y-1"><h3 class="flower-body-copy font-medium">{props.copy.chromeRemoteTitle}</h3>
+          <p class="flower-body-copy leading-relaxed text-muted-foreground">{props.copy.chromeRemoteHint}</p></div>
+        <Show when={remoteError()}><p class="flower-body-copy text-destructive" role="alert">{props.copy.chromeRemoteFailed}</p></Show>
+        <Button variant={remotePrimary() ? 'default' : 'outline'} disabled={opening()} loading={opening()} onClick={() => void prepareRemote()}>{props.copy.chromeRemotePrepare}</Button>
+      </section>
+      <Show when={remotePrimary() && !desktopGuide()}><Button variant="ghost" size="sm" onClick={() => setDesktopGuide(true)}>{props.copy.chromeDesktopAction}</Button></Show>
+    </Show>
+    <Show when={showDesktopGuide()}>
     <Show when={diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}><ol class="grid grid-cols-2 gap-4 flower-body-copy">
       <li aria-current={step() === 'install' ? 'step' : undefined}
         class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'install', 'border-border text-muted-foreground': step() !== 'install' }}>
@@ -201,6 +229,7 @@ export function FlowerChromeConnection(props: {
           }}><StableText reserve={[props.copy.pathCopied, props.copy.copyExtensionPath]}>{copied() ? props.copy.pathCopied : props.copy.copyExtensionPath}</StableText></Button>
         </div>
       </details>
+    </Show>
     </Show>
   </section>;
 }

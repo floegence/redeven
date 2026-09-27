@@ -174,6 +174,25 @@ export function EnvHostApplicationsPage() {
     return pending;
   };
 
+  let revealRevision = 0;
+  createEffect(() => {
+    const intent = ctx.revealHostApplicationRequest?.();
+    if (!intent || !canRead() || !applicationResource.ready() || (activation && !activation.active())) return;
+    untrack(() => {
+      ctx.consumeRevealHostApplicationRequest?.(intent.requestId);
+      const revision = ++revealRevision;
+      const current = applicationResource.captureAuthority();
+      if (intent.environmentID !== ctx.env_id()) return;
+      invalidateCatalog();
+      void refresh().then(() => {
+        if (disposed || revision !== revealRevision || !current() || (activation && !activation.active())) return;
+        const app = catalog()?.applications.find(item => item.id === intent.applicationID);
+        if (!app) { setError(i18n.t('hostApplications.errors.notFound')); return; }
+        setSelectedApplication(app); setSetupDialog(true);
+      });
+    });
+  });
+
   createEffect(() => {
     applicationResource.identity();
     const active = activation ? activation.active() : true;
@@ -704,12 +723,20 @@ export function EnvHostApplicationsPage() {
     </div>
     <Dialog open={setupDialog()} onOpenChange={setSetupDialog} class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')} title={<Show when={selectedApplication()} keyed fallback={i18n.t(setup()?.installed ? 'hostApplications.update.title' : 'hostApplications.prepare.title')}>{app => <span class="host-apps-dialog-identity"><ApplicationIcon app={app} /><span>{app.name}</span></span>}</Show>}>
       <Show when={error()}><p role="alert" class="host-app-error">{error()}</p></Show>
-      <Show when={!isMac()} fallback={<div class="space-y-4"><p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t(availabilityDescription())}</p>
+      <Show when={ready() && selectedApplication()} fallback={<Show when={!isMac()} fallback={<div class="space-y-4"><p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t(availabilityDescription())}</p>
         <Show when={catalog()?.availability.reason === 'macos_permissions'}>
           <Show when={!catalog()?.availability.permissions?.screen_recording}><Button disabled={permissionBusy()} onClick={() => void requestPermission('screen_recording')}>{i18n.t('hostApplications.macAllowScreen')}</Button></Show>
           <Show when={!catalog()?.availability.permissions?.accessibility}><Button disabled={permissionBusy()} onClick={() => void requestPermission('accessibility')}>{i18n.t('hostApplications.macAllowAccessibility')}</Button></Show>
         </Show>
-      </div>}>{preparationPanel(true)}</Show>
+      </div>}>{preparationPanel(true)}</Show>}>
+        <div class="space-y-4">
+          <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('hostApplications.openDescription')}</p>
+          <div class="flex justify-end"><Button disabled={!canLaunch() || Boolean(busy()[selectedApplication()!.id])} onClick={() => {
+            const app = selectedApplication(); if (!app) return;
+            setSetupDialog(false); void open(app);
+          }}>{i18n.t('hostApplications.open')}</Button></div>
+        </div>
+      </Show>
     </Dialog>
     <Dialog open={Boolean(quitting())} onOpenChange={value => { if (!value && !quitBusy()) setQuitting(null); }} class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')}
       title={i18n.t(quitting()?.force ? 'hostApplications.forceQuitTitle' : isMac() ? 'hostApplications.macQuitTitle' : 'hostApplications.closeAllWindowsTitle', { name: quitting()?.app.name ?? '' })}

@@ -15,7 +15,7 @@ export class BrowserWindowBlockedError extends Error { readonly code = 'BROWSER_
 
 /** Windows retain their shells on disconnect; the shared controller alone owns
  * admitted views and source selection. The environment owns the only Session. */
-export function createBrowserWorkspaceWindows(configuration: () => { title: string; connecting: string; locale: string; messages: BrowserMessages; sources: { environment: string; messages: BrowserSourceMessages } }) {
+export function createBrowserWorkspaceWindows(configuration: () => { title: string; connecting: string; locale: string; messages: BrowserMessages; sources: { environment: string; messages: BrowserSourceMessages } }, revealApplication?: (applicationID: string) => void) {
   let session: Session | undefined;
   let implementation: Promise<typeof import('./browserWindow')> | undefined;
   const entries = new Set<Entry>();
@@ -42,7 +42,7 @@ export function createBrowserWorkspaceWindows(configuration: () => { title: stri
     const previous = entry.host;
     const host = createBrowserWindow({ session, view: state.view, child: () => entry.child,
       configuration: { type: 'redeven-browser-ports', nonce, title: copy.title, locale: copy.locale, messages: copy.messages, theme,
-        failure: state.failure, openWindow: true, sources: { messages: copy.sources.messages, current, desktop: Boolean(entry.service.management.browserDesktopAvailable) } },
+        failure: state.failure, openWindow: true, sources: { messages: copy.sources.messages, current, desktop: Boolean(entry.service.management.browserDesktopAvailable), remoteBrowser: Boolean(entry.service.management.prepareRemoteBrowser) } },
       sources: { service: entry.service, select: (selection, signal) => entry.controller.open(selection, signal) },
       onReconnect: () => entry.controller.reconnect(),
       onRecover: () => entry.controller.recover(),
@@ -61,7 +61,7 @@ export function createBrowserWorkspaceWindows(configuration: () => { title: stri
   async function open(request: BrowserWorkspaceRequest): Promise<void> {
     if (!session || entries.size >= 8) throw new Error('Browser window unavailable');
     const copy = configuration();
-    const service = browserSourceService(copy.sources.environment);
+    const service = browserSourceService(copy.sources.environment, revealApplication ? id => { revealApplication(id); window.focus(); } : undefined);
     const controller = createBrowserWorkspaceController(service, { request, label: '' });
     const entry: Entry = { controller, service, child: null, revision: 0, closed: false };
     if (!desktopShellBridgeAvailable()) {

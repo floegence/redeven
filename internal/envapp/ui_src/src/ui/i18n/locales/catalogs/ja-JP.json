@@ -6055,7 +6055,11 @@
       "browserSystemCopy": "設定コマンドをコピー",
       "browserSystemCopied": "設定コマンドをコピーしました",
       "browserDependenciesMissing": "必要なシステムライブラリがありません。このデバイスにインストールしてから、再度確認してください。",
-      "browserSystemFailed": "システムの準備が完了しませんでした。ブラウザーのデータは保持されています。"
+      "browserSystemFailed": "システムの準備が完了しませんでした。ブラウザーのデータは保持されています。",
+      "chromeRemoteTitle": "デスクトップのロックを解除せずに閲覧",
+      "chromeRemoteHint": "専用のブラウザープロファイルに、ログイン状態を個別に保存します。",
+      "chromeRemotePrepare": "専用ブラウザーを設定",
+      "chromeRemoteFailed": "専用ブラウザーを準備できませんでした。もう一度お試しください。"
     }
   },
   "uiCopy": {
@@ -7091,7 +7095,8 @@
     "touchHelp": "タッチガイド",
     "touchHelpTitle": "タッチ操作",
     "touchHelpDescription": "タップでクリックします。1本指でスワイプするとスクロールします。長押ししてから動かすとドラッグ、動かさずに離すと右クリックです。2本指でページを拡大縮小できます。",
-    "clipboardUnavailable": "クリップボードにアクセスできません。HTTPS を使用し、このサイトのクリップボードへのアクセスを許可してから、もう一度コピーしてください。"
+    "clipboardUnavailable": "クリップボードにアクセスできません。HTTPS を使用し、このサイトのクリップボードへのアクセスを許可してから、もう一度コピーしてください。",
+    "openDescription": "このアプリケーションは、この環境をホストするデバイスで実行されます。「アプリケーション」から再度開けます。"
   },
   "settingsDesign": {
     "editDirectory": "ディレクトリを編集",

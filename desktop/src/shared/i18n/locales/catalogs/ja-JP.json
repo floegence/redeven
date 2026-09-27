@@ -1156,7 +1156,11 @@
       "browserSystemCopy": "設定コマンドをコピー",
       "browserSystemCopied": "設定コマンドをコピーしました",
       "browserDependenciesMissing": "必要なシステムライブラリがありません。このデバイスにインストールしてから、再度確認してください。",
-      "browserSystemFailed": "システムの準備が完了しませんでした。ブラウザーのデータは保持されています。"
+      "browserSystemFailed": "システムの準備が完了しませんでした。ブラウザーのデータは保持されています。",
+      "chromeRemoteTitle": "デスクトップのロックを解除せずに閲覧",
+      "chromeRemoteHint": "専用のブラウザープロファイルに、ログイン状態を個別に保存します。",
+      "chromeRemotePrepare": "専用ブラウザーを設定",
+      "chromeRemoteFailed": "専用ブラウザーを準備できませんでした。もう一度お試しください。"
     }
   },
   "common": {

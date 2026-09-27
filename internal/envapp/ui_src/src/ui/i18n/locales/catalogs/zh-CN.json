@@ -6055,7 +6055,11 @@
       "browserSystemCopy": "复制设置命令",
       "browserSystemCopied": "已复制设置命令",
       "browserDependenciesMissing": "缺少必要的系统库。请在此设备上安装后重新检查。",
-      "browserSystemFailed": "系统准备未完成。浏览器数据已保留。"
+      "browserSystemFailed": "系统准备未完成。浏览器数据已保留。",
+      "chromeRemoteTitle": "无需解锁桌面也能浏览",
+      "chromeRemoteHint": "使用独立的浏览器配置，单独保存网站登录状态。",
+      "chromeRemotePrepare": "设置独立浏览器",
+      "chromeRemoteFailed": "未能准备独立浏览器，请重试。"
     }
   },
   "uiCopy": {
@@ -7091,7 +7095,8 @@
     "touchHelp": "触摸说明",
     "touchHelpTitle": "触摸操作",
     "touchHelpDescription": "轻点即可单击。单指滑动可滚动。长按后移动可拖拽；长按不移动后松开可右键。双指可缩放页面。",
-    "clipboardUnavailable": "无法访问剪贴板。请使用 HTTPS 并允许此网站访问剪贴板，然后重新复制。"
+    "clipboardUnavailable": "无法访问剪贴板。请使用 HTTPS 并允许此网站访问剪贴板，然后重新复制。",
+    "openDescription": "应用在此环境所在的设备上运行，你可以从“应用”中再次打开。"
   },
   "settingsDesign": {
     "editDirectory": "编辑目录",

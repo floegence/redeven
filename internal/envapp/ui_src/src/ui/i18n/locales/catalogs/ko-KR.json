@@ -6055,7 +6055,11 @@
       "browserSystemCopy": "설정 명령 복사",
       "browserSystemCopied": "설정 명령을 복사했습니다",
       "browserDependenciesMissing": "필수 시스템 라이브러리가 없습니다. 이 기기에 설치한 후 다시 확인하세요.",
-      "browserSystemFailed": "시스템 준비가 완료되지 않았습니다. 브라우저 데이터는 유지됩니다."
+      "browserSystemFailed": "시스템 준비가 완료되지 않았습니다. 브라우저 데이터는 유지됩니다.",
+      "chromeRemoteTitle": "데스크톱 잠금 해제 없이 탐색",
+      "chromeRemoteHint": "별도의 브라우저 프로필을 사용하여 로그인 상태를 따로 저장합니다.",
+      "chromeRemotePrepare": "별도 브라우저 설정",
+      "chromeRemoteFailed": "별도 브라우저를 준비하지 못했습니다. 다시 시도해 주세요."
     }
   },
   "uiCopy": {
@@ -7091,7 +7095,8 @@
     "touchHelp": "터치 안내",
     "touchHelpTitle": "터치 조작",
     "touchHelpDescription": "탭하면 클릭합니다. 한 손가락으로 쓸어 넘기면 스크롤합니다. 길게 누른 뒤 움직이면 드래그하고, 움직이지 않고 놓으면 오른쪽 클릭입니다. 두 손가락으로 페이지를 확대하거나 축소할 수 있습니다.",
-    "clipboardUnavailable": "클립보드에 접근할 수 없습니다. HTTPS를 사용하고 이 사이트의 클립보드 접근을 허용한 후 다시 복사하세요."
+    "clipboardUnavailable": "클립보드에 접근할 수 없습니다. HTTPS를 사용하고 이 사이트의 클립보드 접근을 허용한 후 다시 복사하세요.",
+    "openDescription": "이 애플리케이션은 이 환경을 호스팅하는 기기에서 실행됩니다. 애플리케이션에서 다시 열 수 있습니다."
   },
   "settingsDesign": {
     "editDirectory": "디렉터리 편집",
