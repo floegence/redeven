@@ -215,7 +215,7 @@ it.each([320, 544, 1077, 1440].flatMap(width => [false, true].flatMap(desktop =>
       expect(leadingInset).toBeCloseTo(parseFloat(css.paddingLeft), 0);
       expect(trailingInset).toBeCloseTo(parseFloat(css.paddingRight), 0);
       expect(primary.querySelector('button')!.getBoundingClientRect().width).toBeGreaterThan(secondary.querySelector('button')!.getBoundingClientRect().width);
-      for (const button of secondary.querySelectorAll('button')) expect(button.getBoundingClientRect().width).toBeLessThanOrEqual(40);
+      for (const button of secondary.querySelectorAll('button')) expect(button.getBoundingClientRect().width).toBeLessThan(primary.getBoundingClientRect().width);
       expect(footer.scrollWidth).toBeLessThanOrEqual(footer.clientWidth);
       expect(second.top).toBe(first.top);
       expect(second.left - first.right).toBeGreaterThanOrEqual(8);
@@ -242,6 +242,7 @@ function assertButtonText(button: HTMLButtonElement) {
     const parent = node.parentElement!;
     if (!node.textContent?.trim() || getComputedStyle(parent).visibility !== 'visible' || !parent.getClientRects().length) continue;
     const range = document.createRange(); range.selectNodeContents(node);
+    expect.soft(new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => rect.top)).size, `${node.textContent} must stay on one line`).toBe(1);
     const text = range.getBoundingClientRect(), bounds = button.getBoundingClientRect();
     const icon = button.querySelector(':scope > svg, :scope > span[aria-hidden="true"]')?.getBoundingClientRect();
     if (icon) expect.soft(Math.abs(text.top + text.height / 2 - icon.top - icon.height / 2), `${node.textContent} must align with its icon`).toBeLessThanOrEqual(2);
@@ -279,7 +280,13 @@ it.each([320, 544, 1077].flatMap(width => (Object.keys(dictionaries) as RedevenL
     const row = footer.getBoundingClientRect();
     for (const button of buttons) {
       const rect = button.getBoundingClientRect();
-      expect.soft(Math.abs(rect.top + rect.height / 2 - row.top - row.height / 2), 'Every action stays centered in the footer').toBeLessThanOrEqual(1);
+      expect.soft(rect.left).toBeGreaterThanOrEqual(row.left);
+      expect.soft(rect.right).toBeLessThanOrEqual(row.right);
+      expect.soft(rect.height).toBe(28);
+      for (const other of buttons) {
+        const peer = other.getBoundingClientRect();
+        if (peer.top < rect.bottom && peer.bottom > rect.top) expect.soft(Math.abs(peer.top + peer.height / 2 - rect.top - rect.height / 2), 'Controls in each row stay centered').toBeLessThanOrEqual(1);
+      }
     }
     buttons[0].click();
     const copy = createTestI18nHelpers(locale);

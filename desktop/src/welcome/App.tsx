@@ -2381,8 +2381,8 @@ function DesktopLanguagePicker(props: Readonly<{
                     }}
                   >
                     <span class="min-w-0">
-                      <span class="block whitespace-normal text-xs font-medium leading-snug">{option.label}</span>
-                      <span class="block whitespace-normal text-[11px] leading-snug text-muted-foreground">{option.secondary}</span>
+                      <span class="block truncate text-xs font-medium leading-snug">{option.label}</span>
+                      <span class="block truncate text-[11px] leading-snug text-muted-foreground">{option.secondary}</span>
                     </span>
                     <Show when={selected()}>
                       <Check class="h-3.5 w-3.5 shrink-0" />

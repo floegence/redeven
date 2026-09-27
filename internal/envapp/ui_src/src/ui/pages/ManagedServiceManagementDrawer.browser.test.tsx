@@ -1,3 +1,6 @@
+import { expectSingleLineButtonLabels } from '../../test/buttonLayoutAssertions';
+import { I18nProvider } from '../i18n';
+import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from '../i18n/storageKey';
 import '../../index.css';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -29,6 +32,7 @@ describe('Managed service recovery drawer', () => {
     dispose?.();
     document.body.replaceChildren();
     api.fetch.mockReset();
+    localStorage.removeItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY);
   });
   function mount(
     onExecute: (
@@ -47,7 +51,7 @@ describe('Managed service recovery drawer', () => {
     }
     dispose = render(
       () => (
-        <ManagedServiceManagementDrawer
+        <I18nProvider><ManagedServiceManagementDrawer
           service={
             archived ? { ...service, management_state: 'uninstalled' } : service
           }
@@ -61,11 +65,31 @@ describe('Managed service recovery drawer', () => {
           onLegacyRestore={() => undefined}
           onReinstall={() => undefined}
           canLegacyRestore={false}
-        />
+        /></I18nProvider>
       ),
       host,
     );
   }
+  it.each(['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'])('keeps %s management actions single-line at 320px', async locale => {
+    await page.viewport(320, 800);
+    localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, locale);
+    api.fetch.mockImplementation(async (_url: string, init: RequestInit) => ({
+      request: JSON.parse(String(init.body)), plan_digest: 'single-line-plan', path: 'uninstall', blockers: [],
+      facts: { presence: 'absent', runtime: 'stopped', ownership: 'verified', resources: [] },
+    }));
+    mount(async () => undefined, false, true);
+    await vi.waitFor(() => expect(document.querySelector('.service-management-execute')).not.toBeNull());
+    await document.fonts.ready; await settle();
+    const panel = document.querySelector<HTMLElement>('[data-testid="service-management-drawer"]')!;
+    expectSingleLineButtonLabels(panel);
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+    const bounds = panel.getBoundingClientRect();
+    for (const button of panel.querySelectorAll('button')) {
+      if (!button.checkVisibility()) continue;
+      expect(button.getBoundingClientRect().left).toBeGreaterThanOrEqual(bounds.left);
+      expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
+    }
+  });
   it('maps observed absence and missing configuration to actionable explanations', () => {
     expect(managementProblemKey('INSTANCE_MISSING')).toBe(
       'webServices.management.problems.missingInstance',

@@ -26,3 +26,8 @@
   .terminal-settings-choice-label { flex-basis: 100%; }
   .terminal-settings-choice-value { max-width: 100%; margin-left: auto; }
 }
+
+.terminal-input-choice { position: relative; min-width: 0; border: 1px solid var(--border); border-radius: .375rem; padding: .75rem; }
+.terminal-input-choice[data-selected=true] { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+.terminal-input-choice > button { color: inherit; }
+.terminal-input-choice > button::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }

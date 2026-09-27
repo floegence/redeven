@@ -56,13 +56,13 @@ main[aria-busy="false"] .progress { display:none; }
 .mac-app-menu { min-height:30px; }
 .mac-app-menu[aria-busy="true"]::after { content:""; display:block; height:2px; width:40px; margin:20px auto; background:var(--ring); animation:menu-pulse 1s ease-in-out infinite alternate; }
 @keyframes menu-pulse { to { opacity:.2; } }
-.mac-app-menu button { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; min-height:32px; border:0; border-radius:var(--floe-radius-control); padding:6px 10px; text-align:left; background:transparent; white-space:normal; overflow-wrap:anywhere; }
+.mac-app-menu button { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; min-height:32px; border:0; border-radius:var(--floe-radius-control); padding:6px 10px; text-align:left; background:transparent; white-space:nowrap; }
 .mac-app-menu button:is(:hover,:focus-visible):not(:disabled) { background:var(--accent); outline:none; }
 .mac-app-menu button:disabled { opacity:.4; cursor:default; }
 .mac-app-menu .mac-app-menu-back { border-bottom:1px solid var(--border); border-radius:0; margin-bottom:4px; font-weight:600; }
 .mac-app-quit-confirmation>strong { display:block; font-size:14px; font-weight:600; overflow-wrap:anywhere; }
 .mac-app-quit-confirmation p { margin:10px 0 18px; font-size:12px; line-height:1.65; color:var(--muted-foreground); }
-.mac-app-confirm-actions { display:flex; gap:8px; justify-content:flex-end; }
+.mac-app-confirm-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
 .mac-app-confirm-actions button { min-height:32px; padding:6px 12px; }
 .mac-app-confirm-quit { border-color:transparent; background:var(--error); color:var(--error-foreground); }
 .mac-app-confirm-quit:hover { border-color:transparent; background:color-mix(in srgb,var(--error) 88%,var(--foreground)); }
@@ -78,8 +78,8 @@ body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; 
 .mac-app-touch-help>strong { display:block; font-size:13px; font-weight:600; }
 .mac-app-touch-help>p { margin:10px 0 0; color:var(--muted-foreground); font-size:12px; line-height:1.7; white-space:pre-line; }
 .mac-app-picture>strong { font-size:13px; font-weight:600; }
-.mac-app-picture-modes { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:4px; margin-top:12px; padding:4px; border-radius:var(--floe-radius-group); background:color-mix(in srgb,var(--card) 65%,var(--muted)); }
-.mac-app-picture-modes button { justify-content:space-between; gap:5px; padding:8px; min-height:34px; font-size:12px; border:1px solid transparent; border-radius:var(--floe-radius-control); background:transparent; text-align:left; }
+.mac-app-picture-modes { display:flex; flex-wrap:wrap; gap:4px; margin-top:12px; padding:4px; border-radius:var(--floe-radius-group); background:color-mix(in srgb,var(--card) 65%,var(--muted)); }
+.mac-app-picture-modes button { flex:1 1 max-content; min-width:max-content; justify-content:space-between; gap:5px; padding:8px; min-height:34px; font-size:12px; border:1px solid transparent; border-radius:var(--floe-radius-control); background:transparent; text-align:left; }
 .mac-app-picture-modes button svg { width:13px; height:13px; flex:none; visibility:hidden; }
 .mac-app-picture-modes button:hover { background:var(--card); }
 .mac-app-picture-modes button[aria-pressed="true"] { background:var(--primary); color:var(--primary-foreground); border-color:transparent; box-shadow:none; }
@@ -105,7 +105,8 @@ body[data-state="active"] #application[aria-busy="true"] { pointer-events:none; 
 .mac-app-window-picker>strong { display:block; margin:4px 8px 8px; font-size:11px; font-weight:500; color:var(--muted-foreground); }
 .mac-app-window-list { max-height:min(320px,calc(100dvh - 150px)); overflow:auto; overscroll-behavior:contain; display:grid; gap:3px; padding:2px; }
 .mac-app-window-list button { margin:0; width:100%; min-height:38px; padding:8px 10px; border:1px solid transparent; border-radius:var(--floe-radius-control); text-align:left; justify-content:space-between; background:transparent; }
-.mac-app-window-list button span { overflow-wrap:anywhere; min-width:0; }
+.mac-app-window-list button span, .mac-app-menu button>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.mac-app-menu button>svg { flex:none; }
 .mac-app-window-list button svg { flex:none; opacity:0; color:var(--ring); }
 .mac-app-window-list button[aria-pressed="true"] { background:var(--accent); }
 .mac-app-window-list button[aria-pressed="true"] svg { opacity:1; }

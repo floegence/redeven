@@ -22,18 +22,21 @@
 .access-flow-steps li[aria-current=step] > span { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
 .access-flow-block h4 { font-size: .75rem; font-weight: 550; margin-bottom: .625rem; }
 .access-flow-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .75rem; }
-.access-flow-options > button { display: flex; align-items: flex-start; gap: .75rem; padding: 1rem; border: 1px solid var(--border); border-radius: .625rem; text-align: start; min-width: 0; background: var(--card); cursor: pointer; }
-.access-flow-options > button:hover { border-color: var(--muted-foreground); }
-.access-flow-options > button[aria-pressed=true] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 4%, var(--card)); }
-.access-flow-options strong { display: block; font-size: var(--floe-type-control); font-weight: 550; line-height: 1.5; }
-.access-flow-options strong + span { display: block; margin-top: .375rem; font-size: .75rem; color: var(--muted-foreground); line-height: 1.7; }
+/* The whole card selects its scope; guidance stays outside the single-line button. */
+.access-flow-option { position: relative; padding: 1rem; border: 1px solid var(--border); border-radius: .625rem; min-width: 0; background: var(--card); }
+.access-flow-option:hover { border-color: var(--muted-foreground); }
+.access-flow-option[data-selected=true] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 4%, var(--card)); }
+.access-flow-option > button { display: flex; align-items: center; gap: .75rem; width: 100%; text-align: start; cursor: pointer; }
+.access-flow-option > button::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
+.access-flow-option strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--floe-type-control); font-weight: 550; line-height: 1.5; }
+.access-flow-option > p { margin-top: .375rem; margin-inline-start: 1.75rem; font-size: .75rem; color: var(--muted-foreground); line-height: 1.7; }
 .access-flow-radio { width: 1rem; height: 1rem; border: 1px solid var(--border); border-radius: 50%; flex: none; margin-top: .2rem; }
 [aria-pressed=true] > .access-flow-radio { border: .3rem solid var(--primary); background: var(--primary-foreground); }
 .access-flow-help { color: var(--muted-foreground); font-size: .75rem; line-height: 1.75; margin-top: .5rem; }
-.access-flow-notice { display: flex; align-items: flex-start; gap: .625rem; padding: .875rem 1rem; border-radius: .5rem; background: color-mix(in srgb, var(--muted) 55%, var(--card)); color: var(--muted-foreground); font-size: .75rem; line-height: 1.75; min-width: 0; }
+.access-flow-notice { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .625rem; padding: .875rem 1rem; border-radius: .5rem; background: color-mix(in srgb, var(--muted) 55%, var(--card)); color: var(--muted-foreground); font-size: .75rem; line-height: 1.75; min-width: 0; }
 .access-flow-notice > svg { flex: none; margin-top: .15rem; }
-.access-flow-notice > span { flex: 1; min-width: 0; }
-.access-flow-notice button { height: auto; min-height: 1.875rem; white-space: normal; flex-shrink: 0; max-width: 45%; }
+.access-flow-notice > span { flex: 1 1 12rem; min-width: 0; }
+.access-flow-notice button { height: auto; min-height: 1.875rem; white-space: nowrap; flex-shrink: 0; max-width: 100%; }
 .access-flow-footer-copy { flex: 1; min-width: 180px; color: var(--muted-foreground); font-size: .6875rem; line-height: 1.6; }
 .access-flow-network { grid-template-columns: minmax(0,1fr) 7.5rem; }
 .access-flow-network label, .access-flow-password label { display: grid; gap: .5rem; min-width: 0; font-size: .75rem; font-weight: 500; }
@@ -58,7 +61,7 @@
 @container (max-width: 34rem) {
   .access-workflow .environment-settings-scroll { padding: 1.125rem; }
   .access-flow-options { grid-template-columns: minmax(0,1fr); }
-  .access-flow-options > button { padding: .875rem; }
+  .access-flow-option { padding: .875rem; }
   .access-flow-summary > section { padding: .875rem; gap: .625rem; }
   .access-flow-icon { display: none; }
   .access-flow-summary button { max-width: 100%; font-size: .6875rem; }
@@ -171,4 +174,9 @@
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+@container (max-width: 20rem) {
+  .access-flow-steps { flex-direction: column; }
+  .access-flow-steps li + li::before { display: none; }
 }

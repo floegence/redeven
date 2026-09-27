@@ -1,5 +1,5 @@
 import { StatusRegion, StableText, Button, Checkbox, Input, SegmentedControl } from '@floegence/floe-webapp-core/ui';
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type ComponentProps, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type ComponentProps, type JSX } from 'solid-js';
 import { AlertCircle, ArrowLeft, Check, ChevronRight, Clock, FileText, Globe, Key, Lock, Refresh, Shield } from '@floegence/floe-webapp-core/icons';
 import { runtimeConnectionIsOnThisDevice } from '../shared/desktopEnvironmentConnection';
 import type { DesktopTranslationKey } from '../shared/i18n';
@@ -209,12 +209,20 @@ export function EnvironmentAccessWorkflow(props: Props) {
           {heading('accessFlow.changeAccess', 'settings.visibilityDescription')}{steps()}
           <section class="access-flow-block"><h4>{t('settings.visibilityTitle')}</h4>
             <div class="access-flow-options" role="group" aria-label={t('settings.visibilityTitle')}>
-              <For each={['local_only', 'shared_local_network'] as const}>{mode => <button type="button" aria-label={scope(mode === 'shared_local_network')} aria-pressed={(mode === 'shared_local_network') === access().network_exposure}
-                onClick={() => props.applyAccessMode(mode)}><span class="access-flow-radio" aria-hidden="true" /><span><strong>{scope(mode === 'shared_local_network')}</strong><span>{t(mode === 'shared_local_network' ? 'settings.sharedLocalNetworkDescription' : remote() ? 'settings.environmentOnlyDescription' : 'settings.localOnlyDescription')}</span></span></button>}</For>
+              <For each={['local_only', 'shared_local_network'] as const}>{mode => {
+                const descriptionID = createUniqueId();
+                return <div class="access-flow-option" data-selected={(mode === 'shared_local_network') === access().network_exposure}>
+                  <button type="button" aria-label={scope(mode === 'shared_local_network')} aria-describedby={descriptionID}
+                    aria-pressed={(mode === 'shared_local_network') === access().network_exposure} onClick={() => props.applyAccessMode(mode)}>
+                    <span class="access-flow-radio" aria-hidden="true" /><strong title={scope(mode === 'shared_local_network')}>{scope(mode === 'shared_local_network')}</strong>
+                  </button>
+                  <p id={descriptionID}>{t(mode === 'shared_local_network' ? 'settings.sharedLocalNetworkDescription' : remote() ? 'settings.environmentOnlyDescription' : 'settings.localOnlyDescription')}</p>
+                </div>;
+              }}</For>
             </div>
           </section>
           <section class="access-flow-block"><h4>{t('settings.connectionSecurity')}</h4>
-            <SegmentedControl size="sm" aria-label={t('settings.connectionSecurity')} value={props.draft.local_ui_protocol ?? 'http'}
+            <SegmentedControl size="sm" class="max-w-full flex-wrap" aria-label={t('settings.connectionSecurity')} value={props.draft.local_ui_protocol ?? 'http'}
               options={[{value: 'http', label: t('settings.httpLabel')}, {value: 'https', label: t('settings.httpsLabel')}]}
               onChange={value => props.updateDraftField('local_ui_protocol', value)} />
             <p class="access-flow-help">{t(props.draft.local_ui_protocol === 'https' ? 'settings.httpsHelp' : 'settings.httpNotice')}</p>

@@ -1,3 +1,4 @@
+import { expectSingleLineButtonLabels } from '../../test/buttonLayoutAssertions';
 import '../../index.css';
 import { expectSingleInputFocus } from '../../styles/inputFocus.test-support';
 
@@ -102,6 +103,21 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
     layoutState.mobile = false;
     await mediaCommands.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'no-preference' });
     await page.viewport(1280, 720);
+  });
+
+  it('keeps mobile input labels single-line and guidance outside controls at 320px', async () => {
+    await page.viewport(320, 800); layoutState.mobile = true;
+    const mounted = await mountDialog('system', false); cleanup = mounted.dispose;
+    await settle();
+    const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+    expectSingleLineButtonLabels(panel);
+    const cards = [...panel.querySelectorAll('.terminal-input-choice')];
+    expect(cards).toHaveLength(2);
+    for (const card of cards) {
+      expect(card.querySelector('button p')).toBeNull();
+      expect(card.querySelector('p')?.textContent).not.toBe('');
+      expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
+    }
   });
 
   it('shows current choices before the optional theme and font galleries', async () => {

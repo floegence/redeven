@@ -1,3 +1,4 @@
+import { expectSingleLineButtonLabels } from '../../test/buttonLayoutAssertions';
 import '../../index.css';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -205,6 +206,7 @@ describe('GitHub source review in the browser', () => {
       await expect.element(page.getByRole('dialog')).toBeVisible();
       const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
       expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+      expectSingleLineButtonLabels(panel);
       const credential = document.querySelector<HTMLInputElement>('input[type=password]')!;
       await expect.element(credential).not.toBeVisible();
       expect(document.querySelector<HTMLDetailsElement>('[data-source-options]')!.open).toBe(false);
@@ -232,11 +234,14 @@ describe('GitHub source review in the browser', () => {
       expect(acquire.mock.calls[1][0].source.path).toBe('templates/documentation');
       expect(api.request.mock.calls.some(([url]) => String(url).endsWith('source-confirmations'))).toBe(false);
       expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+      expectSingleLineButtonLabels(panel);
       const confirmButton = Array.from(panel.querySelectorAll('button')).at(-1)!;
       const confirmBounds = confirmButton.getBoundingClientRect();
       const editButton = Array.from(panel.querySelectorAll('button')).at(-3)!;
       const cancelButton = Array.from(panel.querySelectorAll('button')).at(-2)!;
-      expect(editButton.getBoundingClientRect().right).toBeLessThanOrEqual(cancelButton.getBoundingClientRect().left);
+      const editBounds = editButton.getBoundingClientRect();
+      const cancelBounds = cancelButton.getBoundingClientRect();
+      expect(editBounds.bottom <= cancelBounds.top || editBounds.right <= cancelBounds.left).toBe(true);
       expect(confirmBounds.right).toBeLessThanOrEqual(window.innerWidth);
       expect(confirmBounds.left).toBeGreaterThanOrEqual(0);
     });
@@ -286,6 +291,7 @@ describe('GitHub source review in the browser', () => {
       expect(bounds.bottom).toBeLessThanOrEqual(window.innerHeight);
       expect(bounds.left).toBeGreaterThanOrEqual(0);
       expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+      expectSingleLineButtonLabels(panel);
       await userEvent.click(button);
       expect(api.request.mock.calls.filter(([url]) => String(url).endsWith('source-confirmations'))).toHaveLength(1);
     });

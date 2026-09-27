@@ -234,7 +234,9 @@
       back.className = 'mac-app-menu-back';
       back.setAttribute('role', 'menuitem');
       back.tabIndex = -1;
-      back.textContent = '‹ ' + level.title;
+      const backLabel = document.createElement('span');
+      backLabel.textContent = '‹ ' + level.title;
+      back.title = level.title; back.append(backLabel);
       back.onclick = parentMenu;
       menuPanel.append(back);
     }
@@ -242,7 +244,8 @@
       const button = document.createElement('button');
       button.setAttribute('role', 'menuitem');
       button.tabIndex = -1;
-      button.textContent = item.title;
+      const label = document.createElement('span');
+      label.textContent = item.title; button.title = item.title; button.append(label);
       button.disabled = !item.enabled;
       if (item.children.length) {
         button.setAttribute('aria-haspopup', 'menu');

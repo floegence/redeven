@@ -38,6 +38,20 @@ try {
     assert.equal(await dialog.evaluate(panel => panel.scrollWidth > panel.clientWidth), false, `${name}: dialog overflow`);
     assert.equal(await body().evaluate(el => el.scrollWidth > el.clientWidth), false, `${name}: content overflow`);
     assert.equal(await dialog.evaluate(panel => panel.scrollHeight > panel.clientHeight), false, `${name}: only the body scrolls`);
+    const wrappedLabels = await dialog.evaluate(panel => {
+      const failures = [];
+      for (const button of panel.querySelectorAll('button')) {
+        if (!button.checkVisibility()) continue;
+        const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.textContent.trim() || !node.parentElement.checkVisibility({ visibilityProperty: true }) || node.parentElement.closest('[aria-hidden="true"]')) continue;
+          const range = document.createRange(); range.selectNodeContents(node);
+          if (new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => rect.top)).size > 1) failures.push(node.textContent);
+        }
+      }
+      return failures;
+    });
+    assert.deepEqual(wrappedLabels, [], `${name}: button labels must stay on one line`);
     const before = await footer().boundingBox();
     await body().evaluate(el => { el.scrollTop = el.scrollHeight; });
     assert.equal((await footer().boundingBox()).y, before.y, `${name}: footer moves while reading`);
@@ -211,7 +225,7 @@ try {
   assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_bind), 'localhost:23998');
   report.cases.push('save-failure-retains-draft-and-local-error');
 
-  for (const locale of ['en-US', 'zh-CN', 'de-DE']) {
+  for (const locale of ['en-US', 'zh-CN', 'de-DE', 'fr-FR', 'ru-RU']) {
     await page.setViewportSize({ width: 390, height: 700 }); await open(locale, locale === 'de-DE' ? 'ocean' : 'classic-light');
     await layout(`narrow-${locale}-overview`); await capture(`narrow-${locale}-overview`); await editAccess(); await layout(`narrow-${locale}-access`);
     const before = await footer().boundingBox(); await body().hover(); await page.mouse.wheel(0, 700);
@@ -223,6 +237,24 @@ try {
     await capture(`large-text-${locale}`);
   }
   report.cases.push('narrow-dark-localized-large-text-and-real-scroll');
+  for (const locale of locales) {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await open(locale, 'classic-light', 'Local Environment', '&missing-certificate=1');
+    await button('accessFlow.manageProtection').click(); await button('security.configureHTTPS').click();
+    await layout(`single-line-${locale}-certificate-create`);
+    await button('settings.generateCertificate').click();
+    await button('settings.certificateManage').waitFor();
+    await layout(`single-line-${locale}-certificate-ready`);
+    await button('settings.certificateManage').click();
+    await layout(`single-line-${locale}-certificate-manage`);
+    await open(locale, 'ocean', 'Local Environment', '&secure=ready');
+    await button('accessFlow.manageProtection').click(); await button('security.setup').click();
+    await dialog.locator('#two-factor-verify input').fill('123456'); await button('security.continue').click();
+    await dialog.getByText(t('security.recoveryTitle'), { exact: true }).waitFor();
+    await layout(`single-line-${locale}-recovery-actions`);
+  }
+  report.cases.push('single-line-certificate-and-recovery-actions-in-10-locales-at-320px');
+
   assert.deepEqual(report.errors, []); report.status = 'passed';
   console.log(`Access settings passed: ${report.cases.length} scenarios. Evidence: ${output}`);
 } catch (error) { report.status = 'failed'; report.failure = String(error.stack || error); throw error; }

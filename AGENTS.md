@@ -1104,6 +1104,7 @@ Outside temporary Local Fast Debugging, Redeven must use the released v7 module 
 
 ## UI Interaction Affordance
 
+- Button labels must always remain on one line, including localized, loading, and completion states. Reserve transient label widths through the published `StableText`; let action groups reflow whole controls at narrow widths. Keep explanatory paragraphs outside buttons. Constrained selection labels may truncate with their complete text available; never solve overflow by wrapping action text or changing its height during a request.
 - Any clickable or directly interactive UI control must expose a pointer cursor while it is interactive.
 - Do not ship controls that look clickable while still using the default arrow cursor.
 - Disabled controls are the exception and must use a clearly non-interactive cursor treatment.

@@ -1,3 +1,4 @@
+import { expectSingleLineButtonLabels } from '../../test/buttonLayoutAssertions';
 import '../../index.css';
 import '../../styles/redeven.css';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -72,13 +73,14 @@ it('discovers an advanced endpoint only on request and opens the exact discovere
   button('Open selection').click();
   expect(select).toHaveBeenCalledWith({ label: 'CDP project', request: { connection: { cdp_url: 'http://127.0.0.1:9222', profile_id: 'default', tab_id: 'remote', tab_url: 'https://project.test/', tab_title: 'CDP project' } } }, expect.any(AbortSignal));
 });
-for (const [locale, width] of [['en-US', 1280], ['zh-CN', 390], ['de-DE', 390]] as const) it(`keeps source choices readable in ${locale} at ${width}px`, async () => {
+for (const [locale, width] of [['en-US', 1280], ['zh-CN', 390], ['de-DE', 390], ['fr-FR', 320], ['ru-RU', 320]] as const) it(`keeps source choices readable in ${locale} at ${width}px`, async () => {
   await page.viewport(width, 850);
   if (locale === 'zh-CN') document.documentElement.classList.add('dark');
   await mount(locale);
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
   await vi.waitFor(() => expect(getComputedStyle(dialog).opacity).toBe('1'));
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+  expectSingleLineButtonLabels(dialog);
   for (const input of dialog.querySelectorAll<HTMLInputElement>('input[type="radio"]')) expect(input.getBoundingClientRect().width).toBeGreaterThan(10);
   if (import.meta.env.VITE_REDEVEN_BROWSER_SOURCE_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/browser-sources-${locale}-${width}.png` });
 });

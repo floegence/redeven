@@ -1,6 +1,6 @@
 import { StableText, Button, Checkbox, Input, NumberInput } from '@floegence/floe-webapp-core/ui';
 import './terminal-settings.css';
-import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, createUniqueId, For, Show } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Dialog } from '../primitives/EnvAppModal';
 import { Check } from '@floegence/floe-webapp-core/icons';
@@ -94,31 +94,18 @@ type MobileInputOptionCardProps = {
 };
 
 function MobileInputOptionCard(props: MobileInputOptionCardProps) {
+  const descriptionID = createUniqueId();
   return (
-    <Button
-      size="sm"
-      variant={props.selected ? 'primary' : 'outline'}
-      class={cn(
-        'h-auto w-full flex-col items-start gap-2 px-3 py-3 text-left',
-        props.selected ? 'shadow-sm' : 'bg-transparent',
-      )}
-      onClick={props.onClick}
-    >
-      <span class="flex w-full items-center justify-between gap-2 text-[length:var(--floe-type-control)] font-medium">
-        <span>{props.label}</span>
-        <span class="text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">
+    <div class="terminal-input-choice" data-selected={props.selected}>
+      <Button size="sm" variant="ghost" class="min-w-0 w-full justify-between gap-2 p-0 text-left hover:bg-transparent"
+        aria-pressed={props.selected} aria-label={props.label} aria-describedby={descriptionID} onClick={props.onClick}>
+        <span class="min-w-0 truncate font-medium" title={props.label}>{props.label}</span>
+        <span class="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">
           {props.selected ? props.selectedLabel : props.tapToUseLabel}
         </span>
-      </span>
-      <span
-        class={cn(
-          'whitespace-normal text-xs leading-5',
-          props.selected ? 'text-primary-foreground/90' : 'text-muted-foreground',
-        )}
-      >
-        {props.description}
-      </span>
-    </Button>
+      </Button>
+      <p id={descriptionID} class="mt-2 text-xs leading-5 opacity-90">{props.description}</p>
+    </div>
   );
 }
 

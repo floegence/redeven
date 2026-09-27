@@ -6278,27 +6278,30 @@ webSearch: model.web_search,
                 const itemCopy = createMemo(() => copy().settings.permissionTypes[permissionType]);
                 const selected = createMemo(() => composerPermissionType() === permissionType);
                 return (
-                  <button
-                    id={permissionOptionID(permissionType)}
-                    type="button"
-                    role="option"
-                    tabIndex={permissionMenuActiveIndex() === index() ? 0 : -1}
-                    data-permission-type={permissionType}
-                    aria-selected={selected()}
-                    class={cn('flower-permission-menu-item', selected() && 'flower-permission-menu-item-active')}
-                    onMouseEnter={() => setPermissionMenuActiveIndex(index())}
-                    onFocus={() => setPermissionMenuActiveIndex(index())}
-                    onClick={() => void updateComposerPermissionType(permissionType)}
-                  >
-                    <span class="flower-permission-menu-row">
-                      <Shield class="flower-permission-menu-icon" />
-                      <span class="flower-permission-menu-label">{itemCopy().label}</span>
-                      <Show when={selected()}>
-                        <Check class="flower-permission-menu-check" aria-hidden="true" />
-                      </Show>
-                    </span>
-                    <span class="flower-permission-menu-description">{itemCopy().description}</span>
-                  </button>
+                  <div class="flower-permission-menu-entry">
+                    <button
+                      id={permissionOptionID(permissionType)}
+                      type="button"
+                      role="option"
+                      tabIndex={permissionMenuActiveIndex() === index() ? 0 : -1}
+                      data-permission-type={permissionType}
+                      aria-selected={selected()}
+                      aria-describedby={`${permissionOptionID(permissionType)}-description`}
+                      class={cn('flower-permission-menu-item', selected() && 'flower-permission-menu-item-active')}
+                      onMouseEnter={() => setPermissionMenuActiveIndex(index())}
+                      onFocus={() => setPermissionMenuActiveIndex(index())}
+                      onClick={() => void updateComposerPermissionType(permissionType)}
+                    >
+                      <span class="flower-permission-menu-row">
+                        <Shield class="flower-permission-menu-icon" />
+                        <span class="flower-permission-menu-label">{itemCopy().label}</span>
+                        <Show when={selected()}>
+                          <Check class="flower-permission-menu-check" aria-hidden="true" />
+                        </Show>
+                      </span>
+                    </button>
+                    <span id={`${permissionOptionID(permissionType)}-description`} class="flower-permission-menu-description">{itemCopy().description}</span>
+                  </div>
                 );
               }}
             </For>
@@ -10525,7 +10528,7 @@ webSearch: model.web_search,
           ? <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
           : <Bot class="flower-model-menu-icon" />}
         <span class="flower-model-menu-copy">
-          <span class="flower-model-menu-name">{option.label}</span>
+          <span class="flower-model-menu-name" title={option.label}>{option.label}</span>
           <span class="flower-model-menu-meta">
             <Show when={option.contextWindow}>
               <span>{formatFlowerTokenCount(option.contextWindow)} context</span>

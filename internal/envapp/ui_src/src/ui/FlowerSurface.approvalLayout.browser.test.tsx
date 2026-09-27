@@ -1,3 +1,4 @@
+import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
 import '../index.css';
 import './flower-feature.css';
 import './activity-flower-shell.css';
@@ -106,6 +107,7 @@ it('uses compact desktop decisions and a quiet full-page header without reducing
 });
 
 function expectFooterInside(mount: HTMLElement) {
+  expectSingleLineButtonLabels(mount);
   const shell = mount.querySelector<HTMLElement>('[data-floe-bottom-bar-companion]') ?? mount;
   const surface = mount.querySelector<HTMLElement>('.flower-decision-surface')!;
   const footer = mount.querySelector<HTMLElement>('.flower-approval-queue-footer')!;

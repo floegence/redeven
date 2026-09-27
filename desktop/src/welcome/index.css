@@ -2785,9 +2785,8 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-action-popover__actions button {
-  min-width: 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  min-width: max-content;
+  white-space: nowrap;
 }
 
 .redeven-action-popover__action-stack .redeven-action-popover__actions {
@@ -4242,7 +4241,7 @@ pre,
   height: auto;
   min-height: 1.75rem;
   max-width: 100%;
-  white-space: normal;
+  white-space: nowrap;
   padding-block: .35rem;
 }
 .redeven-center-actions button > svg,

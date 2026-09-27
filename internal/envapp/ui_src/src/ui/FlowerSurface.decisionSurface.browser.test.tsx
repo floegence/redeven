@@ -42,6 +42,7 @@ describe('Flower bottom decision surface', () => {
       current: { ...current, view_version: 2, interactions: [], activity: 'idle' as const, last_outcome: 'completed' as const } }));
     const runtime = renderSurfaceWithAdapter({ ...adapter(true),
       listThreads: vi.fn(async () => [waiting]), loadThread: vi.fn(async () => ({ thread: waiting, current })), submitInput });
+    Object.assign(runtime.style, { width: '1280px', height: '800px' });
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-fixture"] button')));
     (runtime.querySelector('[data-thread-id="thread-fixture"] button') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelectorAll('[role="radio"]').length === 3);
@@ -271,6 +272,7 @@ describe('Flower bottom decision surface', () => {
       submitInput,
     });
 
+    Object.assign(runtime.style, { width: '1280px', height: '800px' });
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-mutually-exclusive-answer"] button')));
     (runtime.querySelector('[data-thread-id="thread-mutually-exclusive-answer"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-answer-kind="custom"]')));
@@ -1191,9 +1193,10 @@ describe('Flower bottom decision surface', () => {
     expect(setThreadModel).not.toHaveBeenCalled();
     expect(setThreadReasoningSelection).not.toHaveBeenCalled();
     if (outcome === 'saved') {
+      await userEvent.keyboard('{Tab}');
       trigger().focus();
-      expect(getComputedStyle(trigger()).borderTopColor).toBe('rgba(0, 0, 0, 0)');
-      expect(getComputedStyle(trigger()).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+      expect(getComputedStyle(trigger()).borderTopWidth).toBe('0px');
+      await expect.poll(() => getComputedStyle(trigger()).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
     } else expect(flowerSurfaceNotifications().some((notice) => notice.tone === 'error')).toBe(true);
   });
 

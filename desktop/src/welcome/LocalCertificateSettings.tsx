@@ -158,14 +158,14 @@ export function LocalCertificateSettings(props: Readonly<{
           </div>
           <Show when={report()?.can_export && identity() === 'ready'}><Button size="sm" variant="outline" disabled={Boolean(operation())} loading={operation() === 'export'} onClick={() => void perform('export')} icon={Download}>{props.i18n.t('accessFlow.exportCertificate')}</Button></Show>
           <Show when={report()?.can_manage}>
-            <Button ref={manageButton} size="sm" variant="outline" class="h-auto min-h-8 whitespace-normal" disabled={Boolean(operation())}
+            <Button ref={manageButton} size="sm" variant="outline" class="min-h-8" disabled={Boolean(operation())}
               aria-expanded={managing()} aria-controls={managementID}
               onClick={() => { setManaging(!managing()); setConfirmation(undefined); }}>
               {props.i18n.t('settings.certificateManage')}<ChevronDown class="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
             </Button>
           </Show>
           <Show when={identity() === 'missing'}>
-            <Button size="sm" class="h-auto min-h-8 whitespace-normal text-left" disabled={Boolean(operation())}
+            <Button size="sm" class="min-h-8 text-left" disabled={Boolean(operation())}
               loading={operation() === 'setup' || operation() === 'generate'} onClick={() => void perform('generate')}>
               {props.i18n.t('settings.generateCertificate')}
             </Button>
@@ -185,7 +185,7 @@ export function LocalCertificateSettings(props: Readonly<{
                 </div>
                 <div class="flex flex-wrap justify-end gap-2">
                   <Button ref={cancelButton} size="sm" variant="ghost" disabled={Boolean(operation())} onClick={cancelConfirmation}>{props.i18n.t('common.cancel')}</Button>
-                  <Button size="sm" variant={confirmation() === 'remove' ? 'destructive' : 'default'} class="h-auto min-h-8 whitespace-normal"
+                  <Button size="sm" variant={confirmation() === 'remove' ? 'destructive' : 'default'} class="min-h-8"
                     disabled={Boolean(operation())} loading={isCertificateReplacement(operation())} onClick={() => void perform(confirmation()!)}>
                     {props.i18n.t(confirmation() === 'import' ? 'settings.certificateChooseFiles' : actionKey(confirmation()!))}
                   </Button>
@@ -220,7 +220,7 @@ export function LocalCertificateSettings(props: Readonly<{
               <p class="max-w-prose text-xs leading-relaxed text-muted-foreground">{props.i18n.t(report()?.certificate_kind === 'server' ? 'settings.certificateServerTrustHelp' : canInstall() ? 'settings.certificateTrustScope' : 'settings.certificateManualTrust')}</p>
             </div>
             <Show when={canInstall() && report()?.trust !== 'trusted'}>
-              <Button size="sm" class="h-auto min-h-8 whitespace-normal text-left" disabled={Boolean(operation())}
+              <Button size="sm" class="min-h-8 text-left" disabled={Boolean(operation())}
                 loading={operation() === 'install'} onClick={() => void perform('install')}>
                 {props.i18n.t('settings.trustCertificate')}
               </Button>

@@ -55,7 +55,7 @@
 .web-service-open { grid-column: 1; }
 .web-service-manage { grid-column: 2; }
 .web-service-more { grid-column: 3; }
-.web-service-button { min-height: 32px; height: auto; width: 100%; padding: 6px 10px; white-space: normal; line-height: 18px; box-shadow: none; overflow-wrap: anywhere; }
+.web-service-button { min-height: 32px; height: auto; width: 100%; padding: 6px 10px; white-space: nowrap; line-height: 18px; box-shadow: none; }
 .web-service-open-restricted { background: var(--muted); color: var(--muted-foreground); border-color: var(--border); cursor: not-allowed; }
 .web-service-open-restricted:hover { background: var(--muted); color: var(--muted-foreground); }
 .web-service-button > svg { flex-shrink: 0; }
@@ -83,7 +83,9 @@
 
   .web-service-list { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 3rem; }
   .web-service-status { grid-column: 1 / -1; grid-row: 2; max-width: none; }
-  .web-service-actions { grid-column: 1 / -1; grid-row: 3; }
+  .web-service-actions { grid-column: 1 / -1; grid-row: 3; display: flex; flex-wrap: wrap; }
+  .web-service-actions > :is(.web-service-open, .web-service-manage) { flex: 1 1 max-content; }
+  .web-service-actions > .web-service-more { margin-inline-start: auto; }
   .web-service-row { padding: 12px; }
   .web-service-notice { margin-inline: 12px; }
 }
@@ -109,7 +111,7 @@
 .service-management-references[open] summary { margin-bottom: 8px; }
 .service-management-path { display: grid; gap: 4px; }
 .service-management-footer { display: grid; gap: 8px; width: 100%; }
-.service-management-execute { min-height: 36px; height: auto; white-space: normal; overflow-wrap: anywhere; text-align: center; line-height: 20px; padding: 8px 12px; }
+.service-management-execute { min-height: 36px; height: auto; white-space: nowrap; text-align: center; line-height: 20px; padding: 8px 12px; }
 .service-management-panel button, .service-management-panel summary { transition: background-color 120ms, color 120ms, border-color 120ms; }
 .service-management-panel [role="alert"] { overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) {

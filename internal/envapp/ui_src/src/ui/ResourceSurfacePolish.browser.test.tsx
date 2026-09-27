@@ -1,3 +1,4 @@
+import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
 import '../index.css';
 import './flower-feature.css';
 import { FloeConfigProvider } from '@floegence/floe-webapp-core';
@@ -28,6 +29,8 @@ it.each(['zh-CN', 'en-US', 'de-DE'] as const)('wraps the complete %s permission 
   const menu = runtime.querySelector<HTMLElement>('.flower-permission-menu')!;
   await page.screenshot({ element: menu, path: `__screenshots__/resource-permission-${locale}.png` });
   console.info('Permission geometry', JSON.stringify({ locale, width: menu.clientWidth, scrollWidth: menu.scrollWidth, whiteSpace: getComputedStyle(menu.querySelector('.flower-permission-menu-description')!).whiteSpace }));
+  expectSingleLineButtonLabels(menu);
+  expect(menu.querySelector('button .flower-permission-menu-description')).toBeNull();
   expect.soft(menu.scrollWidth).toBeLessThanOrEqual(menu.clientWidth);
   for (const description of menu.querySelectorAll<HTMLElement>('.flower-permission-menu-description')) {
     expect.soft(description.scrollWidth).toBeLessThanOrEqual(description.clientWidth);
@@ -107,7 +110,7 @@ it.each([{ width: 320, viewport: 320 }, { width: 544, viewport: 544 }, { width: 
   expect(menu.textContent).toContain(longDescription);
   expect(resolveWorkbenchWheelRouting({ target: menu, disablePanZoom: false, selectedWidgetId: 'permission-widget' }).kind).toBe('local_surface');
   await userEvent.keyboard('{End}');
-  await expect.poll(() => document.activeElement).toBe(menu.querySelector('button:last-child'));
+  await expect.poll(() => document.activeElement).toBe(menu.querySelector('.flower-permission-menu-entry:last-child button'));
   expect(menu.scrollTop).toBeGreaterThan(0);
   await userEvent.keyboard('{Escape}');
   expect(document.activeElement).toBe(trigger);

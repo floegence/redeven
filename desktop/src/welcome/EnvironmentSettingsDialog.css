@@ -87,7 +87,7 @@
   max-width: 100%;
   padding-block: .25rem;
   line-height: 1.4;
-  white-space: normal;
+  white-space: nowrap;
 }
 
 .environment-access-form {
@@ -122,7 +122,7 @@
 .environment-access-status[data-status-tone='warning'] { color: var(--warning); }
 .environment-access-control { display: flex; justify-content: flex-end; min-width: 0; }
 .environment-access-control > * { max-width: 100%; }
-.environment-access-control button { height: auto; min-height: 1.75rem; white-space: normal; }
+.environment-access-control button { height: auto; min-height: 1.75rem; white-space: nowrap; }
 .environment-access-advanced { margin-top: .875rem; }
 .environment-access-advanced summary {
   display: flex;
