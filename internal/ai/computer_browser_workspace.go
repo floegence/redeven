@@ -143,7 +143,10 @@ func (r *ComputerUseRuntime) OpenBrowserWorkspace(ctx context.Context, meta *ses
 			}
 			continue
 		}
-		target, err := host.connectManagedBrowserLocked(ctx, ComputerBrowserConnection{ManagedProfileID: profile.ID, TabID: tab.ID, TabURL: tab.URL, TabTitle: tab.Title}, "")
+		// Opening an owned profile follows stable tab identities while pages load.
+		// Metadata snapshot checks belong to explicit tab selection, not this
+		// internal enumeration of the already selected managed profile.
+		target, err := host.connectManagedBrowserLocked(ctx, ComputerBrowserConnection{ManagedProfileID: profile.ID, TabID: tab.ID}, "")
 		if err != nil {
 			return BrowserViewDescriptor{}, err
 		}
