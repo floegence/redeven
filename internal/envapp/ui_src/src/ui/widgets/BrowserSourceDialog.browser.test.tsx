@@ -43,7 +43,7 @@ async function mount(locale: RedevenLocale = 'en-US', installed = true) {
   const Chooser = () => <BrowserSourceDialog service={browserSourceService(`source-fixture-${locale}`)} messages={browserSourceMessages(useI18n())} current={{ request: { managed_profile_id: 'browser-main' }, label: 'Default profile' }} onSelect={select} onClose={close} />;
   const dispose = render(() => <FloeConfigProvider><LayoutProvider><I18nProvider><Chooser /></I18nProvider></LayoutProvider></FloeConfigProvider>, host);
   cleanup = () => { dispose(); host.remove(); };
-  await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('.redeven-browser-source-card')?.disabled).toBe(false));
+  await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('.redeven-browser-source-card-action')?.disabled).toBe(false));
   return { select, close };
 }
 it('keeps source selection as a draft until Open and preserves exact personal tab identity', async () => {
@@ -99,6 +99,20 @@ for (const [locale, width] of [['en-US', 1280], ['zh-CN', 390], ['de-DE', 390], 
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
   await vi.waitFor(() => expect(getComputedStyle(dialog).opacity).toBe('1'));
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+  const bounds = dialog.getBoundingClientRect();
+  for (const card of dialog.querySelectorAll<HTMLElement>('.redeven-browser-source-card')) {
+    const cardBounds = card.getBoundingClientRect();
+    expect(cardBounds.left).toBeGreaterThanOrEqual(bounds.left);
+    expect(cardBounds.right).toBeLessThanOrEqual(bounds.right);
+    for (const description of card.querySelectorAll<HTMLElement>('.redeven-browser-source-card-description')) {
+      const text = document.createRange();
+      text.selectNodeContents(description);
+      for (const line of text.getClientRects()) {
+        expect(line.left).toBeGreaterThanOrEqual(cardBounds.left);
+        expect(line.right).toBeLessThanOrEqual(cardBounds.right);
+      }
+    }
+  }
   expectSingleLineButtonLabels(dialog);
   for (const input of dialog.querySelectorAll<HTMLInputElement>('input[type="radio"]')) expect(input.getBoundingClientRect().width).toBeGreaterThan(10);
   if (import.meta.env.VITE_REDEVEN_BROWSER_SOURCE_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/browser-sources-${locale}-${width}.png` });
@@ -142,7 +156,7 @@ it('cancels a pending selection when returning to source choices', async () => {
   const signal = select.mock.calls[0][1] as AbortSignal;
   button('Back').click();
   expect(signal.aborted).toBe(true);
-  expect(document.querySelector<HTMLButtonElement>('.redeven-browser-source-card')!.disabled).toBe(false);
+  expect(document.querySelector<HTMLButtonElement>('.redeven-browser-source-card-action')!.disabled).toBe(false);
   reject(new Error('obsolete selection failed'));
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(document.querySelector('[role="alert"]')).toBeNull();
