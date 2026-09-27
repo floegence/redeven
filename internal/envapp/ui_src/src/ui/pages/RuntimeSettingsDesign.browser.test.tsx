@@ -1,7 +1,7 @@
 import '../../index.css';
 import { FloeProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
 import { EnvSettingsPage } from './EnvSettingsPage';
 import { SETTINGS_NAV_ITEMS } from './settings/settingsStructure';
@@ -37,6 +37,49 @@ function expectNoOverflow(panel: HTMLElement) {
   }
 }
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
+
+it.each([false, true])('keeps value copying quiet, discoverable and stationary (dark=%s)', async dark => {
+  await mount(1280, dark);
+  const panel = await openSection('connection');
+  const button = panel.querySelector<HTMLButtonElement>('.settings-copy-value button')!;
+  const value = panel.querySelector('.settings-copy-value code')!;
+  const idle = button.getBoundingClientRect().toJSON();
+  const valueBounds = value.getBoundingClientRect().toJSON();
+  expect(idle.height).toBeGreaterThanOrEqual(28);
+  expect(idle.width).toBeGreaterThanOrEqual(28);
+  expect(button.textContent?.trim()).toBe('');
+  expect(button.getAttribute('aria-label')).toMatch(/^Copy .+/);
+  expect(getComputedStyle(button).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  expect(getComputedStyle(button).color).not.toBe(getComputedStyle(value).color);
+  expect(getComputedStyle(button).opacity).toBe('1');
+  expect(getComputedStyle(button).cursor).toBe('pointer');
+  const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+  try {
+    await userEvent.click(button);
+    expect(write).toHaveBeenCalledWith(value.textContent);
+    await expect.poll(() => button.getAttribute('title')).toBe('Copied');
+    expect(button.getBoundingClientRect().toJSON()).toEqual(idle);
+    expect(value.getBoundingClientRect().toJSON()).toEqual(valueBounds);
+  } finally { write.mockRestore(); }
+});
+
+it('keeps copy actions reachable by keyboard and touch without enlarging the glyph', async () => {
+  await mount(390);
+  const panel = await openSection('config');
+  const button = panel.querySelector<HTMLButtonElement>('.settings-copy-value button')!;
+  await userEvent.tab();
+  button.focus();
+  expect(button.matches(':focus-visible')).toBe(true);
+  await expect.poll(() => getComputedStyle(button).boxShadow).not.toBe('none');
+  const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+  try {
+    await media.emulateTouchInput(true);
+    expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(button.querySelector('svg')!.getBoundingClientRect().width).toBe(12);
+    expectNoOverflow(panel);
+  } finally { await media.emulateTouchInput(false); }
+});
 
 it('keeps long configuration paths with their copy action in the value column', async () => {
   await mount();

@@ -573,8 +573,12 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
                   <Button
                     size="sm"
                     variant="ghost"
+                    class="redeven-copy-action"
+                    data-icon-only
+                    data-copied={keyCopied() || undefined}
                     onClick={() => void copyKey()}
                     aria-label={text(keyCopied() ? 'copied' : 'copyKey')}
+                    title={text(keyCopied() ? 'copied' : 'copyKey')}
                   >
                     <Show when={keyCopied()} fallback={<Copy size={14} />}>
                       <Check size={14} />
@@ -631,7 +635,7 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
                   </For>
                 </div>
                 <div class="two-factor-recovery-actions">
-                  <Button size="sm" variant="ghost" onClick={() => void copy()}>
+                  <Button size="sm" variant="ghost" class="redeven-copy-action" data-copied={copied() || undefined} onClick={() => void copy()}>
                     <Show when={copied()} fallback={<Copy size={14} />}>
                       <Check size={14} />
                     </Show>

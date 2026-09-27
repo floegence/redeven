@@ -177,9 +177,9 @@ export function FlowerChromeConnection(props: {
         <div class="mt-3 space-y-3 leading-relaxed">
           <p>{props.copy.setupHostHint}</p>
           <p>{props.copy.setupLabelsHint}</p>
-          <Show when={manualDesktop()}><label class="block space-y-1">{props.copy.chromeConnectionPage}<input ref={connectionInput} class="flower-settings-text-input w-full" readOnly value={connectionURL()} onFocus={event => event.currentTarget.select()} /></label><Button size="sm" variant="ghost" onClick={copyConnection}><StableText reserve={[props.copy.chromeConnectionLinkCopied, props.copy.chromeCopyConnectionLink]}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</StableText></Button></Show>
+          <Show when={manualDesktop()}><label class="block space-y-1">{props.copy.chromeConnectionPage}<input ref={connectionInput} class="flower-settings-text-input w-full" readOnly value={connectionURL()} onFocus={event => event.currentTarget.select()} /></label><Button size="sm" variant="ghost" class="redeven-copy-action" data-copied={linkCopied() || undefined} onClick={copyConnection}><StableText reserve={[props.copy.chromeConnectionLinkCopied, props.copy.chromeCopyConnectionLink]}>{linkCopied() ? props.copy.chromeConnectionLinkCopied : props.copy.chromeCopyConnectionLink}</StableText></Button></Show>
           <label class="block space-y-1">{props.copy.extensionPath}<input ref={pathInput} class="flower-settings-text-input w-full" readOnly value={setup()!.extension_path} onFocus={event => event.currentTarget.select()} /></label>
-          <Button size="sm" variant="ghost" onClick={() => {
+          <Button size="sm" variant="ghost" class="redeven-copy-action" data-copied={copied() || undefined} onClick={() => {
             void navigator.clipboard.writeText(setup()!.extension_path).then(() => { if (!disposed) setCopied(true); }, () => {
               if (!disposed) { pathInput?.focus(); pathInput?.select(); }
             });

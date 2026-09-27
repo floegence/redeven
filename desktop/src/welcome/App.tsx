@@ -8140,18 +8140,20 @@ function EndpointQRCodePanel(props: Readonly<{
         <span class="redeven-endpoint-qr-label">{props.i18n.t(props.endpoint.label_key)}</span>
         <span class="redeven-endpoint-qr-value" title={props.endpoint.value}>{props.endpoint.value}</span>
       </div>
-      <button
-        type="button"
-        class="redeven-endpoint-qr-copy-button"
+      <Button
+        size="sm"
+        variant="ghost"
+        class="redeven-copy-action redeven-endpoint-qr-copy-button"
+        data-copied={copied() || undefined}
         aria-label={props.i18n.t('environmentFacts.copyEnvironmentUrl')}
-        title={props.i18n.t('environmentFacts.copyEnvironmentUrl')}
+        title={copied() ? props.i18n.t('environmentCenter.copied') : props.i18n.t('environmentFacts.copyEnvironmentUrl')}
         onClick={handleCopy}
       >
         <Show when={copied()} fallback={<Copy class="h-3 w-3" />}>
           <Check class="h-3 w-3" />
         </Show>
-        <span class="redeven-endpoint-qr-copy-label">{copied() ? props.i18n.t('environmentCenter.copied') : props.i18n.t('common.copy')}</span>
-      </button>
+        <span class="redeven-endpoint-qr-copy-label"><StableText reserve={[props.i18n.t('environmentCenter.copied'), props.i18n.t('common.copy')]}>{copied() ? props.i18n.t('environmentCenter.copied') : props.i18n.t('common.copy')}</StableText></span>
+      </Button>
     </div>
   );
 }
@@ -8784,8 +8786,8 @@ function EnvironmentProgressPanel(props: Readonly<{
                 {(action) => (
                   <Button
                     size="sm"
-                    variant="outline"
-                    class="justify-center gap-1.5"
+                    variant={action.kind === 'copy_diagnostics' ? 'ghost' : 'outline'}
+                    class={action.kind === 'copy_diagnostics' ? 'redeven-copy-action' : 'justify-center gap-1.5'}
                     onClick={() => props.runNextAction?.(action, props.progress)}
                   >
                     <Show

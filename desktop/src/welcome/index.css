@@ -1126,11 +1126,6 @@ html:not(.dark) .redeven-new-environment-card:hover {
   to { opacity: 1; }
 }
 
-@keyframes redeven-endpoint-copied {
-  from { opacity: 0.4; transform: scale(0.75); }
-  to { opacity: 1; transform: scale(1); }
-}
-
 /* One reading edge and quiet separators for connection facts and access scope. */
 .redeven-card-endpoint-row {
   display: grid;
@@ -1216,10 +1211,6 @@ html:not(.dark) .redeven-new-environment-card:hover {
 }
 
 .redeven-endpoint-action:active { transform: scale(0.92); }
-.redeven-endpoint-action[data-copied] { color: var(--success); }
-.redeven-endpoint-action[data-copied] svg {
-  animation: redeven-endpoint-copied 180ms ease-out both;
-}
 
 .redeven-endpoint-listener {
   margin-top: 0.5rem;
@@ -1439,27 +1430,8 @@ html:not(.dark) .redeven-endpoint-qr-panel {
 }
 
 .redeven-endpoint-qr-copy-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.3rem;
-  min-width: 0;
-  width: 100%;
-  min-height: 1.8rem;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: 0.3rem;
-  background: var(--background);
-  padding: 0.28rem 0.45rem;
-  color: var(--foreground);
-  font-size: 0.68rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    border-color 120ms ease, background-color 120ms ease, color 120ms ease;
-}
-
-.redeven-endpoint-qr-copy-button > svg {
-  flex: 0 0 auto;
+  justify-self: start;
+  max-width: 100%;
 }
 
 .redeven-endpoint-qr-copy-label {
@@ -1467,17 +1439,6 @@ html:not(.dark) .redeven-endpoint-qr-panel {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.redeven-endpoint-qr-copy-button:hover {
-  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
-  background: color-mix(in srgb, var(--primary) 10%, var(--background));
-  color: var(--primary);
-}
-
-.redeven-endpoint-qr-copy-button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--ring) 70%, transparent);
-  outline-offset: 2px;
 }
 
 /* Sharing expands inside the same width so its anchor never jumps sideways. */
@@ -1527,14 +1488,6 @@ html:not(.dark) .redeven-endpoint-qr-panel {
   font-size: 0.6875rem;
   line-height: 1.5;
   font-weight: 400;
-}
-
-.redeven-endpoints-popover .redeven-endpoint-qr-copy-button {
-  justify-self: start;
-  width: auto;
-  padding-inline: 0.6rem;
-  border-radius: 0.45rem;
-  font-weight: 500;
 }
 
 @media (prefers-reduced-motion: reduce) {

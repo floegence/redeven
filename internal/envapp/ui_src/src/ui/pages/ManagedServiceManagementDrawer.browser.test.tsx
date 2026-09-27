@@ -259,9 +259,11 @@ describe('Managed service recovery drawer', () => {
     const execute = vi.fn(async (_request: ManagementRequest) => undefined);
     mount(execute, true);
     await settle();
-    const bounds = document
-      .querySelector<HTMLElement>('[data-floe-dialog-panel]')!
-      .getBoundingClientRect();
+    const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+    await Promise.all(panel.getAnimations({ subtree: true })
+      .filter(animation => animation.effect?.getTiming().iterations !== Infinity)
+      .map(animation => animation.finished));
+    const bounds = panel.getBoundingClientRect();
     expect(bounds.left).toBeGreaterThanOrEqual(180);
     expect(bounds.right).toBeLessThanOrEqual(840);
     expect(bounds.top).toBeGreaterThanOrEqual(80);

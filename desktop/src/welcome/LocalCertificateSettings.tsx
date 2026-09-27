@@ -277,8 +277,8 @@ export function LocalCertificateSettings(props: Readonly<{
             </Show>
             <div class="flex flex-wrap items-center justify-end gap-2">
               <Show when={copyFailed()}><p role="alert" class="text-xs text-destructive">{props.i18n.t('settings.certificateCopyFailed')}</p></Show>
-              <Button size="sm" variant="outline" disabled={copying()} onClick={() => void copyDetails()}>
-                <Copy class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{props.i18n.t('settings.certificateCopyDetails')}
+              <Button size="sm" variant="ghost" class="redeven-copy-action" disabled={copying()} onClick={() => void copyDetails()}>
+                <Copy aria-hidden="true" />{props.i18n.t('settings.certificateCopyDetails')}
               </Button>
             </div>
           </div>
