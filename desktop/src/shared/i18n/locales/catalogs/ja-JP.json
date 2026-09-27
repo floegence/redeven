@@ -558,7 +558,8 @@
       "toolApprovalOnceScope": "今回のみ",
       "toolApprovalExpandCommand": "コマンド全体を表示",
       "toolApprovalHideCommand": "折りたたむ",
-      "toolApprovalEligibleCount": "承認可能 · {count} 件"
+      "toolApprovalEligibleCount": "承認可能 · {count} 件",
+      "feedbackClose": "通知の詳細を閉じる"
     },
     "threadList": {
       "title": "会話",
@@ -760,7 +761,8 @@
           "no": "いいえ"
         },
         "agentsCount": "{count} エージェント"
-      }
+      },
+      "feedbackClose": "通知の詳細を閉じる"
     },
     "settings": {
       "title": "Flower 設定",

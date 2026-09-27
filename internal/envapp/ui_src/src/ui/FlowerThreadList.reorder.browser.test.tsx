@@ -111,7 +111,7 @@ describe('Flower pinned conversation interaction', () => {
     trigger.focus();
     await userEvent.keyboard('{Shift>}{F10}{/Shift}');
     await frame();
-    const down = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((button) => button.textContent === copy.movePinnedDown)!;
+    const down = page.getByRole('menuitem', { name: copy.movePinnedDown, exact: true }).element() as HTMLButtonElement;
     down.focus();
     await userEvent.keyboard('{Enter}');
     expect(ui.onMove).toHaveBeenCalledExactlyOnceWith('first', { anchor_thread_id: 'second', placement: 'after' });
@@ -124,7 +124,7 @@ describe('Flower pinned conversation interaction', () => {
     ui.row('first').querySelector<HTMLButtonElement>('.flower-thread-card-menu-button')!.click();
     await frame();
     const menu = document.querySelector('[role="menu"]');
-    const down = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((button) => button.textContent === copy.movePinnedDown)!;
+    const down = page.getByRole('menuitem', { name: copy.movePinnedDown, exact: true }).element() as HTMLButtonElement;
     down.focus();
     ui.setItems(ui.items().map((entry) => ({ ...entry, pin_rank: entry.thread_id === 'first' ? 1 : 5 })));
     await frame();
@@ -178,7 +178,7 @@ describe('Flower pinned conversation interaction', () => {
     (row.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
     await frame();
     const menu = document.querySelector('[role="menu"]')!;
-    const pinAction = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((button) => button.textContent === copy.unpin)!;
+    const pinAction = page.getByRole('menuitem', { name: copy.unpin, exact: true }).element() as HTMLButtonElement;
     pinAction.focus();
     const focused = document.activeElement;
     const retainedActions = Array.from(menu.querySelectorAll('[role="menuitem"]'));

@@ -342,7 +342,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                 title={copy().recommendedModelsTitle}
                                 description={copy().recommendedModelsDescription}
                               />
-                              <ModelCatalogControls copy={copy().catalog} query={query()} count={store.draft!.models.length} onQuery={setQuery} onSelectAll={addAllPresets} onClear={() => setEnabled(store.draft?.models ?? [], false)} loading={loading()} error={discoveryError()} onRefresh={props.onDiscoverModels && store.draft?.type !== 'openai_compatible' ? discover : undefined} />
+                              <ModelCatalogControls hasContent={catalog().length > 0} copy={copy().catalog} query={query()} count={store.draft!.models.length} onQuery={setQuery} onSelectAll={addAllPresets} onClear={() => setEnabled(store.draft?.models ?? [], false)} loading={loading()} error={discoveryError()} onRefresh={props.onDiscoverModels && store.draft?.type !== 'openai_compatible' ? discover : undefined} />
                               <Show
                                 when={visibleModels().length > 0}
                                 fallback={<div class="rounded-lg border border-dashed p-4 flower-body-copy text-muted-foreground">{copy().catalog.empty}</div>}

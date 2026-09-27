@@ -48,6 +48,7 @@ async function inspectUpdate() {
   state.setupStatus.mockResolvedValue(installedSetup);
   dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
   expect(state.setupPlan).not.toHaveBeenCalled();
+  host.querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!.click(); await settle();
   textButton('View update').click(); await settle();
 }
 describe('independent component updates', () => {
@@ -81,12 +82,12 @@ describe('independent component updates', () => {
     window.redevenDesktopShell!.applicationComponents = state.components;
     state.components.mockResolvedValue({ ok: false });
     await inspectUpdate();
-    selectDownloadMethod('desktop', document.querySelector('[role=dialog]')!);
+    selectDownloadMethod('desktop', document.querySelector('[role=dialog].host-apps-dialog')!);
     textButton('Update components').click(); await settle();
     expect(state.components.mock.calls.map(([request]) => request.action)).toEqual(['capabilities', 'cancel']);
     expect(state.setupStart).not.toHaveBeenCalled();
     expect(document.querySelector<HTMLInputElement>('[role=dialog] input[value=desktop]')!.checked).toBe(true);
-    expect(controlText(document.querySelector('[role=dialog] [role=alert]')!)).toContain('Desktop');
+    expect(controlText(document.querySelector('[role=dialog].host-apps-dialog [role=alert]')!)).toContain('Desktop');
   });
   it('uses full offline import without inspecting the cache or invoking Desktop', async () => {
     await inspectUpdate(); state.setupPlan.mockClear();
@@ -245,7 +246,7 @@ function selectDownloadMethod(method: 'host' | 'desktop', root: ParentNode = doc
 async function selectAndPrepare(method: 'host' | 'desktop' = 'host') {
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
  button('Open in new window · Text Editor').click(); await settle();
- selectDownloadMethod(method, document.querySelector('[role=dialog]')!);
+ selectDownloadMethod(method, document.querySelector('[role=dialog].host-apps-dialog')!);
  preparationButton().click(); await settle();
 }
 it('reserves one physical window and continues there after verified preparation', async () => {
@@ -433,7 +434,7 @@ it('preserves an explicit Desktop choice when opening an application setup dialo
  selectDownloadMethod('desktop', host);
  button('Open in new window · Text Editor').click(); await settle();
  expect(document.querySelector<HTMLInputElement>('[role=dialog] input[value=desktop]')!.checked).toBe(true);
- expect(controlText(document.querySelector('[role=dialog]')!)).not.toContain('Prepare host applications');
+ expect(controlText(document.querySelector('[role=dialog].host-apps-dialog')!)).not.toContain('Prepare host applications');
 });
 it('cancels Desktop acquisition before there is a host operation', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
@@ -465,7 +466,7 @@ it('reserves an application selected during Desktop acquisition without reopenin
  [...host.querySelectorAll('button')].find(el => controlText(el) === 'Prepare')!.click(); await settle();
  button('Open in new window · Text Editor').click(); await settle();
  expect(state.preparation).toHaveBeenCalledWith(expect.objectContaining({action:'create',application_id:app.id}));
- expect(document.querySelector('[role=dialog]')).toBeNull();
+ expect(document.querySelector('[role=dialog].host-apps-dialog')).toBeNull();
  expect(state.setupStart).not.toHaveBeenCalled();
 });
 

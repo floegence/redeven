@@ -1,4 +1,4 @@
-import { StatusRegion, MonitoringChart } from '@floegence/floe-webapp-core/ui';
+import { FeedbackIndicator, Button, MonitoringChart } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
@@ -102,12 +102,14 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const ctx = useEnvContext();
   const notify = useNotification();
   const i18n = useI18n();
+  let readingsFocus: HTMLSpanElement | undefined;
+  let sessionsHeading: HTMLDivElement | undefined;
 
   const [sortBy, setSortBy] = createSignal<SysMonitorSortBy>('cpu');
   const [showInternalSessions, setShowInternalSessions] = createSignal(false);
   const [data, setData] = createSignal<SysMonitorSnapshot | null>(null);
   const [error, setError] = createSignal<string | null>(null);
-  const [sessions, setSessions] = createSignal<ActiveSession[]>([]);
+  const [sessions, setSessions] = createSignal<ActiveSession[] | null>(null);
   const [sessionsError, setSessionsError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [readDenied, setReadDenied] = createSignal(false);
@@ -509,6 +511,8 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     return `In: ${formatSpeed(s.netIn)} | Out: ${formatSpeed(s.netOut)}`;
   };
 
+  const RetryReadings = () => <Button size="sm" variant="outline" loading={loading()} disabled={loading()} onClick={() => void fetchOnce()}>{i18n.t('common.actions.retry')}</Button>;
+
   const activeSortClass = 'bg-primary/10 text-primary';
   const inactiveSortClass = 'text-muted-foreground hover:text-foreground hover:bg-muted/50';
 
@@ -526,14 +530,14 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
       >
         <Show when={data() || error()} fallback={<ActivityPageLoading />}>
         <div class="max-w-7xl mx-auto space-y-3 h-full flex flex-col">
-          <StatusRegion {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} lines={4} class="text-xs"><Show when={error()}>
+          <Show when={!data() && error()}>
             <Panel class="border-error/40">
               <PanelContent class="p-3 text-xs">
                 <div class="text-error font-medium">{i18n.t('runtimeMonitor.monitorRequestFailed')}</div>
-                <div class="text-muted-foreground break-words mt-1">{error()}</div>
+                <div role="alert" class="text-muted-foreground break-words my-2">{error()}</div><RetryReadings />
               </PanelContent>
             </Panel>
-          </Show></StatusRegion>
+          </Show>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-shrink-0">
           <Panel class="overflow-hidden">
@@ -542,7 +546,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                 {() => (
                   <MonitoringChart
                     title={i18n.t('runtimeMonitor.cpuUsage')}
-                    headerMeta={<span class="text-[11px] text-muted-foreground tabular-nums">{cpuSummary()}</span>}
+                    headerMeta={<span class="inline-flex items-center gap-2"><span ref={readingsFocus} tabIndex={-1} class="text-[11px] text-muted-foreground tabular-nums">{cpuSummary()}</span><FeedbackIndicator label={i18n.t('runtimeMonitor.monitorRequestFailed')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => readingsFocus} entries={data() && error() ? [{ id: 'monitor', severity: 'error', summary: i18n.t('runtimeMonitor.monitorRequestFailed'), detail: error(), actions: <RetryReadings /> }] : []} /></span>}
                     series={cpuSeries()}
                     labels={[]}
                     height={140}
@@ -682,8 +686,9 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
           <Panel class="flex flex-col flex-1 min-h-[220px] overflow-hidden">
             <PanelContent class="p-3 flex flex-col flex-1 min-h-0">
               <div class="flex items-center justify-between gap-3 mb-2 flex-shrink-0">
-                <div class="text-xs font-medium">{i18n.t('runtimeMonitor.activeSessions')}</div>
+                <div ref={sessionsHeading} tabIndex={-1} class="text-xs font-medium">{i18n.t('runtimeMonitor.activeSessions')}</div>
                 <div class="flex items-center gap-2">
+                  <FeedbackIndicator label={i18n.t('runtimeMonitor.activeSessions')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => sessionsHeading} entries={sessions() !== null && sessionsError() ? [{ id: 'sessions', severity: 'error', summary: sessionsError()!, actions: <RetryReadings /> }] : []} />
                   <Show when={internalSessionsCount() > 0}>
                     <button
                       type="button"
@@ -698,9 +703,6 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                 </div>
               </div>
 
-              <StatusRegion {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} lines={2} class="text-xs"><Show when={sessionsError()}>
-                <div class="text-[11px] text-error break-words mb-2">{sessionsError()}</div>
-              </Show></StatusRegion>
 
               <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex-1 min-h-0 overflow-auto rounded border border-border bg-background">
                 <table class="w-full text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)] relative">
@@ -718,7 +720,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                     <Show when={visibleSessions().length > 0} fallback={
                       <tr>
                         <td colSpan={6} class="py-6 px-2 text-[11px] text-muted-foreground text-center">
-                          {loading() ? i18n.t('runtimeMonitor.loading') : i18n.t('runtimeMonitor.noActiveSessions')}
+                          <Show when={sessions() === null && sessionsError()} fallback={loading() ? i18n.t('runtimeMonitor.loading') : i18n.t('runtimeMonitor.noActiveSessions')}><div role="alert" class="space-y-2 text-error"><p>{sessionsError()}</p><RetryReadings /></div></Show>
                         </td>
                       </tr>
                     }>

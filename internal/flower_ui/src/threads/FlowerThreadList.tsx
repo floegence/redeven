@@ -1,4 +1,4 @@
-import { StatusRegion, StableText, Input } from '@floegence/floe-webapp-core/ui';
+import { StableText, Input } from '@floegence/floe-webapp-core/ui';
 import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
@@ -479,19 +479,20 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
         <div class="flower-thread-list-header flex items-center gap-2">
           <div class="flower-thread-list-heading min-w-0 flex-1">
             <h2 class="flower-thread-list-title truncate font-medium">{copy().title}</h2>
-            <StatusRegion lines={1} class="text-xs"><Show when={props.warmup || props.loading}>
-              <p class="flower-thread-list-description truncate text-xs" role="status">{copy().warmupDescription}</p>
-            </Show></StatusRegion>
+            <Show when={props.warmup || props.loading}>
+              <p class="sr-only" role="status">{copy().warmupDescription}</p>
+            </Show>
           </div>
           <button
             type="button"
             class="flower-thread-refresh-button flex cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45"
             aria-label={copy().refreshLabel}
             title={copy().refreshLabel}
-            disabled={props.refreshing || props.warmup}
+            aria-busy={props.refreshing || props.warmup || props.loading}
+            disabled={props.refreshing || props.warmup || props.loading}
             onClick={props.onRefresh}
           >
-            <Refresh class={cn('h-3.5 w-3.5', props.refreshing && 'animate-spin')} />
+            <Refresh class={cn('h-3.5 w-3.5', (props.refreshing || props.warmup || props.loading) && 'animate-spin')} />
           </button>
         </div>
         <label class="relative block">

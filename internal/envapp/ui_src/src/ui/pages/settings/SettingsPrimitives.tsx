@@ -1,5 +1,6 @@
 import {
-  StatusRegion,
+  FeedbackIndicator,
+  type FeedbackIndicatorEntry,
   StableText,
   Tag,
   Button,
@@ -104,10 +105,13 @@ export interface SettingsSectionProps {
   badgeVariant?: 'default' | 'warning' | 'success';
   actions?: JSX.Element;
   error?: string | null;
+  feedback?: readonly FeedbackIndicatorEntry[];
   children: JSX.Element;
 }
 
 export function SettingsSection(props: SettingsSectionProps) {
+  const i18n = useI18n();
+  let actionsRef: HTMLDivElement | undefined;
   return (
     <FloeSettingsSection
       class="redeven-settings-section"
@@ -115,12 +119,17 @@ export function SettingsSection(props: SettingsSectionProps) {
       variant={props.variant}
       title={props.title}
       description={props.description}
-      actions={props.actions}
+      actions={<Show when={props.actions || props.feedback !== undefined}><div ref={actionsRef} tabIndex={-1} class="flex flex-wrap items-center gap-2">
+        <Show when={props.feedback !== undefined}>
+          <FeedbackIndicator label={props.title} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => actionsRef} entries={props.feedback ?? []} />
+        </Show>
+        {props.actions}
+      </div></Show>}
       badge={<Show when={props.badge}><Tag variant={settingsTagVariant(props.badgeVariant ?? 'default')} tone="soft" size="sm">{props.badge}</Tag></Show>}
     >
-      <Show when={'error' in props}><StatusRegion lines={3} class="text-xs"><Show when={props.error}>
+      <Show when={props.error}>
         <div role="alert" class="redeven-settings-alert redeven-settings-alert--danger rounded-lg border p-3 text-xs">{props.error}</div>
-      </Show></StatusRegion></Show>
+      </Show>
       {props.children}
     </FloeSettingsSection>
   );

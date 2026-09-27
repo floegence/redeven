@@ -101,9 +101,9 @@ export function RuntimeConfigSection() {
         description={i18n.t('runtimeConfig.description')}
         badge={i18n.t('runtimeConfig.manualRestartRequired')}
         badgeVariant="warning"
-        error={error()}
+        feedback={error() ? [{ id: 'save', severity: 'error', summary: error()!, actions: <Button size="sm" variant="outline" disabled={!canEdit() || saving()} onClick={() => setError(null)}>{i18n.t('common.actions.retry')}</Button> }] : []}
         actions={
-          <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={canEdit()} />
+          <AutoSaveIndicator dirty={dirty()} saving={saving()} savedAt={savedAt()} enabled={canEdit()} />
         }
       >
         {/* Shell environment card */}

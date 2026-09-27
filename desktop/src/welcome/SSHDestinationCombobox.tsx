@@ -1,4 +1,4 @@
-import { StatusRegion, Input, Tag } from '@floegence/floe-webapp-core/ui';
+import { FeedbackIndicator, Button, Input, Tag } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertCircle, Refresh } from '@floegence/floe-webapp-core/icons';
@@ -111,7 +111,7 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
   return (
     <div
       ref={rootRef}
-      class="relative"
+      class="relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1"
       onFocusOut={(event) => {
         if (containsTarget(event.relatedTarget)) {
           return;
@@ -166,6 +166,10 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
         aria-describedby={props['aria-describedby']}
         aria-busy={props.loading ? 'true' : 'false'}
       />
+      <div class="relative flex items-center">
+        <FeedbackIndicator label={props.i18n.t('connectionDialog.sshConfigLoadFailed')} closeLabel={props.i18n.t('common.close')} restoreFocus={() => rootRef?.querySelector('input') ?? undefined} entries={props.hosts.length > 0 && props.loadError && !props.loading ? [{ id: 'ssh-config', severity: 'error', summary: props.i18n.t('connectionDialog.sshConfigLoadFailed'), actions: <Button size="sm" variant="outline" onClick={props.onRetry}>{props.i18n.t('common.retry')}</Button> }] : []} />
+        <Show when={props.loading}><Refresh class="pointer-events-none absolute inset-0 m-auto h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label={props.i18n.t('connectionDialog.sshConfigLoading')} /></Show>
+      </div>
       <Show when={open()}>
         <DesktopAnchoredListbox
           anchorRef={rootRef}
@@ -176,13 +180,13 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
             overlayRef = element;
           }}
         >
-          <StatusRegion lines={3} class="text-xs"><Show when={props.loading}>
+          <Show when={props.loading && props.hosts.length === 0}>
             <div class="flex items-center gap-2 border-b border-border/70 px-3 py-2 text-[11px] text-muted-foreground" role="status">
               <Refresh class="h-3.5 w-3.5 shrink-0 animate-spin" />
               <span>{props.i18n.t('connectionDialog.sshConfigLoading')}</span>
             </div>
           </Show>
-          <Show when={props.loadError && !props.loading}>
+          <Show when={props.loadError && !props.loading && props.hosts.length === 0}>
             <div class="flex items-center justify-between gap-3 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-[11px] text-destructive" role="alert">
               <span class="flex min-w-0 items-center gap-2">
                 <AlertCircle class="h-3.5 w-3.5 shrink-0" />
@@ -200,7 +204,7 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
                 </button>
               </DesktopTooltip>
             </div>
-          </Show></StatusRegion>
+          </Show>
           <div
             id={optionsID()}
             ref={optionsRef}

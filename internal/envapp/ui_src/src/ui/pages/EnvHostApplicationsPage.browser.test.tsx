@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
 
-const state = vi.hoisted(() => ({ locale: 'en-US' as 'en-US' | 'zh-CN', scope: '', catalog: vi.fn(), detach: vi.fn() }));
+const state = vi.hoisted(() => ({ locale: 'en-US' as 'en-US' | 'zh-CN', scope: '', catalog: vi.fn(), setup: vi.fn(), detach: vi.fn() }));
 vi.mock('../i18n', async () => {
   const { createTestI18nHelpers } = await import('../i18n/locales/testDictionaries');
   return { useI18n: () => ({ ...createTestI18nHelpers(state.locale), locale: () => state.locale }) };
@@ -22,6 +22,8 @@ vi.mock('../services/hostApplicationsApi', async importOriginal => {
     listHostApplications: async () => state.catalog.getMockImplementation() ? state.catalog() : ({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [session], running: [{ application_id: app.id, instances: ['instance'] }] }),
     listHostApplicationSessions: async () => state.catalog.getMockImplementation() ? (await state.catalog()).sessions : [session],
     listRunningHostApplications: async () => state.catalog.getMockImplementation() ? (await state.catalog()).running ?? [] : [{ application_id: app.id, instances: ['instance'] }],
+    getHostApplicationSetup: state.setup,
+    observeHostApplicationSetup: async (_callback: unknown, signal: AbortSignal) => new Promise<void>(resolve => signal.addEventListener('abort', () => resolve())),
     detachHostApplication: state.detach,
   };
 });
@@ -30,7 +32,7 @@ let dispose: (() => void) | undefined;
 afterEach(async () => {
   dispose?.();
   document.body.replaceChildren();
-  state.detach.mockClear(); state.catalog.mockReset(); state.scope = "";
+  state.detach.mockClear(); state.catalog.mockReset(); state.setup.mockReset(); state.scope = "";
   await page.viewport(1280, 720);
 });
 
@@ -107,7 +109,7 @@ it.each([390, 1440])('uses the same host header and tile geometry for module and
   const host = document.createElement('div'); host.style.height = '800px'; document.body.append(host);
   dispose = render(() => <Suspense fallback={<HostApplicationsPageSkeleton />}><LazyPage /></Suspense>, host);
   const geometry = () => ['.host-apps-header', '.host-apps-content', '.host-apps-library-heading', '.host-app-session', '.host-app-tile'].map(selector => {
-    const rect = host.querySelector(selector)!.getBoundingClientRect(); return { selector, left: rect.left, width: rect.width, height: rect.height };
+    const rect = host.querySelector(selector)!.getBoundingClientRect(); return { selector, top: rect.top, left: rect.left, width: rect.width, height: rect.height };
   });
   await document.fonts.ready;
   const before = geometry();
@@ -158,4 +160,50 @@ it('keeps compact running controls and a searchable mobile catalog with stable s
   await userEvent.click(page.getByRole('button', { name: 'Filter applications', exact: true }));
   await userEvent.click(page.getByRole('menuitem', { name: 'Clear filters', exact: true }));
   await expect.poll(() => host.querySelectorAll('button.host-app-tile').length).toBe(100);
+});
+
+
+it.each(['macos', 'xpra'])('keeps the %s inventory compact and shares one entry for update and refresh feedback', async backend => {
+  state.locale = 'en-US'; state.scope = `host-feedback-${crypto.randomUUID()}`;
+  const apps = Array.from({ length: 8 }, (_, index) => ({ id: `application-${index}`, name: `Application ${index}`, description: '', categories: [], icon: '', custom: false }));
+  const catalog = { availability: { backend, native_ready: true, supported: true, ready: true }, applications: apps, sessions: [], running: [] };
+  const setup = { state: 'ready', received_bytes: 0, expected_bytes: 100, can_cancel: false,
+    installed: { id: 'components-r1', digest: 'old', architecture: 'arm64', contract: 'xpra-6-private-v1', ready: true },
+    update_available: true, package: { id: 'components-r2', digest: 'new', architecture: 'arm64', size_bytes: 100, installed_bytes: 200 } };
+  state.catalog.mockResolvedValue(catalog); state.setup.mockResolvedValue(setup);
+  const host = document.createElement('div'); host.style.height = '600px'; document.body.append(host);
+  dispose = render(() => <EnvHostApplicationsPage />, host);
+  await expect.poll(() => host.querySelectorAll('button.host-app-tile').length).toBe(8);
+  const content = host.querySelector<HTMLElement>('.host-apps-content')!;
+  const heading = host.querySelector<HTMLElement>('.host-apps-library-heading')!;
+  expect(heading.getBoundingClientRect().top - content.getBoundingClientRect().top).toBeCloseTo(parseFloat(getComputedStyle(content).paddingTop), 0);
+  const trigger = host.querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!;
+  if (backend === 'macos') {
+    expect(state.setup).not.toHaveBeenCalled();
+    expect(trigger.getAttribute('aria-hidden')).toBe('true');
+  } else {
+    await expect.poll(() => trigger.getAttribute('aria-label')).toContain('Component update available');
+  }
+  const tile = host.querySelector<HTMLButtonElement>('button.host-app-tile')!;
+  tile.focus();
+  const before = tile.getBoundingClientRect().toJSON();
+  state.catalog.mockRejectedValue(new Error('Refresh failed'));
+  host.querySelector<HTMLButtonElement>('button[aria-label="Refresh applications"]')!.click();
+  await expect.poll(() => trigger.getAttribute('aria-label')).toContain('could not');
+  expect(document.activeElement).toBe(tile);
+  expect(tile.getBoundingClientRect().toJSON()).toEqual(before);
+  await userEvent.click(trigger);
+  await expect.poll(() => document.querySelectorAll('[data-floe-status-details] section').length).toBe(backend === 'macos' ? 1 : 2);
+  state.catalog.mockResolvedValue(catalog);
+  await userEvent.click(page.getByRole('button', { name: 'Retry', exact: true }));
+  if (backend === 'xpra') {
+    await expect.poll(() => document.querySelectorAll('[data-floe-status-details] section').length).toBe(1);
+    expect(trigger.getAttribute('aria-label')).toContain('Component update available');
+    state.setup.mockResolvedValue({ ...setup, update_available: false });
+    host.querySelector<HTMLButtonElement>('button[aria-label="Refresh applications"]')!.click();
+  }
+  await expect.poll(() => trigger.getAttribute('aria-hidden')).toBe('true');
+  expect(document.querySelector('[data-floe-status-details]')).toBeNull();
+  expect(host.querySelector('button.host-app-tile')).toBe(tile);
+  expect(tile.getBoundingClientRect().toJSON()).toEqual(before);
 });

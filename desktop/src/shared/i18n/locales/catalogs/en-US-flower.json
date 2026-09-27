@@ -438,7 +438,8 @@
     "toolApprovalOnceScope": "This time only",
     "toolApprovalExpandCommand": "View full command",
     "toolApprovalHideCommand": "Collapse",
-    "toolApprovalEligibleCount": "Can approve · {count}"
+    "toolApprovalEligibleCount": "Can approve · {count}",
+    "feedbackClose": "Close feedback"
   },
   "threadList": {
     "title": "Conversations",
@@ -640,7 +641,8 @@
         "no": "No"
       },
       "agentsCount": "{count} delegated agents"
-    }
+    },
+    "feedbackClose": "Close feedback"
   },
   "settings": {
     "title": "Flower Settings",

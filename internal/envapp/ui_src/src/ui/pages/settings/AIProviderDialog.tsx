@@ -378,7 +378,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         title={i18n.t('flowerProviderDialog.recommendedModelsTitle')}
                         description={i18n.t('flowerProviderDialog.recommendedModelsDescription')}
                       />
-                      <ModelCatalogControls copy={catalogCopy()} query={query()} count={props.provider?.models.length ?? 0} onQuery={setQuery} onSelectAll={props.onApplyAllPresets} onClear={props.onClearModels} onRefresh={props.onDiscoverModels} loading={props.discoveringModels} error={props.discoveryError} disabled={!props.canInteract} />
+                      <ModelCatalogControls hasContent={props.recommendedModels.length > 0} copy={catalogCopy()} query={query()} count={props.provider?.models.length ?? 0} onQuery={setQuery} onSelectAll={props.onApplyAllPresets} onClear={props.onClearModels} onRefresh={props.onDiscoverModels} loading={props.discoveringModels} error={props.discoveryError} disabled={!props.canInteract} />
                       <Show
                         when={filterFlowerModels(props.recommendedModels, query()).length > 0}
                         fallback={<div class="rounded-lg border border-dashed p-4 text-[length:var(--floe-type-body)] text-muted-foreground">{catalogCopy().empty}</div>}

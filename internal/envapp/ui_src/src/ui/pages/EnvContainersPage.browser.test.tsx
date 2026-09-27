@@ -282,6 +282,13 @@ describe('native Containers responsive product surface', () => {
     expect(mounted.host.querySelector('[data-container-resource-table]')).not.toBeNull();
   });
 
+  it('keeps the compact container header at the page top', async () => {
+    const mounted = mount(); dispose = mounted.dispose;
+    await settle();
+    const root = mounted.host.querySelector('[data-container-page]')!;
+    expect(root.querySelector('.container-command-header')!.getBoundingClientRect().top).toBe(root.getBoundingClientRect().top);
+  });
+
   it('retains the displayed inventory and search field while its confirmed owner revalidates', async () => {
     const { createSignal } = await import('solid-js');
     const [phase, setPhase] = createSignal<'ready' | 'revalidating'>('ready');
@@ -301,6 +308,34 @@ describe('native Containers responsive product surface', () => {
     setPhase('ready');
     await new Promise(resolve => requestAnimationFrame(resolve));
     expect(root.querySelector('.container-resource-table-shell tbody tr')).toBe(row);
+  });
+
+  it('retains container geometry and focused search through refresh failure and retry', async () => {
+    await page.viewport(1280, 900);
+    browserHarness.scope = `failure-${crypto.randomUUID()}`;
+    const mounted = mount(); dispose = mounted.dispose;
+    const root = mounted.host;
+    await expect.poll(() => root.textContent).toContain('postgres-development');
+    await expect.poll(() => root.querySelector('header .animate-spin')).toBeNull();
+    const row = root.querySelector('.container-resource-table-shell tbody tr')!;
+    const search = root.querySelector<HTMLInputElement>('.container-search-control input')!;
+    const geometry = [row, search].map(element => element.getBoundingClientRect().toJSON());
+    browserHarness.listResources.mockRejectedValueOnce(new Error('Container inventory unavailable'));
+    await userEvent.click(page.getByRole('button', { name: 'Refresh', exact: true }));
+    search.focus();
+    const indicator = root.querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!;
+    await expect.poll(() => indicator.getAttribute('aria-label')).toContain('Container inventory unavailable');
+    expect(document.activeElement).toBe(search);
+    expect(root.querySelector('.container-resource-table-shell tbody tr')).toBe(row);
+    expect([row, search].map(element => element.getBoundingClientRect().toJSON())).toEqual(geometry);
+    await userEvent.click(indicator);
+    await expect.poll(() => document.querySelector('[data-floe-status-details]')?.textContent).toContain('Container inventory unavailable');
+    await userEvent.click(page.getByRole('dialog').getByRole('button', { name: 'Retry', exact: true }));
+    await expect.poll(() => indicator.getAttribute('aria-hidden')).toBe('true');
+    await expect.poll(() => root.querySelector('header .animate-spin')).toBeNull();
+    expect(root.querySelector('.container-resource-table-shell tbody tr')).toBe(row);
+    expect(root.querySelector('.container-search-control input')).toBe(search);
+    expect([row, search].map(element => element.getBoundingClientRect().toJSON())).toEqual(geometry);
   });
 
   it('shares cached inventory across Activity and Workbench without losing row focus during refresh', async () => {

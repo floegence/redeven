@@ -40,7 +40,6 @@
 .host-apps-notice { display:flex; align-items:flex-start; gap:12px; padding:15px 17px; margin-bottom:20px; border:1px solid var(--border); border-radius:12px; font-size:12px; line-height:1.6; }
 .host-apps-notice strong { font-weight:600; }
 .host-apps-notice p { color:var(--muted-foreground); margin-top:4px; }
-.host-apps-update-notice { align-items:center; flex-wrap:wrap; }
 .host-apps-component-versions { margin:16px 0; font-size:12px; }
 .host-apps-component-versions>div { display:flex; justify-content:space-between; gap:16px; margin-top:8px; }
 .host-apps-component-versions dt { color:var(--muted-foreground); flex-shrink:0; }

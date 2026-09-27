@@ -5475,7 +5475,8 @@
       "toolApprovalOnceScope": "僅限本次",
       "toolApprovalExpandCommand": "檢視完整命令",
       "toolApprovalHideCommand": "收合",
-      "toolApprovalEligibleCount": "可處理 {count} 項"
+      "toolApprovalEligibleCount": "可處理 {count} 項",
+      "feedbackClose": "關閉回饋詳情"
     },
     "threadList": {
       "title": "對話",
@@ -5677,7 +5678,8 @@
           "no": "否"
         },
         "agentsCount": "{count} 個代理"
-      }
+      },
+      "feedbackClose": "關閉回饋詳情"
     },
     "settings": {
       "title": "Flower 設定",

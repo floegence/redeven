@@ -558,7 +558,8 @@
       "toolApprovalOnceScope": "仅限本次",
       "toolApprovalExpandCommand": "查看完整命令",
       "toolApprovalHideCommand": "收起",
-      "toolApprovalEligibleCount": "可处理 {count} 项"
+      "toolApprovalEligibleCount": "可处理 {count} 项",
+      "feedbackClose": "关闭反馈详情"
     },
     "threadList": {
       "title": "对话",
@@ -760,7 +761,8 @@
           "no": "否"
         },
         "agentsCount": "{count} 个代理"
-      }
+      },
+      "feedbackClose": "关闭反馈详情"
     },
     "settings": {
       "title": "Flower 设置",

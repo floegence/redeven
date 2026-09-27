@@ -89,6 +89,12 @@ describe('Web Services product interaction', () => {
     await expect.poll(() => host.querySelectorAll('[data-testid="managed-service-row"]').length).toBe(records.filter((item) => item.management_state === 'active').length);
     await settle();
   }
+  it('keeps the compact collection flush with its list region', async () => {
+    await mount();
+    const list = host.querySelector('[data-testid="unified-web-services-list"]')!;
+    const region = host.querySelector('[data-testid="web-services-list-region"]')!;
+    expect(list.getBoundingClientRect().top).toBe(region.getBoundingClientRect().top);
+  });
   function assertLayout() {
     const surface = host.querySelector<HTMLElement>('.web-services')!;
     expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
@@ -143,15 +149,23 @@ describe('Web Services product interaction', () => {
   it('keeps loaded services visible after refresh failure and preserves their order', async () => {
     await mount();
     const before = [...host.querySelectorAll('[data-managed-service-id]')].map((row) => row.getAttribute('data-managed-service-id'));
+    const row = host.querySelector('[data-managed-service-id]')!;
+    const geometry = row.getBoundingClientRect().toJSON();
     failRefresh = true;
     await userEvent.click(page.getByTestId('web-services-refresh'));
     await expect.poll(() => host.textContent).toContain('The latest check did not complete');
     expect([...host.querySelectorAll('[data-managed-service-id]')].map((row) => row.getAttribute('data-managed-service-id'))).toEqual(before);
     expect(host.querySelector('[data-testid="port-forward-row"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="managed-service-more"]')?.closest('[data-floe-dropdown-trigger]')?.getAttribute('aria-disabled')).not.toBe('true');
+    expect(row.getBoundingClientRect().toJSON()).toEqual(geometry);
+    const indicator = host.querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!;
+    await userEvent.click(indicator);
+    await expect.poll(() => document.querySelector('[data-floe-status-details]')?.textContent).toContain('offline');
     failRefresh = false;
-    await userEvent.click(page.getByTestId('web-services-refresh'));
-    await expect.poll(() => host.querySelector('.web-services-refresh-error')).toBeNull();
+    await userEvent.click(page.getByRole('dialog').getByRole('button', { name: 'Retry', exact: true }));
+    await expect.poll(() => indicator.getAttribute('aria-hidden')).toBe('true');
+    expect(host.querySelector('[data-managed-service-id]')).toBe(row);
+    expect(row.getBoundingClientRect().toJSON()).toEqual(geometry);
   });
 
   it('opens archives with the keyboard and returns to the service collection', async () => {

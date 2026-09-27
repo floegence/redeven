@@ -1,6 +1,6 @@
 import { createSignal, createEffect, onCleanup } from 'solid-js';
 import { Database, FileText, Filter } from '@floegence/floe-webapp-core/icons';
-import { Select } from '@floegence/floe-webapp-core/ui';
+import { Button, Select } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, SettingsList, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
 import { formatUnknownError } from '../../../maintenance/shared';
@@ -56,10 +56,10 @@ export function LoggingSection() {
       icon={Database}
       title={i18n.t('loggingSettings.title')}
       description={i18n.t('loggingSettings.description')}
-      error={error()}
+      feedback={error() ? [{ id: 'save', severity: 'error', summary: error()!, actions: <Button size="sm" variant="outline" disabled={!canEdit() || saving()} onClick={() => setError(null)}>{i18n.t('common.actions.retry')}</Button> }] : []}
       badge={i18n.t('loggingSettings.restartRequired')}
       badgeVariant="warning"
-      actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={canEdit()} />}
+      actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} savedAt={savedAt()} enabled={canEdit()} />}
     >
       <SettingsList>
         <SettingRow

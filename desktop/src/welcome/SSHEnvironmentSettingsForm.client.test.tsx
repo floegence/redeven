@@ -46,6 +46,7 @@ async function mount(overrides: Partial<SSHConnectionDialogState> = {}, saveActi
   document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '40px');
   HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal('CSS', { escape: (value: string) => value });
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {} })));
   const host = document.createElement('div');
   document.body.append(host);
   const [state, setState] = createSignal<SSHConnectionDialogState>({ ...initial, ...overrides });

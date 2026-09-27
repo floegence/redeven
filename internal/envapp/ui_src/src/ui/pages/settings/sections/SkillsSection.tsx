@@ -159,7 +159,8 @@ export function SkillsSection() {
         title={i18n.t('skillsSettings.title')}
         description={i18n.t('skillsSettings.description')}
         badge={skillsReloading() || skillsLoading() ? i18n.t('skillsSettings.loading') : i18n.tn('skillsSettings.skillCount', skillsCatalog()?.skills?.length ?? 0)}
-        error={skillsError()}
+        error={!skillsCatalog() ? skillsError() : null}
+        feedback={skillsCatalog() && skillsError() ? [{ id: 'catalog', severity: 'error', summary: skillsError()!, actions: <Button size="sm" variant="outline" disabled={!ctx.canInteract() || catalogBusy()} onClick={() => void refreshSkillsCatalog()}>{i18n.t('common.actions.retry')}</Button> }] : []}
         actions={
           <>
             <Button size="sm" variant="ghost" icon={Download} onClick={openInstallDialog} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.installFromGitHub')}</Button>
@@ -185,11 +186,11 @@ export function SkillsSection() {
                 class="w-full" />
             </div>
             <Button size="icon" variant="ghost" icon={RefreshIcon} aria-label={i18n.t('skillsSettings.reload')}
-              onClick={() => void refreshSkillsCatalog(true)} loading={skillsReloading()} disabled={!ctx.canInteract() || catalogBusy()} />
+              onClick={() => void refreshSkillsCatalog(true)} loading={skillsReloading() || skillsLoading()} disabled={!ctx.canInteract() || catalogBusy()} />
           </div>
 
           <SkillsCatalogList
-            skills={filteredSkills()} sources={skillSources()} loading={skillsLoading()}
+            skills={filteredSkills()} sources={skillSources()} loading={skillsLoading() && !skillsCatalog()}
             canInteract={ctx.canInteract()} canAdmin={canMutateCatalog()}
             toggleSaving={skillToggleSaving()} reinstalling={skillReinstalling()}
             onToggle={(entry, enabled) => { void toggleSkill(entry, enabled); }}

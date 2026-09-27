@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ api: vi.fn(), canAdmin: true, canInteract: (): boolean => true }));
 vi.mock('../../../services/localApi', () => ({ fetchLocalApiJSON: state.api }));
 vi.mock('../EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canInteract: () => state.canInteract(), canAdmin: () => state.canAdmin }) }));
-vi.mock('../SettingsPrimitives', () => ({ SettingsSection: (props: any) => <section><h1>{props.title}</h1>{props.actions}<Show when={props.error}><p role="alert">{props.error}</p></Show>{props.children}</section>, FieldLabel: (props: any) => <label>{props.children}</label> }));
 vi.mock('../SkillsCatalogList', () => ({ SkillsCatalogList: (props: any) => <div>{props.skills.map((entry: any) => <div>{entry.name}<button disabled={!props.canAdmin} onClick={() => props.onDelete(entry)}>Delete</button><button disabled={!props.canAdmin} onClick={() => props.onToggle(entry, false)}>Disable</button></div>)}</div> }));
 vi.mock('../../../primitives/EnvAppModal', () => ({
   Dialog: (props: any) => <Show when={props.open}><div role="dialog"><h2>{props.title}</h2>{props.children}{props.footer}</div></Show>,
@@ -34,7 +33,7 @@ describe('Skills settings API integration', () => {
     await vi.waitFor(() => expect([...host.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'Reload')?.disabled).toBe(false));
     state.api.mockRejectedValue(new Error('Catalog is unavailable'));
     click(host, 'Reload');
-    await vi.waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toContain('Catalog is unavailable'));
+    await vi.waitFor(() => expect(host.querySelector('[data-floe-status-indicator] button')?.getAttribute('aria-label')).toContain('Catalog is unavailable'));
   });
   it('creates a skill using the confirmed form and keeps the form after failure', async () => {
     const host = mount();
@@ -64,7 +63,7 @@ describe('Skills settings API integration', () => {
     click(host, 'Disable');
     expect([...host.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'Reload')?.disabled).toBe(true);
     rejectToggle(new Error('Toggle rejected'));
-    await vi.waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toContain('Toggle rejected'));
+    await vi.waitFor(() => expect(host.querySelector('[data-floe-status-indicator] button')?.getAttribute('aria-label')).toContain('Toggle rejected'));
     expect(host.textContent).toContain('example');
   });
   it('requires validation of the current install form and retains errors for retry', async () => {

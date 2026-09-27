@@ -44,6 +44,7 @@ function Fixture() {
   const environment = { id: initial.environment_id, label: initial.label, registration_ref: { kind: 'runtime_target', id: initial.environment_id } } as DesktopEnvironmentEntry;
   const [errors, setErrors] = createSignal<Partial<Record<string, string>>>({});
   const [error, setError] = createSignal('');
+  const [hostsError, setHostsError] = createSignal(query.has('fail-ssh-config'));
   const [saved, setSaved] = createSignal('');
   const i18n = createDesktopI18n(locale);
   return (
@@ -88,8 +89,8 @@ function Fixture() {
           },
         ]}
         sshConfigHostsLoading={false}
-        sshConfigHostsLoadError={false}
-        refreshSSHConfigHosts={() => undefined}
+        sshConfigHostsLoadError={hostsError()}
+        refreshSSHConfigHosts={() => setHostsError(false)}
         updateField={(name, value) => {
           setState((current) => ({
             ...current,

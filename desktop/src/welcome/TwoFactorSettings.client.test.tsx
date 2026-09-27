@@ -289,3 +289,27 @@ it('requires six authenticator digits for owner verification and keeps recovery 
   click('Continue'); await settle();
   expect(manage).toHaveBeenLastCalledWith({ action: 'disable', password: 'test-password', recovery_code: 'recovery-abcd-1234' });
 });
+
+
+it('requires matching new passwords before starting authenticator enrollment', async () => {
+  const base: SecurityResult = { https_ready: true, enabled: false, password_configured: false, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
+  const manage = vi.fn(async (request: SecurityRequest): Promise<SecurityResult> => request.action === 'setup'
+    ? { ...base, operation_id: 'enrollment', secret: 'TESTKEY', qr_image: 'data:image/png;base64,' }
+    : base);
+  dispose = render(() => <TwoFactorSettings environmentID="environment" i18n={createDesktopI18n('en-US')} manage={manage} configureHTTPS={() => {}} />, document.body);
+  await settle(); click('Set up'); await settle();
+  const passwords = document.querySelectorAll<HTMLInputElement>('input[type="password"]');
+  expect(passwords).toHaveLength(2);
+  const fill = (input: HTMLInputElement, value: string) => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); };
+  fill(passwords[0], 'test-only-new-password'); fill(passwords[1], 'different');
+  const continueButton = [...document.querySelectorAll('button')].find(button => controlText(button) === 'Continue')!;
+  expect(continueButton.disabled).toBe(true);
+  expect(manage.mock.calls.some(([request]) => request.action === 'setup')).toBe(false);
+  fill(passwords[1], 'test-only-new-password');
+  expect(continueButton.disabled).toBe(false);
+  document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await settle();
+  expect(manage.mock.calls.filter(([request]) => request.action === 'setup')).toHaveLength(1);
+  expect(document.querySelector('input[type="password"]')).toBeNull();
+  expect(document.querySelector('#two-factor-verify')).not.toBeNull();
+});

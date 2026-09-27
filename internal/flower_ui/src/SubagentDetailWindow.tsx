@@ -1,4 +1,4 @@
-import { StatusRegion, FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { FeedbackIndicator, Button, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { Accessor, JSX } from 'solid-js';
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -203,6 +203,7 @@ function activityBatchBody(batch: Accessor<SubagentLedgerActivityBatch>, props: 
 }
 
 export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Element {
+  let overview: HTMLElement | undefined;
   const ledgerItems = createMemo(() => projectSubagentLedgerItems(props.entries));
   const ledgerItemKey = (item: SubagentLedgerItem): string => `${props.threadID}:${item.type}:${item.key}`;
   const ledgerItemKeys = createMemo(() => ledgerItems().map(ledgerItemKey));
@@ -282,7 +283,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         data-flower-subagent-detail="open"
         data-flower-subagent-status={props.status}
       >
-        <header class="flower-subagent-detail-overview">
+        <header ref={overview} tabIndex={-1} class="flower-subagent-detail-overview">
           <div class={cn('flower-subagent-detail-signal', `flower-subagent-detail-signal-${props.status}`)} aria-hidden="true">
             <Show when={props.status === 'running'} fallback={<Bot class="h-4 w-4" />}>
               <FlowerThinkingOrb class="flower-subagent-detail-thinking-orb" running />
@@ -290,6 +291,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
           </div>
           <div class="flower-subagent-detail-overview-copy">
             <div class="flower-subagent-detail-overview-meta">
+              <FeedbackIndicator label={props.title} closeLabel={props.copy.feedbackClose} restoreFocus={() => overview} entries={props.detailAvailable && props.error ? [{ id: 'detail', severity: 'error', summary: props.error, actions: <Button size="sm" variant="outline" disabled={props.loading} onClick={props.onRetryLoad}>{props.copy.detailRetry}</Button> }] : []} />
               <span class={cn('flower-subagent-status-label', `flower-subagent-status-label-${props.status}`)}>
                 <Show when={props.status !== 'running'}>{props.statusIndicator}</Show>
                 <span class="flower-subagent-status-text">
@@ -312,7 +314,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
           </div>
         </header>
 
-        <Show when={props.loading}>
+        <Show when={props.loading && !props.detailAvailable}>
           <div class="flower-subagent-detail-loading" role="status" aria-label={props.threadLoadingLabel}>
             <For each={[0, 1, 2, 3]}>
               {() => (
@@ -339,13 +341,6 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         </Show>
 
         <Show when={props.detailAvailable}>
-          <StatusRegion lines={3} class="text-xs"><Show when={props.error}>
-            <div class="flower-subagent-detail-inline-error" role="alert">
-              <AlertTriangle class="h-3.5 w-3.5" />
-              <span>{props.error}</span>
-              <button type="button" onClick={props.onRetryLoad}>{props.copy.detailRetry}</button>
-            </div>
-          </Show></StatusRegion>
           <div
             ref={props.bindScroll}
             class="flower-subagent-detail-transcript"

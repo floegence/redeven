@@ -9,6 +9,7 @@ import {
   onCleanup,
   type Component,
 } from 'solid-js';
+import { Button, FeedbackIndicator } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, Copy, Download, Loader2, MoreHorizontal, Pencil, Save, X } from '@floegence/floe-webapp-core/icons';
 import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
@@ -25,6 +26,7 @@ export interface FilePreviewActionsProps extends Pick<
   | 'editing'
   | 'dirty'
   | 'saving'
+  | 'saveError'
   | 'loading'
   | 'selectedText'
   | 'onCopyPath'
@@ -66,6 +68,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
   const [menu, setMenu] = createSignal<{ x: number; y: number; selection: string } | null>(null);
   const menuId = createUniqueId();
   let trigger: HTMLButtonElement | undefined;
+  let actionsRoot: HTMLDivElement | undefined;
   let pointerSelection: string | undefined;
   let copyResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let disposed = false;
@@ -200,7 +203,17 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
   );
 
   return (
-    <div class="flex shrink-0 items-center justify-end gap-1">
+    <div ref={actionsRoot} tabIndex={-1} class="flex shrink-0 items-center justify-end gap-1">
+      <FeedbackIndicator
+        label={i18n.t('filePreview.saveFailedTitle')}
+        closeLabel={i18n.t('common.actions.close')}
+        restoreFocus={() => actionsRoot}
+        size={props.compact ? 'sm' : 'md'}
+        entries={props.saveError ? [{
+          id: 'save', severity: 'error', summary: props.saveError,
+          actions: <Button size="sm" variant="outline" disabled={!props.dirty || props.saving || !props.onSave} loading={props.saving} onClick={() => void props.onSave?.()}>{i18n.t('common.actions.retry')}</Button>,
+        }] : []}
+      />
       <Show
         when={props.presentation === 'menu'}
         fallback={

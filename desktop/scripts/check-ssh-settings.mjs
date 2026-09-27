@@ -119,6 +119,11 @@ try {
   }
   console.log(process.argv.includes('--interactions-only') ? 'Running focused SSH interactions.' : 'SSH theme/locale and frame checks passed.');
   await open();
+  const destinationSpace = await page.locator('#ssh-settings-ssh_destination').evaluate(input => {
+    const indicator = input.closest('.ssh-settings-field-control').querySelector('[data-floe-status-indicator]');
+    return { textRight: input.getBoundingClientRect().right - parseFloat(getComputedStyle(input).paddingRight), indicatorLeft: indicator.getBoundingClientRect().left };
+  });
+  assert.ok(destinationSpace.textRight <= destinationSpace.indicatorLeft, 'SSH destination text must not overlap its feedback control');
   await motion('close');
   await motion('open');
   const typography = await page.locator('.redeven-environment-settings-dialog').evaluate((el) => ({
@@ -231,14 +236,26 @@ try {
     }));
   const beforeFeedback = await feedbackGeometry();
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await page.getByRole('alert').filter({ hasText: 'could not save' }).waitFor();
+  await page.getByRole('button', { name: /Environment settings:.*could not save/ }).waitFor();
   assert.deepEqual(await feedbackGeometry(), beforeFeedback, 'save errors preserve field and footer geometry');
+  await page.locator('.redeven-environment-settings-dialog').getByRole('button', { name: /Environment settings:/ }).click();
+  await page.locator('[data-floe-status-details]').getByText(/could not save/).waitFor();
+  await page.keyboard.press('Escape');
   assert.equal(await page.locator('#ssh-settings-label').inputValue(), 'Unsaved');
   await page.getByRole('button', { name: 'About this connection', exact: true }).click();
   await page.locator('.ssh-settings-help-popover').waitFor();
   await page.keyboard.press('Escape');
   await page.locator('.ssh-settings-help-popover').waitFor({ state: 'detached' });
   assert.equal(await page.locator('.redeven-environment-settings-dialog').count(), 1);
+  await open('en-US', 'dark', '&fail-ssh-config=1');
+  const configFeedback = page.getByRole('button', { name: /^Desktop could not read the SSH configuration\./ });
+  const beforeConfigRetry = await feedbackGeometry();
+  await configFeedback.click();
+  await page.locator('[data-floe-status-details]').getByText('Desktop could not read the SSH configuration.', { exact: true }).waitFor();
+  await page.locator('[data-floe-status-details]').getByRole('button', { name: 'Retry', exact: true }).click();
+  await page.waitForFunction(() => document.activeElement?.id === 'ssh-settings-ssh_destination');
+  assert.equal(await configFeedback.count(), 0, 'successful retry clears only the config feedback');
+  assert.deepEqual(await feedbackGeometry(), beforeConfigRetry, 'config feedback recovery preserves input geometry');
   const scrollbarModes = process.platform === 'darwin' ? ['Always', 'WhenScrolling'] : ['native'];
   for (const mode of scrollbarModes) {
     if (mode === 'WhenScrolling') {

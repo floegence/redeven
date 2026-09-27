@@ -5578,7 +5578,8 @@
       "toolApprovalOnceScope": "Только в этот раз",
       "toolApprovalExpandCommand": "Показать команду целиком",
       "toolApprovalHideCommand": "Свернуть",
-      "toolApprovalEligibleCount": "Можно подтвердить · {count}"
+      "toolApprovalEligibleCount": "Можно подтвердить · {count}",
+      "feedbackClose": "Закрыть подробности уведомления"
     },
     "threadList": {
       "title": "Беседы",
@@ -5780,7 +5781,8 @@
           "no": "Нет"
         },
         "agentsCount": "Агентов: {count}"
-      }
+      },
+      "feedbackClose": "Закрыть подробности уведомления"
     },
     "settings": {
       "title": "Настройки Flower",

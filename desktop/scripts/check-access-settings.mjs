@@ -120,7 +120,7 @@ try {
   await capture('protected-change-plan'); await button('accessFlow.verifyContinue').click();
   assert.equal(await dialog.count(), 1, 'owner verification is part of the same dialog');
   await dialog.getByLabel(t('security.password'), { exact: true }).fill('wrong'); await dialog.getByLabel(t('security.code'), { exact: true }).fill('123456'); await button('security.continue').click();
-  await footer().getByRole('alert').waitFor(); await capture('verification-error-near-action');
+  await body().getByRole('alert').waitFor(); await capture('verification-error-with-fields');
   await dialog.getByLabel(t('security.password'), { exact: true }).fill('test-only-owner'); await button('security.continue').click();
   await button('security.disable').click(); await dialog.locator('.access-flow-review').waitFor();
   assert.equal(await page.evaluate(() => window.accessFixture.security.enabled), false);
@@ -172,7 +172,7 @@ try {
   const ownerCode = dialog.getByLabel(t('security.code'), { exact: true });
   await page.evaluate(() => navigator.clipboard.writeText('123 456'));
   await ownerCode.press('ControlOrMeta+V'); assert.equal(await ownerCode.inputValue(), '123456');
-  await ownerCode.fill('000000'); await button('security.continue').click(); await footer().getByRole('alert').waitFor();
+  await ownerCode.fill('000000'); await button('security.continue').click(); await body().getByRole('alert').waitFor();
   assert.equal(await ownerCode.getAttribute('aria-invalid'), 'true');
   await ownerCode.fill('123456'); await button('security.continue').click();
   await dialog.getByText(t('security.disableHelp'), { exact: true }).waitFor();
@@ -189,10 +189,23 @@ try {
 
   await open('en-US', 'ocean', 'Local Environment', '&secure=ready');
   await button('accessFlow.manageProtection').click(); await button('security.setup').click();
+  await dialog.locator('.two-factor-qr img').waitFor();
+  assert.equal(await dialog.locator('.two-factor-manual').evaluate(details => details.open), false);
+  await dialog.locator('.two-factor-manual summary').click();
+  await dialog.locator('.two-factor-manual code').waitFor();
+  const setupKey = await dialog.locator('.two-factor-manual code').textContent();
+  assert.ok(setupKey);
+  await button('security.copyKey').click();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), setupKey);
+  await button('security.copied').waitFor();
   await capture('authenticator-ocean');
   await dialog.locator('#two-factor-verify input').fill('123456'); await button('security.continue').click();
   await dialog.getByText(t('security.recoveryTitle'), { exact: true }).waitFor();
   assert.equal(await button('security.enable').isEnabled(), false);
+  assert.equal(await dialog.locator('.two-factor-recovery-codes code').count(), 8);
+  await button('security.copy').click();
+  await button('security.copied').waitFor();
+  assert.equal((await page.evaluate(() => navigator.clipboard.readText())).split('\n').length, 8);
   await capture('recovery-codes-ocean'); await dialog.getByText(t('security.saved'), { exact: true }).click();
   assert.equal(await dialog.getByRole('checkbox', { name: t('security.saved'), exact: true }).isChecked(), true); await button('security.enable').click();
   assert.equal(await page.evaluate(() => window.accessFixture.security.enabled), true);

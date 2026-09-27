@@ -5475,7 +5475,8 @@
       "toolApprovalOnceScope": "이번만 허용",
       "toolApprovalExpandCommand": "전체 명령 보기",
       "toolApprovalHideCommand": "접기",
-      "toolApprovalEligibleCount": "승인 가능 · {count}개"
+      "toolApprovalEligibleCount": "승인 가능 · {count}개",
+      "feedbackClose": "알림 세부 정보 닫기"
     },
     "threadList": {
       "title": "대화",
@@ -5677,7 +5678,8 @@
           "no": "아니요"
         },
         "agentsCount": "{count}개의 위임된 에이전트"
-      }
+      },
+      "feedbackClose": "알림 세부 정보 닫기"
     },
     "settings": {
       "title": "Flower 설정",

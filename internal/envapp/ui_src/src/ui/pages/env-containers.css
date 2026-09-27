@@ -94,22 +94,6 @@
 .container-service-card__loading-actions { display: flex; gap: 6px; }
 .container-service-card__loading-actions > span { width: 76px; height: 32px; border-radius: 8px; }
 
-.container-services-refresh-error {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  max-width: 1180px;
-  margin: 0 auto 12px;
-  padding: 9px 11px;
-  border-radius: 10px;
-  color: var(--redeven-status-warning-foreground);
-  background: color-mix(in srgb, var(--redeven-status-warning-soft) 72%, transparent);
-}
-.container-services-refresh-error > div { display: grid; min-width: 0; gap: 2px; }
-.container-services-refresh-error strong { font-size: 12px; }
-.container-services-refresh-error small { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-
 .container-service-operation {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;

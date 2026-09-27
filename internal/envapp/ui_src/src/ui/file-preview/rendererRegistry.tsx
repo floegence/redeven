@@ -34,7 +34,6 @@ export type RedevenFilePreviewRenderProps = Readonly<{
   editing?: boolean;
   saving?: boolean;
   bindPdfEditor?: BindPdfPreviewEditor;
-  saveError?: string | null;
   message?: string;
   objectUrl?: string;
   resourceUrl?: string;
@@ -60,7 +59,6 @@ function renderMarkdownPreview(props: RedevenFilePreviewRenderProps): JSX.Elemen
       text={props.text ?? ''}
       draftText={props.draftText ?? props.text ?? ''}
       editing={props.editing}
-      saveError={props.saveError}
       onDraftChange={props.onDraftChange}
       onSelectionChange={props.onSelectionChange}
       surface={props.surface}
@@ -77,7 +75,6 @@ function renderTextPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
       draftText={props.draftText ?? props.text ?? ''}
       truncated={props.truncated}
       editing={props.editing}
-      saveError={props.saveError}
       onDraftChange={props.onDraftChange}
       onSelectionChange={props.onSelectionChange}
       surface={props.surface}
@@ -182,7 +179,7 @@ export const REDEVEN_FILE_PREVIEW_RENDERERS: readonly RedevenFilePreviewRenderer
     modes: ['pdf'],
     render: (props) => {
       const i18n = useI18n();
-      return <Suspense fallback={<RedevenLoadingCurtain visible eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPdf')} />}><PdfPreviewPane bytes={props.bytes} surface={props.surface} editing={props.editing} saving={props.saving} saveError={props.saveError} bindPdfEditor={props.bindPdfEditor} onSelectionChange={props.onSelectionChange} /></Suspense>;
+      return <Suspense fallback={<RedevenLoadingCurtain visible eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPdf')} />}><PdfPreviewPane bytes={props.bytes} surface={props.surface} editing={props.editing} saving={props.saving} bindPdfEditor={props.bindPdfEditor} onSelectionChange={props.onSelectionChange} /></Suspense>;
     },
   },
   {

@@ -30,6 +30,7 @@ describe('File preview titlebar', () => {
     const onAskFlower = vi.fn();
     const onDownload = vi.fn();
     const [editing, setEditing] = createSignal(false);
+    const [saveError, setSaveError] = createSignal('');
     const host = document.createElement('div');
     document.body.appendChild(host);
     const dispose = render(() => {
@@ -55,6 +56,8 @@ describe('File preview titlebar', () => {
                   canEdit
                   editing={editing()}
                   dirty
+                  saveError={saveError()}
+                  onSave={() => { setSaveError(''); }}
                   onStartEdit={() => setEditing(true)}
                   onDiscard={() => setEditing(false)}
                   onCopyPath={onCopyPath}
@@ -96,6 +99,24 @@ describe('File preview titlebar', () => {
       range.selectNodeContents(paragraph);
       window.getSelection()!.removeAllRanges();
       window.getSelection()!.addRange(range);
+      const paragraphRect = paragraph.getBoundingClientRect().toJSON();
+      setSaveError('Could not save this draft. '.repeat(40));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      expect(root.querySelector('.file-markdown-body p')).toBe(paragraph);
+      expect(paragraph.getBoundingClientRect().toJSON()).toEqual(paragraphRect);
+      expect(window.getSelection()?.toString()).toBe('Selected preview paragraph.');
+      const feedback = actions.querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!;
+      await userEvent.click(feedback);
+      await vi.waitFor(() => expect(document.querySelector('[data-floe-status-details]')).toBeTruthy());
+      expect(document.querySelector('[data-floe-status-details]')?.textContent).toContain('Could not save this draft. '.repeat(40));
+      await userEvent.keyboard('{Escape}');
+      expect(document.activeElement).toBe(feedback);
+      await userEvent.click(feedback);
+      await userEvent.click(page.getByRole('button', { name: 'Retry', exact: true }));
+      await vi.waitFor(() => expect(document.querySelector('[data-floe-status-details]')).toBeNull());
+      expect(feedback.getAttribute('aria-hidden')).toBe('true');
+      assertLayout();
+      window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
       await userEvent.click(actions.querySelector<HTMLButtonElement>('button[aria-label="Ask Flower"]')!);
       expect(onAskFlower).toHaveBeenLastCalledWith('Selected preview paragraph.');
       expect(root.getBoundingClientRect().toJSON()).toEqual(originalRect);

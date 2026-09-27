@@ -245,14 +245,23 @@ it('keeps a failed decision local, retryable, and separate from other approvals'
   await waitFor(() => fixture.phase() === 'expanded');
   const before = rows.map(row => row.getBoundingClientRect());
   await userEvent.click(rows[0].querySelector('.flower-approval-decision-approve')!);
-  await waitFor(() => Boolean(rows[0].querySelector('[role="alert"]')));
+  const trigger = rows[0].querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!;
+  await waitFor(() => trigger.getAttribute('aria-hidden') !== 'true');
   expect(rows[0].textContent).toContain('Connection interrupted. Try again.');
-  expect(rows[1].querySelector('[role="alert"]')).toBeNull();
+  expect(rows[1].querySelector('[data-floe-status-indicator] button')?.getAttribute('aria-hidden')).toBe('true');
   expect(rows[1].querySelector<HTMLButtonElement>('.flower-approval-decision-approve')!.disabled).toBe(false);
-  const feedback = rows[0].querySelector<HTMLElement>('[role="alert"]')!.parentElement!;
+  const approve = rows[0].querySelector<HTMLButtonElement>('.flower-approval-decision-approve')!;
+  expect(document.getElementById(approve.getAttribute('aria-describedby')!)?.textContent).toContain(error);
+  await userEvent.click(trigger);
+  await waitFor(() => Boolean(document.querySelector('[data-floe-status-details]')));
+  const feedback = document.querySelector<HTMLElement>('[data-floe-status-details]')!;
+  expect(feedback.textContent).toContain(error);
   expect(feedback.scrollHeight).toBeGreaterThan(feedback.clientHeight);
   expect(getComputedStyle(feedback).overflowY).toBe('auto');
-  expect(feedback.getAttribute('data-redeven-workbench-wheel-role')).toBe('local-scroll-viewport');
+  expect(feedback.getAttribute('data-floe-canvas-wheel-interactive')).toBe('true');
+  await userEvent.keyboard('{Escape}');
+  expect(document.activeElement).toBe(trigger);
+  expect(trigger.getAttribute('aria-hidden')).toBeNull();
   rows.forEach((row, index) => {
     expect(row.getBoundingClientRect().height).toBeCloseTo(before[index].height, 0);
     expect(row.getBoundingClientRect().top).toBeCloseTo(before[index].top, 0);
@@ -344,8 +353,9 @@ it('marks only the constrained approval list for selected Workbench scrolling an
   const touch = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
   await touch.emulateTouchInput(true);
   onTestFinished(() => touch.emulateTouchInput(false));
+  expect(matchMedia('(pointer: coarse)').matches).toBe(true);
   for (const button of fixture.mount.querySelectorAll<HTMLButtonElement>('.flower-approval-surface button')) {
-    expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    await expect.poll(() => button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   }
 });
 

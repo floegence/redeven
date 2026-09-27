@@ -1,4 +1,4 @@
-import { StatusRegion, Button } from '@floegence/floe-webapp-core/ui';
+import { FeedbackIndicator, Button } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createSignal, createUniqueId, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { AlertCircle, Copy, Globe, Pencil, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
 import type { FlowerApprovalAction } from './contracts/flowerSurfaceContracts';
@@ -42,13 +42,13 @@ export function FlowerApprovalRow(props: Readonly<{
   copied: boolean;
   subtaskLabel: string;
   readingProps?: JSX.HTMLAttributes<HTMLDivElement>;
-  scrollViewportProps?: Omit<JSX.HTMLAttributes<HTMLDivElement>, 'style'> & { style?: JSX.CSSProperties };
   onCopy: () => void;
   onDecide: (approved: boolean) => void;
 }>) {
   const id = createUniqueId();
   const [expanded, setExpanded] = createSignal(false);
   const [truncated, setTruncated] = createSignal(false);
+  let row: HTMLElement | undefined;
   let commandRef: HTMLPreElement | undefined;
   let measureFrame = 0;
   const measure = () => {
@@ -77,7 +77,7 @@ export function FlowerApprovalRow(props: Readonly<{
       default: return <Shield class="h-4 w-4" />;
     }
   };
-  return <section class="flower-approval-queue-row" tabIndex={-1} aria-labelledby={`${id}-title`}
+  return <section ref={row} class="flower-approval-queue-row" tabIndex={-1} aria-labelledby={`${id}-title`}
     data-flower-composer-approval="true" data-flower-approval-action-id={props.action.action_id}
     data-flower-approval-origin={props.action.origin} data-flower-approval-surface-role={props.action.surface_role || 'primary_action'}
     data-flower-approval-submitting={props.submitting ? 'true' : undefined} aria-busy={props.submitting}>
@@ -86,10 +86,11 @@ export function FlowerApprovalRow(props: Readonly<{
       <strong id={`${id}-title`} class="flower-approval-operation-label">{props.presentation.operationLabel}</strong>
     </div>
     <div class="flower-approval-actions" data-flower-approval-actions-row="true">
+      <FeedbackIndicator label={props.presentation.operationLabel} closeLabel={props.copy.feedbackClose} restoreFocus={() => row} entries={props.error ? [{ id: 'approval', severity: 'error', summary: props.error }] : []} />
       <FlowerApprovalDecisionActions label={props.presentation.operationLabel} rejectLabel={props.copy.toolApprovalReject}
         approveLabel={props.copy.toolApprovalApprove} rejectAriaLabel={props.copy.toolApprovalRejectAction(props.presentation.operationLabel, props.subtaskLabel)}
         approveAriaLabel={props.copy.toolApprovalApproveAction(props.presentation.operationLabel, props.subtaskLabel)}
-        disabled={props.disabled} submitting={props.submitting} describedBy={props.status || props.error ? `${id}-status` : undefined}
+        disabled={props.disabled} submitting={props.submitting} describedBy={[props.status ? `${id}-status` : '', props.error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined}
         onReject={() => props.onDecide(false)} onApprove={() => props.onDecide(true)} />
     </div>
     <div class="flower-approval-body" {...props.readingProps}>
@@ -118,9 +119,8 @@ export function FlowerApprovalRow(props: Readonly<{
           <For each={props.presentation.details}>{detail => <div class="flower-approval-target">{detail}</div>}</For>
         </details>
       </Show>
-      <StatusRegion {...props.scrollViewportProps} lines={1} class="text-xs"><Show when={props.status || props.error}>
-        <p id={`${id}-status`} class="flower-approval-status" role={props.error ? 'alert' : 'status'}>{props.error || props.status}</p>
-      </Show></StatusRegion>
+      <Show when={props.status}><p id={`${id}-status`} class="flower-approval-status" role="status">{props.status}</p></Show>
+      <Show when={props.error}><p id={`${id}-error`} class="flower-visually-hidden">{props.error}</p></Show>
       <span class="flower-visually-hidden" role="status">{props.submitting ? props.copy.toolApprovalSubmitting : ''}</span>
     </div>
   </section>;

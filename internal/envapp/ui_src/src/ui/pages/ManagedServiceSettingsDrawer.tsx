@@ -1,4 +1,3 @@
-import { StatusRegion } from '@floegence/floe-webapp-core/ui';
 import './managed-service-settings.css';
 import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
@@ -683,7 +682,7 @@ export function ManagedServiceSettingsDrawer(props: {
                     </For>
                   </div>
                 </Show>
-                <StatusRegion lines={3} class="text-xs"><Show when={error()}>
+                <Show when={error()}>
                   <div
                     class="mb-4 rounded-md border border-destructive/25 bg-destructive/[0.06] px-3 py-2 text-xs text-destructive"
                     role="alert"
@@ -691,7 +690,7 @@ export function ManagedServiceSettingsDrawer(props: {
                     {error()}
                   </div>
                   <Show when={props.onEditTemplate && props.canManage}><Button size="sm" variant="outline" onClick={() => props.onEditTemplate?.()}>{i18n.t("webServices.managed.editTemplate")}</Button></Show>
-                </Show></StatusRegion>
+                </Show>
 
                 <Show when={section() === "general"}>
                   <section class="max-w-3xl space-y-4">

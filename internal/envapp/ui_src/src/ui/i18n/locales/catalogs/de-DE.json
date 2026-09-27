@@ -5475,7 +5475,8 @@
       "toolApprovalOnceScope": "Nur dieses Mal",
       "toolApprovalExpandCommand": "Vollständigen Befehl anzeigen",
       "toolApprovalHideCommand": "Zuklappen",
-      "toolApprovalEligibleCount": "Freigabe möglich · {count}"
+      "toolApprovalEligibleCount": "Freigabe möglich · {count}",
+      "feedbackClose": "Rückmeldung schließen"
     },
     "threadList": {
       "title": "Unterhaltungen",
@@ -5677,7 +5678,8 @@
           "no": "Nein"
         },
         "agentsCount": "{count} delegierte Agenten"
-      }
+      },
+      "feedbackClose": "Rückmeldung schließen"
     },
     "settings": {
       "title": "Flower-Einstellungen",

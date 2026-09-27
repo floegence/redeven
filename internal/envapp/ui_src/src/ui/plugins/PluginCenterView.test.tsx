@@ -910,7 +910,8 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const alert = mount.querySelector('[data-plugin-center-error]');
+    mount.querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!.click();
+    const alert = document.querySelector('[data-floe-status-details]');
     expect(controlText(alert)).toContain('The plugin catalog is unavailable');
     expect(mount.querySelector('[data-plugin-center-item="catalog:metrics"]')).not.toBeNull();
     (alert?.querySelector('button') as HTMLButtonElement).click();
@@ -3094,7 +3095,8 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const error = mount.querySelector('[data-plugin-center-error]')!;
+    mount.querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!.click();
+    const error = document.querySelector('[data-floe-status-details]')!;
     expect(controlText(error)).toContain('Inventory unavailable');
     expect(controlText(error)).toContain('environment administrator');
     findDocumentButton('Retry').click();

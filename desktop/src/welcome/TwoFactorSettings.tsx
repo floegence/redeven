@@ -1,4 +1,4 @@
-import { StatusRegion, StableText, Button, Checkbox, Input } from '@floegence/floe-webapp-core/ui';
+import { StableText, Button, Checkbox, Input } from '@floegence/floe-webapp-core/ui';
 import { Show, For, createSignal, createEffect, createMemo, createUniqueId, on, onCleanup } from 'solid-js';
 import {
   Shield,
@@ -407,7 +407,6 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
       </section></Show>
       <Show when={view() !== 'closed'}>
       <EnvironmentSettingsPanel footer={<>
-        <StatusRegion lines={3} class="text-xs"><Show when={error()}><div role="alert" class="environment-access-save-error"><AlertCircle size={18} aria-hidden="true" /><span>{error()}</span></div></Show></StatusRegion>
         <div class="environment-access-actions">
         <Button size="sm" variant="ghost" class="environment-access-close" disabled={busy()} onClick={cancel}>{text('cancel')}</Button>
         <Show when={view() === 'verifyOwner'}><Button size="sm" type="submit" form="two-factor-owner" disabled={busy() || !ownerReady()} loading={busy()}>{text('continue')}</Button></Show>
@@ -417,6 +416,7 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
         </Button></Show>
       </div></>}>
         <div ref={flow} class="two-factor-flow">
+          <Show when={error()}><div role="alert" class="environment-access-save-error"><AlertCircle size={18} aria-hidden="true" /><span>{error()}</span></div></Show>
           <Show
             when={
               isEnrollment() && (view() === 'scan' || view() === 'recovery')
