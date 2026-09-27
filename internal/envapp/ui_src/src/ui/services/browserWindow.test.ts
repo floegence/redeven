@@ -40,12 +40,13 @@ async function fixture(onOpenWindow?: () => Promise<void>, onInteraction?: () =>
   const frame = document.createElement('iframe'); document.body.append(frame);
   const child = frame.contentWindow!;
   const delivered = vi.spyOn(child, 'postMessage').mockImplementation(() => undefined);
+  const onFailure = vi.fn();
   const host = createBrowserWindow({
     session: {} as Session,
     view: { generation: 'fixture-generation', id: 'browser-view-test', initial_target: 'first', protocol_version: 24, media_wire_version: 1 },
     child: () => child,
     configuration: { type: 'redeven-browser-ports', nonce: 'nonce', title: 'Browser', locale: 'en-US', messages: {} as BrowserMessages, theme: { tokens: {}, dark: false, surfaceStyle: '', shellTheme: '', fontFamily: 'sans-serif' } },
-    onReconnect: vi.fn(), onOpenWindow, onInteraction,
+    onReconnect: vi.fn(), onOpenWindow, onInteraction, onFailure,
   });
   window.dispatchEvent(new MessageEvent('message', { source: child, origin: location.origin, data: { type: 'redeven-browser-ready', nonce: 'nonce' } }));
   const ports = (delivered.mock.calls[0] as unknown as [unknown, string, MessagePort[]])[2];
@@ -73,8 +74,25 @@ async function fixture(onOpenWindow?: () => Promise<void>, onInteraction?: () =>
     product.postMessage({ type: 'request', id: ++id, operation: { method } });
     return response;
   };
-  return { acquire, received, token, request, host, product, child };
+  return { acquire, received, token, request, host, product, child, onFailure };
 }
+
+it('retires lost source authority and shows source selection without closing the window', async () => {
+  const { acquire, token, host, product, onFailure } = await fixture();
+  const pending = await acquire();
+  pending.resolve({ token: 'old-token' });
+  await pending.response;
+  await state.receive!({ type: 'control', target: 'first', active: true });
+  expect(token()).toBe('old-token');
+  const failure = new Promise(resolve => { product.onmessage = event => resolve(event.data); });
+  state.carrierOptions!.onClose('source_unavailable');
+  expect(token()).toBe('');
+  expect(onFailure).toHaveBeenCalledExactlyOnceWith('BROWSER_SOURCE_UNAVAILABLE');
+  expect(await failure).toEqual({ type: 'workspace.failure', code: 'BROWSER_SOURCE_UNAVAILABLE', phase: 'failed' });
+  state.carrierOptions!.onClose('source_unavailable');
+  host.close();
+  expect(onFailure).toHaveBeenCalledOnce();
+});
 
 it('admits source control only after its private token arrives, regardless of lane order', async () => {
   const { acquire, received, token } = await fixture();

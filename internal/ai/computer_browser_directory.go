@@ -20,6 +20,7 @@ type browserWorkspace struct {
 	tabs           map[string]browserstore.Tab
 	selected       string
 	connection     *ComputerBrowserConnection // Runtime-only external source scope, never persisted.
+	pendingCloses  int                        // Explicit close transactions may replace the last tab.
 }
 
 func (r *ComputerUseRuntime) newBrowserWorkspaceTab(ctx context.Context, workspace *browserWorkspace) (TargetDescriptor, error) {
@@ -186,10 +187,29 @@ func (r *ComputerUseRuntime) closeBrowserWorkspaceTab(ctx context.Context, event
 		valid = view.permits(targetID)
 	}
 	pinned := valid && view.workspace.pinned[targetID]
+	if valid {
+		view.workspace.pendingCloses++
+	}
 	r.connectMu.Unlock()
 	if !valid {
 		return "", errBrowserViewUnavailable
 	}
+	defer func() {
+		r.connectMu.Lock()
+		defer r.connectMu.Unlock()
+		view.workspace.pendingCloses--
+		r.mu.RLock()
+		var views []*browserView
+		for _, candidate := range r.browserViews {
+			if candidate.workspace == view.workspace {
+				views = append(views, candidate)
+			}
+		}
+		r.mu.RUnlock()
+		for _, candidate := range views {
+			candidate.retireIfEmpty()
+		}
+	}()
 	ctx, cancel := view.operationContext(ctx)
 	defer cancel()
 	// Closing is an explicit product operation. Reserve the same target gate

@@ -198,7 +198,13 @@ export function createBrowserWindow(options: BrowserWindowOptions): { close(): v
     product = actions.port1;
     product.addEventListener('message', receive); product.start();
     if (options.view && !suspended) bridge = serveProjectionPorts({ messages: messages.port1, media: media.port1 }, () => {
-      const carrier = createBrowserCarrier({ session: options.session, view: options.view?.id ?? '', controlToken: currentToken, onClose: () => { token = ''; controlled = ''; grant = undefined; connected = false; readyReject(new Error('Browser closed')); } });
+      const carrier = createBrowserCarrier({ session: options.session, view: options.view?.id ?? '', controlToken: currentToken, onClose: reason => {
+        token = ''; controlled = ''; grant = undefined; connected = false; readyReject(new Error('Browser closed'));
+        if (reason && !suspended && !lifetime.signal.aborted) {
+          suspend('BROWSER_SOURCE_UNAVAILABLE');
+          options.onFailure?.('BROWSER_SOURCE_UNAVAILABLE');
+        }
+      } });
       carrier.subscribe(async message => {
         if (suspended || lifetime.signal.aborted) return;
         if (!connected) { connected = true; clearTimeout(setupTimer); readyResolve(); }

@@ -56,7 +56,7 @@ export type BrowserCarrierOptions = Readonly<{
   session: Session;
   view: string;
   controlToken: (message: ClientMessage) => string;
-  onClose: () => void;
+  onClose: (reason?: DisconnectReason) => void;
   download?: ProjectionConnection['download'];
   upload?: ProjectionConnection['upload'];
 }>;
@@ -90,7 +90,7 @@ export function createBrowserCarrier(options: BrowserCarrierOptions): Projection
     closed = true; reason = failure;
     rejectInput(new Error('Browser carrier closed'));
     for (const stream of streams) void retire(stream);
-    options.onClose();
+    options.onClose(failure);
     for (const listener of disconnected) listener(failure);
     messages.clear(); frames.clear(); disconnected.clear();
   };
