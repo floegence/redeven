@@ -12,15 +12,16 @@ export class BrowserProjectionWindows {
 
   prepare(parent: BrowserWindow, value: unknown): boolean {
     if (parent.isDestroyed() || typeof value !== 'string') return false;
+    const contents = parent.webContents;
     let url: URL;
     try {
       url = new URL(value);
-      if (url.origin !== new URL(parent.webContents.getURL()).origin || !['http:', 'https:'].includes(url.protocol)
+      if (url.origin !== new URL(contents.getURL()).origin || !['http:', 'https:'].includes(url.protocol)
         || url.username || url.password || url.search !== `?instance=${url.hash.slice(1)}` || url.pathname !== documentPath || !/^#[a-zA-Z0-9-]{16,128}$/u.test(url.hash)) return false;
     } catch { return false; }
-    let owner = this.owners.get(parent.webContents.id);
+    let owner = this.owners.get(contents.id);
     if (!owner) {
-      const id = parent.webContents.id;
+      const id = contents.id;
       const close = () => {
         const current = this.owners.get(id);
         if (!current) return;
@@ -29,12 +30,12 @@ export class BrowserProjectionWindows {
       };
       const navigate = (_event: unknown, _url: string, inPlace: boolean, mainFrame: boolean) => { if (mainFrame && !inPlace) close(); };
       owner = { pending: new Map(), windows: new Map(), dispose: () => {
-        parent.webContents.removeListener('destroyed', close);
-        parent.webContents.removeListener('did-start-navigation', navigate);
+        contents.removeListener('destroyed', close);
+        contents.removeListener('did-start-navigation', navigate);
       } };
       this.owners.set(id, owner);
-      parent.webContents.once('destroyed', close);
-      parent.webContents.on('did-start-navigation', navigate);
+      contents.once('destroyed', close);
+      contents.on('did-start-navigation', navigate);
     }
     for (const [key, expiry] of owner.pending) if (expiry <= Date.now()) owner.pending.delete(key);
     if (owner.pending.size + owner.windows.size >= 16) return false;
@@ -62,10 +63,11 @@ export class BrowserProjectionWindows {
     let url: URL;
     try { url = new URL(details.url); } catch { return undefined; }
     if (!url.pathname.startsWith('/_redeven_proxy/env/browser/')) return undefined;
+    if (parent.isDestroyed()) return { action: 'deny' };
     const owner = this.owners.get(parent.webContents.id);
     const expiry = owner?.pending.get(url.href) ?? 0;
     owner?.pending.delete(url.href);
-    if (!owner || expiry <= Date.now() || parent.isDestroyed()) return { action: 'deny' };
+    if (!owner || expiry <= Date.now()) return { action: 'deny' };
     return {
       action: 'allow',
       overrideBrowserWindowOptions: { width: 1280, height: 900, minWidth: 720, minHeight: 480, frame: true, titleBarStyle: 'default', show: true,

@@ -112,6 +112,10 @@ opener or parent before handing over ports. A source replacement changes the
 query as well as the nonce, so the browser loads a new document instead of doing
 a fragment-only navigation with retired ports. Desktop reserves that exact URL
 once and gives the child no preload or generic bridge.
+Parent destruction or navigation retires reservations and static-document grants
+before closing child windows. Cleanup detaches from the captured WebContents
+event emitter without reading an already destroyed BrowserWindow; repeated
+teardown and previously closed children remain harmless.
 Desktop presents the independent window at creation. Its visible shell owns
 loading and recovery; a paint event must not gate the user's window visibility.
 For a Desktop private Local UI bridge, the main process lends authentication
@@ -159,7 +163,7 @@ website verification. Window adapters consume those released capabilities.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWorkspaceController.ts` - Single view intent and release owner.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvBrowserPage.test.tsx` - Effective presentation changes without repeated source opens.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWorkspaceWindows.test.ts` - Retained window shells and independent cleanup.
-- `redeven:desktop/src/main/browserProjectionWindows.test.ts` - Exact static-document loading without environment API authority.
+- `redeven:desktop/src/main/browserProjectionWindows.test.ts` - Exact static-document loading without environment API authority and idempotent cleanup after parent destruction.
 - `redeven:internal/envapp/ui_src/src/ui/services/browserWindow.ts` - Environment-owned window, source replacement and private control admission.
 
 - [FloeBrowser v0.1.13: test/browser-menu.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.13/test/browser-menu.e2e.ts) — Address-row actions, activation, focus, narrow bounds and late completion.
