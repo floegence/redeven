@@ -79,7 +79,7 @@ it.each([1280, 390])('keeps neighboring services still through operation settlem
   const service: RowProps['service'] = {
     service_id: 'layout', template_id: 'example', name: 'Workspace', template_source: 'builtin', deployment: 'container',
     workspace_path: '/workspace', workspace_ownership: 'redeven_created', desired_state: 'running', observed_state: 'running',
-    status: 'running', primary_action: 'stop', management_state: 'active', forward_id: 'forward', runtime_port: 3000,
+    status: 'running', pending_changes: true, primary_action: 'stop', management_state: 'active', forward_id: 'forward', runtime_port: 3000,
     release_status: { schema_version: 2, check_status: 'pending' },
     actions: { open: { available: true }, inspect: { available: true }, stop: { available: true }, start: { available: false }, restart: { available: true }, retry: { available: false } },
   };
@@ -89,9 +89,10 @@ it.each([1280, 390])('keeps neighboring services still through operation settlem
   };
   const [current, setCurrent] = createSignal<RowProps['operation']>(null);
   const [phase, setPhase] = createSignal<RowProps['operationPhase']>('visible');
+  const [expanded, setExpanded] = createSignal(false);
   dispose = render(() => <div class="web-service-list"><ManagedServiceRow service={service} operation={current()} operationPhase={phase()}
-    operationExpanded={false} busy={false} canOpen canManage onOpen={() => {}} onOpenResource={() => {}} onAction={() => {}}
-    onOperationExpandedChange={() => {}} onLogs={() => {}} onUninstall={() => {}} />
+    operationExpanded={expanded()} busy={false} canOpen canManage onOpen={() => {}} onOpenResource={() => {}} onAction={() => {}}
+    onOperationExpandedChange={(_id, value) => setExpanded(value)} onLogs={() => {}} onUninstall={() => {}} />
     <PortForwardRow forward={forward} busy={false} onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} /></div>, host);
   await settle();
   const geometry = () => [...host.querySelectorAll('.web-service-row, .web-service-identity, .web-service-status, .web-service-open')].map(rect);
@@ -100,4 +101,15 @@ it.each([1280, 390])('keeps neighboring services still through operation settlem
     setCurrent(next); await settle(); expect(geometry()).toEqual(initial);
     if (next?.state === 'succeeded') { setPhase('exiting'); await new Promise(resolve => setTimeout(resolve, 250)); expect(geometry()).toEqual(initial); }
   }
+  setPhase('visible'); setCurrent({ ...operation, state: 'failed', stage: 'failed' }); await settle();
+  expect(geometry()).toEqual(initial);
+  const notice = host.querySelector<HTMLElement>('[data-testid="managed-service-notice"]')!;
+  expect(notice.checkVisibility()).toBe(false);
+  await userEvent.click(host.querySelector('.web-service-status-trigger')!); await settle();
+  expect(notice.checkVisibility()).toBe(true);
+  expect(notice.getBoundingClientRect().width).toBeGreaterThan(100);
+  expect(notice.getBoundingClientRect().height).toBeGreaterThan(16);
+  expect(notice.innerText.trim()).not.toBe('');
+  await userEvent.click(host.querySelector('.web-service-status-trigger')!); await settle();
+  expect(geometry()).toEqual(initial);
 });

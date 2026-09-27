@@ -1641,7 +1641,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
         } /></div>
         <div class="web-service-status" data-testid="managed-service-status" role="status" aria-live="polite">
           <Show when={operation() || notices().length} fallback={<ServiceStatusIndicator label={statusLabel()} tone={managedStatusTone(props.service.status ?? props.service.observed_state)} />}>
-          <Tooltip content={operation() ? managedOperationActivityLabel(operation()!, i18n) : notices().join('\n') || statusLabel()}
+          <Tooltip content={[operation() ? managedOperationActivityLabel(operation()!, i18n) : '', ...notices()].filter(Boolean).join('\n') || statusLabel()}
             placement="top" anchorClass="web-service-status-anchor" delay={0} clickToToggle={!operation() && notices().length > 0}>
             <button type="button" class="web-service-status-trigger" aria-expanded={operation() ? props.operationExpanded : undefined}
               aria-label={operation() ? managedOperationActivityLabel(operation()!, i18n) : undefined}
@@ -1688,7 +1688,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
         </div>
       </div>
       <div class="web-service-activity" hidden={!props.operationExpanded}>
-      <div class="web-service-notice-region sr-only" data-expanded={notices().length > 0 || undefined} aria-hidden={notices().length === 0 || undefined} data-testid="managed-service-notice">
+      <div class="web-service-notice-region" data-expanded={notices().length > 0 || undefined} aria-hidden={notices().length === 0 || undefined} data-testid="managed-service-notice">
         <div class="web-service-notice-clip"><div class="web-service-notice">
           <AlertTriangle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <div><For each={notices()}>{(message) => <p>{message}</p>}</For></div>

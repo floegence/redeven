@@ -250,6 +250,7 @@ it('keeps a failed decision local, retryable, and separate from other approvals'
   const feedback = rows[0].querySelector<HTMLElement>('[role="alert"]')!.parentElement!;
   expect(feedback.scrollHeight).toBeGreaterThan(feedback.clientHeight);
   expect(getComputedStyle(feedback).overflowY).toBe('auto');
+  expect(feedback.getAttribute('data-redeven-workbench-wheel-role')).toBe('local-scroll-viewport');
   rows.forEach((row, index) => {
     expect(row.getBoundingClientRect().height).toBeCloseTo(before[index].height, 0);
     expect(row.getBoundingClientRect().top).toBeCloseTo(before[index].top, 0);

@@ -1,3 +1,4 @@
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { StatusRegion } from '@floegence/floe-webapp-core/ui';
 import { ErrorBoundary, Suspense, Show, createMemo, createSignal, lazy } from 'solid-js';
 import type { CodeEditorApi, CodeEditorProps } from '@floegence/floe-webapp-core/editor';
@@ -111,7 +112,7 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
 
   return (
     <div class={`flex h-full min-h-0 flex-col overflow-hidden${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
-      <StatusRegion lines={2} class="text-xs"><Show when={(props.saveError ?? '').trim()}>
+      <StatusRegion {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} lines={2} class="text-xs"><Show when={(props.saveError ?? '').trim()}>
         <div class="shrink-0 border-b border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
           {props.saveError}
         </div>

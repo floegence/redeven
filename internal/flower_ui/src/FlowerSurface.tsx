@@ -584,7 +584,7 @@ export type FlowerSurfaceProps = Readonly<{
   adapter: FlowerSurfaceAdapter;
   filesystemScopeKey?: string;
   filesystemScrollViewportProps?: JSX.HTMLAttributes<HTMLDivElement>;
-  approvalScrollViewportProps?: JSX.HTMLAttributes<HTMLDivElement> & Readonly<Record<`data-${string}`, string>>;
+  approvalScrollViewportProps?: Omit<JSX.HTMLAttributes<HTMLDivElement>, 'style'> & { style?: JSX.CSSProperties } & Readonly<Record<`data-${string}`, string>>;
   approvalReadingProps?: JSX.HTMLAttributes<HTMLDivElement> & Readonly<Record<`data-${string}`, string>>;
   notify: (notification: FlowerSurfaceNotification) => void;
   copy?: FlowerSurfaceCopy;
@@ -8010,7 +8010,7 @@ webSearch: model.web_search,
     if (composerSurface) return <FlowerApprovalRow action={action()} presentation={presentation()} copy={copy().chat}
       disabled={disabled()} submitting={submitting()} status={statusCopy()}
       error={approvalErrors()[decisionSubmissionKey(selectedThreadID(), actionID)] || ''}
-      copied={commandCopied()} subtaskLabel={subtaskLabel()} readingProps={props.approvalReadingProps}
+      copied={commandCopied()} subtaskLabel={subtaskLabel()} readingProps={props.approvalReadingProps} scrollViewportProps={props.approvalScrollViewportProps}
       onCopy={() => void copyApprovalCommand(actionID, commandText())}
       onDecide={approved => void submitApprovalAction(action(), approved)} />;
     return (
