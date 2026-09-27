@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -152,6 +153,7 @@ func (m *Manager) catalog(ctx context.Context, owner, locale string) (Catalog, h
 	if err := json.Unmarshal(data, &result.Applications); err != nil {
 		return result, tools, err
 	}
+	result.Applications = slices.DeleteFunc(result.Applications, func(app Application) bool { return !m.browserApplicationAllowed(app.ID, owner) })
 	return result, tools, nil
 }
 

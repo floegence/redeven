@@ -11,6 +11,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Remote browser surface](architecture/remote-browser-surface.md) - Mount shared browser windows with source selection, theme and authenticated window lifetimes.
 - [Remote browser presentation](architecture/remote-browser-presentation.md) - Present stable tab geometry and admit input only through current source authority.
 - [Remote browser source ownership](architecture/remote-browser-sources.md) - Admit native pages once and preserve directory, control and popup privacy boundaries.
+- [Separate remote browser preparation](architecture/remote-browser-remote-profile.md) - Prepare a persistent browser application while preserving personal data and the existing application lifecycle.
 - [Remote browser persistence](architecture/remote-browser-persistence.md) - Restore managed pages and save browser library state without persisting authority.
 - [Remote browser service recovery](architecture/remote-browser-recovery.md) - Rebuild a failed browser service without reviving old grants or losing saved managed tabs.
 - [Remote browser transport and media](architecture/remote-browser-media.md) - Carry source DOM and element media through bounded authenticated lanes.

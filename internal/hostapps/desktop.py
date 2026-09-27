@@ -9,6 +9,7 @@ import json
 import os
 import pathlib
 import sys
+import tempfile
 
 import gi
 
@@ -80,9 +81,16 @@ def add_application(directory, identity, request):
     key.set_string("Desktop Entry", "Type", "Application")
     key.set_string("Desktop Entry", "Name", request["name"])
     key.set_string("Desktop Entry", "Exec", command)
+    if request.get("remote_browser"):
+        key.set_string("Desktop Entry", "Categories", "Network;WebBrowser;")
     destination = pathlib.Path(directory) / (identity + ".desktop")
-    destination.write_text(key.to_data()[0], encoding="utf-8")
-    destination.chmod(0o600)
+    descriptor, temporary = tempfile.mkstemp(prefix=".application-", dir=directory)
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as output:
+            output.write(key.to_data()[0])
+        os.replace(temporary, destination)
+    finally:
+        pathlib.Path(temporary).unlink(missing_ok=True)
 
 
 def main():
