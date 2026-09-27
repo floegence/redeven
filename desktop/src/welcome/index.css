@@ -1226,6 +1226,8 @@ html:not(.dark) .redeven-new-environment-card:hover {
   gap: 0.25rem;
   width: fit-content;
   max-width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
   border-radius: 0.25rem;
   cursor: pointer;
   list-style: none;
@@ -1233,7 +1235,8 @@ html:not(.dark) .redeven-new-environment-card:hover {
 }
 
 .redeven-endpoint-listener > summary::-webkit-details-marker { display: none; }
-.redeven-endpoint-listener > summary:hover { color: var(--foreground); }
+.redeven-endpoint-listener > summary:hover { color: var(--foreground); background: color-mix(in srgb, var(--foreground) 4%, transparent); }
+@media (pointer: coarse) { .redeven-endpoint-listener > summary { min-height: 44px; } }
 .redeven-endpoint-listener > summary:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;

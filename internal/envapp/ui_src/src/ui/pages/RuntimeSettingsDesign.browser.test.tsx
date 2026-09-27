@@ -38,6 +38,36 @@ function expectNoOverflow(panel: HTMLElement) {
 }
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
 
+it.each([1280, 390])('keeps settings disclosure targets padded and usable at %ipx', async width => {
+  await mount(width);
+  const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+  for (const id of ['connection', 'agent', 'ai', 'skills', 'codespaces'] as const) {
+    const panel = await openSection(id);
+    const summaries = [...panel.querySelectorAll<HTMLElement>('.settings-technical-details > summary')].filter(element => element.getClientRects().length);
+    expect(summaries.length, `${id} has a visible disclosure`).toBeGreaterThan(0);
+    for (const summary of summaries) {
+      const style = getComputedStyle(summary);
+      expect(parseFloat(style.paddingLeft)).toBeGreaterThanOrEqual(8);
+      expect(parseFloat(style.paddingRight)).toBeGreaterThanOrEqual(8);
+      expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
+      expect(style.cursor).toBe('pointer');
+      const details = summary.parentElement as HTMLDetailsElement;
+      const wasOpen = details.open;
+      summary.focus();
+      await userEvent.keyboard('{Enter}');
+      expect(details.open).toBe(!wasOpen);
+      expect(getComputedStyle(summary).outlineStyle).toBe('solid');
+      await userEvent.keyboard('{Enter}');
+      expect(details.open).toBe(wasOpen);
+    }
+    try {
+      await media.emulateTouchInput(true);
+      for (const summary of summaries) expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    } finally { await media.emulateTouchInput(false); }
+    expectNoOverflow(panel);
+  }
+});
+
 it.each([false, true])('keeps value copying quiet, discoverable and stationary (dark=%s)', async dark => {
   await mount(1280, dark);
   const panel = await openSection('connection');

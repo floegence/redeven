@@ -212,14 +212,14 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
               class="ssh-settings-help-popover"
               content={<p>{t('connectionDialog.sshEnvironmentNotice')}</p>}
             >
-              <button
+              <Button size="sm" variant="ghost"
                 class="ssh-settings-help-link"
                 type="button"
                 aria-expanded={helpOpen()}
                 onClick={() => setHelpOpen(!helpOpen())}
               >
                 {t('sshSettings.connectionHelp')}
-              </button>
+              </Button>
             </DesktopActionPopover>
           </div>
           <SettingsList class="ssh-settings-fields">
@@ -292,9 +292,9 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
                 <p class="ssh-settings-help">{t('sshSettings.passwordSaved')}</p>
               </Show>
               <Show when={props.state.ssh_password_configured && props.state.ssh_password_mode !== 'clear'}>
-                <button type="button" class="ssh-settings-help-link" onClick={props.removeSSHPassword}>
+                <Button size="sm" variant="ghost" type="button" class="ssh-settings-help-link" onClick={props.removeSSHPassword}>
                   {t('settings.removeStoredPassword')}
-                </button>
+                </Button>
               </Show>
               <Show when={props.state.ssh_password_mode === 'clear'}>
                 <p class="ssh-settings-help" role="status">
@@ -332,7 +332,7 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
           // Validation focuses immediately; expanding content can outgrow that first scroll position.
           scrollFocusedErrorIntoView();
         }}>
-          <button
+          <Button size="sm" variant="ghost"
             type="button"
             class="ssh-settings-disclosure"
             aria-expanded={advanced()}
@@ -344,7 +344,7 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
               <span class="ssh-settings-disclosure-title">{t('sshSettings.advanced')}</span>
               <span class="ssh-settings-help ssh-settings-summary">{summary()}</span>
             </span>
-          </button>
+          </Button>
           <EnvironmentSettingsReveal open={advanced()}>
             <SettingsList id="ssh-settings-advanced-fields" class="ssh-settings-fields ssh-settings-advanced-fields">
               <Field

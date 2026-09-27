@@ -5,7 +5,8 @@
 .access-flow-intro { min-width: 0; }
 .access-flow-intro h3 { font-size: 1.25rem; line-height: 1.4; font-weight: 600; letter-spacing: -.025em; outline: none; }
 .access-flow-intro > p { margin-top: .5rem; color: var(--muted-foreground); font-size: .75rem; line-height: 1.75; max-width: 38rem; }
-.access-flow-back { padding: 0; gap: .375rem; height: auto; min-height: 1.5rem; margin-bottom: 1rem; color: var(--muted-foreground); }
+.access-flow-back { gap: .375rem; height: auto; min-height: 32px; margin-bottom: 1rem; color: var(--muted-foreground); }
+@media (pointer: coarse) { .access-flow-back { min-height: 44px; } }
 .access-flow-summary { overflow: hidden; border: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--foreground) 9%, var(--background)); }
 .access-flow-summary > section { display: flex; align-items: center; gap: 28px; padding: 14px 17px; min-height: 71px; min-width: 0; }
 .access-flow-summary > section + section { border-top: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); }
