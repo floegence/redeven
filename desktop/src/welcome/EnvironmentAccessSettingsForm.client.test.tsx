@@ -1,3 +1,4 @@
+import { controlText } from '../testSupport/controlText';
 import { EnvironmentSettingsDialog } from './EnvironmentSettingsDialog';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -15,7 +16,7 @@ import { IDLE_LAUNCHER_BUSY_STATE } from './launcherBusyState';
 const disposers: Array<() => void> = [];
 const settle = () => new Promise((resolve) => setTimeout(resolve, 40));
 function button(label: string): HTMLButtonElement {
-  const result = [...document.querySelectorAll('button')].find((item) => !item.closest('[hidden], [aria-hidden="true"]') && (item.textContent?.trim() === label || item.getAttribute('aria-label') === label));
+  const result = [...document.querySelectorAll('button')].find((item) => !item.closest('[hidden], [aria-hidden="true"]') && (controlText(item) === label || item.getAttribute('aria-label') === label));
   if (!result) throw new Error(`Button missing: ${label}`);
   return result;
 }

@@ -1,4 +1,4 @@
-import { Button } from '@floegence/floe-webapp-core/ui';
+import { StableText, Button } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { AlertTriangle, Check, Copy, Database, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
@@ -200,7 +200,7 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
             <Show when={props.canAdmin && props.controller.snapshot().state === 'degraded'}>
               <Button size="sm" variant="outline" icon={AlertTriangle} disabled={reviewLoading()}
                 aria-busy={reviewLoading() || undefined} onClick={() => void loadReview()}>
-                {reviewLoading() ? i18n.t('aiReadiness.settings.reviewing') : i18n.t('aiReadiness.actions.reviewIssues')}
+                <StableText reserve={[i18n.t('aiReadiness.settings.reviewing'), i18n.t('aiReadiness.actions.reviewIssues')]}>{reviewLoading() ? i18n.t('aiReadiness.settings.reviewing') : i18n.t('aiReadiness.actions.reviewIssues')}</StableText>
               </Button>
             </Show>
             <Button size="sm" variant="outline" aria-expanded={diagnosticsOpen()}
@@ -231,13 +231,13 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
                 <Show when={copied()} fallback={<Copy class="h-4 w-4" aria-hidden="true" />}>
                   <Check class="h-4 w-4" aria-hidden="true" />
                 </Show>
-                <span>{copyPending()
+                <span><StableText reserve={[i18n.t('aiReadiness.actions.copyingDiagnostics'), i18n.t('aiReadiness.actions.copyDiagnosticsFailed'), i18n.t('aiReadiness.actions.diagnosticsCopied'), i18n.t('aiReadiness.actions.copyDiagnostics')]}>{copyPending()
                   ? i18n.t('aiReadiness.actions.copyingDiagnostics')
                   : copyFailed()
                     ? i18n.t('aiReadiness.actions.copyDiagnosticsFailed')
                   : copied()
                     ? i18n.t('aiReadiness.actions.diagnosticsCopied')
-                    : i18n.t('aiReadiness.actions.copyDiagnostics')}</span>
+                    : i18n.t('aiReadiness.actions.copyDiagnostics')}</StableText></span>
               </button>
               <Show when={copied() || copyFailed()}>
                 <span class="sr-only" role="status">

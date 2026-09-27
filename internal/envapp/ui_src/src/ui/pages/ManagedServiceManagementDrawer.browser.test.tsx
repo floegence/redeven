@@ -102,7 +102,7 @@ describe('Managed service recovery drawer', () => {
     const buttons = () =>
       Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter(
         (button) =>
-          button.textContent?.trim() === 'Clean up retained resources',
+          button.innerText.trim() === 'Clean up retained resources',
       );
     expect(buttons().at(-1)?.disabled).toBe(true);
     expect(document.body.textContent).toContain(
@@ -231,7 +231,7 @@ describe('Managed service recovery drawer', () => {
     const buttons = Array.from(
       document.querySelectorAll<HTMLButtonElement>('button'),
     ).filter(
-      (button) => button.textContent?.trim() === 'Detach and keep resources',
+      (button) => button.innerText.trim() === 'Detach and keep resources',
     );
     await userEvent.click(buttons[0]);
     await settle();
@@ -328,7 +328,7 @@ describe('Managed service recovery drawer', () => {
     const confirm = Array.from(
       document.querySelectorAll<HTMLButtonElement>('button'),
     ).find(
-      (button) => button.textContent?.trim() === 'Detach and keep resources',
+      (button) => button.innerText.trim() === 'Detach and keep resources',
     )!;
     await userEvent.click(confirm);
     await settle();

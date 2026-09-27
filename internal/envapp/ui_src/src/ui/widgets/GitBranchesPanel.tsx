@@ -1,3 +1,4 @@
+import { StableText } from '@floegence/floe-webapp-core/ui';
 import {
   For,
   Show,
@@ -370,6 +371,7 @@ type BranchSummaryPresentation = {
 type BranchPrimaryActionPresentation = {
   key: string;
   label: string;
+  labelVariants?: readonly string[];
   emphasis: "neutral" | "accent" | "danger";
   disabled: boolean;
   disabledReason?: string;
@@ -1337,11 +1339,11 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                         })
                       }
                     >
-                      {props.switchDetachedBusy
+                      <StableText reserve={[i18n.t('uiCopy.git.switching'), i18n.t('uiCopy.git.alreadyDetachedHere'), i18n.t('uiCopy.git.switchDetachHere')]}>{props.switchDetachedBusy
                         ? i18n.t('uiCopy.git.switching')
                         : props.alreadyDetachedHere
                           ? i18n.t('uiCopy.git.alreadyDetachedHere')
-                          : i18n.t('uiCopy.git.switchDetachHere')}
+                          : i18n.t('uiCopy.git.switchDetachHere')}</StableText>
                     </Button>
                   </Show>
                   <Show when={props.onAskFlower}>
@@ -2313,6 +2315,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       primaryActions.push({
         key: "merge",
         label: mergeLabel(),
+        labelVariants: [i18n.t('git.branches.merging'), i18n.t('git.branches.mergeAction')],
         icon: ArrowRightLeft,
         emphasis: mergeDisabled() ? "neutral" : "accent",
         disabled: mergeDisabled(),
@@ -2329,6 +2332,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       primaryActions.push({
         key: "checkout",
         label: checkoutLabel(),
+        labelVariants: [i18n.t('gitPresentation.checkingOut'), i18n.t('git.common.checkout')],
         icon: GitBranch,
         emphasis: "neutral",
         disabled: checkoutDisabled(),
@@ -2345,6 +2349,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       primaryActions.push({
         key: "delete",
         label: deleteLabel(),
+        labelVariants: [i18n.t('uiCopy.git.deleting'), i18n.t('common.actions.delete')],
         icon: Trash,
         emphasis: "danger",
         disabled: deleteDisabled(),
@@ -2802,7 +2807,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         <Show when={action.icon} keyed>
           {(Icon) => <Dynamic component={Icon} class="h-3.5 w-3.5" />}
         </Show>
-        <span>{action.label}</span>
+        <StableText reserve={action.labelVariants ?? [action.label]}>{action.label}</StableText>
       </span>
     </Button>
   );
@@ -3265,7 +3270,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     "inline-flex min-w-[1.25rem] shrink-0 items-center justify-center rounded px-1 py-0.5 text-[9px] font-semibold tabular-nums",
                     item.active ? "text-inherit" : "bg-background/60 text-muted-foreground",
                   )}>
-                    {pending || unavailable ? "–" : item.count}
+                    <StableText reserve={["–", String(item.count)]}>{pending || unavailable ? "–" : String(item.count)}</StableText>
                   </span>
                 </button>
               );
@@ -3729,11 +3734,11 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           if (branch) props.onCheckoutBranch?.(branch);
                         }}
                       >
-                        {localizedDetachedHeadCheckoutActionLabel(
+                        <StableText reserve={[localizedDetachedHeadCheckoutActionLabel(reattachBranch(), false, i18n), localizedDetachedHeadCheckoutActionLabel(reattachBranch(), true, i18n)]}>{localizedDetachedHeadCheckoutActionLabel(
                           reattachBranch(),
                           Boolean(props.checkoutBusy),
                           i18n,
-                        )}
+                        )}</StableText>
                       </Button>
                     </Show>
                   </div>

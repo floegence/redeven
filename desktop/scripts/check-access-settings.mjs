@@ -199,8 +199,14 @@ try {
   await button('accessFlow.manageProtection').click(); await button('security.configureHTTPS').click(); await button('settings.generateCertificate').click();
   await dialog.getByRole('alert').waitFor(); assert.equal(await button('settings.saveAndRestart').isEnabled(), false);
   await capture('certificate-failure'); report.cases.push('certificate-failure-blocks-restart');
-  await open('en-US', 'classic-light', 'Local Environment', '&save-error=1'); await editAccess(); await page.locator('#local-ui-port').fill('25100'); await button('accessFlow.checkChanges').click(); await button('settings.saveForNextRestart').click();
-  await footer().getByRole('alert').waitFor(); assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_bind), 'localhost:25100');
+  await open('en-US', 'classic-light', 'Local Environment', '&save-error=1'); await editAccess(); await page.locator('#local-ui-port').fill('25100'); await button('accessFlow.checkChanges').click();
+  const reviewGeometry = () => dialog.locator('.access-flow-review, .environment-settings-actions:visible, .environment-access-actions:visible > button').evaluateAll(elements => elements.map(element => {
+    const { x, y, width, height } = element.getBoundingClientRect(); return { x, y, width, height };
+  }));
+  const beforeSaveError = await reviewGeometry();
+  await button('settings.saveForNextRestart').click();
+  await footer().getByRole('alert').waitFor();
+  assert.deepEqual(await reviewGeometry(), beforeSaveError, 'save errors retain review and action geometry'); assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_bind), 'localhost:25100');
   await capture('save-error-near-action'); await button('common.cancel').click(); await button('settings.discardChanges').click();
   assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_bind), 'localhost:23998');
   report.cases.push('save-failure-retains-draft-and-local-error');

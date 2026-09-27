@@ -31,3 +31,8 @@
 .host-apps-preparation-details p { margin: 12px 0; }
 @keyframes host-app-preparation-progress { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
 @media (prefers-reduced-motion: reduce) { .host-apps-preparation-track span { animation: none !important; transition: none; } }
+
+.host-apps-preparation { height: min(36rem, 70dvh); min-height: 16rem; display: flex; flex-direction: column; }
+.host-apps-preparation-content { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+.host-apps-preparation-progress { height: 24px; flex-shrink: 0; }
+.host-apps-preparation-footer { flex-shrink: 0; min-height: 32px; }

@@ -1,7 +1,7 @@
+import { StableText, Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import { Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Copy, Folder, History, MoreHorizontal, Refresh, Terminal } from '@floegence/floe-webapp-core/icons';
-import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import type {
   GitBranchSummary,
   GitCommitSummary,
@@ -254,18 +254,18 @@ export function GitWorkbench(props: GitWorkbenchProps) {
     }
     return items;
   };
-  const repositoryActionLabel = (action: RepositoryHeaderActionId): string => {
+  const repositoryActionLabel = (action: RepositoryHeaderActionId, pending = true): string => {
     switch (action) {
       case 'stashes':
         return stashCountLabel();
       case 'fetch':
-        return props.fetchBusy ? i18n.t('uiCopy.git.fetching') : i18n.t('uiCopy.git.fetch');
+        return pending && props.fetchBusy ? i18n.t('uiCopy.git.fetching') : i18n.t('uiCopy.git.fetch');
       case 'pull':
-        return props.pullBusy
+        return pending && props.pullBusy
           ? i18n.t('uiCopy.git.pulling')
           : `${i18n.t('uiCopy.git.pull')}${Number(props.repoSummary?.behindCount ?? 0) > 0 ? ` ${props.repoSummary?.behindCount}` : ''}`;
       case 'push':
-        return props.pushBusy
+        return pending && props.pushBusy
           ? i18n.t('uiCopy.git.pushing')
           : `${i18n.t('uiCopy.git.push')}${Number(props.repoSummary?.aheadCount ?? 0) > 0 ? ` ${props.repoSummary?.aheadCount}` : ''}`;
       case 'terminal':
@@ -409,7 +409,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                   disabled={repositoryActionDisabled(action())}
                   onClick={() => runRepositoryAction(action())}
                 >
-                  {repositoryActionLabel(action())}
+                  <StableText reserve={[repositoryActionLabel(action(), false), i18n.t(action() === 'fetch' ? 'uiCopy.git.fetching' : action() === 'pull' ? 'uiCopy.git.pulling' : 'uiCopy.git.pushing')]}>{repositoryActionLabel(action())}</StableText>
                 </Button>
               )}
             </Show>

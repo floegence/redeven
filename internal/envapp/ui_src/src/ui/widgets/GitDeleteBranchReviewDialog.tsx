@@ -1,7 +1,7 @@
+import { StableText, Button } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn, useLayout, useNotification } from '@floegence/floe-webapp-core';
 import { Check, Copy } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
 import { Dialog } from '../primitives/EnvAppModal';
 import type { GitBranchSummary, GitPreviewDeleteBranchResponse } from '../protocol/redeven_v1';
 import { branchDisplayName } from '../utils/gitWorkbench';
@@ -145,7 +145,7 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
               </Button>
             </Show>
             <GitDeleteBranchConfirmButton
-              label={confirmLabel()}
+              label={<StableText reserve={[props.forceConfirmLabel, props.safeConfirmLabel, i18n.t('git.deleteBranchReview.deleting')]}>{confirmLabel()}</StableText>}
               class="w-full sm:w-auto"
               disabled={!canConfirm()}
               disabledReason={review().disabledReason}

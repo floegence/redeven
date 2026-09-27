@@ -1,3 +1,4 @@
+import { StatusRegion, StableText, Button, Checkbox, Dropdown } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import {
   For,
@@ -9,7 +10,6 @@ import {
   onCleanup,
   type JSX,
 } from 'solid-js';
-import { Button, Checkbox, Dropdown } from '@floegence/floe-webapp-core/ui';
 import { Check, ChevronDown, Copy } from '@floegence/floe-webapp-core/icons';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
@@ -295,7 +295,7 @@ export function ManagedServiceManagementDrawer(props: {
               (request().action === 'detach' && !props.administrator)
             }
           >
-            {executing() ? text('executing') : actionLabel()}
+            <StableText reserve={[text('executing'), actionLabel()]}>{executing() ? text('executing') : actionLabel()}</StableText>
           </Button>
           <Show when={request().action === 'uninstall'}>
             <p class="text-xs leading-5 text-muted-foreground">{text('cancelMeaning')}</p>
@@ -321,11 +321,11 @@ export function ManagedServiceManagementDrawer(props: {
               })}
             </p>
           </Show>
-          <Show when={loading()}>
+          <StatusRegion lines={1} class="text-xs"><Show when={loading()}>
             <p role="status" class="text-xs text-muted-foreground">
               {text('checking')}
             </p>
-          </Show>
+          </Show></StatusRegion>
           <Show when={props.operation}>
             {(operation) => (
               <div

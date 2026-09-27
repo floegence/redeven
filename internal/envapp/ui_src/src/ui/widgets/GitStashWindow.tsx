@@ -1,3 +1,4 @@
+import { StableText, Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import {
@@ -19,7 +20,6 @@ import {
   Terminal,
   Trash,
 } from '@floegence/floe-webapp-core/icons';
-import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import type {
   GitRepoSummaryResponse,
   GitStashSummary,
@@ -894,12 +894,12 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                   <div class="inline-flex flex-wrap items-center gap-2">
                                     <StashActionButton mobile={isMobile()} tooltip={i18n.t('gitStash.applyTooltip')} disabled={actionsDisabled()}>
                                       <Button size="sm" variant="default" class="rounded-md" icon={CheckCircle} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(props.stashDetail!.id, false)}>
-                                        {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? i18n.t('uiCopy.git.applying') : i18n.t('uiCopy.git.apply')}
+                                        <StableText reserve={[i18n.t('uiCopy.git.applying'), i18n.t('uiCopy.git.apply')]}>{props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? i18n.t('uiCopy.git.applying') : i18n.t('uiCopy.git.apply')}</StableText>
                                       </Button>
                                     </StashActionButton>
                                     <StashActionButton mobile={isMobile()} tooltip={i18n.t('gitStash.applyRemoveTooltip')} disabled={actionsDisabled()}>
                                       <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(props.stashDetail!.id, true)}>
-                                        {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? i18n.t('uiCopy.git.applying') : i18n.t('uiCopy.git.applyAndRemove')}
+                                        <StableText reserve={[i18n.t('uiCopy.git.applying'), i18n.t('uiCopy.git.applyAndRemove')]}>{props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? i18n.t('uiCopy.git.applying') : i18n.t('uiCopy.git.applyAndRemove')}</StableText>
                                       </Button>
                                     </StashActionButton>
                                   </div>
@@ -912,7 +912,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
 
                                   <StashActionButton mobile={isMobile()} tooltip={i18n.t('gitStash.deleteTooltip')} disabled={actionsDisabled()}>
                                     <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" icon={Trash} disabled={actionsDisabled()} onClick={() => props.onRequestDrop?.(props.stashDetail!.id)}>
-                                      {props.dropBusy ? i18n.t('uiCopy.git.deleting') : i18n.t('common.actions.delete')}
+                                      <StableText reserve={[i18n.t('uiCopy.git.deleting'), i18n.t('common.actions.delete')]}>{props.dropBusy ? i18n.t('uiCopy.git.deleting') : i18n.t('common.actions.delete')}</StableText>
                                     </Button>
                                   </StashActionButton>
                                 </div>

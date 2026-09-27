@@ -1,3 +1,4 @@
+import { controlText } from '../../testSupport/controlText';
 // @vitest-environment jsdom
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -42,7 +43,7 @@ beforeEach(() => {
 });
 afterEach(() => { dispose?.(); host.remove(); vi.restoreAllMocks(); });
 
-function textButton(text: string, root: ParentNode = document) { return [...root.querySelectorAll('button')].find(el => el.textContent === text)!; }
+function textButton(text: string, root: ParentNode = document) { return [...root.querySelectorAll('button')].find(el => controlText(el) === text)!; }
 async function inspectUpdate() {
   state.setupStatus.mockResolvedValue(installedSetup);
   dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
@@ -85,7 +86,7 @@ describe('independent component updates', () => {
     expect(state.components.mock.calls.map(([request]) => request.action)).toEqual(['capabilities', 'cancel']);
     expect(state.setupStart).not.toHaveBeenCalled();
     expect(document.querySelector<HTMLInputElement>('[role=dialog] input[value=desktop]')!.checked).toBe(true);
-    expect(document.querySelector('[role=dialog] [role=alert]')!.textContent).toContain('Desktop');
+    expect(controlText(document.querySelector('[role=dialog] [role=alert]')!)).toContain('Desktop');
   });
   it('uses full offline import without inspecting the cache or invoking Desktop', async () => {
     await inspectUpdate(); state.setupPlan.mockClear();
@@ -111,10 +112,10 @@ describe('independent component updates', () => {
     requireSetup();
     state.setupStatus.mockResolvedValue({ ...installedSetup, state: 'failed', installed: { ...installedSetup.installed, ready: false }, installation_error_code: 'installation_damaged' });
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
-    expect(host.textContent).toContain('The installed components need repair');
+    expect(controlText(host)).toContain('The installed components need repair');
     expect(textButton('Repair components').disabled).toBe(false);
     state.setupObserve.mock.calls[0][0]({ ...installedSetup, installed: undefined, installation_error_code: 'unsupported_installation' }); await settle();
-    expect(host.textContent).toContain('This runtime cannot use the installed component version');
+    expect(controlText(host)).toContain('This runtime cannot use the installed component version');
     expect(host.querySelector('input[type=file]')).toBeNull();
     expect(textButton('Prepare').disabled).toBe(true);
   });
@@ -126,8 +127,8 @@ describe('host application interaction', () => {
       installed: { id: 'components-r1', digest: 'old', architecture: 'arm64', contract: 'xpra-6-private-v1', ready: true },
       update_available: true, package: { id: 'components-r2', digest: 'new', architecture: 'arm64', size_bytes: 100, installed_bytes: 200 } });
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
-    expect(host.textContent).toContain('Component update available');
-    expect(host.textContent).not.toContain('Prepare host applications');
+    expect(controlText(host)).toContain('Component update available');
+    expect(controlText(host)).not.toContain('Prepare host applications');
     expect(state.setupStart).not.toHaveBeenCalled();
     button('Open in new window · Text Editor').click(); await settle();
     expect(state.launch).toHaveBeenCalledTimes(1);
@@ -141,7 +142,7 @@ describe('host application interaction', () => {
     button('Open in new window · Text Editor').click(); await settle();
     expect(state.launch).toHaveBeenCalledWith('editor.desktop', 'en-US', expect.objectContaining({ starting: 'Starting application…' }), 'stream');
     expect(state.open).toHaveBeenCalledWith(expect.anything(), 'one', 'http://127.0.0.1:40201', 'unified_proxy', '/_redeven_host_app/', true, expect.any(Function), expect.anything(), null, 'application');
-    expect(host.textContent).toContain('Running applications');
+    expect(controlText(host)).toContain('Running applications');
     expect(state.catalog).toHaveBeenCalledTimes(2);
     button('Resume · Text Editor').click(); await settle();
     expect(state.launch).toHaveBeenCalledTimes(2);
@@ -152,14 +153,14 @@ describe('host application interaction', () => {
     const launchButton = button('Open in new window · Text Editor');
     launchButton.click(); await settle();
     expect(launchButton.getAttribute('aria-busy')).toBe('true');
-    expect(launchButton.textContent).toContain('Text Editor');
-    expect(launchButton.textContent).toContain('Starting application…');
+    expect(controlText(launchButton)).toContain('Text Editor');
+    expect(controlText(launchButton)).toContain('Starting application…');
     expect(launchButton.querySelector('.host-app-launch-indicator')).not.toBeNull();
   });
   it('allows browsing with read permission and disables process control', async () => {
     state.full = false;
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
-    expect(host.textContent).toContain('Text Editor');
+    expect(controlText(host)).toContain('Text Editor');
     expect(button('Open in new window · Text Editor').disabled).toBe(true);
     button('Open in new window · Text Editor').click();
     expect(state.launch).not.toHaveBeenCalled();
@@ -167,7 +168,7 @@ describe('host application interaction', () => {
   it('offers preparation while preserving the real application library', async () => {
     state.catalog.mockResolvedValue({ availability: { supported: true, ready: false, requirements: ['Xpra X11 server', 'Xpra HTML5 v20 / v21'] }, applications: [app], sessions: [] });
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
-    expect(host.textContent).toContain('Prepare host applications');
+    expect(controlText(host)).toContain('Prepare host applications');
     expect(host.querySelector('a[href="https://github.com/Xpra-org/xpra/wiki/Download"]')).toBeNull();
     expect(button('Open in new window · Text Editor').disabled).toBe(false);
     expect(state.launch).not.toHaveBeenCalled();
@@ -175,24 +176,24 @@ describe('host application interaction', () => {
   it('explains unsupported hosts without inviting Linux application installation', async () => {
     state.catalog.mockResolvedValue({ availability: { supported: false, ready: false, reason: 'unsupported_platform' }, applications: [], sessions: [] });
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
-    expect(host.textContent).toContain('Supported host required');
-    expect(host.textContent).not.toContain('No applications yet');
-    expect(host.textContent).not.toContain('Installation guide');
+    expect(controlText(host)).toContain('Supported host required');
+    expect(controlText(host)).not.toContain('No applications yet');
+    expect(controlText(host)).not.toContain('Installation guide');
   });
   it('filters applications without requesting another host inventory', async () => {
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
     const input = host.querySelector<HTMLInputElement>('input[aria-label="Search applications…"]')!;
     input.value = 'missing'; input.dispatchEvent(new Event('input', { bubbles: true })); await settle();
-    expect(host.textContent).toContain('No matching applications');
+    expect(controlText(host)).toContain('No matching applications');
     expect(state.catalog).toHaveBeenCalledTimes(1);
   });
   it('shows only host metadata on cards while retaining accessible launch actions', async () => {
     state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [{ ...app, description: '', categories: [] }], sessions: [] });
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
     const tile = button('Open in new window · Text Editor');
-    expect(tile.textContent).toBe('Text Editor');
+    expect(controlText(tile)).toBe('Text Editor');
     expect(tile.querySelector('p')).toBeNull();
-    expect(host.textContent).not.toContain('Open in new window');
+    expect(controlText(host)).not.toContain('Open in new window');
   });
   it('filters every host category, including unknown categories and a literal all category', async () => {
     state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [
@@ -205,7 +206,7 @@ describe('host application interaction', () => {
     expect(filter).not.toBeNull();
     expect([...filter.options].map(option => option.value)).toEqual(['', 'all', 'Utility', 'X-Host-Laboratory']);
     filter.value = 'X-Host-Laboratory'; filter.dispatchEvent(new Event('change', { bubbles: true })); await settle();
-    expect([...host.querySelectorAll('.host-app-tile strong')].map(el => el.textContent)).toEqual(['Host Lab']);
+    expect([...host.querySelectorAll('.host-app-tile strong')].map(el => controlText(el))).toEqual(['Host Lab']);
     filter.value = 'all'; filter.dispatchEvent(new Event('change', { bubbles: true })); await settle();
     expect(host.querySelectorAll('.host-app-tile')).toHaveLength(1);
     filter.value = ''; filter.dispatchEvent(new Event('change', { bubbles: true })); await settle();
@@ -223,19 +224,19 @@ it('opens local macOS applications without requiring capture permissions or crea
   button('Open in new window · Text Editor').click();await settle();
   expect(state.launch).toHaveBeenCalledWith(app.id,'en-US',expect.anything(),'native');
   expect(state.open).not.toHaveBeenCalled();
-  expect(host.textContent).not.toContain('Allow screen recording');
+  expect(controlText(host)).not.toContain('Allow screen recording');
 });
 it('guides remote macOS authorization and prevents launching until the host is ready', async () => {
   state.catalog.mockResolvedValue({availability:{backend:'macos',supported:true,ready:false,native_ready:true,reason:'macos_permissions',permissions:{screen_recording:false,accessibility:false}},applications:[app],sessions:[]});
   dispose=render(()=><EnvHostApplicationsPage />,host);await settle();
-  expect(host.textContent).toContain('Allow screen recording');
-  expect(host.textContent).not.toContain('Install Xpra');
+  expect(controlText(host)).toContain('Allow screen recording');
+  expect(controlText(host)).not.toContain('Install Xpra');
   expect(button('Open in new window · Text Editor').disabled).toBe(false);
-  [...host.querySelectorAll('button')].find(button=>button.textContent==='Allow screen recording')!.click();await settle();
+  [...host.querySelectorAll('button')].find(button=>controlText(button)==='Allow screen recording')!.click();await settle();
   expect(state.permission).toHaveBeenCalledWith('screen_recording');
 });
 
-function preparationButton() { return [...document.querySelectorAll('button')].find(el => el.textContent === 'Prepare and open')!; }
+function preparationButton() { return [...document.querySelectorAll('button')].find(el => controlText(el) === 'Prepare and open')!; }
 function requireSetup() { state.catalog.mockResolvedValue({ availability: { supported: true, ready: false }, applications: [app], sessions: [] }); }
 function selectDownloadMethod(method: 'host' | 'desktop', root: ParentNode = document) {
  const radio = root.querySelector<HTMLInputElement>(`input[type="radio"][value="${method}"]`)!;
@@ -298,7 +299,7 @@ it('continues an application selected while preparation is already running', asy
 it('retires opening immediately on cancel even if preparation completes before cancellation responds', async () => {
  requireSetup(); await selectAndPrepare();
  state.setupCancel.mockReturnValue(new Promise(() => {}));
- [...host.querySelectorAll('button')].find(el => el.textContent === 'Cancel')!.click();
+ [...host.querySelectorAll('button')].find(el => controlText(el) === 'Cancel')!.click();
  state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
  state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 }); await settle();
  expect(state.preparation).toHaveBeenCalledWith({ action: 'close', id: 'preparation-window' });
@@ -311,7 +312,7 @@ it('reuses the exact admission after a lost start response and reconnects observ
  await selectAndPrepare();
  disconnect(new Error('Disconnected')); await settle();
  const requestID = state.setupStart.mock.calls[0][0];
- [...host.querySelectorAll('button')].find(el => el.textContent === 'Reconnect')!.click(); await settle();
+ [...host.querySelectorAll('button')].find(el => controlText(el) === 'Reconnect')!.click(); await settle();
  expect(state.setupStart).toHaveBeenCalledTimes(1);
  preparationButton().click(); await settle();
  expect(state.setupStart.mock.calls[1][0]).toBe(requestID);
@@ -333,7 +334,7 @@ it('resumes the selected remote macOS app in its reserved window after actual au
  state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: false, native_ready: true, reason: 'macos_permissions', permissions: { screen_recording: false, accessibility: false } }, applications: [app], sessions: [] });
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
  button('Open in new window · Text Editor').click(); await settle();
- [...document.querySelectorAll('[role="dialog"] button')].find(el => el.textContent === 'Allow screen recording')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); await settle();
+ [...document.querySelectorAll('[role="dialog"] button')].find(el => controlText(el) === 'Allow screen recording')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); await settle();
  expect(state.preparation).toHaveBeenCalledWith(expect.objectContaining({ action: 'create' }));
  expect(state.launch).not.toHaveBeenCalled();
  state.catalog.mockResolvedValue({ availability: { backend: 'macos', supported: true, ready: true, native_ready: true }, applications: [app], sessions: [] });
@@ -348,7 +349,7 @@ it('cancels a relay admitted after cancellation without uploading or reopening t
  let receive!: (value: unknown) => void;
  state.setupStart.mockImplementation(async (_id: string, source: string) => source === 'upload' ? new Promise(resolve => { receive = resolve; }) : { state: 'downloading', operation_id: 'install', can_cancel: true });
  await selectAndPrepare('desktop');
- [...host.querySelectorAll('button')].find(el => el.textContent === 'Cancel')!.click(); await settle();
+ [...host.querySelectorAll('button')].find(el => controlText(el) === 'Cancel')!.click(); await settle();
  receive({ state: 'receiving', operation_id: 'relay', received_bytes: 0, expected_bytes: 180, can_cancel: true }); await settle();
  expect(state.setupCancel).toHaveBeenCalledWith('relay');
  expect(state.setupUpload).not.toHaveBeenCalled();
@@ -361,7 +362,7 @@ it('resumes an interrupted Desktop transfer into the same host operation', async
  state.setupUpload.mockResolvedValue({ state: 'validating', operation_id: 'existing-transfer', received_bytes: 180, expected_bytes: 180, can_cancel: true });
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
  selectDownloadMethod('desktop', host);
- [...host.querySelectorAll('button')].find(el => el.textContent === 'Continue preparation')!.click(); await settle();
+ [...host.querySelectorAll('button')].find(el => controlText(el) === 'Continue preparation')!.click(); await settle();
  expect(state.setupStart).not.toHaveBeenCalled();
  expect(state.setupUpload).toHaveBeenCalledWith('existing-transfer', expect.objectContaining({ size: 180 }), expect.any(AbortSignal));
 });
@@ -375,11 +376,11 @@ it('ignores a download failure from a different operation', async () => {
 it('refreshes the real application library after preparation without a pending application', async () => {
  state.catalog.mockResolvedValue({ availability: { supported: true, ready: false }, applications: [], sessions: [] });
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
- [...host.querySelectorAll('button')].find(el => el.textContent === 'Prepare')!.click(); await settle();
+ [...host.querySelectorAll('button')].find(el => controlText(el) === 'Prepare')!.click(); await settle();
  state.catalog.mockResolvedValue({ availability: { supported: true, ready: true }, applications: [app], sessions: [] });
  state.setupObserve.mock.calls[0][0]({ state: 'ready', received_bytes: 100, expected_bytes: 100 }); await settle();
  expect(button('Open in new window · Text Editor')).toBeDefined();
- expect(host.textContent).not.toContain('Prepare host applications');
+ expect(controlText(host)).not.toContain('Prepare host applications');
  expect(state.launch).not.toHaveBeenCalled();
 });
 
@@ -391,13 +392,13 @@ it.each([true, false])('detaches sharing without quitting an existing or newly l
  const label = 'Stop sharing';
  button(`${label} · Text Editor`).click(); await settle();
  const dialog = document.querySelector('[role="dialog"]')!;
- expect(dialog.textContent).toContain('Stop sharing');
- expect(dialog.textContent).toContain('Its windows and unsaved work stay open.');
+ expect(controlText(dialog)).toContain('Stop sharing');
+ expect(controlText(dialog)).toContain('Its windows and unsaved work stay open.');
  const description = document.getElementById(dialog.getAttribute('aria-describedby')!)!;
- expect(dialog.children[0].textContent).toBe('Stop sharing');
+ expect(controlText(dialog.children[0])).toBe('Stop sharing');
  expect(dialog.children[1].contains(description)).toBe(true);
  expect(dialog.children[1].children).toHaveLength(1);
- const confirm = [...dialog.querySelectorAll('button')].find(el => el.textContent === label)!;
+ const confirm = [...dialog.querySelectorAll('button')].find(el => controlText(el) === label)!;
  confirm.click(); await settle();
  expect(state.detach).toHaveBeenCalledWith('shared');
  expect(state.stop).not.toHaveBeenCalled();
@@ -411,20 +412,20 @@ it('shows both download paths and defaults to host download even inside Desktop'
  const desktopOption = host.querySelector<HTMLInputElement>('input[type=radio][value=desktop]');
  expect(hostOption).not.toBeNull(); expect(desktopOption).not.toBeNull();
  expect(hostOption!.checked).toBe(true);
- expect(hostOption!.closest('label')!.textContent).toContain('Host downloads');
- expect(desktopOption!.closest('label')!.textContent).toContain('Transfer through Desktop');
- [...host.querySelectorAll('button')].find(el => el.textContent === 'Prepare')!.click(); await settle();
+ expect(controlText(hostOption!.closest('label')!)).toContain('Host downloads');
+ expect(controlText(desktopOption!.closest('label')!)).toContain('Transfer through Desktop');
+ [...host.querySelectorAll('button')].find(el => controlText(el) === 'Prepare')!.click(); await settle();
  expect(state.setupStart).toHaveBeenCalledWith(expect.any(String), 'download', 0, transferPlan.package_digest);
  expect(state.components).not.toHaveBeenCalled();
  state.setupObserve.mock.calls[0][0]({ state: 'failed', operation_id: 'install', error_code: 'download_failed', package: { architecture: 'arm64' } }); await settle();
  expect(state.components).not.toHaveBeenCalled();
- expect(host.textContent).toContain('The download could not finish');
+ expect(controlText(host)).toContain('The download could not finish');
 });
 
 it('keeps Desktop visible but unavailable in a browser and shares the selection with the setup dialog', async () => {
  requireSetup(); dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
  expect(host.querySelector<HTMLInputElement>('input[value=desktop]')!.disabled).toBe(true);
- expect(host.textContent).toContain('Open this environment in Redeven Desktop');
+ expect(controlText(host)).toContain('Open this environment in Redeven Desktop');
 });
 it('preserves an explicit Desktop choice when opening an application setup dialog', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
@@ -432,19 +433,19 @@ it('preserves an explicit Desktop choice when opening an application setup dialo
  selectDownloadMethod('desktop', host);
  button('Open in new window · Text Editor').click(); await settle();
  expect(document.querySelector<HTMLInputElement>('[role=dialog] input[value=desktop]')!.checked).toBe(true);
- expect(document.querySelector('[role=dialog]')!.textContent).not.toContain('Prepare host applications');
+ expect(controlText(document.querySelector('[role=dialog]')!)).not.toContain('Prepare host applications');
 });
 it('cancels Desktop acquisition before there is a host operation', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
  let finish!: (value: unknown) => void;
  state.components.mockImplementation((request: { action: string }) => request.action === 'acquire' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ok:true,supports_transfer_plan:true,supports_cache_progress:true}));
  await selectAndPrepare('desktop');
- [...host.querySelectorAll('button')].find(el => el.textContent === 'Cancel')!.click(); await settle();
+ [...host.querySelectorAll('button')].find(el => controlText(el) === 'Cancel')!.click(); await settle();
  finish({ok:true,size:180}); await settle();
  expect(state.setupStart).not.toHaveBeenCalled();
  expect(state.setupUpload).not.toHaveBeenCalled();
  expect(state.preparation).toHaveBeenCalledWith({action:'close',id:'preparation-window'});
- expect(host.textContent).toContain('Preparation cancelled');
+ expect(controlText(host)).toContain('Preparation cancelled');
 });
 it('reuses Desktop upload admission after its response is lost', async () => {
  requireSetup(); window.redevenDesktopShell!.applicationComponents = state.components;
@@ -461,7 +462,7 @@ it('reserves an application selected during Desktop acquisition without reopenin
  state.components.mockReturnValue(new Promise(() => {}));
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
  selectDownloadMethod('desktop',host);
- [...host.querySelectorAll('button')].find(el => el.textContent === 'Prepare')!.click(); await settle();
+ [...host.querySelectorAll('button')].find(el => controlText(el) === 'Prepare')!.click(); await settle();
  button('Open in new window · Text Editor').click(); await settle();
  expect(state.preparation).toHaveBeenCalledWith(expect.objectContaining({action:'create',application_id:app.id}));
  expect(document.querySelector('[role=dialog]')).toBeNull();
@@ -483,7 +484,7 @@ describe('macOS running application management', () => {
     let resolve!: (value: unknown) => void;
     state.running.mockReturnValueOnce(new Promise(done => { resolve = done; }));
     const dialog = document.querySelector('[role="dialog"]')!;
-    [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Quit application')!.click();
+    [...dialog.querySelectorAll('button')].find(b => controlText(b) === 'Quit application')!.click();
     await settle();
     state.generation += 1;
     resolve([instance]); await settle();
@@ -494,15 +495,15 @@ describe('macOS running application management', () => {
   it('exposes quit for applications with no sharing session and keeps cancelled quits visible', async () => {
     runningCatalog();
     dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
-    expect(host.textContent).toContain('Running applications');
+    expect(controlText(host)).toContain('Running applications');
     button('Quit application · Text Editor').click(); await settle();
     const dialog = document.querySelector('[role="dialog"]')!;
-    expect(dialog.textContent).toContain('Text Editor');
-    expect(dialog.textContent).toContain('all of its windows');
-    [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Quit application')!.click(); await settle();
+    expect(controlText(dialog)).toContain('Text Editor');
+    expect(controlText(dialog)).toContain('all of its windows');
+    [...dialog.querySelectorAll('button')].find(b => controlText(b) === 'Quit application')!.click(); await settle();
     expect(state.quit).toHaveBeenCalledWith(app.id, instance.instances);
     expect(state.stop).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('Open the application to respond to any save dialog.');
+    expect(controlText(host)).toContain('Open the application to respond to any save dialog.');
     expect(button('Quit application · Text Editor')).toBeDefined();
     state.running.mockResolvedValue([]);
     window.dispatchEvent(new Event('focus')); await settle();
@@ -537,10 +538,10 @@ describe('macOS running application management', () => {
     window.dispatchEvent(new Event('focus')); await settle();
     state.quit.mockRejectedValue(new Error('Connection lost after dispatch'));
     const dialog = document.querySelector('[role="dialog"]')!;
-    [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Quit application')!.click(); await settle();
+    [...dialog.querySelectorAll('button')].find(b => controlText(b) === 'Quit application')!.click(); await settle();
     expect(state.quit).not.toHaveBeenCalled();
-    expect(dialog.textContent).toContain('The application restarted. Review it and confirm again.');
-    [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Quit application')!.click(); await settle();
+    expect(controlText(dialog)).toContain('The application restarted. Review it and confirm again.');
+    [...dialog.querySelectorAll('button')].find(b => controlText(b) === 'Quit application')!.click(); await settle();
     expect(state.quit).toHaveBeenCalledWith(app.id, ['replacement']);
     expect(host.querySelector('.host-app-quit-notice')).toBeNull();
   });
@@ -559,18 +560,18 @@ it('does not stop a server-reused session when opening its viewer fails with a s
  expect(state.open).toHaveBeenCalledTimes(1);
  expect(state.stop).not.toHaveBeenCalled();
  expect(state.detach).not.toHaveBeenCalled();
- expect(host.textContent).toContain('The application could not be opened.');
+ expect(controlText(host)).toContain('The application could not be opened.');
 });
 
 
 it('restores the successful application list on remount while inventory refresh is pending', async () => {
   state.cacheScope = 'host-remount-continuity';
   dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
-  expect(host.textContent).toContain('Text Editor');
+  expect(controlText(host)).toContain('Text Editor');
   dispose(); dispose = undefined;
   state.catalog.mockReturnValue(new Promise(() => {}));
   dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
-  expect(host.textContent).toContain('Text Editor');
+  expect(controlText(host)).toContain('Text Editor');
   expect(host.querySelector('.host-apps-skeleton')).toBeNull();
   expect(host.querySelector('header button .animate-spin')).not.toBeNull();
 });
@@ -595,11 +596,11 @@ it.each(['macos', 'linux'])('requires explicit force confirmation for a running 
   dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
   button(`${backend === 'macos' ? 'Quit application' : 'Close all windows'} · Text Editor`).click(); await settle();
   const dialog = document.querySelector('[role="dialog"]')!;
-  [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Force quit')!.click(); await settle();
-  expect(dialog.textContent).toContain('Unsaved work will be lost.');
+  [...dialog.querySelectorAll('button')].find(b => controlText(b) === 'Force quit')!.click(); await settle();
+  expect(controlText(dialog)).toContain('Unsaved work will be lost.');
   expect(state.terminate).not.toHaveBeenCalled();
   expect(state.quit).not.toHaveBeenCalled();
-  [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Force quit')!.click(); await settle();
+  [...dialog.querySelectorAll('button')].find(b => controlText(b) === 'Force quit')!.click(); await settle();
   expect(state.terminate).toHaveBeenCalledWith(app.id, ['exact-instance']);
   expect(state.quit).not.toHaveBeenCalled();
   expect(state.detach).not.toHaveBeenCalled();
@@ -612,10 +613,10 @@ it('requests normal Linux window closure without escalating cancelled save dialo
   dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
   button('Close all windows · Text Editor').click(); await settle();
   const dialog = document.querySelector('[role="dialog"]')!;
-  [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Close all windows')!.click(); await settle();
+  [...dialog.querySelectorAll('button')].find(b => controlText(b) === 'Close all windows')!.click(); await settle();
   expect(state.quit).toHaveBeenCalledWith(app.id, ['exact-instance']);
   expect(state.terminate).not.toHaveBeenCalled();
-  expect(host.textContent).toContain('Background processes may keep running.');
+  expect(controlText(host)).toContain('Background processes may keep running.');
   expect(button('Close all windows · Text Editor')).toBeDefined();
 });
 
@@ -631,7 +632,7 @@ describe('browser launch recovery', () => {
     button('Open in new window · Text Editor').click(); await settle();
     expect(popup.close).not.toHaveBeenCalled();
     expect(popup.document.title).toBe('Text Editor');
-    expect(popup.document.querySelector('[role="alert"]')?.textContent).toContain('The application could not be opened');
+    expect(controlText(popup.document.querySelector('[role="alert"]'))).toContain('The application could not be opened');
     expect(button('Open in new window · Text Editor').disabled).toBe(false);
     textButton('Try again', popup.document).click(); await settle();
     expect(state.launch).toHaveBeenCalledTimes(2);
@@ -650,16 +651,16 @@ it('presents cached Desktop preparation and host-confirmed upload without networ
  state.setupStart.mockResolvedValue({ state: 'receiving', operation_id: 'relay', received_bytes: 45, expected_bytes: 180, can_cancel: true });
  state.setupUpload.mockReturnValue(new Promise(() => {}));
  await selectAndPrepare('desktop');
- expect(host.textContent).toContain('Checking this computer’s cache');
+ expect(controlText(host)).toContain('Checking this computer’s cache');
  expect(host.querySelector('[role=progressbar]')!.hasAttribute('aria-valuenow')).toBe(false);
  listener({ phase: 'waiting', component_bytes: 100, downloaded_bytes: 0 }); await settle();
- expect(host.textContent).toContain('Waiting for Desktop');
+ expect(controlText(host)).toContain('Waiting for Desktop');
  listener({ phase: 'packing', component_bytes: 100, cached_bytes: 100, download_bytes: 0, downloaded_bytes: 0 }); await settle();
- expect(host.textContent).toContain('Using the local cache. No download is needed.');
+ expect(controlText(host)).toContain('Using the local cache. No download is needed.');
  expect(host.querySelector('[role=progressbar]')!.hasAttribute('aria-valuenow')).toBe(false);
  expect(state.preparation).toHaveBeenCalledWith(expect.objectContaining({ action: 'update', view: expect.objectContaining({ heading: 'Preparing files for transfer…', detail: 'Using the local cache. No download is needed.' }) }));
  acquired({ ok: true, size: 180 }); await settle();
- expect(host.textContent).toContain('Transferring to the host');
+ expect(controlText(host)).toContain('Transferring to the host');
  expect(host.querySelector('[role=progressbar]')!.getAttribute('aria-valuenow')).toBe('25');
 });
 
@@ -669,5 +670,5 @@ it('requires the cache progress capability before acquiring through an older Des
  await selectAndPrepare('desktop');
  expect(state.components).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'acquire' }));
  expect(state.setupStart).not.toHaveBeenCalled();
- expect(host.textContent).toContain('Update Desktop or choose host download');
+ expect(controlText(host)).toContain('Update Desktop or choose host download');
 });

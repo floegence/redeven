@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId } from 'solid-js';
-import { Button } from '@floegence/floe-webapp-core/ui';
+import { StableText, Button } from '@floegence/floe-webapp-core/ui';
 import { Database } from '@floegence/floe-webapp-core/icons';
 import type { AIReadinessController } from '../../flower/aiReadiness';
 import { useI18n } from '../../i18n';
@@ -91,7 +91,7 @@ export function FlowerStorageSettings(props: Readonly<{ controller: AIReadinessC
       control={<Show when={props.canAdmin} fallback={<p class="text-xs text-muted-foreground">{i18n.t('aiReadiness.storage.adminOnly')}</p>}>
         <Button size="sm" variant="outline" disabled={loading() || pending()} aria-busy={loading() || undefined}
           aria-expanded={snapshots() !== null} aria-controls={panelID} onClick={() => void load()}>
-          {loading() ? i18n.t('aiReadiness.settings.refreshing') : snapshots() ? i18n.t('common.actions.refresh') : i18n.t('aiReadiness.storage.view')}
+          <StableText reserve={[i18n.t('aiReadiness.settings.refreshing'), i18n.t('common.actions.refresh'), i18n.t('aiReadiness.storage.view')]}>{loading() ? i18n.t('aiReadiness.settings.refreshing') : snapshots() ? i18n.t('common.actions.refresh') : i18n.t('aiReadiness.storage.view')}</StableText>
         </Button>
       </Show>}>
       <Show when={props.canAdmin}>

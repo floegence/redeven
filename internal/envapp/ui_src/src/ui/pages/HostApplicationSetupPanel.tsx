@@ -1,7 +1,7 @@
+import { StatusRegion, StableText, Button, RadioList } from '@floegence/floe-webapp-core/ui';
 import './host-application-preparation.css';
 import type { HostApplicationComponentsProgress } from '../../../../../../desktop/src/shared/hostApplicationComponents';
 import { Show } from 'solid-js';
-import { Button, RadioList } from '@floegence/floe-webapp-core/ui';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { hostApplicationSetupActive, type HostApplicationSetup, type HostApplicationTransferPlan } from '../services/hostApplicationsApi';
 
@@ -82,9 +82,10 @@ export function HostApplicationSetupPanel(props: {
     && (local() || (props.downloadMethod === 'desktop' ? props.canRelay : !receiving()));
   let fileInput: HTMLInputElement | undefined;
   return <section class="host-apps-preparation" classList={{ "host-apps-preparation-dialog": props.inDialog }} aria-label={i18n.t('hostApplications.prepare.title')}>
+    <div class="host-apps-preparation-content">
     <div class="host-apps-preparation-copy">
       <Show when={!props.inDialog || active() || props.disconnected || ['failed', 'interrupted', 'cancelled', 'unsupported'].includes(props.setup?.state ?? '')}><h2 aria-live="polite">{i18n.t(props.disconnected ? 'hostApplications.disconnected' : hostApplicationSetupHeading(props.setup, props.desktopProgress))}</h2></Show>
-      <Show when={props.desktopProgress}><p aria-live="polite">{hostApplicationDesktopDetail(props.desktopProgress, i18n)}</p></Show>
+      <StatusRegion lines={2} class="text-xs"><Show when={props.desktopProgress}><p aria-live="polite">{hostApplicationDesktopDetail(props.desktopProgress, i18n)}</p></Show></StatusRegion>
       <p>{i18n.t(props.disconnected ? 'hostApplications.prepare.connectionHint' : props.setup?.installation_error_code ? hostApplicationSetupError(props.setup.installation_error_code) : props.setup?.state === 'failed' ? hostApplicationSetupError(props.setup.error_code) : installed() ? 'hostApplications.update.stabilityFix' : 'hostApplications.prepare.description')}</p>
       <Show when={installed()?.ready}><p class="host-apps-preparation-target">{i18n.t(props.setup?.state === 'failed' ? 'hostApplications.update.failedRetained' : 'hostApplications.update.description')}</p></Show>
       <Show when={installed()}><dl class="host-apps-component-versions">
@@ -105,17 +106,24 @@ export function HostApplicationSetupPanel(props: {
       </div>
     </Show>
     <Show when={local()}><p class="host-apps-preparation-target">{i18n.t('hostApplications.update.local')}</p></Show>
-    <Show when={active()}>
+    <Show when={!unsupported() && (!active() || (props.setup?.state === 'receiving' && props.setup.can_cancel && !props.submitting))}><details class="host-apps-preparation-details">
+      <summary>{i18n.t('hostApplications.prepare.offline')}</summary>
+      <p>{i18n.t('hostApplications.prepare.offlineHint')}</p>
+      <input ref={fileInput} type="file" accept=".zip" hidden onChange={event => { const file = event.currentTarget.files?.[0]; if (file) props.onUpload(file); event.currentTarget.value = ''; }} />
+      <Button variant="outline" size="sm" disabled={!props.allowed || props.submitting} onClick={() => fileInput?.click()}>{i18n.t('hostApplications.prepare.choosePackage')}</Button>
+    </details></Show>
+    </div>
+    <div class="host-apps-preparation-progress"><Show when={active()}>
       <div class={`host-apps-preparation-track ${progress() === undefined ? 'indeterminate' : ''}`} role="progressbar" aria-label={i18n.t(hostApplicationSetupHeading(props.setup, props.desktopProgress))} aria-valuenow={progress() === undefined ? undefined : Math.round(progress()! * 100)} aria-valuemin={0} aria-valuemax={100}>
         <span style={{ width: progress() === undefined ? '35%' : `${progress()! * 100}%` }} />
       </div>
-    </Show>
+    </Show></div>
     <div class="host-apps-preparation-footer">
       <div class="host-apps-preparation-actions">
         <Show when={props.disconnected} fallback={
           <Show when={active()} fallback={
             <Button size="sm" disabled={!canStart()} onClick={props.onStart}>
-              {i18n.t(props.submitting || props.checkingPlan ? 'hostApplications.prepare.checking' : installed() ? installed()?.ready ? 'hostApplications.update.start' : 'hostApplications.update.repair' : props.applicationName ? 'hostApplications.prepare.prepareAndOpen' : props.setup && ['failed', 'interrupted', 'cancelled'].includes(props.setup.state) ? 'hostApplications.prepare.continue' : 'hostApplications.prepare.start')}
+              <StableText reserve={[i18n.t('hostApplications.prepare.checking'), i18n.t('hostApplications.update.start'), i18n.t('hostApplications.update.repair'), i18n.t('hostApplications.prepare.prepareAndOpen'), i18n.t('hostApplications.prepare.continue'), i18n.t('hostApplications.prepare.start')]}>{i18n.t(props.submitting || props.checkingPlan ? 'hostApplications.prepare.checking' : installed() ? installed()?.ready ? 'hostApplications.update.start' : 'hostApplications.update.repair' : props.applicationName ? 'hostApplications.prepare.prepareAndOpen' : props.setup && ['failed', 'interrupted', 'cancelled'].includes(props.setup.state) ? 'hostApplications.prepare.continue' : 'hostApplications.prepare.start')}</StableText>
             </Button>
           }>
             <Show when={props.setup?.state === 'receiving' && props.setup.can_cancel && !props.submitting && props.canRelay}>
@@ -126,11 +134,6 @@ export function HostApplicationSetupPanel(props: {
         }><Button size="sm" onClick={props.onReconnect}>{i18n.t('hostApplications.reconnect')}</Button></Show>
       </div>
     </div>
-    <Show when={!unsupported() && (!active() || (props.setup?.state === 'receiving' && props.setup.can_cancel && !props.submitting))}><details class="host-apps-preparation-details">
-      <summary>{i18n.t('hostApplications.prepare.offline')}</summary>
-      <p>{i18n.t('hostApplications.prepare.offlineHint')}</p>
-      <input ref={fileInput} type="file" accept=".zip" hidden onChange={event => { const file = event.currentTarget.files?.[0]; if (file) props.onUpload(file); event.currentTarget.value = ''; }} />
-      <Button variant="outline" size="sm" disabled={!props.allowed || props.submitting} onClick={() => fileInput?.click()}>{i18n.t('hostApplications.prepare.choosePackage')}</Button>
-    </details></Show>
+
   </section>;
 }

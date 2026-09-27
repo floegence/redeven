@@ -296,7 +296,7 @@ describe('AIReadinessSettingsSection', () => {
     await flushMicrotasks();
     expect(copy.disabled).toBe(false);
     expect(copy.textContent).toContain('Diagnostics copied');
-    expect(fixture.host.querySelector('[role="status"]')?.textContent).toContain('Diagnostics copied');
+    expect(fixture.host.querySelector('.sr-only[role="status"]')?.textContent).toContain('Diagnostics copied');
     fixture.dispose();
   });
 
@@ -339,7 +339,7 @@ describe('AIReadinessSettingsSection', () => {
     expect(copy.disabled).toBe(false);
     expect(copy.dataset.pending).toBeUndefined();
     expect(copy.textContent).toContain('Copy unavailable');
-    expect(fixture.host.querySelector('[role="status"]')?.textContent).toContain('Copy unavailable');
+    expect(fixture.host.querySelector('.sr-only[role="status"]')?.textContent).toContain('Copy unavailable');
     copy.click();
     expect(writeText).toHaveBeenCalledTimes(2);
     fixture.dispose();

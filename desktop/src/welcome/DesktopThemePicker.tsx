@@ -385,7 +385,7 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
                           }
                         }}
                       >
-                        <Show when={pending() === `mode-${source}`}><span class="redeven-theme-picker__spinner" aria-hidden="true" /></Show>
+                        <span class="redeven-theme-picker__spinner" aria-hidden="true" style={{ visibility: pending() === `mode-${source}` ? 'visible' : 'hidden' }} />
                         {props.i18n.t(sourceLabelKey(source))}
                       </button>
                     );

@@ -1,3 +1,20 @@
+import {
+  StableText,
+  Button,
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  Checkbox,
+  CommandPalette,
+  ConfirmDialog,
+  createFloatingPresence,
+  Dialog,
+  Input,
+  SegmentedControl,
+  Tag,
+} from '@floegence/floe-webapp-core/ui';
 import { EnvironmentAccessWorkflow } from './EnvironmentAccessWorkflow';
 import type { SecurityRequest, SecurityResult } from '../shared/runtimeSecurity';
 import { CloudAccountOverview } from './CloudAccountOverview';
@@ -46,22 +63,6 @@ import {
   X,
 } from '@floegence/floe-webapp-core/icons';
 import { BottomBarItem, TopBarIconButton } from '@floegence/floe-webapp-core/layout';
-import {
-  Button,
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-  Checkbox,
-  CommandPalette,
-  ConfirmDialog,
-  createFloatingPresence,
-  Dialog,
-  Input,
-  SegmentedControl,
-  Tag,
-} from '@floegence/floe-webapp-core/ui';
 
 import { SSHEnvironmentSettingsForm } from './SSHEnvironmentSettingsForm';
 import { EnvironmentSettingsDialog, EnvironmentSettingsPanel } from './EnvironmentSettingsDialog';
@@ -6236,9 +6237,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               )}
             />
             <span>{i18n().t('desktopUpdate.checkForUpdates')}</span>
-            <Show when={desktopUpdateSnapshot().state === 'available' || desktopUpdateSnapshot().state === 'ready'}>
-              <span class="redeven-desktop-update-button__indicator" aria-hidden="true" />
-            </Show>
+            <span class="redeven-desktop-update-button__indicator" aria-hidden="true" style={{ visibility: desktopUpdateSnapshot().state === 'available' || desktopUpdateSnapshot().state === 'ready' ? 'visible' : 'hidden' }} />
           </button>
         )}
         bottomBarLeading={(
@@ -7164,9 +7163,9 @@ function WSLDiscoveryPanel(props: Readonly<{
                               distribution_name: distribution.distribution_name,
                             }))}
                           >
-                            {busyKey() === actionKey()
+                            <StableText reserve={[props.i18n.t('environmentCenter.wslRegistering'), props.i18n.t('environmentCenter.wslRegister')]}>{busyKey() === actionKey()
                               ? props.i18n.t('environmentCenter.wslRegistering')
-                              : props.i18n.t('environmentCenter.wslRegister')}
+                              : props.i18n.t('environmentCenter.wslRegister')}</StableText>
                           </Button>
                         )}
                       >
@@ -12471,8 +12470,8 @@ function ContainerPicker(props: Readonly<{
           loading={props.loading}
           disabled={props.disabled || props.loading}
           onClick={props.onRefresh}
+          icon={Refresh}
         >
-          <Refresh class="mr-1 h-3.5 w-3.5" />
           {props.i18n.t('connectionDialog.refreshContainers')}
         </Button>
       </div>
@@ -13115,8 +13114,8 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
             onClick={() => {
               void props.onSave();
             }}
+            icon={Save}
           >
-            <Save class="mr-1 h-3.5 w-3.5" />
             {props.i18n.t('connectionDialog.save')}
           </Button>
         </div>
@@ -13571,8 +13570,8 @@ function GatewaySetupDialog(props: Readonly<{
             onClick={() => {
               void props.onSave();
             }}
+            icon={Save}
           >
-            <Save class="mr-1 h-3.5 w-3.5" />
             {props.i18n.t('connectionDialog.saveGateway')}
           </Button>
         </div>

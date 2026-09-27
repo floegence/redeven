@@ -21,6 +21,8 @@ Managed and ordinary services share one neutral divided list with content-sized,
 
 Previously loaded collection facts survive an unsuccessful refresh with an explicit stale-check explanation. Forward ordering uses creation identity instead of health or last-opened time, so opening and refresh do not reorder rows. Managed snapshots retain service-ID-keyed DOM. Hover feedback is 120ms, state color feedback 180ms, and explanatory expansion 220ms; refresh never replays row entry. Reduced motion removes these transitions without removing focus, progress, or status feedback. Diagnostics and per-service operation presentation follow the [operation progress contract](managed-service-operation-progress.md).
 
+Opening indicators keep the same icon footprint as idle and restricted states. The bounded status cell isolates asynchronous progress and explanatory feedback from neighboring rows under the [layout stability contract](../ui/asynchronous-layout-stability.md).
+
 ## Opening restrictions
 
 Managed and ordinary services share one Open action. Current access restrictions and backend action capability control availability; old opening errors and health-check failures do not permanently disable retries. A restricted action keeps its position and keyboard focusability, uses muted disabled styling, `aria-disabled`, and a yellow warning icon. Click, touch, Enter, or Space discloses the yellow reason tooltip without issuing an opening request. Hover and focus also expose the reason; Escape, a second activation, or outside interaction dismisses it. An associated accessible description retains the full reason independently of tooltip presence.

@@ -1,3 +1,4 @@
+import { controlText } from '../../testSupport/controlText';
 // @vitest-environment jsdom
 
 import {
@@ -115,7 +116,7 @@ async function clickDropdownMenuItem(
 
   const menuItem = Array.from(
     document.body.querySelectorAll('[role="menu"] button'),
-  ).find((node) => node.textContent?.trim() === label) as
+  ).find((node) => controlText(node)?.trim() === label) as
     | HTMLButtonElement
     | undefined;
   expect(menuItem).toBeTruthy();
@@ -312,8 +313,8 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
 
       expect(mockListWorkspacePage).toHaveBeenCalledTimes(1);
-      expect(host.textContent).toContain("Request failed");
-      expect(host.textContent?.match(/Request failed/g)).toHaveLength(1);
+      expect(controlText(host)).toContain("Request failed");
+      expect(controlText(host)?.match(/Request failed/g)).toHaveLength(1);
       expect(host.querySelector('[data-git-branch-status-unavailable="true"]')).toBeNull();
       expect(host.querySelector('[data-git-branch-status-unavailable-summary="true"]')).toBeNull();
 
@@ -321,7 +322,7 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
 
       expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
-      expect(host.textContent).not.toContain("Request failed");
+      expect(controlText(host)).not.toContain("Request failed");
       expect(host.querySelector('[data-git-branch-status-empty-section="changes"]')).toBeTruthy();
     } finally {
       dispose();
@@ -441,42 +442,42 @@ describe("GitBranchesPanel interactions", () => {
         offset: 0,
         limit: 200,
       });
-      expect(host.textContent).toContain("Workspace");
-      expect(host.textContent).toContain("Commit Graph");
+      expect(controlText(host)).toContain("Workspace");
+      expect(controlText(host)).toContain("Commit Graph");
       expect(host.querySelector('button[aria-label="Compare"]')).toBeTruthy();
-      expect(host.textContent).toContain("src/linked.ts");
-      expect(host.textContent).toContain("notes.txt");
-      expect(host.textContent).toContain("origin/feature/demo");
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).toContain("src/linked.ts");
+      expect(controlText(host)).toContain("notes.txt");
+      expect(controlText(host)).toContain("origin/feature/demo");
+      expect(controlText(host)).not.toContain(
         "Current · Upstream origin/feature/demo",
       );
-      expect(host.textContent).toContain("Changes");
-      expect(host.textContent).toContain("Staged");
-      expect(host.textContent).toContain("Unstaged");
-      expect(host.textContent).toContain("Untracked");
-      expect(host.textContent).toContain("View Diff");
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).toContain("Changes");
+      expect(controlText(host)).toContain("Staged");
+      expect(controlText(host)).toContain("Unstaged");
+      expect(controlText(host)).toContain("Untracked");
+      expect(controlText(host)).toContain("View Diff");
+      expect(controlText(host)).not.toContain(
         "Select another branch to merge into the current branch.",
       );
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).not.toContain(
         "Switch to another branch before deleting it.",
       );
-      expect(host.textContent).not.toContain("pending review");
+      expect(controlText(host)).not.toContain("pending review");
       const changesButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Changes"),
+        (node) => controlText(node)?.includes("Changes"),
       ) as HTMLButtonElement | undefined;
       const unstagedButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Unstaged"),
+        (node) => controlText(node)?.includes("Unstaged"),
       ) as HTMLButtonElement | undefined;
       const untrackedButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Untracked"),
+        (node) => controlText(node)?.includes("Untracked"),
       ) as HTMLButtonElement | undefined;
       const conflictedButton = Array.from(host.querySelectorAll("button")).find(
         (node) =>
           node.getAttribute("aria-label")?.startsWith("Conflicted:"),
       ) as HTMLButtonElement | undefined;
       const stagedButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Staged"),
+        (node) => controlText(node)?.includes("Staged"),
       ) as HTMLButtonElement | undefined;
       expect(changesButton).toBeTruthy();
       expect(changesButton?.getAttribute("aria-pressed")).toBe("true");
@@ -499,9 +500,9 @@ describe("GitBranchesPanel interactions", () => {
       moreButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flush();
       const branchMenuButtons = Array.from(document.body.querySelectorAll('[role="menu"] button')) as HTMLButtonElement[];
-      expect(branchMenuButtons.find((node) => node.textContent?.startsWith("Checkout"))?.disabled).toBe(true);
-      expect(branchMenuButtons.find((node) => node.textContent?.startsWith("Merge"))?.disabled).toBe(true);
-      expect(branchMenuButtons.find((node) => node.textContent?.startsWith("Delete Branch"))?.disabled).toBe(true);
+      expect(branchMenuButtons.find((node) => controlText(node)?.startsWith("Checkout"))?.disabled).toBe(true);
+      expect(branchMenuButtons.find((node) => controlText(node)?.startsWith("Merge"))?.disabled).toBe(true);
+      expect(branchMenuButtons.find((node) => controlText(node)?.startsWith("Delete Branch"))?.disabled).toBe(true);
       expect(checkoutCount).toBe(0);
       expect(mergeCount).toBe(0);
       expect(deleteCount).toBe(0);
@@ -601,9 +602,9 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
 
-      expect(host.textContent).toContain("Showing 2 of 40 files.");
-      expect(host.textContent).toContain("src/linked.ts");
-      expect(host.textContent).toContain("notes.txt");
+      expect(controlText(host)).toContain("Showing 2 of 40 files.");
+      expect(controlText(host)).toContain("src/linked.ts");
+      expect(controlText(host)).toContain("notes.txt");
       expect(host.querySelectorAll('tr[aria-hidden="true"] td')).toHaveLength(
         0,
       );
@@ -698,8 +699,8 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
 
-      expect(host.textContent).toContain("feature/demo");
-      expect(host.textContent).toContain("Current");
+      expect(controlText(host)).toContain("feature/demo");
+      expect(controlText(host)).toContain("Current");
       expect(host.querySelector('[data-git-branch-header-layout]')).toBeTruthy();
       expect(host.querySelector('[data-git-branch-status-summary-state="ready"]')).toBeTruthy();
     } finally {
@@ -768,11 +769,11 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       await setBranchHeaderWidth(host, 1040);
 
-      expect(host.textContent).toContain("Status unavailable");
-      expect(host.textContent).toContain(
+      expect(controlText(host)).toContain("Status unavailable");
+      expect(controlText(host)).toContain(
         "Remote branches are not checked out in the active worktree.",
       );
-      expect(host.textContent).toContain(
+      expect(controlText(host)).toContain(
         "Check out this branch locally to review workspace changes.",
       );
       expect(
@@ -781,12 +782,12 @@ describe("GitBranchesPanel interactions", () => {
       expect(
         host.querySelector('[data-git-branch-stable-placeholder="status"]'),
       ).toBeFalsy();
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).not.toContain(
         "Status is only available for checked-out local worktrees.",
       );
       expect(mockListWorkspacePage).not.toHaveBeenCalled();
       const checkoutButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Checkout"),
+        (node) => controlText(node)?.includes("Checkout"),
       ) as HTMLButtonElement | undefined;
       expect(checkoutButton).toBeTruthy();
       expect(checkoutButton?.disabled).toBe(false);
@@ -892,16 +893,16 @@ describe("GitBranchesPanel interactions", () => {
         offset: 0,
         limit: 200,
       });
-      expect(host.textContent).toContain("src/linked.ts");
-      expect(host.textContent).toContain("scratch.txt");
-      expect(host.textContent).toContain("Changes");
-      expect(host.textContent).toContain("View Diff");
+      expect(controlText(host)).toContain("src/linked.ts");
+      expect(controlText(host)).toContain("scratch.txt");
+      expect(controlText(host)).toContain("Changes");
+      expect(controlText(host)).toContain("View Diff");
 
       const changesButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Changes"),
+        (node) => controlText(node)?.includes("Changes"),
       ) as HTMLButtonElement | undefined;
       const untrackedButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Untracked"),
+        (node) => controlText(node)?.includes("Untracked"),
       ) as HTMLButtonElement | undefined;
       expect(changesButton).toBeTruthy();
       expect(untrackedButton).toBeFalsy();
@@ -987,12 +988,12 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       await setBranchHeaderWidth(host, 1040);
 
-      expect(host.textContent).toContain("internal");
-      expect(host.textContent).toContain("Folder");
-      expect(host.textContent).toContain("8 files");
-      expect(host.textContent).toContain("Open Folder");
+      expect(controlText(host)).toContain("internal");
+      expect(controlText(host)).toContain("Folder");
+      expect(controlText(host)).toContain("8 files");
+      expect(controlText(host)).toContain("Open Folder");
       expect(host.querySelectorAll("tbody tr")).toHaveLength(1);
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).not.toContain(
         "No pending files are available in this worktree.",
       );
     } finally {
@@ -1083,13 +1084,13 @@ describe("GitBranchesPanel interactions", () => {
       expect(emptyState).toBeTruthy();
       expect(emptyHeader).toBeNull();
       expect(contentFrame?.querySelector('.git-diff-split')).toBeNull();
-      expect(emptyState?.textContent).toContain("No pending files");
-      expect(emptyState?.textContent).toContain("This worktree is clean.");
+      expect(controlText(emptyState)).toContain("No pending files");
+      expect(controlText(emptyState)).toContain("This worktree is clean.");
       expect(
         emptyState?.querySelector(".git-branch-status-empty-state__mark svg"),
       ).toBeTruthy();
       expect(host.querySelectorAll("tbody tr")).toHaveLength(0);
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).not.toContain(
         "No pending files are available in this worktree.",
       );
     } finally {
@@ -1176,12 +1177,12 @@ describe("GitBranchesPanel interactions", () => {
 
       expect(header.dataset.gitBranchHeaderLayout).toBe("compact");
       expect(host.querySelectorAll("tbody tr").length).toBeGreaterThan(0);
-      expect(host.textContent).toContain("internal");
-      expect(host.textContent).toContain("Folder");
-      expect(host.textContent).toContain("Unstaged");
-      expect(host.textContent).toContain("Untracked");
-      expect(host.textContent).toContain("8 files");
-      expect(host.textContent).toContain("Open Folder");
+      expect(controlText(host)).toContain("internal");
+      expect(controlText(host)).toContain("Folder");
+      expect(controlText(host)).toContain("Unstaged");
+      expect(controlText(host)).toContain("Untracked");
+      expect(controlText(host)).toContain("8 files");
+      expect(controlText(host)).toContain("Open Folder");
     } finally {
       dispose();
     }
@@ -1331,7 +1332,7 @@ describe("GitBranchesPanel interactions", () => {
       await setBranchHeaderWidth(host, 1040);
 
       const openFolderButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Open Folder",
+        (node) => controlText(node)?.trim() === "Open Folder",
       ) as HTMLButtonElement | undefined;
       expect(openFolderButton).toBeTruthy();
 
@@ -1347,11 +1348,11 @@ describe("GitBranchesPanel interactions", () => {
         offset: 0,
         limit: 200,
       });
-      expect(host.textContent).toContain("EnvWorkbenchPage.tsx");
-      expect(host.textContent).toContain("redeven.css");
+      expect(controlText(host)).toContain("EnvWorkbenchPage.tsx");
+      expect(controlText(host)).toContain("redeven.css");
 
       const rootBreadcrumb = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "repo-linked",
+        (node) => controlText(node)?.trim() === "repo-linked",
       ) as HTMLButtonElement | undefined;
       expect(rootBreadcrumb).toBeTruthy();
 
@@ -1366,7 +1367,7 @@ describe("GitBranchesPanel interactions", () => {
         offset: 0,
         limit: 200,
       });
-      expect(host.textContent).toContain("Open Folder");
+      expect(controlText(host)).toContain("Open Folder");
     } finally {
       dispose();
     }
@@ -1469,7 +1470,7 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
 
       const stagedButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Staged"),
+        (node) => controlText(node)?.includes("Staged"),
       ) as HTMLButtonElement | undefined;
       expect(stagedButton).toBeTruthy();
       expect(stagedButton?.getAttribute("aria-pressed")).toBe("false");
@@ -1485,11 +1486,11 @@ describe("GitBranchesPanel interactions", () => {
         offset: 0,
         limit: 200,
       });
-      expect(host.textContent).toContain("src/indexed.ts");
-      expect(host.textContent).not.toContain("src/pending.ts");
+      expect(controlText(host)).toContain("src/indexed.ts");
+      expect(controlText(host)).not.toContain("src/pending.ts");
       const selectedStagedButton = Array.from(
         host.querySelectorAll("button"),
-      ).find((node) => node.textContent?.includes("Staged")) as
+      ).find((node) => controlText(node)?.includes("Staged")) as
         | HTMLButtonElement
         | undefined;
       expect(selectedStagedButton?.getAttribute("aria-pressed")).toBe("true");
@@ -1595,7 +1596,7 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
 
       const stagedButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Staged"),
+        (node) => controlText(node)?.includes("Staged"),
       ) as HTMLButtonElement | undefined;
       expect(stagedButton).toBeTruthy();
       expect(stagedButton?.getAttribute("aria-pressed")).toBe("false");
@@ -1613,11 +1614,11 @@ describe("GitBranchesPanel interactions", () => {
         offset: 0,
         limit: 200,
       });
-      expect(host.textContent).toContain("src/indexed.ts");
-      expect(host.textContent).not.toContain("src/pending.ts");
+      expect(controlText(host)).toContain("src/indexed.ts");
+      expect(controlText(host)).not.toContain("src/pending.ts");
       const selectedStagedButton = Array.from(
         host.querySelectorAll("button"),
-      ).find((node) => node.textContent?.includes("Staged")) as
+      ).find((node) => controlText(node)?.includes("Staged")) as
         | HTMLButtonElement
         | undefined;
       expect(selectedStagedButton?.getAttribute("aria-pressed")).toBe("true");
@@ -1730,9 +1731,9 @@ describe("GitBranchesPanel interactions", () => {
         offset: 0,
         limit: 200,
       });
-      expect(host.textContent).toContain("src/conflict.ts");
+      expect(controlText(host)).toContain("src/conflict.ts");
       const changesButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Changes"),
+        (node) => controlText(node)?.includes("Changes"),
       ) as HTMLButtonElement | undefined;
       const conflictedButton = Array.from(host.querySelectorAll("button")).find(
         (node) =>
@@ -1927,7 +1928,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(askFlowerButton).toBeTruthy();
       expect(askFlowerButton?.dataset.gitShortcutOrb).toBe("flower");
       expect(askFlowerButton?.className).toContain("h-7");
-      expect(askFlowerButton?.textContent).toBe("");
+      expect(controlText(askFlowerButton)).toBe("");
 
       askFlowerButton!.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
@@ -2214,11 +2215,11 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
 
-      expect(host.textContent).toContain("Status unavailable");
-      expect(host.textContent).toContain(
+      expect(controlText(host)).toContain("Status unavailable");
+      expect(controlText(host)).toContain(
         "This branch is not checked out in the active worktree.",
       );
-      expect(host.textContent).toContain(
+      expect(controlText(host)).toContain(
         "Use History or Compare to inspect commits and diffs.",
       );
       expect(
@@ -2227,7 +2228,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(
         host.querySelector('[data-git-branch-stable-placeholder="status"]'),
       ).toBeFalsy();
-      expect(host.textContent).not.toContain("Branch is not checked out");
+      expect(controlText(host)).not.toContain("Branch is not checked out");
       expect(mockListWorkspacePage).not.toHaveBeenCalled();
     } finally {
       dispose();
@@ -2282,11 +2283,11 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
 
-      expect(host.textContent).toContain("Status unavailable");
-      expect(host.textContent).toContain(
+      expect(controlText(host)).toContain("Status unavailable");
+      expect(controlText(host)).toContain(
         "Remote branches are not checked out in the active worktree.",
       );
-      expect(host.textContent).toContain(
+      expect(controlText(host)).toContain(
         "Check out this branch locally to review workspace changes.",
       );
       expect(
@@ -2358,7 +2359,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(askFlowerButton?.disabled).toBe(true);
 
       const askTooltip = await revealTooltipForButton(askFlowerButton);
-      expect(askTooltip?.textContent).toContain(
+      expect(controlText(askTooltip)).toContain(
         "Open this branch in a worktree first.",
       );
       (
@@ -2373,12 +2374,12 @@ describe("GitBranchesPanel interactions", () => {
       moreButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flush();
       const menuButtons = Array.from(document.body.querySelectorAll('[role="menu"] button')) as HTMLButtonElement[];
-      const terminalButton = menuButtons.find((node) => node.textContent?.startsWith("Open in Terminal"));
-      const filesButton = menuButtons.find((node) => node.textContent?.startsWith("Browse Files"));
+      const terminalButton = menuButtons.find((node) => controlText(node)?.startsWith("Open in Terminal"));
+      const filesButton = menuButtons.find((node) => controlText(node)?.startsWith("Browse Files"));
       expect(terminalButton?.disabled).toBe(true);
       expect(filesButton?.disabled).toBe(true);
-      expect(terminalButton?.textContent).toContain("Open this branch in a worktree first.");
-      expect(filesButton?.textContent).toContain("Open this branch in a worktree first.");
+      expect(controlText(terminalButton)).toContain("Open this branch in a worktree first.");
+      expect(controlText(filesButton)).toContain("Open this branch in a worktree first.");
     } finally {
       dispose();
     }
@@ -2470,24 +2471,24 @@ describe("GitBranchesPanel interactions", () => {
       );
 
       expect(deleteCount).toBe(1);
-      expect(document.body.textContent).toContain("Delete Branch");
-      expect(document.body.textContent).toContain("/workspace/repo-linked");
-      expect(document.body.textContent).toContain(
+      expect(controlText(document.body)).toContain("Delete Branch");
+      expect(controlText(document.body)).toContain("/workspace/repo-linked");
+      expect(controlText(document.body)).toContain(
         "Delete the local branch reference for",
       );
-      expect(document.body.textContent).toContain(
+      expect(controlText(document.body)).toContain(
         "Remove the linked worktree at",
       );
-      expect(document.body.textContent).toContain(
+      expect(controlText(document.body)).toContain(
         "Uncommitted changes in that worktree will be discarded (1 untracked).",
       );
-      expect(document.body.textContent).not.toContain("Files discarded");
-      expect(document.body.textContent).not.toContain("Safe delete ready");
-      expect(document.body.textContent).not.toContain("Delete Confirmation");
-      expect(document.body.textContent).not.toContain(
+      expect(controlText(document.body)).not.toContain("Files discarded");
+      expect(controlText(document.body)).not.toContain("Safe delete ready");
+      expect(controlText(document.body)).not.toContain("Delete Confirmation");
+      expect(controlText(document.body)).not.toContain(
         "Approve permanent file discard",
       );
-      expect(document.body.textContent).not.toContain("scratch.txt");
+      expect(controlText(document.body)).not.toContain("scratch.txt");
       const footer = Array.from(document.body.querySelectorAll("div")).find(
         (node) =>
           node.className.includes("border-t") &&
@@ -2499,7 +2500,7 @@ describe("GitBranchesPanel interactions", () => {
       const confirmButton = Array.from(
         document.body.querySelectorAll("button"),
       ).find(
-        (node) => node.textContent?.trim() === "Delete Branch and Worktree",
+        (node) => controlText(node)?.trim() === "Delete Branch and Worktree",
       ) as HTMLButtonElement | undefined;
       expect(footer).toBeTruthy();
       expect(confirmButton).toBeTruthy();
@@ -2571,10 +2572,10 @@ describe("GitBranchesPanel interactions", () => {
         "[data-git-branch-header-actions]",
       ) as HTMLDivElement | null;
       const mergeButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Merge",
+        (node) => controlText(node)?.trim() === "Merge",
       ) as HTMLButtonElement | undefined;
       const visibleDeleteButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Delete",
+        (node) => controlText(node)?.trim() === "Delete",
       ) as HTMLButtonElement | undefined;
       const moreButton = host.querySelector(
         'button[aria-label="More actions"]',
@@ -2598,10 +2599,10 @@ describe("GitBranchesPanel interactions", () => {
       expect(commandRail?.className).toContain("flex");
       expect(commandRail?.className).not.toContain("grid-cols-1");
       expect(commandRail?.className).not.toContain("bg-muted/[0.08]");
-      expect(commandRail?.textContent).toContain("Merge");
-      expect(commandRail?.textContent).not.toContain("Delete");
-      expect(commandRail?.textContent).not.toContain("Workspace");
-      expect(commandRail?.textContent).not.toContain("Actions");
+      expect(controlText(commandRail)).toContain("Merge");
+      expect(controlText(commandRail)).not.toContain("Delete");
+      expect(controlText(commandRail)).not.toContain("Workspace");
+      expect(controlText(commandRail)).not.toContain("Actions");
       expect(mergeButton?.className).toContain("rounded-md");
       expect(mergeButton?.className).toContain("cursor-pointer");
       expect(visibleDeleteButton).toBeUndefined();
@@ -2764,8 +2765,8 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
 
-      expect(host.textContent).toContain("feature/clean");
-      expect(host.textContent).not.toContain("No extra status");
+      expect(controlText(host)).toContain("feature/clean");
+      expect(controlText(host)).not.toContain("No extra status");
     } finally {
       dispose();
     }
@@ -2959,17 +2960,17 @@ describe("GitBranchesPanel interactions", () => {
       );
 
       expect(requestedBranch).toBe("feature/demo");
-      expect(document.body.textContent).toContain("Delete Branch");
-      expect(document.body.textContent).toContain(
+      expect(controlText(document.body)).toContain("Delete Branch");
+      expect(controlText(document.body)).toContain(
         "Delete the local branch reference for",
       );
-      expect(document.body.textContent).toContain(
+      expect(controlText(document.body)).toContain(
         "Leave your current worktree and uncommitted files untouched.",
       );
-      expect(document.body.textContent).not.toContain("Delete base main");
-      expect(document.body.textContent).not.toContain("Files discarded");
-      expect(document.body.textContent).not.toContain("Safe delete ready");
-      expect(document.body.textContent).not.toContain("Delete Confirmation");
+      expect(controlText(document.body)).not.toContain("Delete base main");
+      expect(controlText(document.body)).not.toContain("Files discarded");
+      expect(controlText(document.body)).not.toContain("Safe delete ready");
+      expect(controlText(document.body)).not.toContain("Delete Confirmation");
       const footer = Array.from(document.body.querySelectorAll("div")).find(
         (node) =>
           node.className.includes("border-t") &&
@@ -2980,7 +2981,7 @@ describe("GitBranchesPanel interactions", () => {
       ) as HTMLDivElement | undefined;
       const confirmButton = Array.from(
         document.body.querySelectorAll('[role="dialog"] button'),
-      ).find((node) => node.textContent?.trim() === "Delete Branch") as
+      ).find((node) => controlText(node)?.trim() === "Delete Branch") as
         | HTMLButtonElement
         | undefined;
       expect(footer).toBeTruthy();
@@ -3057,10 +3058,10 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
 
-      expect(document.body.textContent).toContain("Force delete consequences");
+      expect(controlText(document.body)).toContain("Force delete consequences");
       const confirmButton = Array.from(
         document.body.querySelectorAll("button"),
-      ).find((node) => node.textContent?.trim() === "Force Delete Branch") as
+      ).find((node) => controlText(node)?.trim() === "Force Delete Branch") as
         | HTMLButtonElement
         | undefined;
       expect(confirmButton).toBeTruthy();
@@ -3070,7 +3071,7 @@ describe("GitBranchesPanel interactions", () => {
       ) as HTMLInputElement | null;
       expect(confirmationInput?.placeholder).toBe("feature/unmerged");
       const tooltip = await revealTooltipForButton(confirmButton);
-      expect(tooltip?.textContent).toContain(
+      expect(controlText(tooltip)).toContain(
         "Type feature/unmerged to enable force delete.",
       );
       confirmationInput!.value = "feature/unmerged";
@@ -3078,7 +3079,7 @@ describe("GitBranchesPanel interactions", () => {
       await Promise.resolve();
       const enabledConfirmButton = Array.from(
         document.body.querySelectorAll("button"),
-      ).find((node) => node.textContent?.trim() === "Force Delete Branch") as
+      ).find((node) => controlText(node)?.trim() === "Force Delete Branch") as
         | HTMLButtonElement
         | undefined;
       expect(enabledConfirmButton?.disabled).toBe(false);
@@ -3180,7 +3181,7 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       const mergeButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Merge",
+        (node) => controlText(node)?.trim() === "Merge",
       ) as HTMLButtonElement | undefined;
       expect(mergeButton).toBeTruthy();
       expect(mergeButton?.disabled).toBe(false);
@@ -3188,16 +3189,16 @@ describe("GitBranchesPanel interactions", () => {
       await Promise.resolve();
 
       expect(requestedBranch).toBe("feature/demo");
-      expect(document.body.textContent).toContain("Merge Branch");
-      expect(document.body.textContent).toContain("Fast-forward");
-      expect(document.body.textContent).toContain("feature/demo");
-      expect(document.body.textContent).toContain("Changed Files");
-      expect(document.body.textContent).toContain(" src/merge.ts ");
-      expect(document.body.textContent).toContain("Fast-Forward main");
+      expect(controlText(document.body)).toContain("Merge Branch");
+      expect(controlText(document.body)).toContain("Fast-forward");
+      expect(controlText(document.body)).toContain("feature/demo");
+      expect(controlText(document.body)).toContain("Changed Files");
+      expect(controlText(document.body)).toContain(" src/merge.ts ");
+      expect(controlText(document.body)).toContain("Fast-Forward main");
 
       const confirmButton = Array.from(
         document.body.querySelectorAll("button"),
-      ).find((node) => node.textContent?.trim() === "Fast-Forward main") as
+      ).find((node) => controlText(node)?.trim() === "Fast-Forward main") as
         | HTMLButtonElement
         | undefined;
       expect(confirmButton).toBeTruthy();
@@ -3301,15 +3302,15 @@ describe("GitBranchesPanel interactions", () => {
     }, host);
 
     try {
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).not.toContain(
         "Current workspace must be clean before merging.",
       );
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).not.toContain(
         "This branch is checked out in a linked worktree: /workspace/repo-blocked",
       );
 
       const mergeButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Merge",
+        (node) => controlText(node)?.trim() === "Merge",
       ) as HTMLButtonElement | undefined;
       expect(mergeButton).toBeTruthy();
       expect(mergeButton?.disabled).toBe(false);
@@ -3318,14 +3319,14 @@ describe("GitBranchesPanel interactions", () => {
       await Promise.resolve();
 
       expect(requestedBranch).toBe("feature/blocked");
-      expect(document.body.textContent).toContain("Merge Branch");
-      expect(document.body.textContent).toContain("Blocked");
-      expect(document.body.textContent).toContain(
+      expect(controlText(document.body)).toContain("Merge Branch");
+      expect(controlText(document.body)).toContain("Blocked");
+      expect(controlText(document.body)).toContain(
         "Current workspace must be clean before merging (1 unstaged).",
       );
       const stashShortcut = Array.from(
         document.body.querySelectorAll("button"),
-      ).find((node) => node.textContent?.trim() === "Stash current changes") as
+      ).find((node) => controlText(node)?.trim() === "Stash current changes") as
         | HTMLButtonElement
         | undefined;
       expect(stashShortcut).toBeTruthy();
@@ -3338,7 +3339,7 @@ describe("GitBranchesPanel interactions", () => {
 
       const confirmButton = Array.from(
         document.body.querySelectorAll("button"),
-      ).find((node) => node.textContent?.trim() === "Merge Into main") as
+      ).find((node) => controlText(node)?.trim() === "Merge Into main") as
         | HTMLButtonElement
         | undefined;
       expect(confirmButton).toBeTruthy();
@@ -3545,18 +3546,18 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
-      expect(host.textContent).toContain("src/linked.ts");
+      expect(controlText(host)).toContain("src/linked.ts");
 
       setRefreshToken(1);
       await flush();
 
       expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
-      expect(host.textContent).toContain("src/linked.ts");
-      expect(host.textContent).not.toContain("Branch status is unavailable");
+      expect(controlText(host)).toContain("src/linked.ts");
+      expect(controlText(host)).not.toContain("Branch status is unavailable");
 
       resolveRefresh(refreshedPage);
       await flush();
-      expect(host.textContent).toContain("src/config.ts");
+      expect(controlText(host)).toContain("src/config.ts");
     } finally {
       dispose();
     }
@@ -3637,8 +3638,8 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
 
       expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
-      expect(host.textContent).toContain("src/fresh.ts");
-      expect(host.textContent).not.toContain("src/stale.ts");
+      expect(controlText(host)).toContain("src/fresh.ts");
+      expect(controlText(host)).not.toContain("src/stale.ts");
     } finally {
       dispose();
     }
@@ -3713,7 +3714,7 @@ describe("GitBranchesPanel interactions", () => {
       setProtocolContext({ client: clientA, mode: "legacy" });
       await flush();
       expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
-      expect(host.textContent).toContain("src/legacy.ts");
+      expect(controlText(host)).toContain("src/legacy.ts");
 
       resolveOldGeneration({
         repoRootPath: "/workspace/repo-linked",
@@ -3727,7 +3728,7 @@ describe("GitBranchesPanel interactions", () => {
         items: [{ section: "unstaged", changeType: "modified", path: "src/old.ts", displayPath: "src/old.ts" }],
       });
       await flush();
-      expect(host.textContent).not.toContain("src/old.ts");
+      expect(controlText(host)).not.toContain("src/old.ts");
 
       setProtocolContext({ client: clientB, mode: "capable" });
       await flush();
@@ -3739,8 +3740,8 @@ describe("GitBranchesPanel interactions", () => {
         limit: 200,
         expectedWorkspaceRevision: undefined,
       });
-      expect(host.textContent).toContain("src/client-b.ts");
-      expect(host.textContent).not.toContain("src/legacy.ts");
+      expect(controlText(host)).toContain("src/client-b.ts");
+      expect(controlText(host)).not.toContain("src/legacy.ts");
     } finally {
       dispose();
     }
@@ -3835,12 +3836,12 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
 
-      expect(document.body.textContent).toContain("Force delete consequences");
+      expect(controlText(document.body)).toContain("Force delete consequences");
       const confirmButton = Array.from(
         document.body.querySelectorAll("button"),
       ).find(
         (node) =>
-          node.textContent?.trim() === "Force Delete Branch and Worktree",
+          controlText(node)?.trim() === "Force Delete Branch and Worktree",
       ) as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.disabled).toBe(true);
@@ -3849,7 +3850,7 @@ describe("GitBranchesPanel interactions", () => {
       ) as HTMLInputElement | null;
       expect(confirmationInput?.placeholder).toBe("feature/linked-blocked");
       const tooltip = await revealTooltipForButton(confirmButton);
-      expect(tooltip?.textContent).toContain(
+      expect(controlText(tooltip)).toContain(
         "Type feature/linked-blocked to enable force delete.",
       );
       confirmationInput!.value = "feature/linked-blocked";
@@ -3859,7 +3860,7 @@ describe("GitBranchesPanel interactions", () => {
         document.body.querySelectorAll("button"),
       ).find(
         (node) =>
-          node.textContent?.trim() === "Force Delete Branch and Worktree",
+          controlText(node)?.trim() === "Force Delete Branch and Worktree",
       ) as HTMLButtonElement | undefined;
       expect(enabledConfirmButton?.disabled).toBe(false);
     } finally {
@@ -3953,17 +3954,17 @@ describe("GitBranchesPanel interactions", () => {
       await Promise.resolve();
       await setBranchHeaderWidth(host, 1040);
 
-      expect(host.textContent).toContain("First commit");
-      expect(host.textContent).toContain("Merge feature");
-      expect(host.textContent).toContain("11111111");
-      expect(host.textContent).toContain("Files in Commit");
-      expect(host.textContent).toContain("Merge Commit");
-      expect(host.textContent).toContain(
+      expect(controlText(host)).toContain("First commit");
+      expect(controlText(host)).toContain("Merge feature");
+      expect(controlText(host)).toContain("11111111");
+      expect(controlText(host)).toContain("Files in Commit");
+      expect(controlText(host)).toContain("Merge Commit");
+      expect(controlText(host)).toContain(
         "Compared with first parent so the changed-file list and diff view stay aligned.",
       );
-      expect(host.textContent).toContain("src/history.ts");
-      expect(host.textContent).toContain("+8");
-      expect(host.textContent).toContain("-3");
+      expect(controlText(host)).toContain("src/history.ts");
+      expect(controlText(host)).toContain("+8");
+      expect(controlText(host)).toContain("-3");
 
       const historyPanel = host.querySelector(
         "#git-branch-subview-panel-history:not([hidden])",
@@ -3989,7 +3990,7 @@ describe("GitBranchesPanel interactions", () => {
         'button[aria-label="Ask Flower"]',
       ) as HTMLButtonElement | null;
       expect(askFlowerButton).toBeTruthy();
-      expect(askFlowerButton?.textContent).toBe("");
+      expect(controlText(askFlowerButton)).toBe("");
 
       const fullMessageButton = historyPanel!.querySelector(
         "[data-git-full-commit-message-trigger]",
@@ -3997,7 +3998,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(fullMessageButton).toBeTruthy();
       fullMessageButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flush();
-      expect(document.body.querySelector('[data-git-commit-message-dialog]')?.textContent).toContain(
+      expect(controlText(document.body.querySelector('[data-git-commit-message-dialog]'))).toContain(
         "Preserve the full merge rationale for reviewers.",
       );
 
@@ -4031,16 +4032,16 @@ describe("GitBranchesPanel interactions", () => {
       });
 
       const diffButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("View Diff"),
+        (node) => controlText(node)?.includes("View Diff"),
       ) as HTMLButtonElement | undefined;
       expect(diffButton).toBeTruthy();
       diffButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
       await Promise.resolve();
       expect(historyPanel!.querySelector('[data-git-diff-panel]')).toBeTruthy();
-      expect(Array.from(document.querySelectorAll('[role="dialog"]')).some((dialog) => dialog.textContent?.includes('Commit Diff'))).toBe(false);
-      expect(document.body.textContent).toContain("Merge Commit");
-      expect(document.body.textContent).toContain("history updated");
+      expect(Array.from(document.querySelectorAll('[role="dialog"]')).some((dialog) => controlText(dialog)?.includes('Commit Diff'))).toBe(false);
+      expect(controlText(document.body)).toContain("Merge Commit");
+      expect(controlText(document.body)).toContain("history updated");
 
       const selectedGraphRow = historyPanel!.querySelector(
         '[data-commit-graph-row="2222222222222222"]',
@@ -4128,7 +4129,7 @@ describe("GitBranchesPanel interactions", () => {
       await setBranchHeaderWidth(host, 1040);
 
       const diffButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("View Diff"),
+        (node) => controlText(node)?.includes("View Diff"),
       ) as HTMLButtonElement | undefined;
       expect(diffButton).toBeTruthy();
 
@@ -4136,11 +4137,11 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
 
       expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
-      expect(document.body.textContent).toContain("Loading patch preview...");
+      expect(controlText(document.body)).toContain("Loading patch preview...");
       expect(document.body.querySelector('[data-git-content-skeleton="patch"]')).toBeTruthy();
       expect(document.body.querySelector(".git-loading-indicator")).toBeNull();
       expect(document.body.querySelector(".floe-grid-cell")).toBeNull();
-      expect(document.body.textContent).not.toContain(
+      expect(controlText(document.body)).not.toContain(
         "Select a file to inspect its diff.",
       );
 
@@ -4217,13 +4218,13 @@ describe("GitBranchesPanel interactions", () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(document.body.textContent).toContain("Compare branches");
-      expect(document.body.textContent).toContain("Changed Files");
-      expect(document.body.textContent).toContain("src/compare.ts");
+      expect(controlText(document.body)).toContain("Compare branches");
+      expect(controlText(document.body)).toContain("Changed Files");
+      expect(controlText(document.body)).toContain("src/compare.ts");
 
       const dialogRoot = Array.from(
         document.body.querySelectorAll('[role="dialog"]'),
-      ).find((node) => node.textContent?.includes("Compare branches")) as
+      ).find((node) => controlText(node)?.includes("Compare branches")) as
         | HTMLDivElement
         | undefined;
       expect(dialogRoot).toBeTruthy();
@@ -4319,7 +4320,7 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
       const statusRow = Array.from(host.querySelectorAll("tbody tr")).find((row) =>
-        row.textContent?.includes("src/app.ts"),
+        controlText(row)?.includes("src/app.ts"),
       ) as HTMLTableRowElement | undefined;
       expect(statusRow).toBeTruthy();
       statusRow!.dispatchEvent(new MouseEvent("contextmenu", {
@@ -4330,7 +4331,7 @@ describe("GitBranchesPanel interactions", () => {
       }));
       await flush();
       const askFlower = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
-        item.textContent?.includes("Ask Flower"),
+        controlText(item)?.includes("Ask Flower"),
       ) as HTMLButtonElement | undefined;
       expect(askFlower).toBeTruthy();
       askFlower!.click();
@@ -4349,7 +4350,7 @@ describe("GitBranchesPanel interactions", () => {
       }));
       await flush();
       const preview = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
-        item.textContent?.includes("Preview Current File"),
+        controlText(item)?.includes("Preview Current File"),
       ) as HTMLButtonElement | undefined;
       expect(preview).toBeTruthy();
       preview!.click();
@@ -4368,7 +4369,7 @@ describe("GitBranchesPanel interactions", () => {
       }));
       await flush();
       const copyBranch = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
-        item.textContent?.includes("Copy Branch Name"),
+        controlText(item)?.includes("Copy Branch Name"),
       ) as HTMLButtonElement | undefined;
       expect(copyBranch).toBeTruthy();
       copyBranch!.click();
@@ -4419,14 +4420,14 @@ describe("GitBranchesPanel interactions", () => {
       branchTarget!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();
       const actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
-      const terminal = actions.find((item) => item.textContent?.includes('Open Terminal'));
-      const files = actions.find((item) => item.textContent?.includes('Browse Files'));
-      const checkout = actions.find((item) => item.textContent?.includes('Checkout Branch'));
+      const terminal = actions.find((item) => controlText(item)?.includes('Open Terminal'));
+      const files = actions.find((item) => controlText(item)?.includes('Browse Files'));
+      const checkout = actions.find((item) => controlText(item)?.includes('Checkout Branch'));
       expect(terminal?.getAttribute('aria-disabled')).toBe('true');
       expect(files?.getAttribute('aria-disabled')).toBe('true');
       expect(terminal?.title).toBe('Check out this branch locally first.');
       expect(files?.title).toBe('Check out this branch locally first.');
-      expect(actions.some((item) => item.textContent?.includes('Copy Worktree Path'))).toBe(false);
+      expect(actions.some((item) => controlText(item)?.includes('Copy Worktree Path'))).toBe(false);
       expect(checkout?.getAttribute('aria-disabled')).not.toBe('true');
       checkout!.click();
       expect(onCheckoutBranch).toHaveBeenCalledWith(expect.objectContaining({
@@ -4496,7 +4497,7 @@ describe("GitBranchesPanel interactions", () => {
         return Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
       };
       let actions = await openScopeMenu();
-      actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
+      actions.find((item) => controlText(item)?.includes('Ask Flower'))!.click();
       expect(onAskFlower).toHaveBeenCalledWith(expect.objectContaining({
         kind: 'branch_status',
         repoRootPath: '/workspace/repo',
@@ -4505,13 +4506,13 @@ describe("GitBranchesPanel interactions", () => {
         items: [expect.objectContaining({ path: 'src/app.ts' })],
       }));
       actions = await openScopeMenu();
-      actions.find((item) => item.textContent?.includes('Open Terminal'))!.click();
+      actions.find((item) => controlText(item)?.includes('Open Terminal'))!.click();
       expect(onOpenInTerminal).toHaveBeenCalledWith({ path: '/workspace/repo-linked', preferredName: 'repo-linked' });
       actions = await openScopeMenu();
-      actions.find((item) => item.textContent?.includes('Browse Files'))!.click();
+      actions.find((item) => controlText(item)?.includes('Browse Files'))!.click();
       expect(onBrowseFiles).toHaveBeenCalledWith({ path: '/workspace/repo-linked', preferredName: 'repo-linked' });
       actions = await openScopeMenu();
-      actions.find((item) => item.textContent?.includes('Stash'))!.click();
+      actions.find((item) => controlText(item)?.includes('Stash'))!.click();
       expect(onOpenStash).toHaveBeenCalledWith({ tab: 'save', repoRootPath: '/workspace/repo-linked', source: 'branch_status' });
     } finally {
       dispose();
@@ -4576,7 +4577,7 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
       const row = Array.from(host.querySelectorAll<HTMLTableRowElement>('tbody tr'))
-        .find((candidate) => candidate.textContent?.includes('internal'));
+        .find((candidate) => controlText(candidate)?.includes('internal'));
       expect(row).toBeTruthy();
       const openMenu = async () => {
         row!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
@@ -4586,7 +4587,7 @@ describe("GitBranchesPanel interactions", () => {
 
       let actions = await openMenu();
       directoryItem.directoryPath = 'mutated-after-open';
-      actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
+      actions.find((item) => controlText(item)?.includes('Ask Flower'))!.click();
       expect(onAskFlower).toHaveBeenCalledWith({
         kind: 'branch_status_item',
         repoRootPath: '/workspace/repo',
@@ -4599,19 +4600,19 @@ describe("GitBranchesPanel interactions", () => {
       directoryItem.directoryPath = 'internal';
       actions = await openMenu();
       directoryItem.directoryPath = 'mutated-after-open';
-      actions.find((item) => item.textContent?.includes('Open Terminal'))!.click();
+      actions.find((item) => controlText(item)?.includes('Open Terminal'))!.click();
       expect(onOpenInTerminal).toHaveBeenCalledWith({ path: '/workspace/repo-linked/internal', preferredName: 'internal' });
 
       directoryItem.directoryPath = 'internal';
       actions = await openMenu();
       directoryItem.directoryPath = 'mutated-after-open';
-      actions.find((item) => item.textContent?.includes('Browse Files'))!.click();
+      actions.find((item) => controlText(item)?.includes('Browse Files'))!.click();
       expect(onBrowseFiles).toHaveBeenCalledWith({ path: '/workspace/repo-linked/internal', preferredName: 'internal' });
 
       directoryItem.directoryPath = 'internal';
       actions = await openMenu();
       directoryItem.directoryPath = 'mutated-after-open';
-      actions.find((item) => item.textContent?.includes('Open Directory'))!.click();
+      actions.find((item) => controlText(item)?.includes('Open Directory'))!.click();
       await flush();
       expect(mockListWorkspacePage).toHaveBeenLastCalledWith({
         repoRootPath: '/workspace/repo-linked',
@@ -4668,14 +4669,14 @@ describe("GitBranchesPanel interactions", () => {
       const compare = host.querySelector('button[aria-label="Compare"]') as HTMLButtonElement | null;
       compare!.click();
       await flush();
-      const renamedRow = Array.from(document.body.querySelectorAll('tbody tr')).find((row) => row.textContent?.includes('src/new.ts')) as HTMLTableRowElement | undefined;
+      const renamedRow = Array.from(document.body.querySelectorAll('tbody tr')).find((row) => controlText(row)?.includes('src/new.ts')) as HTMLTableRowElement | undefined;
       expect(renamedRow).toBeTruthy();
       renamedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();
       compareResponse.baseRef = 'mutated-base';
       compareResponse.targetRef = 'mutated-target';
       let actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
-      actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
+      actions.find((item) => controlText(item)?.includes('Ask Flower'))!.click();
       expect(onAskFlower).toHaveBeenCalledWith(expect.objectContaining({
         kind: 'compare_file',
         baseRef: 'main',
@@ -4686,16 +4687,16 @@ describe("GitBranchesPanel interactions", () => {
       renamedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();
       actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
-      actions.find((item) => item.textContent?.includes('Preview Current File'))!.click();
+      actions.find((item) => controlText(item)?.includes('Preview Current File'))!.click();
       expect(onPreviewCurrentFile).toHaveBeenCalledWith(expect.objectContaining({
         absolutePath: '/workspace/repo/src/new.ts',
         relativePath: 'src/new.ts',
       }));
 
-      const deletedRow = Array.from(document.body.querySelectorAll('tbody tr')).find((row) => row.textContent?.includes('src/deleted.ts')) as HTMLTableRowElement | undefined;
+      const deletedRow = Array.from(document.body.querySelectorAll('tbody tr')).find((row) => controlText(row)?.includes('src/deleted.ts')) as HTMLTableRowElement | undefined;
       deletedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();
-      expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).some((item) => item.textContent?.includes('Preview Current File'))).toBe(false);
+      expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).some((item) => controlText(item)?.includes('Preview Current File'))).toBe(false);
     } finally {
       dispose();
     }
@@ -4745,7 +4746,7 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       commit.subject = 'Mutated subject';
       let actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
-      actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
+      actions.find((item) => controlText(item)?.includes('Ask Flower'))!.click();
       expect(onAskFlower).toHaveBeenCalledWith(expect.objectContaining({
         kind: 'commit',
         repoRootPath: '/workspace/repo-linked',
@@ -4754,19 +4755,19 @@ describe("GitBranchesPanel interactions", () => {
         files: [expect.objectContaining({ newPath: 'src/new.ts' }), expect.objectContaining({ path: 'src/deleted.ts' })],
       }));
 
-      const renamedRow = Array.from(host.querySelectorAll('tr[tabindex="0"]')).find((row) => row.textContent?.includes('src/new.ts')) as HTMLTableRowElement | undefined;
+      const renamedRow = Array.from(host.querySelectorAll('tr[tabindex="0"]')).find((row) => controlText(row)?.includes('src/new.ts')) as HTMLTableRowElement | undefined;
       expect(renamedRow).toBeTruthy();
       renamedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();
       actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
-      actions.find((item) => item.textContent?.includes('Preview Current File'))!.click();
+      actions.find((item) => controlText(item)?.includes('Preview Current File'))!.click();
       expect(onPreviewCurrentFile).toHaveBeenCalledWith(expect.objectContaining({ absolutePath: '/workspace/repo-linked/src/new.ts' }));
 
-      const deletedRow = Array.from(host.querySelectorAll('tr[tabindex="0"]')).find((row) => row.textContent?.includes('src/deleted.ts')) as HTMLTableRowElement | undefined;
+      const deletedRow = Array.from(host.querySelectorAll('tr[tabindex="0"]')).find((row) => controlText(row)?.includes('src/deleted.ts')) as HTMLTableRowElement | undefined;
       expect(deletedRow).toBeTruthy();
       deletedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();
-      expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).some((item) => item.textContent?.includes('Preview Current File'))).toBe(false);
+      expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).some((item) => controlText(item)?.includes('Preview Current File'))).toBe(false);
     } finally {
       dispose();
     }
@@ -4792,7 +4793,7 @@ describe("GitBranchesPanel interactions", () => {
     );
 
     try {
-      expect(host.textContent).toContain(
+      expect(controlText(host)).toContain(
         "Choose a branch from the sidebar to inspect its status or history.",
       );
     } finally {
@@ -4866,7 +4867,7 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       const initialDetailRequestCount = mockGetCommitDetail.mock.calls.length;
       expect(initialDetailRequestCount).toBeGreaterThan(0);
-      expect(host.textContent).toContain("src/history.ts");
+      expect(controlText(host)).toContain("src/history.ts");
 
       const statusTab = host.querySelector(
         "#git-branch-subview-tab-status",
@@ -4885,7 +4886,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(mockGetCommitDetail).toHaveBeenCalledTimes(
         initialDetailRequestCount,
       );
-      expect(host.textContent).toContain("src/history.ts");
+      expect(controlText(host)).toContain("src/history.ts");
     } finally {
       dispose();
     }
@@ -4964,7 +4965,7 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
       const detachButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Detach here"),
+        (node) => controlText(node)?.includes("Detach here"),
       ) as HTMLButtonElement | undefined;
       expect(detachButton).toBeTruthy();
 
@@ -5029,11 +5030,11 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
-      expect(host.textContent).toContain("Detached HEAD");
-      expect(host.textContent).toContain("Viewing 11111111 without a branch");
-      expect(host.textContent).toContain("Last attached: main");
-      expect(host.textContent).toContain("Status unavailable");
-      expect(host.textContent).toContain(
+      expect(controlText(host)).toContain("Detached HEAD");
+      expect(controlText(host)).toContain("Viewing 11111111 without a branch");
+      expect(controlText(host)).toContain("Last attached: main");
+      expect(controlText(host)).toContain("Status unavailable");
+      expect(controlText(host)).toContain(
         "This branch is not checked out in the active worktree.",
       );
       expect(
@@ -5045,12 +5046,12 @@ describe("GitBranchesPanel interactions", () => {
       expect(
         host.querySelector('[data-git-branch-stable-placeholder="status"]'),
       ).toBeFalsy();
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).not.toContain(
         "Checkout a local branch to reattach HEAD before pull, push, or merge.",
       );
-      expect(host.textContent).not.toContain("Last attached branch: main.");
+      expect(controlText(host)).not.toContain("Last attached branch: main.");
       const checkoutButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Checkout main"),
+        (node) => controlText(node)?.includes("Checkout main"),
       ) as HTMLButtonElement | undefined;
       expect(checkoutButton).toBeTruthy();
 
@@ -5131,12 +5132,12 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
-      expect(host.textContent).toContain("Branch no longer exists");
-      expect(host.textContent).toContain(
+      expect(controlText(host)).toContain("Branch no longer exists");
+      expect(controlText(host)).toContain(
         "feature/demo was deleted outside Redeven.",
       );
-      expect(host.textContent).toContain("Refresh branches");
-      expect(host.textContent).toContain("View current branch");
+      expect(controlText(host)).toContain("Refresh branches");
+      expect(controlText(host)).toContain("View current branch");
       expect(host.querySelector(".git-branch-detail-banner")).toBeTruthy();
       expect(
         host.querySelector(
@@ -5149,17 +5150,17 @@ describe("GitBranchesPanel interactions", () => {
       expect(placeholder).toBeTruthy();
       expect(placeholder?.getAttribute('data-git-branch-stable-placeholder-layout')).toBe('status');
       expect(placeholder?.querySelectorAll(".git-content-skeleton__table-row")).toHaveLength(3);
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).not.toContain(
         "Branch status will appear here after this selection is available.",
       );
       expect(mockListWorkspacePage).not.toHaveBeenCalled();
 
       const refreshButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Refresh branches",
+        (node) => controlText(node)?.trim() === "Refresh branches",
       ) as HTMLButtonElement | undefined;
       const currentBranchButton = Array.from(
         host.querySelectorAll("button"),
-      ).find((node) => node.textContent?.trim() === "View current branch") as
+      ).find((node) => controlText(node)?.trim() === "View current branch") as
         | HTMLButtonElement
         | undefined;
       expect(refreshButton).toBeTruthy();
@@ -5254,14 +5255,14 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       const mergeMenuButton = Array.from(
         document.body.querySelectorAll('[role="menu"] button'),
-      ).find((node) => node.textContent?.startsWith("Merge")) as HTMLButtonElement | undefined;
+      ).find((node) => controlText(node)?.startsWith("Merge")) as HTMLButtonElement | undefined;
       expect(mergeMenuButton).toBeTruthy();
       expect(mergeMenuButton?.disabled).toBe(true);
-      expect(mergeMenuButton?.textContent).toContain("Checking");
+      expect(controlText(mergeMenuButton)).toContain("Checking");
       expect(inlineStatuses).toHaveLength(0);
       expect(host.querySelector('[data-git-branch-verification-state]')).toBeNull();
-      expect(host.textContent).not.toContain("Checking branch...");
-      expect(host.textContent).not.toContain("Checking branch selection");
+      expect(controlText(host)).not.toContain("Checking branch...");
+      expect(controlText(host)).not.toContain("Checking branch selection");
       expect(host.querySelector('[data-git-content-skeleton="changed-files"][data-git-skeleton-busy="true"]')).toBeTruthy();
       expect(host.querySelector(".git-loading-indicator")).toBeNull();
       expect(
@@ -5278,12 +5279,12 @@ describe("GitBranchesPanel interactions", () => {
           ".git-content-skeleton__table-row",
         ),
       ).toHaveLength(3);
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).not.toContain(
         "Status will appear here after verification.",
       );
       expect(host.querySelector("#git-branch-subview-tab-status")).toBeTruthy();
       expect(host.querySelector("#git-branch-subview-tab-history")).toBeTruthy();
-      expect(host.textContent).not.toContain("Refresh branches");
+      expect(controlText(host)).not.toContain("Refresh branches");
 
       mergeMenuButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
@@ -5341,7 +5342,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(placeholder?.getAttribute('data-git-branch-stable-placeholder-layout')).toBe('status');
       expect(placeholder?.querySelectorAll(".git-content-skeleton__table-heading")).toHaveLength(4);
       expect(placeholder?.querySelectorAll(".git-content-skeleton__table-row")).toHaveLength(3);
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).not.toContain(
         "Status will appear here after verification.",
       );
       expect(mockListWorkspacePage).not.toHaveBeenCalled();
@@ -5408,10 +5409,10 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
-      expect(host.textContent).toContain("Unable to verify branch");
-      expect(host.textContent).toContain("Branch verification timed out.");
-      expect(host.textContent).toContain("Refresh branches");
-      expect(host.textContent).not.toContain("Merge feature");
+      expect(controlText(host)).toContain("Unable to verify branch");
+      expect(controlText(host)).toContain("Branch verification timed out.");
+      expect(controlText(host)).toContain("Refresh branches");
+      expect(controlText(host)).not.toContain("Merge feature");
       expect(host.querySelector(".git-branch-detail-banner")).toBeTruthy();
       const historyPlaceholder = host.querySelector(
         '[data-git-branch-stable-placeholder="history"]',
@@ -5423,7 +5424,7 @@ describe("GitBranchesPanel interactions", () => {
           ".git-content-skeleton__graph-row",
         ),
       ).toHaveLength(7);
-      expect(host.textContent).not.toContain(
+      expect(controlText(host)).not.toContain(
         "Commit history will appear here after this selection is available.",
       );
       expect(
@@ -5431,7 +5432,7 @@ describe("GitBranchesPanel interactions", () => {
       ).toHaveLength(1);
 
       const refreshButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Refresh branches",
+        (node) => controlText(node)?.trim() === "Refresh branches",
       ) as HTMLButtonElement | undefined;
       expect(refreshButton).toBeTruthy();
 

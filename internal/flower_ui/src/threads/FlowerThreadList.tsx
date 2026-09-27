@@ -1,9 +1,9 @@
+import { StatusRegion, StableText, Input } from '@floegence/floe-webapp-core/ui';
 import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { ArrowUp, ArrowDown, Copy, GitBranch, MessageSquare, MoreHorizontal, Pencil, Pin, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
-import { Input } from '@floegence/floe-webapp-core/ui';
 
 import { FlowerThreadRows } from './FlowerThreadRows';
 import type { FlowerThreadPinPosition } from '../contracts/flowerSurfaceContracts';
@@ -241,7 +241,7 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
       onClick={() => { if (!disabled()) action(itemProps.kind); }}
     >
       {itemProps.icon}
-      <span>{props.busyAction === itemProps.kind ? props.copy.working : itemProps.label}</span>
+      <span><StableText reserve={[props.copy.working, itemProps.label]}>{props.busyAction === itemProps.kind ? props.copy.working : itemProps.label}</StableText></span>
     </button>;
   };
   return (
@@ -479,9 +479,9 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
         <div class="flower-thread-list-header flex items-center gap-2">
           <div class="flower-thread-list-heading min-w-0 flex-1">
             <h2 class="flower-thread-list-title truncate font-medium">{copy().title}</h2>
-            <Show when={props.warmup || props.loading}>
+            <StatusRegion lines={1} class="text-xs"><Show when={props.warmup || props.loading}>
               <p class="flower-thread-list-description truncate text-xs" role="status">{copy().warmupDescription}</p>
-            </Show>
+            </Show></StatusRegion>
           </div>
           <button
             type="button"
@@ -550,7 +550,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                 onClick={props.onRefresh}
                 disabled={props.refreshing}
               >
-                {props.refreshing ? copy().working : (props.errorRetryLabel || copy().refreshLabel)}
+                <StableText reserve={[copy().working, props.errorRetryLabel || copy().refreshLabel]}>{props.refreshing ? copy().working : (props.errorRetryLabel || copy().refreshLabel)}</StableText>
               </button>
             </div>
           )}>

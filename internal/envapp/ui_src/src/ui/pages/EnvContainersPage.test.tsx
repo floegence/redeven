@@ -100,7 +100,8 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   PanelContent: (props: any) => <div class={props.class}>{props.children}</div>,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   Button: (props: any) => <button type="button" class={props.class} data-variant={props.variant} disabled={props.disabled} aria-label={props['aria-label']} onClick={props.onClick}>{props.children}</button>,
   Dropdown: (props: any) => <div class="test-dropdown">{props.trigger}<div data-test-dropdown-menu>{props.items.map((item: any) => <button type="button" data-tone={item.tone} disabled={item.disabled} onClick={() => props.onSelect(item.id)}>{item.icon?.()}{item.label}</button>)}</div></div>,
   DirectoryPicker: (props: any) => <Show when={props.open}><section data-directory-picker>{props.title}<button type="button" data-directory-picker-confirm onClick={() => { props.onSelect?.('/workspace/data'); props.onOpenChange?.(false); }}>confirm folder</button></section></Show>,

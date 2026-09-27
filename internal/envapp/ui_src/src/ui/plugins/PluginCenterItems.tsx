@@ -1,11 +1,11 @@
+import { StableText, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import { Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { CheckCircle, Download, MoreHorizontal, Play, Refresh, RefreshIcon } from '@floegence/floe-webapp-core/icons';
-import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
 import type { PluginCenterTab, PluginInstallExecutionProjection, PluginInventoryItem, PluginPendingCommandType, PluginRuntimeRecoveryPresentation } from './pluginTypes';
-import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
+import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginPendingActionLabels, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginInstallSummary } from './PluginInstallStatus';
@@ -182,7 +182,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
                 : primaryAction() === 'enable' ? <CheckCircle class="h-4 w-4 shrink-0" />
                   : <MoreHorizontal class="h-4 w-4 shrink-0" />}
             <span data-plugin-center-card-primary-label class="min-w-0 break-words leading-4">
-              {commandPending() ? pendingLabel() : primaryLabel()}
+              <StableText reserve={[...pluginPendingActionLabels(i18n), primaryLabel()]}>{commandPending() ? pendingLabel() : primaryLabel()}</StableText>
             </span>
           </button>
         )}>

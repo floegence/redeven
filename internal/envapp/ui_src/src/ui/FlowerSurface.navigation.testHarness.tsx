@@ -166,6 +166,8 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
 vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>();
   return {
+  StableText: actual.StableText,
+  StatusRegion: actual.StatusRegion,
   createFloatingPresence: actual.createFloatingPresence,
   resolveFloatingWindowViewport: actual.resolveFloatingWindowViewport,
   Switch: actual.Switch,

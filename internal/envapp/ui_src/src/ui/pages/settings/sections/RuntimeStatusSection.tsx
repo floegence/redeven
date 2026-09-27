@@ -103,8 +103,8 @@ export function RuntimeStatusSection() {
       <SettingsList>
         <SettingRow title={i18n.t('runtimeStatus.restartAction')} description={i18n.t('settingsDesign.maintenanceWarning')}
           control={<Button size="sm" variant="outline" onClick={() => setMaintenanceAction('restart')}
-            loading={ctx.isRestarting()} disabled={!ctx.canStartRestart()}>
-            <RefreshIcon class="mr-1.5 h-3.5 w-3.5" />{i18n.t('runtimeStatus.restartAction')}
+            loading={ctx.isRestarting()} disabled={!ctx.canStartRestart()} icon={RefreshIcon}>
+            {i18n.t('runtimeStatus.restartAction')}
           </Button>} />
         <Show when={ctx.upgradeState().allowsUpgradeAction}>
           <Show when={ctx.upgradeState().requiresTargetVersion}>

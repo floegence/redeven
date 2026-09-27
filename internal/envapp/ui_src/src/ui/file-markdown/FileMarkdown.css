@@ -21,6 +21,7 @@
   color: var(--foreground);
   background: var(--background);
   max-width: 860px;
+  width: 100%;
   margin: 0 auto;
   padding: 16px 32px 24px;
   word-wrap: break-word;
@@ -287,9 +288,18 @@
 .file-markdown-body img.fm-image {
   display: inline-block;
   max-width: 100%;
-  height: auto;
+  width: min(100%, 42rem);
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
   vertical-align: middle;
   border-radius: 8px;
+}
+
+/* Inline images and image rows retain compact slots, including badge links. */
+.file-markdown-body p:not(.fm-image-single) img.fm-image:not([width]):not([height]) {
+  width: 8em;
+  height: 1.5em;
+  aspect-ratio: auto;
 }
 
 .file-markdown-body p:not(.fm-image-paragraph) > img.fm-image:only-child {
@@ -379,8 +389,12 @@
 .file-markdown-body .mermaid {
   margin: 1em 0;
   display: flex;
+  height: clamp(12rem, 36vw, 24rem);
+  overflow: auto;
+  align-items: flex-start;
   justify-content: center;
 }
+.file-markdown-body .mermaid > svg { flex-shrink: 0; }
 
 .file-markdown-body .fm-mermaid-error {
   margin: 1em 0;

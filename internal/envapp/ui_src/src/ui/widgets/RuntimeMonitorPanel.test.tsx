@@ -61,7 +61,8 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   PanelContent: (props: any) => <div>{props.children}</div>,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -199,7 +200,7 @@ describe('RuntimeMonitorPanel', () => {
       expect(chart?.textContent).toContain('8 cores');
       await vi.advanceTimersByTimeAsync(2000);
       expect(host.querySelector('[data-testid="cpu-chart"]')).toBe(chart);
-      expect(host.querySelector('[role="status"]')).toBeNull();
+      expect(host.querySelector('[role="status"]')?.textContent ?? '').toBe('');
       refresh.resolve(makeSnapshot(2));
       await flushPanel();
       expect(host.querySelector('[data-testid="cpu-chart"]')).toBe(chart);

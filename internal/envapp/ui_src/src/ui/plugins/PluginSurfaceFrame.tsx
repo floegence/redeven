@@ -1,3 +1,4 @@
+import { StableText, Button } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import {
   PluginSurfaceSlot,
@@ -5,7 +6,6 @@ import {
 } from '@floegence/redevplugin-ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Copy, Loader2, Refresh } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
@@ -279,7 +279,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
                   <Button type="button" size="sm" variant="ghost" icon={Copy}
                     class={`${PLUGIN_MOBILE_TOUCH_TARGET_CLASS} mt-2`}
                     data-plugin-surface-copy-diagnostics onClick={() => void copyDiagnostic()}>
-                    {copyState() === 'copied' ? i18n.t('common.actions.copied') : i18n.t('uiCopy.plugin.copySurfaceDiagnostics')}
+                    <StableText reserve={[i18n.t('common.actions.copied'), i18n.t('uiCopy.plugin.copySurfaceDiagnostics')]}>{copyState() === 'copied' ? i18n.t('common.actions.copied') : i18n.t('uiCopy.plugin.copySurfaceDiagnostics')}</StableText>
                   </Button>
                   <Show when={copyState() === 'failed'}>
                     <p role="status">{i18n.t('uiCopy.plugin.copySurfaceDiagnosticsFailed')}</p>

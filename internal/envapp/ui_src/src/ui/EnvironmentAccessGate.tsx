@@ -1,3 +1,4 @@
+import { StableText } from '@floegence/floe-webapp-core/ui';
 import { Show, createMemo, type JSX } from 'solid-js';
 import { windowStatusIllustrationSvg } from '@floegence/floe-webapp-core/window-status';
 import { useI18n } from './i18n';
@@ -278,9 +279,9 @@ export function EnvironmentAccessGate(props: EnvironmentAccessGateProps) {
                 onClick={() => void props.onRetry()}
                 class="floe-window-status__button"
               >
-                {props.recoveryBusy
+                <StableText reserve={[i18n.t('accessGate.preparingSecureSessionAction'), i18n.t('accessGate.retryConnectionAction')]}>{props.recoveryBusy
                   ? i18n.t('accessGate.preparingSecureSessionAction')
-                  : i18n.t('accessGate.retryConnectionAction')}
+                  : i18n.t('accessGate.retryConnectionAction')}</StableText>
               </button>
               <button
                 type="button"

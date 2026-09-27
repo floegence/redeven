@@ -48,7 +48,7 @@
 .web-service-workspace { display: inline-flex; align-items: center; gap: 4px; }
 .web-service-workspace > span { overflow-wrap: anywhere; }
 .web-service-access { overflow-wrap: anywhere; }
-.web-service-status { grid-column: 2; min-width: 0; max-width: 13rem; justify-self: end; }
+.web-service-status { grid-column: 2; width: clamp(6rem, 12cqw, 10rem); min-width: 0; height: 36px; overflow: auto; justify-self: end; display: flex; align-items: center; }
 .web-service-state { line-height: 18px; overflow-wrap: anywhere; transition: color var(--web-service-settle, 180ms); }
 .web-service-actions { display: grid; grid-template-columns: minmax(4.75rem, max-content) minmax(4.75rem, max-content) 3rem; grid-column: 3 / 6; gap: 8px; align-items: center; }
 .web-service-list .web-service-actions { grid-template-columns: subgrid; }
@@ -160,3 +160,16 @@
   .web-service-address-submit { width: 2.75rem; height: 2.75rem; }
   .web-services-menu-trigger, .web-service-button, .web-service-actions > span { min-height: 2.75rem; }
 }
+
+/* Only explicit disclosure adds a detail row; background progress stays in the status cell. */
+.web-service-activity { grid-column: 1 / -1; min-width: 0; }
+.web-service-status-trigger { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; text-align: left; cursor: pointer; }
+.managed-release-verification { height: 2rem; overflow: auto; align-content: start; width: clamp(6rem, 28cqw, 12rem); max-width: 100%; }
+
+.managed-release-origin { display: flex; align-items: center; gap: 6px; }
+.managed-release-origin > * { min-width: 0; }
+.managed-release-origin > code { flex: 1; margin-top: 0; }
+.managed-release-origin.hidden { display: none; }
+
+.web-service-status-anchor { display: flex; width: 100%; height: 100%; min-width: 0; }
+.web-service-status-trigger { height: 100%; overflow: auto; }

@@ -1,3 +1,4 @@
+import { StableText } from '@floegence/floe-webapp-core/ui';
 import type { Component, JSX } from 'solid-js';
 import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -108,15 +109,15 @@ export const FlowerAutoSaveIndicator: Component<{
   });
 
   return (
-    <Show when={props.error || props.dirty || props.saving || showSaved()}>
+    <span role="status" style={{ visibility: props.error || props.dirty || props.saving || showSaved() ? 'visible' : 'hidden' }}>
       <FlowerSettingsPill tone={tone()}>
         <span class="inline-flex min-w-0 items-center gap-1.5">
           <Show when={props.error} fallback={<Check class="h-3 w-3" />}>
             <AlertTriangle class="h-3 w-3" />
           </Show>
-          {label()}
+          <StableText reserve={[copy().saving, copy().saveFailed, copy().unsaved, copy().saved, copy().ready]}>{label()}</StableText>
         </span>
       </FlowerSettingsPill>
-    </Show>
+    </span>
   );
 };

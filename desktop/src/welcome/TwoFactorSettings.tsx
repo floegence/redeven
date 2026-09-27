@@ -1,9 +1,5 @@
+import { StatusRegion, StableText, Button, Checkbox, Input } from '@floegence/floe-webapp-core/ui';
 import { Show, For, createSignal, createEffect, createMemo, createUniqueId, on, onCleanup } from 'solid-js';
-import {
-  Button,
-  Checkbox,
-  Input,
-} from '@floegence/floe-webapp-core/ui';
 import {
   Shield,
   ShieldCheck,
@@ -377,11 +373,15 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
                   : begin('setup')
               }
             >
-              {text(
+              <StableText reserve={[text(
+                'manage',
+              ), text(
+                'setup',
+              )]}>{text(
                 status()?.enabled && !status()?.recovery_pending
                   ? 'manage'
                   : 'setup',
-              )}
+              )}</StableText>
             </Button>
           </Show>
         </div>
@@ -407,7 +407,7 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
       </section></Show>
       <Show when={view() !== 'closed'}>
       <EnvironmentSettingsPanel footer={<>
-        <Show when={error()}><div role="alert" class="environment-access-save-error"><AlertCircle size={18} aria-hidden="true" /><span>{error()}</span></div></Show>
+        <StatusRegion lines={3} class="text-xs"><Show when={error()}><div role="alert" class="environment-access-save-error"><AlertCircle size={18} aria-hidden="true" /><span>{error()}</span></div></Show></StatusRegion>
         <div class="environment-access-actions">
         <Button size="sm" variant="ghost" class="environment-access-close" disabled={busy()} onClick={cancel}>{text('cancel')}</Button>
         <Show when={view() === 'verifyOwner'}><Button size="sm" type="submit" form="two-factor-owner" disabled={busy() || !ownerReady()} loading={busy()}>{text('continue')}</Button></Show>
@@ -635,7 +635,7 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
                     <Show when={copied()} fallback={<Copy size={14} />}>
                       <Check size={14} />
                     </Show>
-                    {text(copied() ? 'copied' : 'copy')}
+                    <StableText reserve={[text('copied'), text('copy')]}>{text(copied() ? 'copied' : 'copy')}</StableText>
                   </Button>
                   <Button size="sm" variant="ghost" onClick={download}>
                     <Download size={14} />

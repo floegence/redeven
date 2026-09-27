@@ -1,6 +1,6 @@
 import { For, type JSX } from 'solid-js';
 import { ChevronDown, FileText, Globe, Plus, RefreshIcon, Search } from '@floegence/floe-webapp-core/icons';
-import { Button, Input } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, StatusRegion } from '@floegence/floe-webapp-core/ui';
 import { useI18n } from '../i18n';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import './web-services.css';
@@ -42,7 +42,7 @@ export function WebServicesPageSkeleton() {
         <div class="web-services-search"><Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /><Input disabled size="sm" class="h-9 w-full pl-9 pr-9" placeholder={i18n.t('webServices.search.placeholder')} /></div>
         <button disabled class="web-services-menu-trigger"><span>{i18n.t('webServices.collection.archives')}<ChevronDown class="ml-1.5 h-3.5 w-3.5" /></span></button>
         <Button size="sm" variant="ghost" disabled class="h-9 w-9 shrink-0 px-0" aria-label={i18n.t('webServices.actions.refresh')}><RefreshIcon class="h-4 w-4 animate-spin motion-reduce:animate-none" /></Button>
-      </div></div><div class="relative" style={{ 'min-height': '200px' }}><WebServicesListSkeleton /></div></section>
+      </div></div><div class="relative" style={{ 'min-height': '200px' }}><StatusRegion lines={3} class="text-xs" /><WebServicesListSkeleton /></div></section>
     </div></main>
   </div>;
 }

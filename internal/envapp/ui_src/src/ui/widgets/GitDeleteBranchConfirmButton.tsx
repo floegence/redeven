@@ -17,7 +17,7 @@ export function resolveDeleteBranchConfirmDisabledReason(options: {
 }
 
 export interface GitDeleteBranchConfirmButtonProps {
-  label: string;
+  label: JSX.Element;
   disabled: boolean;
   disabledReason?: string;
   loading?: boolean;

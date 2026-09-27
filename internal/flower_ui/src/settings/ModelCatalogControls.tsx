@@ -1,5 +1,5 @@
+import { StatusRegion, StableText, Button, Input } from '@floegence/floe-webapp-core/ui';
 import { Show } from 'solid-js';
-import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import type { ModelCatalogCopy } from './modelCatalogCopy';
 
 export function ModelCatalogControls(props: Readonly<{
@@ -12,8 +12,8 @@ export function ModelCatalogControls(props: Readonly<{
       <span class="text-xs tabular-nums text-muted-foreground" aria-live="polite">{props.copy.selected.replace('{count}', String(props.count))}</span>
       <Button size="sm" variant="outline" disabled={props.disabled || props.loading} onClick={props.onSelectAll}>{props.copy.selectAll}</Button>
       <Button size="sm" variant="ghost" disabled={props.disabled || props.loading || props.count === 0} onClick={props.onClear}>{props.copy.clearAll}</Button>
-      <Show when={props.onRefresh}><Button size="sm" variant="outline" disabled={props.disabled || props.loading} onClick={() => props.onRefresh?.()}>{props.loading ? props.copy.loading : props.copy.refresh}</Button></Show>
+      <Show when={props.onRefresh}><Button size="sm" variant="outline" disabled={props.disabled || props.loading} onClick={() => props.onRefresh?.()}><StableText reserve={[props.copy.loading, props.copy.refresh]}>{props.loading ? props.copy.loading : props.copy.refresh}</StableText></Button></Show>
     </div>
-    <Show when={props.error}><p role="alert" class="flower-body-copy text-destructive">{props.error}</p></Show>
+    <StatusRegion lines={2} class="text-xs"><Show when={props.error}><p role="alert" class="flower-body-copy text-destructive">{props.error}</p></Show></StatusRegion>
   </div>;
 }

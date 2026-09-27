@@ -184,7 +184,7 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
                   <span>{item().mime_type}</span>
                   <span data-attachment-status-label>{status()}</span>
                 </span>
-                <Show when={item().status === 'uploading'}>
+                <span class="flower-attachment-feedback"><Show when={item().status === 'uploading'}>
                   <Show
                     when={!item().progress_indeterminate && item().total_bytes !== undefined}
                     fallback={<span class="flower-attachment-progress-indeterminate" role="status">{props.copy.uploading}</span>}
@@ -199,7 +199,7 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
                 </Show>
                 <Show when={item().error_code}>
                   <span id={errorDescriptionID()} class="flower-attachment-error">{error()}</span>
-                </Show>
+                </Show></span>
               </span>
             </>
           );

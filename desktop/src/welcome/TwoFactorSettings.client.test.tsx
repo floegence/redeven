@@ -1,3 +1,4 @@
+import { controlText } from '../testSupport/controlText';
 import { afterEach, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
@@ -17,7 +18,7 @@ afterEach(() => {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
 function click(label: string) {
   const button = [...document.querySelectorAll('button')].find(
-    (item) => item.textContent?.trim() === label,
+    (item) => controlText(item) === label,
   );
   if (!button) throw new Error(`Missing button: ${label}`);
   button.click();

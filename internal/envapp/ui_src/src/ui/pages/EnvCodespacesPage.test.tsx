@@ -1,3 +1,4 @@
+import { controlText } from '../../testSupport/controlText';
 // @vitest-environment jsdom
 
 import { Show, Suspense, createSignal } from 'solid-js';
@@ -95,7 +96,8 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
   SnakeLoader: () => <div data-testid="snake-loader" />,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -310,7 +312,7 @@ function deferred<T>() {
 
 async function waitForHostText(host: HTMLElement, text: string, attempts = 20): Promise<void> {
   for (let index = 0; index < attempts; index += 1) {
-    if (host.textContent?.includes(text)) return;
+    if (controlText(host)?.includes(text)) return;
     await flushPage();
   }
   throw new Error(`Timed out waiting for text: ${text}`);
@@ -490,13 +492,13 @@ describe('EnvCodespacesPage', () => {
     envContextMocks.scope = 'codespaces-remount';
     const dispose = render(() => <EnvCodespacesPage />, host);
     await flushPage();
-    expect(host.textContent).toContain('Demo Space');
+    expect(controlText(host)).toContain('Demo Space');
     dispose();
     localApiMocks.fetchLocalApiJSON.mockReturnValue(new Promise(() => {}));
     const close = render(() => <Suspense fallback={<div data-testid="cold-page" />}><EnvCodespacesPage /></Suspense>, host);
     await flushPage();
     expect(host.querySelector('[data-testid="cold-page"]')).toBeNull();
-    expect(host.textContent).toContain('Demo Space');
+    expect(controlText(host)).toContain('Demo Space');
     expect(host.querySelector('[data-testid="codespaces-initial-loading"]')).toBeNull();
     expect(host.querySelector('[data-testid="browser-editor-readiness-inline-status"]')).toBeNull();
     close();
@@ -513,7 +515,7 @@ describe('EnvCodespacesPage', () => {
     });
     host.querySelector<HTMLButtonElement>('button[aria-label="Refresh"]')!.click();
     await flushPage();
-    expect(host.textContent).toContain('Renamed Space');
+    expect(controlText(host)).toContain('Renamed Space');
     expect(host.querySelector('[data-testid="codespace-card"]')).toBe(card);
     dispose();
   });
@@ -526,7 +528,7 @@ describe('EnvCodespacesPage', () => {
     ));
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
-    const newButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('New Codespace'))!;
+    const newButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.includes('New Codespace'))!;
     newButton.click(); await flushPage();
     const path = host.querySelector<HTMLInputElement>('[data-directory-input]')!;
     path.value = '/Volumes/team/project'; path.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -534,7 +536,7 @@ describe('EnvCodespacesPage', () => {
     const description = host.querySelector<HTMLInputElement>('input[placeholder="codespace at /path/to/project"]')!;
     name.value = 'User name'; name.dispatchEvent(new InputEvent('input', { bubbles: true }));
     description.value = 'User description'; description.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    const createButton = () => Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent === 'Create')!;
+    const createButton = () => Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button) === 'Create')!;
     createButton().click(); await flushPage();
     expect(create).toHaveBeenCalledExactlyOnceWith({ path: '/Volumes/team/project', name: 'User name', description: 'User description' });
     expect(name.value).toBe('User name'); expect(description.value).toBe('User description'); expect(path.value).toBe('/Volumes/team/project');
@@ -568,7 +570,7 @@ describe('EnvCodespacesPage', () => {
       spacesRequest.resolve({ spaces: [] });
       await flushMicrotasks();
       expect(host.querySelector('[data-testid="codespaces-initial-loading"]')).toBeNull();
-      expect(host.textContent).toContain('No codespaces yet');
+      expect(controlText(host)).toContain('No codespaces yet');
     } finally {
       dispose();
       vi.useRealTimers();
@@ -587,14 +589,14 @@ describe('EnvCodespacesPage', () => {
     });
     refresh(); await flushPage();
     expect(host.querySelector('[data-testid="codespace-card"]')).toBe(card);
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Offline');
+    expect(controlText(host.querySelector('[role="alert"]'))).toContain('Offline');
     expect(host.querySelector('[data-codespace-skeleton]')).toBeNull();
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url.endsWith('/code-runtime/status')) return runtimeStatusResponse;
       throw new LocalApiError({ status: 403, message: 'Access denied' });
     });
     refresh(); await flushPage();
-    expect(host.textContent).not.toContain('Demo Space');
+    expect(controlText(host)).not.toContain('Demo Space');
     expect(host.querySelector('[data-codespace-skeleton]')).toBeNull();
     expect(envResourceCache().resource({ scope: envContextMocks.scope, key: 'codespaces', version: 1, decode: codespaceSnapshot }).snapshot().data).toBeUndefined();
     dispose();
@@ -606,7 +608,7 @@ describe('EnvCodespacesPage', () => {
     const dispose = render(() => <EnvCodespacesPage />, host); await flushPage(); dispose();
     localApiMocks.fetchLocalApiJSON.mockReturnValue(new Promise(() => {}));
     const close = render(() => <EnvCodespacesPage />, host); await flushPage();
-    expect(host.textContent).toContain('No codespaces yet');
+    expect(controlText(host)).toContain('No codespaces yet');
     expect(host.querySelector('[data-codespace-skeleton]')).toBeNull(); close();
   });
 
@@ -618,10 +620,10 @@ describe('EnvCodespacesPage', () => {
     const close = render(() => <EnvCodespacesPage />, host); await flushPage();
     (host.querySelector('button[aria-label="Delete codespace"]') as HTMLButtonElement).click();
     await flushMicrotasks();
-    expect(host.textContent).not.toContain('Delete Codespace');
+    expect(controlText(host)).not.toContain('Delete Codespace');
     expect(host.querySelector('[data-testid="codespace-card"]')).not.toBeNull();
     request.resolve({ spaces: [] }); await flushPage();
-    expect(host.textContent).not.toContain('Delete Codespace');
+    expect(controlText(host)).not.toContain('Delete Codespace');
     expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false);
     expect(notificationMocks.error).toHaveBeenCalled(); close();
   });
@@ -643,8 +645,8 @@ describe('EnvCodespacesPage', () => {
     (host.querySelector('button[aria-label="Stop codespace"]') as HTMLButtonElement).click(); await flushMicrotasks();
     setScope('codespaces-scope-b'); await flushPage();
     oldRequest.resolve(sample); await flushPage();
-    expect(host.textContent).toContain('codespaces-scope-b');
-    expect(host.textContent).not.toContain('Demo Space');
+    expect(controlText(host)).toContain('codespaces-scope-b');
+    expect(controlText(host)).not.toContain('Demo Space');
     expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
     dispose();
   });
@@ -657,7 +659,7 @@ describe('EnvCodespacesPage', () => {
     const close = render(() => <EnvCodespacesPage />, host); await flushPage();
     const popup = { close: vi.fn(), location: { assign: vi.fn() } };
     const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
-    Array.from(host.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Open')!.click();
+    Array.from(host.querySelectorAll('button')).find(button => controlText(button)?.trim() === 'Open')!.click();
     expect(open).toHaveBeenCalledExactlyOnceWith('about:blank', 'redeven_codespace_space-1');
     expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
     request.resolve({ spaces: [] }); await flushPage();
@@ -674,13 +676,13 @@ describe('EnvCodespacesPage', () => {
       if (url.endsWith('/code-runtime/status')) return runtimeStatusResponse;
       throw new Error('Offline after delete');
     });
-    const confirm = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Delete')!;
+    const confirm = Array.from(host.querySelectorAll('button')).find(button => controlText(button)?.trim() === 'Delete')!;
     confirm.click(); await flushPage();
     expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1', { method: 'DELETE' });
-    expect(host.textContent).not.toContain('Demo Space'); dispose();
+    expect(controlText(host)).not.toContain('Demo Space'); dispose();
     const close = render(() => <EnvCodespacesPage />, host); await flushPage();
-    expect(host.textContent).toContain('No codespaces yet');
-    expect(host.textContent).not.toContain('Demo Space'); close();
+    expect(controlText(host)).toContain('No codespaces yet');
+    expect(controlText(host)).not.toContain('Demo Space'); close();
   });
 
   it('keeps the current codespace card mounted while refreshing', async () => {
@@ -725,7 +727,7 @@ describe('EnvCodespacesPage', () => {
     });
     await flushPage();
 
-    expect(host.textContent).toContain('Updated Space');
+    expect(controlText(host)).toContain('Updated Space');
     expect(host.querySelector('[data-testid="codespaces-list-region"]')?.getAttribute('aria-busy')).toBeNull();
     expect(refreshButton?.getAttribute('aria-busy')).toBeNull();
     expect(refreshButton?.querySelector('[data-testid="refresh-icon"]')?.className).not.toContain('animate-spin');
@@ -750,9 +752,9 @@ describe('EnvCodespacesPage', () => {
     expect(menu).toBeTruthy();
 
     const menuButtons = Array.from(menu?.querySelectorAll('button') ?? []);
-    expect(menuButtons.map((button) => button.textContent?.trim())).toEqual(['Ask Flower', 'Open in Terminal']);
+    expect(menuButtons.map((button) => controlText(button)?.trim())).toEqual(['Ask Flower', 'Open in Terminal']);
 
-    const askFlowerButton = menuButtons.find((button) => button.textContent?.includes('Ask Flower'));
+    const askFlowerButton = menuButtons.find((button) => controlText(button)?.includes('Ask Flower'));
     expect(askFlowerButton).toBeTruthy();
 
     askFlowerButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -802,11 +804,11 @@ describe('EnvCodespacesPage', () => {
 
     const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
-    expect(wizard?.textContent).toContain('Browser Editor');
-    expect(wizard?.textContent).toContain('Not ready');
-    expect(wizard?.textContent).toContain('Set up Browser Editor');
-    expect(wizard?.textContent).toContain('sends it through the current connection to this environment');
-    expect(wizard?.textContent).toContain('Desktop network → current connection → environment');
+    expect(controlText(wizard)).toContain('Browser Editor');
+    expect(controlText(wizard)).toContain('Not ready');
+    expect(controlText(wizard)).toContain('Set up Browser Editor');
+    expect(controlText(wizard)).toContain('sends it through the current connection to this environment');
+    expect(controlText(wizard)).toContain('Desktop network → current connection → environment');
     expect(wizard?.getAttribute('data-layout')).toBe('wide');
     expect(wizard?.querySelector('[role="progressbar"]')).toBeNull();
   });
@@ -851,20 +853,20 @@ describe('EnvCodespacesPage', () => {
     const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
     expect(wizard?.getAttribute('data-presentation')).toBe('result');
-    expect(wizard?.textContent).toContain('This environment is not supported');
-    expect(wizard?.textContent).toContain('linux / amd64 / musl');
-    expect(wizard?.textContent).toContain('Linux amd64/arm64 · glibc');
-    expect(wizard?.textContent).not.toContain('Retry setup');
-    expect(wizard?.textContent).not.toContain('Set up Browser Editor');
-    expect(host.textContent).toContain('No codespaces yet');
+    expect(controlText(wizard)).toContain('This environment is not supported');
+    expect(controlText(wizard)).toContain('linux / amd64 / musl');
+    expect(controlText(wizard)).toContain('Linux amd64/arm64 · glibc');
+    expect(controlText(wizard)).not.toContain('Retry setup');
+    expect(controlText(wizard)).not.toContain('Set up Browser Editor');
+    expect(controlText(host)).toContain('No codespaces yet');
 
-    const detailsButton = Array.from(wizard?.querySelectorAll('button') ?? []).find((button) => button.textContent?.includes('Technical details'));
+    const detailsButton = Array.from(wizard?.querySelectorAll('button') ?? []).find((button) => controlText(button)?.includes('Technical details'));
     expect(detailsButton?.getAttribute('aria-expanded')).toBe('false');
     detailsButton?.click();
     await flushPage();
     expect(detailsButton?.getAttribute('aria-expanded')).toBe('true');
-    expect(wizard?.textContent).toContain('Environment platform');
-    expect(wizard?.textContent).toContain('unsupported_libc');
+    expect(controlText(wizard)).toContain('Environment platform');
+    expect(controlText(wizard)).toContain('unsupported_libc');
   });
 
   it('shows only the refresh spinner during the initial runtime check while showing codespaces', async () => {
@@ -943,9 +945,9 @@ describe('EnvCodespacesPage', () => {
 
     const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
-    expect(wizard?.textContent).toContain('Browser Editor');
-    expect(wizard?.textContent).toContain('Retry setup');
-    expect(wizard?.textContent).toContain('Download failed.');
+    expect(controlText(wizard)).toContain('Browser Editor');
+    expect(controlText(wizard)).toContain('Retry setup');
+    expect(controlText(wizard)).toContain('Download failed.');
   });
 
   it('shows and cancels an existing Runtime setup using its real identity', async () => {
@@ -984,9 +986,9 @@ describe('EnvCodespacesPage', () => {
 
     const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
-    expect(wizard?.textContent).toContain('This environment is downloading the Browser Editor');
-    expect(wizard?.textContent).toContain('1 KiB of 4 KiB');
-    const cancelButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Cancel');
+    expect(controlText(wizard)).toContain('This environment is downloading the Browser Editor');
+    expect(controlText(wizard)).toContain('1 KiB of 4 KiB');
+    const cancelButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Cancel');
     cancelButton?.click();
 
     await vi.waitFor(() => {
@@ -1067,7 +1069,7 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const startButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Start');
+    const startButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Start');
     expect(startButton).toBeTruthy();
 
     startButton?.click();
@@ -1076,9 +1078,9 @@ describe('EnvCodespacesPage', () => {
     expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).not.toHaveBeenCalled();
 
     await vi.waitFor(() => {
-      expect(Array.from(host.querySelectorAll('button')).some(button => button.textContent?.trim() === 'Set up Browser Editor' && !button.disabled)).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some(button => controlText(button)?.trim() === 'Set up Browser Editor' && !button.disabled)).toBe(true);
     });
-    const setupButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Set up Browser Editor');
+    const setupButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Set up Browser Editor');
     expect(setupButton).toBeTruthy();
     setupButton?.click();
     await vi.waitFor(() => {
@@ -1160,26 +1162,26 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const startButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Start');
+    const startButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Start');
     expect(startButton).toBeTruthy();
 
     startButton?.click();
     await waitForHostText(host, 'Set up Browser Editor');
 
     await vi.waitFor(() => {
-      expect(Array.from(host.querySelectorAll('button')).some(button => button.textContent?.trim() === 'Set up Browser Editor' && !button.disabled)).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some(button => controlText(button)?.trim() === 'Set up Browser Editor' && !button.disabled)).toBe(true);
     });
-    const setupButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Set up Browser Editor');
+    const setupButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Set up Browser Editor');
     expect(setupButton).toBeTruthy();
     setupButton?.click();
     await waitForHostText(host, 'Redeven Browser Editor catalog lookup failed with HTTP 503.');
 
     const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
-    expect(wizard?.textContent).toContain('Setup failed');
-    expect(wizard?.textContent).toContain('Couldn’t check the latest Browser Editor.');
-    expect(wizard?.textContent).toContain('Retry setup');
-    expect(wizard?.textContent).not.toContain('Continue to start codespace');
+    expect(controlText(wizard)).toContain('Setup failed');
+    expect(controlText(wizard)).toContain('Couldn’t check the latest Browser Editor.');
+    expect(controlText(wizard)).toContain('Retry setup');
+    expect(controlText(wizard)).not.toContain('Continue to start codespace');
     expect(notificationMocks.error).toHaveBeenCalledWith('Browser Editor setup failed', 'Redeven Browser Editor catalog lookup failed with HTTP 503.');
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
   });
@@ -1219,13 +1221,13 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const startButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Start') as HTMLButtonElement | undefined;
+    const startButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Start') as HTMLButtonElement | undefined;
     expect(startButton).toBeTruthy();
 
     startButton?.click();
     await flushPage();
 
-    const busyStartButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Starting...')) as HTMLButtonElement | undefined;
+    const busyStartButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.includes('Starting...')) as HTMLButtonElement | undefined;
     expect(busyStartButton).toBeTruthy();
     expect(busyStartButton?.getAttribute('aria-busy')).toBe('true');
     expect(busyStartButton?.querySelector('.redeven-loading-shimmer-overlay')).toBeNull();
@@ -1266,7 +1268,7 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open in Desktop');
+    const openButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Open in Desktop');
     expect(openButton).toBeTruthy();
 
     openButton?.click();
@@ -1296,7 +1298,7 @@ describe('EnvCodespacesPage', () => {
     window.redevenDesktopShell = { openCodespaceWindow: bridge };
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === (mode === 'browser' ? 'Open in Browser' : 'Open in Desktop'))?.click();
+    Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === (mode === 'browser' ? 'Open in Browser' : 'Open in Desktop'))?.click();
     await flushPage();
     expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/access/delegate', { method: 'POST', body: JSON.stringify({ code_space_id: 'space-1' }) });
     expect(host.querySelector('input[type="password"]')).toBeNull();
@@ -1322,7 +1324,7 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const browserButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open in Browser');
+    const browserButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Open in Browser');
     expect(browserButton).toBeTruthy();
 
     browserButton?.click();
@@ -1388,7 +1390,7 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const browserButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open in Browser');
+    const browserButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Open in Browser');
     expect(browserButton).toBeTruthy();
 
     browserButton?.click();
@@ -1444,7 +1446,7 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const desktopButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open in Desktop');
+    const desktopButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Open in Desktop');
     expect(desktopButton).toBeTruthy();
 
     desktopButton?.click();
@@ -1457,7 +1459,7 @@ describe('EnvCodespacesPage', () => {
       code_space_id: 'space-1',
       title: 'Opening Codespace',
     }));
-    const busyOpenButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Opening...')) as HTMLButtonElement | undefined;
+    const busyOpenButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.includes('Opening...')) as HTMLButtonElement | undefined;
     expect(busyOpenButton).toBeTruthy();
     expect(busyOpenButton?.getAttribute('aria-busy')).toBe('true');
     expect(busyOpenButton?.querySelector('.redeven-loading-shimmer-overlay')).toBeNull();
@@ -1499,7 +1501,7 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open in Desktop');
+    const openButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Open in Desktop');
     expect(openButton).toBeTruthy();
 
     openButton?.click();
@@ -1540,7 +1542,7 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open');
+    const openButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Open');
     expect(openButton).toBeTruthy();
 
     openButton?.click();
@@ -1569,7 +1571,7 @@ describe('EnvCodespacesPage', () => {
     }));
     await flushPage();
 
-    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Open in Terminal'));
+    const openButton = Array.from(host.querySelectorAll('button')).find((button) => controlText(button)?.includes('Open in Terminal'));
     expect(openButton).toBeTruthy();
 
     openButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -1605,7 +1607,7 @@ describe('EnvCodespacesPage', () => {
 
     const menu = surfaceHost?.querySelector('[role="menu"]') as HTMLDivElement | null;
     const askFlowerButton = Array.from(menu?.querySelectorAll('button') ?? []).find((button) =>
-      button.textContent?.includes('Ask Flower')
+      controlText(button)?.includes('Ask Flower')
     ) as HTMLButtonElement | undefined;
     expect(menu).toBeTruthy();
     expect(menu?.getAttribute('data-floe-local-interaction-surface')).toBe('true');
@@ -1632,8 +1634,8 @@ describe('EnvCodespacesPage', () => {
     }));
     await flushPage();
 
-    expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Open in Terminal'))).toBe(false);
-    expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Ask Flower'))).toBe(true);
+    expect(Array.from(host.querySelectorAll('button')).some((button) => controlText(button)?.includes('Open in Terminal'))).toBe(false);
+    expect(Array.from(host.querySelectorAll('button')).some((button) => controlText(button)?.includes('Ask Flower'))).toBe(true);
   });
 
   it('closes the codespace context menu on Escape', async () => {
@@ -1650,12 +1652,12 @@ describe('EnvCodespacesPage', () => {
       clientY: 56,
     }));
     await flushPage();
-    expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Ask Flower'))).toBe(true);
+    expect(Array.from(host.querySelectorAll('button')).some((button) => controlText(button)?.includes('Ask Flower'))).toBe(true);
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     await flushPage();
 
-    expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Ask Flower'))).toBe(false);
+    expect(Array.from(host.querySelectorAll('button')).some((button) => controlText(button)?.includes('Ask Flower'))).toBe(false);
   });
 
   it('uses the shared main canvas and neutral card surfaces', async () => {

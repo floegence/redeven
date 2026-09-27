@@ -65,8 +65,8 @@ export function CloudAccountOverview(props: Readonly<{
         <div class="redeven-cloud-account-actions">
           <Show when={status().recovery_action === 'sign_in'} fallback={
             <Button size="sm" variant="outline" loading={refreshBusy() || source().sync_state === 'syncing'} disabled={signOutBusy() || reconnectBusy()}
-              onClick={() => { void props.refreshControlPlane(source()); }}>
-              <Refresh class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{props.i18n.t('common.refresh')}
+              onClick={() => { void props.refreshControlPlane(source()); }} icon={Refresh}>
+              {props.i18n.t('common.refresh')}
             </Button>
           }>
             <Button size="sm" variant="outline" loading={reconnectBusy()} disabled={signOutBusy()}

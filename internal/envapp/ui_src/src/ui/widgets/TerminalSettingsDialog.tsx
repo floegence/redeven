@@ -1,7 +1,7 @@
+import { StableText, Button, Checkbox, Input, NumberInput } from '@floegence/floe-webapp-core/ui';
 import './terminal-settings.css';
 import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
-import { Button, Checkbox, Input, NumberInput } from '@floegence/floe-webapp-core/ui';
 import { Dialog } from '../primitives/EnvAppModal';
 import { Check } from '@floegence/floe-webapp-core/icons';
 import {
@@ -442,17 +442,17 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
                       disabled={terminalFontCatalog.state(option.id) !== 'ready'}
                       onClick={() => props.onFontFamilyChange(option.id)}>
                       <span>{option.label}</span>
-                      <Show when={terminalFontCatalog.state(option.id) === 'ready'}>
+                      <span class="block h-6 w-full overflow-hidden" style={{ visibility: terminalFontCatalog.state(option.id) === 'ready' ? 'visible' : 'hidden' }}>
                         <span aria-hidden="true" class="text-sm font-normal"
                           style={{ 'font-family': terminalFontCatalog.resolve(option.id).family, 'font-feature-settings': '"liga" 0, "calt" 0' }}>
                           {TERMINAL_FONT_PREVIEW_SAMPLE.split('\n')[0]}
                         </span>
-                      </Show>
+                      </span>
                       <span class="text-xs opacity-80">
-                        {terminalFontCatalog.state(option.id) === 'loading' ? i18n.t('terminal.settings.fontLoading')
+                        <StableText reserve={[i18n.t('terminal.settings.fontLoading'), i18n.t('terminal.settings.fontUnavailable'), i18n.t('terminal.settings.fontRecommended'), i18n.t('terminal.settings.fontCompact'), '']}>{terminalFontCatalog.state(option.id) === 'loading' ? i18n.t('terminal.settings.fontLoading')
                           : terminalFontCatalog.state(option.id) !== 'ready' ? i18n.t('terminal.settings.fontUnavailable')
                           : option.id === 'jetbrains' ? i18n.t('terminal.settings.fontRecommended')
-                          : option.id === 'iosevka' ? i18n.t('terminal.settings.fontCompact') : ''}
+                          : option.id === 'iosevka' ? i18n.t('terminal.settings.fontCompact') : ''}</StableText>
                       </span>
                     </Button>
                   )}

@@ -1,7 +1,7 @@
+import { StatusRegion, Button, Input, SegmentedControl, SettingsList, Switch } from '@floegence/floe-webapp-core/ui';
 import { EnvironmentSettingsPanel, EnvironmentSettingsReveal } from './EnvironmentSettingsDialog';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
-import { Button, Input, SegmentedControl, SettingsList, Switch } from '@floegence/floe-webapp-core/ui';
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import { DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS, type DesktopSSHBootstrapStrategy } from '../shared/desktopSSH';
 import type { DesktopI18n } from '../shared/i18n';
@@ -156,9 +156,6 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
         </div>
         <div class="ssh-settings-field-control">
           {field.children}
-          <Show when={props.fieldErrors[field.name]}>
-            <p id={`ssh-settings-${field.name}-error`} class="ssh-settings-error" role="alert">{props.fieldErrors[field.name]}</p>
-          </Show>
         </div>
       </div>
     );
@@ -176,6 +173,12 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
       onKeyDown={handleKeyDown}
       footer={
         <>
+          <StatusRegion lines={2} class="ssh-settings-feedback text-xs">
+            <For each={Object.entries(props.fieldErrors).filter(([, message]) => message)}>{([name, message]) =>
+              <p id={`ssh-settings-${name}-error`} class="ssh-settings-error" role="alert">{message}</p>
+            }</For>
+            <Show when={props.error}><p class="ssh-settings-error" role="alert">{props.error}</p></Show>
+          </StatusRegion>
           <Button variant="ghost" onClick={requestClose}>
             {t('common.cancel')}
           </Button>
@@ -417,11 +420,6 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
             </SettingsList>
           </EnvironmentSettingsReveal>
         </section>
-        <Show when={props.error}>
-          <p class="ssh-settings-error" role="alert">
-            {props.error}
-          </p>
-        </Show>
       </div>
     </EnvironmentSettingsPanel>
   );

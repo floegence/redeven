@@ -1,3 +1,4 @@
+import { StatusRegion } from '@floegence/floe-webapp-core/ui';
 import { For, Show, type JSX } from 'solid-js';
 import { Activity, Database, FileText, Filter, Layers, MoreHorizontal, Package, Plus, Refresh, Search, Settings } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Tabs } from '@floegence/floe-webapp-core/ui';
@@ -95,6 +96,7 @@ export function ContainersPageSkeleton(props: { stateScope?: string; variant?: '
   const secondary = view !== 'volumes';
   const header = <ContainerInventoryTableHeader view={view} volumeSize secondary={secondary} ports />;
   return <div class={`redeven-containers flex h-full min-h-0 flex-col ${redevenSurfaceRoleClass('main')}`} data-container-page data-variant={props.variant ?? 'activity'} data-resource-view={view}>
+    <StatusRegion lines={3} class="text-xs" />
     <ContainersHeader tabs={<Tabs class="container-resource-tabs" items={tabs.map(id => ({ id, label: i18n.t(`containers.views.${id}`), icon: <ContainerViewIcon view={id} class="h-4 w-4" />, disabled: true }))} activeId={view} onChange={() => {}} size="md" ariaLabel={i18n.t('containers.resourceNavigation')} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false, scrollButtons: 'auto' }} slotClassNames={{ scrollContainer: 'container-resource-tabs__scroller', tab: 'container-resource-tabs__tab', indicator: 'container-tab-indicator' }} />} />
     <main class="container-content min-h-0 flex-1 overflow-hidden" aria-busy="true"><div class="container-list-page" data-container-list-loading aria-label={i18n.t('containers.loading')}><ContainerInventoryToolbarSkeleton view={view} /><div class="container-inventory-scroll"><ContainerInventorySkeleton view={view} header={header} volumeSize secondary={secondary} ports /></div></div></main>
   </div>;

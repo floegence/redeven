@@ -1,3 +1,4 @@
+import { StableText } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import {
   For,
@@ -374,13 +375,13 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
                     <Show when={copied()} fallback={<Copy class="h-4 w-4" aria-hidden="true" />}>
                       <Check class="h-4 w-4" aria-hidden="true" />
                     </Show>
-                    <span>{copyPending()
+                    <span><StableText reserve={[i18n.t('aiReadiness.actions.copyingDiagnostics'), i18n.t('aiReadiness.actions.copyDiagnosticsFailed'), i18n.t('aiReadiness.actions.diagnosticsCopied'), i18n.t('aiReadiness.actions.copyDiagnostics')]}>{copyPending()
                       ? i18n.t('aiReadiness.actions.copyingDiagnostics')
                       : copyFailed()
                         ? i18n.t('aiReadiness.actions.copyDiagnosticsFailed')
                       : copied()
                         ? i18n.t('aiReadiness.actions.diagnosticsCopied')
-                        : i18n.t('aiReadiness.actions.copyDiagnostics')}</span>
+                        : i18n.t('aiReadiness.actions.copyDiagnostics')}</StableText></span>
                   </button>
                   <Show when={copied() || copyFailed()}>
                     <span class="sr-only" role="status">

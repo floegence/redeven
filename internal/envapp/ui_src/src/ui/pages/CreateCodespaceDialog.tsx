@@ -1,6 +1,5 @@
-import { Show, createEffect, createSignal } from 'solid-js';
+import { createEffect, createSignal } from 'solid-js';
 import { Button, DirectoryInput, Input, type PickerPanelProps } from '@floegence/floe-webapp-core/ui';
-import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Dialog } from '../primitives/EnvAppModal';
 import { useI18n } from '../i18n';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
@@ -59,10 +58,7 @@ export function CreateCodespaceDialog(props: {
           <Button size="sm" variant="outline" onClick={() => handleOpenChange(false)} disabled={props.loading} class={outlineControlClass}>
             {i18n.t("codespaces.actions.cancel")}
           </Button>
-          <Button size="sm" variant="default" onClick={handleCreate} disabled={props.loading || !pathValid() || !selectedPath()}>
-            <Show when={props.loading}>
-              <SnakeLoader size="sm" />
-            </Show>
+          <Button size="sm" variant="default" onClick={handleCreate} loading={props.loading} disabled={props.loading || !pathValid() || !selectedPath()}>
             {i18n.t("codespaces.actions.create")}
           </Button>
         </div>

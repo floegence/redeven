@@ -1,3 +1,4 @@
+import { controlText } from '../../testSupport/controlText';
 // @vitest-environment jsdom
 
 import { Show } from 'solid-js';
@@ -7,7 +8,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ArchiveExtractionDialog } from './ArchiveExtractionDialog';
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   Button: (props: any) => (
     <button
       type={props.type ?? 'button'}
@@ -114,7 +116,7 @@ describe('ArchiveExtractionDialog', () => {
 
     const inputs = host.querySelectorAll<HTMLInputElement>('input:not([type="password"])');
     expect(inputs[1]?.value).toBe('/workspace/output');
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Extract')!.click();
+    Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Extract')!.click();
     await flush();
 
     expect(onExtract).toHaveBeenCalledWith({
@@ -138,21 +140,21 @@ describe('ArchiveExtractionDialog', () => {
     const { host } = renderDialog({ onExtract });
 
     expect(host.querySelector('input[type="password"]')).toBeNull();
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Extract')!.click();
+    Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Extract')!.click();
     await flush();
-    expect(host.textContent).toContain('This archive requires a password.');
-    expect(host.textContent).not.toContain('backend detail');
+    expect(controlText(host)).toContain('This archive requires a password.');
+    expect(controlText(host)).not.toContain('backend detail');
 
     const passwordInput = host.querySelector<HTMLInputElement>('input[type="password"]')!;
     passwordInput.value = 'wrong';
     passwordInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Extract')!.click();
+    Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Extract')!.click();
     await flush();
-    expect(host.textContent).toContain('The password is incorrect. Try again.');
+    expect(controlText(host)).toContain('The password is incorrect. Try again.');
 
     passwordInput.value = 'correct';
     passwordInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Extract')!.click();
+    Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Extract')!.click();
     await flush();
     expect(onExtract).toHaveBeenLastCalledWith(expect.objectContaining({ password: 'correct' }), expect.anything());
   });
@@ -163,11 +165,11 @@ describe('ArchiveExtractionDialog', () => {
     });
     const { host } = renderDialog({ onExtract });
 
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Extract')!.click();
+    Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Extract')!.click();
     await flush();
 
-    expect(host.textContent).toContain('The archive is damaged or incomplete.');
-    expect(host.textContent).not.toContain('archive is corrupt');
+    expect(controlText(host)).toContain('The archive is damaged or incomplete.');
+    expect(controlText(host)).not.toContain('archive is corrupt');
   });
 
   it('aborts extraction but stays open until the request settles', async () => {
@@ -175,14 +177,14 @@ describe('ArchiveExtractionDialog', () => {
     const onExtract = vi.fn().mockReturnValue(pending.promise);
     const { host, onClose } = renderDialog({ onExtract });
 
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Extract')!.click();
+    Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Extract')!.click();
     await flush();
     const signal = onExtract.mock.calls[0]?.[1]?.signal as AbortSignal;
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Cancel')!.click();
+    Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Cancel')!.click();
 
     expect(signal.aborted).toBe(true);
     expect(host.querySelector('[role="dialog"]')).not.toBeNull();
-    expect(host.textContent).toContain('Canceling...');
+    expect(controlText(host)).toContain('Canceling...');
     expect(onClose).not.toHaveBeenCalled();
 
     pending.reject(new DOMException('aborted', 'AbortError'));
@@ -195,10 +197,10 @@ describe('ArchiveExtractionDialog', () => {
     const onComplete = vi.fn().mockReturnValue(completion.promise);
     const { host, onClose } = renderDialog({ onComplete });
 
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Extract')!.click();
+    Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Extract')!.click();
     await flush();
 
-    const cancel = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Cancel')!;
+    const cancel = Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Cancel')!;
     expect(onComplete).toHaveBeenCalledOnce();
     expect(cancel.disabled).toBe(true);
     cancel.click();
@@ -219,8 +221,8 @@ describe('ArchiveExtractionDialog', () => {
       },
     });
 
-    expect(host.textContent).toContain('Multipart archives are not supported yet.');
-    const extract = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Extract')!;
+    expect(controlText(host)).toContain('Multipart archives are not supported yet.');
+    const extract = Array.from(host.querySelectorAll('button')).find((button) => controlText(button) === 'Extract')!;
     expect(extract.disabled).toBe(true);
     extract.click();
     expect(onExtract).not.toHaveBeenCalled();

@@ -179,3 +179,11 @@
 .access-flow-summary button:hover { background: var(--muted); color: var(--foreground); }
 .access-flow-summary .access-flow-icon { display: none; }
 .access-workflow .environment-access-overview h3 { font-weight: 500; color: var(--muted-foreground); }
+
+/* Async feedback shares the existing footer instead of moving the form. */
+.access-flow-footer-feedback :is(.environment-access-save-error, .environment-settings-draft-notice, .access-flow-notice) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}

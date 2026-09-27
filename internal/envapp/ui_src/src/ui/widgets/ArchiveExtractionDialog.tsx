@@ -1,3 +1,4 @@
+import { StableText, Button, DirectoryPicker, type PickerPanelProps } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import {
   ArchiveFileIcon,
@@ -5,7 +6,6 @@ import {
   type FileItem,
 } from '@floegence/floe-webapp-core/file-browser';
 import { FolderOpen } from '@floegence/floe-webapp-core/icons';
-import { Button, DirectoryPicker, type PickerPanelProps } from '@floegence/floe-webapp-core/ui';
 
 import type { FsExtractRequest, FsExtractResponse } from '../protocol/redeven_v1';
 import { useI18n } from '../i18n';
@@ -228,9 +228,9 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
               disabled={status() === 'canceling' || status() === 'finishing'}
               onClick={requestClose}
             >
-              {status() === 'canceling'
+              <StableText reserve={[i18n.t('files.archiveExtraction.canceling'), i18n.t('common.actions.cancel')]}>{status() === 'canceling'
                 ? i18n.t('files.archiveExtraction.canceling')
-                : i18n.t('common.actions.cancel')}
+                : i18n.t('common.actions.cancel')}</StableText>
             </Button>
             <Button
               size="sm"
@@ -239,9 +239,9 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
               disabled={multipart() || busy()}
               onClick={() => void submit()}
             >
-              {status() === 'idle'
+              <StableText reserve={[i18n.t('files.archiveExtraction.extract'), i18n.t('files.archiveExtraction.extracting')]}>{status() === 'idle'
                 ? i18n.t('files.archiveExtraction.extract')
-                : i18n.t('files.archiveExtraction.extracting')}
+                : i18n.t('files.archiveExtraction.extracting')}</StableText>
             </Button>
           </div>
         )}

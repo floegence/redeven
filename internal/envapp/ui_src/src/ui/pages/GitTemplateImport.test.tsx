@@ -10,7 +10,8 @@ vi.mock('../services/localApi', async (original) => ({
   ...(await original<typeof import('../services/localApi')>()),
   fetchLocalApiJSON: api.request,
 }));
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   Button: (props: any) => (
     <button disabled={props.disabled} onClick={props.onClick}>
       {props.children}
