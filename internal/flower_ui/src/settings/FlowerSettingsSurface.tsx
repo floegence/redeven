@@ -6,7 +6,7 @@ import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
 import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
 import type { Component } from 'solid-js';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, ChevronDown, ChevronLeft, Pencil, Plus, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, Select } from '@floegence/floe-webapp-core/ui';
@@ -196,6 +196,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const [providerDialogMode, setProviderDialogMode] = createSignal<FlowerProviderDialogMode>('create');
   const [providerDialogProvider, setProviderDialogProvider] = createSignal<FlowerProviderDraft | null>(null);
   const [providerDialogError, setProviderDialogError] = createSignal('');
+  const permissionDescriptionID = createUniqueId();
   const permissionButtonRefs = new Map<FlowerPermissionType, HTMLButtonElement>();
 
   createEffect(() => {
@@ -681,22 +682,23 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                     const item = () => copy().permissionTypes[kind];
                     const active = () => permissionType() === kind;
                     return (
-                      <button
-                        ref={el => { permissionButtonRefs.set(kind, el); }}
-                        type="button"
-                        class={cn('flower-settings-policy-card', active() && 'flower-settings-policy-card-active')}
-                        role="radio"
-                        aria-checked={active()}
-                        tabIndex={active() ? 0 : -1}
-                        onKeyDown={onPermissionTypeKeyDown}
-                        onClick={() => choosePermissionType(kind)}
-                      >
-                        <span class="flower-settings-policy-radio" aria-hidden="true"><Show when={active()}><Check class="h-3 w-3" /></Show></span>
-                        <span class="flower-settings-policy-copy">
+                      <div class="flower-settings-policy-option">
+                        <button
+                          ref={el => { permissionButtonRefs.set(kind, el); }}
+                          type="button"
+                          class={cn('flower-settings-policy-card', active() && 'flower-settings-policy-card-active')}
+                          role="radio"
+                          aria-checked={active()}
+                          aria-describedby={`${permissionDescriptionID}-${kind}`}
+                          tabIndex={active() ? 0 : -1}
+                          onKeyDown={onPermissionTypeKeyDown}
+                          onClick={() => choosePermissionType(kind)}
+                        >
+                          <span class="flower-settings-policy-radio" aria-hidden="true"><Show when={active()}><Check class="h-3 w-3" /></Show></span>
                           <span class="flower-settings-policy-card-label">{item().label}</span>
-                          <span class="flower-settings-policy-card-desc">{item().description}</span>
-                        </span>
-                      </button>
+                        </button>
+                        <p id={`${permissionDescriptionID}-${kind}`} class="flower-settings-policy-card-desc">{item().description}</p>
+                      </div>
                     );
                   }}
                 </For>

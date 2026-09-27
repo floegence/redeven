@@ -1,5 +1,5 @@
 import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
-import { Terminal, Plus, Trash, Home, Pencil } from '@floegence/floe-webapp-core/icons';
+import { Terminal, Plus, Trash, Home, MonitorPointer, Folder, Pencil } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Switch } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog, Dialog } from '../../../primitives/EnvAppModal';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
@@ -109,7 +109,6 @@ export function RuntimeConfigSection() {
         {/* Shell environment card */}
         <SettingsList>
           <SettingRow
-            icon={Home}
             title={i18n.t('settingsDesign.homeDirectory')}
             description={i18n.t('uiCopy.runtime.homeDirectoryDescription')}
             control={
@@ -118,7 +117,6 @@ export function RuntimeConfigSection() {
             }
           />
           <SettingRow
-            icon={Terminal}
             title={i18n.t('settingsDesign.defaultShell')}
             description={i18n.t('uiCopy.runtime.shellDescription')}
             control={
@@ -136,6 +134,7 @@ export function RuntimeConfigSection() {
             <For each={roots()}>
               {(root, index) => (
                 <SettingRow class="runtime-filesystem-root"
+                  icon={root.kind === 'home' ? Home : root.kind === 'computer' ? MonitorPointer : Folder}
                   title={root.kind === 'home' ? i18n.t('settingsDesign.homeDirectory') : root.kind === 'computer' ? i18n.t('settingsDesign.computerRoot') : root.label || i18n.t('runtimeConfig.customRoot')}
                   description={root.kind === 'home' ? agentHomeDir() || '~' : root.path}
                   control={<div class="settings-row-actions">

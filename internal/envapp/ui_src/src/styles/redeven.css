@@ -1,4 +1,5 @@
 @import './loadingCurtain.css';
+@import './settings-controls.css';
 
 .managed-release-list-status {
   position: relative;
@@ -1662,15 +1663,6 @@ html.dark .git-changes-table-pending {
 
 .redeven-settings-dialog .text-muted-foreground {
   color: var(--redeven-settings-note-fg);
-}
-
-.redeven-settings-shell input:not([type='checkbox']):not([type='radio']):not([type='range']):not(.redeven-settings-search),
-.redeven-settings-shell textarea,
-.redeven-settings-shell [role='combobox'],
-.redeven-settings-dialog input:not([type='checkbox']):not([type='radio']):not([type='range']),
-.redeven-settings-dialog textarea,
-.redeven-settings-dialog [role='combobox'] {
-  border-color: var(--redeven-settings-control-border);
 }
 
 .redeven-network-security-details {

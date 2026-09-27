@@ -63,7 +63,7 @@ export const FLOWER_PROVIDER_ICON_DEFINITIONS: Record<FlowerProviderType, Flower
   openrouter: {
     title: 'OpenRouter',
     viewBox: '0 0 24 24',
-    color: '#0f172a',
+    color: 'currentColor',
     paths: [
       'M3 6.5h11.5a4.5 4.5 0 0 1 0 9H9.8l2.1 2.1-1.4 1.4L6 14.5 10.5 10l1.4 1.4-2.1 2.1h4.7a2.5 2.5 0 0 0 0-5H3v-2Z',
       'M17.5 4.2 21.3 8l-3.8 3.8-1.4-1.4L17.5 9H15V7h2.5l-1.4-1.4 1.4-1.4Z',
@@ -72,7 +72,7 @@ export const FLOWER_PROVIDER_ICON_DEFINITIONS: Record<FlowerProviderType, Flower
   xai: {
     title: 'xAI',
     viewBox: '0 0 24 24',
-    color: '#111827',
+    color: 'currentColor',
     paths: [
       'M4.1 5h3l4.9 6.3L16.9 5h3l-6.3 8 6.5 8h-3l-5.1-6.3L7 21H4l6.4-8L4.1 5Z',
       'M20.2 5h-2.4v16h2.4V5Z',
@@ -90,7 +90,7 @@ export const FLOWER_PROVIDER_ICON_DEFINITIONS: Record<FlowerProviderType, Flower
   ollama: {
     title: 'Ollama',
     viewBox: '0 0 24 24',
-    color: '#18181b',
+    color: 'currentColor',
     paths: [
       'M7 8.5C7 5.5 9.2 3 12 3s5 2.5 5 5.5V10h.3c1.5 0 2.7 1.2 2.7 2.7V18c0 1.7-1.3 3-3 3H7c-1.7 0-3-1.3-3-3v-5.3C4 11.2 5.2 10 6.7 10H7V8.5Zm2 1.5h6V8.5C15 6.6 13.7 5 12 5S9 6.6 9 8.5V10Zm-.8 5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm7.6 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z',
     ],

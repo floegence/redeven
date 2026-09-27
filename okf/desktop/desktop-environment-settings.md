@@ -4,7 +4,7 @@ title: Desktop environment settings
 description: Open one target-bound settings session, preserve independent drafts, and save through the registered owner.
 tags: [desktop, environments, settings, interaction]
 quality_exception: One target-bound settings session joins connection drafts, access prerequisites, and restart recovery; keep their cross-domain authority and focus handoff together.
-timestamp: 2026-09-27T16:18:00Z
+timestamp: 2026-09-27T17:29:30Z
 ---
 # Summary
 
@@ -127,7 +127,7 @@ task navigation adds no configuration copy or alternate save path. Connection
 forms group identity, transport, and probing into quiet 14px-radius lists.
 Labels and guidance align left; desktop controls share a 258px right column,
 with 88px port fields. Narrow screens stack labels and controls. Advanced fields
-start collapsed. Local and network browser addresses use disclosures in the
+start collapsed. Fields follow the shared [settings control treatment](../ui/runtime-settings.md#settings-controls-and-identity). The access editor uses a compact Back label with the full destination in its accessible name and tooltip, so enlarged localized text stays within narrow windows. Local and network browser addresses use disclosures in the
 Access overview; remote internal listeners retain their scope explanation.
 Copy, filtering, and opening actions remain available inside each disclosure.
 WSL identity uses three labeled rows for distribution, Linux user and Runtime

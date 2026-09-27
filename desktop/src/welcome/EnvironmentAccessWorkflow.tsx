@@ -159,7 +159,7 @@ export function EnvironmentAccessWorkflow(props: Props) {
   });
   const reviewing = () => page() === 'review' || page() === 'prepare';
   const heading = (title: DesktopTranslationKey, description?: DesktopTranslationKey) => <div class="access-flow-intro">
-    <Button size="sm" variant="ghost" class="access-flow-back" disabled={saving()} onClick={back}><ArrowLeft class="h-3.5 w-3.5" aria-hidden="true" />{t('accessFlow.backOverview')}</Button>
+    <Button size="sm" variant="ghost" class="access-flow-back" title={t('accessFlow.backOverview')} aria-label={t('accessFlow.backOverview')} disabled={saving()} onClick={back}><ArrowLeft class="h-3.5 w-3.5" aria-hidden="true" />{t('common.back')}</Button>
     <h3 tabindex="-1" data-flow-heading>{t(title)}</h3><Show when={description}><p>{t(description!)}</p></Show>
   </div>;
   const steps = () => <ol class="access-flow-steps" aria-label={t('accessFlow.configurationSteps')}>

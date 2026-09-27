@@ -6,7 +6,8 @@ import { FlowerProviderDialog } from '../../../../../../flower_ui/src/settings/F
 import { defaultFlowerProviderModels, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../../flower_ui/src/settings/modelSelection';
 import type { FlowerProviderDraft, FlowerModelCatalogDiscovery } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (original) => ({
+  ...await original<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,

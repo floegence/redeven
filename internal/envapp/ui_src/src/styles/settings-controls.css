@@ -1,0 +1,68 @@
+/* Redeven's approved settings scale. Floe still owns control semantics, menus,
+ * validation and border-only focus; compound inputs retain one visible frame. */
+:is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
+  .redeven-environment-settings-dialog, .flower-settings-surface,
+  .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer) {
+  --redeven-settings-field-bg: color-mix(in srgb, var(--foreground) 2%, var(--background));
+  --redeven-settings-field-border: color-mix(in srgb, var(--foreground) 9%, transparent);
+  --input: var(--redeven-settings-field-border);
+}
+
+.dark :is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
+  .redeven-environment-settings-dialog, .flower-settings-surface,
+  .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer) {
+  --redeven-settings-field-bg: color-mix(in srgb, var(--foreground) 7%, var(--background));
+}
+
+:is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
+  .redeven-environment-settings-dialog, .flower-settings-surface,
+  .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer)
+  :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit']),
+    textarea, select, [data-floe-input-surface]):not(:where([data-floe-input-surface] *, .two-factor-code-surface)) {
+  border: 1px solid var(--redeven-settings-field-border);
+  border-radius: 8px;
+  background: var(--redeven-settings-field-bg);
+  color: var(--foreground);
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1.5;
+  padding-block: 6px;
+  padding-inline: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+:is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
+  .redeven-environment-settings-dialog, .flower-settings-surface,
+  .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer)
+  :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit']),
+    select, [data-floe-input-surface]):not(:where([data-floe-input-surface] *, .two-factor-code-surface)) {
+  min-height: 34px;
+  font-family: var(--font-sans);
+}
+
+:is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
+  .redeven-environment-settings-dialog, .flower-settings-surface,
+  .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer)
+  :is(input, textarea, select, [data-floe-input-surface])[aria-invalid='true'] {
+  border-color: var(--error);
+}
+
+/* High contrast presets keep their stronger field boundaries. */
+[data-floe-shell-theme^='hc-'] :is(.redeven-settings-shell, .redeven-settings-dialog,
+  .redeven-provider-dialog, .redeven-environment-settings-dialog, .flower-settings-surface,
+  .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer) {
+  --redeven-settings-field-border: var(--foreground);
+  --redeven-settings-field-bg: var(--background);
+}
+
+@media (pointer: coarse) {
+  :is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
+    .redeven-environment-settings-dialog, .flower-settings-surface,
+    .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer)
+    :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit']),
+      textarea, select, [data-floe-input-surface]):not(:where([data-floe-input-surface] *, .two-factor-code-surface)) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}

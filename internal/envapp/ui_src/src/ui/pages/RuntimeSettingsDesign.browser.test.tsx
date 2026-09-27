@@ -6,6 +6,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { EnvSettingsPage } from './EnvSettingsPage';
 import { SETTINGS_NAV_ITEMS } from './settings/settingsStructure';
 import { createRuntimeSettingsFixture } from '../../../scripts/fixtures/runtime-settings/fixture';
+import { expectSingleInputFocus } from '../../styles/inputFocus.test-support';
+import { FLOWER_PROVIDER_TYPES } from '../../../../../flower_ui/src/settings/providerCatalog';
 
 const api = vi.hoisted(() => ({ request: async (_url: string, _init: RequestInit): Promise<unknown> => ({}) }));
 vi.mock('../services/localApi', async (original) => ({ ...await original<typeof import('../services/localApi')>(), fetchLocalApiJSON: (url: string, init: RequestInit) => api.request(url, init) }));
@@ -37,6 +39,70 @@ function expectNoOverflow(panel: HTMLElement) {
   }
 }
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
+
+it.each([false, true])('coordinates settings fields and selects with the surrounding surface (dark=%s)', async dark => {
+  await mount(1280, dark);
+  const runtime = await openSection('runtime');
+  const input = runtime.querySelector<HTMLInputElement>('input[data-floe-control="input"]')!;
+  const style = getComputedStyle(input);
+  expect(style.borderRadius).toBe('8px');
+  expect(input.getBoundingClientRect().height).toBe(34);
+  // Upstream ring-0 serializes as a transparent zero-area shadow in Chromium.
+  expect(['none', 'rgba(0, 0, 0, 0) 0px 0px 0px 0px']).toContain(style.boxShadow);
+  expectSingleInputFocus(input);
+  const search = host.querySelector<HTMLInputElement>('.redeven-settings-search')!;
+  expect(parseFloat(getComputedStyle(search).paddingLeft)).toBeGreaterThanOrEqual(32);
+  input.blur();
+  await page.screenshot({ path: `../../../dist/control-harmony/runtime-${dark ? 'dark' : 'light'}.png` });
+  const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
+  try {
+    await media.emulateTouchInput(true);
+    expect(input.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(getComputedStyle(input).fontSize).toBe('16px');
+  } finally { await media.emulateTouchInput(false); }
+  const models = await openSection('ai');
+  const select = models.querySelector<HTMLElement>('[data-floe-input-surface]')!;
+  expect(getComputedStyle(select).borderRadius).toBe('8px');
+  expect(select.getBoundingClientRect().height).toBe(34);
+  expect(['none', 'rgba(0, 0, 0, 0) 0px 0px 0px 0px']).toContain(getComputedStyle(select).boxShadow);
+  select.focus();
+  await userEvent.keyboard('{Enter}');
+  await expect.element(page.getByRole('menu')).toBeVisible();
+  await userEvent.keyboard('{Escape}');
+  await page.getByRole('button', { name: 'Edit provider', exact: true }).click();
+  await userEvent.click(document.querySelector('[data-provider-dialog-step="connection"]')!);
+  const dialogInput = document.querySelector<HTMLInputElement>('[role="dialog"] input[data-floe-control="input"]')!;
+  expect(getComputedStyle(dialogInput).borderRadius).toBe('8px');
+  expect(dialogInput.getBoundingClientRect().height).toBe(34);
+  expectSingleInputFocus(dialogInput);
+  await page.screenshot({ path: `../../../dist/control-harmony/provider-${dark ? 'dark' : 'light'}.png` });
+});
+
+it.each([false, true])('identifies filesystem roots and every model provider with a visible matching icon (dark=%s)', async dark => {
+  await mount(1280, dark);
+  const runtime = await openSection('runtime');
+  const roots = [...runtime.querySelectorAll('.runtime-filesystem-root')];
+  expect(roots).toHaveLength(3);
+  for (const root of roots) {
+    const icon = root.querySelector<HTMLElement>('.floe-setting-row__icon')!;
+    expect(icon, 'directory identity has an icon').not.toBeNull();
+    expect(icon.getBoundingClientRect().width).toBe(34);
+    expect(getComputedStyle(icon).padding).toBe('8px');
+  }
+  const settings = fixture.settings();
+  fixture.context.mutateSettings({ ...settings, ai: { ...settings.ai!, providers: FLOWER_PROVIDER_TYPES.map(({ value }) => ({ ...settings.ai!.providers![0], id: value, type: value, name: value })) } });
+  const models = await openSection('ai');
+  for (const { value } of FLOWER_PROVIDER_TYPES) {
+    const icon = models.querySelector<HTMLElement>(`.settings-provider-row [data-provider-brand="${value}"]`)!;
+    expect(icon, `${value} uses its catalog brand`).not.toBeNull();
+    expect(icon.getBoundingClientRect().width).toBe(34);
+    expect(getComputedStyle(icon).padding).toBe('6px');
+    if (['openrouter', 'xai', 'ollama'].includes(value)) {
+      expect(getComputedStyle(icon).color).toBe(getComputedStyle(models.querySelector('.floe-setting-row__title')!).color);
+    }
+  }
+  await page.screenshot({ path: `../../../dist/control-harmony/all-providers-${dark ? 'dark' : 'light'}.png` });
+});
 
 it.each([1280, 390])('keeps settings disclosure targets padded and usable at %ipx', async width => {
   await mount(width);

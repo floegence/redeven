@@ -103,6 +103,7 @@
 /* Product page scale follows the approved reference. Floe owns interaction. */
 .redeven-settings-shell .floe-settings-layout__sidebar { width: 228px; border-inline-end: 0; }
 .redeven-settings-shell .floe-settings-navigation__search { padding: 20px 14px 8px; }
+.redeven-settings-shell input.redeven-settings-search { padding-inline: 32px 28px; }
 .redeven-settings-shell .floe-settings-navigation__groups { padding: 0 14px 20px; }
 .redeven-settings-shell .floe-settings-navigation__label { padding: 19px 9px 6px; font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; }
 .redeven-settings-shell .floe-settings-navigation__group + .floe-settings-navigation__group { margin-top: 0; }
@@ -113,7 +114,16 @@
 .redeven-settings-shell .floe-settings-section[data-settings-variant='page'] > .floe-settings-section__header .floe-settings-section__heading > p { margin-top: 8px; font-size: 13px; line-height: 1.7; }
 .redeven-settings-shell .floe-setting-row__title { font-size: 13px; line-height: 1.6; }
 .redeven-settings-shell .floe-setting-row__label p { font-size: 12px; line-height: 1.65; margin-top: 3px; }
-.redeven-settings-shell .floe-setting-row__icon { display: none; }
+.redeven-settings-shell .floe-setting-row__icon {
+  display: flex; align-items: center; justify-content: center; flex: none;
+  width: 34px; height: 34px; padding: 8px; border: 1px solid var(--redeven-settings-inset-border);
+  border-radius: 8px; background: transparent; color: var(--muted-foreground);
+}
+.redeven-settings-shell .floe-setting-row__icon > svg { width: 17px; height: 17px; }
+.redeven-settings-shell .settings-provider-row .floe-setting-row__icon { padding: 6px; background: var(--redeven-settings-field-bg); color: var(--foreground); }
+.redeven-settings-shell .settings-provider-row .floe-setting-row__icon > svg { width: 20px; height: 20px; }
+.redeven-settings-shell .floe-setting-row__control > .relative:has(> input[data-floe-control='input']) { width: 258px; max-width: 100%; }
+
 .redeven-settings-shell .floe-setting-row__control > input:not([type='checkbox']):not([type='radio']) { width: 258px; height: 34px; font-size: 12px; }
 @container redeven-settings (max-width: 767px) {
   .redeven-settings-shell .floe-settings-layout__sidebar { display: none; }
