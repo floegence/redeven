@@ -1,4 +1,11 @@
 .codespaces-page { container: codespaces / inline-size; }
+.codespace-card { container: codespace-card / inline-size; }
+.codespace-primary-action { height: auto; min-height: 1.75rem; padding-block: .25rem; }
+/* Keep secondary actions compact when two complete progress labels cannot fit. */
+.codespace-open-label { display: none; }
+@container codespace-card (width >= 26rem) {
+  .codespace-open-label { display: inline; }
+}
 .codespace-details-toggle {
   display: flex;
   align-items: center;
