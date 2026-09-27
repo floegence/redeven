@@ -208,6 +208,14 @@ try {
   }
   await viewer.keyboard.insertText('光标验收');
   await page.waitForFunction(() => document.querySelector('#focus-note').value === '光标验收');
+  // A Mac client must select the source text, including when Runtime is Linux.
+  await viewer.keyboard.press('Meta+a');
+  await page.waitForFunction(() => {
+    const input = document.querySelector('#focus-note');
+    return input.selectionStart === 0 && input.selectionEnd === input.value.length;
+  }, undefined, { timeout: 3000 });
+  await viewer.keyboard.insertText('全选替换验收');
+  await page.waitForFunction(() => document.querySelector('#focus-note').value === '全选替换验收');
   await checkBrowserInputCongestion({ viewer, document, source: page });
   const inlineAddress = document.getByRole('combobox', { name: 'Website address' });
   await inlineAddress.fill(sourceOrigin + '/inline-navigation');

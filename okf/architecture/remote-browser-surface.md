@@ -69,6 +69,10 @@ Progress notifications with the same view and Session retain the current
 document and its in-flight source-selection request. A committed replacement
 changes the document exactly once; retiring the old document cannot cancel or
 restore a preceding selection after that commit.
+Carrier failure, status and tab callbacks must belong to both the current
+window host and the controller's committed view. Desktop document admission is
+asynchronous, so the previous host can remain mounted briefly after its view
+has been released; its late events have no authority over the replacement.
 Reconnection uses a confirmed source, never an earlier new-tab operation. Theme
 configuration refreshes with unchanged effective values do not reopen a view.
 Actual locale or palette changes acquire a new view of the selected target;

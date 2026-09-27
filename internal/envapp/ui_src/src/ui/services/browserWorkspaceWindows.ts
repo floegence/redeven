@@ -40,6 +40,9 @@ export function createBrowserWorkspaceWindows(configuration: () => { title: stri
     const theme = captureBrowserDocumentTheme();
     const current: BrowserSourceSelection = { ...state.selection!, label: state.selection!.label || copy.sources.messages.product.defaultProfile };
     const previous = entry.host;
+    // The controller commits a replacement before Desktop admits its document.
+    // Released-carrier events still belong to the old view during that gap.
+    const ownsView = (): boolean => entry.host === host && entry.controller.snapshot().view?.id === state.view?.id;
     const host = createBrowserWindow({ session, view: state.view, child: () => entry.child,
       configuration: { type: 'redeven-browser-ports', nonce, title: copy.title, locale: copy.locale, messages: copy.messages, theme,
         failure: state.failure, openWindow: true, sources: { messages: copy.sources.messages, current, desktop: Boolean(entry.service.management.browserDesktopAvailable), remoteBrowser: Boolean(entry.service.management.prepareRemoteBrowser) } },
@@ -47,9 +50,9 @@ export function createBrowserWorkspaceWindows(configuration: () => { title: stri
       onReconnect: () => entry.controller.reconnect(),
       onRecover: () => entry.controller.recover(),
       onOpenWindow: () => open(entry.controller.currentRequest()),
-      onFailure: code => { if (entry.host === host) void entry.controller.fail(code); },
-      onStatus: status => { if (entry.host === host && status === 'disconnected') void entry.controller.fail(); },
-      onTabs: state => { if (entry.host === host) entry.controller.selectTarget(state.active); },
+      onFailure: code => { if (ownsView()) void entry.controller.fail(code); },
+      onStatus: status => { if (ownsView() && status === 'disconnected') void entry.controller.fail(); },
+      onTabs: state => { if (ownsView()) entry.controller.selectTarget(state.active); },
       onClose: () => { if (entry.host === host) dispose(entry); },
     });
     entry.host = host; entry.document = identity;
