@@ -6055,7 +6055,11 @@
       "browserSystemCopy": "Copiar comando de configuración",
       "browserSystemCopied": "Comando de configuración copiado",
       "browserDependenciesMissing": "Faltan bibliotecas del sistema necesarias. Instálalas en este dispositivo y vuelve a comprobarlo.",
-      "browserSystemFailed": "La preparación del sistema no se ha completado. Los datos de tu navegador se conservan."
+      "browserSystemFailed": "La preparación del sistema no se ha completado. Los datos de tu navegador se conservan.",
+      "chromeRemoteTitle": "Navega sin desbloquear el escritorio",
+      "chromeRemoteHint": "Usa un perfil de navegador independiente con sus propias sesiones guardadas.",
+      "chromeRemotePrepare": "Configurar navegador independiente",
+      "chromeRemoteFailed": "No se pudo preparar el navegador independiente. Inténtalo de nuevo."
     }
   },
   "uiCopy": {
@@ -7095,7 +7099,8 @@
     "touchHelp": "Guía táctil",
     "touchHelpTitle": "Controles táctiles",
     "touchHelpDescription": "Toca para hacer clic. Desliza un dedo para desplazarte. Mantén pulsado y mueve para arrastrar; suelta sin mover para hacer clic derecho. Pellizca con dos dedos para ampliar la página.",
-    "clipboardUnavailable": "El acceso al portapapeles no está disponible. Utilice HTTPS y permita que este sitio acceda al portapapeles; después, vuelva a copiar."
+    "clipboardUnavailable": "El acceso al portapapeles no está disponible. Utilice HTTPS y permita que este sitio acceda al portapapeles; después, vuelva a copiar.",
+    "openDescription": "Esta aplicación se ejecuta en el dispositivo que aloja este entorno. Puedes volver a abrirla desde Aplicaciones."
   },
   "settingsDesign": {
     "editDirectory": "Editar directorio",

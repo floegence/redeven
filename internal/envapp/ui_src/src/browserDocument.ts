@@ -102,6 +102,7 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
         installBrowser: async input => await request({ method: 'source.install', request: input }) as FlowerBrowserInstallationSnapshot,
         setupExtension: async installationID => await request({ method: 'source.setup', installationID }) as Awaited<ReturnType<NonNullable<BrowserSourceService['management']['setupExtension']>>>,
         openExtension: async (action, installationID) => { await request({ method: 'source.openExtension', action, installationID }); },
+        prepareRemoteBrowser: sources.remoteBrowser ? async (installationID, signal) => { await request({ method: 'source.remoteBrowser', installationID }, signal); } : undefined,
         loadExtensionStatus: async () => await request({ method: 'source.status' }) as Awaited<ReturnType<BrowserSourceService['status']>>,
         subscribeBrowserInstallation: listener => {
           installationListeners.add(listener);

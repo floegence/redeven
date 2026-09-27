@@ -6055,7 +6055,11 @@
       "browserSystemCopy": "Copier la commande de configuration",
       "browserSystemCopied": "Commande de configuration copiée",
       "browserDependenciesMissing": "Des bibliothèques système requises sont manquantes. Installez-les sur cet appareil, puis vérifiez à nouveau.",
-      "browserSystemFailed": "La préparation du système n’a pas abouti. Les données de votre navigateur sont conservées."
+      "browserSystemFailed": "La préparation du système n’a pas abouti. Les données de votre navigateur sont conservées.",
+      "chromeRemoteTitle": "Naviguer sans déverrouiller le bureau",
+      "chromeRemoteHint": "Utilisez un profil de navigateur distinct avec ses propres connexions enregistrées.",
+      "chromeRemotePrepare": "Configurer un navigateur distinct",
+      "chromeRemoteFailed": "Le navigateur distinct n’a pas pu être préparé. Réessayez."
     }
   },
   "uiCopy": {
@@ -7095,7 +7099,8 @@
     "touchHelp": "Guide tactile",
     "touchHelpTitle": "Commandes tactiles",
     "touchHelpDescription": "Touchez pour cliquer. Faites glisser un doigt pour faire défiler. Maintenez puis déplacez pour faire glisser ; relâchez sans bouger pour un clic droit. Pincez avec deux doigts pour zoomer la page.",
-    "clipboardUnavailable": "L’accès au presse-papiers est indisponible. Utilisez HTTPS et autorisez ce site à accéder au presse-papiers, puis copiez à nouveau."
+    "clipboardUnavailable": "L’accès au presse-papiers est indisponible. Utilisez HTTPS et autorisez ce site à accéder au presse-papiers, puis copiez à nouveau.",
+    "openDescription": "Cette application s’exécute sur l’appareil qui héberge cet environnement. Vous pouvez la retrouver dans Applications."
   },
   "settingsDesign": {
     "editDirectory": "Modifier le répertoire",

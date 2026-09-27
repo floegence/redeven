@@ -34,7 +34,7 @@ export type BrowserDocumentConfiguration = Readonly<{
   theme: BrowserDocumentTheme;
   library?: boolean;
   openWindow?: boolean;
-  sources?: { messages: BrowserSourceMessages; current: BrowserSourceSelection; desktop: boolean };
+  sources?: { messages: BrowserSourceMessages; current: BrowserSourceSelection; desktop: boolean; remoteBrowser?: boolean };
 }>;
 
 // This private product port has no URL fetch, generic IPC, filesystem or

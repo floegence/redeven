@@ -1067,6 +1067,10 @@
     "browserSystemCopy": "Copy setup command",
     "browserSystemCopied": "Setup command copied",
     "browserDependenciesMissing": "Required system libraries are missing. Install them on this device, then check again.",
-    "browserSystemFailed": "System preparation did not finish. Your browser data is unchanged."
+    "browserSystemFailed": "System preparation did not finish. Your browser data is unchanged.",
+    "chromeRemoteTitle": "Browse without unlocking the desktop",
+    "chromeRemoteHint": "Use a separate browser profile with its own saved sign-ins.",
+    "chromeRemotePrepare": "Set up separate browser",
+    "chromeRemoteFailed": "The separate browser could not be prepared. Try again."
   }
 }

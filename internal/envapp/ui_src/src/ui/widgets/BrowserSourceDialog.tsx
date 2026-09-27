@@ -217,7 +217,7 @@ export function BrowserSourceDialog(props: {
     <Show when={page() === 'installation'}><FlowerManagedBrowser management={management} copy={copy()} canMutate
       requireEnabledForContinue continuationKey={JSON.stringify(draft()?.request)} installLabel={continueAfterInstall() ? props.messages.product.installOpen : undefined}
       onContinue={continueAfterInstall() ? async enabled => { if (enabled && !lifetime.signal.aborted) await select(); } : undefined} /></Show>
-    <Show when={page() === 'chrome'}><FlowerChromeConnection management={management} copy={copy()} platform={chrome()?.platform} environmentName={chrome()?.hostname} preferredInstallationID={preferredInstallation()?.id} reuseConnected={false}
+    <Show when={page() === 'chrome'}><FlowerChromeConnection onRemoteBrowserPrepared={props.onClose} management={management} copy={copy()} platform={chrome()?.platform} environmentName={chrome()?.hostname} preferredInstallationID={preferredInstallation()?.id} reuseConnected={false}
       onConnected={async () => { await refresh(); if (!lifetime.signal.aborted) changePage('personal'); }} /></Show>
   </Dialog>;
 }

@@ -1,13 +1,15 @@
 import { BrowserInstallationController, browserInstallationForSession } from './browserInstallationController';
+import { remoteBrowserPreparation } from './remoteBrowserPreparation';
 import { browserPackageBridge } from './browserPackageBridge';
 import type { FlowerComputerManagement } from '../src/contracts/flowerSurfaceContracts';
 
 // Both product carriers use the same authenticated Runtime boundary.
-export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown) => Promise<T>, sessionKey?: string): FlowerComputerManagement {
+export function computerManagementAdapter(request: <T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown, signal?: AbortSignal) => Promise<T>, sessionKey?: string, revealApplication?: (applicationID: string) => void): FlowerComputerManagement {
   const path = '/_redeven_proxy/api/ai/computer';
   const desktop = browserPackageBridge();
   const browser = sessionKey ? browserInstallationForSession(sessionKey, request, desktop) : new BrowserInstallationController(request, desktop);
   return {
+    prepareRemoteBrowser: revealApplication ? remoteBrowserPreparation(request, revealApplication) : undefined,
     browserDesktopAvailable: Boolean(desktop),
     subscribeBrowserInstallation: listener => browser.subscribe(listener),
     loadBrowserInstallation: () => browser.load(),

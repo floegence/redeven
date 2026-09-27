@@ -6055,7 +6055,11 @@
       "browserSystemCopy": "Copiar comando de configuração",
       "browserSystemCopied": "Comando de configuração copiado",
       "browserDependenciesMissing": "Faltam bibliotecas necessárias do sistema. Instale-as neste dispositivo e verifique novamente.",
-      "browserSystemFailed": "A preparação do sistema não foi concluída. Os dados do navegador foram preservados."
+      "browserSystemFailed": "A preparação do sistema não foi concluída. Os dados do navegador foram preservados.",
+      "chromeRemoteTitle": "Navegue sem desbloquear a área de trabalho",
+      "chromeRemoteHint": "Use um perfil de navegador separado com suas próprias sessões salvas.",
+      "chromeRemotePrepare": "Configurar navegador separado",
+      "chromeRemoteFailed": "Não foi possível preparar o navegador separado. Tente novamente."
     }
   },
   "uiCopy": {
@@ -7095,7 +7099,8 @@
     "touchHelp": "Guia de toque",
     "touchHelpTitle": "Controles de toque",
     "touchHelpDescription": "Toque para clicar. Deslize um dedo para rolar. Pressione e mova para arrastar; solte sem mover para clicar com o botão direito. Use dois dedos para ampliar a página.",
-    "clipboardUnavailable": "O acesso à área de transferência está indisponível. Use HTTPS e permita que este site acesse a área de transferência. Depois, copie novamente."
+    "clipboardUnavailable": "O acesso à área de transferência está indisponível. Use HTTPS e permita que este site acesse a área de transferência. Depois, copie novamente.",
+    "openDescription": "Este aplicativo é executado no dispositivo que hospeda este ambiente. Você pode abri-lo novamente em Aplicativos."
   },
   "settingsDesign": {
     "editDirectory": "Editar diretório",

@@ -21,6 +21,46 @@ function buttonText(button: Element): string {
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); dispose = undefined; });
 
+it('offers a separate browser without pretending that preparation connected or authorized a page', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const prepared = vi.fn(), connected = vi.fn();
+  const management = {
+    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture', extension_home_path: ['fixture'], platform: 'linux', native_host: 'fixture.host', extension_id: 'fixture' }),
+    openExtension: vi.fn(), prepareRemoteBrowser: vi.fn().mockResolvedValue(undefined),
+    loadExtensionStatus: vi.fn().mockResolvedValue({ platform: 'linux', installations: [{ id: 'browser-aaaaaaaaaaaaaaaaaaaaaaaa', kind: 'chromium_snap', name: 'Chromium (Snap)', installed: true, prepared: true, connected: false, reason: 'desktop_session_unavailable' }], profiles: [] }),
+  };
+  const stop = render(() => <FloeConfigProvider><FlowerChromeConnection management={management} copy={computerUseEnUS} onConnected={connected} onRemoteBrowserPrepared={prepared} /></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent === text);
+  await waitFor(() => Boolean(button(computerUseEnUS.chromeRemotePrepare)));
+  expect(button(computerUseEnUS.openExtensions)).toBeUndefined();
+  expect(host.textContent).not.toContain(computerUseEnUS.chromeDesktopHint);
+  expect(management.prepareRemoteBrowser).not.toHaveBeenCalled();
+  button(computerUseEnUS.chromeRemotePrepare)!.click();
+  await waitFor(() => prepared.mock.calls.length === 1);
+  expect(management.prepareRemoteBrowser).toHaveBeenCalledExactlyOnceWith('browser-aaaaaaaaaaaaaaaaaaaaaaaa', expect.any(AbortSignal));
+  expect(connected).not.toHaveBeenCalled(); expect(management.openExtension).not.toHaveBeenCalled();
+});
+
+it('cancels only the pending handoff when the browser guide closes', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  let finish!: () => void;
+  const prepared = vi.fn();
+  const management = {
+    setupExtension: vi.fn().mockResolvedValue({ extension_path: '/fixture', extension_home_path: ['fixture'], platform: 'linux', native_host: 'fixture.host', extension_id: 'fixture' }),
+    openExtension: vi.fn(), prepareRemoteBrowser: vi.fn((_id: string, _signal: AbortSignal) => new Promise<void>(resolve => { finish = resolve; })),
+    loadExtensionStatus: vi.fn().mockResolvedValue({ platform: 'linux', installations: [{ id: 'browser-aaaaaaaaaaaaaaaaaaaaaaaa', kind: 'chromium_snap', name: 'Chromium (Snap)', installed: true, prepared: true, connected: false }], profiles: [] }),
+  };
+  const stop = render(() => <FloeConfigProvider><FlowerChromeConnection management={management} copy={computerUseEnUS} onConnected={vi.fn()} onRemoteBrowserPrepared={prepared} /></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  await waitFor(() => !!host.querySelector('[data-remote-browser-setup] button'));
+  host.querySelector<HTMLButtonElement>('[data-remote-browser-setup] button')!.click();
+  await waitFor(() => !!finish);
+  const signal = management.prepareRemoteBrowser.mock.calls[0][1];
+  dispose(); dispose = undefined; finish(); await Promise.resolve();
+  expect(signal.aborted).toBe(true); expect(prepared).not.toHaveBeenCalled();
+});
+
 it('prepares Chrome automatically and continues only after a real connection', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const connected = vi.fn().mockResolvedValue({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: false, connected: false }], profiles: [] });

@@ -68,6 +68,7 @@ import {
 } from '../../../../../flower_host_ui/src/flowerAttachmentStaging';
 type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envPublicID: string;
+  revealHostApplication?: (applicationID: string) => void;
   envLabel: string;
   desktopSessionTargetRoute?: 'local_host' | 'remote_desktop';
   rpc: RedevenV1Rpc;
@@ -818,7 +819,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
-    computerManagement: { ...computerManagementAdapter((method, path, body) => fetchLocalApiJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), `environment:${options.envPublicID}`) },
+    computerManagement: { ...computerManagementAdapter((method, path, body, signal) => fetchLocalApiJSON(path, { method, signal, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), `environment:${options.envPublicID}`, options.revealHostApplication) },
     saveComputerUseEnabled: async (enabled) => {
       await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/computer_use', {
         method: 'PUT',

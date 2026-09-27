@@ -23,6 +23,10 @@ export function browserSourcePort(service: BrowserSourceService, select: (select
       case 'source.setup':
         if (typeof operation.installationID !== 'string' || !/^browser-[a-f0-9]{24}$/u.test(operation.installationID)) throw new Error('Browser source operation unavailable');
         return management.setupExtension!(operation.installationID);
+      case 'source.remoteBrowser':
+        if (!management.prepareRemoteBrowser || typeof operation.installationID !== 'string' || !/^browser-[a-f0-9]{24}$/u.test(operation.installationID)) break;
+        await management.prepareRemoteBrowser(operation.installationID, signal);
+        return;
       case 'source.openExtension':
         if (typeof operation.installationID !== 'string' || !/^browser-[a-f0-9]{24}$/u.test(operation.installationID)) throw new Error('Browser source operation unavailable');
         if (['extensions', 'folder', 'connect'].includes(operation.action)) { await management.openExtension!(operation.action, operation.installationID); return; }
