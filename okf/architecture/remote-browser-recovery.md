@@ -83,7 +83,11 @@ hash, size, marker and executable version, stages the published helper resources
 and executes Runtime, storage/installation, API, UI and real Chrome/Electron
 projection cases. Extension coverage includes the real Runtime Native Messaging
 bridge, incompatible-version rejection, popup progress and recovery actions,
-and the shared connection guide. Historical extension fixtures must verify that
+and the shared connection guide. Required cases also cover source prerequisite
+diagnostics, separate-profile registration replacement, application-owner
+isolation and preparation API authority. Resource-diagnostic fixtures must use
+a discovered installation ID; unknown IDs have their own early-rejection case.
+Historical extension fixtures must verify that
 they actually changed the current handshake protocol. A skipped required test, zero assertions, missing required
 case or file-load failure rejects qualification. Evidence includes counts,
 source identity, dependency version and projection records. The computer
