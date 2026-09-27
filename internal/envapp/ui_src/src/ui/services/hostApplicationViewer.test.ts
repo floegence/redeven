@@ -15,7 +15,7 @@ type DisplayState = {available:boolean; policy:string; density:number; width:num
 const drain = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 afterEach(() => { dom?.window.close(); });
 
-async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }, savedPicture?: string, pointerVersion = 1, connected = true, preparationVersion: number | null = 2) {
+async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }, savedPicture?: string, pointerVersion = 1, connected = true, preparationVersion: number | null = 1) {
   dom = new JSDOM(html, { url:'http://localhost/pf/test/_redeven_host_app/', runScripts:'dangerously', pretendToBeVisual:true });
   const fetch = vi.fn().mockResolvedValue({ok:true, json:async () => ({state:'running', password:'private'})});
   dom.window.fetch = fetch;
@@ -64,6 +64,8 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
   let displayListener: (state: DisplayState) => void = () => {};
   const unsubscribeDisplay = vi.fn();
   const client = {
+    inputCapability: 'ready' as 'ready' | 'unavailable' | 'unsupported' | 'restart-required',
+    set_window_layout:vi.fn(),
     supported_encodings: video?.encodings ?? ['webp'],
     floeInput: {version:1, target:null as {wid:number} | null,
       bindTarget(wid: number | null) { if (this.target?.wid !== wid) this.target = wid ? {wid} : null; return this.target; },
@@ -79,11 +81,11 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
     }),
     send_control_refresh:vi.fn(), send:vi.fn(), send_close_window:vi.fn(), focused_wid:1, set_focus:vi.fn((win: {wid:number}) => { client.focused_wid = win.wid; }), close:vi.fn(), callback_close:() => {}, on_last_window:vi.fn(),
   };
-  const bootstrap = {version:preparationVersion,getClient:() => (frame.contentWindow as unknown as {client?:unknown}).client};
-  if (preparationVersion !== null) Object.assign(frame.contentWindow!, {floeXpraInput:bootstrap});
+  const bootstrap = {version:preparationVersion,capabilities:()=>({display:displayState.available?'native':'logical',input:client.inputCapability,pointer:client.inputCapability==='ready'&&pointerVersion===1?'ready':'unavailable'}),getClient:() => (frame.contentWindow as unknown as {client?:unknown}).client};
+  if (preparationVersion !== null) Object.assign(frame.contentWindow!, {floeXpraViewer:bootstrap});
   if (!deferredInitialization) {
     Object.assign(frame.contentWindow!, {client});
-    if (lexicalClient && preparationVersion !== null) Object.assign(frame.contentWindow!, {floeXpraInput:{...bootstrap,getClient:()=>client}});
+    if (lexicalClient && preparationVersion !== null) Object.assign(frame.contentWindow!, {floeXpraViewer:{...bootstrap,getClient:()=>client}});
   }
   frame.dispatchEvent(new dom.window.Event('load'));
   return {frame, doc, client, appWindow, fetch, nativeWindow, unsubscribeDisplay,
@@ -92,25 +94,36 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
 }
 
 describe('host application viewer', () => {
-  it.each([null, 1, 3])('rejects preparation version %s before creating input owners and preserves the application', async preparationVersion => {
+  it.each([null, 0, 2])('reports viewer contract %s as a retryable preparation failure', async preparationVersion => {
     const v = await viewer(false, true, false, undefined, undefined, undefined, 1, true, preparationVersion);
-    expect(v.state()).toBe('inputVersionUnsupported');
+    expect(v.state()).toBe('viewerPreparationFailed');
     expect(v.doc.querySelector('.floe-remote-input')).toBeNull();
     expect(v.doc.querySelector('[data-floe-remote-pointer]')).toBeNull();
     expect(v.client.subscribe_display).not.toHaveBeenCalled();
     expect(v.client.send_close_window).not.toHaveBeenCalled();
     expect(v.nativeWindow.request).not.toHaveBeenCalled();
-    expect(dom.window.document.querySelector<HTMLButtonElement>('#retry')!.hidden).toBe(true);
+    expect(dom.window.document.querySelector<HTMLButtonElement>('#retry')!.hidden).toBe(false);
   });
 
   it('rechecks preparation before deferred client installation', async () => {
     const v = await viewer(true);
     expect(v.state()).toBe('connecting');
-    Object.assign(v.frame.contentWindow!, {client:v.client, floeXpraInput:{version:1,getClient:()=>v.client}});
+    Object.assign(v.frame.contentWindow!, {client:v.client, floeXpraViewer:{version:0,getClient:()=>v.client}});
     v.doc.dispatchEvent(new dom.window.Event('connection-established'));
-    expect(v.state()).toBe('inputVersionUnsupported');
+    expect(v.state()).toBe('viewerPreparationFailed');
     expect(v.doc.querySelector('.floe-remote-input')).toBeNull();
     expect(v.client.send_close_window).not.toHaveBeenCalled();
+  });
+
+  it.each(['_new_window', 'do_send_damage_sequence', 'set_window_layout', 'set_display_density'])('keeps missing %s in the viewer preparation recovery boundary', async method => {
+    const v = await viewer(true);
+    Object.assign(v.client, {[method]:undefined});
+    Object.assign(v.frame.contentWindow!, {client:v.client});
+    v.doc.dispatchEvent(new dom.window.Event('connection-established'));
+    expect(v.state()).toBe('viewerPreparationFailed');
+    expect(v.doc.querySelector('.floe-remote-input')).toBeNull();
+    expect(v.client.send_close_window).not.toHaveBeenCalled();
+    expect(dom.window.document.querySelector<HTMLButtonElement>('#retry')!.hidden).toBe(false);
   });
 
   it('ignores deferred initialization from a retired connection', async () => {
@@ -195,29 +208,29 @@ describe('host application viewer', () => {
     expect(v.client.close).not.toHaveBeenCalled();
   });
 
-  it('explains how to upgrade retained application resources without closing the application', async () => {
+  it('reports the exact legacy display limitation without closing the application', async () => {
     const v = await viewer();
     Object.defineProperty(dom.window, 'devicePixelRatio', {value:2});
     v.client.set_display_density.mockReturnValue(false);
+    v.displayChanged({available:false});
     v.appWindow(1); v.client._new_window(1);
     v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
     dom.window.document.querySelector<HTMLButtonElement>('[data-picture-mode="clarity"]')!.click();
-    expect(dom.window.document.querySelector('[data-app-copy="pictureReopenHint"]')).not.toBeNull();
+    expect(dom.window.document.querySelector('[data-app-copy="pictureBackendLimitHint"]')).not.toBeNull();
     expect(v.client.close).not.toHaveBeenCalled();
     expect(v.client.send_close_window).not.toHaveBeenCalled();
     dom.window.document.querySelector<HTMLButtonElement>('[data-picture-mode="auto"]')!.click();
-    expect(dom.window.document.querySelector('[data-app-copy="pictureReopenHint"]')).toBeNull();
+    expect(dom.window.document.querySelector('[data-app-copy="pictureBackendLimitHint"]')).not.toBeNull();
   });
 
-  it('keeps dialog margins in logical pixels at native density', async () => {
+  it('declares dialog layout through the SDK without duplicating geometry', async () => {
     const v = await viewer();
     v.client.scale = 2;
     const dialog = v.appWindow(2, {'transient-for':1}, 'DIALOG');
     v.client._new_window(2);
-    expect(dialog.w).toBe(950);
-    expect(dialog.h).toBe(601);
-    expect(dialog.x).toBeGreaterThanOrEqual(dialog.leftoffset + 24);
-    expect(dialog.y).toBeGreaterThanOrEqual(dialog.topoffset + 24);
+    expect(v.client.set_window_layout).toHaveBeenCalledWith(2, 'dialog');
+    expect([dialog.x, dialog.y, dialog.w, dialog.h]).toEqual([100,100,1096,856]);
+    expect(dialog.handle_resized).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -435,9 +448,9 @@ describe('host application viewer', () => {
     v.client._new_window(1); v.client._new_window(2); v.client._new_window(3);
     expect(primary.metadataUpdated).toHaveBeenCalledWith({decorations:false});
     expect(dialog.metadataUpdated).not.toHaveBeenCalled();
-    expect(dialog.w).toBe(974);
-    expect(dialog.h).toBe(625);
-    expect(dialog.y + dialog.h).toBeLessThan(680);
+    expect(v.client.set_window_layout).toHaveBeenCalledWith(1, 'viewport');
+    expect(v.client.set_window_layout).toHaveBeenCalledWith(2, 'dialog');
+    expect(v.client.set_window_layout).not.toHaveBeenCalledWith(3, expect.anything());
     expect(popup.update_metadata).not.toHaveBeenCalled();
     expect(v.state()).toBe('connecting');
     v.client.do_send_damage_sequence(1, 1, 100, 100, -1, 'decode failed');
@@ -684,23 +697,47 @@ it('releases held keys on toolbar focus and never replays text after input failu
   // JSDOM does not emit the browser's child-window blur when focus crosses an iframe.
   v.frame.contentWindow!.dispatchEvent(new dom.window.Event('blur'));
   expect(v.client.floeInput.release).toHaveBeenCalledWith(v.client.floeInput.target);
+  v.client.inputCapability = 'unavailable';
   v.client.floeInput.onError?.(); await drain();
   expect(v.state()).toBe('inputUnavailable');
   v.commit('late'); expect(v.client.floeInput.commitText).not.toHaveBeenCalled();
 });
 
-it('requires reopening an old input protocol without closing the host application', async () => {
-  const v = await inputViewer(); v.client.floeInput.version = 0; v.paint();
-  expect(v.state()).toBe('inputVersionUnsupported');
+it.each(['unsupported', 'restart-required'] as const)('keeps pictures and local controls for input capability %s', async capability => {
+  const v = await inputViewer(); v.client.inputCapability = capability; v.paint();
+  expect(v.state()).toBe('active');
+  expect(v.client.floeInput.target).toBeNull();
   expect(v.client.send_close_window).not.toHaveBeenCalled();
-  expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(true);
+  expect(v.client.close).not.toHaveBeenCalled();
+  expect(dom.window.document.querySelector('.host-app-input-notice strong')?.getAttribute('data-app-copy'))
+    .toBe(capability === 'restart-required' ? 'inputVersionUnsupported' : 'inputUnsupported');
+  expect(dom.window.document.querySelector<HTMLButtonElement>('.mac-app-close-window')?.disabled).not.toBe(true);
 });
 
-it('requires reopening an old pointer protocol without closing the host application', async () => {
+it('disables unsupported pointer input while preserving the image', async () => {
   const v = await inputViewer(0); v.paint();
-  expect(v.state()).toBe('inputVersionUnsupported');
+  expect(v.state()).toBe('active');
+  expect(v.client.floeInput.target).toBeNull();
   expect(v.client.send_close_window).not.toHaveBeenCalled();
-  expect((dom.window.document.getElementById('retry') as HTMLButtonElement).hidden).toBe(true);
+  expect(v.client.close).not.toHaveBeenCalled();
+});
+
+it('does not send quality or layout commands for repeated mode selections', async () => {
+  const v = await viewer(); v.appWindow(1); v.client._new_window(1); v.client.do_send_damage_sequence(1,1,100,100,10,'');
+  const button=dom.window.document.querySelector<HTMLButtonElement>('[data-picture-mode="clarity"]')!;
+  button.click();const count=v.client.send.mock.calls.length;
+  for(let i=0;i<20;i++)button.click();
+  expect(v.client.send).toHaveBeenCalledTimes(count);
+  expect(v.client.set_display_density).toHaveBeenCalledOnce();
+});
+
+it('keeps remote geometry acknowledgements separate from viewport layout', async () => {
+  const v=await viewer();const win=v.appWindow(1);const maximize=win.set_maximized;v.client._new_window(1);
+  for(let i=0;i<50;i++)win.move_resize();
+  expect(v.client.set_window_layout).toHaveBeenCalledExactlyOnceWith(1,'viewport');
+  expect(win.screen_resized).not.toHaveBeenCalled();
+  expect(maximize).not.toHaveBeenCalled();
+  expect(v.client.send_configure_window).not.toHaveBeenCalled();
 });
 
 it('cancels composition before an outer toolbar pointer triggers iframe blur', async () => {

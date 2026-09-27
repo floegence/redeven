@@ -27,7 +27,7 @@ const hostApplicationConnection = (() => {
     document.body.dataset.state = state;
     document.getElementById('connection').setAttribute('aria-busy', String(busy));
     document.getElementById('status').textContent = config.copy[state] || config.copy.failed;
-    const hints = {inputUnavailable:'inputUnavailableHint', inputVersionUnsupported:'inputVersionHint', disconnected:'connectionHint', failed:'connectionHint', waiting:'waitingHint', permissionRequired:'permissionHint', sessionUnavailable:'sessionHint', sessionFailed:'reopenHint', captureUnavailable:'captureHint', applicationExited:'applicationExitedHint', windowsClosed:'windowsClosedHint', sharingStopped:'sharingStoppedHint', ended:'endedHint', sessionMissing:'sessionMissingHint', accessRequired:'accessHint'};
+    const hints = {viewerPreparationFailed:'viewerPreparationHint', inputUnavailable:'inputUnavailableHint', inputVersionUnsupported:'inputVersionHint', disconnected:'connectionHint', failed:'connectionHint', waiting:'waitingHint', permissionRequired:'permissionHint', sessionUnavailable:'sessionHint', sessionFailed:'reopenHint', captureUnavailable:'captureHint', applicationExited:'applicationExitedHint', windowsClosed:'windowsClosedHint', sharingStopped:'sharingStoppedHint', ended:'endedHint', sessionMissing:'sessionMissingHint', accessRequired:'accessHint'};
     const hint = document.getElementById('hint');
     hint.textContent = config.copy[hints[state]] || (config.backend === 'macos' && ['starting', 'connecting', 'reconnecting'].includes(state) ? config.copy.sharedControl : '') || '';
     hint.hidden = !hint.textContent;

@@ -27,6 +27,7 @@ var desktopHelper []byte
 
 type ownedSession struct {
 	application *linuxApplication
+	viewer      *nativeapps.PreparedViewer
 	proxy       *applicationProxy
 	finishOnce  sync.Once
 	native      *macSession
@@ -193,13 +194,13 @@ func (m *Manager) Launch(ctx context.Context, owner string, req LaunchRequest) (
 			return Session{}, ErrInvalid
 		}
 	}
-	for _, value := range []string{req.Presentation.TouchHelp, req.Presentation.TouchHelpTitle, req.Presentation.TouchHelpDescription, req.Presentation.Checking, req.Presentation.ApplicationExited, req.Presentation.ApplicationExitedHint, req.Presentation.WindowsClosed, req.Presentation.WindowsClosedHint, req.Presentation.SharingStopped, req.Presentation.SharingStoppedHint, req.Presentation.EndedHint, req.Presentation.SessionMissing, req.Presentation.SessionMissingHint, req.Presentation.AccessRequired, req.Presentation.AccessHint, req.Presentation.Dismiss, req.Presentation.SessionFailed, req.Presentation.ReopenHint, req.Presentation.PermissionRequired, req.Presentation.PermissionHint, req.Presentation.SessionUnavailable, req.Presentation.SessionHint, req.Presentation.CaptureHint, req.Presentation.VideoDecoding, req.Presentation.VideoAvailable, req.Presentation.VideoUnavailable, req.Presentation.HttpsPerformanceHint} {
+	for _, value := range []string{req.Presentation.ViewerPreparationFailed, req.Presentation.ViewerPreparationHint, req.Presentation.InputUnsupported, req.Presentation.InputUnsupportedHint, req.Presentation.PictureBackendLimitHint, req.Presentation.TouchHelp, req.Presentation.TouchHelpTitle, req.Presentation.TouchHelpDescription, req.Presentation.Checking, req.Presentation.ApplicationExited, req.Presentation.ApplicationExitedHint, req.Presentation.WindowsClosed, req.Presentation.WindowsClosedHint, req.Presentation.SharingStopped, req.Presentation.SharingStoppedHint, req.Presentation.EndedHint, req.Presentation.SessionMissing, req.Presentation.SessionMissingHint, req.Presentation.AccessRequired, req.Presentation.AccessHint, req.Presentation.Dismiss, req.Presentation.SessionFailed, req.Presentation.ReopenHint, req.Presentation.PermissionRequired, req.Presentation.PermissionHint, req.Presentation.SessionUnavailable, req.Presentation.SessionHint, req.Presentation.CaptureHint, req.Presentation.VideoDecoding, req.Presentation.VideoAvailable, req.Presentation.VideoUnavailable, req.Presentation.HttpsPerformanceHint} {
 		if len(value) > 1024 {
 			return Session{}, ErrInvalid
 		}
 	}
 	if runtime.GOOS == "darwin" {
-		for _, value := range []string{req.Presentation.Quit, req.Presentation.QuitTitle, req.Presentation.QuitDescription, req.Presentation.QuitPending, req.Presentation.QuitFailed, req.Presentation.Cancel, req.Presentation.Controls, req.Presentation.Menu, req.Presentation.Input, req.Presentation.Windows, req.Presentation.CloseWindow, req.Presentation.SharedControl, req.Presentation.OperationFailed, req.Presentation.Waiting, req.Presentation.WaitingHint, req.Presentation.CaptureUnavailable, req.Presentation.Picture, req.Presentation.PictureAuto, req.Presentation.PictureClarity, req.Presentation.PictureSmooth, req.Presentation.PictureData, req.Presentation.PictureHint, req.Presentation.PictureReopenHint, req.Presentation.PictureAdvanced, req.Presentation.PicturePixels, req.Presentation.PictureResolution, req.Presentation.PictureFrameRate, req.Presentation.PictureActualRate, req.Presentation.PictureBandwidth, req.Presentation.PictureTransport, req.Presentation.PictureVideo, req.Presentation.PictureImages} {
+		for _, value := range []string{req.Presentation.Quit, req.Presentation.QuitTitle, req.Presentation.QuitDescription, req.Presentation.QuitPending, req.Presentation.QuitFailed, req.Presentation.Cancel, req.Presentation.Controls, req.Presentation.Menu, req.Presentation.Input, req.Presentation.Windows, req.Presentation.CloseWindow, req.Presentation.SharedControl, req.Presentation.OperationFailed, req.Presentation.Waiting, req.Presentation.WaitingHint, req.Presentation.CaptureUnavailable, req.Presentation.Picture, req.Presentation.PictureAuto, req.Presentation.PictureClarity, req.Presentation.PictureSmooth, req.Presentation.PictureData, req.Presentation.PictureHint, req.Presentation.PictureAdvanced, req.Presentation.PicturePixels, req.Presentation.PictureResolution, req.Presentation.PictureFrameRate, req.Presentation.PictureActualRate, req.Presentation.PictureBandwidth, req.Presentation.PictureTransport, req.Presentation.PictureVideo, req.Presentation.PictureImages} {
 			if strings.TrimSpace(value) == "" || len(value) > 1024 {
 				return Session{}, ErrInvalid
 			}
@@ -263,6 +264,7 @@ func (m *Manager) finish(s *ownedSession, code string, release func()) {
 		}
 		s.stopping = true
 		s.password = ""
+		s.viewer = nil
 		m.forwards.ReleaseOwnedForwardSession(s.view.Forward.Forward.ForwardID)
 		_ = os.Remove(filepath.Join(m.state, "sessions", s.view.ID, "password"))
 		if s.application == nil {

@@ -12,6 +12,7 @@
   let client;
   let displayState;
   let unsubscribeDisplay;
+  let appliedPicture;
   let inputController;
   let pointerController;
   let pointerFeedback;
@@ -60,6 +61,12 @@
     identity.querySelector('svg').replaceWith(icon);
   }
   const windows = new Map();
+  const inputNotice = document.createElement('aside');
+  inputNotice.className = 'host-app-input-notice'; inputNotice.hidden = true;
+  inputNotice.setAttribute('role', 'status');
+  const inputNoticeTitle = document.createElement('strong');
+  const inputNoticeHint = document.createElement('p');
+  inputNotice.append(inputNoticeTitle, inputNoticeHint); document.body.append(inputNotice);
   const picture = {mode:'auto'};
   try {
     const saved = localStorage.getItem('redeven.xpra-app.picture.v1');
@@ -154,20 +161,20 @@
       const text = `${hostApplicationAppearance.number(displayState.width)} × ${hostApplicationAppearance.number(displayState.height)}`;
       if (resolution.textContent !== text) resolution.textContent = text;
     }
-    const limited = picture.mode === 'clarity' && displayState?.available && displayState.limit;
+    const limited = displayState && !displayState.available ? 'backend' : picture.mode === 'clarity' && displayState?.limit;
     displayNotice.hidden = !limited;
     if (limited) {
-      const key = limited === 'display' ? 'pictureDisplayLimitHint' : 'pictureDensityLimitHint';
+      const key = limited === 'backend' ? 'pictureBackendLimitHint' : limited === 'display' ? 'pictureDisplayLimitHint' : 'pictureDensityLimitHint';
       if (displayNoticeHint.getAttribute('data-app-copy') !== key) hostApplicationAppearance.copy(displayNoticeHint, key);
     }
     positionPopover();
   }
   function applyPicture() {
-    if (!client?.connected) return;
+    if (!client?.connected || appliedPicture === picture.mode) return;
+    appliedPicture = picture.mode;
     const [quality, speed] = {auto:[-1,-1], clarity:[95,-1], smooth:[65,90], data:[40,75]}[picture.mode];
     const clarity = picture.mode === 'clarity';
-    const densityAvailable = client.set_display_density?.(clarity ? 'native' : 'logical');
-    hostApplicationAppearance.copy(pictureHint, clarity && devicePixelRatio > 1 && !densityAvailable ? 'pictureReopenHint' : 'pictureHint');
+    client.set_display_density(clarity ? 'native' : 'logical');
     renderDisplay();
     client.send(['quality', quality]); client.send(['speed', speed]);
     client.send_control_refresh(100, {'refresh-now':true});
@@ -242,7 +249,8 @@
 
   function stopClient() {
     unsubscribeDisplay?.(); unsubscribeDisplay = undefined;
-    displayState = undefined; renderDisplay();
+    displayState = undefined; appliedPicture = undefined; renderDisplay();
+    inputNotice.hidden = true;
     const previous = client;
     pointerController?.dispose(); pointerController = null;
     pointerFeedback?.dispose(); pointerFeedback = null;
@@ -287,9 +295,9 @@
 
   function preparedClient(attempt) {
     if (attempt !== generation) return null;
-    const prepared = frame.contentWindow.floeXpraInput;
-    if (prepared?.version !== 2 || typeof prepared.getClient !== 'function') {
-      finish('inputVersionUnsupported');
+    const prepared = frame.contentWindow.floeXpraViewer;
+    if (prepared?.version !== 1 || typeof prepared.getClient !== 'function' || typeof prepared.capabilities !== 'function') {
+      finish('viewerPreparationFailed');
       return null;
     }
     return prepared;
@@ -301,9 +309,10 @@
     const doc = frame.contentDocument;
     const xpra = prepared.getClient();
     if (xpra && client === xpra) return;
-    if (!xpra || typeof xpra._new_window !== 'function' || typeof xpra.do_send_damage_sequence !== 'function') throw new Error('Unsupported Xpra HTML5 client');
-    if (!xpra.floeInput) { finish('inputVersionUnsupported'); return; }
-    if (xpra.floePointer?.version !== 1) { finish('inputVersionUnsupported'); return; }
+    if (!xpra || typeof xpra._new_window !== 'function' || typeof xpra.do_send_damage_sequence !== 'function' ||
+        !xpra.floeInput || !xpra.floePointer || typeof xpra.set_window_layout !== 'function' || typeof xpra.set_display_density !== 'function') {
+      finish('viewerPreparationFailed'); return;
+    }
     client = xpra;
     unsubscribeDisplay = xpra.subscribe_display?.(state => {
       if (attempt !== generation || client !== xpra) return;
@@ -322,23 +331,32 @@
     });
     const controller = inputController;
     controller.element.addEventListener('paste', event => { gestures.flush(); adapter.paste(event, adapter.target); });
-    adapter.onError = () => { if (attempt === generation) finish('inputUnavailable'); };
+    adapter.onError = () => {
+      if (attempt !== generation) return;
+      if (prepared.capabilities(xpra).input === 'unavailable') finish('inputUnavailable');
+      else { gestures.reset(); controller.reset(); syncInput(); }
+    };
     function syncInput() {
       if (attempt !== generation) return;
       const wid = xpra.focused_wid;
       const win = xpra.id_to_window[wid];
-      controller.bindTarget(adapter.bindTarget(win && pointer.targetForWindow(win) ? wid : null));
+      const capability = prepared.capabilities(xpra);
+      controller.bindTarget(adapter.bindTarget(capability.input === 'ready' && capability.pointer === 'ready' && win && pointer.targetForWindow(win) ? wid : null));
+      const restricted = xpra.connected && (['unsupported', 'restart-required'].includes(capability.input) || capability.pointer !== 'ready');
+      inputNotice.hidden = !restricted;
+      if (restricted) {
+        const title = capability.input === 'restart-required' ? 'inputVersionUnsupported' : 'inputUnsupported';
+        const hint = capability.input === 'restart-required' ? 'inputVersionHint' : 'inputUnsupportedHint';
+        if (inputNoticeTitle.getAttribute('data-app-copy') !== title) hostApplicationAppearance.copy(inputNoticeTitle, title);
+        if (inputNoticeHint.getAttribute('data-app-copy') !== hint) hostApplicationAppearance.copy(inputNoticeHint, hint);
+      }
       syncToolbar();
-    }
-    function checkInputVersion() {
-      if (adapter.version !== 1) { finish('inputVersionUnsupported'); return false; }
-      return true;
     }
     pointerFeedback = createHostApplicationHoldFeedback(doc);
     pointerController = hostApplicationPointer.createRemotePointer({
       surface,
-      resolveTarget: event => pointer.resolveTarget(event),
-      isTargetValid: target => attempt === generation && client === xpra && pointer.isTargetValid(target),
+      resolveTarget: event => prepared.capabilities(xpra).pointer === 'ready' ? pointer.resolveTarget(event) : null,
+      isTargetValid: target => attempt === generation && client === xpra && prepared.capabilities(xpra).pointer === 'ready' && pointer.isTargetValid(target),
       sendPointer: (command, target) => pointer.sendPointer(command, target),
       release: target => pointer.release(target),
       onActivate(position, target) {
@@ -346,7 +364,12 @@
         if (xpra.focused_wid !== target.wid) xpra.set_focus(target.window);
         syncInput();
         controller.setAnchor(position.clientX, position.clientY);
-        if (position.pointerType !== 'touch' || keyboardVisible) controller.focus();
+        if (position.pointerType !== 'touch' || keyboardVisible) {
+          // Return focus from local toolbar controls to the embedded document
+          // before focusing its input; Firefox otherwise keeps the parent active.
+          frame.focus();
+          controller.focus();
+        }
       },
       onHoldChange: pointerFeedback.update,
     });
@@ -364,7 +387,7 @@
     doc.addEventListener('connection-lost', () => connectionLost(attempt));
     let pictureConfigured = false;
     doc.addEventListener('connection-established', () => {
-      if (attempt !== generation || !checkInputVersion()) return;
+      if (attempt !== generation) return;
       configureConnectedPicture();
       if (Object.keys(xpra.id_to_window).length) return;
       clearTimeout(deadline);
@@ -410,8 +433,7 @@
     const primaryWindows = new Set();
     const paintableWindows = new Set();
     function syncWindowState(win) {
-      const state = nativeState || {maximized:true, minimized:false};
-      xpra.send_configure_window(win, {maximized:state.maximized, iconified:state.minimized}, false);
+      if (nativeState) xpra.send_configure_window(win, {maximized:nativeState.maximized, iconified:nativeState.minimized}, false);
     }
     applyNativeState = () => {
       if (attempt !== generation) return;
@@ -425,22 +447,7 @@
       if (win.metadata['transient-for'] || win.metadata.modal || win.has_windowtype(['DIALOG'])) {
         paintableWindows.add(win.wid);
         trackWindow(win);
-        // A headless display may be larger than the viewer. Keep dialog controls
-        // reachable by negotiating a bounded size, never scaling their pixels.
-        const resized = win.screen_resized;
-        win.screen_resized = function() {
-          resized.call(this);
-          const [width, height] = xpra._get_desktop_size();
-          const margin = 12 * (xpra.scale || 1);
-          const maxWidth = Math.max(1, width - this.leftoffset - this.rightoffset - 2 * margin);
-          const maxHeight = Math.max(1, height - this.topoffset - this.bottomoffset - 2 * margin);
-          this.w = Math.min(this.w, maxWidth);
-          this.h = Math.min(this.h, maxHeight);
-          this.x = Math.max(this.leftoffset + margin, Math.min(this.x, width - this.w - this.rightoffset - margin));
-          this.y = Math.max(this.topoffset + margin, Math.min(this.y, height - this.h - this.bottomoffset - margin));
-          this.handle_resized();
-        };
-        win.screen_resized();
+        xpra.set_window_layout(win.wid, 'dialog');
         return;
       }
       if (win.windowtype.length && !win.has_windowtype(['NORMAL'])) return;
@@ -455,22 +462,16 @@
         win.set_maximized = value => {
           if (attempt !== generation) return;
           if (nativeState && Boolean(value) !== nativeState.maximized) nativeWindow.request(value ? 'maximize' : 'unmaximize');
-          maximize.call(win, true);
+          maximize.call(win, value);
         };
         win.set_minimized = value => {
           if (attempt === generation && nativeState && value && !nativeState.minimized) nativeWindow.request('minimize');
         };
         win.initiate_moveresize = () => {};
-        const moveResize = win.move_resize;
-        win.move_resize = function(...args) {
-          moveResize.apply(this, args);
-          this.screen_resized();
-        };
         win.update_metadata({'decorations':false});
-        maximize.call(win, true);
+        xpra.set_window_layout(win.wid, 'viewport');
         syncWindowState(win);
       }
-      win.screen_resized();
     }
     const newWindow = xpra._new_window;
     xpra._new_window = function(...args) {
@@ -491,7 +492,7 @@
       if (document.body.dataset.state === 'active') return;
       // Reveal only after the server has painted, including the offscreen-worker path.
       requestAnimationFrame(() => {
-        if (attempt !== generation || !checkInputVersion()) return;
+        if (attempt !== generation) return;
         clearTimeout(deadline);
         present('active');
         syncInput();
@@ -506,9 +507,10 @@
       const videoAvailable = xpra.supported_encodings?.some(codec => ['h264', 'vp8', 'vp9', 'av1'].includes(codec));
       hostApplicationAppearance.copy(decodingStatus, videoAvailable ? 'videoAvailable' : 'videoUnavailable');
       if (picture.mode !== 'auto') applyPicture();
-      else xpra.send_control_refresh(100, {'refresh-now':true});
+      else { appliedPicture = 'auto'; xpra.send_control_refresh(100, {'refresh-now':true}); }
+      syncInput();
     }
-    if (xpra.connected && checkInputVersion()) configureConnectedPicture();
+    if (xpra.connected) configureConnectedPicture();
   }
 
   frame.addEventListener('load', () => {
@@ -524,9 +526,9 @@
       else frame.contentDocument.addEventListener('connection-established', () => {
         if (attempt !== generation) return;
         try { installClient(attempt); }
-        catch (error) { console.error('Host application viewer initialization failed', error); finish('failed'); }
+        catch (error) { console.error('Host application viewer initialization failed', error); finish('viewerPreparationFailed'); }
       }, {once:true});
-    } catch (error) { console.error('Host application viewer initialization failed', error); finish('failed'); }
+    } catch (error) { console.error('Host application viewer initialization failed', error); finish('viewerPreparationFailed'); }
   });
 
   async function observe(attempt) {

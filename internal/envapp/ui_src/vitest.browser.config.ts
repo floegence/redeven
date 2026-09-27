@@ -111,6 +111,12 @@ export default mergeConfig(viteConfig, defineConfig({
           await page.unroute(route);
           if (html !== null) await page.route(route, request => request.fulfill({contentType:'text/html', body:html}));
         },
+        typeHostApplicationDisplayContent: async ({page}, activation: 'pixels' | 'keyboard') => {
+          const frame = await frameForSelector(page, 'canvas[data-host-display-fixture]');
+          if (activation === 'keyboard') await frame.parentFrame()!.locator('.mac-app-keyboard').click();
+          else await frame.locator('canvas[data-host-display-fixture]').click({position:{x:120,y:120}});
+          await page.keyboard.type('abc');
+        },
         clickHostApplicationPointer: async ({page}) => {
           const frame=await frameForSelector(page,'.mac-app-canvas');
           await frame.locator('.mac-app-canvas').click();

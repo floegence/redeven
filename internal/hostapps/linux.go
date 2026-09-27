@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,8 +38,7 @@ type linuxApplication struct {
 	record               linuxApplicationRecord
 	tools                hostTools
 	input                nativeapps.ClientInput
-	assets               *nativeapps.ClientAssets // protected by Manager.appsMu
-	ready, ended         bool                     // protected by Manager.appsMu
+	ready, ended         bool // protected by Manager.appsMu
 	terminationRequested bool
 }
 
@@ -215,18 +213,20 @@ func (m *Manager) launchLinux(ctx context.Context, owner string, req LaunchReque
 			application = a
 		}
 	}
+	var tools hostTools
+	var app Application
 	if application == nil {
 		if active >= 12 {
 			return Session{}, ErrLimit
 		}
-		catalog, tools, err := m.catalog(ctx, owner, req.Locale)
+		catalog, selectedTools, err := m.catalog(ctx, owner, req.Locale)
+		tools = selectedTools
 		if err != nil {
 			return Session{}, err
 		}
 		if !catalog.Availability.Ready {
 			return Session{}, ErrUnavailable
 		}
-		var app Application
 		for _, candidate := range catalog.Applications {
 			if candidate.ID == req.ApplicationID {
 				app = candidate
@@ -236,25 +236,24 @@ func (m *Manager) launchLinux(ctx context.Context, owner string, req LaunchReque
 		if app.ID == "" {
 			return Session{}, ErrNotFound
 		}
+	} else {
+		_, tools = m.installedTools(ctx)
+	}
+	viewer, err := nativeapps.PrepareViewer(tools.html)
+	if err != nil {
+		return Session{}, fmt.Errorf("%w: %v", ErrViewerPreparation, err)
+	}
+	if application == nil {
 		application, err = m.startApplication(owner, app, tools)
 		if err != nil {
 			return Session{}, err
 		}
 		m.applications[application.record.ID] = application
 	}
-	return m.shareApplication(ctx, owner, application, req.Presentation)
+	return m.shareApplication(ctx, owner, application, req.Presentation, viewer)
 }
 
-func (m *Manager) shareApplication(ctx context.Context, owner string, a *linuxApplication, presentation Presentation) (Session, error) {
-	// Snapshot once for this application's lifetime, including recovered instances.
-	// Detaching a viewer preserves the exact resource version for the next share.
-	if a.assets == nil {
-		assets, err := nativeapps.OpenClientAssets(filepath.Join(m.applicationDir(a.record.ID), "www"))
-		if err != nil {
-			return Session{}, fmt.Errorf("prepare application resources: %w", err)
-		}
-		a.assets = assets
-	}
+func (m *Manager) shareApplication(ctx context.Context, owner string, a *linuxApplication, presentation Presentation, viewer *nativeapps.PreparedViewer) (Session, error) {
 	password := randomID() + randomID()
 	path := filepath.Join(m.applicationDir(a.record.ID), "password")
 	if err := os.WriteFile(path+".tmp", []byte(password), 0600); err != nil {
@@ -263,7 +262,7 @@ func (m *Manager) shareApplication(ctx context.Context, owner string, a *linuxAp
 	if err := os.Rename(path+".tmp", path); err != nil {
 		return Session{}, err
 	}
-	proxy, address, err := newApplicationProxy("http://"+a.record.Address, a.assets)
+	proxy, address, err := newApplicationProxy("http://"+a.record.Address, viewer)
 	if err != nil {
 		return Session{}, err
 	}
@@ -276,7 +275,7 @@ func (m *Manager) shareApplication(ctx context.Context, owner string, a *linuxAp
 	if a.ready {
 		state = "running"
 	}
-	s := &ownedSession{application: a, proxy: proxy, tools: a.tools, socketDir: applicationSocketDir(a.record.ID), owner: owner, password: password, done: make(chan struct{}),
+	s := &ownedSession{application: a, proxy: proxy, viewer: viewer, tools: a.tools, socketDir: applicationSocketDir(a.record.ID), owner: owner, password: password, done: make(chan struct{}),
 		view: Session{ID: randomID(), Application: a.record.Application, State: state, Backend: "linux", Mode: "stream", StartedAt: time.Now().UnixMilli(), Forward: forward, Presentation: presentation}}
 	m.mu.Lock()
 	m.trimCompletedLocked()
@@ -290,7 +289,7 @@ func (m *Manager) applicationArgs(a *linuxApplication) []string {
 	dir, socketDir := m.applicationDir(a.record.ID), applicationSocketDir(a.record.ID)
 	t := a.tools
 	args := []string{t.inputPython, a.input.Launcher, "start", "--daemon=no", "--systemd-run=no", "--attach=no", "--use-display=no", "--bind-ws=" + a.record.Address,
-		"--ws-auth=file:filename=" + filepath.Join(dir, "password"), "--html=" + filepath.Join(dir, "www"), "--sessions-dir=" + filepath.Join(socketDir, "sessions"), "--socket-dir=" + socketDir, "--socket-dirs=" + socketDir,
+		"--ws-auth=file:filename=" + filepath.Join(dir, "password"), "--html=no", "--sessions-dir=" + filepath.Join(socketDir, "sessions"), "--socket-dir=" + socketDir, "--socket-dirs=" + socketDir,
 		"--bind=" + filepath.Join(socketDir, "control"), "--terminate-children=yes", "--start-new-commands=no", "--sharing=no", "--mdns=no", "--source=", "--source-start=",
 		"--webcam=no", "--printing=no", "--file-transfer=no", "--notifications=no", "--dbus-launch=", "--session-name=" + a.record.ID,
 		"--xvfb=" + quoteArgv([]string{t.xvfb, "-screen", "0", "3840x2160x24", "-nolisten", "tcp", "-noreset", "+extension", "Composite", "-auth", "$XAUTHORITY"}),
@@ -331,13 +330,6 @@ func (m *Manager) startApplication(owner string, app Application, tools hostTool
 	}
 	a := &linuxApplication{record: linuxApplicationRecord{Version: 2, Component: component, ID: id, Owner: owner, Application: app, Address: address, StartedAt: time.Now().UnixMilli()}, tools: tools}
 	a.input, err = nativeapps.PrepareClientInput(filepath.Join(dir, "input"), runtime.GOARCH)
-	if err != nil {
-		return nil, err
-	}
-	if err = nativeapps.PrepareInputClient(tools.html, filepath.Join(dir, "www")); err != nil {
-		return nil, err
-	}
-	a.assets, err = nativeapps.OpenClientAssets(filepath.Join(dir, "www"))
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +389,6 @@ func (m *Manager) watchApplication(a *linuxApplication, done <-chan error) {
 		defer m.appsDone.Done()
 		tick := time.NewTicker(250 * time.Millisecond)
 		defer tick.Stop()
-		client := http.Client{Timeout: time.Second}
 		observedAt := time.Now()
 		phase := "launch"
 		if done == nil {
@@ -418,7 +409,6 @@ func (m *Manager) watchApplication(a *linuxApplication, done <-chan error) {
 			if !alive {
 				m.appsMu.Lock()
 				a.ended = true
-				a.assets = nil
 				m.appsMu.Unlock()
 				code, reason := "capture_failed", ""
 				m.appsMu.Lock()
@@ -436,24 +426,21 @@ func (m *Manager) watchApplication(a *linuxApplication, done <-chan error) {
 				return
 			}
 			if !ready && receipt == "running" {
-				res, err := client.Get("http://" + a.record.Address + "/index.html")
-				if err == nil {
-					_ = res.Body.Close()
-					if res.StatusCode == http.StatusOK {
-						ready = true
-						m.appsMu.Lock()
-						a.ready = true
-						m.appsMu.Unlock()
-						m.mu.Lock()
-						for _, s := range m.sessions {
-							if s.application == a && !s.stopping {
-								s.view.State = "running"
-							}
+				identity, err := m.applicationCommand(context.Background(), a, "id")
+				if err == nil && strings.Contains("\n"+string(identity), "\nsession-name="+a.record.ID+"\n") {
+					ready = true
+					m.appsMu.Lock()
+					a.ready = true
+					m.appsMu.Unlock()
+					m.mu.Lock()
+					for _, s := range m.sessions {
+						if s.application == a && !s.stopping {
+							s.view.State = "running"
 						}
-						m.mu.Unlock()
-						tick.Reset(time.Second)
-						slog.Info("host application ready", "instance", a.record.ID, "backend", "xpra", "phase", phase, "duration_ms", time.Since(observedAt).Milliseconds())
 					}
+					m.mu.Unlock()
+					tick.Reset(time.Second)
+					slog.Info("host application ready", "instance", a.record.ID, "backend", "xpra", "phase", phase, "duration_ms", time.Since(observedAt).Milliseconds())
 				}
 			}
 			if !ready && time.Since(observedAt) > 40*time.Second {
@@ -591,11 +578,11 @@ func applicationWindowCloseTargets(info string) []string {
 // ClientAssets selects public bytes for an authenticated owner. The caller must
 // separately authorize session documents and live control, even on cache hits.
 func (m *Manager) ClientAssets(owner, digest string) *nativeapps.ClientAssets {
-	m.appsMu.Lock()
-	defer m.appsMu.Unlock()
-	for _, a := range m.applications {
-		if !a.ended && a.record.Owner == owner && a.assets != nil && a.assets.Digest() == digest {
-			return a.assets
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, s := range m.sessions {
+		if !s.stopping && (s.view.State == "starting" || s.view.State == "running") && s.owner == owner && s.viewer != nil && s.viewer.Assets().Digest() == digest {
+			return s.viewer.Assets()
 		}
 	}
 	return nil

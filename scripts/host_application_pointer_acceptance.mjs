@@ -27,7 +27,7 @@ export async function checkPointer({page,frame,read,output,waitFor,backend}) {
     point=async(x,y)=>{
       const state=read();
       geometry=await frame.evaluate(()=>{
-        const client=window.floeXpraInput.getClient();
+        const client=window.floeXpraViewer.getClient();
         const win=Object.values(client.id_to_window).find(w=>client.floePointer.targetForWindow(w));
         const rect=win.canvas.getBoundingClientRect();
         return {x:rect.x,y:rect.y,scale:client.scale,wid:win.wid,dpr:devicePixelRatio,precise:client.server_precise_wheel};

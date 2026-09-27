@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -74,6 +75,29 @@ func waitMac(t *testing.T, m *Manager, id, state string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("session did not become %s: %+v", state, m.Sessions("alice"))
+}
+
+func TestMacLaunchDoesNotRequireLinuxViewerCopy(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("requires the macOS launch dispatcher")
+	}
+	m := macFixture(t)
+	presentation := Presentation{}
+	fields := reflect.ValueOf(&presentation).Elem()
+	for i := 0; i < fields.NumField(); i++ {
+		fields.Field(i).SetString(fields.Type().Field(i).Name)
+	}
+	presentation.Locale = "en-US"
+	presentation.InputUnsupported = ""
+	presentation.InputUnsupportedHint = ""
+	presentation.ViewerPreparationFailed = ""
+	presentation.ViewerPreparationHint = ""
+	presentation.PictureBackendLimitHint = ""
+	session, err := m.Launch(context.Background(), "alice", LaunchRequest{ApplicationID: "macos-fixture", Presentation: presentation})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitMac(t, m, session.ID, "running")
 }
 
 func TestMacSessionsShareNativeProcessAcrossSuspendAndStop(t *testing.T) {

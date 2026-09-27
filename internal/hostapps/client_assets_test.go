@@ -7,132 +7,130 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	nativeapps "github.com/floegence/floe-native-apps"
 )
 
-func TestApplicationUpgradeKeepsPreparedSnapshotsSeparate(t *testing.T) {
-	root := t.TempDir()
-	if err := os.CopyFS(root, os.DirFS("testdata/client")); err != nil {
-		t.Fatal(err)
-	}
-	old, err := nativeapps.OpenClientAssets(root)
+func TestApplicationUpgradePinsResourcesToActiveShares(t *testing.T) {
+	root := viewerSourceFixture(t)
+	old, err := nativeapps.PrepareViewer(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldRequest := httptest.NewRequest(http.MethodGet, "http://host/js/FloeInput.js", nil)
-	oldResponse := httptest.NewRecorder()
-	old.ServeHTTP(oldResponse, oldRequest)
-	// A new launch prepares new bytes even when the installed component recipe
-	// is unchanged. An existing application's snapshot must retain its identity.
-	if err := os.WriteFile(filepath.Join(root, "js/FloeInput.js"), []byte("// Newly published prepared input adapter.\n"), 0600); err != nil {
+	path := filepath.Join(root, "js/Keycodes.js")
+	if err := os.WriteFile(path, []byte("/* changed current publisher resource */"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	current, err := nativeapps.OpenClientAssets(root)
+	current, err := nativeapps.PrepareViewer(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if old.Digest() == current.Digest() {
-		t.Fatal("changed preparation reused the old asset cache")
+	if old.Assets().Digest() == current.Assets().Digest() {
+		t.Fatal("changed bytes reused the old content version")
 	}
+	app := &linuxApplication{record: linuxApplicationRecord{Owner: "alice"}}
 	m := New(t.TempDir(), t.TempDir(), nil)
-	m.applications["old"] = &linuxApplication{record: linuxApplicationRecord{Owner: "alice"}, assets: old}
-	m.applications["new"] = &linuxApplication{record: linuxApplicationRecord{Owner: "alice"}, assets: current}
-	if m.ClientAssets("alice", old.Digest()) != old || m.ClientAssets("alice", current.Digest()) != current || m.ClientAssets("bob", current.Digest()) != nil {
-		t.Fatal("upgrade changed resource ownership or snapshot selection")
+	m.sessions["old"] = &ownedSession{owner: "alice", application: app, viewer: old, view: Session{State: "running"}}
+	m.sessions["new"] = &ownedSession{owner: "alice", application: app, viewer: current, view: Session{State: "running"}}
+	if m.ClientAssets("alice", old.Assets().Digest()) != old.Assets() || m.ClientAssets("alice", current.Assets().Digest()) != current.Assets() || m.ClientAssets("bob", current.Assets().Digest()) != nil {
+		t.Fatal("share snapshot ownership changed")
 	}
-	oldRequest.Header.Set("If-None-Match", oldResponse.Header().Get("ETag"))
+	request := httptest.NewRequest("GET", "/js/Keycodes.js", nil)
+	before := httptest.NewRecorder()
+	old.Assets().ServeHTTP(before, request)
+	request.Header.Set("If-None-Match", before.Header().Get("ETag"))
 	cached := httptest.NewRecorder()
-	old.ServeHTTP(cached, oldRequest)
-	if cached.Code != http.StatusNotModified {
-		t.Fatal("running application's cached resources changed")
-	}
+	old.Assets().ServeHTTP(cached, request)
 	updated := httptest.NewRecorder()
-	current.ServeHTTP(updated, oldRequest)
-	if updated.Code != http.StatusOK || updated.Body.String() == oldResponse.Body.String() {
-		t.Fatal("new application reused an old cache validator")
+	current.Assets().ServeHTTP(updated, request)
+	if cached.Code != 304 || updated.Code != 200 || updated.Body.String() == before.Body.String() {
+		t.Fatal("snapshot validators crossed versions")
 	}
-	m.applications["old"].ended = true
-	if m.ClientAssets("alice", old.Digest()) != nil || m.ClientAssets("alice", current.Digest()) != current {
-		t.Fatal("ending old application revoked the new snapshot")
+	m.sessions["old"].stopping = true
+	if m.ClientAssets("alice", old.Assets().Digest()) != nil || m.ClientAssets("alice", current.Assets().Digest()) != current.Assets() || app.ended {
+		t.Fatal("retiring a share changed the application or another snapshot")
+	}
+	m.sessions["new"].view.State = "ended"
+	if m.ClientAssets("alice", current.Assets().Digest()) != nil {
+		t.Fatal("retired share exposes resources")
 	}
 }
 
 func TestApplicationProxyPreservesSharingHostAndTargetRouting(t *testing.T) {
 	requests := make(chan *http.Request, 1)
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests <- r.Clone(r.Context())
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	defer upstream.Close()
-	proxy, address, err := newApplicationProxy(upstream.URL+"/native?owned=1", nil)
+	defer backend.Close()
+	proxy, address, err := newApplicationProxy(backend.URL+"/native?owned=1", viewerFixture(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proxy.Close()
-	request, err := http.NewRequest(http.MethodGet, "http://"+address+"/socket?view=2", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	request, _ := http.NewRequest("GET", "http://"+address+"/index.html?view=2", nil)
 	request.Host = "sharing.local"
 	request.Header.Set("Origin", "http://sharing.local")
-	request.Header.Set("Accept-Encoding", "br")
+	request.Header.Set("Connection", "Upgrade")
+	request.Header.Set("Upgrade", "websocket")
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
 	received := <-requests
-	if received.Host != request.Host || received.URL.RequestURI() != "/native/socket?owned=1&view=2" || received.Header.Get("Origin") != request.Header.Get("Origin") {
-		t.Fatalf("sharing request changed: %s %s %s", received.Host, received.URL.RequestURI(), received.Header.Get("Origin"))
+	if received.Host != request.Host || received.URL.RequestURI() != "/native/index.html?owned=1&view=2" || received.Header.Get("Origin") != request.Header.Get("Origin") {
+		t.Fatal("sharing host or transport routing changed")
 	}
-	if received.Header.Get("Accept-Encoding") == "br" {
-		t.Fatal("client compression bypassed transport decompression")
+	if response.Header.Get("Cache-Control") != "no-store" {
+		t.Fatal("transport response is cacheable")
 	}
 }
 
-func TestApplicationSharesReuseAssetsWithoutCachingSessionDocuments(t *testing.T) {
-	root, _ := filepath.Abs("testdata/client")
-	assets, err := nativeapps.OpenClientAssets(root)
+func TestApplicationShareServesMatchingCurrentDocumentWithoutReadingLegacyTree(t *testing.T) {
+	viewer := viewerFixture(t)
+	var calls atomic.Int32
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		io.WriteString(w, "obsolete application document or asset")
+	}))
+	defer backend.Close()
+	proxy, address, err := newApplicationProxy(backend.URL, viewer)
 	if err != nil {
 		t.Fatal(err)
 	}
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		w.Header().Set("Cache-Control", "public, max-age=3600")
-		w.Header().Set("ETag", `"private-document"`)
-		_, _ = io.WriteString(w, `<script src="js/Client.js"></script><script src="default-settings.txt"></script>`)
-	}))
-	defer upstream.Close()
-	for range 2 {
-		proxy, address, err := newApplicationProxy(upstream.URL, assets)
+	defer proxy.Close()
+	for _, path := range []string{"/", "/index.html", "/default-settings.txt", "/js/Client.js", "/old.html"} {
+		response, err := http.Get("http://" + address + path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		res, err := http.Get("http://" + address + "/index.html")
-		if err != nil {
-			t.Fatal(err)
+		data, _ := io.ReadAll(response.Body)
+		response.Body.Close()
+		if response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("ETag") != "" {
+			t.Fatal("private response is cacheable")
 		}
-		body, _ := io.ReadAll(res.Body)
-		res.Body.Close()
-		proxy.Close()
-		expected := ClientAssetsPath + assets.Digest() + "/js/Client.js"
-		if !strings.Contains(string(body), expected) || !strings.Contains(string(body), `src="default-settings.txt"`) {
-			t.Fatalf("incorrect resource routing: %s", body)
-		}
-		if res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("ETag") != "" {
-			t.Fatalf("private document cacheable: %v", res.Header)
+		switch path {
+		case "/", "/index.html":
+			if response.StatusCode != 200 || !strings.Contains(string(data), ClientAssetsPath+viewer.Assets().Digest()+"/js/FloeViewer.js") {
+				t.Fatal("document and resources differ")
+			}
+		case "/default-settings.txt":
+			if response.StatusCode != 200 || len(data) != 0 {
+				t.Fatal("current defaults inherited legacy settings")
+			}
+		default:
+			if response.StatusCode != 404 {
+				t.Fatal("legacy asset alias remains reachable")
+			}
 		}
 	}
-	m := New(t.TempDir(), t.TempDir(), nil)
-	app := &linuxApplication{record: linuxApplicationRecord{Owner: "alice"}, assets: assets}
-	m.applications["instance"] = app
-	if m.ClientAssets("alice", assets.Digest()) != assets || m.ClientAssets("bob", assets.Digest()) != nil || m.ClientAssets("alice", strings.Repeat("0", 64)) != nil {
-		t.Fatal("resource lookup lost owner or version binding")
+	if calls.Load() != 0 {
+		t.Fatal("viewer read the retained application's old resource tree")
 	}
-	app.ended = true
-	if m.ClientAssets("alice", assets.Digest()) != nil {
-		t.Fatal("ended application still exposes assets")
+	if _, _, err := newApplicationProxy(backend.URL, nil); err != ErrViewerPreparation {
+		t.Fatal("missing preparation did not fail explicitly")
 	}
 }

@@ -3,6 +3,7 @@ package appserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -14,6 +15,14 @@ import (
 	"github.com/floegence/redeven/internal/hostapps"
 	"github.com/floegence/redeven/internal/session"
 )
+
+func TestHostApplicationViewerPreparationFailureIsRetryable(t *testing.T) {
+	w := httptest.NewRecorder()
+	writeHostAppError(w, fmt.Errorf("%w: invalid current viewer", hostapps.ErrViewerPreparation))
+	if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), `"error_code":"HOST_APP_VIEWER_PREPARATION_FAILED"`) {
+		t.Fatalf("viewer preparation error lost its recovery boundary: %d %s", w.Code, w.Body.String())
+	}
+}
 
 type hostAppsStub struct {
 	assets      *nativeapps.ClientAssets

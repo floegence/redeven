@@ -62,6 +62,11 @@ type Session struct {
 // Presentation comes from the caller's explicit localized catalog. The window
 // document renders these bounded strings as text, never as markup or script.
 type Presentation struct {
+	InputUnsupported        string `json:"inputUnsupported,omitempty"`
+	InputUnsupportedHint    string `json:"inputUnsupportedHint,omitempty"`
+	ViewerPreparationFailed string `json:"viewerPreparationFailed,omitempty"`
+	ViewerPreparationHint   string `json:"viewerPreparationHint,omitempty"`
+
 	Keyboard                string `json:"keyboard,omitempty"`
 	TouchHelp               string `json:"touchHelp,omitempty"`
 	TouchHelpTitle          string `json:"touchHelpTitle,omitempty"`
@@ -109,7 +114,7 @@ type Presentation struct {
 	PictureSmooth           string `json:"pictureSmooth,omitempty"`
 	PictureData             string `json:"pictureData,omitempty"`
 	PictureHint             string `json:"pictureHint,omitempty"`
-	PictureReopenHint       string `json:"pictureReopenHint,omitempty"`
+	PictureBackendLimitHint string `json:"pictureBackendLimitHint,omitempty"`
 	PictureRenderResolution string `json:"pictureRenderResolution,omitempty"`
 	PictureLimited          string `json:"pictureLimited,omitempty"`
 	PictureDisplayLimitHint string `json:"pictureDisplayLimitHint,omitempty"`
@@ -186,9 +191,10 @@ type Backend interface {
 }
 
 var (
-	ErrUnavailable  = errors.New("host applications are unavailable")
-	ErrNotFound     = errors.New("application or session not found")
-	ErrInvalid      = errors.New("invalid application request")
-	ErrQuitRejected = errors.New("application declined the quit request")
-	ErrLimit        = errors.New("host application session limit reached")
+	ErrViewerPreparation = errors.New("host application viewer preparation failed")
+	ErrUnavailable       = errors.New("host applications are unavailable")
+	ErrNotFound          = errors.New("application or session not found")
+	ErrInvalid           = errors.New("invalid application request")
+	ErrQuitRejected      = errors.New("application declined the quit request")
+	ErrLimit             = errors.New("host application session limit reached")
 )

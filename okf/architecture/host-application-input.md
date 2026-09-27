@@ -40,6 +40,8 @@ IME composition and candidate choice remain available. No input history or input
 logging is introduced.
 
 Touch content clicks position the remote caret without opening the system keyboard.
+When returning from local toolbar controls, the Linux viewer focuses its embedded
+document before the shared textarea so Firefox can restore application typing.
 The toolbar Keyboard action explicitly focuses the existing textarea. Subsequent
 content touches keep an already visible keyboard usable. Viewport occlusion changes
 local geometry, never connection identity or the input element. Toolbar focus, page
@@ -60,13 +62,13 @@ a new application. The same implementation serves managed and supported system X
 The exact Xpra Python interpreter is probed; the catalog's host GIO interpreter remains
 independent. IBus/Fcitx configuration from the host desktop does not select input.
 
-Preparation version 2 is checked before creating input controllers, including deferred
-client initialization. Older preparation requires saving, quitting and reopening the
-application; it never silently falls back or ends the process. The text and pointer
-protocols remain version 1. GTK4 modules use a private GTK_PATH separate from the
-GTK3 cache; no generic GIO module path or global host setting is changed.
+The current `PreparedViewer` has one SDK capability result for display, input and
+pointer support. Linux never rejects the whole viewer because an application's
+historical preparation version differs. Text and pointer protocols remain version
+1 and unsupported input stays disabled. GTK4 modules use a private GTK_PATH
+separate from the GTK3 cache; no generic GIO module path or host setting changes.
 
-The prepared HTML v20/v21 client exposes `floeXpraInput.getClient()`, `floeInput`
+The prepared HTML v20/v21 client exposes `floeXpraViewer.getClient()`, `floeInput`
 and versioned `floePointer`. The pointer adapter reuses Xpra's existing pointer,
 button and fine/discrete wheel transport, owns per-connection scroll remainder,
 and clears it on cancellation or target change. Canvas, screen, touch, wheel,
@@ -84,10 +86,13 @@ Missing/stale input contexts return an explicit failure. Failed delivery revokes
 attachment input and presents reconnection guidance; pending text is discarded.
 No browser port or second reconnection path is added.
 
-Recovery retains existing backend/component identity and immutable prepared assets.
-A new application receives the new content digest; a live application retains its
-resource snapshot across viewer reconnects and Runtime upgrades. Recovery
-does not migrate a live input session or kill a process containing unsaved work.
+Recovery retains the backend, component identity and loaded modules. Current
+viewer resources have the independent [share snapshot lifetime](host-application-viewer-resources.md).
+The SDK reports `restart-required` only for an authenticated incompatible loaded
+module registration. Unknown input protocols disable affected input while retaining
+pictures and local controls. Missing focus/context, transport failure and ordinary
+reconnection never imply a module upgrade; existing recovery discards pending text
+and never replays it. No loaded module is replaced and no process is killed.
 
 ## macOS delivery
 
@@ -117,7 +122,7 @@ composition event alone does not establish system input-method acceptance.
 
 # Boundaries
 
-Binding loss cancels composition and releases held keys without replay. An incompatible input protocol requires an explicit application restart after saving. This input boundary does not change Flower, terminal or editor input.
+Binding loss cancels composition and releases held keys without replay. The macOS helper protocol retains its existing save/restart compatibility boundary; Linux uses the SDK capability decisions above. This input boundary does not change Flower, terminal or editor input.
 
 # Evidence
 

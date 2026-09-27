@@ -124,18 +124,23 @@ func resolveManagedTools(manager *nativeapps.Manager, digest string) (hostTools,
 }
 
 func (m *Manager) tools(ctx context.Context) (Availability, hostTools) {
+	availability, tools := m.installedTools(ctx)
+	return clientInputTools(ctx, availability, tools)
+}
+
+// Resolve current resources independently of a retained application's backend.
+func (m *Manager) installedTools(ctx context.Context) (Availability, hostTools) {
 	if runtime.GOOS == "linux" {
 		manager, err := m.setupManager()
 		if err == nil {
 			if installed := manager.Snapshot("").Installed; installed != nil && installed.Ready {
 				if tools, err := resolveManagedTools(manager, installed.Digest); err == nil {
-					return clientInputTools(ctx, Availability{Supported: true, Ready: true}, tools)
+					return Availability{Supported: true, Ready: true}, tools
 				}
 			}
 		}
 	}
-	availability, tools := detectDependencies(ctx, runtime.GOOS, os.Environ())
-	return clientInputTools(ctx, availability, tools)
+	return detectDependencies(ctx, runtime.GOOS, os.Environ())
 }
 
 // Only new launches require the input capability. Recovery retains the exact

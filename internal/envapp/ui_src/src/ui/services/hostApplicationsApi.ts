@@ -89,7 +89,11 @@ export type HostApplicationPresentation = Readonly<{
   pictureSmooth?: string;
   pictureData?: string;
   pictureHint?: string;
-  pictureReopenHint?: string;
+  pictureBackendLimitHint?: string;
+  inputUnsupported?: string;
+  inputUnsupportedHint?: string;
+  viewerPreparationFailed?: string;
+  viewerPreparationHint?: string;
   pictureRenderResolution?: string;
   pictureLimited?: string;
   pictureDisplayLimitHint?: string;
