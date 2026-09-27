@@ -317,13 +317,13 @@ export function GitTemplateImport(props: {
         </span>
       }
       footer={
-        <div class="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+        <div class="flex w-full flex-wrap justify-between items-center gap-2">
           <div class="min-w-0">
             <Show when={currentStep() > 0}>
               <Button
                 size="sm"
                 variant="ghost"
-                class="h-auto min-h-8 max-w-full whitespace-normal text-left"
+                class="min-h-8 max-w-full text-left"
                 disabled={busy()}
                 onClick={editSource}
               >
@@ -332,7 +332,7 @@ export function GitTemplateImport(props: {
               </Button>
             </Show>
           </div>
-          <div class="flex shrink-0 items-center gap-2">
+          <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
             <Button
               size="sm"
               variant="ghost"

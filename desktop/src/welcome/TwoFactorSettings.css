@@ -69,12 +69,13 @@
   min-width: 0;
 }
 .two-factor-progress {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 2px;
 }
 .two-factor-progress li {
+  flex: 1 1 max-content;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -289,18 +290,19 @@
   overflow-wrap: anywhere;
 }
 .two-factor-recovery-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 8px;
   border-top: 1px solid var(--border);
   background: var(--card);
 }
 .two-factor-recovery-actions button {
+  flex: 1 1 auto;
   gap: 7px;
   height: auto;
   min-height: 30px;
-  white-space: normal;
+  white-space: nowrap;
   line-height: 1.4;
 }
 .two-factor-recovery-actions svg {
@@ -386,7 +388,7 @@
 .two-factor-notice-copy h4 { color: var(--foreground); font-weight: 600; }
 .two-factor-notice-copy p { margin-top: 3px; color: var(--muted-foreground); }
 .two-factor-notice > button { grid-column: 2; justify-self: start; }
-.two-factor-notice-action { margin-top: 2px; height: auto; min-height: 32px; white-space: normal; gap: 6px; }
+.two-factor-notice-action { margin-top: 2px; height: auto; min-height: 32px; white-space: nowrap; gap: 6px; }
 .two-factor-error {
   border-color: color-mix(in srgb, var(--error) 25%, transparent);
   background: color-mix(in srgb, var(--error) 7%, var(--card));

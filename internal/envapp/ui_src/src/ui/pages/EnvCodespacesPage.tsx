@@ -496,13 +496,13 @@ function CodespaceCard(props: {
         <Show
           when={isRunning()}
           fallback={
-            <div class="flex flex-1 items-center gap-2 min-w-0">
+            <div class="flex flex-1 min-w-max">
               <Button
                 size="sm"
                 variant="default"
                 disabled={isBusy()}
                 onClick={props.onStart}
-                class="codespace-primary-action relative flex-1 min-w-0"
+                class="relative flex-1"
                 aria-busy={props.busyAction === "start" ? "true" : undefined}
               >
                 <Show
@@ -513,59 +513,16 @@ function CodespaceCard(props: {
                 </Show>
                 <StableText reserve={[i18n.t("codespaces.actions.starting"), i18n.t("codespaces.actions.opening"), i18n.t("codespaces.status.settingUpEditor"), i18n.t("codespaces.actions.start")]}>{props.busyAction === "start" ? busyActionLabel() : i18n.t("codespaces.actions.start")}</StableText>
               </Button>
-              <Show
-                when={props.desktopOpenAvailable}
-                fallback={
-                  <Tooltip content={i18n.t("codespaces.actions.openWillAutoStart")} placement="top">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={isBusy()}
-                      onClick={() => props.onOpen("system_browser")}
-                      aria-label={i18n.t("codespaces.actions.openWillAutoStart")}
-                      class="px-2 text-muted-foreground"
-                    >
-                      <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-3.5 h-3.5" />}>
-                        <InlineButtonSnakeLoading />
-                      </Show>
-                    </Button>
-                  </Tooltip>
-                }
-              >
-                <Dropdown
-                  align="end"
-                  disabled={isBusy()}
-                  triggerAriaLabel={props.busyAction === "open" ? busyActionLabel() : i18n.t("codespaces.actions.open")}
-                  items={openDropdownItems()}
-                  onSelect={handleOpenMenuSelect}
-                  trigger={
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={isBusy()}
-                      class={cn("relative gap-1 px-2", redevenSurfaceRoleClass("control"))}
-                      title={props.busyAction === "open" ? busyActionLabel() : i18n.t("codespaces.actions.open")}
-                      aria-busy={props.busyAction === "open" ? "true" : undefined}
-                    >
-                      <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-3.5 h-3.5" />}>
-                        <InlineButtonSnakeLoading />
-                      </Show>
-                      <span class="codespace-open-label"><StableText reserve={[i18n.t("codespaces.actions.starting"), i18n.t("codespaces.actions.opening"), i18n.t("codespaces.status.settingUpEditor"), i18n.t("codespaces.actions.open")]}>{props.busyAction === "open" ? busyActionLabel() : i18n.t("codespaces.actions.open")}</StableText></span>
-                      <ChevronDown class="w-3 h-3 text-muted-foreground" />
-                    </Button>
-                  }
-                />
-              </Show>
             </div>
           }
         >
-          <div class="flex flex-1 min-w-0">
+          <div class="flex flex-1 min-w-max">
             <Button
               size="sm"
               variant="default"
               disabled={isBusy()}
               onClick={() => props.onOpen(primaryOpenTarget())}
-              class={cn("codespace-primary-action relative flex-1 min-w-0", props.desktopOpenAvailable ? "rounded-r-none" : undefined)}
+              class={cn("relative flex-1", props.desktopOpenAvailable ? "rounded-r-none" : undefined)}
               aria-busy={props.busyAction === "open" ? "true" : undefined}
             >
               <Show
@@ -586,7 +543,7 @@ function CodespaceCard(props: {
                 items={openDropdownItems()}
                 onSelect={handleOpenMenuSelect}
                 trigger={
-                  <Button size="sm" variant="default" disabled={isBusy()} class="h-auto rounded-l-none border-l border-primary-foreground/20 px-2">
+                  <Button size="sm" variant="default" disabled={isBusy()} class="rounded-l-none border-l border-primary-foreground/20 px-2">
                     <ChevronDown class="w-3.5 h-3.5" />
                   </Button>
                 }
@@ -594,7 +551,52 @@ function CodespaceCard(props: {
             </Show>
           </div>
         </Show>
-        <div class="flex shrink-0 items-center gap-1">
+        <div class="ml-auto flex shrink-0 items-center gap-1">
+          <Show when={!isRunning()}>
+            <Show
+              when={props.desktopOpenAvailable}
+              fallback={
+                <Tooltip content={i18n.t("codespaces.actions.openWillAutoStart")} placement="top">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={isBusy()}
+                    onClick={() => props.onOpen("system_browser")}
+                    aria-label={i18n.t("codespaces.actions.openWillAutoStart")}
+                    class="px-2 text-muted-foreground"
+                  >
+                    <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-3.5 h-3.5" />}>
+                      <InlineButtonSnakeLoading />
+                    </Show>
+                  </Button>
+                </Tooltip>
+              }
+            >
+              <Dropdown
+                align="end"
+                disabled={isBusy()}
+                triggerAriaLabel={props.busyAction === "open" ? busyActionLabel() : i18n.t("codespaces.actions.open")}
+                items={openDropdownItems()}
+                onSelect={handleOpenMenuSelect}
+                trigger={
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isBusy()}
+                    class={cn("relative gap-1 px-2", redevenSurfaceRoleClass("control"))}
+                    title={props.busyAction === "open" ? busyActionLabel() : i18n.t("codespaces.actions.open")}
+                    aria-busy={props.busyAction === "open" ? "true" : undefined}
+                  >
+                    <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-3.5 h-3.5" />}>
+                      <InlineButtonSnakeLoading />
+                    </Show>
+                    <span class="codespace-open-label"><StableText reserve={[i18n.t("codespaces.actions.starting"), i18n.t("codespaces.actions.opening"), i18n.t("codespaces.status.settingUpEditor"), i18n.t("codespaces.actions.open")]}>{props.busyAction === "open" ? busyActionLabel() : i18n.t("codespaces.actions.open")}</StableText></span>
+                    <ChevronDown class="w-3 h-3 text-muted-foreground" />
+                  </Button>
+                }
+              />
+            </Show>
+          </Show>
           <Show when={isRunning()}>
             <Tooltip content={i18n.t("codespaces.actions.stopTooltip")} placement="top">
               <Button size="sm" variant="outline" disabled={isBusy()} onClick={props.onStop} aria-label={i18n.t("codespaces.actions.stopTooltip")} class={cn("px-2", redevenSurfaceRoleClass("control"))}>

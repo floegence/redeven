@@ -21,11 +21,11 @@ export function FlowerApprovalDecisionActions(props: Readonly<{
   return <div class="flower-approval-decision-group" role="group" aria-label={props.label} data-flower-approval-decision-group="true">
     <Button variant="outline" size="sm" class="flower-composer-approval-decision flower-approval-decision-reject rounded-full"
       disabled={props.disabled} aria-label={props.rejectAriaLabel} aria-describedby={props.describedBy || undefined} onClick={props.onReject}>
-      {props.rejectLabel}
+      <span class="min-w-0 truncate" title={props.rejectLabel}>{props.rejectLabel}</span>
     </Button>
     <Button variant="primary" size="sm" class="flower-composer-approval-decision flower-approval-decision-approve rounded-full"
       disabled={props.disabled} loading={props.submitting} aria-label={props.approveAriaLabel} aria-describedby={props.describedBy || undefined} onClick={props.onApprove}>
-      {props.approveLabel}
+      <span class="min-w-0 truncate" title={props.approveLabel}>{props.approveLabel}</span>
     </Button>
   </div>;
 }

@@ -1809,10 +1809,13 @@
   left: auto;
 }
 
+.flower-permission-menu-entry { position: relative; min-width: 0; border-radius: .375rem; }
+.flower-permission-menu-item::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
+
 .flower-permission-menu-item {
   display: grid;
   min-width: 0;
-  white-space: normal;
+  white-space: nowrap;
   width: 100%;
   cursor: pointer;
   grid-template-columns: minmax(0, 1fr);
@@ -1828,13 +1831,13 @@
     background-color 120ms ease, color 120ms ease;
 }
 
-.flower-permission-menu-item:hover,
-.flower-permission-menu-item:focus-visible {
+.flower-permission-menu-entry:hover,
+.flower-permission-menu-entry:has(:focus-visible) {
   background: color-mix(in srgb, var(--primary) 7%, transparent);
   outline: none;
 }
 
-.flower-permission-menu-item-active {
+.flower-permission-menu-entry:has(.flower-permission-menu-item-active) {
   background: color-mix(in srgb, var(--primary) 8%, transparent);
   outline: none;
 }
@@ -1864,8 +1867,10 @@
 }
 
 .flower-permission-menu-description {
-  overflow-wrap: anywhere;
+  display: block;
+  padding: 0 .375rem .25rem;
   white-space: normal;
+  overflow-wrap: anywhere;
   color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 8%);
   font-size: 0.6875rem;
   line-height: 1.35;
@@ -2100,8 +2105,9 @@
 .flower-model-menu-name {
   display: block;
   min-width: 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: var(--floe-type-caption);
   font-weight: 500;
 }
@@ -2236,7 +2242,7 @@
   height: auto;
   padding: 0.3125rem 0.5rem;
   text-align: left;
-  white-space: normal;
+  white-space: nowrap;
 }
 
 .flower-model-source-status-setup {
@@ -6616,7 +6622,7 @@
   margin-top: 0;
   border-radius: 9999px;
   color: var(--muted-foreground);
-  white-space: normal;
+  white-space: nowrap;
   text-align: left;
 }
 
@@ -7662,25 +7668,18 @@
 
   .flower-approval-queue-row .flower-approval-decision-group,
   .flower-approval-queue-footer > .flower-approval-decision-group {
-    display: grid;
+    display: flex;
+    flex-wrap: wrap;
     flex: 1 0 100%;
     width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .flower-approval-surface .flower-composer-approval-decision {
+    flex: 1 1 max-content;
+    min-width: 0;
     max-width: 100%;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
     text-align: center;
-  }
-}
-
-/* Enlarged text needs the full line for localized decision labels. */
-@container flower-bottom-composer (max-width: 14rem) {
-  .flower-approval-queue-row .flower-approval-decision-group,
-  .flower-approval-queue-footer > .flower-approval-decision-group {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 

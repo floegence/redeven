@@ -1,4 +1,7 @@
 import '../index.css';
+import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
+import { I18nProvider } from './i18n';
+import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from './i18n/storageKey';
 import './flower-feature.css';
 import { createSignal, type ComponentProps } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -13,20 +16,30 @@ import { CopyButton } from './pages/settings/SettingsPrimitives';
 import { FilePreviewErrorState } from './widgets/FilePreviewErrorState';
 
 let dispose: (() => void) | undefined;
-afterEach(() => { dispose?.(); vi.restoreAllMocks(); document.body.replaceChildren(); });
+afterEach(() => { dispose?.(); vi.restoreAllMocks(); document.body.replaceChildren(); localStorage.removeItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY); });
 const settle = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 const rect = (element: Element) => { const { x, y, width, height } = element.getBoundingClientRect(); return { x, y, width, height }; };
 const forward = { forward_id: 'stable', name: 'Dashboard', target_url: 'http://localhost:3001', description: '', health_path: '/', insecure_skip_verify: false, created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: 1, health: { status: 'healthy' as const, last_checked_at_unix_ms: 1, latency_ms: 10, last_error: '' } };
 
-it.each([1280, 600, 390])('preserves the web service action and adjacent row geometry at %ipx', async width => {
+it.each(['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'].flatMap(locale => [1280, 600, 320].map(width => ({ locale, width }))))('preserves single-line web service actions at $width px in $locale', async ({ width, locale }) => {
+  localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, locale);
   await page.viewport(width, 1000);
   const host = document.createElement('div'); host.className = 'web-services'; document.body.append(host);
   const [busy, setBusy] = createSignal(false);
-  dispose = render(() => <div class="web-service-list"><PortForwardRow forward={forward} busy={busy()} onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} /><PortForwardRow forward={{ ...forward, forward_id: 'neighbor' }} busy={false} onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} /></div>, host);
-  await settle();
+  dispose = render(() => <I18nProvider><div class="web-service-list"><PortForwardRow forward={forward} busy={busy()} onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} /><PortForwardRow forward={{ ...forward, forward_id: 'neighbor' }} busy={false} onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} /></div></I18nProvider>, host);
+  await vi.waitFor(() => expect(host.querySelectorAll('.web-service-row')).toHaveLength(2));
+  await document.fonts.ready; await settle();
   const geometry = () => [...host.querySelectorAll('.web-service-open button, .web-service-identity, .web-service-row')].map(rect);
-  const idle = geometry(); setBusy(true); await settle(); expect(geometry()).toEqual(idle);
-  setBusy(false); await settle(); expect(geometry()).toEqual(idle);
+  const idle = geometry();
+  for (const pending of [true, false]) {
+    setBusy(pending); await settle(); expect(geometry()).toEqual(idle);
+    expectSingleLineButtonLabels(host);
+    expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+    for (const button of host.querySelectorAll('button')) {
+      expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(host.getBoundingClientRect().right);
+      expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+    }
+  }
 });
 
 it('keeps copy feedback and its neighboring value still through the success timeout', async () => {

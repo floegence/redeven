@@ -858,7 +858,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                                       >
                                         <div class="grid grid-cols-[minmax(0,2.2fr)_7rem_8rem_5rem_6rem] gap-3 px-3 py-2.5 text-[10px]">
                                           <div class="min-w-0">
-                                            <div class="whitespace-normal break-all font-medium leading-[1rem]">{eventTitle(event)}</div>
+                                            <div class="truncate font-medium leading-[1rem]" title={eventTitle(event)}>{eventTitle(event)}</div>
                                             <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] text-muted-foreground">
                                               <span>{formatTimestamp(event.created_at)}</span>
                                               <span>{eventTransport(event) || compact(event.scope) || '-'}</span>
@@ -866,7 +866,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                                                 <span class="font-mono">{eventOperation(event)}</span>
                                               </Show>
                                               <Show when={compact(event.message)}>
-                                                <span class={`${eventFailed(event) ? 'font-medium' : ''} whitespace-normal break-words`}>{eventFailureMessage(event)}</span>
+                                                <span class={`${eventFailed(event) ? 'font-medium' : ''} min-w-0 truncate`} title={eventFailureMessage(event)}>{eventFailureMessage(event)}</span>
                                               </Show>
                                             </div>
                                           </div>
@@ -986,7 +986,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                                     >
                                         <div class="grid grid-cols-[minmax(0,2.4fr)_9rem_5rem_6rem_8rem] gap-3 px-3 py-2.5 text-[10px]">
                                           <div class="min-w-0">
-                                          <div class="whitespace-normal break-all font-medium text-foreground">{trace.title}</div>
+                                          <div class="truncate font-medium text-foreground" title={trace.title}>{trace.title}</div>
                                           <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] text-muted-foreground">
                                             <span class="font-mono">{compact(trace.trace_id) || i18n.t('debugConsole.values.generatedGroup')}</span>
                                             <span>{trace.scopes.join(', ') || '-'}</span>

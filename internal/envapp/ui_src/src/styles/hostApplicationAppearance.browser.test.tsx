@@ -1,3 +1,4 @@
+import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
 import '../index.css';
 import { afterEach, expect, it } from 'vitest';
 import { commands } from 'vitest/browser';
@@ -73,6 +74,7 @@ it.each(builtInShellThemePresets)('matches Env App colors and floating material 
   expect(doc.documentElement.classList.contains(preset.mode!)).toBe(true);
   const popover = doc.querySelector<HTMLElement>('.mac-app-popover')!;
   expect(popover.scrollWidth).toBeLessThanOrEqual(popover.clientWidth);
+  expectSingleLineButtonLabels(popover);
   expect(popover.getBoundingClientRect().right).toBeLessThanOrEqual(412);
   const select = doc.querySelector<HTMLSelectElement>('.mac-app-picture select')!;
   doc.querySelector<HTMLDetailsElement>('.mac-app-picture details')!.open = true;
@@ -112,10 +114,12 @@ it.each(Object.keys(catalog.locales))('updates visible copy and accessibility in
   advanced.open = true;
   const popover = doc.querySelector<HTMLElement>('.mac-app-popover')!;
   expect(popover.scrollWidth).toBeLessThanOrEqual(popover.clientWidth);
+  expectSingleLineButtonLabels(popover);
   for (const button of popover.querySelectorAll('button')) expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
   toggle.click(); doc.querySelector<HTMLButtonElement>('.mac-app-quit')!.click();
   expect(doc.querySelector('.mac-app-quit-confirmation strong')!.textContent).toBe(catalog.locales[locale].quitTitle.replaceAll('{name}', 'Text Editor'));
   expect(popover.scrollWidth).toBeLessThanOrEqual(popover.clientWidth);
+  expectSingleLineButtonLabels(popover);
   expect(doc.querySelector('.mac-app-confirm-quit')!.getBoundingClientRect().right).toBeLessThanOrEqual(352);
 });
 
