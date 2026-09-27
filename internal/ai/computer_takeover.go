@@ -49,8 +49,8 @@ func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, saf
 
 func computerInstallExecution() targetToolExecution {
 	return targetToolExecution{Payload: map[string]any{"browser_installation_required": true}, inputRequired: &fltools.InputRequest{
-		Summary:   "Install the built-in browser?",
-		Questions: []fltools.InputQuestion{{ID: "browser_install", Kind: "select", Prompt: "The built-in browser is not installed. Review the download size and choose environment download or automatic download and upload through Desktop. Nothing downloads until you confirm. You can disable this browser to continue without it and stop future installation requests.", Options: []string{"Continue with installed browser", "Continue without built-in browser"}}},
+		Summary:   "Prepare the built-in browser?",
+		Questions: []fltools.InputQuestion{{ID: "browser_install", Kind: "select", Prompt: "The built-in browser needs installation or system preparation. Review its current readiness in the browser setup panel. Choose environment download or automatic upload through Desktop when a package is needed, and authorize system preparation in the environment terminal when requested. Nothing downloads until you confirm. You can disable this browser to continue without it and stop future installation requests.", Options: []string{"Continue with installed browser", "Continue without built-in browser"}}},
 	}}
 }
 func computerInstallInteraction(view flruntime.ThreadView, interaction flruntime.ThreadInteraction) bool {

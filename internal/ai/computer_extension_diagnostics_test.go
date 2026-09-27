@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	"github.com/floegence/redeven/internal/browserbridge"
 	"os"
 	"os/exec"
 	"testing"
@@ -15,7 +16,7 @@ func TestChromeMissingResourcesHaveActionableDiagnostics(t *testing.T) {
 	}
 	host := NewComputerUseRuntime(registry, nil, t.TempDir())
 	t.Cleanup(func() { _ = host.Close() })
-	_, err := host.setupComputerExtension(t.Context())
+	_, err := host.setupComputerExtension(t.Context(), "unknown")
 	if err == nil || err.Error() != "browser_resources_missing" {
 		t.Fatalf("missing resources must identify the repairable prerequisite: %v", err)
 	}
@@ -40,9 +41,9 @@ func TestChromeDesktopPrerequisitesDoNotConfuseInstallationAndSession(t *testing
 		installed                bool
 		display, wayland, reason string
 	}{
-		{false, "", "", "chrome_not_installed"}, {true, "", "", "desktop_session_unavailable"}, {true, ":0", "", ""}, {true, "", "wayland-0", ""},
+		{false, "", "", "browser_not_installed"}, {true, "", "", "desktop_session_unavailable"}, {true, ":0", "", ""}, {true, "", "wayland-0", ""},
 	} {
-		err := checkComputerExtensionOpen("linux", "extensions", func(key string) string {
+		err := checkComputerExtensionOpen("linux", "extensions", browserbridge.Installation{Installed: tc.installed}, func(key string) string {
 			if key == "DISPLAY" {
 				return tc.display
 			}

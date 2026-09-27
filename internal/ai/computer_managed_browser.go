@@ -42,6 +42,7 @@ type managedBrowserProfile struct {
 	cmd       *exec.Cmd
 	input     io.WriteCloser
 	reader    *bufio.Reader
+	output    io.Closer
 	endpoint  string
 	done      chan struct{}
 	mu        sync.Mutex
@@ -58,12 +59,30 @@ type managedBrowserProfile struct {
 func (p *managedBrowserProfile) fault() {
 	p.mu.Lock()
 	unexpected := !p.retired
+	callback := p.onFailure
 	p.retired = true
 	p.mu.Unlock()
-	if unexpected && p.onFailure != nil {
-		p.onFailure()
+	if unexpected && callback != nil {
+		callback()
 	}
 	p.close()
+}
+
+// A failed startup belongs to installation readiness, not the shared service.
+// Arm service failure handling only after a valid successful handshake.
+func (p *managedBrowserProfile) establish(onFailure func()) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.retired {
+		return false
+	}
+	select {
+	case <-p.done:
+		return false
+	default:
+	}
+	p.onFailure = onFailure
+	return true
 }
 
 func (p *managedBrowserProfile) stopped() bool {
@@ -108,6 +127,10 @@ func (p *managedBrowserProfile) startReader() {
 		p.pending = make(map[string]*managedBrowserPending)
 		go func() {
 			defer p.fault()
+			if p.output != nil {
+				defer p.output.Close()
+			}
+			defer close(p.ready)
 			receivedReady := false
 			for {
 				body, err := readComputerLine(p.reader, 262144)
@@ -156,14 +179,15 @@ func (p *managedBrowserProfile) receive(ctx context.Context, destination any) er
 	timer := time.NewTimer(20 * time.Second)
 	defer timer.Stop()
 	select {
-	case body := <-p.ready:
+	case body, ok := <-p.ready:
+		if !ok {
+			return errors.New("managed browser disconnected")
+		}
 		return json.Unmarshal(body, destination)
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timer.C:
 		return context.DeadlineExceeded
-	case <-p.done:
-		return errors.New("managed browser disconnected")
 	}
 }
 func (p *managedBrowserProfile) call(ctx context.Context, command string) ([]ComputerBrowserTab, error) {
@@ -184,15 +208,9 @@ func (p *managedBrowserProfile) call(ctx context.Context, command string) ([]Com
 	request.timer = time.AfterFunc(20*time.Second, func() {
 		p.mu.Lock()
 		expired := p.pending[id] == request
-		if expired {
-			p.retired = true
-		}
 		p.mu.Unlock()
 		if expired {
-			if p.onFailure != nil {
-				p.onFailure()
-			}
-			p.close()
+			p.fault()
 		}
 	})
 	p.pending[id] = request
@@ -327,16 +345,22 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 	if err != nil {
 		return nil, err
 	}
-	output, err := cmd.StdoutPipe()
+	output, writer, err := os.Pipe()
 	if err != nil {
 		_ = input.Close()
 		return nil, err
 	}
+	// Own the pipe separately: exec.Cmd.Wait closes StdoutPipe before a fast
+	// failing process's structured startup result has necessarily been drained.
+	cmd.Stdout = writer
 	if err := cmd.Start(); err != nil {
 		_ = input.Close()
+		_ = output.Close()
+		_ = writer.Close()
 		return nil, err
 	}
-	profile := &managedBrowserProfile{cmd: cmd, input: input, reader: bufio.NewReader(output), done: make(chan struct{}), onFailure: func() { r.browserHostStopped(status.Generation) }}
+	_ = writer.Close()
+	profile := &managedBrowserProfile{cmd: cmd, input: input, reader: bufio.NewReader(output), output: output, done: make(chan struct{})}
 	go func() { _ = cmd.Wait(); close(profile.done) }()
 	var ready struct {
 		Type     string `json:"type"`
@@ -359,8 +383,11 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 	if ready.Error != "" {
 		profile.close()
 		reason := "browser_launch_failed"
-		if ready.Reason == "browser_dependency_missing" {
+		if ready.Reason == "browser_dependency_missing" || ready.Reason == "browser_sandbox_unavailable" {
 			reason = ready.Reason
+		}
+		if reason == "browser_sandbox_unavailable" {
+			r.browserInstallation.RequireSystemPreparation()
 		}
 		return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: reason}
 	}
@@ -369,6 +396,10 @@ func (r *ComputerUseRuntime) managedProfileLocked(ctx context.Context, profileID
 		return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_handshake_invalid"}
 	}
 
+	if !profile.establish(func() { r.browserHostStopped(status.Generation) }) {
+		profile.close()
+		return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_launch_failed"}
+	}
 	profile.endpoint = ready.Endpoint
 	if r.managedProfiles == nil {
 		r.managedProfiles = make(map[string]*managedBrowserProfile)

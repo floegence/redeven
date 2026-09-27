@@ -23,12 +23,13 @@ async function mount(locale: RedevenLocale = 'en-US') {
   writeStoredLanguagePreference(locale);
   let profiles = [{ id: 'browser-main', name: 'Default' }, { id: 'work', name: 'Work accounts' }];
   api.request.mockImplementation(async (path: string, options?: { method?: string; body?: string }) => {
-    if (path.endsWith('/installation')) return { enabled: true, state: 'installed', package: { id: 'fixture', name: 'Chromium', version: '153', platform: 'darwin', architecture: 'arm64', size_bytes: 1, installed_bytes: 1 }, received_bytes: 0, directory: '/fixture' };
+    if (path.endsWith('/preference')) return { preference: null };
+    if (path.endsWith('/installation')) return { storage_bytes: 1, enabled: true, state: 'installed', launch: { state: 'ready' as const }, package: { id: 'fixture', name: 'Chromium', version: '153', platform: 'darwin', architecture: 'arm64', size_bytes: 1, installed_bytes: 1 }, received_bytes: 0, directory: '/fixture' };
     if (path.endsWith('/profiles')) {
       if (options?.method === 'POST') profiles = [...profiles, { id: 'new-profile', name: JSON.parse(options.body!).name }];
       return profiles;
     }
-    if (path.endsWith('/extension/status')) return { profiles: [{ id: 'personal', name: 'My Chrome' }], platform: 'darwin', hostname: 'Workstation', prepared: true };
+    if (path.endsWith('/extension/status')) return { installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [{ installation_id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", library_id: "chrome-library", id: 'personal', name: 'My Chrome' }], platform: 'darwin', hostname: 'Workstation', prepared: true };
     if (path.includes('/extension/tabs?')) return [{ id: '7', profile_id: 'personal', title: 'Issue draft', url: 'https://example.test/issues/draft' }];
     if (path.endsWith('/connections/cdp')) return [{ id: 'remote', profile_id: 'default', title: 'CDP project', url: 'https://project.test/' }];
     throw new Error('Unexpected fixture request');
@@ -39,11 +40,13 @@ async function mount(locale: RedevenLocale = 'en-US') {
   const Chooser = () => <BrowserSourceDialog service={browserSourceService(`source-fixture-${locale}`)} messages={browserSourceMessages(useI18n())} current={{ request: { managed_profile_id: 'browser-main' }, label: 'Default profile' }} onSelect={select} onClose={close} />;
   const dispose = render(() => <FloeConfigProvider><LayoutProvider><I18nProvider><Chooser /></I18nProvider></LayoutProvider></FloeConfigProvider>, host);
   cleanup = () => { dispose(); host.remove(); };
-  await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Issue draft'));
+  await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('.redeven-browser-source-card')?.disabled).toBe(false));
   return { select, close };
 }
 it('keeps source selection as a draft until Open and preserves exact personal tab identity', async () => {
   const { select } = await mount();
+  await page.getByRole('button', { name: 'Personal browser', exact: true }).click();
+  await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Issue draft'));
   const personal = [...document.querySelectorAll('label')].find(label => label.textContent?.includes('Issue draft'))!;
   personal.click();
   expect(select).not.toHaveBeenCalled();
@@ -53,6 +56,8 @@ it('keeps source selection as a draft until Open and preserves exact personal ta
 });
 it('creates and selects an isolated profile without replacing the active page', async () => {
   const { select } = await mount();
+  await page.getByRole('button', { name: 'Built-in browser', exact: true }).click();
+  button('Create profile').click();
   const name = document.querySelector<HTMLInputElement>('input[maxlength="120"]')!;
   name.value = 'Client account'; name.dispatchEvent(new Event('input', { bubbles: true }));
   button('Create profile').click();
@@ -63,7 +68,7 @@ it('creates and selects an isolated profile without replacing the active page', 
 });
 it('discovers an advanced endpoint only on request and opens the exact discovered page', async () => {
   const { select } = await mount();
-  document.querySelector('summary')!.click();
+  button('Discover a self-managed Chromium browser').click();
   const endpoint = document.querySelector<HTMLInputElement>('input[aria-label="Browser debugging endpoint"]')!;
   endpoint.value = 'http://127.0.0.1:9222'; endpoint.dispatchEvent(new Event('input', { bubbles: true }));
   expect(api.request.mock.calls.some(([path]) => String(path).endsWith('/connections/cdp'))).toBe(false);
@@ -87,6 +92,8 @@ for (const [locale, width] of [['en-US', 1280], ['zh-CN', 390], ['de-DE', 390], 
 
 it('submits profile intent once on Enter and ignores composition Enter without native forms', async () => {
   await mount();
+  await page.getByRole('button', { name: 'Built-in browser', exact: true }).click();
+  button('Create profile').click();
   const name = document.querySelector<HTMLInputElement>('input[maxlength="120"]')!;
   name.value = 'Keyboard profile'; name.dispatchEvent(new Event('input', { bubbles: true }));
   name.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }));
@@ -95,4 +102,34 @@ it('submits profile intent once on Enter and ignores composition Enter without n
   await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Keyboard profile'));
   expect(api.request.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
   expect(document.querySelector('[role="dialog"] form')).toBeNull();
+});
+
+it('shows two source choices before revealing page selection or profile administration', async () => {
+  await mount();
+  expect(document.querySelectorAll('.redeven-browser-source-card')).toHaveLength(2);
+  expect(document.querySelector('input[type="radio"]')).toBeNull();
+  expect(document.querySelector('input[maxlength="120"]')).toBeNull();
+  expect(button('Open selection')).toBeUndefined();
+  await page.getByRole('button', { name: 'Built-in browser', exact: true }).click();
+  expect(document.querySelectorAll('input[type="radio"]')).toHaveLength(2);
+  expect(document.querySelector('input[maxlength="120"]')).toBeNull();
+  expect(document.querySelector('input[aria-label="Search pages"]')).toBeNull();
+  button('Back').click();
+  expect(document.querySelectorAll('.redeven-browser-source-card')).toHaveLength(2);
+});
+
+it('cancels a pending selection when returning to source choices', async () => {
+  const { select } = await mount();
+  let reject!: (reason: unknown) => void;
+  select.mockImplementation(() => new Promise((_resolve, onReject) => { reject = onReject; }));
+  await page.getByRole('button', { name: 'Built-in browser', exact: true }).click();
+  button('Open selection').click();
+  await vi.waitFor(() => expect(select).toHaveBeenCalledOnce());
+  const signal = select.mock.calls[0][1] as AbortSignal;
+  button('Back').click();
+  expect(signal.aborted).toBe(true);
+  expect(document.querySelector<HTMLButtonElement>('.redeven-browser-source-card')!.disabled).toBe(false);
+  reject(new Error('obsolete selection failed'));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(document.querySelector('[role="alert"]')).toBeNull();
 });

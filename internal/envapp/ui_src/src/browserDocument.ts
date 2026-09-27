@@ -89,6 +89,7 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
   if (configuration.sources) {
     const sources = configuration.sources;
     const service: BrowserSourceService = {
+      preference: async signal => await request({ method: 'source.preference' }, signal) as Awaited<ReturnType<BrowserSourceService['preference']>>,
       profiles: async signal => await request({ method: 'source.profiles' }, signal) as Awaited<ReturnType<BrowserSourceService['profiles']>>,
       createProfile: async (name, signal) => await request({ method: 'source.createProfile', name }, signal) as Awaited<ReturnType<BrowserSourceService['profiles']>>,
       status: async signal => await request({ method: 'source.status' }, signal) as Awaited<ReturnType<BrowserSourceService['status']>>,
@@ -99,8 +100,8 @@ function attach(event: MessageEvent<BrowserDocumentConfiguration>): void {
         loadBrowserInstallation: async () => await request({ method: 'source.installation' }) as FlowerBrowserInstallationSnapshot,
         saveBrowserEnabled: async enabled => await request({ method: 'source.enabled', enabled }) as FlowerBrowserInstallationSnapshot,
         installBrowser: async input => await request({ method: 'source.install', request: input }) as FlowerBrowserInstallationSnapshot,
-        setupExtension: async () => await request({ method: 'source.setup' }) as Awaited<ReturnType<NonNullable<BrowserSourceService['management']['setupExtension']>>>,
-        openExtension: async action => { await request({ method: 'source.openExtension', action }); },
+        setupExtension: async installationID => await request({ method: 'source.setup', installationID }) as Awaited<ReturnType<NonNullable<BrowserSourceService['management']['setupExtension']>>>,
+        openExtension: async (action, installationID) => { await request({ method: 'source.openExtension', action, installationID }); },
         loadExtensionStatus: async () => await request({ method: 'source.status' }) as Awaited<ReturnType<BrowserSourceService['status']>>,
         subscribeBrowserInstallation: listener => {
           installationListeners.add(listener);

@@ -3,9 +3,14 @@ type: Architecture Contract
 title: Remote browser surface
 description: Mount shared browser windows with source selection, theme and authenticated window lifetimes.
 tags: [architecture, browser, ui]
-timestamp: 2026-09-26T00:00:00Z
+timestamp: 2026-09-27T00:00:00Z
 ---
 # Summary
+
+Embedded and independent views receive the Shell's admitted Session only after
+the existing local readiness handshake. Transport establishment alone does not
+authorize initial source reads. This prevents an early request from racing the
+Runtime's product-session registration without introducing retries.
 
 - Authority: the environment window owns its authenticated Session and private control token; FloeBrowser owns reusable browser chrome and inert page presentation.
 - Outcome: Desktop and Web clients browse through the same surface and can open independent windows without selecting their source again.
@@ -21,7 +26,14 @@ The shared `FloeBrowserSurface` mounts the released `@floegence/floebrowser` vie
 Source admission, popup privacy and directory retirement belong to [browser source ownership](remote-browser-sources.md). [Browser persistence](remote-browser-persistence.md) owns the library and managed restoration. [Browser transport and media](remote-browser-media.md) owns authenticated carriers and source playback.
 
 
-The Browser page prepares the default managed profile without AI configuration.
+The Browser page first offers two source cards: the personal browser is recommended
+and the built-in browser remains independent. It does not force a managed profile.
+The chooser reveals connection setup, page selection and profile administration
+only after the corresponding source is chosen. Profile creation is disclosed on
+request; advanced debugging endpoints occupy a secondary step. Each step shows
+only its applicable actions, with one concise body description and local errors.
+Successful source preferences follow the [persistence contract](remote-browser-persistence.md).
+A missing or invalid preference returns to selection without starting a browser.
 One browser workspace controller owns source choice, open intent, replacement,
 view release and recovery for both the page and independent windows. Surfaces
 own only their document and ports. Managed opens check current installation
@@ -39,7 +51,7 @@ and renders localized failures without changing the selected page. Hosts supply
 plain labels and callbacks to the released FloeBrowser menu; they do not copy its
 chrome or menu implementation.
 Its source dialog edits a draft and applies it only on Open; profile creation,
-Chrome setup and browser installation reuse the same operations as Flower.
+personal-browser setup and browser installation reuse the same operations as Flower.
 Independent windows reuse the admitted source identity, so reopening a window
 never repeats a new-tab operation or rebinds an outdated URL selection. They mount
 the same source chooser through named product-port operations. Installation uses

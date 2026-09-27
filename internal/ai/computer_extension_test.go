@@ -28,12 +28,13 @@ func extensionFixture(t *testing.T, owners ...*ComputerUseRuntime) (*computerExt
 	if err != nil {
 		t.Fatal(err)
 	}
-	hub := &computerExtensionHub{listener: listener, directory: directory, profiles: make(map[string]*computerExtensionClient)}
+	registration := &computerExtensionRegistration{installationID: "fixture", listener: listener, directory: directory}
+	hub := &computerExtensionHub{registrations: map[string]*computerExtensionRegistration{"fixture": registration}, profiles: make(map[string]*computerExtensionClient)}
 	if len(owners) > 0 {
 		hub.owner = owners[0]
 	}
 	hub.wait.Add(1)
-	go hub.accept()
+	go hub.accept(registration)
 	t.Cleanup(hub.close)
 	peer, err := net.Dial("unix", listener.Addr().String())
 	if err != nil {
@@ -448,7 +449,7 @@ func TestExtensionRejectsOldObservationProtocol(t *testing.T) {
 	for _, old := range []string{"native_host", "hello"} {
 		t.Run(old, func(t *testing.T) {
 			hub, _, _ := extensionFixture(t)
-			peer, err := net.Dial("unix", hub.listener.Addr().String())
+			peer, err := net.Dial("unix", hub.registrations["fixture"].listener.Addr().String())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -485,7 +486,7 @@ func TestExtensionRejectsOldObservationProtocol(t *testing.T) {
 			}
 			hub.mu.Lock()
 			defer hub.mu.Unlock()
-			if old == "hello" && (hub.diagnostic == nil || hub.diagnostic.Reason != "extension_update_required") {
+			if old == "hello" && (hub.registrations["fixture"].diagnostic == nil || hub.registrations["fixture"].diagnostic.Reason != "extension_update_required") {
 				t.Fatal("guide lost the handshake failure")
 			}
 			if len(hub.profiles) != 1 {

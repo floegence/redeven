@@ -9,7 +9,7 @@ import (
 func (g *Server) handleBrowserWorkspaceAPI(w http.ResponseWriter, r *http.Request) bool {
 	const prefix = "/_redeven_proxy/api/browser/"
 	switch r.URL.Path {
-	case prefix + "recovery", prefix + "environment", prefix + "profiles", prefix + "workspace", prefix + "installation", prefix + "connections/cdp", prefix + "extension/setup", prefix + "extension/open", prefix + "extension/status", prefix + "extension/tabs":
+	case prefix + "preference", prefix + "recovery", prefix + "environment", prefix + "profiles", prefix + "workspace", prefix + "installation", prefix + "connections/cdp", prefix + "extension/setup", prefix + "extension/open", prefix + "extension/status", prefix + "extension/tabs":
 	default:
 		return false
 	}
@@ -20,6 +20,16 @@ func (g *Server) handleBrowserWorkspaceAPI(w http.ResponseWriter, r *http.Reques
 	var data any
 	var err error
 	switch {
+	case r.URL.Path == prefix+"preference" && r.Method == http.MethodGet:
+		data, err = g.browserRuntime.BrowserPreference(r.Context(), meta)
+	case r.URL.Path == prefix+"preference" && r.Method == http.MethodPost:
+		var request struct {
+			ViewID string `json:"view_id"`
+		}
+		if !decodeBrowserRequest(w, r, 4096, &request) {
+			return true
+		}
+		err = g.browserRuntime.SaveBrowserPreference(r.Context(), meta, request.ViewID)
 	case r.URL.Path == prefix+"recovery" && r.Method == http.MethodPost:
 		var request struct {
 			Generation string `json:"expected_generation"`
@@ -29,19 +39,26 @@ func (g *Server) handleBrowserWorkspaceAPI(w http.ResponseWriter, r *http.Reques
 		}
 		data, err = g.browserRuntime.RecoverBrowser(r.Context(), meta, request.Generation)
 	case r.URL.Path == prefix+"extension/setup" && r.Method == http.MethodPost:
-		data, err = g.browserRuntime.BrowserExtensionSetup(r.Context(), meta)
+		var request struct {
+			InstallationID string `json:"installation_id"`
+		}
+		if !decodeBrowserRequest(w, r, 1024, &request) {
+			return true
+		}
+		data, err = g.browserRuntime.BrowserExtensionSetup(r.Context(), meta, request.InstallationID)
 	case r.URL.Path == prefix+"extension/status" && r.Method == http.MethodGet:
 		data, err = g.browserRuntime.BrowserExtensionStatus(meta)
 	case r.URL.Path == prefix+"extension/tabs" && r.Method == http.MethodGet:
 		data, err = g.browserRuntime.BrowserExtensionTabs(r.Context(), meta, r.URL.Query().Get("profile_id"))
 	case r.URL.Path == prefix+"extension/open" && r.Method == http.MethodPost:
 		var request struct {
-			Action string `json:"action"`
+			Action         string `json:"action"`
+			InstallationID string `json:"installation_id"`
 		}
 		if !decodeBrowserRequest(w, r, 1024, &request) {
 			return true
 		}
-		err = g.browserRuntime.OpenBrowserExtension(r.Context(), meta, request.Action)
+		err = g.browserRuntime.OpenBrowserExtension(r.Context(), meta, request.Action, request.InstallationID)
 	case r.URL.Path == prefix+"environment" && r.Method == http.MethodGet:
 		data, err = g.browserRuntime.ComputerEnvironment(r.Context())
 	case r.URL.Path == prefix+"profiles" && (r.Method == http.MethodGet || r.Method == http.MethodPost):

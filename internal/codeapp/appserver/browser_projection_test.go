@@ -146,12 +146,29 @@ func TestBrowserProjectionUsesOneFlowersecSession(t *testing.T) {
 	}
 
 	if fixture.Resources != "" {
-		setup, err := runtime.BrowserExtensionSetup(ctx, meta)
+		installations, err := browserbridge.Installations()
+		if err != nil || len(installations) == 0 {
+			t.Fatal("browser discovery unavailable", err)
+		}
+		kind := os.Getenv("REDEVEN_BROWSER_TEST_INSTALLATION_KIND")
+		if kind == "" {
+			kind = "google_chrome"
+		}
+		var selected browserbridge.Installation
+		for _, installation := range installations {
+			if installation.Kind == kind {
+				selected = installation
+			}
+		}
+		if selected.ID == "" {
+			t.Fatal("requested browser installation is unavailable", kind)
+		}
+		setup, err := runtime.BrowserExtensionSetup(ctx, meta, selected.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer os.RemoveAll(setup.ExtensionPath)
-		if err = json.NewEncoder(input).Encode(map[string]any{"nativeHost": setup.NativeHost, "extensionID": setup.ExtensionID}); err != nil {
+		if err = json.NewEncoder(input).Encode(map[string]any{"nativeHost": setup.NativeHost, "extensionID": setup.ExtensionID, "nativeManifestDirectory": selected.ManifestDirectory}); err != nil {
 			t.Fatal(err)
 		}
 		if !reader.Scan() {

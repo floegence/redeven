@@ -11,7 +11,7 @@ import (
 
 const (
 	schemaKind           = "browser_product_v1"
-	currentSchemaVersion = 1
+	currentSchemaVersion = 2
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -22,7 +22,16 @@ func schemaSpec() sqliteutil.Spec {
 		Pragmas:          []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA foreign_keys=ON;`},
 		ValidateExisting: validateExisting,
 		Initialize:       createSchema,
-		Verify:           verifySchema,
+		Migrations: []sqliteutil.Migration{{FromVersion: 1, ToVersion: 2, Apply: func(tx *sql.Tx) error {
+			if err := verifySchemaVersion(tx, 1); err != nil {
+				return err
+			}
+			if err := createPreferences(tx); err != nil {
+				return err
+			}
+			return verifySchemaVersion(tx, 2)
+		}}},
+		Verify: verifySchema,
 	}
 }
 
@@ -41,13 +50,31 @@ func validateExisting(tx *sql.Tx) error {
 	if version < 1 {
 		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: 1}
 	}
-	if err := verifySchema(tx); err != nil {
+	if err := verifySchemaVersion(tx, version); err != nil {
 		return &sqliteutil.SchemaVerifyError{Kind: kind, Err: err}
 	}
 	return nil
 }
 
 func createSchema(tx *sql.Tx) error {
+	if err := createSchemaV1(tx); err != nil {
+		return err
+	}
+	return createPreferences(tx)
+}
+
+func createPreferences(tx *sql.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE browser_preferences (
+ owner_id TEXT PRIMARY KEY NOT NULL,
+ profile_id TEXT NOT NULL,
+ installation_id TEXT NOT NULL,
+ FOREIGN KEY(owner_id, profile_id) REFERENCES browser_profiles(owner_id, profile_id) ON DELETE CASCADE
+ );`)
+	return err
+}
+
+// Version one remains the reviewed historical migration input.
+func createSchemaV1(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 CREATE TABLE browser_profiles (
   owner_id TEXT NOT NULL,
@@ -108,7 +135,9 @@ CREATE TABLE browser_zoom (
 
 // Verify the complete reviewed DDL, not just object and column names. A changed
 // constraint, column type or index definition is an incompatible store.
-func verifySchema(tx *sql.Tx) error {
+func verifySchema(tx *sql.Tx) error { return verifySchemaVersion(tx, currentSchemaVersion) }
+
+func verifySchemaVersion(tx *sql.Tx, version int) error {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		return err
@@ -119,8 +148,13 @@ func verifySchema(tx *sql.Tx) error {
 		return err
 	}
 	defer func() { _ = expected.Rollback() }()
-	if err := createSchema(expected); err != nil {
+	if err := createSchemaV1(expected); err != nil {
 		return err
+	}
+	if version >= 2 {
+		if err := createPreferences(expected); err != nil {
+			return err
+		}
 	}
 	read := func(source *sql.Tx) ([]string, error) {
 		rows, err := source.Query(`SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> '__redeven_db_meta' ORDER BY type, name`)

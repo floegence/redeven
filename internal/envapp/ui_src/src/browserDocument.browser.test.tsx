@@ -44,7 +44,8 @@ function mountDocument(failed = false, onInteraction?: () => void) {
     onInteraction: () => { events.push({ type: 'interaction' }); onInteraction?.(); },
     sources: { select: async () => undefined, service: {
       profiles: async () => [{ id: 'browser-main', name: 'Default' }],
-      status: async () => ({ profiles: [], platform: 'darwin', prepared: false }),
+      status: async () => ({ profiles: [], installations: [], platform: 'darwin', prepared: false }),
+      preference: async () => ({ preference: null }),
       management: {},
     } as unknown as BrowserSourceService },
   });
@@ -78,6 +79,11 @@ for (const failed of [false, true]) for (const [dark, surfaceStyle, width] of [[
     frame.contentDocument!.querySelector<HTMLButtonElement>('[data-floe-ui="more"]')!.click();
     frame.contentDocument!.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click();
   }
+  await vi.waitFor(() => expect(frame.contentDocument?.querySelectorAll('.redeven-browser-source-card')).toHaveLength(2));
+  await vi.waitFor(() => expect(frame.contentDocument!.querySelector<HTMLButtonElement>('.redeven-browser-source-card[aria-label="Built-in browser"]')!.disabled).toBe(false));
+  frame.contentDocument!.querySelector<HTMLButtonElement>('.redeven-browser-source-card[aria-label="Built-in browser"]')!.click();
+  await vi.waitFor(() => expect(Array.from(frame.contentDocument!.querySelectorAll('button')).find(button => button.textContent === 'Create profile')).toBeTruthy());
+  Array.from(frame.contentDocument!.querySelectorAll('button')).find(button => button.textContent === 'Create profile')!.click();
   await vi.waitFor(() => expect(frame.contentDocument?.querySelector('.redeven-browser-sources-dialog input')).toBeTruthy());
   const child = frame.contentWindow!, doc = frame.contentDocument!;
   const dialog = doc.querySelector<HTMLElement>('.redeven-browser-sources-dialog')!;
@@ -137,7 +143,7 @@ for (const failed of [false, true]) it(`reports real pointer interaction from th
   expect(mount.querySelector('textarea')).toBe(draft);
   expect(draft.value).toBe('Preserved draft');
   expect(document.activeElement).toBe(frame);
-  if (failed) await vi.waitFor(() => expect(doc.querySelector('.redeven-browser-sources-dialog input')).toBeTruthy());
+  if (failed) await vi.waitFor(() => expect(doc.querySelectorAll('.redeven-browser-source-card')).toHaveLength(2));
   else {
     expect(doc.querySelector('[role="menuitem"]')).toBeTruthy();
     setOpen(true);

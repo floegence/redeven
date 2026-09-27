@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile, mkdir, readdir, copyFile, symlink } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { createRequire } from 'node:module';
@@ -29,7 +29,7 @@ assert.ok(['chromium', 'chrome', 'msedge', 'firefox', 'webkit', 'electron', 'fir
 const input = createInterface({ input: process.stdin });
 const nextMessage = () => new Promise(resolve => input.once('line', line => resolve(JSON.parse(line))));
 const firstMessage = nextMessage();
-const directory = await mkdtemp(path.join(tmpdir(), 'redeven-browser-projection-'));
+const directory = await mkdtemp(path.join(process.env.REDEVEN_BROWSER_TEST_TEMP_ROOT || tmpdir(), 'redeven-browser-projection-'));
 const tls = await createBuiltDistTLS();
 let source, managedBrowser, client, website, publicServer, diagnosticPage;
 const managedSource = process.env.REDEVEN_BROWSER_SOURCE === 'managed';
@@ -85,7 +85,9 @@ try {
   const sourceOrigin = `http://127.0.0.1:${website.address().port}`;
   let page, port, targetInfo;
   if (!managedSource) {
-  source = await chromium.launchPersistentContext(directory, { headless: true, ...(extensionSource ? { executablePath: chromium.executablePath() } : {}), ignoreDefaultArgs: extensionSource ? ['--disable-extensions'] : [], args: ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', ...(extensionSource ? [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] : [])] });
+  const executablePath = process.env.REDEVEN_BROWSER_TEST_EXECUTABLE;
+  assert(executablePath && path.isAbsolute(executablePath), 'Source browser qualification requires an explicit verified executable');
+  source = await chromium.launchPersistentContext(directory, { headless: true, executablePath, chromiumSandbox: true, ignoreDefaultArgs: extensionSource ? ['--disable-extensions'] : [], args: ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', ...(extensionSource ? [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] : [])] });
   page = source.pages()[0]; await page.goto(sourceOrigin);
   const probe = await source.newCDPSession(page);
   ({ targetInfo } = await probe.send('Target.getTargetInfo')); await probe.detach();
@@ -130,8 +132,7 @@ try {
     // this Runtime's exact registration into the disposable browser profile.
     // See Chromium chrome/common/chrome_paths.cc, DIR_USER_NATIVE_MESSAGING.
     {
-      const root = process.platform === 'darwin' ? path.join(homedir(), 'Library', 'Application Support', 'Google', 'Chrome') : path.join(homedir(), '.config', 'google-chrome');
-      const manifest = await readFile(path.join(root, 'NativeMessagingHosts', configuration.nativeHost + '.json'));
+      const manifest = await readFile(path.join(configuration.nativeManifestDirectory, configuration.nativeHost + '.json'));
       testingManifest = path.join(directory, 'NativeMessagingHosts', configuration.nativeHost + '.json');
       await mkdir(path.dirname(testingManifest), { recursive: true });
       await writeFile(testingManifest, manifest, { flag: 'wx', mode: 0o600 });
@@ -251,6 +252,7 @@ try {
   const chooseProfile = async (surface, name) => {
     await surface.getByRole('button', { name: 'More browser actions', exact: true }).click();
     await surface.getByRole('menuitem', { name: 'Browser sources', exact: true }).click();
+    await surface.getByRole('button', { name: 'Built-in browser', exact: true }).click();
     await surface.getByRole('radio', { name }).click();
     await surface.getByRole('button', { name: 'Open selection', exact: true }).click();
     await surface.getByRole('dialog').waitFor({ state: 'hidden' });
@@ -258,6 +260,8 @@ try {
   if (managedSource) {
     await document.getByRole('button', { name: 'More browser actions', exact: true }).click();
     await document.getByRole('menuitem', { name: 'Browser sources', exact: true }).click();
+    await document.getByRole('button', { name: 'Built-in browser', exact: true }).click();
+    await document.getByRole('button', { name: 'Create profile', exact: true }).click();
     await document.getByRole('textbox', { name: 'New profile name', exact: true }).fill('Inline selection');
     await document.getByRole('button', { name: 'Create profile', exact: true }).click();
     await document.getByRole('radio', { name: /Inline selection/ }).waitFor();
@@ -293,10 +297,14 @@ try {
   await popup.getByRole('menuitem', { name: 'Browser sources', exact: true }).click();
   assert.equal(await popup.locator('.redeven-browser-document-bar').count(), 0, 'Product actions share the address row');
   await popup.getByRole('dialog').waitFor();
+  await popup.getByRole('button', { name: 'Built-in browser', exact: true }).click();
+  await popup.getByRole('button', { name: 'Create profile', exact: true }).click();
   await popup.getByRole('textbox', { name: 'New profile name', exact: true }).fill('Sandbox profile');
   await popup.getByRole('button', { name: 'Create profile', exact: true }).click();
   await popup.getByRole('radio', { name: /Sandbox profile/ }).waitFor();
   if (extensionSource) {
+    await popup.getByRole('dialog').getByRole('button', { name: 'Back', exact: true }).click();
+    await popup.getByRole('button', { name: 'Personal browser', exact: true }).click();
     await popup.getByRole('radio', { name: /New background tab/ }).waitFor();
     assert.equal(await popup.getByRole('radio', { name: /Popup popup/ }).count(), 0, 'Private native descendants stay outside source selection after their direct opener closes');
     assert.equal(await popup.getByRole('radio', { name: /Shared source fixture/ }).count(), 0, 'The private root is absent from another window inventory');
@@ -465,7 +473,7 @@ try {
       await dialog.getByText('Discover a self-managed Chromium browser', { exact: true }).click();
       await dialog.getByRole('textbox', { name: 'Browser debugging endpoint', exact: true }).fill(`http://127.0.0.1:${port}`);
       await dialog.getByRole('button', { name: 'Find tabs', exact: true }).click();
-    }
+    } else await dialog.getByRole('button', { name: 'Personal browser', exact: true }).click();
     return dialog;
   };
   let sourceDialog = await findSources();

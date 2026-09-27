@@ -1,4 +1,4 @@
-import { StableText, Button } from '@floegence/floe-webapp-core/ui';
+import { StableText, Button, Select } from '@floegence/floe-webapp-core/ui';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import type { FlowerChromeDiagnostic, FlowerChromeStatus, FlowerComputerExtensionSetup, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
@@ -9,8 +9,10 @@ import { chromeConnectionDiagnostic, chromeConnectionError } from './chromeConne
 // This guide observes Runtime connection inventory. It never binds a tab or
 // creates a conversation lifecycle; the caller resumes the original interaction.
 export function FlowerChromeConnection(props: {
-  environmentName?: string; platform?: string; reuseConnected?: boolean; management: Pick<FlowerComputerManagement, 'setupExtension' | 'openExtension' | 'loadExtensionStatus'>; copy: FlowerComputerCopy; onConnected: () => Promise<void>;
+  environmentName?: string; platform?: string; preferredInstallationID?: string; reuseConnected?: boolean; management: Pick<FlowerComputerManagement, 'setupExtension' | 'openExtension' | 'loadExtensionStatus'>; copy: FlowerComputerCopy; onConnected: () => Promise<void>;
 }) {
+  const [installationID, setInstallationID] = createSignal('');
+  const selectedInstallation = () => connectionStatus()?.installations.find(item => item.id === installationID());
   const [setup, setSetup] = createSignal<FlowerComputerExtensionSetup>();
   const [phase, setPhase] = createSignal<'preparing' | 'waiting' | 'confirming' | 'connected' | 'failed' | 'timeout'>('preparing');
   const [step, setStep] = createSignal<'install' | 'connect'>('install');
@@ -31,15 +33,18 @@ export function FlowerChromeConnection(props: {
   const check = async (epoch: number): Promise<boolean> => {
     const connection = await props.management.loadExtensionStatus!();
     if (disposed || completing || epoch !== generation) return true;
-    const profiles = connection.profiles;
+    if (!installationID()) setInstallationID(connection.installations.find(item => item.id === props.preferredInstallationID && item.installed)?.id ?? connection.installations.find(item => item.connected)?.id ?? connection.installations.find(item => item.installed)?.id ?? '');
+    const installation = connection.installations.find(item => item.id === installationID());
+    const profiles = connection.profiles.filter(profile => profile.installation_id === installationID());
     setConnectionStatus(connection);
-    setDiagnostic(connection.diagnostic ? chromeConnectionDiagnostic(connection.diagnostic, connection.diagnostic.stage) : undefined);
-    if (connection.diagnostic?.reason === 'desktop_session_unavailable') setExtensionsOpened(true);
+    const diagnostic = connection.diagnostic ?? installation?.diagnostic ?? (installation?.reason && !['connection_required', 'extension_update_required'].includes(installation.reason) ? { stage: 'open' as const, reason: installation.reason } : undefined);
+    setDiagnostic(diagnostic ? chromeConnectionDiagnostic(diagnostic, diagnostic.stage) : undefined);
+    if (diagnostic?.reason === 'desktop_session_unavailable') setExtensionsOpened(true);
     if (!initialProfiles) {
       initialProfiles = new Set(profiles.map(profile => profile.id));
-      if (props.reuseConnected && connection.prepared) setStep('connect');
+      if (props.reuseConnected && installation?.prepared) setStep('connect');
     }
-    if (connection.error === 'extension_update_required') {
+    if (installation?.reason === 'extension_update_required') {
       if (!updateRequired()) {
         setUpdateRequired(true); setStep('install'); setExtensionsOpened(false); setPhase('waiting');
       }
@@ -66,9 +71,9 @@ export function FlowerChromeConnection(props: {
     clearTimeout(timer); completing = false; setPhase('preparing'); setDiagnostic(undefined);
     try { if (await check(epoch) || disposed) return; }
     catch (error) { if (!disposed && epoch === generation) { setDiagnostic(chromeConnectionError(error, 'check')); setPhase('failed'); } return; }
-    if (diagnostic()?.stage === 'prepare') { setPhase('failed'); return; }
+    if (!installationID() || connectionStatus()?.diagnostic?.stage === 'prepare') { setPhase('failed'); return; }
     try {
-      const result = await props.management.setupExtension!();
+      const result = await props.management.setupExtension!(installationID());
       if (disposed || epoch !== generation) return;
       setSetup(result); setPhase('waiting'); deadline = Date.now() + 120_000;
       void poll();
@@ -84,7 +89,7 @@ export function FlowerChromeConnection(props: {
     const epoch = generation;
     setOpening(true); setDiagnostic(undefined);
     try {
-      await props.management.openExtension!(action);
+      await props.management.openExtension!(action, installationID());
       if (!disposed && !completing && epoch === generation) {
         if (action === 'extensions') setExtensionsOpened(true);
         if (action === 'connect') observeConfirmation();
@@ -100,17 +105,27 @@ export function FlowerChromeConnection(props: {
     setStep(next); setDiagnostic(undefined);
     if (phase() === 'confirming') setPhase('waiting');
   };
-  const manualDesktop = () => connectionStatus()?.diagnostic?.reason === 'desktop_session_unavailable';
+  const manualDesktop = () => selectedInstallation()?.reason === 'desktop_session_unavailable';
   const connectionURL = () => setup() ? `chrome-extension://${setup()!.extension_id}/popup.html#${setup()!.native_host}` : '';
   const copyConnection = () => {
     observeConfirmation();
     void navigator.clipboard.writeText(connectionURL()).then(() => { if (!disposed) setLinkCopied(true); }, () => { if (!disposed) { connectionInput?.closest('details')?.setAttribute('open', ''); connectionInput?.focus(); connectionInput?.select(); } });
   };
   const retryLabel = () => diagnostic()?.stage === 'continue' ? props.copy.continueTask
-    : ['browser_resources_missing', 'browser_extension_missing', 'chrome_not_installed', 'desktop_session_unavailable'].includes(diagnostic()?.reason ?? '') ? props.copy.chromeCheckAfterRepair
+    : ['browser_resources_missing', 'browser_extension_missing', 'browser_not_installed', 'desktop_session_unavailable'].includes(diagnostic()?.reason ?? '') ? props.copy.chromeCheckAfterRepair
     : diagnostic()?.stage === 'prepare' ? props.copy.chromeRetryPrepare : props.copy.retryConnection;
+  const selectInstallation = (id: string) => {
+    if (opening() || id === installationID()) return;
+    clearTimeout(timer); ++generation; initialProfiles = undefined; completing = false;
+    setInstallationID(id); setSetup(undefined); setStep('install'); setExtensionsOpened(false); setUpdateRequired(false);
+    void prepare();
+  };
   return <section class="space-y-5" data-flower-chrome-connection>
-    <FlowerChromeReadiness status={connectionStatus()} diagnostic={diagnostic()} environmentName={props.environmentName} platform={props.platform} copy={props.copy}
+    <Show when={(connectionStatus()?.installations.filter(item => item.installed).length ?? 0) > 1}>
+      <Select value={installationID()} onChange={value => { if (value) selectInstallation(value); }} disabled={opening()}
+        aria-label={props.copy.chromeTitle} options={(connectionStatus()?.installations ?? []).filter(item => item.installed).map(item => ({ value: item.id, label: item.name }))} />
+    </Show>
+    <FlowerChromeReadiness status={connectionStatus() ? { ...connectionStatus()!, profiles: connectionStatus()!.profiles.filter(profile => profile.installation_id === installationID()), browser_installed: selectedInstallation()?.installed } : undefined} diagnostic={diagnostic()} environmentName={props.environmentName} platform={props.platform} copy={props.copy}
       onRetry={diagnostic() ? () => void prepare() : undefined} retryLabel={retryLabel()} retryDisabled={opening()} />
     <Show when={diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}><ol class="grid grid-cols-2 gap-4 flower-body-copy">
       <li aria-current={step() === 'install' ? 'step' : undefined}

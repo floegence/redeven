@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +25,8 @@ import (
 )
 
 type ComputerExtensionSetup struct {
+	InstallationID    string   `json:"installation_id"`
+	BrowserName       string   `json:"browser_name"`
 	NativeHost        string   `json:"native_host"`
 	ExtensionID       string   `json:"extension_id"`
 	ExtensionPath     string   `json:"extension_path"`
@@ -33,10 +34,13 @@ type ComputerExtensionSetup struct {
 	Platform          string   `json:"platform"`
 }
 type ComputerExtensionProfile struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	InstallationID string `json:"installation_id"`
+	LibraryID      string `json:"library_id"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
 }
 type ComputerExtensionStatus struct {
+	Installations    []browserbridge.Installation `json:"installations"`
 	RuntimeVersion   string                       `json:"runtime_version,omitempty"`
 	Hostname         string                       `json:"hostname,omitempty"`
 	Platform         string                       `json:"platform,omitempty"`
@@ -48,17 +52,12 @@ type ComputerExtensionStatus struct {
 }
 
 type computerExtensionHub struct {
-	diagnostic       *ComputerExtensionDiagnostic
-	launchGeneration uint64
-	owner            *ComputerUseRuntime
-	mu               sync.Mutex
-	listener         net.Listener
-	directory        string
-	profiles         map[string]*computerExtensionClient
-	closed           bool
-	manifestPath     string
-	manifestBytes    []byte
-	wait             sync.WaitGroup
+	owner         *ComputerUseRuntime
+	mu            sync.Mutex
+	registrations map[string]*computerExtensionRegistration
+	profiles      map[string]*computerExtensionClient
+	closed        bool
+	wait          sync.WaitGroup
 }
 type computerExtensionClient struct {
 	hub      *computerExtensionHub
@@ -74,7 +73,7 @@ type computerExtensionClient struct {
 
 // Initial setup is an explicit local user command. Later Runtime starts restore
 // that registration; neither path binds a tab or creates a thread grant.
-func (s *Service) SetupComputerExtension(ctx context.Context, meta *session.Meta) (ComputerExtensionSetup, error) {
+func (s *Service) SetupComputerExtension(ctx context.Context, meta *session.Meta, installation string) (ComputerExtensionSetup, error) {
 	if err := requireRWX(meta); err != nil {
 		return ComputerExtensionSetup{}, err
 	}
@@ -82,12 +81,17 @@ func (s *Service) SetupComputerExtension(ctx context.Context, meta *session.Meta
 	if !ok {
 		return ComputerExtensionSetup{}, errors.New("computer runtime unavailable")
 	}
-	return host.setupComputerExtension(ctx)
+	return host.setupComputerExtension(ctx, installation)
 }
-func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (result ComputerExtensionSetup, failure error) {
+func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context, installation string) (result ComputerExtensionSetup, failure error) {
+	selected, err := browserbridge.ResolveInstallation(installation)
+	if err != nil {
+		return result, extensionFailure("prepare", "browser_not_installed", err)
+	}
 	defer func() {
 		if failure != nil {
 			failure = extensionFailure("prepare", "extension_setup_failed", failure)
+			r.recordExtensionFailure(installation, failure)
 		}
 	}()
 	r.connectMu.Lock()
@@ -114,55 +118,22 @@ func (r *ComputerUseRuntime) setupComputerExtension(ctx context.Context) (result
 	if err != nil {
 		return ComputerExtensionSetup{}, err
 	}
-	setup := computerExtensionInstallLocation(userHome, managed.ProfileDir)
+	setup := computerExtensionLocation(userHome, managed.ProfileDir, selected)
 	if err := stageComputerExtension(resources, setup.ExtensionPath); err != nil {
-		return ComputerExtensionSetup{}, err
+		return result, err
 	}
 	if hub == nil {
-		directory, err := os.MkdirTemp("/tmp", "redeven-chrome-")
-		if err != nil {
-			return ComputerExtensionSetup{}, err
-		}
-		socket := filepath.Join(directory, "bridge")
-		listener, err := net.Listen("unix", socket)
-		if err != nil {
-			_ = os.RemoveAll(directory)
-			return ComputerExtensionSetup{}, err
-		}
-		hub = &computerExtensionHub{owner: r, listener: listener, directory: directory, profiles: make(map[string]*computerExtensionClient)}
+		hub = &computerExtensionHub{owner: r, profiles: make(map[string]*computerExtensionClient), registrations: make(map[string]*computerExtensionRegistration)}
 		r.mu.Lock()
 		r.extension = hub
 		r.mu.Unlock()
-		hub.wait.Add(1)
-		go hub.accept()
 	}
-	executable, err := os.Executable()
-	if err != nil {
-		return ComputerExtensionSetup{}, err
-	}
-	manifestDirectory := filepath.Join(userHome, ".config", "google-chrome", "NativeMessagingHosts")
-	if runtime.GOOS == "darwin" {
-		manifestDirectory = filepath.Join(userHome, "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts")
-	}
-	wrapper := filepath.Join(hub.directory, "native-host")
-	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'" }
-	script := "#!/bin/sh\nexec " + quote(executable) + " browser-bridge " + quote(filepath.Join(hub.directory, "bridge")) + " \"$@\"\n"
-	if err := os.WriteFile(wrapper, []byte(script), 0700); err != nil {
-		return ComputerExtensionSetup{}, err
-	}
-	manifest, _ := json.MarshalIndent(map[string]any{"name": setup.NativeHost, "description": "Flower browser connection", "path": wrapper, "type": "stdio", "allowed_origins": []string{"chrome-extension://" + browserbridge.ExtensionID + "/"}}, "", "  ")
-	if err := os.MkdirAll(manifestDirectory, 0700); err != nil {
-		return ComputerExtensionSetup{}, err
-	}
-	manifestPath := filepath.Join(manifestDirectory, setup.NativeHost+".json")
-	manifest = append(manifest, '\n')
-	if err := os.WriteFile(manifestPath, manifest, 0600); err != nil {
-		return ComputerExtensionSetup{}, err
+	if err := hub.register(selected, setup); err != nil {
+		return result, err
 	}
 	hub.mu.Lock()
-	hub.manifestPath, hub.manifestBytes = manifestPath, manifest
-	hub.diagnostic = nil
-	hub.launchGeneration++
+	hub.registrations[selected.ID].diagnostic = nil
+	hub.registrations[selected.ID].launchGeneration++
 	hub.mu.Unlock()
 	return setup, nil
 }
@@ -181,19 +152,37 @@ func (r *ComputerUseRuntime) restoreComputerExtension(ctx context.Context) error
 	if err != nil {
 		return err
 	}
-	setup := computerExtensionInstallLocation(userHome, managed.ProfileDir)
-	info, err := os.Lstat(filepath.Join(setup.ExtensionPath, "manifest.json"))
-	if os.IsNotExist(err) {
-		return nil
-	}
+	installations, err := browserbridge.Installations()
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() {
-		return errors.New("invalid browser extension installation manifest")
+	return r.restoreComputerInstallations(ctx, userHome, managed.ProfileDir, installations)
+}
+
+func (r *ComputerUseRuntime) restoreComputerInstallations(ctx context.Context, home, profile string, installations []browserbridge.Installation) error {
+	var failures []error
+	for _, installation := range installations {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(append(failures, err)...)
+		}
+		setup := computerExtensionLocation(home, profile, installation)
+		info, err := os.Lstat(filepath.Join(setup.ExtensionPath, "manifest.json"))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err == nil && !info.Mode().IsRegular() {
+			err = errors.New("invalid browser extension installation manifest")
+		}
+		if err == nil {
+			_, err = r.setupComputerExtension(ctx, installation.ID)
+		}
+		if err != nil {
+			failure := extensionFailure("prepare", "extension_setup_failed", err)
+			r.recordExtensionFailure(installation.ID, failure)
+			failures = append(failures, failure)
+		}
 	}
-	_, err = r.setupComputerExtension(ctx)
-	return err
+	return errors.Join(failures...)
 }
 
 func computerExtensionInstallLocation(userHome, profileDir string) ComputerExtensionSetup {
@@ -205,18 +194,18 @@ func computerExtensionInstallLocation(userHome, profileDir string) ComputerExten
 		ExtensionHomePath: parts, Platform: runtime.GOOS}
 }
 
-func (h *computerExtensionHub) accept() {
+func (h *computerExtensionHub) accept(registration *computerExtensionRegistration) {
 	defer h.wait.Done()
 	for {
-		conn, err := h.listener.Accept()
+		conn, err := registration.listener.Accept()
 		if err != nil {
 			return
 		}
 		h.wait.Add(1)
-		go func() { defer h.wait.Done(); h.admit(conn) }()
+		go func() { defer h.wait.Done(); h.admit(conn, registration.installationID) }()
 	}
 }
-func (h *computerExtensionHub) admit(conn net.Conn) {
+func (h *computerExtensionHub) admit(conn net.Conn, installationID string) {
 	admitted := false
 	defer func() {
 		if !admitted {
@@ -251,7 +240,9 @@ func (h *computerExtensionHub) admit(conn net.Conn) {
 	}
 	if hello.Protocol != browserbridge.ProtocolVersion {
 		h.mu.Lock()
-		h.diagnostic = &ComputerExtensionDiagnostic{Stage: "check", Reason: "extension_update_required"}
+		if registration := h.registrations[installationID]; registration != nil {
+			registration.diagnostic = &ComputerExtensionDiagnostic{Stage: "check", Reason: "extension_update_required"}
+		}
 		h.mu.Unlock()
 		slog.Info("browser extension connection rejected", "reason", "extension_update_required", "protocol", hello.Protocol, "required_protocol", browserbridge.ProtocolVersion)
 		_ = browserbridge.WriteMessage(conn, map[string]any{"type": "connection_error", "code": "extension_update_required"}, 1<<20)
@@ -261,7 +252,8 @@ func (h *computerExtensionHub) admit(conn net.Conn) {
 	if _, err := rand.Read(token); err != nil {
 		return
 	}
-	client := &computerExtensionClient{hub: h, conn: conn, profile: ComputerExtensionProfile{ID: hex.EncodeToString(token), Name: hello.Name}, done: make(chan struct{}), pending: make(map[string]chan json.RawMessage)}
+	libraryDigest := sha256.Sum256([]byte(installationID + "\x00" + hello.ProfileID))
+	client := &computerExtensionClient{hub: h, conn: conn, profile: ComputerExtensionProfile{ID: hex.EncodeToString(token), Name: hello.Name, InstallationID: installationID, LibraryID: "chrome-" + hex.EncodeToString(libraryDigest[:])}, done: make(chan struct{}), pending: make(map[string]chan json.RawMessage)}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closed || len(h.profiles) >= 16 {
@@ -272,7 +264,9 @@ func (h *computerExtensionHub) admit(conn net.Conn) {
 	}
 	_ = conn.SetDeadline(time.Time{})
 	h.profiles[client.profile.ID] = client
-	h.diagnostic = nil
+	if registration := h.registrations[installationID]; registration != nil {
+		registration.diagnostic = nil
+	}
 	admitted = true
 	h.wait.Add(1)
 	go client.read()
@@ -436,7 +430,11 @@ func (c *computerExtensionClient) call(ctx context.Context, kind string, argumen
 func (h *computerExtensionHub) close() {
 	h.mu.Lock()
 	h.closed = true
-	_ = h.listener.Close()
+	for _, registration := range h.registrations {
+		if registration.listener != nil {
+			_ = registration.listener.Close()
+		}
+	}
 	for _, client := range h.profiles {
 		_ = client.conn.Close()
 	}
@@ -445,10 +443,14 @@ func (h *computerExtensionHub) close() {
 	h.wait.Wait()
 	// Remove only the exact registration written by this Runtime. Another
 	// process may have explicitly replaced it while this one was shutting down.
-	if body, err := os.ReadFile(h.manifestPath); err == nil && string(body) == string(h.manifestBytes) {
-		_ = os.Remove(h.manifestPath)
+	for _, registration := range h.registrations {
+		if body, err := os.ReadFile(registration.manifestPath); err == nil && string(body) == string(registration.manifestBytes) {
+			_ = os.Remove(registration.manifestPath)
+		}
+		if registration.directory != "" {
+			_ = os.RemoveAll(registration.directory)
+		}
 	}
-	_ = os.RemoveAll(h.directory)
 }
 func (r *ComputerUseRuntime) extensionClient(profileID string) (*computerExtensionClient, error) {
 	r.mu.RLock()
@@ -484,34 +486,58 @@ func (r *ComputerUseRuntime) extensionStatus() ComputerExtensionStatus {
 	r.mu.RLock()
 	hub := r.extension
 	r.mu.RUnlock()
-	status := ComputerExtensionStatus{Profiles: []ComputerExtensionProfile{}, Platform: runtime.GOOS}
+	installations, _ := browserbridge.Installations()
+	status := ComputerExtensionStatus{Profiles: []ComputerExtensionProfile{}, Platform: runtime.GOOS, Installations: installations}
 	status.Hostname, _ = os.Hostname()
 	if runtime.GOOS == "linux" {
-		installed := chromeExecutableAvailable()
+		installed := false
+		for _, item := range installations {
+			installed = installed || item.Installed
+		}
 		status.BrowserInstalled = &installed
 	}
 	if hub != nil {
 		hub.mu.Lock()
-		status.Prepared = !hub.closed && hub.manifestPath != ""
-		status.Diagnostic = hub.diagnostic
-		if hub.diagnostic != nil && hub.diagnostic.Reason == "extension_update_required" {
-			status.Error = hub.diagnostic.Reason
-			status.Diagnostic = nil
+		for i := range status.Installations {
+			item := &status.Installations[i]
+			registration := hub.registrations[item.ID]
+			item.Prepared = !hub.closed && registration != nil && registration.listener != nil
+			status.Prepared = status.Prepared || item.Prepared
+			if registration != nil && registration.diagnostic != nil {
+				item.Reason = registration.diagnostic.Reason
+				diagnostic := *registration.diagnostic
+				item.Diagnostic = &diagnostic
+			}
 		}
 		for _, client := range hub.profiles {
 			status.Profiles = append(status.Profiles, client.profile)
+			for i := range status.Installations {
+				if status.Installations[i].ID == client.profile.InstallationID {
+					status.Installations[i].Connected = true
+				}
+			}
 		}
 		hub.mu.Unlock()
 	}
-	if len(status.Profiles) == 0 && status.Diagnostic == nil && status.Error == "" {
-		if _, err := r.extensionResources(); err != nil {
-			diagnostic := ComputerExtensionDiagnosticForError(err, "prepare")
-			diagnostic.DiagnosticID = ""
-			status.Diagnostic = &diagnostic
-		} else if err := checkComputerExtensionOpen(runtime.GOOS, "extensions", os.Getenv, exec.LookPath); err != nil {
-			diagnostic := ComputerExtensionDiagnosticForError(err, "open")
-			diagnostic.DiagnosticID = ""
-			status.Diagnostic = &diagnostic
+	if _, err := r.extensionResources(); err != nil {
+		diagnostic := ComputerExtensionDiagnosticForError(err, "prepare")
+		diagnostic.DiagnosticID = ""
+		status.Diagnostic = &diagnostic
+	}
+	for i := range status.Installations {
+		item := &status.Installations[i]
+		if item.Connected {
+			item.Reason = ""
+			item.Diagnostic = nil
+			continue
+		}
+		if item.Reason != "" {
+			continue
+		}
+		if err := checkComputerExtensionOpen(runtime.GOOS, "connect", *item, os.Getenv, exec.LookPath); err != nil {
+			item.Reason = ComputerExtensionDiagnosticForError(err, "open").Reason
+		} else {
+			item.Reason = "connection_required"
 		}
 	}
 	sort.Slice(status.Profiles, func(i, j int) bool { return status.Profiles[i].ID < status.Profiles[j].ID })
@@ -751,11 +777,11 @@ func (e *extensionTargetExecutor) Close() error {
 }
 
 // Browser source setup and inventory do not require an AI provider or service.
-func (r *ComputerUseRuntime) BrowserExtensionSetup(ctx context.Context, meta *session.Meta) (ComputerExtensionSetup, error) {
+func (r *ComputerUseRuntime) BrowserExtensionSetup(ctx context.Context, meta *session.Meta, installation string) (ComputerExtensionSetup, error) {
 	if err := requireRWX(meta); err != nil {
 		return ComputerExtensionSetup{}, err
 	}
-	return r.setupComputerExtension(ctx)
+	return r.setupComputerExtension(ctx, installation)
 }
 func (r *ComputerUseRuntime) BrowserExtensionStatus(meta *session.Meta) (ComputerExtensionStatus, error) {
 	if err := requireRWX(meta); err != nil {

@@ -4,7 +4,7 @@ import type { BrowserPackageBridge } from '../../../desktop/src/shared/browserPa
 import type { FlowerBrowserInstallation, FlowerBrowserInstallRequest } from './contracts/flowerSurfaceContracts';
 function fixture(acquire?: BrowserPackageBridge['request'], beforeResponse?: (input: FlowerBrowserInstallRequest) => Promise<void>) {
   const pkg = { id: 'chromium-linux-arm64', name: 'Chromium', version: '148', platform: 'linux', architecture: 'arm64', url: 'https://example.test/browser.zip', sha256: 'a'.repeat(64), size_bytes: 300000, installed_bytes: 600000 };
-  let state: FlowerBrowserInstallation = { enabled: true, state: 'not_installed', package: pkg, directory: '/private/browser', received_bytes: 0 };
+  let state: FlowerBrowserInstallation = { storage_bytes: 900000, enabled: true, state: 'not_installed', launch: { state: 'installation_required' as const }, package: pkg, directory: '/private/browser', received_bytes: 0 };
   const calls: FlowerBrowserInstallRequest[] = [];
   const request: ComputerRequest = async <T>(method: string, _path: string, body?: unknown) => {
     if (method === 'PUT') state = { ...state, enabled: (body as { enabled: boolean }).enabled };
@@ -12,7 +12,7 @@ function fixture(acquire?: BrowserPackageBridge['request'], beforeResponse?: (in
       const input = body as FlowerBrowserInstallRequest; calls.push(input);
       if (input.action === 'start') state = { ...state, operation_id: 'runtime-1', state: input.source === 'upload' ? 'uploading' : 'downloading' };
       if (input.action === 'chunk') state = { ...state, received_bytes: input.offset! + atob(input.data!).length };
-      if (input.action === 'complete') state = { ...state, state: 'installed' };
+      if (input.action === 'complete') state = { ...state, state: 'installed', launch: { state: 'ready' as const } };
       if (input.action === 'cancel') state = { ...state, state: 'cancelled' };
       await beforeResponse?.(input);
     }
@@ -42,7 +42,7 @@ describe('environment browser installation', () => {
     const next = vi.fn(); f.controller.subscribe(next); expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ transfer_active: true }));
     release(); await vi.waitFor(() => expect(f.controller.snapshot()?.state).toBe('installed'));
     expect(vi.mocked(f.desktop.request).mock.calls.filter(([r]) => r.action === 'acquire')).toHaveLength(1);
-    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ transfer_active: false, state: 'installed' })); f.controller.dispose();
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ transfer_active: false, state: 'installed', launch: { state: 'ready' as const } })); f.controller.dispose();
   });
   it('cancels acquisition before it can create a Runtime upload', async () => {
     let release!: () => void; const wait = new Promise<void>(resolve => { release = resolve; });
@@ -116,4 +116,17 @@ it('dispatches host cancellation immediately when a document closes during a chu
   expect(f.calls.map(call => call.action)).toEqual(['start', 'chunk', 'cancel']);
   release(); await vi.waitFor(() => expect(f.controller.snapshot()?.transfer_active).toBe(false));
   expect(f.calls.some(call => call.action === 'complete')).toBe(false);
+});
+
+it('uses the Runtime retained archive for system preparation without Desktop acquisition', async () => {
+  const f = fixture();
+  const status = { ...(await f.controller.load()), state: 'installed' as const, launch: { state: 'system_preparation_required' as const } };
+  f.controller.dispose();
+  const request = vi.fn(async (method: string) => method === 'POST' ? { ...status, state: 'awaiting_authorization', operation_id: 'prepare-1' } : status) as ComputerRequest;
+  const controller = new BrowserInstallationController(request, f.desktop);
+  await controller.install({ action: 'prepare_system', source: 'upload', package_id: f.pkg.id });
+  await vi.waitFor(() => expect(controller.snapshot()?.transfer_active).toBe(false));
+  expect(controller.snapshot()?.state).toBe('awaiting_authorization');
+  expect(vi.mocked(f.desktop.request).mock.calls.some(([input]) => input.action === 'acquire')).toBe(false);
+  controller.dispose();
 });

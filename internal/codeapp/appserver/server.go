@@ -3480,7 +3480,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok || !g.requireAIService(w, aiSvc) {
 			return
 		}
-		setup, err := aiSvc.SetupComputerExtension(r.Context(), meta)
+		var input struct {
+			InstallationID string `json:"installation_id"`
+		}
+		if !decodeBrowserRequest(w, r, 1024, &input) {
+			return
+		}
+		setup, err := aiSvc.SetupComputerExtension(r.Context(), meta, input.InstallationID)
 		if err != nil {
 			g.writeComputerExtensionFailure(w, err, "prepare")
 			return
@@ -3493,7 +3499,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var input struct {
-			Action string `json:"action"`
+			Action         string `json:"action"`
+			InstallationID string `json:"installation_id"`
 		}
 		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
 		dec.DisallowUnknownFields()
@@ -3501,7 +3508,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid_request"})
 			return
 		}
-		if err := aiSvc.OpenComputerExtension(r.Context(), meta, input.Action); err != nil {
+		if err := aiSvc.OpenComputerExtension(r.Context(), meta, input.Action, input.InstallationID); err != nil {
 			g.writeComputerExtensionFailure(w, err, "open")
 			return
 		}

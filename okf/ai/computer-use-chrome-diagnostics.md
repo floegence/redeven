@@ -3,7 +3,7 @@ type: Runtime and Product Contract
 title: Chrome connection diagnostics and recovery
 description: Identify Chrome prerequisites, preserve connection failures, and guide recovery on the actual environment host.
 tags: [ai, browser-use, chrome, diagnostics]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-27T00:00:00Z
 ---
 # Summary
 
@@ -21,8 +21,8 @@ Failures preserve user guidance and never substitute a different browser.
 ## Readiness and diagnostics
 
 `extension/status` reports the environment hostname, platform, Runtime build
-version when available, Linux Chrome executable detection, live profiles, prior
-preparation and one bounded diagnostic. With no connected profile, the Runtime
+version when available, discovered installations, their live profiles, prior
+preparation and bounded per-installation diagnostics. With no connected profile, the Runtime
 checks its authoritative `browser-main` resources before launch prerequisites.
 This observation does not start Chrome, stage files, install Chromium or create
 conversation state. Resource readiness remains independent of whether the
@@ -36,8 +36,9 @@ browser content never become error copy. Read-only prerequisite observations do
 not invent log events or retained lifecycle state.
 
 Runtime Service epoch 30 pairs these diagnostics with Desktop and Env App.
-Epoch 29 follows the existing upgrade path. Native Messaging protocol 6, browser
-consent, website grants and database schemas are unchanged.
+The source adapters retain Native Messaging protocol 7 and existing website
+grants. Browser source preferences follow the separately versioned
+[product persistence contract](../architecture/remote-browser-persistence.md).
 
 ## Recovery on the environment host
 
@@ -59,7 +60,7 @@ reinstall the complete Runtime while keeping data; retry checks readiness after
 that repair. Self-managed installations use the matching complete Runtime suite.
 The browser installation contract owns [package completeness](computer-use-browser-installation.md).
 
-On Linux, opening Chrome or a folder checks the executable and this Runtime's
+On Linux, opening the selected personal browser or a folder checks its installation and this Runtime's
 `DISPLAY` or `WAYLAND_DISPLAY`. An absent graphical launch context is distinct
 from an uninstalled browser. Redeven does not discover or borrow another user's
 session. A user may sign in to the environment's desktop, install the staged
@@ -69,8 +70,8 @@ Connect action still supplies consent. A connection from the client computer is
 not treated as a connection to a remote Runtime.
 
 Opening a native application observes its early process exit. A later failure is
-retained in the existing extension hub only if the same launch generation
-is current and no profile has connected. Fresh setup and a successful handshake
+retained in the existing extension hub only if the same installation and launch generation
+are current and no profile has connected. Fresh setup and a successful handshake
 clear that diagnostic. Closing a process or reporting an error never replays a
 browser action. The log records the process exit without capturing page content.
 

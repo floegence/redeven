@@ -38,7 +38,7 @@ export function createBrowserWorkspaceWindows(configuration: () => { title: stri
     if (desktopShellBridgeAvailable() && !(await prepareDesktopBrowserWindow(url))) throw new Error('Desktop browser window unavailable');
     if (entry.closed || entry.revision !== revision || !session) return;
     const theme = captureBrowserDocumentTheme();
-    const current: BrowserSourceSelection = { ...state.selection, label: state.selection.label || copy.sources.messages.product.defaultProfile };
+    const current: BrowserSourceSelection = { ...state.selection!, label: state.selection!.label || copy.sources.messages.product.defaultProfile };
     const previous = entry.host;
     const host = createBrowserWindow({ session, view: state.view, child: () => entry.child,
       configuration: { type: 'redeven-browser-ports', nonce, title: copy.title, locale: copy.locale, messages: copy.messages, theme,

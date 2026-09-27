@@ -49,7 +49,7 @@ describe('Flower computer stage', () => {
       const listCandidates = vi.fn(async () => ({ current_target_id: '', candidates: [] }));
       const runtime = renderSurfaceWithAdapterProps({ ...adapter(true),
         loadComputerFrame: async () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), value => value.charCodeAt(0))], { type: 'image/png' }),
-        computerManagement: { openExtension: vi.fn(), loadExtensionStatus: vi.fn(async () => ({ profiles: [] })), setupExtension: vi.fn(),
+        computerManagement: { openExtension: vi.fn(), loadExtensionStatus: vi.fn(async () => ({ installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [] })), setupExtension: vi.fn(),
           listCandidates, selectCandidate: vi.fn(),
           loadAccess: vi.fn(async () => ({ origins: [], apps: [], allow_foreground: false })), saveAccess: vi.fn(),
 

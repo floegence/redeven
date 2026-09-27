@@ -50,7 +50,7 @@ export function FlowerComputerConnections(props: {
     : target.title || (target.kind === 'browser.managed' ? props.copy.managed : target.display_name);
   const stateLabel = (state?: string) => ({ ready: props.copy.available, on_demand: props.copy.onDemand,
     in_use: props.copy.inUse, user_control: props.copy.waitingControl, permission_required: props.copy.permissionRequired,
-    disabled: props.copy.browserDisabled, installation_required: props.copy.browserNotInstalled, setup_required: props.copy.setupRequired, stopped: props.copy.stopped, connection_required: props.copy.disconnected }[state ?? ''] ?? props.copy.unknown);
+    system_preparation_required: props.copy.browserSystemPrepare, unavailable: props.copy.browserDependenciesMissing, disabled: props.copy.browserDisabled, installation_required: props.copy.browserNotInstalled, setup_required: props.copy.setupRequired, stopped: props.copy.stopped, connection_required: props.copy.disconnected }[state ?? ''] ?? props.copy.unknown);
   const candidateState = (target: FlowerComputerCandidate) => target.kind === 'browser.managed'
     && environment()?.managed.state !== 'on_demand' && environment()?.managed.state !== 'ready'
     ? environment()?.managed.state ?? 'unknown' : target.state;

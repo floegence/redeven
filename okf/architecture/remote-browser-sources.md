@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote browser source ownership
 description: Admit native pages once and preserve directory, control and popup privacy boundaries.
 tags: [architecture, browser, privacy]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-27T00:00:00Z
 ---
 # Summary
 
@@ -29,14 +29,26 @@ browser identities, replay an uncertain action or clear a profile to retry a
 challenge. Source requests remain in the selected browser; no request, cookie
 or challenge token is relayed through a second HTTP client.
 
-Personal Chrome is the existing user-selected path for normal interactive
-browsing. Its profile and login remain in Chrome. The source dialog explains
-this option when a website repeatedly requests verification; it never silently
-changes sources or grants access to another tab. Managed and personal source
+The personal browser is the recommended explicitly selected path for interactive
+browsing. Its profile and login remain in the original browser. The source dialog
+never silently changes sources or grants access to another tab. Managed and personal source
 capabilities remain distinct. A successful fixture or one public-site visit
 does not imply universal CAPTCHA compatibility.
 
-## Personal Chrome admission
+## Personal browser installation and admission
+
+Runtime discovers macOS Google Chrome and Linux Google Chrome, native Chromium
+and Snap Chromium through fixed installation adapters. Clients submit an opaque
+installation ID, never an executable path. Detection alone neither stages a
+connection nor launches the browser. One Runtime hub owns all live profiles;
+per-installation Native Messaging endpoints only forward to that hub.
+
+Snap extension assets, the private Unix socket and the exact current static Runtime
+bridge live under the user's Snap Chromium common data directory. Bridge deployment
+verifies the running build's bytes and publishes atomically. Other installations
+retain their native host identity and existing protocol. Setup restoration records
+failures per installation so one unavailable browser cannot block others. No
+browser database is copied, and no second process shares an active personal profile.
 
 
 Native Messaging protocol 7 carries debugger commands and events for an opaque,
@@ -113,6 +125,8 @@ Discovery is not source admission. Source loss or overflow retires affected bind
 
 # Evidence
 
+- `redeven:internal/browserbridge/installations.go` - Fixed discovery and opaque installation identity.
+- `redeven:internal/ai/computer_extension_registration.go` - One hub with installation-specific registration and verified Snap bridge placement.
 - `redeven:internal/ai/computer_extension_source.go` - Bounded private source carrier and native binding lifetime.
 - `redeven:browser-extension/background.mjs` - Selected-tab debugger boundary and consumption credits.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.mjs` - Shared semantic/projection ownership across CDP and extension sources.

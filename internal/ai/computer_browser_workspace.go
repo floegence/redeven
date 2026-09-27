@@ -42,12 +42,13 @@ func (r *ComputerUseRuntime) OpenBrowserWorkspace(ctx context.Context, meta *ses
 		}
 		key := owner + "/" + profile
 		workspace := r.browserWorkspaces[key]
+		connection := *request.Connection
+		connection.NewTab, connection.TabID, connection.TabURL, connection.TabTitle = false, "", "", ""
 		if workspace == nil {
-			connection := *request.Connection
-			connection.NewTab, connection.TabID, connection.TabURL, connection.TabTitle = false, "", "", ""
 			workspace = &browserWorkspace{owner: owner, profile: profile, connection: &connection, pinned: make(map[string]bool), tabs: make(map[string]browserstore.Tab)}
 			r.browserWorkspaces[key] = workspace
 		}
+		workspace.connection = &connection
 		if !slices.Contains(workspace.targets, target.ID) {
 			if len(workspace.targets) >= 128 {
 				return BrowserViewDescriptor{}, errBrowserViewUnavailable

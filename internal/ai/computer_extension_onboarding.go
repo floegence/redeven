@@ -11,45 +11,51 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/floegence/redeven/internal/browserbridge"
 	"github.com/floegence/redeven/internal/session"
 )
 
 // Only explicit UI commands open native applications. Neither model tools nor
 // caller-provided paths, URLs or command arguments reach this boundary.
-func (s *Service) OpenComputerExtension(ctx context.Context, meta *session.Meta, action string) error {
+func (s *Service) OpenComputerExtension(ctx context.Context, meta *session.Meta, action, installationID string) error {
 	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
 	if !ok {
 		return errors.New("computer runtime unavailable")
 	}
-	return host.OpenBrowserExtension(ctx, meta, action)
+	return host.OpenBrowserExtension(ctx, meta, action, installationID)
 }
 
-func (host *ComputerUseRuntime) OpenBrowserExtension(ctx context.Context, meta *session.Meta, action string) error {
+func (host *ComputerUseRuntime) OpenBrowserExtension(ctx context.Context, meta *session.Meta, action, installationID string) error {
 	if err := requireRWX(meta); err != nil {
 		return err
 	}
 	if action != "extensions" && action != "folder" && action != "connect" {
 		return errors.New("invalid browser setup action")
 	}
-	setup, err := host.BrowserExtensionSetup(ctx, meta)
+	setup, err := host.BrowserExtensionSetup(ctx, meta, installationID)
 	if err != nil {
 		return err
 	}
-	name, args, err := computerExtensionOpenCommand(runtime.GOOS, action, setup)
+	installation, err := browserbridge.ResolveInstallation(installationID)
+	if err != nil {
+		return extensionFailure("open", "browser_not_installed", err)
+	}
+	name, args, err := computerExtensionOpenCommand(runtime.GOOS, action, setup, installation)
 	if err != nil {
 		return err
 	}
-	if err := checkComputerExtensionOpen(runtime.GOOS, action, os.Getenv, exec.LookPath); err != nil {
+	if err := checkComputerExtensionOpen(runtime.GOOS, action, installation, os.Getenv, exec.LookPath); err != nil {
 		return err
 	}
 	host.mu.RLock()
 	hub := host.extension
 	host.mu.RUnlock()
 	hub.mu.Lock()
-	hub.launchGeneration++
-	generation := hub.launchGeneration
+	registration := hub.registrations[installationID]
+	registration.launchGeneration++
+	generation := registration.launchGeneration
 	hub.mu.Unlock()
-	reason := "chrome_start_failed"
+	reason := "browser_start_failed"
 	if action == "folder" {
 		reason = "folder_open_failed"
 	}
@@ -57,8 +63,8 @@ func (host *ComputerUseRuntime) OpenBrowserExtension(ctx context.Context, meta *
 		diagnostic := ComputerExtensionDiagnosticForError(err, "open")
 		hub.mu.Lock()
 		defer hub.mu.Unlock()
-		if !hub.closed && hub.launchGeneration == generation && len(hub.profiles) == 0 {
-			hub.diagnostic = &diagnostic
+		if !hub.closed && registration.launchGeneration == generation && !hub.installationConnected(installationID) {
+			registration.diagnostic = &diagnostic
 		}
 	})
 }
@@ -90,7 +96,7 @@ func startComputerExtensionCommand(cmd *exec.Cmd, reason string, failed func(err
 	}
 }
 
-func computerExtensionOpenCommand(platform, action string, setup ComputerExtensionSetup) (string, []string, error) {
+func computerExtensionOpenCommand(platform, action string, setup ComputerExtensionSetup, installation browserbridge.Installation) (string, []string, error) {
 	var destination string
 	switch action {
 	case "extensions":
@@ -112,7 +118,10 @@ func computerExtensionOpenCommand(platform, action string, setup ComputerExtensi
 		if action == "folder" {
 			return "xdg-open", []string{filepath.Dir(destination)}, nil
 		}
-		return "google-chrome", []string{destination}, nil
+		if !installation.Installed || installation.Executable == "" {
+			return "", nil, extensionFailure("open", "browser_not_installed", nil)
+		}
+		return installation.Executable, []string{destination}, nil
 	default:
 		return "", nil, errors.New("browser extension platform unavailable")
 	}

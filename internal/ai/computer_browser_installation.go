@@ -112,6 +112,8 @@ func (r *ComputerUseRuntime) InstallComputerBrowser(_ context.Context, meta *ses
 	}
 	manager := host.browserInstallation
 	switch request.Action {
+	case "prepare_system":
+		return manager.PrepareSystem(request.PackageID, request.Source)
 	case "start":
 		status, err := manager.Start(request.PackageID, request.Source)
 		if err == nil {

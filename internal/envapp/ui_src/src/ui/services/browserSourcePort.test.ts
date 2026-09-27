@@ -32,3 +32,13 @@ it('preserves the explicit personal page identity and strips unrelated request f
   await bridge.execute({ method: 'source.select', selection: { label: 'Personal page', request: { connection: { extension_profile_id: 'personal', tab_id: '7', tab_url: 'https://example.test/', tab_title: 'Draft', injected: 'not forwarded' } } } } as BrowserSourceOperation, new AbortController().signal);
   expect(select).toHaveBeenCalledWith({ label: 'Personal page', request: { connection: { extension_profile_id: 'personal', tab_id: '7', tab_url: 'https://example.test/', tab_title: 'Draft' } } }, expect.any(AbortSignal));
 });
+
+it('rejects renderer executable paths and requires a discovered installation identity', async () => {
+  const setup = vi.fn(), open = vi.fn();
+  const bridge = browserSourcePort({ management: { setupExtension: setup, openExtension: open } } as unknown as BrowserSourceService, vi.fn(), vi.fn());
+  const signal = new AbortController().signal;
+  await expect(bridge.execute({ method: 'source.setup', installationID: '/usr/bin/chromium' }, signal)).rejects.toThrow('unavailable');
+  await bridge.execute({ method: 'source.setup', installationID: 'browser-aaaaaaaaaaaaaaaaaaaaaaaa' }, signal);
+  expect(setup).toHaveBeenCalledExactlyOnceWith('browser-aaaaaaaaaaaaaaaaaaaaaaaa');
+  expect(open).not.toHaveBeenCalled();
+});

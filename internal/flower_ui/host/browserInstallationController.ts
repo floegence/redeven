@@ -3,7 +3,7 @@ import type { BrowserPackageBridge, BrowserPackageProgress } from '../../../desk
 
 export type ComputerRequest = <T>(method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown) => Promise<T>;
 const path = '/_redeven_proxy/api/browser/installation';
-const activeStates = new Set(['downloading', 'uploading', 'verifying', 'installing']);
+const activeStates = new Set(['downloading', 'uploading', 'verifying', 'installing', 'awaiting_authorization', 'verifying_system', 'preparing_system']);
 type Attempt = { source: 'download' | 'upload'; id: string; cancelled: boolean; runtimeID: string; done?: Promise<void> };
 
 // One environment document owns transfer work. Panels are observers, never
@@ -54,12 +54,12 @@ export class BrowserInstallationController {
   }
   async install(input: FlowerBrowserInstallRequest): Promise<FlowerBrowserInstallationSnapshot> {
     if (input.action === 'cancel') { await this.cancel(); return this.snapshot() ?? await this.load(); }
-    if (input.action !== 'start') throw new Error('Browser transfer is owned by its environment controller.');
+    if (input.action !== 'start' && input.action !== 'prepare_system') throw new Error('Browser transfer is owned by its environment controller.');
     if (this.attempt) return this.snapshot() ?? await this.load();
     if (!this.status) await this.load();
     if (this.attempt) return this.snapshot()!;
     if (!this.status?.enabled || this.disposed) throw new Error('Browser installation is unavailable.');
-    if (activeStates.has(this.status.state) || this.status.state === 'installed') return this.snapshot()!;
+    if (activeStates.has(this.status.state) || (this.status.state === 'installed' && input.action !== 'prepare_system')) return this.snapshot()!;
     if (input.package_id !== this.status.package.id || !['download', 'upload'].includes(input.source ?? '')) throw new Error('Invalid browser installation request.');
     if (input.source === 'upload' && !this.desktop) throw new Error('Desktop acquisition is unavailable.');
     const attempt: Attempt = { source: input.source as 'download' | 'upload', id: crypto.randomUUID(), cancelled: false, runtimeID: '' };
@@ -77,7 +77,14 @@ export class BrowserInstallationController {
       const current = await this.request<FlowerBrowserInstallation>('GET', path);
       check(); this.accept(current);
       if (!current.enabled || current.package.id !== input.package_id) throw new Error('Browser availability changed.');
-      if (current.state === 'installed' || activeStates.has(current.state)) return;
+      if ((current.state === 'installed' && input.action !== 'prepare_system') || activeStates.has(current.state)) return;
+      let started: FlowerBrowserInstallation | undefined;
+      if (input.action === 'prepare_system') {
+        started = await this.request<FlowerBrowserInstallation>('POST', path, input);
+        attempt.runtimeID = started.operation_id ?? '';
+        this.progress = undefined; this.accept(started); check();
+        if (input.source !== 'upload' || started.state !== 'uploading') return;
+      }
       if (input.source === 'upload') {
         const desktop = this.desktop!;
         const pkg = { id: current.package.id, sha256: current.package.sha256, size_bytes: current.package.size_bytes };
@@ -93,7 +100,7 @@ export class BrowserInstallationController {
       }
       check();
       stage = 'desktop_upload_failed';
-      const started = await this.request<FlowerBrowserInstallation>('POST', path, input);
+      started ??= await this.request<FlowerBrowserInstallation>('POST', path, input);
       attempt.runtimeID = started.operation_id ?? '';
       this.progress = undefined; this.accept(started); check();
       if (input.source !== 'upload' || started.state !== 'uploading') return;

@@ -1,6 +1,4 @@
 .redeven-browser-sources-dialog { width: min(42rem, calc(100vw - 2rem)); max-width: min(42rem, calc(100vw - 2rem)); }
-.redeven-browser-source-sections { display: flex; flex-direction: column; gap: 1.5rem; }
-.redeven-browser-source-sections > section { min-width: 0; }
 .redeven-browser-source-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .375rem; }
 .redeven-browser-source-heading h3 { font-size: .875rem; font-weight: 600; }
 .redeven-browser-source-list { display: flex; flex-direction: column; gap: .25rem; margin-top: .75rem; max-height: 15rem; overflow-y: auto; }
@@ -19,4 +17,25 @@
 
 @media (pointer: coarse) {
   .redeven-browser-source-input { min-height: 44px; font-size: max(16px, 1rem); }
+}
+
+.redeven-browser-source-cards { display: grid; gap: .75rem; }
+.redeven-browser-source-card { display: flex; align-items: center; gap: 1rem; width: 100%; padding: 1.125rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--card); color: var(--foreground); text-align: start; cursor: pointer; transition: background-color .15s, border-color .15s; }
+.redeven-browser-source-card:hover:not(:disabled) { background: var(--muted); border-color: color-mix(in srgb, var(--foreground) 22%, var(--border)); }
+.redeven-browser-source-card:disabled { cursor: wait; opacity: .65; }
+.redeven-browser-source-card-icon { display: grid; flex-shrink: 0; place-items: center; width: 2.5rem; height: 2.5rem; border: 1px solid var(--border); border-radius: .625rem; background: var(--background); }
+.redeven-browser-source-card-content { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: .375rem; }
+.redeven-browser-source-card-title { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: var(--floe-type-body); font-weight: 600; }
+.redeven-browser-source-card-description { font-size: var(--floe-type-control); line-height: 1.6; color: var(--muted-foreground); }
+.redeven-browser-source-badge { padding: .125rem .375rem; border-radius: .25rem; background: var(--secondary); color: var(--secondary-foreground); font-size: .625rem; font-weight: 500; }
+.redeven-browser-source-card-status { display: flex; align-items: center; gap: .375rem; margin-top: .25rem; color: var(--muted-foreground); font-size: .6875rem; }
+.redeven-browser-source-card-status > span { width: .375rem; height: .375rem; border-radius: 50%; background: var(--muted-foreground); }
+.redeven-browser-source-card-status > span.is-connected { background: var(--success); }
+.redeven-browser-source-advanced { margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--border); color: var(--muted-foreground); }
+.redeven-browser-source-advanced > button { height: auto; white-space: normal; text-align: start; }
+.redeven-browser-source-management { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--border); }
+@media (max-width: 560px) {
+  .redeven-browser-source-card { gap: .75rem; padding: .875rem; }
+  .redeven-browser-source-card-icon { width: 2rem; height: 2rem; }
+  .redeven-browser-source-heading { flex-wrap: wrap; }
 }

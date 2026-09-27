@@ -42,8 +42,7 @@ func (r *ComputerUseRuntime) browserSourceLibrary(target string) browserstore.Pr
 		digest := sha256.Sum256([]byte(source.CDPURL + "\x00" + source.BrowserContextID))
 		return browserstore.Profile{ID: "cdp-" + hex.EncodeToString(digest[:]), Name: "Chromium", Kind: browserstore.CDP}
 	case *extensionTargetExecutor:
-		digest := sha256.Sum256([]byte(source.client.profile.ID))
-		return browserstore.Profile{ID: "chrome-" + hex.EncodeToString(digest[:]), Name: source.client.profile.Name, Kind: browserstore.Extension}
+		return browserstore.Profile{ID: source.client.profile.LibraryID, Name: source.client.profile.Name, Kind: browserstore.Extension}
 	default:
 		return browserstore.Profile{}
 	}

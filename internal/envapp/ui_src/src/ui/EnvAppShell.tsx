@@ -561,12 +561,16 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation } = {}) {
     return theme.shellPresetForMode(mode)?.name === presetName;
   };
   const protocol = useProtocol();
+  // The existing local readiness handshake confirms product authority after
+  // transport establishment. Embedded and independent browser views share it.
+  const browserSession = () => protocol.status() === 'connected' && (!isLocalMode() || pluginSessionReady())
+    ? protocol.session?.() ?? undefined : undefined;
   const browserWindows = createBrowserWorkspaceWindows(() => ({ title: i18n.t('shell.nav.remoteBrowser'), connecting: i18n.t('browserEngine.connection.connecting'), locale: i18n.locale(), messages: browserMessages(i18n), sources: { environment: envId() || 'env_local', messages: browserSourceMessages(i18n) } }));
-  createEffect(() => browserWindows.setSession(protocol.session?.() ?? undefined));
+  createEffect(() => browserWindows.setSession(browserSession()));
   const browserPresentation = createMemo(() => JSON.stringify([i18n.locale(), theme.resolvedTheme(), theme.shellPresetForMode(theme.resolvedTheme())?.name]));
   createEffect(on(browserPresentation, () => browserWindows.refreshPresentation(), { defer: true }));
   onCleanup(() => browserWindows.close());
-  const BrowserPage = () => <EnvBrowserPage onOpenWindow={request => browserWindows.open(request)}
+  const BrowserPage = () => <EnvBrowserPage session={browserSession()} onOpenWindow={request => browserWindows.open(request)}
     onInteraction={() => dismissActivityFlowerCompanion('outside-pointer')} />;
   let remoteProxyServiceWorkerControlled = false;
   const rpc = useRedevenRpc();

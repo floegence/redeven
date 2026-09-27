@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote browser persistence
 description: Restore managed pages and save browser library state without persisting authority.
 tags: [architecture, browser, persistence]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-27T00:00:00Z
 ---
 # Summary
 
@@ -24,12 +24,29 @@ while retaining this store and the last committed restoration snapshot.
 
 Empty collection reads return explicit arrays. Admitting an already-running managed page records its current eligible URL once; another window or a title-only update does not add a visit.
 
+## Remembered source
+
+The permanent `browser_product_v1` schema lineage advances from version 1 to 2
+through one atomic, exact-shape migration. The new preference row is scoped to
+authenticated owner within the environment store and references its existing
+profile. Upgrade preserves profiles, tabs, history, bookmarks and zoom; failures
+roll back metadata and schema together. Unknown, drifted or future schemas remain
+unchanged and fail closed.
+
+Only an owner/channel-bound, successfully opened view can save a preference.
+The stored value contains a stable profile and, for personal browsers, installation
+identity. It contains no view token, tab grant or debugging endpoint. Managed
+profiles can reopen through normal installation and launch checks. External
+preferences resume only an already admitted live workspace; extension reconnection
+rotates authority while preserving library identity and requires fresh explicit
+page selection. Remembering a browser never authorizes all its tabs.
+
 ## Library and restoration
 
 The shared FloeBrowser library panel reads product bookmarks and history and
 stores origin zoom through the environment owner's restricted product port.
 Library identity is separate from managed-profile directory authority. Personal
-Chrome keys derive from the connected profile identity; CDP keys derive from
+browser keys derive from installation identity and the extension's persistent profile identity; CDP keys derive from
 the selected endpoint and browser context, with the endpoint hashed out of the
 stored key. Neither external source imports native browser history or restores
 pages from saved URLs. Only granted external targets with a live product view
@@ -49,6 +66,8 @@ Only managed profiles restore URLs, and restoration requires an explicit open. P
 
 # Evidence
 
+- `redeven:internal/browserstore/preferences_test.go` - Atomic upgrade, record preservation, rollback and owner isolation.
+- `redeven:internal/ai/computer_browser_preferences_test.go` - Successful-view admission and fresh authority after reconnect.
 - `redeven:internal/browserstore/schema.go` - Exact product-owned schema and fail-closed verification.
 - `redeven:internal/browserstore/store.go` - Owner-scoped profiles, recovery tabs, history, bookmarks and zoom.
 - `redeven:internal/ai/computer_browser_library.go` - Library authorization and service ownership.

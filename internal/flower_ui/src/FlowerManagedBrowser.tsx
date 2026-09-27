@@ -4,7 +4,7 @@ import { Check, Download, Upload, Sparkles } from '@floegence/floe-webapp-core/i
 import type { FlowerBrowserInstallationSnapshot, FlowerComputerManagement } from './contracts/flowerSurfaceContracts';
 import type { FlowerComputerCopy } from './computerUseCopy';
 
-const activeStates = new Set(['downloading', 'uploading', 'verifying', 'installing']);
+const activeStates = new Set(['downloading', 'uploading', 'verifying', 'installing', 'awaiting_authorization', 'verifying_system', 'preparing_system']);
 
 export function FlowerManagedBrowser(props: {
   management: Pick<FlowerComputerManagement, 'loadBrowserInstallation' | 'saveBrowserEnabled' | 'installBrowser' | 'subscribeBrowserInstallation' | 'browserDesktopAvailable'>;
@@ -19,6 +19,10 @@ export function FlowerManagedBrowser(props: {
   const management = props.management;
   const [status, setStatus] = createSignal<FlowerBrowserInstallationSnapshot>();
   const [source, setSource] = createSignal<'download' | 'upload'>(management.browserDesktopAvailable ? 'upload' : 'download');
+  const [commandCopied, setCommandCopied] = createSignal(false);
+  let commandInput: HTMLTextAreaElement | undefined;
+  const systemRequired = () => status()?.launch.state === 'system_preparation_required';
+  const ready = () => status()?.launch.state === 'ready';
   const [busy, setBusy] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [failed, setFailed] = createSignal(false);
@@ -32,7 +36,7 @@ export function FlowerManagedBrowser(props: {
     observation++; setStatus(value);
     if (!props.onContinue || continuationKey !== props.continuationKey || value.desktop_error
       || (!value.transfer_active && (value.state === 'failed' || value.state === 'cancelled'))) resumeAfterInstall = false;
-    if (value.state === 'installed' && value.enabled && !value.transfer_active && resumeAfterInstall) {
+    if (value.state === 'installed' && value.launch.state === 'ready' && value.enabled && !value.transfer_active && resumeAfterInstall) {
       resumeAfterInstall = false;
       props.onChange?.();
       void props.onContinue?.(true).catch(() => { if (!disposed) setFailed(true); });
@@ -75,7 +79,7 @@ export function FlowerManagedBrowser(props: {
     continuationKey = props.continuationKey;
     resumeAfterInstall = Boolean(props.onContinue);
     try {
-      const value = await management.installBrowser!({ action: 'start', package_id: current.package.id, source: source() });
+      const value = await management.installBrowser!({ action: systemRequired() ? 'prepare_system' : 'start', package_id: current.package.id, source: source() });
       if (!disposed) accept(value);
     } catch { resumeAfterInstall = false; if (!disposed) setFailed(true); }
     finally { if (!disposed) setBusy(false); }
@@ -89,7 +93,7 @@ export function FlowerManagedBrowser(props: {
   };
   const stateLabel = () => status()?.desktop_progress
     ? ({ checking: props.copy.browserCheckingCache, downloading: props.copy.browserDesktopDownloading, verifying: props.copy.browserVerifying }[status()!.desktop_progress!.phase])
-    : ({ installed: props.copy.browserInstalled, not_installed: props.copy.browserNotInstalled,
+    : ({ awaiting_authorization: props.copy.browserSystemAuthorizing, verifying_system: props.copy.browserVerifying, preparing_system: props.copy.browserSystemProgress, installed: props.copy.browserInstalled, not_installed: props.copy.browserNotInstalled,
     downloading: props.copy.browserDownloading, uploading: props.copy.browserUploading, verifying: props.copy.browserVerifying,
     installing: props.copy.browserInstalling, failed: props.copy.browserInstallFailed, cancelled: props.copy.browserCancelled,
   } as Record<string, string>)[status()?.state ?? ''] ?? props.copy.checking;
@@ -103,16 +107,20 @@ export function FlowerManagedBrowser(props: {
     <Show when={status()} fallback={<p role="status" class="flower-computer-description">{failed() ? props.copy.loadFailed : props.copy.checking}</p>}>{current => <>
       <div class="flower-browser-package-heading">
         <span>{current().package.name} · {current().package.version} · {current().package.platform === 'darwin' ? 'macOS' : 'Linux'} {current().package.architecture === 'arm64' ? 'ARM64' : 'x64'}</span>
-        <span class="flower-computer-status" data-tone={current().enabled && current().state === 'installed' ? 'positive' : 'neutral'}>{current().enabled ? stateLabel() : props.copy.browserDisabled}</span>
+        <span class="flower-computer-status" data-tone={current().enabled && ready() ? 'positive' : 'neutral'}>{current().enabled ? stateLabel() : props.copy.browserDisabled}</span>
       </div>
-      <Show when={current().enabled && current().state !== 'installed'}>
+      <Show when={current().enabled && !ready()}>
+        <Show when={systemRequired()}><p class="flower-computer-description">{props.copy.browserSystemHint}</p></Show>
+        <Show when={current().launch.state === 'unavailable'}><p class="flower-computer-description">{current().launch.reason === 'browser_dependencies_missing' ? props.copy.browserDependenciesMissing : props.copy.managedMissingHint}</p><Button variant="outline" onClick={() => void load()}>{props.copy.chromeCheckAfterRepair}</Button></Show>
+        <Show when={current().launch.state !== 'unavailable'}>
         <div class="flower-browser-size-grid">
           <div><strong>{props.copy.browserDownloadSize.replace('{size}', size(current().package.size_bytes))}</strong><span>{props.copy.browserOnce}</span></div>
-          <div><strong>{props.copy.browserDiskSize.replace('{size}', size(current().package.installed_bytes))}</strong><span>{props.copy.browserInEnvironment}</span></div>
+          <div><strong>{props.copy.browserDiskSize.replace('{size}', size(current().storage_bytes))}</strong><span>{props.copy.browserInEnvironment}</span></div>
         </div>
         <Show when={!active()} fallback={<div class="flower-browser-progress" role="status" aria-live="polite">
+          <Show when={current().authorization_command}><p>{props.copy.browserSystemTerminal}</p><textarea ref={commandInput} readOnly aria-label={props.copy.browserSystemPrepare} class="flower-settings-text-input w-full min-h-20 font-mono text-xs" value={current().authorization_command} onFocus={event => event.currentTarget.select()} /><Button size="sm" variant="outline" onClick={() => { void navigator.clipboard.writeText(current().authorization_command!).then(() => setCommandCopied(true), () => { commandInput?.focus(); commandInput?.select(); }); }}>{commandCopied() ? props.copy.browserSystemCopied : props.copy.browserSystemCopy}</Button></Show>
           <div><span>{stateLabel()}</span><span>{props.copy.browserTransferProgress.replace('{received}', size(current().desktop_progress?.received_bytes ?? current().received_bytes)).replace('{total}', size(current().package.size_bytes))}</span></div>
-          <Show when={current().desktop_progress?.phase === 'checking' || current().desktop_progress?.phase === 'verifying' || ['verifying', 'installing'].includes(current().state)}
+          <Show when={current().desktop_progress?.phase === 'checking' || current().desktop_progress?.phase === 'verifying' || ['verifying', 'installing', 'awaiting_authorization', 'verifying_system', 'preparing_system'].includes(current().state)}
             fallback={<progress aria-label={stateLabel()} max={current().package.size_bytes} value={current().desktop_progress?.received_bytes ?? current().received_bytes} />}>
             <progress aria-label={stateLabel()} max={current().package.size_bytes} />
           </Show>
@@ -123,15 +131,16 @@ export function FlowerManagedBrowser(props: {
             <label data-selected={source() === 'download'} data-disabled={!editable()}><input type="radio" name="browser-install-source" checked={source() === 'download'} disabled={!editable()} onChange={() => setSource('download')} /><Download aria-hidden="true" /><strong>{props.copy.browserDownloadHere}</strong><span>{props.copy.browserDownloadHereHint}</span></label>
             <label data-selected={source() === 'upload'} data-disabled={!editable() || !management.browserDesktopAvailable}><input type="radio" name="browser-install-source" checked={source() === 'upload'} disabled={!editable() || !management.browserDesktopAvailable} onChange={() => setSource('upload')} /><Upload aria-hidden="true" /><strong>{props.copy.browserUploadDesktop}</strong><span>{management.browserDesktopAvailable ? props.copy.browserUploadHint : props.copy.browserDesktopRequired}</span></label>
           </div>
-          <div class="flower-browser-consent"><p>{props.copy.browserConsentHint}</p><Button variant="primary" disabled={!editable()} onClick={() => void install()}>{props.installLabel ?? (source() === 'upload' ? props.copy.browserConfirmUpload : props.copy.browserConfirmDownload)}</Button></div>
+          <div class="flower-browser-consent"><p>{props.copy.browserConsentHint}</p><Button variant="primary" disabled={!editable()} onClick={() => void install()}>{systemRequired() ? props.copy.browserSystemPrepare : props.installLabel ?? (source() === 'upload' ? props.copy.browserConfirmUpload : props.copy.browserConfirmDownload)}</Button></div>
+        </Show>
         </Show>
       </Show>
-      <Show when={current().enabled && current().state === 'installed'}><div class="flower-browser-ready"><Check aria-hidden="true" /><p>{props.copy.browserReadyHint}</p></div></Show>
-      <Show when={props.onContinue && !active() && (!props.requireEnabledForContinue || current().enabled) && (!current().enabled || current().state === 'installed')}><Button variant="primary" disabled={!editable()} onClick={() => void continueTask()}>{current().enabled ? props.copy.browserContinue : props.copy.browserContinueWithout}</Button></Show>
+      <Show when={current().enabled && ready()}><div class="flower-browser-ready"><Check aria-hidden="true" /><p>{props.copy.browserReadyHint}</p></div></Show>
+      <Show when={props.onContinue && !active() && (!props.requireEnabledForContinue || current().enabled) && (!current().enabled || ready())}><Button variant="primary" disabled={!editable()} onClick={() => void continueTask()}>{current().enabled ? props.copy.browserContinue : props.copy.browserContinueWithout}</Button></Show>
       <Show when={current().state === 'installed'}><details class="flower-computer-detail-card"><summary>{props.copy.browserInstallLocation}</summary><code>{current().directory}</code></details></Show>
     </>}</Show>
     <Show when={failed() || (!status()?.transfer_active && status()?.state === 'failed') || status()?.desktop_error}>
-      <Show when={status()}><p role="alert" class="text-xs text-destructive">{status()?.desktop_error === 'package_mismatch' ? props.copy.browserWrongPackage : status()?.desktop_error === 'desktop_download_failed' ? props.copy.browserDesktopDownloadFailed : status()?.desktop_error === 'desktop_upload_failed' ? props.copy.browserDesktopUploadFailed : props.copy.browserInstallFailed}</p></Show>
+      <Show when={status()}><p role="alert" class="text-xs text-destructive">{status()?.error?.startsWith('system_') ? props.copy.browserSystemFailed : status()?.desktop_error === 'package_mismatch' ? props.copy.browserWrongPackage : status()?.desktop_error === 'desktop_download_failed' ? props.copy.browserDesktopDownloadFailed : status()?.desktop_error === 'desktop_upload_failed' ? props.copy.browserDesktopUploadFailed : props.copy.browserInstallFailed}</p></Show>
       <Button variant="outline" disabled={busy()} onClick={() => void load()}>{props.copy.refresh}</Button>
     </Show>
   </section>;

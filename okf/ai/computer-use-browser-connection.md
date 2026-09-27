@@ -1,19 +1,26 @@
 ---
 type: Product Interaction Contract
-title: Guided Chrome connection
+title: Guided personal browser connection
 description: Prepare, install and confirm a same-host browser connection without exposing native-host configuration.
 tags: [ai, browser-use, chrome, onboarding]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-27T00:00:00Z
 ---
 # Summary
 
-Desktop and Env App share one Chrome connection guide. ComputerUseRuntime owns
+Desktop and Env App share one personal browser connection guide. ComputerUseRuntime owns
 connections; Floret InputRequired and Respond remain the conversation owners.
 The guide is bounded UI observation, not a second execution lifecycle. Users confirm installation and the first connection in Chrome; that profile then restores the same environment connection after restarts. Routine tasks reuse the verified connection without manually selecting a target.
 
 # Contract
 
-The **Connect Chrome** guide opens from canonical conversation assistance. It
+The browser connection guide opens from canonical conversation assistance or the
+Remote Browser source selector. Runtime-discovered installation IDs select macOS
+Google Chrome or Linux Google Chrome, native Chromium and Snap Chromium. The
+[source contract](../architecture/remote-browser-sources.md) owns installation
+discovery and the single connection hub. Runtime compatibility epoch 34 requires
+installation-scoped preparation/open requests and structured launch readiness;
+older upgradeable Runtime epochs must update before this Desktop uses the guide.
+The guide
 prepares the native connection automatically, shows the unpacked-extension
 installation steps and offers fixed actions to open Chrome extensions, the
 installation folder, or the extension's confirmation page. The package has no
@@ -23,7 +30,8 @@ Chrome's extension list, toolbar action and connection page identify the package
 as **Redeven Flower**. Staging copies the canonical Redeven app icons at 16, 32,
 48 and 128 pixels into the extension bundle. The extension key and registered
 installation path remain stable across branding updates.
-The stable installation lives under the user's visible `Redeven` home folder.
+The stable installation lives under the user's visible `Redeven` home folder;
+Snap Chromium uses `snap/chromium/common/Redeven` within its allowed data area.
 Its `Flower Browser <identity>` name derives from the Runtime profile root, so
 different Runtimes cannot overwrite each other and rebuilding preserves the
 registered location. Runtime returns the absolute `extension_path`, exact
@@ -79,9 +87,9 @@ old requests and bindings without replaying commands, inspecting tabs or grantin
 new target authority. Existing saved names without confirmed consent do not opt
 in. Upgrading from extension 1.0.2 requires a one-time reload and Connect.
 
-Chrome must run on the environment host (macOS or Linux); a remote environment
-cannot open Chrome on the client machine. Safari and other browsers are not
-supported by this extension connection. Native open actions accept only a fixed
+The selected supported browser must run on the environment host (macOS or Linux);
+a remote environment cannot open the client's browser. Safari is not supported
+by this extension connection. Native open actions accept only a fixed
 enum, never caller-supplied URLs, paths, arguments or sandbox overrides. Managed
 Chromium also launches with its sandbox enabled. Managed profiles are identified
 as **Flower dedicated browser**; Default is not the OS default browser.
@@ -94,10 +102,10 @@ assistance may reuse already connected profiles and resume immediately. Genuine
 profile ambiguity remains the Agent's responsibility through existing discovery.
 The extension's optional profile label is user content, not routing authority.
 
-Runtime Service epoch 30 pairs the connection status snapshot and structured
-diagnostics with both product carriers. `extension/status` contains live profiles, an optional failure reason
-and optional `prepared` presentation hint. Older carriers safely ignore the hint;
-new carriers retain installation guidance when it is absent. Native Messaging
+The connection status snapshot and structured diagnostics serve both product
+carriers. `extension/status` contains live profiles and per-installation
+availability, preparation and diagnostics. Preparation failure in one
+installation does not hide other connected sources. Native Messaging
 uses protocol 7. The first connection remains consent-gated even when the URL
 supplies configuration.
 No database, Floret API, tool-selection rule or authorization policy changes.
