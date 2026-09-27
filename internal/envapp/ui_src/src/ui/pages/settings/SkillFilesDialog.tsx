@@ -1,4 +1,4 @@
-import { StatusRegion, Button } from '@floegence/floe-webapp-core/ui';
+import { FeedbackIndicator, Button } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { ChevronLeft, FileText, FolderOpen } from '@floegence/floe-webapp-core/icons';
 import { Dialog } from '../../primitives/EnvAppModal';
@@ -13,6 +13,7 @@ export function SkillFilesDialog(props: { entry: SkillCatalogEntry | null; onClo
   const [file, setFile] = createSignal<SkillBrowseFileResponse | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  let closeButton: HTMLButtonElement | undefined;
   let requestID = 0;
   let lastRequest: { kind: 'tree' | 'file'; path: string } = { kind: 'tree', path: '' };
   const load = async (kind: 'tree' | 'file', path = '') => {
@@ -43,12 +44,18 @@ export function SkillFilesDialog(props: { entry: SkillCatalogEntry | null; onClo
   return (
     <Dialog open={Boolean(props.entry)} onOpenChange={(open) => { if (!open) props.onClose(); }} title={props.entry?.name ?? i18n.t('settingsDesign.skillFiles')}
       bodyDescription={props.entry?.description} class="redeven-settings-dialog w-[min(52rem,94vw)]"
-      footer={<Button variant="outline" onClick={props.onClose}>{i18n.t('common.actions.close')}</Button>}>
-      <StatusRegion lines={3} class="mb-3 text-xs"><Show when={error()}><div class="mb-4 flex items-center justify-between gap-3"><p role="alert" class="text-[length:var(--floe-type-body)] text-destructive">{error()}</p><Button size="sm" variant="outline" disabled={loading() || !props.canInteract} onClick={() => void load(lastRequest.kind, lastRequest.path)}>{i18n.t('common.actions.retry')}</Button></div></Show>
-      <Show when={loading()}><p role="status" class="mb-3 text-xs text-muted-foreground">{i18n.t('skillsSettings.loading')}</p></Show></StatusRegion>
+      footer={<div class="flex items-center gap-2">
+        <FeedbackIndicator label={i18n.t('settingsDesign.skillFiles')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => closeButton} entries={(tree() || file()) && error() ? [{ id: 'files', severity: 'error', summary: error()!, actions: <Button size="sm" variant="outline" disabled={loading() || !props.canInteract} onClick={() => void load(lastRequest.kind, lastRequest.path)}>{i18n.t('common.actions.retry')}</Button> }] : []} />
+        <Button ref={closeButton} variant="outline" onClick={props.onClose}>{i18n.t('common.actions.close')}</Button>
+      </div>}>
+      <Show when={!tree() && !file()}>
+        <Show when={error()}><div class="mb-4 flex items-center justify-between gap-3"><p role="alert" class="text-[length:var(--floe-type-body)] text-destructive">{error()}</p><Button size="sm" variant="outline" disabled={loading() || !props.canInteract} onClick={() => void load(lastRequest.kind, lastRequest.path)}>{i18n.t('common.actions.retry')}</Button></div></Show>
+        <Show when={loading()}><p role="status" class="mb-3 text-xs text-muted-foreground">{i18n.t('skillsSettings.loading')}</p></Show>
+      </Show>
+      <Show when={tree() || file()}>
       <Show when={file()} fallback={<>
         <div class="mb-3 flex items-center gap-2">
-          <Button size="sm" variant="outline" icon={ChevronLeft} disabled={!tree()?.dir || tree()?.dir === '.' || loading()} onClick={() => void load('tree', parentDirectory())}>{i18n.t('settingsDesign.parentFolder')}</Button>
+          <Button size="sm" variant="outline" icon={ChevronLeft} loading={loading()} disabled={!tree()?.dir || tree()?.dir === '.' || loading()} onClick={() => void load('tree', parentDirectory())}>{i18n.t('settingsDesign.parentFolder')}</Button>
           <code class="min-w-0 break-all text-xs text-muted-foreground">{tree()?.dir || props.entry?.path}</code>
         </div>
         <div class="redeven-settings-list rounded-lg border">
@@ -62,6 +69,7 @@ export function SkillFilesDialog(props: { entry: SkillCatalogEntry | null; onClo
           <Show when={current().truncated}><p class="mb-3 text-xs text-warning">{i18n.t('settingsDesign.truncatedFile')}</p></Show>
           <pre class="redeven-settings-inset max-h-[50dvh] overflow-auto whitespace-pre-wrap break-words rounded-lg border p-4 text-xs">{current().content}</pre>
         </>}
+      </Show>
       </Show>
     </Dialog>
   );

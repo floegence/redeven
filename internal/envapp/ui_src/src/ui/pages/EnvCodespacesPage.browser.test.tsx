@@ -324,3 +324,72 @@ it('keeps compact Open menus named and keyboard accessible at intermediate deskt
   await userEvent.keyboard('{Escape}');
   expect(document.activeElement).toBe(trigger);
 });
+
+it('keeps the compact inventory flush with its content padding', async () => {
+  state.spaces.mockResolvedValue({ spaces: [space] });
+  dispose = render(() => <EnvCodespacesPage />, host);
+  await expect.poll(() => host.querySelector('.codespace-card')).toBeTruthy();
+  const content = host.querySelector<HTMLElement>('.codespaces-content')!;
+  const list = host.querySelector<HTMLElement>('.codespaces-grid')!;
+  expect(list.getBoundingClientRect().top - content.getBoundingClientRect().top).toBe(parseFloat(getComputedStyle(content).paddingTop));
+});
+
+
+it.each([390, 900, 1440])('retains codespace geometry, selection and scroll through refresh failure and recovery at %ipx', async width => {
+  await page.viewport(width, 800);
+  const items = Array.from({ length: 15 }, (_, index) => ({ ...space, code_space_id: `retained-${index}`, name: `Workspace ${index}` }));
+  state.spaces.mockResolvedValue({ spaces: items });
+  dispose = render(() => <EnvCodespacesPage />, host);
+  await expect.poll(() => host.querySelectorAll('.codespace-card').length).toBe(15);
+  await document.fonts.ready;
+  const viewport = host.querySelector<HTMLElement>('.codespaces-content')!;
+  const card = host.querySelector<HTMLElement>('.codespace-card')!;
+  const anchor = card.querySelector<HTMLButtonElement>('button')!;
+  anchor.focus();
+  const range = document.createRange(); range.selectNodeContents(card.querySelector('h3')!);
+  window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
+  const selection = window.getSelection()!.toString();
+  viewport.scrollTop = 120;
+  const scroll = viewport.scrollTop;
+  const before = geometry();
+  let reject!: (error: Error) => void;
+  state.spaces.mockReturnValue(new Promise((_resolve, fail) => { reject = fail; }));
+  const refresh = host.querySelector<HTMLButtonElement>('button[aria-label="Refresh"]')!;
+  refresh.click();
+  await expect.poll(() => Boolean(reject)).toBe(true);
+  expect(geometry()).toEqual(before);
+  const error = 'Connection interrupted. ' + 'Diagnostic detail remains readable. '.repeat(80);
+  reject(new Error(error));
+  const trigger = host.querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!;
+  await expect.poll(() => trigger.getAttribute('aria-hidden')).toBeNull();
+  expect(document.activeElement).toBe(anchor);
+  expect(window.getSelection()!.toString()).toBe(selection);
+  expect(viewport.scrollTop).toBe(scroll);
+  expect(host.querySelector('.codespace-card')).toBe(card);
+  expect(geometry()).toEqual(before);
+  await userEvent.click(trigger);
+  const details = () => document.querySelector<HTMLElement>('[data-floe-status-details]');
+  await expect.poll(() => details()?.textContent).toContain(error);
+  expect(details()!.scrollHeight).toBeGreaterThan(details()!.clientHeight);
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => details()).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+  expect(trigger.getAttribute('aria-hidden')).toBeNull();
+  state.spaces.mockResolvedValue({ spaces: items });
+  await userEvent.click(trigger);
+  await userEvent.click(page.getByRole('button', { name: 'Retry', exact: true }));
+  await expect.poll(() => trigger.getAttribute('aria-hidden')).toBe('true');
+  expect(details()).toBeNull();
+  expect(document.activeElement).toBe(host.querySelector('h1'));
+  expect(host.querySelector('.codespace-card')).toBe(card);
+  expect(viewport.scrollTop).toBe(scroll);
+  expect(geometry()).toEqual(before);
+});
+
+it('keeps first-load codespace failure visible with a direct retry', async () => {
+  state.spaces.mockRejectedValue(new Error('Inventory unavailable'));
+  dispose = render(() => <EnvCodespacesPage />, host);
+  await expect.poll(() => host.textContent).toContain('Inventory unavailable');
+  expect(host.querySelector('[data-floe-status-indicator] button')?.getAttribute('aria-hidden')).toBe('true');
+  expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeDefined();
+});

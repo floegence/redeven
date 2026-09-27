@@ -5475,7 +5475,8 @@
       "toolApprovalOnceScope": "Solo esta vez",
       "toolApprovalExpandCommand": "Ver el comando completo",
       "toolApprovalHideCommand": "Contraer",
-      "toolApprovalEligibleCount": "Se pueden aprobar · {count}"
+      "toolApprovalEligibleCount": "Se pueden aprobar · {count}",
+      "feedbackClose": "Cerrar detalles del aviso"
     },
     "threadList": {
       "title": "Conversaciones",
@@ -5677,7 +5678,8 @@
           "no": "No"
         },
         "agentsCount": "Agentes delegados: {count}"
-      }
+      },
+      "feedbackClose": "Cerrar detalles del aviso"
     },
     "settings": {
       "title": "Configuración de Flower",

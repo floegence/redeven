@@ -399,6 +399,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
             editing={controller.editing()}
             dirty={controller.dirty()}
             saving={controller.saving()}
+            saveError={controller.saveError()}
             loading={controller.loading()}
             selectedText={controller.selectedText()}
             contentElement={contentElement()}

@@ -360,6 +360,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       toolApprovalWorkingDirectoryDetail: (target) => t(i18n, k('chat.toolApprovalWorkingDirectoryDetail'), { target }),
       toolApprovalComposerDescription: t(i18n, k('chat.toolApprovalComposerDescription')),
       toolApprovalDetails: t(i18n, k('chat.toolApprovalDetails')),
+      feedbackClose: t(i18n, k('chat.feedbackClose')),
       toolApprovalScope: t(i18n, k('chat.toolApprovalScope')),
       toolApprovalOnceScope: t(i18n, k('chat.toolApprovalOnceScope')),
       toolApprovalExpandCommand: t(i18n, k('chat.toolApprovalExpandCommand')),
@@ -589,6 +590,7 @@ function createLocalizedFlowerSubagentsCopy(i18n: FlowerSurfaceTranslator): Flow
     detailActivityLabel: (count) => t(i18n, k('detailActivityLabel'), { count }),
     detailOutcomeLabel: t(i18n, k('detailOutcomeLabel')),
     detailRetry: t(i18n, k('detailRetry')),
+    feedbackClose: t(i18n, k('feedbackClose')),
     unavailableThread: t(i18n, k('unavailableThread')),
     readOnlyComposerLabel: t(i18n, k('readOnlyComposerLabel')),
     statusLabels: {

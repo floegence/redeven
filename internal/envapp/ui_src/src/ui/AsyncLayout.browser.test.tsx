@@ -78,7 +78,7 @@ it('keeps the model toolbar and result list still through refresh and a long err
   await page.viewport(600, 1000);
   const host = document.createElement('div'); host.style.width = '488px'; document.body.append(host);
   const [loading, setLoading] = createSignal(false); const [error, setError] = createSignal('');
-  dispose = render(() => <><ModelCatalogControls copy={modelCatalogCopy('zh-CN')} query="" count={2} loading={loading()} error={error()} onQuery={() => {}} onSelectAll={() => {}} onClear={() => {}} onRefresh={() => {}} /><p data-neighbor>Model results</p></>, host);
+  dispose = render(() => <><ModelCatalogControls hasContent copy={modelCatalogCopy('zh-CN')} query="" count={2} loading={loading()} error={error()} onQuery={() => {}} onSelectAll={() => {}} onClear={() => {}} onRefresh={() => {}} /><p data-neighbor>Model results</p></>, host);
   await settle(); const initial = rect(host.querySelector('[data-neighbor]')!);
   setLoading(true); await settle(); expect(rect(host.querySelector('[data-neighbor]')!)).toEqual(initial);
   setError('The model provider could not be reached. '.repeat(20)); setLoading(false); await settle(); expect(rect(host.querySelector('[data-neighbor]')!)).toEqual(initial);

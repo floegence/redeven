@@ -13,7 +13,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   return { AlertTriangle: Icon, Bot: Icon, ChevronDown: Icon, Clock: Icon, Refresh: Icon };
 });
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async original => ({
+  ...await original<object>(),
   FloatingWindow: (props: { open: boolean; title: string; class?: string; children?: JSX.Element }) => (
     <Show when={props.open}>
       <div role="dialog" class={props.class}>

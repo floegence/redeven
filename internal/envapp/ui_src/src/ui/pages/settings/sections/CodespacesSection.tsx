@@ -1,6 +1,6 @@
 import { createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Code, Hash } from '@floegence/floe-webapp-core/icons';
-import { Input, Checkbox } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, SettingsList, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
 import { CodeRuntimeSettingsCard } from '../CodeRuntimeSettingsCard';
@@ -96,8 +96,8 @@ export function CodespacesSection() {
 
       <SettingsSection
         icon={Code} title={i18n.t('codespacesSettings.title')} description={i18n.t('codespacesSettings.description')}
-        error={error()}
-        actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={canEdit()} />}
+        feedback={error() ? [{ id: 'save', severity: 'error', summary: error()!, actions: <Button size="sm" variant="outline" disabled={!canEdit() || saving()} onClick={() => setError(null)}>{i18n.t('common.actions.retry')}</Button> }] : []}
+        actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} savedAt={savedAt()} enabled={canEdit()} />}
       >
         {/* Port range card */}
         <SettingsList>

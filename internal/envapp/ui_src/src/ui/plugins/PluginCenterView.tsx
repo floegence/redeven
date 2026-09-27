@@ -1,4 +1,4 @@
-import { StatusRegion, StableText, Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { FeedbackIndicator, type FeedbackIndicatorEntry, StableText, Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import './plugin-center-compact.css';
 import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
@@ -752,10 +752,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       focusRequest={props.selectedInventoryKey ? undefined : props.focusRequest}
       onInstallExternal={() => openExternalDialog()}
       onClose={props.onClose}
+      feedback={allItems().length > 0 && errorMessage() ? [{ id: 'inventory', severity: 'error', summary: errorMessage()!, detail: <Show when={!canManage()}><p>{i18n.t('uiCopy.plugin.permissionsAdminRequired')}</p></Show>, actions: <Button size="sm" variant="outline" disabled={loading() || refreshPending()} onClick={() => void refreshInventory()}>{i18n.t('common.actions.retry')}</Button> }] : []}
       runtimeRecovery={props.runtimeRecovery}
       onRetryRuntimeRecovery={props.onRetryRuntimeRecovery}
     >
-      <StatusRegion lines={4} class="text-xs"><Show when={errorMessage()}>
+      <Show when={allItems().length === 0 && errorMessage()}>
         <div role="alert" data-plugin-center-error class={cn('flex flex-wrap items-center gap-3 border-b border-destructive bg-background px-4 py-3 text-[length:var(--floe-type-body)] text-destructive', PLUGIN_ENTER_MOTION_CLASS)}>
           <AlertTriangle class="h-4 w-4 shrink-0" />
           <div class="min-w-0 flex-1">
@@ -773,7 +774,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             {i18n.t('common.actions.retry')}
           </button>
         </div>
-      </Show></StatusRegion>
+      </Show>
       <div
         ref={pluginCenterPanelRef}
         id={`${idPrefix}-panel`}
@@ -1305,6 +1306,7 @@ export function PluginCenterShell(props: {
   lifecycleFilter: PluginLifecycleFilter;
   loading: boolean;
   refreshing: boolean;
+  feedback?: readonly FeedbackIndicatorEntry[];
   activeTab: PluginCenterTab;
   installedCount: number;
   discoverCount: number;
@@ -1426,6 +1428,7 @@ export function PluginCenterShell(props: {
             items={[...filterGroups.map(group => ({ id: group.id, label: i18n.t('uiCopy.plugin.filterSelection', { dimension: group.dimension, value: group.items.find(item => item.id === group.value)?.label ?? '' }), children: group.items.map(item => ({ ...item, id: `${group.id}:${item.id}`, icon: () => item.id === group.value ? <Check class="h-4 w-4" /> : <span class="h-4 w-4" /> })) })), { id: 'clear', label: i18n.t('uiCopy.plugin.clearFilters'), disabled: !props.filtersActive }]}
             onSelect={id => { if (id === 'clear') props.onClearFilters(); else { const [groupID, value] = id.split(':'); filterGroups.find(group => group.id === groupID)?.onSelect(value); } }} /></div>
           <div class="plugin-center-management ml-auto flex shrink-0 items-center gap-1.5">
+            <FeedbackIndicator label={i18n.t('uiCopy.plugin.centerTitle')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => searchRef} entries={props.feedback ?? []} />
             <Show when={props.filtersActive}>
               <button
                 type="button"
@@ -1460,6 +1463,7 @@ export function PluginCenterShell(props: {
               class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 motion-reduce:transition-none"
               aria-label={i18n.t('uiCopy.plugin.refreshOfficial')}
               title={i18n.t('uiCopy.plugin.refreshOfficial')}
+              aria-busy={props.loading || props.refreshing}
               disabled={props.loading || props.refreshing}
               onClick={props.onRefresh}
             >
@@ -1573,6 +1577,12 @@ export function PluginCenterDetails(props: {
   onResolveRetainedData?: () => void;
 }): JSX.Element {
   const i18n = useI18n();
+  let detailControls: HTMLDivElement | undefined;
+  const presentation = () => {
+    if (props.item?.presentation) return resolveAuthorPresentation(props.item?.presentation, i18n.locale());
+    if (!props.item?.pluginInstanceID && props.marketDetail) return resolveAuthorPresentation(props.marketDetail.presentation, i18n.locale());
+    return undefined;
+  };
   return (
     <aside
       data-plugin-center-details={props.item?.inventoryKey ?? ''}
@@ -1586,8 +1596,10 @@ export function PluginCenterDetails(props: {
       >
         {(item) => (
           <div class="flex h-full min-h-0 flex-col">
-            <div class="shrink-0 space-y-4 border-b px-4 py-4" data-plugin-detail-controls>
-              <div class="flex items-center justify-between gap-3">
+            <div ref={detailControls} tabIndex={-1} class="shrink-0 space-y-4 border-b px-4 py-4" data-plugin-detail-controls>
+              <div class="flex items-center justify-between gap-3" aria-busy={props.marketDetailLoading}>
+                <FeedbackIndicator label={item().displayName} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => detailControls} entries={presentation() && props.marketDetailError ? [{ id: 'market', severity: 'error', summary: i18n.t('uiCopy.plugin.marketUnavailable'), detail: messageFromUnknown(props.marketDetailError), actions: <Button size="sm" variant="outline" disabled={props.marketDetailLoading} onClick={props.onRetryMarketDetail}>{i18n.t('common.actions.retry')}</Button> }] : []} />
+                <span class="inline-flex h-3.5 w-3.5 shrink-0" style={{ visibility: props.marketDetailLoading ? 'visible' : 'hidden' }}><RefreshIcon class="h-3.5 w-3.5 animate-spin" aria-label={i18n.t('uiCopy.plugin.loadingOfficial')} /></span>
                 <Button
                 data-plugin-center-mobile-back
                 size="sm"
@@ -1647,8 +1659,7 @@ export function PluginCenterDetails(props: {
             <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4" data-plugin-detail-scroll-body>
               <div class="space-y-4">
                 <PluginAuthorContent
-                  item={item()}
-                  marketDetail={props.marketDetail}
+                  presentation={presentation()}
                   loading={props.marketDetailLoading}
                   error={props.marketDetailError}
                   onRetry={props.onRetryMarketDetail}
@@ -1694,34 +1705,28 @@ export function PluginCenterDetails(props: {
 }
 
 function PluginAuthorContent(props: {
-  item: PluginInventoryItem;
-  marketDetail?: PluginMarketDetail;
+  presentation?: ReturnType<typeof resolveAuthorPresentation>;
   loading?: boolean;
   error?: unknown;
   onRetry?: () => void;
 }): JSX.Element {
   const i18n = useI18n();
-  const presentation = () => {
-    if (props.item.presentation) return resolveAuthorPresentation(props.item.presentation, i18n.locale());
-    if (!props.item.pluginInstanceID && props.marketDetail) return resolveAuthorPresentation(props.marketDetail.presentation, i18n.locale());
-    return undefined;
-  };
   return (
     <section class="min-w-0 space-y-4" data-plugin-author-content>
-      <StatusRegion lines={3} class="text-xs"><Show when={props.loading}>
+      <Show when={!props.presentation && props.loading}>
         <div class="rounded-md border bg-muted/20 px-3 py-3 text-xs text-muted-foreground" role="status">
           {i18n.t('uiCopy.plugin.loadingOfficial')}
         </div>
       </Show>
-      <Show when={props.error}>
+      <Show when={!props.presentation && props.error}>
         <div class="flex min-w-0 items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-3 text-xs text-destructive" role="alert">
           <span class="min-w-0 flex-1">{i18n.t('uiCopy.plugin.marketUnavailable')}</span>
           <Button size="sm" variant="outline" icon={RefreshIcon} onClick={props.onRetry}>
             {i18n.t('common.actions.retry')}
           </Button>
         </div>
-      </Show></StatusRegion>
-      <Show when={presentation()}>
+      </Show>
+      <Show when={props.presentation}>
         {(resolved) => (
           <div class="min-w-0 space-y-4" lang={resolved().resolved_locale} dir="auto">
             <div class="space-y-2" data-plugin-author-description>

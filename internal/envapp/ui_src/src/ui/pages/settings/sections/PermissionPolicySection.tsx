@@ -30,7 +30,8 @@ export function PermissionPolicySection() {
   const [dirty, setDirty] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
-  const [error, setError] = createSignal<string | null>(null);
+  const [failure, setFailure] = createSignal<{ kind: 'validation' | 'request'; message: string } | null>(null);
+  const error = () => failure()?.message;
   const localMaxDescription = () => [
     i18n.t('permissionPolicy.localMaxDescription'),
     localExecute() && !localWrite() ? i18n.t('terminal.executePermissionDescription') : '',
@@ -64,16 +65,22 @@ export function PermissionPolicySection() {
     autoSaveTimer = window.setTimeout(async () => {
       autoSaveTimer = undefined;
       if (!dirty() || saving() || error() || !canEdit()) return;
-      setSaving(true);
+      let body;
       try {
-        const body = buildPermissionPolicyValue(
+        body = buildPermissionPolicyValue(
           { read: localRead(), write: localWrite(), execute: localExecute() },
           byUser(), byApp(),
         );
-        await ctx.saveSettings({ permission_policy: body });
-        setSaving(false); setSavedAt(Date.now()); setDirty(false); setError(null);
       } catch (e) {
-        setSaving(false); setError(formatUnknownError(e) || i18n.t('permissionPolicy.saveFailed'));
+        setFailure({ kind: 'validation', message: formatUnknownError(e) || i18n.t('permissionPolicy.saveFailed') });
+        return;
+      }
+      setSaving(true);
+      try {
+        await ctx.saveSettings({ permission_policy: body });
+        setSaving(false); setSavedAt(Date.now()); setDirty(false); setFailure(null);
+      } catch (e) {
+        setSaving(false); setFailure({ kind: 'request', message: formatUnknownError(e) || i18n.t('permissionPolicy.saveFailed') });
       }
     }, AUTO_SAVE_DELAY_MS);
   });
@@ -82,11 +89,11 @@ export function PermissionPolicySection() {
 
   const addUserRule = () => {
     setByUser((prev) => [...prev, { key: '', read: localRead(), write: localWrite(), execute: localExecute() }]);
-    setError(null); setDirty(true);
+    setFailure(null); setDirty(true);
   };
   const addAppRule = () => {
     setByApp((prev) => [...prev, { key: '', read: localRead(), write: localWrite(), execute: localExecute() }]);
-    setError(null); setDirty(true);
+    setFailure(null); setDirty(true);
   };
 
   // One matrix owns the shared user/app rule interaction and permission ceiling.
@@ -95,7 +102,7 @@ export function PermissionPolicySection() {
     const setRows = kind === 'user' ? setByUser : setByApp;
     const permissions = ['read', 'write', 'execute'] as const;
     const ceiling = (permission: typeof permissions[number]) => ({ read: localRead(), write: localWrite(), execute: localExecute() })[permission];
-    const changed = () => { setError(null); setDirty(true); };
+    const changed = () => { setFailure(null); setDirty(true); };
     return <div class="space-y-3">
       <SubSectionHeader title={i18n.t(kind === 'user' ? 'settingsDesign.userOverrides' : 'settingsDesign.appOverrides')}
         description={i18n.t(kind === 'user' ? 'permissionPolicy.byUserDescription' : 'permissionPolicy.byAppDescription')}
@@ -131,8 +138,9 @@ export function PermissionPolicySection() {
 
   return (
     <SettingsSection variant="page" icon={Shield} title={i18n.t('permissionPolicy.title')} description={i18n.t('permissionPolicy.description')}
-      badge={i18n.t('permissionPolicy.manualRestartRequired')} badgeVariant="warning" error={error()}
-      actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={canEdit()} />}>
+      badge={i18n.t('permissionPolicy.manualRestartRequired')} badgeVariant="warning" error={failure()?.kind === 'validation' ? error() : null}
+      feedback={failure()?.kind === 'request' ? [{ id: 'save', severity: 'error', summary: error()!, actions: <Button size="sm" variant="outline" disabled={!canEdit() || saving()} onClick={() => setFailure(null)}>{i18n.t('common.actions.retry')}</Button> }] : []}
+      actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={failure()?.kind === 'validation' ? error() : null} savedAt={savedAt()} enabled={canEdit()} />}>
       <SettingsList>
         <SettingRow icon={ShieldCheck} title={i18n.t('settingsDesign.permissionCeiling')} description={localMaxDescription()}
           control={<div class="settings-permission-ceiling">
@@ -141,7 +149,7 @@ export function PermissionPolicySection() {
               { key: 'write' as const, value: localWrite, set: setLocalWrite },
               { key: 'execute' as const, value: localExecute, set: setLocalExecute },
             ]}>{permission => <Checkbox label={i18n.t(`permissionPolicy.permission.${permission.key}`)}
-              checked={permission.value()} disabled={!canEdit()} onChange={value => { permission.set(value); setError(null); setDirty(true); }} />}</For>
+              checked={permission.value()} disabled={!canEdit()} onChange={value => { permission.set(value); setFailure(null); setDirty(true); }} />}</For>
           </div>} />
       </SettingsList>
       {renderRules('user')}

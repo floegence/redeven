@@ -3,7 +3,7 @@ type: Security Contract
 title: Runtime two-factor authentication
 description: Configure independent environment TOTP, sign in, recover access, and revoke ordinary sessions without changing SSH authentication.
 tags: [security, authentication, runtime, desktop, totp]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-28T00:00:00Z
 ---
 # Summary
 
@@ -65,7 +65,7 @@ Password-only challenges grant no ordinary product data access. Loopback address
 - `redeven:internal/agent/native_codespace.go` - Applies the shared authentication contract before editor streams.
 - `redeven:desktop/src/welcome/TwoFactorSettings.client.test.tsx` - Verifies HTTPS preflight, stale enrollment rejection, scan, save-code acknowledgement, commit and unavailable status.
 - `redeven:desktop/src/welcome/EnvironmentAccessSettingsForm.client.test.tsx` - Exercises HTTPS navigation, explicit certificate preparation, save/restart, and focus returning only after actual readiness.
-- `redeven:desktop/scripts/check-two-factor.mjs` - Checks the real browser setup flow, password confirmation and 320px layout.
+- `redeven:desktop/scripts/check-access-settings.mjs` - Checks inline enrollment, manual-key and recovery-code copying, explicit acknowledgement, visible verification errors, HTTPS preparation, password confirmation, and 320px layouts through the current access workflow.
 - `redeven:internal/envapp/ui_src/src/ui/EnvironmentAccessGate.browser.test.tsx` - Checks keyboard operation, leading zeroes, recovery input, locales and viewport sizes.
 - `redeven:internal/envapp/ui_src/src/ui/ResourceAccessGate.browser.test.tsx` - Verifies isolated-resource factor completion, scoped resume and local cookie transport.
 - `redeven:cmd/redeven/security.go` - Implements terminal-only owner setup and recovery.

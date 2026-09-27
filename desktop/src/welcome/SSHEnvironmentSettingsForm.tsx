@@ -1,4 +1,4 @@
-import { StatusRegion, Button, Input, SegmentedControl, SettingsList, Switch } from '@floegence/floe-webapp-core/ui';
+import { FeedbackIndicator, Button, Input, SegmentedControl, SettingsList, Switch } from '@floegence/floe-webapp-core/ui';
 import { EnvironmentSettingsPanel, EnvironmentSettingsReveal } from './EnvironmentSettingsDialog';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
@@ -145,6 +145,8 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
     void save();
   }
 
+  let saveButton: HTMLButtonElement | undefined;
+
   function Field(field: { name: string; label: string; children: JSX.Element; help?: string }) {
     return (
       <div class="ssh-settings-field" classList={{ 'ssh-settings-field--invalid': !!props.fieldErrors[field.name] }}>
@@ -156,6 +158,7 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
         </div>
         <div class="ssh-settings-field-control">
           {field.children}
+          <Show when={props.fieldErrors[field.name]}><p id={`ssh-settings-${field.name}-error`} class="ssh-settings-error" role="alert">{props.fieldErrors[field.name]}</p></Show>
         </div>
       </div>
     );
@@ -173,16 +176,11 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
       onKeyDown={handleKeyDown}
       footer={
         <>
-          <StatusRegion lines={2} class="ssh-settings-feedback text-xs">
-            <For each={Object.entries(props.fieldErrors).filter(([, message]) => message)}>{([name, message]) =>
-              <p id={`ssh-settings-${name}-error`} class="ssh-settings-error" role="alert">{message}</p>
-            }</For>
-            <Show when={props.error}><p class="ssh-settings-error" role="alert">{props.error}</p></Show>
-          </StatusRegion>
+          <FeedbackIndicator label={t('sshSettings.title')} closeLabel={t('common.close')} restoreFocus={() => saveButton} entries={props.error ? [{ id: 'save', severity: 'error', summary: props.error }] : []} />
           <Button variant="ghost" onClick={requestClose}>
             {t('common.cancel')}
           </Button>
-          <Button disabled={props.saveBlocked || !dirty() || busy()} loading={busy()} onClick={() => void save()}>
+          <Button ref={saveButton} disabled={props.saveBlocked || !dirty() || busy()} loading={busy()} onClick={() => void save()}>
             {t('sshSettings.saveChanges')}
           </Button>
         </>

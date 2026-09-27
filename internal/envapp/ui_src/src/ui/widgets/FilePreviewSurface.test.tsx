@@ -95,7 +95,7 @@ describe('FilePreviewSurface', () => {
     ), host);
     try {
       const titlebar = host.querySelector('[data-testid="floating-titlebar"]')!;
-      expect(Array.from(titlebar.querySelectorAll('button')).map((button) => button.getAttribute('aria-label')))
+      expect(Array.from(titlebar.querySelectorAll('button:not([aria-hidden="true"])')).map((button) => button.getAttribute('aria-label')))
         .toEqual(['Copy path', 'Edit file', 'Ask Flower', 'Download file']);
       expect(host.querySelector('.redeven-file-preview-toolbar')).toBeNull();
       expect(host.textContent).not.toContain('/workspace/demo.md');

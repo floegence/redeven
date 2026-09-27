@@ -437,16 +437,24 @@ it('submits logging and port values using the flat settings API contract', async
   await expect.poll(() => fixture.settings().codespaces.code_server_port_min).toBe(0);
 });
 
-it('keeps a failed autosave draft without retrying until the user edits it', async () => {
+it('keeps a failed autosave draft and field geometry until explicit retry', async () => {
   await mount();
   await openSection('runtime');
+  const field = host.querySelector<HTMLInputElement>('input[placeholder="/home/user"]')!;
+  const geometry = field.getBoundingClientRect().toJSON();
   fixture.setSaveError('Workspace is unavailable');
   await page.getByPlaceholder('/home/user').fill('/workspace/unavailable');
-  await expect.element(page.getByRole('alert')).toHaveTextContent('Workspace is unavailable');
+  await expect.poll(() => fixture.requests.filter(request => request.url.endsWith('/api/settings')).length).toBe(1);
+  await expect.poll(() => host.textContent).toContain('Workspace is unavailable');
+  expect(field.getBoundingClientRect().toJSON()).toEqual(geometry);
+  await page.getByRole('button', { name: /Shell & Workspace: Workspace is unavailable/ }).click();
+  await expect.element(page.getByRole('dialog')).toHaveTextContent('Workspace is unavailable');
   await new Promise((resolve) => setTimeout(resolve, 1600));
   expect(fixture.requests.filter((request) => request.url.endsWith('/api/settings'))).toHaveLength(1);
   await expect.element(page.getByPlaceholder('/home/user')).toHaveValue('/workspace/unavailable');
   fixture.setSaveError(null);
-  await page.getByPlaceholder('/home/user').fill('/workspace/available');
-  await expect.poll(() => fixture.settings().runtime.agent_home_dir).toBe('/workspace/available');
+  await page.getByRole('dialog').getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect.poll(() => fixture.settings().runtime.agent_home_dir).toBe('/workspace/unavailable');
+  expect(host.querySelector('input[placeholder="/home/user"]')).toBe(field);
+  expect(field.getBoundingClientRect().toJSON()).toEqual(geometry);
 });

@@ -188,7 +188,10 @@ it('returns from a narrow uninstall confirmation to visible details and preserve
   const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
   fixture.onCommand.mockRejectedValueOnce(new Error('The plugin component could not be opened.'));
   await page.elementLocator(panel.querySelector('[data-plugin-center-card-primary]')!).click();
-  await expect.poll(() => panel.querySelector('[data-plugin-center-error]')?.textContent).toContain('could not be opened');
+  const failure = panel.querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!;
+  await expect.poll(() => failure.getAttribute('aria-label')).toContain('could not be opened');
+  await userEvent.click(failure);
+  await expect.poll(() => document.querySelector('[data-floe-status-details]')?.textContent).toContain('could not be opened');
   expect(panel.isConnected).toBe(true);
   await page.elementLocator(panel.querySelector('[data-plugin-center-card-menu]')!).click();
   await page.getByRole('menuitem', { name: 'Uninstall', exact: true }).click();

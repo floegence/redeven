@@ -1,4 +1,4 @@
-import { StatusRegion, StableText } from '@floegence/floe-webapp-core/ui';
+import { StableText } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js";
 import { cn, useNotification, useViewActivation } from "@floegence/floe-webapp-core";
 import { AlertTriangle, ChevronDown, ExternalLink, Maximize, Play, RefreshIcon, Stop, Terminal, Trash } from "@floegence/floe-webapp-core/icons";
@@ -1358,6 +1358,7 @@ export function EnvCodespacesPage() {
   return (
     <>
       <CodespacesPageFrame refreshing={pageRefreshing()} reloadState={spacesRenderable() ? 'content' : inventory.snapshot().error ? 'error' : 'pending'}
+        feedback={spacesRenderable() && inventory.snapshot().error ? [{ id: 'inventory', severity: 'error', summary: String(inventory.snapshot().error), actions: <Button size="sm" variant="outline" disabled={spacesRefreshing()} onClick={() => void refetch().catch(() => undefined)}>{i18n.t('common.actions.retry')}</Button> }] : []}
         onRefresh={() => void handleRefreshAll()} onCreate={() => setCreateDialogOpen(true)}
         readiness={<Show when={showCompactRuntimeStatus()}><BrowserEditorReadinessInlineStatus
           loading={runtimeResource.loading} error={runtimeStatusError()} onRefresh={() => void refetchRuntimeStatus()} /></Show>}>
@@ -1398,10 +1399,10 @@ export function EnvCodespacesPage() {
             data-testid="codespaces-list-region"
           >
 
-            <StatusRegion lines={2} class="text-xs"><Show when={inventory.snapshot().error}>{error => <div class="flex items-center gap-2 text-[length:var(--floe-type-body)] text-destructive" role="alert">
+            <Show when={!spacesRenderable() && inventory.snapshot().error}>{error => <div class="flex items-center gap-2 text-[length:var(--floe-type-body)] text-destructive" role="alert">
               <AlertTriangle class="h-4 w-4 shrink-0" /><span>{String(error())}</span>
               <Button size="sm" variant="outline" onClick={() => void refetch().catch(() => undefined)}>{i18n.t('common.actions.retry')}</Button>
-            </div>}</Show></StatusRegion>
+            </div>}</Show>
             <Show when={initialSpacesLoading()}><CodespacesListSkeleton /></Show>
             <Show when={spacesRenderable()}>
               <Show when={spaceList().length > 0} fallback={<EmptyState onCreateClick={() => setCreateDialogOpen(true)} />}>

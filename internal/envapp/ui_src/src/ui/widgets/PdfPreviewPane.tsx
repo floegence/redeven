@@ -79,7 +79,6 @@ export interface PdfPreviewPaneProps {
   bytes?: Uint8Array<ArrayBuffer> | null;
   editing?: boolean;
   saving?: boolean;
-  saveError?: string | null;
   bindPdfEditor?: BindPdfPreviewEditor;
   onSelectionChange?: (value: string) => void;
 }
@@ -233,7 +232,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
             onSelect={action => { if (action === 'undo') session()?.undo(); else if (action === 'redo') session()?.redo(); }} />
         </Show>
       </div>
-      <Show when={searchOpen() || props.saveError}>
+      <Show when={searchOpen()}>
         <div class="pdf-search-panel absolute inset-x-2 bottom-2 z-20 mx-auto max-w-xl rounded-lg border border-border/60 bg-background/95 p-2 shadow-sm backdrop-blur-sm">
           <Show when={searchOpen()}>
             <div class="flex items-center gap-1">
@@ -249,7 +248,6 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
               <Button size="sm" variant="ghost" class="h-8 w-7 px-0" aria-label={i18n.t('common.actions.close')} onClick={closeSearch}><X class="size-3.5" /></Button>
             </div>
           </Show>
-          <Show when={props.saveError}><p role="alert" class="text-xs text-error">{props.saveError}</p></Show>
         </div>
       </Show>
       <div ref={setViewport} {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS} tabIndex={0} inert={props.saving}

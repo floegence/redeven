@@ -6921,7 +6921,6 @@
   color: var(--flower-thread-rail-foreground);
 }
 
-.flower-thread-list-description,
 .flower-thread-card-preview,
 .flower-thread-card-meta,
 .flower-thread-card-time,
@@ -9119,8 +9118,7 @@ button.flower-attachment-preview-trigger:disabled {
   gap: 0.65rem;
 }
 
-.flower-subagent-detail-retry,
-.flower-subagent-detail-inline-error button {
+.flower-subagent-detail-retry {
   display: inline-flex;
   width: max-content;
   cursor: pointer;
@@ -9136,26 +9134,13 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagent-detail-retry:hover,
-.flower-subagent-detail-retry:focus-visible,
-.flower-subagent-detail-inline-error button:hover,
-.flower-subagent-detail-inline-error button:focus-visible {
+.flower-subagent-detail-retry:focus-visible {
   border-color: color-mix(in srgb, currentColor 45%, var(--flower-subagent-window-border));
   outline: 2px solid color-mix(in srgb, currentColor 18%, transparent);
   outline-offset: 1px;
 }
 
-.flower-subagent-detail-inline-error {
-  display: grid;
-  flex: 0 0 auto;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.55rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--flower-subagent-window-danger) 28%, var(--flower-subagent-window-border-soft));
-  background: color-mix(in srgb, var(--flower-subagent-window-danger) 7%, var(--flower-subagent-window-surface));
-  color: var(--flower-subagent-window-danger);
-  padding: 0.55rem 1rem;
-  font-size: 0.75rem;
-}
+
 
 .flower-subagent-detail-transcript {
   position: relative;

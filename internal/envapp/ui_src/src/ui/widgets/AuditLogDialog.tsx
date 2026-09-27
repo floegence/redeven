@@ -1,4 +1,4 @@
-import { StatusRegion, Button } from '@floegence/floe-webapp-core/ui';
+import { FeedbackIndicator, Button } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createMemo, createResource } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
@@ -191,21 +191,20 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
 
   const envId = createMemo(() => String(props.envId ?? '').trim());
 
-  const [entries, { refetch }] = createResource<AgentAuditEntry[], string | null>(
+  let refreshButton: HTMLButtonElement | undefined;
+  const [snapshot, { refetch }] = createResource<{ envId: string; data?: AgentAuditEntry[]; error?: string }, string>(
     () => (props.open ? envId() || null : null),
-    async (id) => {
-      const all = await listAgentAuditLogs(200);
-      const targetEnv = String(id ?? '').trim();
-      if (!targetEnv) return all;
-      return all.filter((e) => String(e.env_public_id ?? '').trim() === targetEnv);
+    async (id, { value: previous }) => {
+      try {
+        const all = await listAgentAuditLogs(200);
+        return { envId: id, data: all.filter((entry) => String(entry.env_public_id ?? '').trim() === id) };
+      } catch (error) {
+        return { envId: id, data: previous?.envId === id ? previous.data : undefined, error: error instanceof Error ? error.message : String(error) };
+      }
     },
   );
-
-  const errorText = createMemo(() => {
-    const e = entries.error;
-    if (!e) return '';
-    return e instanceof Error ? e.message : String(e);
-  });
+  const entries = () => snapshot()?.data;
+  const errorText = () => snapshot()?.error;
 
   const copy = async (label: string, value: string) => {
     const v = String(value ?? '').trim();
@@ -226,8 +225,9 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
       }}
       title={i18n.t('uiCopy.audit.title')}
       footer={
-        <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={entries.loading || !envId()}>
+        <div class="flex items-center justify-end gap-2">
+          <FeedbackIndicator label={i18n.t('uiCopy.audit.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => refreshButton} entries={entries() !== undefined && errorText() ? [{ id: 'audit', severity: 'error', summary: errorText()!, actions: <Button size="sm" variant="outline" disabled={snapshot.loading} onClick={() => void refetch()}>{i18n.t('common.actions.retry')}</Button> }] : []} />
+          <Button ref={refreshButton} size="sm" variant="outline" loading={snapshot.loading} onClick={() => void refetch()} disabled={snapshot.loading || !envId()}>
             {i18n.t('common.actions.refresh')}
           </Button>
           <Button size="sm" variant="default" onClick={props.onClose}>
@@ -239,14 +239,14 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
       <div class="space-y-2">
         <div class="text-xs text-muted-foreground">{i18n.t('uiCopy.audit.description')}</div>
 
-        <StatusRegion lines={2} class="text-xs"><Show when={errorText()}>
-          <div class="text-xs text-error break-words">{errorText()}</div>
-        </Show></StatusRegion>
+        <Show when={entries() === undefined && errorText()}>
+          <div role="alert" class="text-xs text-error break-words">{errorText()}</div>
+        </Show>
 
         <div class="relative" style={{ 'min-height': '160px' }}>
-          <RedevenLoadingCurtain visible={entries.loading} eyebrow={i18n.t('uiCopy.audit.title')} message={i18n.t('uiCopy.audit.loading')} />
+          <RedevenLoadingCurtain visible={snapshot.loading} eyebrow={i18n.t('uiCopy.audit.title')} message={i18n.t('uiCopy.audit.loading')} />
 
-          <Show when={!entries.loading || (entries() ?? []).length > 0}>
+          <Show when={entries() !== undefined}>
             <Show when={(entries() ?? []).length > 0} fallback={<div class="text-xs text-muted-foreground">{i18n.t('uiCopy.audit.empty')}</div>}>
               <div class="max-h-[60vh] overflow-auto">
                 <table class="w-full text-xs">

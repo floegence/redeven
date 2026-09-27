@@ -1,4 +1,3 @@
-import { StatusRegion } from '@floegence/floe-webapp-core/ui';
 import { ErrorBoundary, For, Suspense, Show, createEffect, createMemo, createSignal, lazy, on } from 'solid-js';
 import type { CodeEditorApi, CodeEditorProps } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
@@ -100,7 +99,6 @@ export interface TextFilePreviewPaneProps {
   draftText?: string;
   truncated?: boolean;
   editing?: boolean;
-  saveError?: string | null;
   onDraftChange?: (value: string) => void;
   onSelectionChange?: (selectionText: string) => void;
 }
@@ -176,11 +174,6 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
 
   return (
     <div class={`flex h-full min-h-0 flex-col overflow-hidden${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
-      <StatusRegion {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} lines={2} class="text-xs"><Show when={(props.saveError ?? '').trim()}>
-        <div class="shrink-0 border-b border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
-          {props.saveError}
-        </div>
-      </Show></StatusRegion>
 
       <div class="min-h-0 flex-1 overflow-hidden">
         <Show

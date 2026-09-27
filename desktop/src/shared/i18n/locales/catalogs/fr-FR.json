@@ -558,7 +558,8 @@
       "toolApprovalOnceScope": "Cette fois uniquement",
       "toolApprovalExpandCommand": "Afficher la commande complète",
       "toolApprovalHideCommand": "Réduire",
-      "toolApprovalEligibleCount": "Approbation possible · {count}"
+      "toolApprovalEligibleCount": "Approbation possible · {count}",
+      "feedbackClose": "Fermer les détails du message"
     },
     "threadList": {
       "title": "Discussions",
@@ -760,7 +761,8 @@
           "no": "Non"
         },
         "agentsCount": "Agents délégués : {count}"
-      }
+      },
+      "feedbackClose": "Fermer les détails du message"
     },
     "settings": {
       "title": "Paramètres Flower",

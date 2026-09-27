@@ -8013,7 +8013,7 @@ webSearch: model.web_search,
     if (composerSurface) return <FlowerApprovalRow action={action()} presentation={presentation()} copy={copy().chat}
       disabled={disabled()} submitting={submitting()} status={statusCopy()}
       error={approvalErrors()[decisionSubmissionKey(selectedThreadID(), actionID)] || ''}
-      copied={commandCopied()} subtaskLabel={subtaskLabel()} readingProps={props.approvalReadingProps} scrollViewportProps={props.approvalScrollViewportProps}
+      copied={commandCopied()} subtaskLabel={subtaskLabel()} readingProps={props.approvalReadingProps}
       onCopy={() => void copyApprovalCommand(actionID, commandText())}
       onDecide={approved => void submitApprovalAction(action(), approved)} />;
     return (

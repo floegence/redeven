@@ -1848,7 +1848,7 @@ describe('native Containers page', () => {
     refresh?.click();
     await settle();
 
-    expect(host.querySelector('[role="status"]')?.textContent).toContain('engine temporarily unavailable');
+    expect(host.querySelector('[data-floe-status-indicator] button')?.getAttribute('aria-label')).toContain('engine temporarily unavailable');
     expect(host.textContent).toContain('Managed API');
     expect(host.querySelector('[data-container-resource-table]')).not.toBeNull();
   });

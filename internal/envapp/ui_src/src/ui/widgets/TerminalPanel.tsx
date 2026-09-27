@@ -1,6 +1,5 @@
-import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import {
-  StatusRegion,
+  FeedbackIndicator,
   Button,
   Dropdown,
   Dialog,
@@ -4941,7 +4940,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         <div ref={setNavigationContainer} data-terminal-sidebar-presentation={navigationOverlay() ? 'overlay' : 'inline'}
           class="relative flex min-h-0 flex-1 overflow-hidden bg-background">
           <SessionNavigation />
-
           <div inert={desktopNavigationOverlay() && sessionDrawerPresent()} class="min-w-0 min-h-0 flex flex-1 flex-col">
             <div
               ref={(element) => {
@@ -4950,6 +4948,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               tabIndex={-1}
               class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background px-2 outline-none"
             >
+              <FeedbackIndicator label={i18n.t('terminal.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => mobileToolbarEl ?? undefined} entries={error() ? [{ id: 'terminal', severity: 'error', summary: error()! }] : []} />
               <Show when={navigationOverlay()}>
                 <Button
                   ref={(element) => {
@@ -5370,9 +5369,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               onConfirm={confirmDeleteGroup}
             />
 
-            <StatusRegion {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} lines={2} class="text-xs"><Show when={error()}>
-              <div class="p-2 text-[11px] text-error border-t border-border bg-background/80 break-words">{error()}</div>
-            </Show></StatusRegion>
             <Show when={showTerminalStatusBar()}>
               <div
                 data-testid="terminal-status-bar"

@@ -1,4 +1,5 @@
 import {
+  FeedbackIndicator,
   StatusRegion,
   StableText,
   Button,
@@ -636,7 +637,7 @@ function ServiceStatusIndicator(props: { label: string; tone: ServiceStatusTone;
       <span class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center" aria-hidden="true"><Show when={props.tone === 'warning' || props.tone === 'error'} fallback={
         <span class={cn('h-1.5 w-1.5 shrink-0 rounded-full', props.tone === 'success' ? 'bg-[var(--redeven-status-success)]' : 'bg-muted-foreground/55')} aria-hidden="true" />
       }><AlertTriangle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /></Show></span>
-      {props.label}
+      <span class="min-w-0 truncate" title={props.label}>{props.label}</span>
     </span>
   );
 }
@@ -2058,6 +2059,7 @@ export function ForwardMetadataDialog(props: Readonly<{
 // ============================================================================
 
 export function EnvPortForwardsPage() {
+  let collectionHeading: HTMLHeadingElement | undefined;
   let pageRoot: HTMLDivElement | undefined;
   let addressInput: HTMLInputElement | undefined;
   const ctx = useEnvContext();
@@ -2117,6 +2119,7 @@ export function EnvPortForwardsPage() {
     if (permissionReady() && !ctx.env()?.permissions?.can_execute) forwardResource.invalidate(true);
   });
   const forwardsRefreshing = () => forwardResource.snapshot().refreshing;
+  const collectionRetained = () => forwardResource.data() !== undefined || managedResource.data() !== undefined;
   const collectionRenderable = () => Boolean(forwardResource.data()?.length || managedResource.data()?.length)
     || ((forwardResource.data() !== undefined || !!forwardResource.snapshot().error || (permissionReady() && !ctx.env()?.permissions?.can_execute))
       && (managedResource.data() !== undefined || !!managedResource.snapshot().error || (permissionReady() && !canRead())));
@@ -3478,10 +3481,12 @@ export function EnvPortForwardsPage() {
           <section class="space-y-3" data-testid="web-services-collection" aria-labelledby="web-services-collection-title">
               <div class="web-services-toolbar">
                 <div class="web-services-toolbar-heading">
-                  <h2 id="web-services-collection-title" tabindex="-1" title={archiveView() === 'active' ? i18n.t('webServices.collection.title') : i18n.t(`webServices.management.archive.${archiveView()}` as EnvAppTranslationKey)}>{archiveView() === 'active' ? i18n.t('webServices.collection.title') : i18n.t(`webServices.management.archive.${archiveView()}` as EnvAppTranslationKey)}</h2>
+                  <h2 ref={collectionHeading} id="web-services-collection-title" tabindex="-1" title={archiveView() === 'active' ? i18n.t('webServices.collection.title') : i18n.t(`webServices.management.archive.${archiveView()}` as EnvAppTranslationKey)}>{archiveView() === 'active' ? i18n.t('webServices.collection.title') : i18n.t(`webServices.management.archive.${archiveView()}` as EnvAppTranslationKey)}</h2>
+                  <FeedbackIndicator label={i18n.t('webServices.collection.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => collectionHeading} entries={collectionRetained() && (forwardsCheckFailed() || managedLoadError()) ? [{ id: 'collection', severity: 'error', summary: i18n.t('webServices.collection.refreshFailed'), detail: <><Show when={forwardResource.snapshot().error}>{error => <p>{String(error())}</p>}</Show><Show when={managedResource.snapshot().error}>{error => <p>{String(error())}</p>}</Show></>, actions: <Button size="sm" variant="outline" disabled={forwardsRefreshing() || managedLoading()} onClick={() => { bumpRefresh(); void loadManaged(true); }}>{i18n.t('common.actions.retry')}</Button> }] : []} />
                   <Show when={forwardResource.data() !== undefined || managedResource.data() !== undefined}><span class="text-xs tabular-nums text-muted-foreground">{filteredForwards().length + filteredManagedServices().length}</span></Show>
                 </div>
                 <div class="web-services-toolbar-actions" data-testid="web-services-toolbar-actions">
+
                   <Show when={archiveView() !== 'active'}><Button variant="ghost" size="sm" class="h-8 w-8 px-0" onClick={() => setArchiveView('active')} aria-label={i18n.t('webServices.collection.back')}><ArrowLeft class="h-4 w-4" /></Button></Show>
                   <div class="web-services-search" data-testid="web-services-search">
                     <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -3526,10 +3531,10 @@ export function EnvPortForwardsPage() {
               aria-busy={forwardsRefreshing() || managedLoading() ? 'true' : undefined}
               data-testid="web-services-list-region"
             >
-              <StatusRegion lines={3} class="text-xs"><Show when={forwardsCheckFailed() || managedLoadError()}><div class="web-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" /><p>{i18n.t(forwardsRenderable() || managedState().length ? 'webServices.collection.refreshFailed' : 'webServices.errors.loadFailedPrefix')}</p></div></Show></StatusRegion>
+              <Show when={!collectionRetained() && (forwardsCheckFailed() || managedLoadError())}><div class="web-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" /><p>{i18n.t(forwardsRenderable() || managedState().length ? 'webServices.collection.refreshFailed' : 'webServices.errors.loadFailedPrefix')}</p></div></Show>
               <Show when={initialForwardsLoading()}><WebServicesListSkeleton /></Show>
 
-              <Show when={collectionRenderable()}>
+              <Show when={collectionRenderable() && (collectionRetained() || !(forwardsCheckFailed() || managedLoadError()))}>
                 <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !ctx.env()?.permissions?.can_execute} />}>
                   <Show when={filteredForwards().length > 0 || filteredManagedServices().length > 0} fallback={
                     <div class="flex flex-col items-center justify-center px-4 py-12">

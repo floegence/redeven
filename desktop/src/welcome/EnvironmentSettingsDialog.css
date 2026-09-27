@@ -267,5 +267,3 @@
 @media (pointer: coarse) {
   .environment-connection-field input, .environment-connection-field select { font-size: 16px; min-height: 44px; }
 }
-
-.ssh-settings-feedback { flex: 1; min-width: 0; text-align: left; }

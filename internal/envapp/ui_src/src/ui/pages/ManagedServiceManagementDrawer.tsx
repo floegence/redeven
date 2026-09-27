@@ -1,4 +1,4 @@
-import { StatusRegion, StableText, Button, Checkbox, Dropdown } from '@floegence/floe-webapp-core/ui';
+import { StableText, Button, Checkbox, Dropdown } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import {
   For,
@@ -304,7 +304,7 @@ export function ManagedServiceManagementDrawer(props: {
     >
       <div class="service-management-body" data-testid="service-management-drawer">
         <section class="service-management-situation space-y-2">
-          <div class="service-management-section-heading"><h3>{text('currentSituation')}</h3><Button size="sm" variant="ghost" onClick={() => setRevision((value) => value + 1)} disabled={loading() || executing()}>{text('recheck')}</Button></div>
+          <div class="service-management-section-heading"><h3>{text('currentSituation')}</h3><Button size="sm" variant="ghost" onClick={() => setRevision((value) => value + 1)} disabled={loading() || executing()} loading={loading()}><StableText reserve={[text('checking'), text('recheck')]}>{text(loading() ? 'checking' : 'recheck')}</StableText></Button></div>
           <p class="service-management-conclusion">
             {i18n.t(
               managementStatusKey(
@@ -321,11 +321,6 @@ export function ManagedServiceManagementDrawer(props: {
               })}
             </p>
           </Show>
-          <StatusRegion lines={1} class="text-xs"><Show when={loading()}>
-            <p role="status" class="text-xs text-muted-foreground">
-              {text('checking')}
-            </p>
-          </Show></StatusRegion>
           <Show when={props.operation}>
             {(operation) => (
               <div

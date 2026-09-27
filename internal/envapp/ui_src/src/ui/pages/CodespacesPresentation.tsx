@@ -4,7 +4,8 @@ import { For, Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import {
-  StatusRegion,
+  FeedbackIndicator,
+  type FeedbackIndicatorEntry,
   Button,
   Card,
   CardContent,
@@ -20,16 +21,19 @@ import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surf
 export function CodespacesPageFrame(props: {
   children: JSX.Element;
   readiness?: JSX.Element;
+  feedback?: readonly FeedbackIndicatorEntry[];
   refreshing?: boolean;
   reloadState?: 'pending' | 'content' | 'error';
   onRefresh?: () => void;
   onCreate?: () => void;
 }) {
   const i18n = useI18n();
+  let heading: HTMLHeadingElement | undefined;
   return <div data-env-reload-state={props.reloadState ?? 'pending'} class={cn('codespaces-page flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
     <header class="codespaces-header redeven-resource-header">
-      <h1>{i18n.t('codespaces.title')}</h1>
+      <h1 ref={heading} tabIndex={-1}>{i18n.t('codespaces.title')}</h1>
       <div class="flex items-center gap-2 flex-shrink-0">
+        <FeedbackIndicator entries={props.feedback ?? []} label={i18n.t('codespaces.title')} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => heading} />
         {props.readiness}
         <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={!props.onRefresh || props.refreshing}
           aria-label={i18n.t('codespaces.actions.refresh')} title={i18n.t('codespaces.actions.refresh')}
@@ -108,5 +112,5 @@ export function CodespacesListSkeleton() {
 }
 
 export function CodespacesPageSkeleton() {
-  return <CodespacesPageFrame refreshing><div><StatusRegion lines={2} class="text-xs" /><CodespacesListSkeleton /></div></CodespacesPageFrame>;
+  return <CodespacesPageFrame refreshing><div><CodespacesListSkeleton /></div></CodespacesPageFrame>;
 }

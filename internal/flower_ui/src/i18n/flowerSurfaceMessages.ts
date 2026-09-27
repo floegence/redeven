@@ -282,6 +282,7 @@ export const flowerSurfaceEnUS = {
     toolApprovalWorkingDirectoryDetail: 'Working directory: {target}',
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
     toolApprovalDetails: 'View action details',
+    feedbackClose: 'Close feedback',
     toolApprovalOnceScope: 'This time only',
     toolApprovalExpandCommand: 'View full command',
     toolApprovalHideCommand: 'Collapse',
@@ -459,6 +460,7 @@ export const flowerSurfaceEnUS = {
     detailActivityLabel: '{count} operations',
     detailOutcomeLabel: 'Outcome',
     detailRetry: 'Retry',
+    feedbackClose: 'Close feedback',
     unavailableThread: 'Thread not available',
     readOnlyComposerLabel: 'Read only · Managed by parent thread',
     status: {

@@ -1,5 +1,4 @@
 import {
-  StatusRegion,
   Button,
   DirectoryPicker,
   Dropdown,
@@ -1504,7 +1503,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         ? { phase: 'ready', target: targetWithCurrentSelection(target), runtimes: runtimeSet, inventory: entries, refreshing: true }
         : { phase: 'loading', target: targetWithCurrentSelection(target), runtimes: runtimeSet };
     };
-    const initialCached = cachedEntries(nextRuntimes, target);
+    // A failed refresh can mark runtime discovery unavailable while the current inventory remains readable.
+    // Keep that same-view presentation mounted until rediscovery confirms its replacement.
+    const initialCached = previous.phase === 'ready' && previous.target.view === target.view && !options.navigation
+      ? previous.inventory
+      : cachedEntries(nextRuntimes, target);
     setConsoleState(pendingConsoleState(nextRuntimes, initialCached));
     if (previous.target.view !== target.view || options.navigation) resetResourceContext();
 
@@ -3700,9 +3703,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <Button size="sm" variant="ghost" class="container-icon-action" onClick={closeContainerServices} aria-label={i18n.t('containers.detail.back')}><ArrowLeft class="h-4 w-4" /></Button>
         <div><h2>{i18n.t('containers.services.title')}</h2><p>{i18n.t('containers.services.description')}</p></div>
       </header>
-          <StatusRegion lines={4} class="text-xs"><Show when={containerServicesError() && containerServices().length > 0}>
-            <div class="container-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4" /><div><strong>{i18n.t('containers.services.loadFailed')}</strong><small>{containerServicesError()}</small></div><Button size="sm" variant="outline" onClick={() => void loadContainerServices()}>{i18n.t('containers.actions.retry')}</Button></div>
-          </Show></StatusRegion>
+
       <Show when={!containerServicesInitialLoading()} fallback={renderContainerServicesSkeleton()}>
         <Show when={!containerServicesError() || containerServices().length > 0} fallback={<div class="container-engine-state" role="alert"><AlertTriangle class="h-6 w-6" /><strong>{i18n.t('containers.services.loadFailed')}</strong><p>{containerServicesError()}</p><Button size="sm" variant="outline" onClick={() => void loadContainerServices()}>{i18n.t('containers.actions.retry')}</Button></div>}>
 
@@ -3741,14 +3742,17 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   return (
     <div class={`redeven-containers flex h-full min-h-0 flex-col ${redevenSurfaceRoleClass('main')}`} data-container-page data-env-reload-state={servicesOpen() ? servicesResource.data() !== undefined ? 'content' : containerServicesError() ? 'error' : 'pending' : readyConsole() ? 'content' : loading() ? 'pending' : 'error'} data-variant={props.variant ?? 'activity'} data-resource-view={view()}>
-      <StatusRegion lines={3} class="text-xs"><Show when={readyConsole()?.refreshError}><div class="container-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4" /><small>{readyConsole()?.refreshError}</small><Button size="sm" variant="outline" onClick={() => void reloadConsole(true)}>{i18n.t('containers.actions.retry')}</Button></div></Show></StatusRegion>
-      <ContainersHeader controls={<>
+
+      <ContainersHeader feedback={[
+        ...(readyConsole()?.refreshError ? [{ id: 'inventory', severity: 'error' as const, summary: readyConsole()!.refreshError!, actions: <Button size="sm" variant="outline" onClick={() => void reloadConsole(true)}>{i18n.t('containers.actions.retry')}</Button> }] : []),
+        ...(servicesOpen() && containerServicesError() && containerServices().length > 0 ? [{ id: 'services', severity: 'error' as const, summary: i18n.t('containers.services.loadFailed'), detail: containerServicesError(), actions: <Button size="sm" variant="outline" onClick={() => void loadContainerServices()}>{i18n.t('containers.actions.retry')}</Button> }] : []),
+      ]} controls={<>
 
             <Button size="sm" variant="ghost" class="container-icon-action container-services-entry" onClick={openContainerServices} aria-label={i18n.t('containers.services.title')} title={i18n.t('containers.services.title')} aria-pressed={servicesOpen()}>
               <Settings class="h-4 w-4" aria-hidden="true" />
               <Show when={readyRuntimes().length > 0 && runtimeIssues().length > 0}><span class="container-services-entry__issue" aria-hidden="true" /></Show>
             </Button>
-            <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => { if (!resources.ready()) resources.retry(); else void (servicesOpen() ? loadContainerServices() : reloadConsole(true)); }} disabled={servicesOpen() ? containerServicesLoading() : consoleBusy()} aria-label={i18n.t('containers.actions.refresh')} title={i18n.t('containers.actions.refresh')}><Refresh class={`h-4 w-4 ${(servicesOpen() ? containerServicesLoading() : consoleBusy()) ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
+            <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => { if (!resources.ready()) resources.retry(); else void (servicesOpen() ? loadContainerServices() : reloadConsole(true)); }} disabled={servicesOpen() ? containerServicesLoading() : consoleBusy()} aria-busy={servicesOpen() ? containerServicesLoading() : consoleBusy()} aria-label={i18n.t('containers.actions.refresh')} title={i18n.t('containers.actions.refresh')}><Refresh class={`h-4 w-4 ${(servicesOpen() ? containerServicesLoading() : consoleBusy()) ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
             <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => setOperationsOpen(true)} aria-label={i18n.t('containers.operations.title')} title={i18n.t('containers.operations.title')}>
               <Activity class="h-4 w-4" aria-hidden="true" />
               <Show when={activeOperationCount() > 0}><span class="container-operation-count">{activeOperationCount()}</span></Show>
@@ -3842,6 +3846,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <Show when={serviceConfigurationTarget()?.configuration.mode === 'local'} fallback={<div class="container-service-config-unavailable"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.services.configurationUnavailable')}</strong><p>{serviceConfigurationTarget() ? serviceGuidance(serviceConfigurationTarget()!) : ''}</p></div>}>
           <Show when={!serviceConfigurationLoading()} fallback={<div class="container-service-config-loading"><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" />{i18n.t('containers.loading')}</div>}>
             <Show when={serviceConfiguration()} fallback={<div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div>}>
+              <Show when={serviceConfigurationError()}><div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div></Show>
               <Tabs class="container-service-config-source-tabs" items={(serviceConfiguration()?.sources ?? []).map((source) => ({ id: source.source_id, label: i18n.t(source.source_id === 'docker_cli' ? 'containers.services.dockerCLI' : 'containers.services.engineConfiguration') }))} activeId={serviceConfigurationSourceID()} onChange={(id) => selectServiceConfigurationSource(id as ContainerServiceConfigurationSourceID)} size="md" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false }} />
               <Show when={serviceConfigurationSource()} keyed>{(source) => <>
                 <div class="container-service-config-source-meta">
@@ -3852,7 +3857,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                 <Show when={source.status === 'invalid'}><div class="container-service-config-note container-service-config-note--warning"><AlertTriangle class="h-4 w-4" />{i18n.t(source.source_id === 'docker_cli' ? 'containers.services.dockerCLIInvalid' : 'containers.services.configurationInvalid')}</div></Show>
                 <Show when={source.status !== 'permission' && source.status !== 'unsupported'} fallback={<div class="container-service-config-unavailable"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t(`containers.services.sourceStates.${source.status}` as Parameters<typeof i18n.t>[0])}</strong></div>}>
                   <Show when={serviceConfigurationSections().length > 1}><Tabs class="container-service-config-tabs" items={serviceConfigurationSections().map((section) => ({ id: section, label: i18n.t(section === 'general' ? 'containers.services.general' : section === 'proxy' ? 'containers.services.proxies' : section === 'credentials' ? 'containers.services.credentials' : 'containers.services.advanced') }))} activeId={serviceConfigurationMode()} onChange={(id) => setServiceConfigurationMode(id as ContainerServiceConfigurationSection)} size="sm" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false }} /></Show>
-                  <Show when={source.source_id === 'docker_cli'} fallback={<Show when={serviceConfigurationMode() === 'proxy'} fallback={<div class="container-service-config-editor"><TextFilePreviewPane path={source.display_path} descriptor={{ mode: 'text', textPresentation: 'code', language: source.format, wrapText: false }} text={source.content ?? ''} draftText={serviceConfigurationDraft()?.content ?? ''} editing onDraftChange={(content) => updateServiceConfigurationDraft({ content })} saveError={serviceConfigurationError()} /></div>}><div class="container-service-proxy-form"><label><span>{i18n.t('containers.services.httpProxy')}</span><Input value={serviceConfigurationDraft()?.httpProxy ?? ''} onInput={(event) => updateServiceConfigurationDraft({ httpProxy: event.currentTarget.value })} placeholder="http://proxy.example.com:3128" autocomplete="off" /></label><label><span>{i18n.t('containers.services.httpsProxy')}</span><Input value={serviceConfigurationDraft()?.httpsProxy ?? ''} onInput={(event) => updateServiceConfigurationDraft({ httpsProxy: event.currentTarget.value })} placeholder="https://proxy.example.com:3129" autocomplete="off" /></label><label><span>{i18n.t('containers.services.noProxy')}</span><Input value={serviceConfigurationDraft()?.noProxy ?? ''} onInput={(event) => updateServiceConfigurationDraft({ noProxy: event.currentTarget.value })} placeholder="localhost,127.0.0.1,.example.com" autocomplete="off" /></label></div></Show>}>
+                  <Show when={source.source_id === 'docker_cli'} fallback={<Show when={serviceConfigurationMode() === 'proxy'} fallback={<div class="container-service-config-editor"><TextFilePreviewPane path={source.display_path} descriptor={{ mode: 'text', textPresentation: 'code', language: source.format, wrapText: false }} text={source.content ?? ''} draftText={serviceConfigurationDraft()?.content ?? ''} editing onDraftChange={(content) => updateServiceConfigurationDraft({ content })} /></div>}><div class="container-service-proxy-form"><label><span>{i18n.t('containers.services.httpProxy')}</span><Input value={serviceConfigurationDraft()?.httpProxy ?? ''} onInput={(event) => updateServiceConfigurationDraft({ httpProxy: event.currentTarget.value })} placeholder="http://proxy.example.com:3128" autocomplete="off" /></label><label><span>{i18n.t('containers.services.httpsProxy')}</span><Input value={serviceConfigurationDraft()?.httpsProxy ?? ''} onInput={(event) => updateServiceConfigurationDraft({ httpsProxy: event.currentTarget.value })} placeholder="https://proxy.example.com:3129" autocomplete="off" /></label><label><span>{i18n.t('containers.services.noProxy')}</span><Input value={serviceConfigurationDraft()?.noProxy ?? ''} onInput={(event) => updateServiceConfigurationDraft({ noProxy: event.currentTarget.value })} placeholder="localhost,127.0.0.1,.example.com" autocomplete="off" /></label></div></Show>}>
                     <Show when={dockerCLIConfigurationDocument()} keyed>{(document) => <>
                       <Show when={serviceConfigurationMode() === 'general'}>
                         <div class="container-service-cli-form">
@@ -3884,7 +3889,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                           <div class="container-service-protected-registries"><strong>{i18n.t('containers.services.signedInRegistries')}</strong><Show when={(source.protected_registries?.length ?? 0) > 0} fallback={<p>{i18n.t('containers.services.noSignedInRegistries')}</p>}><div><For each={source.protected_registries}>{(registry) => <Tag tone="soft" size="sm">{registry}</Tag>}</For></div></Show><p>{i18n.t('containers.services.registryCredentialsProtected')}</p></div>
                         </div>
                       </Show>
-                      <Show when={serviceConfigurationMode() === 'advanced'}><div class="container-service-cli-section"><div class="container-service-config-note"><Lock class="h-4 w-4" />{i18n.t('containers.services.advancedProtected')}</div><div class="container-service-config-editor"><TextFilePreviewPane path={source.display_path} descriptor={{ mode: 'text', textPresentation: 'code', language: 'json', wrapText: false }} text={source.content ?? ''} draftText={serviceConfigurationDraft()?.content ?? ''} editing onDraftChange={(content) => updateServiceConfigurationDraft({ content })} saveError={serviceConfigurationError()} /></div></div></Show>
+                      <Show when={serviceConfigurationMode() === 'advanced'}><div class="container-service-cli-section"><div class="container-service-config-note"><Lock class="h-4 w-4" />{i18n.t('containers.services.advancedProtected')}</div><div class="container-service-config-editor"><TextFilePreviewPane path={source.display_path} descriptor={{ mode: 'text', textPresentation: 'code', language: 'json', wrapText: false }} text={source.content ?? ''} draftText={serviceConfigurationDraft()?.content ?? ''} editing onDraftChange={(content) => updateServiceConfigurationDraft({ content })} /></div></div></Show>
                     </>}</Show>
                   </Show>
                 </Show>
