@@ -172,7 +172,7 @@ export function ManagedServiceManagementDrawer(props: {
     try { await writeTextToClipboard(plan()?.facts.resources?.find((resource) => resource.resource_id === 'workspace')?.identity ?? displayedService()?.workspace_path ?? ''); setPathCopy('copied'); }
     catch { setPathCopy('failed'); }
   };
-  const copyPathButton = () => <Button size="sm" variant="ghost" class="h-8 w-8 px-0" onClick={() => void copyPath()} aria-label={text('copyPath')}>
+  const copyPathButton = () => <Button size="sm" variant="ghost" class="redeven-copy-action" data-icon-only data-copied={pathCopy() === 'copied' || undefined} onClick={() => void copyPath()} aria-label={text('copyPath')} title={text('copyPath')}>
               <Show when={pathCopy() === 'copied'} fallback={<Copy class="h-3.5 w-3.5" />}><Check class="h-3.5 w-3.5" /></Show>
             </Button>;
   let generation = 0;

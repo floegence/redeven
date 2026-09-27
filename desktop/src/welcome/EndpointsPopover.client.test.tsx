@@ -191,10 +191,10 @@ describe('Environment connection popover', () => {
     const urls = ['https://192.0.2.20:23998/', 'https://192.0.2.21:23998/'];
     test.setURLs(urls); test.setSelected(`address:${urls[0]}`); await settle();
     (document.querySelector('.redeven-endpoint-qr-copy-button') as HTMLButtonElement).click(); await settle();
-    expect(document.querySelector('.redeven-endpoint-qr-copy-label')?.textContent).toBe('Copied');
+    expect(document.querySelector('.redeven-endpoint-qr-copy-button')?.getAttribute('title')).toBe('Copied');
     test.setSelected(`address:${urls[1]}`); await settle();
     expect(document.querySelector('.redeven-endpoint-qr-value')?.textContent).toBe(urls[1]);
-    expect(document.querySelector('.redeven-endpoint-qr-copy-label')?.textContent).toBe('Copy');
+    expect(document.querySelector('.redeven-endpoint-qr-copy-button')?.hasAttribute('data-copied')).toBe(false);
   });
 
   it('never renders a QR code for a selected connection or host-only address', async () => {

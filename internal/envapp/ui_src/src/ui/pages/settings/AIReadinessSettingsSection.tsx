@@ -220,9 +220,12 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
                   </div>
                 )}</For>
               </dl>
-              <button
+              <Button
                 type="button"
-                class={`${BUTTON_CLASS} mt-3`}
+                variant="ghost"
+                size="sm"
+                class="redeven-copy-action mt-3"
+                data-copied={copied() || undefined}
                 disabled={copyPending()}
                 aria-busy={copyPending() ? 'true' : undefined}
                 data-pending={copyPending() ? 'true' : undefined}
@@ -238,7 +241,7 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
                   : copied()
                     ? i18n.t('aiReadiness.actions.diagnosticsCopied')
                     : i18n.t('aiReadiness.actions.copyDiagnostics')}</StableText></span>
-              </button>
+              </Button>
               <Show when={copied() || copyFailed()}>
                 <span class="sr-only" role="status">
                   {copyFailed()

@@ -158,7 +158,7 @@ function ConnectionRow(props: ConnectionActions & Readonly<{ row: DesktopConnect
     </div>
     <div class="redeven-endpoint-actions">
       <Show when={copyable()}>
-        <Button size="sm" variant="ghost" class="redeven-endpoint-action shrink-0" aria-describedby={valueID} aria-label={copyLabel()}
+        <Button size="sm" variant="ghost" class="redeven-copy-action" data-icon-only aria-describedby={valueID} aria-label={copyLabel()}
           title={copied() ? props.i18n.t('environmentCenter.copied') : copyLabel()} data-copied={copied() || undefined}
           onClick={() => void copy()}>{copied() ? <Check class="h-3.5 w-3.5" /> : <Copy class="h-3.5 w-3.5" />}</Button>
       </Show>

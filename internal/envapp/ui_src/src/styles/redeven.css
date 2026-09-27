@@ -5426,3 +5426,43 @@ html.dark .git-content-skeleton__block {
 .redeven-settings-related { border-color: var(--redeven-settings-divider); }
 .redeven-settings-shell [data-flower-settings-panel][hidden] { display: none; }
 .redeven-settings-shell .floe-setting-row__control > * { max-width: 100%; }
+
+/* Copy is a secondary product action; Floe Button retains focus and disabled semantics. */
+.redeven-copy-action {
+  flex-shrink: 0;
+  min-height: 28px;
+  height: 28px;
+  gap: 6px;
+  padding-inline: 8px;
+  border-radius: 5px;
+  color: var(--muted-foreground);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 400;
+}
+.redeven-copy-action[data-icon-only] {
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+.redeven-copy-action svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+.redeven-copy-action:is(:hover, :focus-visible):not(:disabled) {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+.redeven-copy-action[data-copied] { color: var(--success); }
+@media (pointer: coarse) {
+  .redeven-copy-action { min-height: 44px; height: 44px; }
+  .redeven-copy-action[data-icon-only] { min-width: 44px; width: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .redeven-copy-action { transition: none; }
+}
+@media (forced-colors: active) {
+  .redeven-copy-action,
+  .redeven-copy-action[data-copied] { color: ButtonText; }
+}

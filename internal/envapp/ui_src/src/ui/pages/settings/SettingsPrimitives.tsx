@@ -466,6 +466,9 @@ export function CopyButton(props: { value: string; label?: string; iconOnly?: bo
     <Button
       variant="ghost"
       size="xs"
+      class="redeven-copy-action"
+      data-icon-only={props.iconOnly || !props.label || undefined}
+      data-copied={copied() || undefined}
       icon={copied() ? Check : Copy}
       onClick={handleCopy}
       disabled={!props.value}

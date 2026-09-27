@@ -54,6 +54,15 @@ Configuration paths wrap beside their icon-only full-value copy action. Related
 destinations use continuous action rows. Diagnostic IDs, installation paths and
 maintenance metadata start collapsed; actionable errors remain visible.
 
+Secondary copy actions use the same product treatment in runtime and Desktop
+settings: transparent at rest, muted 12px glyphs, and a neutral hover background.
+They remain visible without hover, retain the published Button keyboard focus
+indicator, and expose a localized accessible name. Icon-only targets are 28px
+with 44px targets for coarse pointers. Success changes the glyph or reserved
+label without moving the adjacent value. Primary copy steps in manual connection
+setup keep their workflow emphasis; this treatment applies to auxiliary actions.
+
+
 ## Configuration editing
 
 Shell, filesystem, logging, port, and permission changes retain their existing
