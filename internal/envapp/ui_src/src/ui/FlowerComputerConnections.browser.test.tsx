@@ -413,3 +413,24 @@ it('retries a recorded preparation failure for the selected installation after r
   await waitFor(() => setupExtension.mock.calls.length === 1);
   expect(setupExtension).toHaveBeenCalledWith('browser-aaaaaaaaaaaaaaaaaaaaaaaa');
 });
+
+
+it('keeps desktop-only instructions out of the separate-browser preparation transition', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  let finish!: (value: import('../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerComputerExtensionSetup) => void;
+  const management = {
+    setupExtension: vi.fn(() => new Promise<import('../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerComputerExtensionSetup>(resolve => { finish = resolve; })),
+    openExtension: vi.fn(), prepareRemoteBrowser: vi.fn(),
+    loadExtensionStatus: vi.fn().mockResolvedValue({ platform: 'linux', installations: [{ id: 'browser-aaaaaaaaaaaaaaaaaaaaaaaa', kind: 'chromium_snap', name: 'Chromium (Snap)', installed: true, prepared: true, connected: false, reason: 'desktop_session_unavailable' }], profiles: [] }),
+  };
+  const stop = render(() => <FloeConfigProvider><FlowerChromeConnection management={management} copy={computerUseEnUS} onConnected={vi.fn()} /></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  await waitFor(() => !!finish);
+  expect(host.textContent).toContain(computerUseEnUS.setupPreparing);
+  expect(host.textContent).not.toContain(computerUseEnUS.chromeDesktopHint);
+  expect(host.textContent).not.toContain(computerUseEnUS.setupInstallTitle);
+  expect(host.querySelector('[data-remote-browser-setup]')).toBeNull();
+  finish({ installation_id: 'browser-aaaaaaaaaaaaaaaaaaaaaaaa', browser_name: 'Chromium (Snap)', extension_path: '/fixture', extension_home_path: ['fixture'], platform: 'linux', native_host: 'fixture.host', extension_id: 'fixture' });
+  await waitFor(() => !!host.querySelector('[data-remote-browser-setup]'));
+  expect(host.textContent).not.toContain(computerUseEnUS.chromeDesktopHint);
+});
