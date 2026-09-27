@@ -214,7 +214,7 @@ export function BrowserSourceDialog(props: {
       <div class="redeven-browser-source-list"><For each={cdpTabs()}>{tab => <Option request={{ connection: { cdp_url: discoveredEndpoint(), profile_id: tab.profile_id, tab_id: tab.id, tab_title: tab.title, tab_url: tab.url } }} label={tab.title || tab.url} detail={tab.url} />}</For></div>
       <Show when={discoveredEndpoint() && !cdpTabs().length && !busy()}><p class="mt-3 text-[length:var(--floe-type-body)] text-muted-foreground">{props.messages.product.noPages}</p></Show>
     </Show>
-    <Show when={page() === 'installation'}><FlowerManagedBrowser management={management} copy={copy()} canMutate onChange={() => void refresh()}
+    <Show when={page() === 'installation'}><FlowerManagedBrowser management={management} copy={copy()} canMutate
       requireEnabledForContinue continuationKey={JSON.stringify(draft()?.request)} installLabel={continueAfterInstall() ? props.messages.product.installOpen : undefined}
       onContinue={continueAfterInstall() ? async enabled => { if (enabled && !lifetime.signal.aborted) await select(); } : undefined} /></Show>
     <Show when={page() === 'chrome'}><FlowerChromeConnection management={management} copy={copy()} platform={chrome()?.platform} environmentName={chrome()?.hostname} preferredInstallationID={preferredInstallation()?.id} reuseConnected={false}
