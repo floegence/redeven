@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId } from 'solid-js';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import { Database } from '@floegence/floe-webapp-core/icons';
 import type { AIReadinessController } from '../../flower/aiReadiness';
 import { useI18n } from '../../i18n';
@@ -86,11 +87,14 @@ export function FlowerStorageSettings(props: Readonly<{ controller: AIReadinessC
     : snapshot.source_build.replace(/:([a-f0-9]{64})$/u, (_, hash: string) => ` · ${hash.slice(0, 12)}`);
 
   return (
-    <SettingRow icon={Database} title={i18n.t('aiReadiness.storage.title')} description={i18n.t('aiReadiness.storage.description')}>
-      <Show when={props.canAdmin} fallback={<p class="text-xs text-muted-foreground">{i18n.t('aiReadiness.storage.adminOnly')}</p>}>
-        <button type="button" class={BUTTON_CLASS} disabled={loading() || pending()} aria-busy={loading() || undefined} aria-expanded={snapshots() !== null} aria-controls={panelID} onClick={() => void load()}>
+    <SettingRow icon={Database} title={i18n.t('aiReadiness.storage.title')} description={i18n.t('aiReadiness.storage.description')}
+      control={<Show when={props.canAdmin} fallback={<p class="text-xs text-muted-foreground">{i18n.t('aiReadiness.storage.adminOnly')}</p>}>
+        <Button size="sm" variant="outline" disabled={loading() || pending()} aria-busy={loading() || undefined}
+          aria-expanded={snapshots() !== null} aria-controls={panelID} onClick={() => void load()}>
           {loading() ? i18n.t('aiReadiness.settings.refreshing') : snapshots() ? i18n.t('common.actions.refresh') : i18n.t('aiReadiness.storage.view')}
-        </button>
+        </Button>
+      </Show>}>
+      <Show when={props.canAdmin}>
         <Show when={failed()}><p role="alert" class="mt-3 text-xs text-destructive">{failed() === 'load' ? i18n.t('aiReadiness.storage.loadFailed') : i18n.t('aiReadiness.storage.restoreFailed')}</p></Show>
         <Show when={accepted()}><p role="status" class="mt-3 text-xs text-muted-foreground">{i18n.t('aiReadiness.storage.accepted')}</p></Show>
         <div id={panelID}>

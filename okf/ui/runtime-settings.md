@@ -3,7 +3,7 @@ type: UI Contract
 title: Runtime settings
 description: Navigate and edit runtime configuration through consistent, responsive settings surfaces while preserving API and permission ownership.
 tags: [ui, runtime, settings, skills]
-timestamp: 2026-09-21T14:22:26Z
+timestamp: 2026-09-27T12:50:00Z
 ---
 # Summary
 
@@ -48,6 +48,12 @@ text, and 14px grouped-list corners. The desktop page starts with 44px top
 padding; narrow pages use 28px top and 20px side padding. Geometry lives with
 the settings page so global and lazy-loaded styles cannot compete for ownership.
 
+Row composition is part of this contract, not only outer geometry. Identity and
+guidance stay left; values, permissions and actions share the right column.
+Configuration paths wrap beside their icon-only full-value copy action. Related
+destinations use continuous action rows. Diagnostic IDs, installation paths and
+maintenance metadata start collapsed; actionable errors remain visible.
+
 ## Configuration editing
 
 Shell, filesystem, logging, port, and permission changes retain their existing
@@ -59,15 +65,24 @@ Default ports are reset with zero values. Failed autosaves retain the draft and
 stop retrying until the user edits it. Editing controls and autosave require
 both a connected usable settings context and administrator permission.
 
-Connection details remain read-only, with copy actions and the existing Desktop
-Connection Center route. Debug Console remains a local interface preference.
+Directory rows show their name and path opposite actual access and actions.
+Adding or editing a custom directory uses a separate draft dialog; Cancel never
+creates or saves a root. Enabling writes still requires explicit confirmation.
+Permission rules use user/app tables with read, write and execute columns;
+narrowing the environment ceiling clears and disables incompatible grants.
+
+Connection status follows the live protocol state, never the presence of IDs.
+Details remain read-only, with copy actions and the existing Desktop Connection
+Center route. Debug Console remains a local interface preference.
 Runtime restart and upgrade display a confirmation that identifies active work
 and the upgrade version. The shared controller owns execution, authority routing,
 progress, and recovery; settings do not create another maintenance lifecycle.
 
-Codespaces shows the selected Browser Editor version and runtime state first.
-Source, binary path, and Runtime directories remain available in a technical
-information disclosure without hiding setup failures or update actions.
+Codespaces shows the selected editor, actual source and update action first.
+Compact version rows keep Use and Remove on the right; the selected version has
+a selection marker without redundant disabled actions. Binary paths and Runtime
+directories share one installation disclosure. Paired numeric port fields and an
+explicit default-range control preserve the existing zero-value reset contract.
 
 Runtime Flower settings use Models & providers, Permissions, and Health & storage
 tabs. All three bodies retain their state. Blocked or degraded readiness exposes
@@ -75,6 +90,11 @@ a direct recovery action even when another tab is selected. Existing readiness,
 storage, model discovery, secret handling, and permission contracts remain the
 owners of those operations. The separate shared chat settings surface is defined
 in [Flower setup and settings](flower-setup-and-settings.md).
+The current model uses a standard setting row, providers disclose model details,
+and default permissions use one vertical radio list with keyboard navigation.
+Health, diagnostic and backup actions follow the same right-column arrangement;
+expanding diagnostics or reviewing restore retains the existing permission and
+confirmation boundaries.
 
 ## Skills operations
 
@@ -84,6 +104,8 @@ connection is usable, through
 catalog. Each row retains enablement, effective/shadowed/degraded status, source,
 path, browsing, reinstall, and delete actions. Catalog refresh and mutations are
 serialized within the page so an older refresh cannot replace a mutation result.
+Paths, source IDs and maintenance actions live in a closed details disclosure;
+enablement, effective state and errors remain visible in the catalog row.
 
 GitHub installation requires validation of the current form. Changing any input
 invalidates that validation. Create and import failures keep the form open;

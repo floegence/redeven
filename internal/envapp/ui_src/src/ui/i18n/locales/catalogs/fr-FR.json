@@ -7081,6 +7081,10 @@
     "touchHelpDescription": "Touchez pour cliquer. Faites glisser un doigt pour faire défiler. Maintenez puis déplacez pour faire glisser ; relâchez sans bouger pour un clic droit. Pincez avec deux doigts pour zoomer la page."
   },
   "settingsDesign": {
+    "editDirectory": "Modifier le répertoire",
+    "availableEditorVersion": "Disponible pour les nouveaux Codespaces.",
+    "computerRoot": "Ordinateur",
+    "installationDetails": "Installation et chemins",
     "startPort": "Port de début",
     "endPort": "Port de fin",
     "relatedSettings": "Paramètres associés",

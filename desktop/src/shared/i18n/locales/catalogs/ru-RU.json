@@ -1218,6 +1218,7 @@
     "appliesToDesktopAndEnvApp": "Язык применяется к Redeven Desktop и сеансам Env App, открытым из этого Desktop."
   },
   "settings": {
+    "linuxUser": "Пользователь Linux",
     "remoteSettingsDescription": "{label} · Работает на сервере",
     "managementConnection": "Подключение для управления",
     "remoteCertificateHelp": "Файлы сертификата хранятся на этом сервере. Каждое подключающееся устройство отдельно проверяет доверие к выдавшему сертификат CA.",

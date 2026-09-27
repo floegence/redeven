@@ -111,6 +111,14 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
     const galleries = [...document.querySelectorAll<HTMLDetailsElement>('[data-terminal-preview]')];
     expect(galleries).toHaveLength(2);
     expect(galleries.every(details => !details.open)).toBe(true);
+    expect(getComputedStyle(galleries[1]).borderTopWidth).toBe('1px');
+    for (const details of galleries) {
+      const label = details.querySelector<HTMLElement>('.terminal-settings-choice-label');
+      const value = details.querySelector<HTMLElement>('.terminal-settings-choice-value');
+      expect(label).not.toBeNull();
+      expect(value).not.toBeNull();
+      expect(value!.getBoundingClientRect().left).toBeGreaterThan(label!.getBoundingClientRect().right);
+    }
     const theme = galleries[0].querySelector('summary')!;
     await userEvent.click(theme);
     expect(galleries[0].open).toBe(true);

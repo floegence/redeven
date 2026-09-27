@@ -5807,10 +5807,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return error?.failure ? formatDesktopOperationFailureForClipboard(error.failure)
       : [error?.code, error?.error].filter(Boolean).join(': ');
   }
-  function wslSettingsIdentity(): string {
+  function wslSettingsFacts(): { distribution: string; user: string; root: string } {
     const environment = settingsPresentation()?.environment;
     const host = environment?.managed_runtime_host_access;
-    return host?.kind === 'wsl_host' ? `${host.distribution_name} · ${host.linux_user}\n${environment?.managed_runtime_placement?.runtime_root ?? ''}` : '';
+    return { distribution: host?.kind === 'wsl_host' ? host.distribution_name : '',
+      user: host?.kind === 'wsl_host' ? host.linux_user : '',
+      root: environment?.managed_runtime_placement?.runtime_root ?? '' };
   }
   async function saveWSLSettingsLabel(): Promise<void> {
     const opening = settingsSession();
@@ -6529,7 +6531,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                     <Input id="wsl-settings-name" disabled={Boolean(settingsSession()?.saving)} value={settingsPresentation()?.metadata_label ?? ''}
                       onInput={event => settingsController.update({ metadata_label: event.currentTarget.value })} />
                     </div>
-                    <p class="select-text whitespace-pre-wrap font-mono text-xs">{wslSettingsIdentity()}</p>
+                    <dl class="environment-connection-group environment-connection-facts">
+                      <div><dt>{i18n().t('environmentConnection.wsl')}</dt><dd>{wslSettingsFacts().distribution}</dd></div>
+                      <div><dt>{i18n().t('settings.linuxUser')}</dt><dd>{wslSettingsFacts().user}</dd></div>
+                      <div><dt>{i18n().t('connectionDialog.runtimeRoot')}</dt><dd><code>{wslSettingsFacts().root}</code></dd></div>
+                    </dl>
                     <Show when={connectionDialogError()}><p role="alert" class="text-xs text-destructive">{connectionDialogError()}</p></Show>
 
                   </div>
@@ -12445,7 +12451,7 @@ function ContainerPicker(props: Readonly<{
   return (
     <div
       ref={rootRef}
-      class="space-y-1.5"
+      class="environment-container-picker space-y-1.5"
       onFocusOut={(event) => {
         if (containsTarget(event.relatedTarget)) {
           return;
@@ -12453,7 +12459,7 @@ function ContainerPicker(props: Readonly<{
         closeMenuSoon();
       }}
     >
-      <div class="flex items-center justify-between gap-2">
+      <div class="environment-container-picker-heading flex items-center justify-between gap-2">
         <label for="environment-container-picker" class="block text-xs font-medium text-foreground">
           {props.i18n.t('connectionDialog.containerPickerLabel')} <span class="text-destructive">*</span>
         </label>
@@ -12470,7 +12476,7 @@ function ContainerPicker(props: Readonly<{
           {props.i18n.t('connectionDialog.refreshContainers')}
         </Button>
       </div>
-      <div class="relative">
+      <div class="environment-container-picker-control relative">
         <button
           ref={buttonRef}
           id="environment-container-picker"

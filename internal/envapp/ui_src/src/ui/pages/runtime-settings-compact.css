@@ -53,7 +53,7 @@
 }
 
 .redeven-settings-shell .redeven-settings-page .floe-setting-row__title {
-  font-weight: 400;
+  font-weight: 500;
 }
 
 .redeven-settings-shell .redeven-settings-page .floe-setting-row__label p,
@@ -132,3 +132,48 @@
   --redeven-settings-inset-border: color-mix(in srgb, var(--foreground) 5%, transparent);
   --redeven-settings-divider: color-mix(in srgb, var(--foreground) 4%, transparent);
 }
+
+/* Values, permissions and actions share the same right-hand column. Long
+ * diagnostic values wrap within that column instead of creating extra rows. */
+.settings-copy-value { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.settings-copy-value code { min-width: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; }
+.settings-copy-value button { flex-shrink: 0; }
+.settings-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.settings-row-actions > button { flex-shrink: 0; }
+.runtime-filesystem-root .floe-setting-row__label p { overflow-wrap: anywhere; font-family: var(--font-mono); }
+.settings-port-controls { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.settings-port-pair { display: flex; align-items: center; gap: 8px; }
+.settings-port-pair input { width: 88px; min-width: 0; height: 34px; font-size: 12px; }
+.settings-technical-details { color: var(--redeven-settings-note-fg); font-size: 12px; }
+.settings-technical-details > summary { cursor: pointer; padding-block: 8px; }
+.settings-technical-details > .floe-settings-list { margin-top: 12px; }
+.settings-provider-row + .settings-provider-row { border-top: 1px solid var(--redeven-settings-divider); }
+.settings-provider-details { padding: 0 17px 12px; }
+.settings-provider-details > summary { padding-block: 0; }
+.settings-skill-details { margin-top: 10px; }
+.settings-permission-ceiling { display: flex; flex-wrap: wrap; gap: 16px; }
+.settings-permission-ceiling label { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12px; }
+.settings-permission-table { border: 1px solid var(--redeven-settings-inset-border); border-radius: 14px; background: var(--redeven-settings-inset-bg); overflow: hidden; }
+.settings-permission-table table { table-layout: fixed; width: 100%; font-size: 12px; }
+.settings-permission-table th { color: var(--redeven-settings-note-fg); font-weight: 400; }
+.settings-permission-table th, .settings-permission-table td { padding: 12px 8px; text-align: center; overflow-wrap: anywhere; }
+.settings-permission-table th:first-child, .settings-permission-table td:first-child { width: 42%; text-align: left; padding-inline-start: 17px; }
+.settings-permission-table th:last-child { width: 44px; }
+.settings-permission-table tr + tr, .settings-permission-table tbody { border-top: 1px solid var(--redeven-settings-divider); }
+.settings-permission-table .settings-permission-empty { color: var(--redeven-settings-note-fg); padding: 22px 17px; }
+.settings-permission-options { border: 1px solid var(--redeven-settings-inset-border); border-radius: 14px; background: var(--redeven-settings-inset-bg); overflow: hidden; }
+.settings-permission-option { display: flex; align-items: center; justify-content: space-between; gap: 28px; width: 100%; min-height: 65px; padding: 14px 17px; text-align: left; cursor: pointer; }
+.settings-permission-option + .settings-permission-option { border-top: 1px solid var(--redeven-settings-divider); }
+.settings-permission-option:hover { background: var(--redeven-settings-row-hover-bg); }
+.settings-permission-option:disabled { cursor: not-allowed; opacity: .6; }
+.settings-permission-option-copy { display: grid; gap: 3px; font-size: 13px; }
+.settings-permission-option-mark { flex-shrink: 0; width: 16px; height: 16px; border: 1px solid var(--muted-foreground); border-radius: 50%; }
+.settings-permission-option[aria-checked='true'] .settings-permission-option-mark { border: 5px solid var(--primary); }
+.redeven-settings-shell .floe-settings-list > .floe-setting-row + .floe-setting-row { border-top: 0; position: relative; }
+.redeven-settings-shell .floe-settings-list > .floe-setting-row + .floe-setting-row::before { content: ''; position: absolute; top: 0; left: 17px; right: 17px; border-top: 1px solid var(--redeven-settings-divider); }
+@container redeven-settings (max-width: 600px) {
+  .settings-row-actions { flex-wrap: wrap; justify-content: flex-start; }
+  .settings-port-controls { align-items: flex-start; }
+}
+
+.redeven-settings-shell .settings-provider-row > .floe-setting-row { border: 0; border-radius: 0; box-shadow: none; }

@@ -38,6 +38,62 @@ function expectNoOverflow(panel: HTMLElement) {
 }
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
 
+it('keeps long configuration paths with their copy action in the value column', async () => {
+  await mount();
+  const panel = await openSection('config');
+  const code = panel.querySelector('code')!;
+  const control = code.closest('.floe-setting-row__control');
+  expect(control).not.toBeNull();
+  expect(control?.querySelector('button')).not.toBeNull();
+  expect(code.textContent).toBe(fixture.settings().config_path);
+  expect(panel.querySelector('.floe-setting-row__children')).toBeNull();
+});
+
+it('places root identity and permission controls in separate aligned columns', async () => {
+  await mount();
+  const panel = await openSection('runtime');
+  const roots = [...panel.querySelectorAll<HTMLElement>('.runtime-filesystem-root')];
+  expect(roots).toHaveLength(3);
+  for (const root of roots) {
+    const label = root.querySelector('.floe-setting-row__label')!;
+    const controls = root.querySelector('.floe-setting-row__control')!;
+    expect(label).not.toBeNull();
+    expect(controls).not.toBeNull();
+    expect(label.textContent).not.toContain('Write');
+    expect(controls.getBoundingClientRect().left).toBeGreaterThan(label.getBoundingClientRect().right);
+  }
+});
+
+it('keeps version actions compact and installation paths inside one closed disclosure', async () => {
+  await mount();
+  const panel = await openSection('codespaces');
+  const rows = [...panel.querySelectorAll<HTMLElement>('.redeven-settings-version-row')];
+  expect(rows).toHaveLength(2);
+  for (const row of rows) {
+    expect(row.textContent).not.toContain('/Users/');
+    expect(row.querySelector('.floe-setting-row__control')).not.toBeNull();
+    expect(row.getBoundingClientRect().height).toBeLessThan(100);
+  }
+  expect(rows[0].querySelectorAll('button')).toHaveLength(0);
+  const details = panel.querySelector<HTMLDetailsElement>('details.code-runtime-details')!;
+  expect(details.open).toBe(false);
+  expect(details.textContent).toContain('/versions/4.108.2/bin/code-server');
+  await userEvent.click(details.querySelector('summary')!);
+  expect(details.open).toBe(true);
+  expectNoOverflow(panel);
+});
+
+it('pairs custom port fields in the value column without duplicating the range', async () => {
+  await mount();
+  const panel = await openSection('codespaces');
+  const min = panel.querySelector<HTMLInputElement>('#settings-port-min')!;
+  const max = panel.querySelector<HTMLInputElement>('#settings-port-max')!;
+  expect(min.closest('.floe-setting-row__control')).toBe(max.closest('.floe-setting-row__control'));
+  expect(min.closest('.floe-setting-row__control')).not.toBeNull();
+  expect(Math.abs(min.getBoundingClientRect().top - max.getBoundingClientRect().top)).toBeLessThan(1);
+  expect(min.closest('.floe-setting-row')?.querySelector('code')).toBeNull();
+});
+
 it.each([1280, 1024, 768, 390, 320])('keeps all ten pages readable without overflow at %ipx', async (width) => {
   await mount(width);
   for (const item of SETTINGS_NAV_ITEMS) {
@@ -64,17 +120,101 @@ it.each([1280, 1024, 768, 390, 320])('keeps all ten pages readable without overf
   }
 });
 
-it('keeps connection and runtime status facts in continuous setting rows', async () => {
+it('prioritizes current connection and workload while disclosing identifiers and maintenance metadata', async () => {
   await mount(1280);
   const connection = await openSection('connection');
-  expect(connection.querySelectorAll('.redeven-settings-page .redeven-settings-list')).toHaveLength(1);
-  expect(connection.querySelectorAll('.redeven-settings-page .redeven-setting-row')).toHaveLength(4);
-  expect(connection.querySelectorAll('.redeven-settings-page .redeven-settings-inset.rounded-lg.border')).toHaveLength(1);
-
+  const details = connection.querySelector<HTMLDetailsElement>('.connection-details')!;
+  expect(details.open).toBe(false);
+  expect(details.textContent).toContain('env_design_workspace');
+  expect(details.textContent).toContain('runtime_macos_arm64');
+  expect(connection.textContent).not.toContain('Connection information incomplete');
+  fixture.context.mutateSettings({ ...fixture.settings(), connection: { direct: { artifact_provisioned: false } } } as typeof fixture.settings extends () => infer T ? T : never);
+  await expect.element(page.getByText('Connected', { exact: true })).toBeVisible();
   const runtime = await openSection('agent');
-  expect(runtime.querySelector('.runtime-status-summary')).not.toBeNull();
-  expect(runtime.querySelectorAll('.runtime-status-summary > .redeven-setting-row')).toHaveLength(8);
-  expect(runtime.querySelector('.runtime-status-details')).not.toBeNull();
+  expect(runtime.querySelectorAll('.runtime-status-summary > .redeven-setting-row')).toHaveLength(4);
+  const runtimeDetails = runtime.querySelector<HTMLDetailsElement>('.runtime-status-details')!;
+  expect(runtimeDetails.open).toBe(false);
+  expect(runtimeDetails.textContent).toContain('release-2026-09');
+  expect(runtimeDetails.textContent).toContain('Runtime protocol');
+});
+
+it('edits directory identity separately and confirms write permission before saving', async () => {
+  await mount();
+  await openSection('runtime');
+  const before = fixture.settings().runtime.filesystem_scope!.roots;
+  await page.getByRole('button', { name: 'Edit directory', exact: true }).click();
+  await page.getByRole('dialog').getByRole('textbox', { name: 'Path', exact: true }).fill('/workspace/edited');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(fixture.settings().runtime.filesystem_scope!.roots).toEqual(before);
+  await page.getByRole('button', { name: 'Edit directory', exact: true }).click();
+  await page.getByRole('dialog').getByRole('textbox', { name: 'Path', exact: true }).fill('/workspace/edited');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect.poll(() => fixture.settings().runtime.filesystem_scope!.roots[2].path).toBe('/workspace/edited');
+  await page.getByText('Allow writes', { exact: true }).click();
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+  expect(fixture.settings().runtime.filesystem_scope!.roots[2].permissions.write).toBe(false);
+  await page.getByRole('dialog').getByRole('button', { name: 'Allow writes', exact: true }).click();
+  await expect.poll(() => fixture.settings().runtime.filesystem_scope!.roots[2].permissions.write).toBe(true);
+  fixture.setCanAdmin(false);
+  await expect.element(page.getByRole('switch', { name: 'Allow writes', exact: true })).toBeDisabled();
+  await expect.element(page.getByRole('button', { name: 'Edit directory', exact: true })).toBeDisabled();
+});
+
+it('keeps provider and skill diagnostics closed without hiding their actions', async () => {
+  await mount();
+  const models = await openSection('ai');
+  const provider = models.querySelector<HTMLDetailsElement>('.settings-provider-details')!;
+  expect(provider.open).toBe(false);
+  await expect.element(page.getByRole('button', { name: 'Edit provider', exact: true })).toBeVisible();
+  const skills = await openSection('skills');
+  await expect.element(page.getByText('code-review', { exact: true })).toBeVisible();
+  const detail = skills.querySelector<HTMLDetailsElement>('.settings-skill-details')!;
+  expect(detail.open).toBe(false);
+  expect(detail.textContent).toContain('/Users/alex/.redeven/skills/code-review');
+  await userEvent.click(detail.querySelector('summary')!);
+  await expect.element(page.getByRole('button', { name: 'Reinstall', exact: true })).toBeVisible();
+});
+
+it('cancels a new directory without saving an empty filesystem root', async () => {
+  await mount();
+  await openSection('runtime');
+  await page.getByRole('button', { name: 'Add Root', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect.element(dialog.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+  await dialog.getByRole('textbox', { name: 'Path', exact: true }).fill('/workspace/draft');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(fixture.requests.filter(request => request.url.endsWith('/api/settings'))).toHaveLength(0);
+  expect(fixture.settings().runtime.filesystem_scope!.roots).toHaveLength(3);
+});
+
+it('saves permission table changes, narrows grants to the ceiling, and prevents reader edits', async () => {
+  await mount();
+  await openSection('permission_policy');
+  const write = page.getByRole('checkbox', { name: 'user_design_reviewer: Write', exact: true });
+  await userEvent.click(host.querySelector<HTMLInputElement>('input[aria-label="user_design_reviewer: Write"]')!.closest('label')!);
+  await expect.poll(() => fixture.settings().permission_policy?.by_user?.user_design_reviewer.write).toBe(true);
+  await userEvent.click([...host.querySelectorAll('.settings-permission-ceiling label')].find(label => label.textContent === 'Write')!);
+  await expect.element(write).toBeDisabled();
+  await expect.element(write).not.toBeChecked();
+  await expect.poll(() => fixture.settings().permission_policy?.by_user?.user_design_reviewer.write).toBe(false);
+  expect(fixture.settings().permission_policy?.local_max?.write).toBe(false);
+  fixture.setCanAdmin(false);
+  await expect.element(page.getByRole('textbox', { name: 'User', exact: true })).toBeDisabled();
+  await expect.element(page.getByRole('checkbox', { name: 'Read', exact: true })).toBeDisabled();
+});
+
+it('selects default Flower permissions with the keyboard and saves the chosen policy', async () => {
+  await mount();
+  await openSection('ai');
+  await page.getByRole('tab', { name: 'Permissions', exact: true }).click();
+  const selected = page.getByRole('radio', { name: /Approval required/ });
+  await expect.element(selected).toBeVisible();
+  await selected.click();
+  await userEvent.keyboard('{ArrowDown}');
+  await expect.poll(() => fixture.settings().ai?.permission_type).toBe('full_access');
+  expect(document.activeElement?.getAttribute('aria-checked')).toBe('true');
+  fixture.setCanAdmin(false);
+  await expect.element(page.getByRole('radio', { name: /Full access/ })).toBeDisabled();
 });
 
 it('retains drafts and scroll position when navigating, and saves real settings values', async () => {
@@ -117,6 +257,9 @@ it('switches Flower groups without losing permissions or health access and respe
   await expect.element(page.getByText('Approval required', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Health & storage', exact: true }).click();
   await expect.element(page.getByText('Flower backups', { exact: true })).toBeVisible();
+  const health = host.querySelector('[data-flower-settings-panel="health"]')!;
+  const backupButton = [...health.querySelectorAll('button')].find(button => button.textContent === 'View backups')!;
+  expect(backupButton.closest('.floe-setting-row__control')).not.toBeNull();
   await page.screenshot({ path: '../../../dist/settings-design/runtime-settings-health-dark.png' });
   fixture.setCanAdmin(false);
   await openSection('runtime');
@@ -144,8 +287,8 @@ it('submits logging and port values using the flat settings API contract', async
   await page.getByRole('menuitem', { name: 'text', exact: true }).click();
   await expect.poll(() => fixture.settings().logging.log_format).toBe('text');
   await openSection('codespaces');
-  await page.getByRole('textbox', { name: 'Starting port', exact: true }).fill('22000');
-  await page.getByRole('textbox', { name: 'Ending port', exact: true }).fill('23000');
+  await page.getByRole('spinbutton', { name: 'Starting port', exact: true }).fill('22000');
+  await page.getByRole('spinbutton', { name: 'Ending port', exact: true }).fill('23000');
   await expect.poll(() => fixture.settings().codespaces.code_server_port_min).toBe(22000);
   await expect.poll(() => fixture.settings().codespaces.code_server_port_max).toBe(23000);
   await page.getByText('Use default port range', { exact: true }).click();

@@ -2565,9 +2565,9 @@
     "saveFailed": "儲存失敗。",
     "agentHomeDirNote": "留空時預設使用使用者 home 目錄。",
     "shellNote": "留空時預設使用 `$SHELL`。",
-    "filesystemRootsTitle": "檔案系統根",
+    "filesystemRootsTitle": "可存取目錄",
     "filesystemRootsDescription": "提供給「檔案」、Git、Flower 工具和 Code App 的目錄層級檔案存取權。",
-    "addRoot": "新增 Root",
+    "addRoot": "新增目錄",
     "rootHeader": "根",
     "pathHeader": "路徑",
     "accessHeader": "存取",
@@ -2577,11 +2577,11 @@
     "allowWrites": "允許寫入",
     "systemRoot": "系統",
     "customRoot": "自訂",
-    "removeRoot": "移除 root",
+    "removeRoot": "移除目錄",
     "systemRootsNote": "系統根目錄由執行環境管理。自訂根目錄儲存後需要手動重新啟動。",
     "allowWritesDialogTitle": "允許 filesystem 寫入？",
     "allowWritesDialogDescription": "這個自訂根目錄將允許執行環境的檔案功能執行建立、重新命名、覆寫與刪除操作。",
-    "rootLabel": "根"
+    "rootLabel": "目錄名稱"
   },
   "loggingSettings": {
     "title": "記錄",
@@ -2853,20 +2853,20 @@
     }
   },
   "skillsSettings": {
-    "title": "根",
-    "description": "管理 Flower skills：從 GitHub 安裝、瀏覽 skill 檔案、切換啟用狀態並維護本機 skills。",
+    "title": "技能",
+    "description": "管理 Flower 技能：安裝、建立、瀏覽檔案並控制啟用狀態。",
     "loading": "正在載入",
     "skillCount": {
-      "one": "{count} 個 skill",
-      "other": "{count} 個 skills"
+      "one": "{count} 個技能",
+      "other": "{count} 個技能"
     },
     "reload": "重新載入",
     "installFromGitHub": "從 GitHub 安裝",
-    "createSkill": "建立 Skill",
+    "createSkill": "建立技能",
     "searchLabel": "搜尋",
     "searchPlaceholder": "按名稱、描述或路徑搜尋",
     "scopeLabel": "範圍",
-    "scopeAll": "全部 scopes",
+    "scopeAll": "全部範圍",
     "scopeUserRedeven": "用戶 (.redeven)",
     "scopeUserAgents": "用戶 (.agents)",
     "conflictsDetected": "偵測到衝突：{count}",
@@ -4879,7 +4879,7 @@
     "permissionApprovalRequiredDescription": "標準工具和子任務編排保持可用。子任務會繼承此權限，因此 shell、檔案修改和子任務工具審批會在執行前請求確認；唯讀專屬輔助工具會隱藏。",
     "permissionFullAccessTitle": "完整存取",
     "permissionFullAccessDescription": "標準工具和子任務編排無需逐工具確認即可執行。子任務會繼承此權限，同時仍保留逾時、限制和稽核；唯讀專屬輔助工具會隱藏。",
-    "currentModelTitle": "目前 Model",
+    "currentModelTitle": "目前模型",
     "currentModelDescription": "建立新聊天執行緒時使用的預設模型。",
     "noModelSelected": "未選擇型號",
     "textCapability": "文字",
@@ -7077,6 +7077,10 @@
     "touchHelpDescription": "點一下即可單擊。單指滑動可捲動。長按後移動可拖曳；長按不移動後放開可按右鍵。雙指可縮放頁面。"
   },
   "settingsDesign": {
+    "editDirectory": "編輯目錄",
+    "availableEditorVersion": "可供新啟動的 Codespaces 使用。",
+    "computerRoot": "電腦",
+    "installationDetails": "安裝與路徑",
     "startPort": "起始連接埠",
     "endPort": "結束連接埠",
     "relatedSettings": "相關設定",

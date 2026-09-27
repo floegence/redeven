@@ -1,3 +1,4 @@
+import { Button } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { AlertTriangle, Check, Copy, Database, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
@@ -184,38 +185,30 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
           title={i18n.t('aiReadiness.settings.floretStoreTitle')}
           description={i18n.t('aiReadiness.settings.floretDescription')}
           tone={statusTone()}
-          control={<SettingsPill tone={statusTone()}>{statusLabel()}</SettingsPill>}
-        >
-          <div class="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              class={BUTTON_CLASS}
+          control={<div class="flex flex-wrap items-center justify-end gap-2">
+            <SettingsPill tone={statusTone()}>{statusLabel()}</SettingsPill>
+            <Button size="icon" variant="ghost" icon={RefreshIcon}
+              aria-label={props.controller.loading() ? i18n.t('aiReadiness.settings.refreshing') : i18n.t('common.actions.refresh')}
               disabled={props.controller.loading() || props.controller.retryPending()}
-              aria-busy={props.controller.loading() ? 'true' : undefined}
-              data-pending={props.controller.loading() ? 'true' : undefined}
-              onClick={() => void props.controller.refresh()}
-            >
-              <RefreshIcon class={`h-4 w-4 ${props.controller.loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />
-              <span>{props.controller.loading() ? i18n.t('aiReadiness.settings.refreshing') : i18n.t('common.actions.refresh')}</span>
-            </button>
+              data-pending={props.controller.loading() || undefined}
+              aria-busy={props.controller.loading() || undefined} onClick={() => void props.controller.refresh()} />
+          </div>}
+        />
+        <SettingRow title={i18n.t('aiReadiness.actions.showDiagnostics')}
+          description={i18n.t('aiReadiness.diagnostics.description')}
+          control={<div class="flex flex-wrap items-center justify-end gap-2">
             <Show when={props.canAdmin && props.controller.snapshot().state === 'degraded'}>
-              <button type="button" class={BUTTON_CLASS} disabled={reviewLoading()} aria-busy={reviewLoading() ? 'true' : undefined} onClick={() => void loadReview()}>
-                <AlertTriangle class="h-4 w-4" aria-hidden="true" />
-                <span>{reviewLoading() ? i18n.t('aiReadiness.settings.reviewing') : i18n.t('aiReadiness.actions.reviewIssues')}</span>
-              </button>
+              <Button size="sm" variant="outline" icon={AlertTriangle} disabled={reviewLoading()}
+                aria-busy={reviewLoading() || undefined} onClick={() => void loadReview()}>
+                {reviewLoading() ? i18n.t('aiReadiness.settings.reviewing') : i18n.t('aiReadiness.actions.reviewIssues')}
+              </Button>
             </Show>
-            <button
-              type="button"
-              class={BUTTON_CLASS}
-              aria-expanded={diagnosticsOpen()}
-              onClick={() => {
-                setDiagnosticsOpen((open) => !open);
-                setCopied(false);
-              }}
-            >
-              <span>{diagnosticsOpen() ? i18n.t('aiReadiness.actions.hideDiagnostics') : i18n.t('aiReadiness.actions.showDiagnostics')}</span>
-            </button>
-          </div>
+            <Button size="sm" variant="outline" aria-expanded={diagnosticsOpen()}
+              onClick={() => { setDiagnosticsOpen(open => !open); setCopied(false); }}>
+              {diagnosticsOpen() ? i18n.t('aiReadiness.actions.hideDiagnostics') : i18n.t('aiReadiness.actions.showDiagnostics')}
+            </Button>
+          </div>}
+        >
           <Show when={diagnosticsOpen()}>
             <div class="mt-3 border-t border-border pt-3" data-testid="ai-readiness-settings-diagnostics">
               <p class="text-xs leading-relaxed text-muted-foreground">{i18n.t('aiReadiness.diagnostics.description')}</p>

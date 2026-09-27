@@ -1,8 +1,8 @@
 import '../index.css';
 import './flower-feature.css';
 
-import { FloeProvider } from '@floegence/floe-webapp-core';
-import { createSignal } from 'solid-js';
+import { FloeProvider, useTheme, builtInShellThemePresets } from '@floegence/floe-webapp-core';
+import { createSignal, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 import { page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -33,7 +33,7 @@ function settings(): FlowerSettingsSnapshot {
   };
 }
 
-async function mount(locale: RedevenLocale = 'en-US', width = 1000) {
+async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false) {
   await page.viewport(1280, 960);
   const i18n = createI18nHelpers(locale, await loadEnvAppDictionary(locale));
   const copy = createLocalizedFlowerSurfaceCopy({ locale,
@@ -53,7 +53,12 @@ async function mount(locale: RedevenLocale = 'en-US', width = 1000) {
   Object.assign(host.style, { width: `${width}px`, height: '940px' });
   document.body.append(host);
   const openComputerSettings = vi.fn();
-  dispose = render(() => <FloeProvider><FlowerSettingsSurface snapshot={snapshot()} copy={copy.settings} computerCopy={copy.computer}
+  function SettingsTheme() {
+    const theme = useTheme();
+    onMount(() => theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'porcelain-dark' : 'porcelain-light'));
+    return null;
+  }
+  dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><SettingsTheme /><FlowerSettingsSurface snapshot={snapshot()} copy={copy.settings} computerCopy={copy.computer}
     onSaveDefaultPermission={savePermission} onSaveComputerUseEnabled={saveComputer}
     onSaveModelProfile={async draft => { const next = { ...snapshot(), ...draft }; setSnapshot(next); return next; }}
     onOpenComputerSettings={openComputerSettings}
@@ -66,8 +71,7 @@ for (const [locale, dark, width] of [
   ['en-US', false, 320], ['de-DE', true, 390], ['zh-TW', true, 544],
 ] as const) {
   it(`keeps ${locale} settings readable in a ${width}px ${dark ? 'dark' : 'light'} container`, async () => {
-    const { copy, openComputerSettings } = await mount(locale, width);
-    document.documentElement.classList.toggle('dark', dark);
+    const { copy, openComputerSettings } = await mount(locale, width, dark);
     const frame = host.querySelector<HTMLElement>('.flower-settings-frame')!;
     expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth);
     expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontSize).toBe('25px');
@@ -87,6 +91,13 @@ for (const [locale, dark, width] of [
     const currentModel = frame.querySelector<HTMLElement>('.flower-settings-current-model')!;
     const modelField = currentModel.querySelector<HTMLElement>('.flower-settings-model-field')!;
     expect(modelField.scrollWidth).toBeLessThanOrEqual(modelField.clientWidth);
+    if (width >= 1000) {
+      const label = modelField.querySelector<HTMLElement>('.flower-settings-model-label');
+      expect(label).not.toBeNull();
+      const select = modelField.querySelector<HTMLElement>('.flower-settings-model-select')!;
+      expect(select.getBoundingClientRect().left).toBeGreaterThan(label!.getBoundingClientRect().right);
+      expect(Math.abs(select.getBoundingClientRect().top - label!.getBoundingClientRect().top)).toBeLessThan(24);
+    }
     expect(currentModel.textContent).toContain(copy.settings.dialog.contextWindow);
     expect(currentModel.textContent).toContain(copy.settings.dialog.maxOutput);
     const permission = frame.querySelector<HTMLElement>('[role="radiogroup"]')!;
@@ -106,6 +117,9 @@ for (const [locale, dark, width] of [
     expect(openComputerSettings).toHaveBeenCalledTimes(1);
     if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') {
       await page.screenshot({ element: frame, path: `__screenshots__/flower-settings-${locale}-${width}.png` });
+      const surface = frame.parentElement!;
+      surface.scrollTop = surface.scrollHeight;
+      await page.screenshot({ element: surface, path: `__screenshots__/flower-settings-bottom-${locale}-${width}.png` });
     }
   });
 }

@@ -96,21 +96,24 @@ primary heading. Provider rows share one quiet 14px-radius group with internal
 dividers. At 760 CSS pixels or below page padding contracts to 16px while
 preserving the reading order.
 
-Current-model capabilities, capacity figures, and reasoning preferences have
-separate visual groups. Provider rows always expose identity, credential readiness,
+The current model, capacity figures, and reasoning preferences share one quiet
+group with inset dividers. Labels stay left; model selection, capacities, and
+reasoning controls stay right. Model input capabilities sit beneath its label;
+narrow containers stack the selector without truncating controls. Provider rows always expose identity, credential readiness,
 and edit/remove actions. A keyboard-operable model disclosure shows the configured
 count and expands to every model identifier plus web/image capability details;
 identifiers wrap rather than hiding the rest of the inventory behind a count.
-Adding a provider remains directly available without expanding details.
+Adding a provider stays in the section heading without expanding details.
 
-Permission choices remain visible as a vertical radio group, with a check indicator,
-restrained selected fill, and a left selection rule. Long translations must wrap
+Permission choices remain visible as one divided vertical radio group, with a
+check indicator and no additional selection border. Long translations must wrap
 without covering adjacent values. Buttons, switches, and disclosure summaries
 retain keyboard focus and pointer affordances. Input boundaries use the published
 Floe focus contract.
 
 Computer use remains a separately saved switch with a visible thumb in both
-themes. The self-managed Chromium connection form is an expandable advanced
+themes. Its management destination shares the same group as a full-width action
+row. The self-managed Chromium connection form is an expandable advanced
 section; collapsing it does not destroy its address or connection result.
 Discovery, profile/tab selection, and explicit connection retain their existing
 runtime operations. The shared settings panel stays mounted when returning to chat.

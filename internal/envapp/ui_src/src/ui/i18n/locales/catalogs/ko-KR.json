@@ -7077,6 +7077,10 @@
     "touchHelpDescription": "탭하면 클릭합니다. 한 손가락으로 쓸어 넘기면 스크롤합니다. 길게 누른 뒤 움직이면 드래그하고, 움직이지 않고 놓으면 오른쪽 클릭입니다. 두 손가락으로 페이지를 확대하거나 축소할 수 있습니다."
   },
   "settingsDesign": {
+    "editDirectory": "디렉터리 편집",
+    "availableEditorVersion": "새 Codespaces에서 사용할 수 있습니다.",
+    "computerRoot": "컴퓨터",
+    "installationDetails": "설치 및 경로",
     "startPort": "시작 포트",
     "endPort": "종료 포트",
     "relatedSettings": "관련 설정",

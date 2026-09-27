@@ -162,8 +162,7 @@ export function SkillsSection() {
         error={skillsError()}
         actions={
           <>
-            <Button size="sm" variant="outline" icon={RefreshIcon} onClick={() => void refreshSkillsCatalog(true)} loading={skillsReloading()} disabled={!ctx.canInteract() || catalogBusy()}>{i18n.t('skillsSettings.reload')}</Button>
-            <Button size="sm" variant="default" icon={Download} onClick={openInstallDialog} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.installFromGitHub')}</Button>
+            <Button size="sm" variant="ghost" icon={Download} onClick={openInstallDialog} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.installFromGitHub')}</Button>
             <Button size="sm" variant="default" icon={Plus} onClick={() => { setSkillCreateError(null); setSkillCreateOpen(true); }} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.createSkill')}</Button>
           </>
         }
@@ -185,6 +184,8 @@ export function SkillsSection() {
                 options={[{ value: 'all', label: i18n.t('skillsSettings.scopeAll') }, { value: 'user', label: i18n.t('skillsSettings.scopeUserRedeven') }, { value: 'user_agents', label: i18n.t('skillsSettings.scopeUserAgents') }]}
                 class="w-full" />
             </div>
+            <Button size="icon" variant="ghost" icon={RefreshIcon} aria-label={i18n.t('skillsSettings.reload')}
+              onClick={() => void refreshSkillsCatalog(true)} loading={skillsReloading()} disabled={!ctx.canInteract() || catalogBusy()} />
           </div>
 
           <SkillsCatalogList

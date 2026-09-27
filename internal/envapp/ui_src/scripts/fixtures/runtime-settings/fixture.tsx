@@ -12,9 +12,13 @@ export function createRuntimeSettingsFixture() {
   const [targetVersionInput, setTargetVersionInput] = createSignal('v1.2.4');
   const [installMethod, setInstallMethod] = createSignal<'desktop_transfer' | 'remote_download'>('remote_download');
   const [settings, setSettings] = createSignal<AgentSettingsResponse>({
-    config_path: '/Users/alex/.redeven/config.json',
+    config_path: '/Users/alex/.redeven-dev/redeven-1854757905/local-environment/config.json',
     connection: { controlplane_base_url: 'https://cloud.example.com', environment_id: 'env_design_workspace', agent_instance_id: 'runtime_macos_arm64', direct: { artifact_provisioned: true, expires_at_unix_s: 1893456000 } },
-    runtime: { agent_home_dir: '/Users/alex/workspace', shell: '/bin/zsh' },
+    runtime: { agent_home_dir: '/Users/alex/workspace', shell: '/bin/zsh', filesystem_scope: { schema_version: 1, default_root_id: 'home', roots: [
+      { id: 'home', label: 'Home', path: '/Users/alex/workspace', kind: 'home', permissions: { read: true, write: true }, system: true },
+      { id: 'computer', label: 'Computer', path: '/', kind: 'computer', permissions: { read: true, write: false }, system: true },
+      { id: 'projects', label: 'Projects', path: '/Volumes/Development/teams/shared-projects/workspaces', kind: 'custom', permissions: { read: true, write: false }, system: false },
+    ] } },
     logging: { log_format: 'json', log_level: 'info' },
     codespaces: { code_server_port_min: 20000, code_server_port_max: 21000 },
     permission_policy: { schema_version: 1, local_max: { read: true, write: true, execute: true }, by_user: { 'user_design_reviewer': { read: true, write: false, execute: false } }, by_app: {} },
@@ -49,7 +53,7 @@ export function createRuntimeSettingsFixture() {
     settings: Object.assign(settings, { loading: false, error: null, state: 'ready' }),
     mutateSettings: setSettings, saveSettings, refreshSettings: async () => undefined,
     saveDefaultAIPermission: async (permission_type: 'readonly' | 'approval_required' | 'full_access') => { setSettings((current) => ({ ...current, ai: { ...current.ai!, permission_type } })); return { settings: settings() }; },
-    codeRuntimeStatus: Object.assign(() => ({ active_runtime: { present: true, detection_state: 'ready', source: 'managed', version: '4.109.1', binary_path: '/Users/alex/.redeven/code-server/bin/code-server' }, managed_runtime: { present: true, detection_state: 'ready', source: 'managed', version: '4.109.1' }, managed_prefix: '/Users/alex/.redeven/apps/code', installed_versions: [{ version: '4.109.1', selected_by_local_environment: true, removable: false, detection_state: 'ready' }], operation: { state: 'idle', log_tail: [] } }), { loading: false, error: null, state: 'ready' }),
+    codeRuntimeStatus: Object.assign(() => ({ active_runtime: { present: true, detection_state: 'ready', source: 'managed', version: '4.109.1', binary_path: '/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server' }, managed_runtime: { present: true, detection_state: 'ready', source: 'managed', version: '4.109.1' }, managed_runtime_source: 'managed', managed_runtime_version: '4.109.1', managed_prefix: '/Users/alex/.redeven/apps/code', shared_runtime_root: '/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64', installed_versions: ['4.109.1', '4.108.2'].map((version, index) => ({ version, selected_by_local_environment: index === 0, removable: index !== 0, detection_state: 'ready', binary_path: `/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64/versions/${version}/bin/code-server` })), operation: { state: 'idle', log_tail: [] } }), { loading: false, error: null, state: 'ready' }),
     refreshCodeRuntimeStatus: noop, codeRuntimeInstallMethod: installMethod, setCodeRuntimeInstallMethod: setInstallMethod, desktopCodeRuntimeTransferAvailable: () => true,
     latestVersion: () => ({ latest_version: 'v1.2.4', manifest_etag: 'release-2026-09' }), latestVersionLoading: () => false, latestVersionError: () => null,
     maintenanceContext: () => ({ authority: 'runtime_rpc' }), upgradeState: () => ({ allowsUpgradeAction: true, requiresTargetVersion: true, actionLabel: 'Update Redeven', policy: 'self_upgrade' }), displayedStatus: () => 'online', maintenanceStage: () => '', maintenanceError: () => null, maintaining: () => false, isUpgrading: () => false, isRestarting: () => false,

@@ -1,9 +1,9 @@
 import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
-import { Terminal, Plus, Trash, Home, FolderOpen } from '@floegence/floe-webapp-core/icons';
-import { Button, Input } from '@floegence/floe-webapp-core/ui';
-import { ConfirmDialog } from '../../../primitives/EnvAppModal';
+import { Terminal, Plus, Trash, Home, Pencil } from '@floegence/floe-webapp-core/icons';
+import { Button, Input, Switch } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog, Dialog } from '../../../primitives/EnvAppModal';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, SettingsList, AutoSaveIndicator, DotIndicator, SettingRow } from '../SettingsPrimitives';
+import { SettingsSection, SettingsList, AutoSaveIndicator, SettingRow, SubSectionHeader } from '../SettingsPrimitives';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
 import type { FilesystemRootPolicy } from '../types';
@@ -29,6 +29,7 @@ export function RuntimeConfigSection() {
   const [saving, setSaving] = createSignal(false);
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
   const [error, setError] = createSignal<string | null>(null);
+  const [rootEditor, setRootEditor] = createSignal<{ id: string; label: string; path: string; isNew: boolean } | null>(null);
   const [writeConfirmTarget, setWriteConfirmTarget] = createSignal<{ index: number; root: FilesystemRootPolicy } | null>(null);
 
   createEffect(() => {
@@ -71,15 +72,23 @@ export function RuntimeConfigSection() {
   const updateRootAt = (index: number, fn: (r: FilesystemRootPolicy) => FilesystemRootPolicy) => {
     setRoots((prev) => prev.map((r, i) => (i === index ? fn(r) : r))); setError(null); setDirty(true);
   };
-  const addRoot = () => { setRoots((prev: any) => [...prev, { id: nextCustomRootID(prev), label: '', path: '', kind: 'custom' as const, permissions: { read: true, write: false }, hidden: false, system: false }]); setError(null); setDirty(true); };
+  const addRoot = () => setRootEditor({ id: nextCustomRootID(roots()), label: '', path: '', isNew: true });
+  const saveRoot = () => {
+    const draft = rootEditor();
+    if (!draft || !canEdit() || !draft.path.trim()) return;
+    if (draft.isNew) setRoots(previous => [...previous, { id: draft.id, label: draft.label.trim(), path: draft.path.trim(), kind: 'custom', permissions: { read: true, write: false }, system: false }]);
+    else setRoots(previous => previous.map(root => root.id === draft.id ? { ...root, label: draft.label.trim(), path: draft.path.trim() } : root));
+    setError(null); setDirty(true); setRootEditor(null);
+  };
   const removeRoot = (index: number) => { setRoots((prev) => prev.filter((_, i) => i !== index)); setError(null); setDirty(true); };
   const requestWriteChange = (index: number, root: FilesystemRootPolicy, enable: boolean) => {
+    if (!canEdit() || root.system) return;
     if (!enable) { updateRootAt(index, (r) => ({ ...r, permissions: { ...r.permissions, write: false } })); return; }
     setWriteConfirmTarget({ index, root });
   };
   const confirmWriteAccess = () => {
     const target = writeConfirmTarget();
-    if (target) { updateRootAt(target.index, (r) => ({ ...r, permissions: { ...r.permissions, write: true } })); }
+    if (target && canEdit()) { updateRootAt(target.index, (r) => ({ ...r, permissions: { ...r.permissions, write: true } })); }
     setWriteConfirmTarget(null);
   };
 
@@ -120,52 +129,55 @@ export function RuntimeConfigSection() {
         </SettingsList>
 
         {/* Filesystem roots */}
-        <div class="mt-5">
-          <div class="flex items-center justify-between mb-3">
-            <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{i18n.t('runtimeConfig.filesystemRootsTitle')}</div>
-            <Button size="sm" variant="outline" icon={Plus} onClick={addRoot} disabled={!canEdit()}>{i18n.t('runtimeConfig.addRoot')}</Button>
-          </div>
+        <div class="space-y-3">
+          <SubSectionHeader title={i18n.t('runtimeConfig.filesystemRootsTitle')}
+            actions={<Button size="sm" variant="ghost" icon={Plus} onClick={addRoot} disabled={!canEdit()}>{i18n.t('runtimeConfig.addRoot')}</Button>} />
           <SettingsList>
             <For each={roots()}>
               {(root, index) => (
-                <div class="redeven-settings-list-row px-4 py-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="flex min-w-0 flex-1 items-start gap-3">
-                      <span class="redeven-setting-row__icon mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
-                        {root.kind === 'home' ? <Home class="h-3.5 w-3.5" /> : <FolderOpen class="h-3.5 w-3.5" />}
-                      </span>
-                      <div class="min-w-0 flex-1">
-                        <div class="flex flex-wrap items-center gap-2 mb-1">
-                          <code class="break-all text-[length:var(--floe-type-body)] font-mono font-medium text-foreground">{root.path}</code>
-                          <span class="text-[10px] text-muted-foreground">{root.label || root.id}</span>
-                        </div>
-                        <div class="flex items-center gap-2 mt-2">
-                          <span class={root.system ? 'text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground' : 'text-[10px] bg-success/10 px-1.5 py-0.5 rounded text-success'}>
-                            {root.system ? i18n.t('runtimeConfig.systemRoot') : i18n.t('runtimeConfig.customRoot')}
-                          </span>
-                          <DotIndicator active={Boolean(root.permissions?.read)} label={i18n.t('permissionPolicy.permission.read')} />
-                          <DotIndicator active={Boolean(root.permissions?.write)} label={i18n.t('permissionPolicy.permission.write')} onClick={root.system ? undefined : () => requestWriteChange(index(), root, !root.permissions?.write)} />
-                        </div>
-                      </div>
-                    </div>
-                    <Show when={!root.system}>
-                      <Button size="icon" variant="ghost" icon={Trash} class="text-muted-foreground hover:text-destructive"
-                        onClick={() => removeRoot(index())} disabled={!canEdit()} aria-label={i18n.t('runtimeConfig.removeRoot')} />
+                <SettingRow class="runtime-filesystem-root"
+                  title={root.kind === 'home' ? i18n.t('settingsDesign.homeDirectory') : root.kind === 'computer' ? i18n.t('settingsDesign.computerRoot') : root.label || i18n.t('runtimeConfig.customRoot')}
+                  description={root.kind === 'home' ? agentHomeDir() || '~' : root.path}
+                  control={<div class="settings-row-actions">
+                    <Show when={root.system} fallback={
+                      <Switch label={i18n.t('runtimeConfig.allowWrites')} labelPosition="left"
+                        checked={Boolean(root.permissions?.write)} disabled={!canEdit()}
+                        onChange={(value) => requestWriteChange(index(), root, value)} />
+                    }>
+                      <span class="text-xs text-muted-foreground">{i18n.t(root.permissions?.write ? 'runtimeConfig.readWrite' : 'runtimeConfig.readOnly')}</span>
                     </Show>
-                  </div>
-                  <Show when={!root.system}>
-                    <div class="mt-2 border-t border-[var(--redeven-settings-divider)] pt-2">
-                      <Input value={root.path} onInput={(e) => updateRootAt(index(), (r) => ({ ...r, path: e.currentTarget.value }))}
-                        placeholder="/path/to/folder" size="sm" class="w-full font-mono text-xs" disabled={!canEdit()} />
-                    </div>
-                  </Show>
-                </div>
+                    <Show when={!root.system}>
+                      <Button size="icon" variant="ghost" icon={Pencil} disabled={!canEdit()} aria-label={i18n.t('settingsDesign.editDirectory')}
+                        onClick={() => setRootEditor({ id: root.id, label: root.label, path: root.path, isNew: false })} />
+                      <Button size="icon" variant="ghost" icon={Trash} class="text-muted-foreground hover:text-destructive"
+                      onClick={() => removeRoot(index())} disabled={!canEdit()} aria-label={i18n.t('runtimeConfig.removeRoot')} /></Show>
+                  </div>}
+                />
               )}
             </For>
           </SettingsList>
           <p class="mt-2 text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.systemRootsNote')}</p>
         </div>
       </SettingsSection>
+
+      <Dialog open={Boolean(rootEditor())} onOpenChange={(open) => { if (!open) setRootEditor(null); }}
+        title={i18n.t(rootEditor()?.isNew ? 'runtimeConfig.addRoot' : 'settingsDesign.editDirectory')}
+        class="redeven-settings-dialog w-[min(30rem,94vw)]"
+        footer={<div class="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setRootEditor(null)}>{i18n.t('common.actions.cancel')}</Button>
+          <Button disabled={!canEdit() || !rootEditor()?.path.trim()} onClick={saveRoot}>{i18n.t('common.actions.save')}</Button>
+        </div>}>
+        <div class="space-y-4">
+          <label class="block space-y-2 text-xs"><span>{i18n.t('runtimeConfig.rootLabel')}</span>
+            <Input value={rootEditor()?.label ?? ''} disabled={!canEdit()} class="w-full"
+              onInput={e => setRootEditor(value => value ? { ...value, label: e.currentTarget.value } : null)} />
+          </label>
+          <label class="block space-y-2 text-xs"><span>{i18n.t('runtimeConfig.pathHeader')}</span>
+            <Input value={rootEditor()?.path ?? ''} disabled={!canEdit()} class="w-full font-mono" placeholder="/path/to/folder"
+              onInput={e => setRootEditor(value => value ? { ...value, path: e.currentTarget.value } : null)} />
+          </label>
+        </div>
+      </Dialog>
 
       <ConfirmDialog
         open={Boolean(writeConfirmTarget())}

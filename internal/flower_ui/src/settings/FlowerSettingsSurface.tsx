@@ -557,13 +557,19 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
           </header>
 
           <section class="flower-settings-section flower-settings-current-model" aria-label={copy().currentModel}>
-            <FlowerSubSectionHeader title={copy().currentModel} />
-            <div class="flower-settings-section-content">
+            <FlowerSubSectionHeader title={copy().models} />
+            <div class="flower-settings-section-content flower-settings-model-group">
               <Show when={currentModelID() && !activeModelOption()}>
                 <p role="alert" class="mb-3 flower-body-copy text-destructive">{copy().dialog.catalog.unavailable}</p>
               </Show>
               <Show when={modelOptions().length > 0} fallback={<p class="flower-body-copy text-muted-foreground">{copy().noModelSelected}</p>}>
                 <div class="flower-settings-model-field">
+                  <div class="flower-settings-model-label"><span>{copy().currentModel}</span>
+                    <div class="flower-settings-model-capabilities">
+                      <span>{copy().text}</span>
+                      <Show when={activeModelOption()?.supportsImageInput}><span>{copy().imageInput}</span></Show>
+                    </div>
+                  </div>
                   <Select
                     value={currentModelID()}
                     options={modelSelectOptions()}
@@ -572,10 +578,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                     disabled={props.saving}
                     class="flower-settings-model-select w-full"
                   />
-                </div>
-                <div class="flower-settings-model-capabilities">
-                  <span>{copy().text}</span>
-                  <Show when={activeModelOption()?.supportsImageInput}><span>{copy().imageInput}</span></Show>
                 </div>
                 <dl class="flower-settings-model-limits">
                   <Show when={activeModelOption()?.contextWindow}>
@@ -601,7 +603,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
           </section>
 
           <section class="flower-settings-section flower-settings-providers-section" aria-label={copy().providersTitle}>
-            <FlowerSubSectionHeader title={copy().providersTitle} description={copy().providersDescription} />
+            <FlowerSubSectionHeader title={copy().providersTitle} description={copy().providersDescription}
+              actions={<Button size="sm" variant="ghost" icon={Plus} class="flower-settings-provider-add" onClick={openAddProviderDialog}>{copy().addProvider}</Button>} />
             <div class="flower-settings-section-content">
               <div class="flower-settings-provider-gallery">
                 <For each={providers()} fallback={<div class="flower-settings-provider-empty">{copy().noProviders}</div>}>
@@ -662,9 +665,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   }}
                 </For>
               </div>
-              <Button size="sm" variant="outline" icon={Plus} class="flower-settings-provider-add" onClick={openAddProviderDialog}>
-                {copy().addProvider}
-              </Button>
             </div>
           </section>
 
@@ -711,7 +711,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                 title={copy().computerUseTitle}
                 actions={<FlowerAutoSaveIndicator dirty={computerUseSaving()} copy={copy().autoSave} saving={computerUseSaving()} error={computerUseError()} savedAt={computerUseSavedAt()} />}
               />
-              <div class="flower-settings-section-content">
+              <div class="flower-settings-section-content flower-settings-computer-group">
                 <Show when={props.onSaveComputerUseEnabled}>
                   <button type="button" class="flower-settings-toggle-card" role="switch" aria-checked={computerUseEnabled()}
                     disabled={computerUseSaving()} onClick={() => void saveComputerUseEnabled(!computerUseEnabled())}>
@@ -723,7 +723,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   <Show when={computerUseError()}><p role="alert" class="mt-3 text-xs text-destructive">{computerUseError()}</p></Show>
                 </Show>
                 <Show when={props.onOpenComputerSettings}>
-                  <Button size="sm" variant="outline" onClick={() => props.onOpenComputerSettings?.()}>{(props.computerCopy ?? computerUseEnUS).title}</Button>
+                  <button type="button" class="flower-settings-computer-action" onClick={() => props.onOpenComputerSettings?.()}><span>{(props.computerCopy ?? computerUseEnUS).title}</span><ChevronDown class="h-4 w-4 -rotate-90" aria-hidden="true" /></button>
                 </Show>
               </div>
             </section>

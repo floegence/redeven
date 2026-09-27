@@ -1209,6 +1209,7 @@
     "appliesToDesktopAndEnvApp": "Die Sprache gilt für Redeven Desktop und Env App Sitzungen, die über diesen Desktop geöffnet werden."
   },
   "settings": {
+    "linuxUser": "Linux-Benutzer",
     "remoteSettingsDescription": "{label} · Läuft auf dem Server",
     "managementConnection": "Verwaltungsverbindung",
     "remoteCertificateHelp": "Die Zertifikatsdateien liegen auf diesem Server. Jedes verbindende Gerät prüft das Vertrauen in die ausstellende CA separat.",

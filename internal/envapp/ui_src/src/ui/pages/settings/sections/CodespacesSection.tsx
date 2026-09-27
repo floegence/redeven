@@ -1,4 +1,4 @@
-import { Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
+import { createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Code, Hash } from '@floegence/floe-webapp-core/icons';
 import { Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
@@ -106,32 +106,28 @@ export function CodespacesSection() {
             title={i18n.t('codespacesSettings.portRange')}
             description={`${i18n.t('codespacesSettings.effectiveRange')}: ${effective().effective_min} - ${effective().effective_max}`}
             control={
-              <label class={`flex items-center gap-2 ${canEdit() ? 'cursor-pointer' : ''}`}>
-                <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setError(null); setDirty(true); }} disabled={!canEdit()} />
-                <span class="text-[length:var(--floe-type-body)] text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
-              </label>
-            }
-          >
-            <code class="redeven-settings-control inline-flex rounded-md border px-2 py-1 font-mono text-xs text-foreground">
-              {effective().effective_min} - {effective().effective_max}
-            </code>
-            <Show when={!useDefaults()}>
-              <div class="grid grid-cols-1 gap-4 border-t border-[var(--redeven-settings-divider)] pt-3">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <label for="settings-port-min" class="redeven-settings-note text-xs">{i18n.t('settingsDesign.startPort')}</label>
-                  <Input id="settings-port-min" value={portMin() === '' ? '' : String(portMin())}
+              <div class="settings-port-controls">
+                <div class="settings-port-pair">
+                  <Input id="settings-port-min" type="number" min={1024} max={65535}
+                    aria-label={i18n.t('settingsDesign.startPort')}
+                    value={portMin() === '' ? '' : String(portMin())}
                     onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMin(v ? Number(v) : ''); setError(null); setDirty(true); }}
-                    placeholder="20000" size="sm" class="w-24" disabled={!canEdit()} />
-                </div>
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <label for="settings-port-max" class="redeven-settings-note text-xs">{i18n.t('settingsDesign.endPort')}</label>
-                  <Input id="settings-port-max" value={portMax() === '' ? '' : String(portMax())}
+                    placeholder="20000" size="sm" disabled={!canEdit() || useDefaults()} />
+                  <span aria-hidden="true">–</span>
+                  <Input id="settings-port-max" type="number" min={1024} max={65535}
+                    aria-label={i18n.t('settingsDesign.endPort')}
+                    value={portMax() === '' ? '' : String(portMax())}
                     onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMax(v ? Number(v) : ''); setError(null); setDirty(true); }}
-                    placeholder="21000" size="sm" class="w-24" disabled={!canEdit()} />
+                    placeholder="21000" size="sm" disabled={!canEdit() || useDefaults()} />
                 </div>
+                  <Checkbox label={i18n.t('codespacesSettings.useDefaultRange')} checked={useDefaults()} onChange={(v) => {
+                    setUseDefaults(Boolean(v));
+                    if (!v) { setPortMin(effective().effective_min); setPortMax(effective().effective_max); }
+                    setError(null); setDirty(true);
+                  }} disabled={!canEdit()} />
               </div>
-            </Show>
-          </SettingRow>
+            }
+          />
         </SettingsList>
       </SettingsSection>
     </SettingsSection>

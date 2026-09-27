@@ -122,8 +122,6 @@ const EXCEPTIONS: readonly Exception[] = [
   { file: 'src/ui/pages/ManagedServiceSettingsDrawer.tsx', kind: 'placeholder', text: 'rwm', reason: 'Container device-permission enum literal.' },
   { file: 'src/ui/pages/ServiceTemplateCatalog.tsx', kind: 'label', text: 'SHA-256', reason: 'Standard cryptographic hash-algorithm name.' },
   { file: 'src/ui/pages/settings/AIProviderDialog.tsx', kind: 'placeholder', text: 'model-name', reason: 'Wire-format model identifier example.' },
-  { file: 'src/ui/pages/settings/sections/PermissionPolicySection.tsx', kind: 'placeholder', text: 'user_public_id', reason: 'Identifier field example.' },
-  { file: 'src/ui/pages/settings/sections/PermissionPolicySection.tsx', kind: 'placeholder', text: 'floe_app identifier', reason: 'Identifier field example.' },
   { file: 'src/ui/pages/settings/sections/RuntimeConfigSection.tsx', kind: 'placeholder', text: '/home/user', reason: 'Filesystem path example.' },
   { file: 'src/ui/pages/settings/sections/RuntimeConfigSection.tsx', kind: 'placeholder', text: '/bin/bash', reason: 'Executable path example.' },
   { file: 'src/ui/pages/settings/sections/RuntimeConfigSection.tsx', kind: 'placeholder', text: '/path/to/folder', reason: 'Filesystem path example.' },
