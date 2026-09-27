@@ -4,7 +4,7 @@ title: Desktop environment settings
 description: Open one target-bound settings session, preserve independent drafts, and save through the registered owner.
 tags: [desktop, environments, settings, interaction]
 quality_exception: One target-bound settings session joins connection drafts, access prerequisites, and restart recovery; keep their cross-domain authority and focus handoff together.
-timestamp: 2026-09-27T12:50:00Z
+timestamp: 2026-09-27T16:18:00Z
 ---
 # Summary
 
@@ -159,8 +159,16 @@ The footer stays visible while the task body scrolls. Validation focuses the
 related field; save and security errors appear beside the action. Disabled saves
 have keyboard-accessible contextual explanations. Review contains no password
 value. Password fields have bounded width and ports stay compact. Narrow panels
-stack controls without horizontal scrolling. Theme colors, wrapped action labels
+stack controls without horizontal scrolling. Theme colors, single-line action labels
 and enlarged text preserve the hierarchy and reachable actions.
+
+Connection and access tabs retain the released Floe trigger's 12px horizontal
+padding and a 40px target height. Product alignment must not remove that padding
+or replace clickable space with margins. Back, SSH help, saved-password removal
+and disclosure actions have padded targets at least 32px high; coarse pointers
+receive at least 44px targets. Shared buttons retain Floe hover and keyboard focus
+behavior, while native disclosures retain keyboard activation with visible focus.
+The target includes its surrounding padding, not just the text.
 
 The released Floe slider provides the active tab's 200ms underline transition.
 Product styling uses a restrained 160ms opacity entrance for section content and
@@ -203,6 +211,8 @@ SSH field and secret details are owned by
 [SSH environment settings](desktop-ssh-environment-settings.md).
 
 # Evidence
+
+- `redeven:desktop/scripts/check-settings-hit-targets.mjs` - Clicks inside tab and action padding, keyboard switching, multilingual narrow layouts and touch target dimensions.
 
 - `redeven:desktop/scripts/check-settings-restart.mjs` - Full Welcome shell acceptance for Local, SSH, WSL and container restart handoff, focus, dismissal, retry, narrow layouts and reduced motion.
 

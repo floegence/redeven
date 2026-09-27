@@ -3,7 +3,7 @@ type: UI Contract
 title: Runtime settings
 description: Navigate and edit runtime configuration through consistent, responsive settings surfaces while preserving API and permission ownership.
 tags: [ui, runtime, settings, skills]
-timestamp: 2026-09-27T12:50:00Z
+timestamp: 2026-09-27T16:18:00Z
 ---
 # Summary
 
@@ -62,6 +62,11 @@ with 44px targets for coarse pointers. Success changes the glyph or reserved
 label without moving the adjacent value. Primary copy steps in manual connection
 setup keep their workflow emphasis; this treatment applies to auxiliary actions.
 
+Technical disclosures for connection, runtime status, providers, skills and
+installation paths use at least 8px horizontal padding and 32px target height,
+increasing to 44px for coarse pointers. The full padded summary activates the
+native disclosure; neutral hover and visible keyboard focus identify its bounds
+without promoting diagnostic content into a primary action.
 
 ## Configuration editing
 
