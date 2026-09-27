@@ -4331,6 +4331,64 @@ pre,
   padding: 0 1rem 1rem;
 }
 
+/* The settings dialog uses a single reading surface. Sections are separated
+ * by quiet dividers so identity, connection, probing, and advanced options do
+ * not compete as a stack of unrelated cards. */
+.redeven-environment-settings-dialog .ssh-settings-form {
+  gap: 1.25rem;
+}
+.redeven-environment-settings-dialog .ssh-settings-form > .ssh-settings-field:first-child {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.redeven-environment-settings-dialog .ssh-settings-section {
+  gap: .75rem;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.redeven-environment-settings-dialog .ssh-settings-section-heading {
+  padding: 0 0 .625rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  background: transparent;
+}
+.redeven-environment-settings-dialog .ssh-settings-endpoint {
+  padding: 0;
+}
+.redeven-environment-settings-dialog .ssh-settings-section > .ssh-settings-field {
+  padding: .75rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+}
+.redeven-environment-settings-dialog .ssh-settings-section > .ssh-settings-field + .ssh-settings-field {
+  padding-top: .75rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+}
+.redeven-environment-settings-dialog .ssh-settings-probe {
+  padding: .75rem .875rem;
+  border: 0;
+  border-radius: .5rem;
+  background: color-mix(in srgb, var(--primary) 7%, var(--card));
+}
+.redeven-environment-settings-dialog .ssh-settings-advanced {
+  margin: 0;
+  overflow: visible;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border-radius: 0;
+  background: transparent;
+}
+.redeven-environment-settings-dialog .ssh-settings-disclosure {
+  min-height: 2.75rem;
+  padding: .625rem 0;
+}
+.redeven-environment-settings-dialog .ssh-settings-advanced-fields {
+  gap: .75rem;
+  padding: 0 0 .25rem 1.5rem;
+}
+
 /* Access overview reads as one surface; actions stay on the same reading edge as facts. */
 .redeven-environment-settings-dialog .environment-access-overview {
   gap: 0;
@@ -4819,3 +4877,11 @@ pre,
   .redeven-endpoints-popover .redeven-endpoint-actions { grid-column: 2; grid-row: 2; }
 }
 @media (max-height: 700px) { .redeven-environment-settings-dialog .environment-settings-scroll { padding-bottom: 5rem; } }
+
+/* Keep the accepted settings window contract authoritative after compact
+ * overlay rules: 48rem is the desktop cap and the viewport owns the smaller
+ * bound. */
+[data-floe-dialog-panel].redeven-environment-settings-dialog {
+  width: min(48rem, calc(100vw - 2rem));
+  max-width: 48rem;
+}

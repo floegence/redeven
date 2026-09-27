@@ -55,6 +55,19 @@ it.each([1280, 1024, 768, 390, 320])('keeps all ten pages readable without overf
   }
 });
 
+it('keeps connection and runtime status facts in continuous setting rows', async () => {
+  await mount(1280);
+  const connection = await openSection('connection');
+  expect(connection.querySelectorAll('.redeven-settings-page .redeven-settings-list')).toHaveLength(1);
+  expect(connection.querySelectorAll('.redeven-settings-page .redeven-setting-row')).toHaveLength(4);
+  expect(connection.querySelectorAll('.redeven-settings-page .redeven-settings-inset.rounded-lg.border')).toHaveLength(1);
+
+  const runtime = await openSection('agent');
+  expect(runtime.querySelector('.runtime-status-summary')).not.toBeNull();
+  expect(runtime.querySelectorAll('.runtime-status-summary > .redeven-setting-row')).toHaveLength(8);
+  expect(runtime.querySelector('.runtime-status-details')).not.toBeNull();
+});
+
 it('retains drafts and scroll position when navigating, and saves real settings values', async () => {
   await mount();
   const panel = await openSection('runtime');

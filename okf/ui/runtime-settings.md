@@ -22,13 +22,17 @@ to the shared maintenance controller after explicit user confirmation.
 
 The ten destinations are Config File, Connection, Runtime Status, Shell &
 Workspace, Codespaces & Tooling, Logging, Permission Policy, Flower, Skills, and
-Debug Console. Desktop navigation groups and filters these destinations. Narrow
+Debug Console. Desktop navigation groups and filters these destinations. Overview
+contains Connection and Runtime Status; Runtime Environment contains Shell &
+Workspace and Codespaces & Tooling; Diagnostics contains Config File, Logging,
+and Debug Console. Narrow
 viewports expose the same destinations through a section picker. Related links
 connect the smaller configuration and diagnostic pages to their next actions. On narrow viewports the picker is in the page header and the desktop breadcrumb is removed, so the settings body has no empty mobile-navigation slot or repeated section title. The native picker remains a 44px touch target with 16px text.
 
 Each page has one primary heading, a short description, and contextual actions.
 Sections use secondary headings; continuous settings use shared rows and
-dividers. Long paths wrap, controls stay within their page, and dialog actions
+dividers instead of repeating bordered cards. Status and connection facts use
+the same row treatment, while long paths wrap, controls stay within their page, and dialog actions
 remain reachable independently of the scrolling dialog body. Colors derive from
 the current Floe theme and Redeven semantic surface roles, including dark and
 high-contrast themes. Input focus follows the published border-only contract.

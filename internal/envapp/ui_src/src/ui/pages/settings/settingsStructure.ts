@@ -41,12 +41,12 @@ export type SettingsGroupMeta = Readonly<{
 }>;
 
 export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = Object.freeze([
-  { id: 'config', navLabel: 'Config File', icon: FileCode, group: 'overview' },
+  { id: 'config', navLabel: 'Config File', icon: FileCode, group: 'diagnostics' },
   { id: 'connection', navLabel: 'Connection', icon: Globe, group: 'overview' },
   { id: 'agent', navLabel: 'Runtime Status', icon: Zap, group: 'overview' },
   { id: 'runtime', navLabel: 'Shell & Workspace', icon: Terminal, group: 'runtime_configuration' },
   { id: 'codespaces', navLabel: 'Codespaces & Tooling', icon: Code, group: 'runtime_configuration' },
-  { id: 'logging', navLabel: 'Logging', icon: Database, group: 'runtime_configuration' },
+  { id: 'logging', navLabel: 'Logging', icon: Database, group: 'diagnostics' },
   { id: 'permission_policy', navLabel: 'Permission Policy', icon: Shield, group: 'security' },
   { id: 'ai', navLabel: 'Flower', icon: FlowerIcon, group: 'ai_extensions' },
   { id: 'skills', navLabel: 'Skills', icon: Layers, group: 'ai_extensions' },
@@ -61,11 +61,11 @@ export const SETTINGS_SECTION_META: Readonly<Record<EnvSettingsSection, Settings
 );
 
 export const SETTINGS_GROUPS: readonly SettingsGroupMeta[] = Object.freeze([
-  { id: 'overview', title: 'Overview', sections: ['config', 'connection', 'agent'] },
-  { id: 'runtime_configuration', title: 'Runtime Environment', sections: ['runtime', 'codespaces', 'logging'] },
+  { id: 'overview', title: 'Overview', sections: ['connection', 'agent'] },
+  { id: 'runtime_configuration', title: 'Runtime Environment', sections: ['runtime', 'codespaces'] },
   { id: 'security', title: 'Security', sections: ['permission_policy'] },
   { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai', 'skills'] },
-  { id: 'diagnostics', title: 'Diagnostics', sections: ['debug_console'] },
+  { id: 'diagnostics', title: 'Diagnostics', sections: ['config', 'logging', 'debug_console'] },
 ]);
 
 export const SETTINGS_GROUP_META: Readonly<Record<SettingsGroupID, SettingsGroupMeta>> = Object.freeze(

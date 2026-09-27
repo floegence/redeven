@@ -2,7 +2,7 @@ import { Show, createSignal, type JSX } from 'solid-js';
 import { ChevronDown, Copy, Globe, Hash, Home, Link, ShieldCheck } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { CopyButton, SettingsSection } from '../SettingsPrimitives';
+import { CopyButton, SettingsList, SettingsSection, SettingRow } from '../SettingsPrimitives';
 import { desktopShellBridgeAvailable, openConnectionCenter } from '../../../services/desktopShellBridge';
 import { useI18n } from '../../../i18n';
 
@@ -38,28 +38,17 @@ function ConnectionInfoRow(props: Readonly<{
   action?: JSX.Element;
 }>) {
   return (
-    <div class="redeven-settings-inset rounded-lg border px-4 py-3">
-      <div class="grid min-w-0 gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] md:items-center">
-        <div class="flex min-w-0 items-start gap-3">
-          <span class="redeven-setting-row__icon mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
-            <props.icon class="h-3.5 w-3.5" />
-          </span>
-          <div class="min-w-0">
-            <div class="text-[length:var(--floe-type-body)] font-semibold text-foreground">{props.label}</div>
-            <Show when={props.technicalLabel}>
-              <div class="mt-0.5 text-[11px] font-mono text-muted-foreground">{props.technicalLabel}</div>
-            </Show>
-            <Show when={props.description}>
-              <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{props.description}</p>
-            </Show>
-          </div>
+    <SettingRow
+      icon={props.icon}
+      title={props.label}
+      description={props.description ?? props.technicalLabel}
+      control={
+        <div class="flex min-w-0 max-w-full items-center justify-end gap-2">
+          <div class="min-w-0 text-right">{props.value}</div>
+          <Show when={props.action}><div class="flex shrink-0">{props.action}</div></Show>
         </div>
-        <div class="min-w-0 md:text-right">{props.value}</div>
-        <Show when={props.action}>
-          <div class="flex md:justify-end">{props.action}</div>
-        </Show>
-      </div>
-    </div>
+      }
+    />
   );
 }
 
@@ -124,6 +113,7 @@ export function ConnectionSection() {
 
       <div class="space-y-2">
         <div class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{i18n.t('settings.connection.coreInformation')}</div>
+        <SettingsList>
         <ConnectionInfoRow
           icon={Hash}
           label={i18n.t('settings.connection.currentEnvironmentId')}
@@ -168,6 +158,7 @@ export function ConnectionSection() {
             </span>
           }
         />
+        </SettingsList>
       </div>
 
       <div class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">

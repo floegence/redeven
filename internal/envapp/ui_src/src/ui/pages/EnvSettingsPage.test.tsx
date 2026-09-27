@@ -588,7 +588,18 @@ describe('EnvSettingsPage', () => {
     const renderedNavLabels = Array.from(host.querySelectorAll('[data-settings-nav-item]'))
       .map((node) => node.textContent?.trim() ?? '')
       .filter((label) => navLabels.includes(label));
-    expect(renderedNavLabels).toEqual(navLabels);
+    expect(renderedNavLabels).toEqual([
+      'Connection',
+      'Runtime Status',
+      'Shell & Workspace',
+      'Codespaces & Tooling',
+      'Permission Policy',
+      'Flower',
+      'Skills',
+      'Config File',
+      'Logging',
+      'Debug Console',
+    ]);
     expect(host.querySelector('[data-settings-nav-item="config"]')?.getAttribute('aria-current')).toBe('page');
     expect(host.querySelector('[data-settings-nav-item="connection"]')?.hasAttribute('aria-current')).toBe(false);
     const settingsSidebar = host.querySelector('.floe-settings-layout__sidebar');
@@ -600,6 +611,8 @@ describe('EnvSettingsPage', () => {
     expect(host.textContent).not.toContain('System default');
 
     const diagnosticsGroup = host.querySelector('[data-settings-group="diagnostics"]');
+    expect(diagnosticsGroup?.querySelector('[data-settings-nav-item="config"]')).not.toBeNull();
+    expect(diagnosticsGroup?.querySelector('[data-settings-nav-item="logging"]')).not.toBeNull();
     expect(diagnosticsGroup?.querySelector('[data-settings-nav-item="debug_console"]')).not.toBeNull();
 
     const runtimeGroup = host.querySelector('[data-settings-group="runtime_configuration"]');
@@ -611,7 +624,7 @@ describe('EnvSettingsPage', () => {
     expect(responsiveBody?.classList.contains('floe-settings-layout')).toBe(true);
     expect(responsiveBody?.querySelector('.floe-settings-layout__mobile')).toBeNull();
     expect(host.querySelector('.redeven-settings-header select')).not.toBeNull();
-    expect(runtimeGroup?.querySelector('[data-settings-nav-item="logging"]')).not.toBeNull();
+    expect(runtimeGroup?.querySelector('[data-settings-nav-item="logging"]')).toBeNull();
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
     const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-nav-item]') ?? []).map((node) => node.getAttribute('data-settings-nav-item'));
