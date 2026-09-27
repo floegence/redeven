@@ -42,6 +42,9 @@ and Snap Chromium through fixed installation adapters. Clients submit an opaque
 installation ID, never an executable path. Detection alone neither stages a
 connection nor launches the browser. One Runtime hub owns all live profiles;
 per-installation Native Messaging endpoints only forward to that hub.
+Native and Snap Chromium may coexist. A Snap executable on `PATH` must not hide
+a separately installed native browser; Ubuntu's transitional Snap launcher is
+not itself another native installation.
 
 Snap extension assets, the private Unix socket and the exact current static Runtime
 bridge live under the user's Snap Chromium common data directory. Bridge deployment

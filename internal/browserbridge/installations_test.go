@@ -16,7 +16,9 @@ func TestBrowserDiscoveryRecognizesSnapWithoutClaimingNativeChromium(t *testing.
 		}
 		return "", errors.New("missing")
 	}
-	items := discoverInstallations("linux", "/home/alice", lookup, func(string) bool { return true })
+	items := discoverInstallations("linux", "/home/alice", lookup, func(name string) bool {
+		return name == "/snap/bin/chromium" || name == "/snap/chromium/current/meta/snap.yaml"
+	})
 	var installed []Installation
 	for _, item := range items {
 		if item.Installed {
@@ -32,6 +34,28 @@ func TestBrowserDiscoveryRecognizesSnapWithoutClaimingNativeChromium(t *testing.
 	}
 	if item.ID == item.Executable || !filepath.IsAbs(item.ManifestDirectory) {
 		t.Fatal("untrusted installation identity")
+	}
+}
+
+func TestBrowserDiscoveryKeepsNativeChromiumAlongsideSnap(t *testing.T) {
+	lookup := func(name string) (string, error) {
+		switch name {
+		case "chromium":
+			return "/snap/bin/chromium", nil
+		case "chromium-browser":
+			return "/usr/bin/chromium-browser", nil
+		default:
+			return "", errors.New("missing")
+		}
+	}
+	items := discoverInstallations("linux", "/home/alice", lookup, func(name string) bool {
+		return name == "/snap/bin/chromium" || name == "/snap/chromium/current/meta/snap.yaml" || name == "/usr/lib/chromium-browser/chromium-browser"
+	})
+	if !items[1].Installed || items[1].Kind != "chromium" || items[1].Executable != "/usr/bin/chromium-browser" {
+		t.Fatalf("native Chromium disappeared after Snap installation: %+v", items)
+	}
+	if !items[2].Installed || items[1].ID == items[2].ID {
+		t.Fatalf("coexisting browser installations must remain independently selectable: %+v", items)
 	}
 }
 
