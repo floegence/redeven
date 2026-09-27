@@ -1114,7 +1114,7 @@
       "browserSettings": "ブラウザー設定",
       "browserCheckingCache": "Desktop のキャッシュを確認中…",
       "browserDesktopDownloading": "Desktop にダウンロード中…",
-      "browserBackgroundHint": "このパネルを閉じてもインストールは続きます。Desktop とこの環境の接続を維持してください。",
+      "browserBackgroundHint": "このパネルを閉じてもインストールは続きます。",
       "browserCancelInstallation": "インストールをキャンセル",
       "browserDesktopDownloadFailed": "Desktop でブラウザーをダウンロードできませんでした。接続を確認して再試行するか、環境でダウンロードしてください。",
       "browserDesktopUploadFailed": "アップロードが完了しませんでした。再接続して再試行すると、検証済みのダウンロードが再利用されます。",

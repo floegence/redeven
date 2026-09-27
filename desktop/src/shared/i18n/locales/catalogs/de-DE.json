@@ -1114,7 +1114,7 @@
       "browserSettings": "Browsereinstellungen",
       "browserCheckingCache": "Desktop-Cache wird geprüft…",
       "browserDesktopDownloading": "Download auf Desktop…",
-      "browserBackgroundHint": "Die Installation läuft nach dem Schließen dieses Bereichs weiter. Halten Sie Desktop mit dieser Umgebung verbunden.",
+      "browserBackgroundHint": "Die Installation läuft nach dem Schließen dieses Bereichs weiter.",
       "browserCancelInstallation": "Installation abbrechen",
       "browserDesktopDownloadFailed": "Desktop konnte den Browser nicht herunterladen. Prüfen Sie die Verbindung und versuchen Sie es erneut oder laden Sie ihn in der Umgebung herunter.",
       "browserDesktopUploadFailed": "Der Upload wurde nicht abgeschlossen. Verbinden Sie sich erneut und wiederholen Sie den Vorgang; der geprüfte Download wird wiederverwendet.",

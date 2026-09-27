@@ -41,7 +41,7 @@ export const computerUseEnUS = {
   browserInstallHint: "Choose how to install it, or turn it off to stop installation prompts.",
   browserCheckingCache: "Checking Desktop cache…",
   browserDesktopDownloading: "Downloading to Desktop…",
-  browserBackgroundHint: "Installation continues when you close this panel. Keep Desktop and this environment connected.",
+  browserBackgroundHint: "Installation continues when you close this panel.",
   browserCancelInstallation: "Cancel installation",
   browserDesktopDownloadFailed: "Desktop could not download the browser. Check your connection and retry, or download in the environment.",
   browserDesktopUploadFailed: "Upload could not finish. Reconnect and retry; Desktop will reuse the verified download.",

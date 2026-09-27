@@ -1114,7 +1114,7 @@
       "browserSettings": "浏览器设置",
       "browserCheckingCache": "正在检查 Desktop 缓存…",
       "browserDesktopDownloading": "正在下载到 Desktop…",
-      "browserBackgroundHint": "关闭此面板后安装仍会继续。请保持 Desktop 与此环境连接。",
+      "browserBackgroundHint": "关闭此面板后安装仍会继续。",
       "browserCancelInstallation": "取消安装",
       "browserDesktopDownloadFailed": "Desktop 未能下载浏览器。请检查网络后重试，或选择在运行环境中下载。",
       "browserDesktopUploadFailed": "上传未完成。请重新连接后重试，Desktop 会复用已校验的下载文件。",

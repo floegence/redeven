@@ -6013,7 +6013,7 @@
       "browserSettings": "Ajustes del navegador",
       "browserCheckingCache": "Comprobando la caché de Desktop…",
       "browserDesktopDownloading": "Descargando en Desktop…",
-      "browserBackgroundHint": "La instalación continúa al cerrar este panel. Mantén Desktop conectado a este entorno.",
+      "browserBackgroundHint": "La instalación continúa al cerrar este panel.",
       "browserCancelInstallation": "Cancelar instalación",
       "browserDesktopDownloadFailed": "Desktop no pudo descargar el navegador. Comprueba la conexión y reinténtalo, o descárgalo en el entorno.",
       "browserDesktopUploadFailed": "La subida no se completó. Vuelve a conectarte e inténtalo de nuevo; se reutilizará la descarga verificada.",

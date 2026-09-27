@@ -1114,7 +1114,7 @@
       "browserSettings": "Configurações do navegador",
       "browserCheckingCache": "Verificando o cache do Desktop…",
       "browserDesktopDownloading": "Baixando no Desktop…",
-      "browserBackgroundHint": "A instalação continua após fechar este painel. Mantenha o Desktop conectado a este ambiente.",
+      "browserBackgroundHint": "A instalação continua após fechar este painel.",
       "browserCancelInstallation": "Cancelar instalação",
       "browserDesktopDownloadFailed": "O Desktop não conseguiu baixar o navegador. Verifique a conexão e tente novamente ou baixe no ambiente.",
       "browserDesktopUploadFailed": "O envio não foi concluído. Reconecte e tente novamente; o download verificado será reutilizado.",
