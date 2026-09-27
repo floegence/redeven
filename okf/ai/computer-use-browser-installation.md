@@ -19,6 +19,12 @@ partial package, and failures offer an explicit retry or alternative source.
 
 # Contract
 
+Installation input prompts must satisfy the published Floret `InputRequest`
+contract, including its 400-character question limit. The setup panel owns
+detailed instructions. Prompt validation and a production continuation test
+must both pass; invalid input must never turn an installation prerequisite into
+an unknown-effect failure.
+
 ## User contract
 
 The shared Browser and desktop dialog opens Browser settings for this environment.
