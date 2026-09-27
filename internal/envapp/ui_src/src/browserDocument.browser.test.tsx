@@ -80,8 +80,8 @@ for (const failed of [false, true]) for (const [dark, surfaceStyle, width] of [[
     frame.contentDocument!.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click();
   }
   await vi.waitFor(() => expect(frame.contentDocument?.querySelectorAll('.redeven-browser-source-card')).toHaveLength(2));
-  await vi.waitFor(() => expect(frame.contentDocument!.querySelector<HTMLButtonElement>('.redeven-browser-source-card[aria-label="Built-in browser"]')!.disabled).toBe(false));
-  frame.contentDocument!.querySelector<HTMLButtonElement>('.redeven-browser-source-card[aria-label="Built-in browser"]')!.click();
+  await vi.waitFor(() => expect(frame.contentDocument!.querySelector<HTMLButtonElement>('.redeven-browser-source-card-action[title="Built-in browser"]')!.disabled).toBe(false));
+  frame.contentDocument!.querySelector<HTMLButtonElement>('.redeven-browser-source-card-action[title="Built-in browser"]')!.click();
   await vi.waitFor(() => expect(Array.from(frame.contentDocument!.querySelectorAll('button')).find(button => button.textContent === 'Create profile')).toBeTruthy());
   Array.from(frame.contentDocument!.querySelectorAll('button')).find(button => button.textContent === 'Create profile')!.click();
   await vi.waitFor(() => expect(frame.contentDocument?.querySelector('.redeven-browser-sources-dialog input')).toBeTruthy());

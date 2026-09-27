@@ -32,6 +32,10 @@ The chooser reveals connection setup, page selection and profile administration
 only after the corresponding source is chosen. Profile creation is disclosed on
 request; advanced debugging endpoints occupy a secondary step. Each step shows
 only its applicable actions, with one concise body description and local errors.
+Source cards keep their action labels on one line and associate separate, wrapping
+descriptions through accessible description references. The whole card remains
+one pointer target; narrow layouts must keep both cards and their explanatory
+text inside the dialog rather than hiding overflow.
 Successful source preferences follow the [persistence contract](remote-browser-persistence.md).
 A missing or invalid preference returns to selection without starting a browser.
 First use is a neutral selection state, including after the chooser is dismissed;

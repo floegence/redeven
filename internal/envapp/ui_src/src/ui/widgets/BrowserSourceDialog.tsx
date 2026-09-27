@@ -1,5 +1,5 @@
 import '../../styles/browserSources.css';
-import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
 import { Button, Dialog, Select } from '@floegence/floe-webapp-core/ui';
 import { ChevronRight, Globe, Plus, Refresh, Settings } from '@floegence/floe-webapp-core/icons';
 import { FlowerChromeConnection } from '../../../../../flower_ui/src/FlowerChromeConnection';
@@ -23,6 +23,7 @@ export function BrowserSourceDialog(props: {
   onSelect(selection: BrowserSourceSelection, signal: AbortSignal): void | Promise<void>;
 }) {
   const management = props.service.management;
+  const descriptionID = createUniqueId();
   const copy = () => props.messages.computer;
   const [page, setPage] = createSignal<'sources' | 'personal' | 'managed' | 'advanced' | 'installation' | 'chrome'>('sources');
   const [profiles, setProfiles] = createSignal<Array<{ id: string; name: string }>>([]);
@@ -159,25 +160,25 @@ export function BrowserSourceDialog(props: {
     <Show when={error()}><p role="alert" class="mb-3 text-[length:var(--floe-type-body)] text-destructive">{error()}</p></Show>
     <Show when={page() === 'sources'}>
       <div class="redeven-browser-source-cards" aria-busy={busy()}>
-        <button type="button" class="redeven-browser-source-card" aria-label={props.messages.product.chromeSource} disabled={busy()} onClick={() => changePage(chrome()?.profiles.length ? 'personal' : 'chrome')}>
-          <span class="redeven-browser-source-card-icon"><Globe class="size-5" /></span>
-          <span class="redeven-browser-source-card-content">
-            <span class="redeven-browser-source-card-title">{props.messages.product.chromeSource}<span class="redeven-browser-source-badge">{preference()?.installation_id ? props.messages.product.previouslyUsed : props.messages.product.recommended}</span></span>
-            <span class="redeven-browser-source-card-description">{copy().chromeOnlineHint}</span>
+        <div class="redeven-browser-source-card" classList={{ 'is-disabled': busy() }}>
+          <span class="redeven-browser-source-card-icon" aria-hidden="true"><Globe class="size-5" /></span>
+          <div class="redeven-browser-source-card-content">
+            <div class="redeven-browser-source-card-title"><button type="button" class="redeven-browser-source-card-action" title={props.messages.product.chromeSource} aria-describedby={`${descriptionID}-personal`} disabled={busy()} onClick={() => changePage(chrome()?.profiles.length ? 'personal' : 'chrome')}>{props.messages.product.chromeSource}</button><span class="redeven-browser-source-badge">{preference()?.installation_id ? props.messages.product.previouslyUsed : props.messages.product.recommended}</span></div>
+            <p id={`${descriptionID}-personal`} class="redeven-browser-source-card-description">{copy().chromeOnlineHint}</p>
             <Show when={preferredInstallation()}><span class="redeven-browser-source-card-status"><span classList={{ 'is-connected': preferredInstallation()?.connected }} />{preferredInstallation()!.name}</span></Show>
             <Show when={chromeError()}><span class="text-xs text-destructive">{copy().loadFailed}</span></Show>
-          </span><ChevronRight class="size-4 shrink-0 text-muted-foreground" />
-        </button>
-        <button type="button" class="redeven-browser-source-card" aria-label={props.messages.product.managedSource} disabled={busy()} onClick={chooseManaged}>
-          <span class="redeven-browser-source-card-icon"><ActivityBarBrowserIcon class="size-5" /></span>
-          <span class="redeven-browser-source-card-content">
-            <span class="redeven-browser-source-card-title">{props.messages.product.managedSource}<Show when={preference() && !preference()?.installation_id}><span class="redeven-browser-source-badge">{props.messages.product.previouslyUsed}</span></Show></span>
-            <span class="redeven-browser-source-card-description">{copy().profileHint}</span>
+          </div><ChevronRight class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </div>
+        <div class="redeven-browser-source-card" classList={{ 'is-disabled': busy() }}>
+          <span class="redeven-browser-source-card-icon" aria-hidden="true"><ActivityBarBrowserIcon class="size-5" /></span>
+          <div class="redeven-browser-source-card-content">
+            <div class="redeven-browser-source-card-title"><button type="button" class="redeven-browser-source-card-action" title={props.messages.product.managedSource} aria-describedby={`${descriptionID}-managed`} disabled={busy()} onClick={chooseManaged}>{props.messages.product.managedSource}</button><Show when={preference() && !preference()?.installation_id}><span class="redeven-browser-source-badge">{props.messages.product.previouslyUsed}</span></Show></div>
+            <p id={`${descriptionID}-managed`} class="redeven-browser-source-card-description">{copy().profileHint}</p>
             <Show when={profileError()}><span class="text-xs text-destructive">{copy().loadFailed}</span></Show>
-          </span><ChevronRight class="size-4 shrink-0 text-muted-foreground" />
-        </button>
+          </div><ChevronRight class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </div>
       </div>
-      <div class="redeven-browser-source-advanced"><Button size="sm" variant="ghost" onClick={() => changePage('advanced')}>{copy().advanced}<ChevronRight class="size-3.5 shrink-0" /></Button></div>
+      <div class="redeven-browser-source-advanced"><Button size="sm" variant="ghost" title={copy().advanced} onClick={() => changePage('advanced')}><span class="truncate">{copy().advanced}</span><ChevronRight class="size-3.5 shrink-0" /></Button></div>
     </Show>
     <Show when={page() === 'personal'}>
       <div class="redeven-browser-source-heading">
