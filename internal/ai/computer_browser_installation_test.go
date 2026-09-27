@@ -21,6 +21,9 @@ func TestComputerMissingBrowserRequestsConsentAndDisabledBrowserCannotRun(t *tes
 	if !ok || execution.inputRequired == nil || execution.inputRequired.Questions[0].ID != "browser_install" {
 		t.Fatalf("missing canonical consent: %#v", value)
 	}
+	if err := execution.inputRequired.Validate(); err != nil {
+		t.Fatalf("browser consent violates the published Floret input contract: %v", err)
+	}
 	if state := host.browserInstallation.Snapshot(); state.State != "not_installed" || state.OperationID != "" {
 		t.Fatalf("discovery started installation: %+v", state)
 	}
