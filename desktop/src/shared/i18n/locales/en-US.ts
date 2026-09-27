@@ -1092,6 +1092,7 @@ export const enUS = {
     unavailableTrigger: '{label} is unavailable. Show recovery options.',
   },
   environmentConnection: {
+    addressActions: 'Actions',
     filterAddresses: "Filter addresses",
     clearAddressFilter: "Clear address filter",
     noMatchingAddresses: "No matching addresses",

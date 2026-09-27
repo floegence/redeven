@@ -2918,6 +2918,7 @@
     "passwordHelp": "密码仅保存在此设备，供自动检测使用。连接时临时输入的密码不会保存。"
   },
   "environmentConnection": {
+    "addressActions": "操作",
     "filterAddresses": "筛选地址",
     "clearAddressFilter": "清除地址筛选",
     "noMatchingAddresses": "没有匹配的地址",

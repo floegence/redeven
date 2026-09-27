@@ -2922,6 +2922,7 @@
     "passwordHelp": "Enregistré uniquement sur cet appareil pour les vérifications automatiques. Les mots de passe saisis à la demande lors de la connexion ne sont pas enregistrés."
   },
   "environmentConnection": {
+    "addressActions": "Actions",
     "filterAddresses": "Filtrer les adresses",
     "clearAddressFilter": "Effacer le filtre des adresses",
     "noMatchingAddresses": "Aucune adresse correspondante",

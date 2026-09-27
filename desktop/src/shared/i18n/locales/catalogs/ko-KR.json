@@ -2918,6 +2918,7 @@
     "passwordHelp": "자동 확인을 위해 이 기기에만 저장됩니다. 연결할 때 입력 창에 입력한 비밀번호는 저장되지 않습니다."
   },
   "environmentConnection": {
+    "addressActions": "작업",
     "filterAddresses": "주소 필터링",
     "clearAddressFilter": "주소 필터 지우기",
     "noMatchingAddresses": "일치하는 주소가 없습니다",

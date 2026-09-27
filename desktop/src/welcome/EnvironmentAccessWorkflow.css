@@ -70,8 +70,6 @@
 }
 
 
-.access-workflow .redeven-address-group { padding-block: .5rem; }
-.access-workflow .redeven-address-list { margin-top: .25rem; }
 .access-workflow .two-factor-heading h3:focus { outline: none; }
 
 /* The overview is the landing surface for access settings. Keep the current
@@ -90,16 +88,15 @@
   background: transparent;
 }
 .access-workflow .redeven-settings-connections--summary {
-  padding: 0 17px;
-  border: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--foreground) 9%, var(--background));
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 .access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row {
   grid-template-columns: 7rem minmax(0, 1fr) auto;
   align-items: center;
   column-gap: .75rem;
-  padding-block: 14px;
+  padding: 14px 17px;
 }
 .access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row .redeven-card-endpoint-content {
   grid-column: 2;
@@ -112,8 +109,9 @@
 .access-workflow .redeven-settings-connections--summary .redeven-card-endpoint-value {
   font-size: var(--floe-type-control);
 }
-.access-workflow .redeven-settings-connections--summary .redeven-address-group--summary {
-  padding-block: 14px;
+.access-workflow .redeven-settings-connections--summary .redeven-address-group {
+  --redeven-address-background: color-mix(in srgb, var(--foreground) 9%, var(--background));
+  --redeven-address-radius: 14px;
 }
 .access-workflow .redeven-settings-connections--summary .redeven-address-summary {
   display: flex;
@@ -121,8 +119,6 @@
   justify-content: space-between;
   gap: .75rem;
   width: 100%;
-  min-height: 28px;
-  padding: 0;
   color: inherit;
   cursor: pointer;
   list-style: none;
@@ -140,19 +136,11 @@
 .access-workflow .redeven-settings-connections--summary .redeven-address-group--summary[open] .redeven-address-summary-chevron {
   transform: rotate(90deg);
 }
-.access-workflow .redeven-settings-connections--summary .redeven-address-summary-content {
-  padding: .625rem 0 .125rem 7.75rem;
-}
-.access-workflow .redeven-settings-connections--summary .redeven-address-summary-content .redeven-address-list {
-  margin-top: .5rem;
-}
+.access-workflow .redeven-settings-connections--summary .redeven-address-summary-content { padding: 0; }
 @media (max-width: 560px) {
   .access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row {
     grid-template-columns: 5.5rem minmax(0, 1fr) auto;
     column-gap: .5rem;
-  }
-  .access-workflow .redeven-settings-connections--summary .redeven-address-summary-content {
-    padding-left: 6rem;
   }
 }
 @media (max-width: 420px) {
@@ -166,9 +154,6 @@
   .access-workflow .redeven-settings-connections--summary > .redeven-card-endpoint-row .redeven-card-endpoint-content {
     grid-column: 1;
     grid-row: 2;
-  }
-  .access-workflow .redeven-settings-connections--summary .redeven-address-summary-content {
-    padding-left: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {

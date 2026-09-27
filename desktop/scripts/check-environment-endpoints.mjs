@@ -34,10 +34,16 @@ try {
         .map(animation => animation.finished.catch(() => {})));
     });
   }
+  async function expandAddressGroups(surface) {
+    for (const group of await surface.locator('.redeven-address-group--summary').all()) {
+      if (!await group.evaluate(element => element.open)) await group.locator('summary').click();
+    }
+    await settleDisclosure();
+  }
   async function assertActionAlignment(surface) {
-    const offsets = await surface.locator('.redeven-card-endpoint-row').evaluateAll(rows => rows.flatMap(row => {
+    const offsets = await surface.locator('.redeven-card-endpoint-row:visible').evaluateAll(rows => rows.flatMap(row => {
       const actions = row.querySelectorAll('.redeven-endpoint-action');
-      return actions.length ? [Math.abs(row.getBoundingClientRect().right - actions[actions.length - 1].getBoundingClientRect().right)] : [];
+      return actions.length ? [Math.abs(row.getBoundingClientRect().right - actions[actions.length - 1].getBoundingClientRect().right - (row.dataset.endpointKind === 'address' ? 8 : 0))] : [];
     }));
     assert.ok(offsets.every(offset => offset < 1), 'available actions stay on the same trailing edge');
   }
@@ -97,7 +103,7 @@ try {
       const dialog = page.getByRole('dialog');
       const body = dialog.locator('.environment-settings-scroll:visible');
       await body.waitFor();
-      await settleDisclosure();
+      await expandAddressGroups(dialog);
       assert.ok(await body.evaluate(element => element.scrollHeight > element.clientHeight), 'wheel chaining requires an overflowing settings body');
       const backgroundTop = await page.evaluate(() => document.scrollingElement.scrollTop);
       assert.ok(await page.evaluate(() => document.scrollingElement.scrollHeight > innerHeight), 'background can reveal scroll bleed');
@@ -187,9 +193,9 @@ try {
     const readingAlignment = await popup.locator('.redeven-card-endpoint-row:not([data-endpoint-kind="address"])').evaluateAll(rows => rows.map(row => {
       const label = row.querySelector('.redeven-card-endpoint-label');
       const value = row.querySelector('.redeven-endpoint-scope-title, .redeven-card-endpoint-value');
-      return Math.abs(label.getBoundingClientRect().left - value.getBoundingClientRect().left);
+      return { labelRight: label.getBoundingClientRect().right, valueLeft: value.getBoundingClientRect().left };
     }));
-    assert.ok(readingAlignment.every(offset => offset < 1), 'connection labels and values share one reading edge');
+    assert.ok(readingAlignment.every(row => row.labelRight < row.valueLeft && Math.abs(row.valueLeft - readingAlignment[0].valueLeft) < 1), 'connection facts share aligned label and value columns');
     assert.ok((await popup.innerText()).includes(name));
     const network = name === 'Network';
     assert.equal(await popup.getByLabel('分享连接').count(), network ? 1 : 0);
@@ -232,6 +238,7 @@ try {
     const dialog = page.getByRole('dialog');
     await dialog.waitFor();
     await settleDisclosure();
+    await expandAddressGroups(dialog);
     await assertAddressHelp(dialog, `${output}/help-settings-${name.replaceAll(' ', '-')}.png`);
     await assertActionAlignment(dialog);
     assert.equal(await dialog.getByLabel('分享连接').count(), name === 'Network' ? 1 : 0);
@@ -279,6 +286,7 @@ try {
   await stableScreenshot(`${output}/narrow.png`);
   await page.keyboard.press('Escape');
   await page.locator('[data-environment="Network"]').getByRole('button', { name: '环境设置' }).click();
+  await expandAddressGroups(page.getByRole('dialog'));
   const settingsConnection = page.locator('.redeven-settings-connections');
   const addressRow = settingsConnection.locator('[data-endpoint-kind="address"]').last();
   await addressRow.waitFor();
@@ -315,12 +323,12 @@ try {
   }
   const opening = await frames('[data-environment="Network"] [aria-haspopup="dialog"]');
   assert.ok(opening.some(frame => frame && frame.opacity > 0 && frame.opacity < 1), 'opening interpolates opacity');
-  assert.ok(opening.every(frame => !frame || Math.abs(frame.width - 352) < 1), 'opening preserves measured width');
+  assert.ok(opening.every(frame => !frame || Math.abs(frame.width - 416) < 1), 'opening preserves measured width');
   assert.equal(await page.locator('.redeven-endpoints-surface').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)', 'only one material layer');
   const expanded = await frames('.redeven-endpoints-popover [aria-label="分享连接"]');
   const expandedHeights = expanded.filter(Boolean).map(frame => frame.height);
   assert.ok(new Set(expandedHeights.map(height => Math.round(height))).size > 2, 'sharing expands through intermediate heights');
-  assert.ok(expanded.every(frame => frame && Math.abs(frame.width - 352) < 1), 'sharing never changes panel width');
+  assert.ok(expanded.every(frame => frame && Math.abs(frame.width - 416) < 1), 'sharing never changes panel width');
   const collapsed = await frames('.redeven-endpoints-popover [aria-label="分享连接"]');
   assert.ok(new Set(collapsed.filter(Boolean).map(frame => Math.round(frame.height))).size > 2, 'sharing collapses through intermediate heights');
   assert.equal(await page.locator('.redeven-endpoint-qr-image').count(), 0);
@@ -419,7 +427,7 @@ try {
     const viewport = group.locator('.redeven-address-viewport');
     await viewport.waitFor();
     const dimensions = await viewport.evaluate(el => ({ height: el.clientHeight, content: el.scrollHeight, overflow: el.scrollWidth - el.clientWidth }));
-    assert.ok(dimensions.height <= 192 && dimensions.content > dimensions.height * 10, 'many addresses use a bounded list');
+    assert.ok(dimensions.height <= 224 && dimensions.content > dimensions.height * 10, 'many addresses use a bounded list');
     assert.equal(dimensions.overflow, 0);
     assert.equal(await viewport.locator('[data-endpoint-id]').count(), count + 1, 'all addresses remain available');
     assert.equal(await group.locator('.sr-only').last().textContent(), '网络地址，能否访问取决于你的网络连接。');
@@ -451,6 +459,7 @@ try {
     await page.keyboard.press('Escape'); await popup.waitFor({ state: 'detached' });
     await page.locator('[data-environment="Network"]').getByRole('button', { name: '环境设置' }).click();
     const dialog = page.getByRole('dialog');
+    await expandAddressGroups(dialog);
     const settingsGroup = dialog.locator('[data-address-scope="network"]');
     const settingsViewport = settingsGroup.locator('.redeven-address-viewport');
     await settleDisclosure();
@@ -464,6 +473,7 @@ try {
     await dialog.locator('.environment-access-advanced summary').click();
     await dialog.locator('#local-ui-port').fill('25000');
     await dialog.getByRole('button', { name: '返回概览', exact: true }).click();
+    await expandAddressGroups(dialog);
     await settingsGroup.getByRole('searchbox', { name: '筛选地址' }).fill('2001:db8');
     assert.equal(await settingsViewport.locator('.redeven-card-endpoint-value').innerText(), ipv6);
     const after = await dialog.boundingBox();

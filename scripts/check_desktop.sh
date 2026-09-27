@@ -74,6 +74,7 @@ main() {
       node scripts/check-environment-settings.mjs
       node scripts/check-settings-restart.mjs
       node scripts/check-environment-endpoints.mjs
+      node scripts/check-connection-table-layout.mjs
       node scripts/check-welcome-cards.mjs
       node scripts/check-welcome-tab-motion.mjs
       node scripts/check-welcome-toolbar.mjs
