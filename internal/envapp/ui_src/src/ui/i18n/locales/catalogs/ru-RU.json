@@ -6116,7 +6116,7 @@
       "browserSettings": "Настройки браузера",
       "browserCheckingCache": "Проверка кеша Desktop…",
       "browserDesktopDownloading": "Скачивание в Desktop…",
-      "browserBackgroundHint": "Установка продолжится после закрытия этой панели. Сохраняйте подключение Desktop к этой среде.",
+      "browserBackgroundHint": "Установка продолжится после закрытия этой панели.",
       "browserCancelInstallation": "Отменить установку",
       "browserDesktopDownloadFailed": "Desktop не удалось скачать браузер. Проверьте подключение и повторите попытку или скачайте его в среде.",
       "browserDesktopUploadFailed": "Отправка не завершена. Подключитесь снова и повторите попытку; проверенный файл будет использован повторно.",

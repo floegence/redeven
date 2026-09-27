@@ -6013,7 +6013,7 @@
       "browserSettings": "브라우저 설정",
       "browserCheckingCache": "Desktop 캐시 확인 중…",
       "browserDesktopDownloading": "Desktop에 다운로드 중…",
-      "browserBackgroundHint": "이 패널을 닫아도 설치는 계속됩니다. Desktop과 이 환경의 연결을 유지하세요.",
+      "browserBackgroundHint": "이 패널을 닫아도 설치는 계속됩니다.",
       "browserCancelInstallation": "설치 취소",
       "browserDesktopDownloadFailed": "Desktop에서 브라우저를 다운로드하지 못했습니다. 연결을 확인하고 다시 시도하거나 환경에서 다운로드하세요.",
       "browserDesktopUploadFailed": "업로드가 완료되지 않았습니다. 다시 연결한 후 재시도하면 검증된 다운로드 파일을 재사용합니다.",

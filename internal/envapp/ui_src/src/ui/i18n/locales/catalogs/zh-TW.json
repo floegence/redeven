@@ -6013,7 +6013,7 @@
       "browserSettings": "瀏覽器設定",
       "browserCheckingCache": "正在檢查 Desktop 快取…",
       "browserDesktopDownloading": "正在下載至 Desktop…",
-      "browserBackgroundHint": "關閉此面板後仍會繼續安裝。請保持 Desktop 與此環境連線。",
+      "browserBackgroundHint": "關閉此面板後仍會繼續安裝。",
       "browserCancelInstallation": "取消安裝",
       "browserDesktopDownloadFailed": "Desktop 無法下載瀏覽器。請檢查網路後重試，或選擇在執行環境中下載。",
       "browserDesktopUploadFailed": "上傳未完成。請重新連線後重試，Desktop 會重用已驗證的下載檔案。",
