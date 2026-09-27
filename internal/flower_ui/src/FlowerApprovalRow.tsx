@@ -42,6 +42,7 @@ export function FlowerApprovalRow(props: Readonly<{
   copied: boolean;
   subtaskLabel: string;
   readingProps?: JSX.HTMLAttributes<HTMLDivElement>;
+  scrollViewportProps?: Omit<JSX.HTMLAttributes<HTMLDivElement>, 'style'> & { style?: JSX.CSSProperties };
   onCopy: () => void;
   onDecide: (approved: boolean) => void;
 }>) {
@@ -117,7 +118,7 @@ export function FlowerApprovalRow(props: Readonly<{
           <For each={props.presentation.details}>{detail => <div class="flower-approval-target">{detail}</div>}</For>
         </details>
       </Show>
-      <StatusRegion lines={1} class="text-xs"><Show when={props.status || props.error}>
+      <StatusRegion {...props.scrollViewportProps} lines={1} class="text-xs"><Show when={props.status || props.error}>
         <p id={`${id}-status`} class="flower-approval-status" role={props.error ? 'alert' : 'status'}>{props.error || props.status}</p>
       </Show></StatusRegion>
       <span class="flower-visually-hidden" role="status">{props.submitting ? props.copy.toolApprovalSubmitting : ''}</span>

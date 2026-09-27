@@ -219,14 +219,17 @@ it('selects default Flower permissions with the keyboard and saves the chosen po
 
 it('retains drafts and scroll position when navigating, and saves real settings values', async () => {
   await mount();
+  host.style.height = '480px';
   const panel = await openSection('runtime');
   const home = page.getByPlaceholder('/home/user');
   await home.fill('/workspace/new-home');
   panel.scrollTop = 120;
   const scrollTop = panel.scrollTop;
+  expect(scrollTop).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Logging', exact: true }).click();
   await expect.element(page.getByTestId('settings-section-logging').getByRole('heading', { level: 1 })).toBeVisible();
   await page.getByRole('button', { name: 'Shell & Workspace', exact: true }).click();
+  await expect.element(home).toBeVisible();
   await expect.element(home).toHaveValue('/workspace/new-home');
   expect(panel.scrollTop).toBe(scrollTop);
   await expect.poll(() => fixture.settings().runtime.agent_home_dir).toBe('/workspace/new-home');
@@ -258,7 +261,7 @@ it('switches Flower groups without losing permissions or health access and respe
   await page.getByRole('tab', { name: 'Health & storage', exact: true }).click();
   await expect.element(page.getByText('Flower backups', { exact: true })).toBeVisible();
   const health = host.querySelector('[data-flower-settings-panel="health"]')!;
-  const backupButton = [...health.querySelectorAll('button')].find(button => button.textContent === 'View backups')!;
+  const backupButton = [...health.querySelectorAll('button')].find(button => button.innerText === 'View backups')!;
   expect(backupButton.closest('.floe-setting-row__control')).not.toBeNull();
   await page.screenshot({ path: '../../../dist/settings-design/runtime-settings-health-dark.png' });
   fixture.setCanAdmin(false);

@@ -526,7 +526,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
       >
         <Show when={data() || error()} fallback={<ActivityPageLoading />}>
         <div class="max-w-7xl mx-auto space-y-3 h-full flex flex-col">
-          <StatusRegion lines={4} class="text-xs"><Show when={error()}>
+          <StatusRegion {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} lines={4} class="text-xs"><Show when={error()}>
             <Panel class="border-error/40">
               <PanelContent class="p-3 text-xs">
                 <div class="text-error font-medium">{i18n.t('runtimeMonitor.monitorRequestFailed')}</div>
@@ -698,7 +698,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                 </div>
               </div>
 
-              <StatusRegion lines={2} class="text-xs"><Show when={sessionsError()}>
+              <StatusRegion {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} lines={2} class="text-xs"><Show when={sessionsError()}>
                 <div class="text-[11px] text-error break-words mb-2">{sessionsError()}</div>
               </Show></StatusRegion>
 

@@ -1,3 +1,4 @@
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import {
   StatusRegion,
   Button,
@@ -5369,7 +5370,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               onConfirm={confirmDeleteGroup}
             />
 
-            <StatusRegion lines={2} class="text-xs"><Show when={error()}>
+            <StatusRegion {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} lines={2} class="text-xs"><Show when={error()}>
               <div class="p-2 text-[11px] text-error border-t border-border bg-background/80 break-words">{error()}</div>
             </Show></StatusRegion>
             <Show when={showTerminalStatusBar()}>
