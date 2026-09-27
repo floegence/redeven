@@ -13,12 +13,15 @@ type ConnectionActions = Readonly<{
   copyEnvironmentValue: (value: string, label: string) => Promise<void>;
 }>;
 
+type ConnectionPresentation = 'full' | 'settings-summary';
+
 const ADDRESS_SCOPES = ['this_device', 'network', 'environment_only'] as const;
 
 /** Both connection surfaces own the same grouping, filtering and address actions. */
 export function EnvironmentConnectionRows(props: ConnectionActions & Readonly<{
   environmentID: string;
   rows: readonly DesktopConnectionRow[];
+  presentation?: ConnectionPresentation;
 }>) {
   // Only a different Environment resets interaction state; snapshots and labels do not.
   return <Show when={props.environmentID} keyed>{(_environmentID) => {
@@ -31,12 +34,16 @@ export function EnvironmentConnectionRows(props: ConnectionActions & Readonly<{
     const scopes = createMemo(() => ADDRESS_SCOPES.filter(scope => groups().get(scope)!.length > 0));
     return <>
       <For each={factIDs()}>{id => <ConnectionRow {...props} row={factsByID().get(id)!} />}</For>
-      <For each={scopes()}>{scope => <ConnectionAddressGroup {...props} rows={groups().get(scope)!} />}</For>
+      <For each={scopes()}>{scope => <ConnectionAddressGroup {...props} rows={groups().get(scope)!}
+        compact={props.presentation === 'settings-summary'} />}</For>
     </>;
   }}</Show>;
 }
 
-function ConnectionAddressGroup(props: ConnectionActions & Readonly<{ rows: readonly DesktopConnectionAddress[] }>) {
+function ConnectionAddressGroup(props: ConnectionActions & Readonly<{
+  rows: readonly DesktopConnectionAddress[];
+  compact?: boolean;
+}>) {
   const headingID = createUniqueId();
   const helpLabelID = createUniqueId();
   const helpDescriptionID = createUniqueId();
@@ -73,7 +80,23 @@ function ConnectionAddressGroup(props: ConnectionActions & Readonly<{ rows: read
       </For>
     </div>
   </div>;
-  return <Show when={props.rows[0]}>{first => <section class="redeven-address-group" data-address-scope={first().access_scope}>
+  return <Show when={props.rows[0]}>{first => props.compact && first().access_scope !== 'environment_only' ? (
+    <details class="redeven-address-group redeven-address-group--summary" data-address-scope={first().access_scope}>
+      <summary class="redeven-address-summary">
+        <div class="redeven-address-title">
+          <span id={headingID} class="redeven-card-endpoint-label">{props.i18n.t(first().label_key)}</span>
+        </div>
+        <span class="redeven-address-summary-meta">
+          <span class="redeven-address-count" aria-label={countLabel()}>{term() ? `${props.i18n.formatNumber(visibleIDs().length)} / ${props.i18n.formatNumber(props.rows.length)}` : props.i18n.formatNumber(props.rows.length)}</span>
+          <ChevronRight class="h-3.5 w-3.5 redeven-address-summary-chevron" aria-hidden="true" />
+        </span>
+      </summary>
+      <div class="redeven-address-summary-content">
+        <p class="redeven-card-endpoint-detail">{props.i18n.t(first().detail_key, first().detail_params)}</p>
+        {list}
+      </div>
+    </details>
+  ) : (<section class="redeven-address-group" data-address-scope={first().access_scope}>
     <div class="redeven-address-heading">
       <div class="redeven-address-title">
         <span id={headingID} class="redeven-card-endpoint-label">{props.i18n.t(first().label_key)}</span>
@@ -104,7 +127,7 @@ function ConnectionAddressGroup(props: ConnectionActions & Readonly<{ rows: read
         </div>
       </details>
     </Show>
-  </section>}</Show>;
+  </section>)}</Show>;
 }
 
 function ConnectionRow(props: ConnectionActions & Readonly<{ row: DesktopConnectionRow }>) {

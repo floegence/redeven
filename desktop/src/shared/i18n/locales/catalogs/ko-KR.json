@@ -2887,6 +2887,8 @@
     "profileInvalid": "저장된 CodeSpace 브라우저 프로필을 읽을 수 없습니다. codespace-profiles.json을 복원한 후 이 CodeSpace를 다시 여세요."
   },
   "sshSettings": {
+    "nameHelp": "Desktop에 표시되는 환경 이름입니다.",
+    "destinationHelp": "~/.ssh/config의 호스트 별칭을 사용할 수 있습니다.",
     "title": "환경 설정",
     "connection": "연결",
     "connectionHelp": "연결 방식 안내",

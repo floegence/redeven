@@ -35,7 +35,7 @@ type MountedDialog = Readonly<{
   changes: string[];
 }>;
 
-function mountDialog(initialTheme = 'system'): MountedDialog {
+async function mountDialog(initialTheme = 'system', expandPreviews = true): Promise<MountedDialog> {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const [selectedTheme, setSelectedTheme] = createSignal(initialTheme);
@@ -64,6 +64,8 @@ function mountDialog(initialTheme = 'system'): MountedDialog {
       onWorkIndicatorEnabledChange={() => undefined}
     />
   ), host);
+  await expect.poll(() => document.querySelectorAll('[data-terminal-preview]').length).toBe(2);
+  if (expandPreviews) for (const details of document.querySelectorAll<HTMLDetailsElement>('[data-terminal-preview]')) details.open = true;
   return { dispose, selectedTheme, selectedFont, changes };
 }
 
@@ -102,10 +104,25 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
     await page.viewport(1280, 720);
   });
 
+  it('shows current choices before the optional theme and font galleries', async () => {
+    await page.viewport(1280, 900);
+    const mounted = await mountDialog('system', false); cleanup = mounted.dispose;
+    await settle();
+    const galleries = [...document.querySelectorAll<HTMLDetailsElement>('[data-terminal-preview]')];
+    expect(galleries).toHaveLength(2);
+    expect(galleries.every(details => !details.open)).toBe(true);
+    const theme = galleries[0].querySelector('summary')!;
+    await userEvent.click(theme);
+    expect(galleries[0].open).toBe(true);
+    await page.screenshot({ path: '../../../dist/settings-design/terminal-settings-gallery.png' });
+    await userEvent.click(theme);
+    await page.screenshot({ path: '../../../dist/settings-design/terminal-settings-overview.png' });
+  });
+
   it('previews and selects all four packaged fonts with the actual loaded family on mobile', async () => {
     layoutState.mobile = true;
     await page.viewport(360, 780);
-    const mounted = mountDialog();
+    const mounted = await mountDialog();
     cleanup = mounted.dispose;
     await expect.poll(() => document.querySelector('[data-terminal-font-group="bundled"]')?.getAttribute('aria-busy')).toBe('false');
     const choices = [
@@ -126,7 +143,7 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
   });
 
   it('uses one focus border for terminal settings inputs', async () => {
-    const mounted = mountDialog(); cleanup = mounted.dispose;
+    const mounted = await mountDialog(); cleanup = mounted.dispose;
     await settle();
     const inputs = document.querySelectorAll<HTMLInputElement>('input:not([type="radio"]):not([type="checkbox"])');
     expect(inputs.length).toBeGreaterThan(0);
@@ -135,7 +152,7 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
 
   it('renders a keyboard-operable 21-theme desktop gallery with one scroll region', async () => {
     await page.viewport(1280, 900);
-    const mounted = mountDialog();
+    const mounted = await mountDialog();
     cleanup = mounted.dispose;
     await settle();
 
@@ -145,7 +162,7 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
     expect(radios).toHaveLength(TERMINAL_THEME_DEFINITIONS.length + 1);
     expect(new Set(radios.map((radio) => radio.value)).size).toBe(21);
     expect(radios[0]?.value).toBe('system');
-    await expect.poll(() => document.activeElement).toBe(radios[0]);
+    await expect.poll(() => document.activeElement).toBe(document.querySelector('[data-terminal-preview="theme"] > summary'));
 
     const firstDark = radios.find((radio) => radio.value === 'dark')!;
     const secondDark = radios.find((radio) => radio.value === 'solarizedDark')!;
@@ -182,14 +199,14 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
   it('keeps the gallery usable at 320px and separately at 200 percent page zoom', async () => {
     layoutState.mobile = true;
     await page.viewport(320, 720);
-    const mounted = mountDialog('studioPaper');
+    const mounted = await mountDialog('studioPaper');
     cleanup = mounted.dispose;
     await settle();
 
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
     const radios = themeRadios();
     expect(dialog).toBeTruthy();
-    expect(document.activeElement).toBe(radios.find((radio) => radio.value === 'studioPaper'));
+    expect(document.activeElement).toBe(document.querySelector('[data-terminal-preview="theme"] > summary'));
     expect(dialog!.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
     expect(dialog!.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth + 1);
     expect(dialog!.scrollWidth).toBeLessThanOrEqual(dialog!.clientWidth + 1);
@@ -208,7 +225,7 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
     layoutState.mobile = false;
     await page.viewport(1280, 900);
     document.body.style.zoom = '2';
-    const zoomed = mountDialog('studioPaper');
+    const zoomed = await mountDialog('studioPaper');
     cleanup = zoomed.dispose;
     await settle();
 
@@ -223,7 +240,7 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
   it('preserves selection and focus visibility in forced-colors mode', async () => {
     await page.viewport(1280, 900);
     await mediaCommands.emulateMediaPreferences({ forcedColors: 'active', reducedMotion: 'reduce' });
-    const mounted = mountDialog('signalSafeDark');
+    const mounted = await mountDialog('signalSafeDark');
     cleanup = mounted.dispose;
     await settle();
 
@@ -231,7 +248,7 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
     expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
     const selected = themeRadios().find((radio) => radio.value === 'signalSafeDark')!;
     const selectedCard = selected.nextElementSibling as HTMLElement;
-    expect(document.activeElement).toBe(selected);
+    expect(document.activeElement).toBe(document.querySelector('[data-terminal-preview="theme"] > summary'));
     expect(selected.checked).toBe(true);
     expect(getComputedStyle(selectedCard).transitionDuration).toBe('0s');
     expect(getComputedStyle(selectedCard).outlineStyle).not.toBe('none');

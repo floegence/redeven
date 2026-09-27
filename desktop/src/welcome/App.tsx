@@ -6523,10 +6523,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                     </Button>
                   </div>
                 )}>
-                  <div class="space-y-4">
+                  <div class="environment-connection-form">
+                    <div class="environment-connection-field environment-connection-group">
                     <label class="block text-[length:var(--floe-type-control)] leading-[var(--floe-line-control)]" for="wsl-settings-name">{i18n().t('connectionDialog.name')}</label>
                     <Input id="wsl-settings-name" disabled={Boolean(settingsSession()?.saving)} value={settingsPresentation()?.metadata_label ?? ''}
                       onInput={event => settingsController.update({ metadata_label: event.currentTarget.value })} />
+                    </div>
                     <p class="select-text whitespace-pre-wrap font-mono text-xs">{wslSettingsIdentity()}</p>
                     <Show when={connectionDialogError()}><p role="alert" class="text-xs text-destructive">{connectionDialogError()}</p></Show>
 
@@ -12306,8 +12308,9 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
               {props.desktopOpenLabel}<ChevronRight class="ml-1 h-3.5 w-3.5" aria-hidden="true" />
             </Button>
           </div>
-          <div class="redeven-settings-connections">
+          <div class="redeven-settings-connections redeven-settings-connections--summary">
             <EnvironmentConnectionRows environmentID={props.snapshot.environment_id} rows={connectionRows()} i18n={props.i18n}
+              presentation="settings-summary"
               selectedID={selectedShareAddress()?.id}
               selectForShare={(id) => setSharedAddress(id ? { environment_id: props.snapshot.environment_id, id } : null)}
               openInBrowser={props.openInBrowser} copyEnvironmentValue={props.copyEnvironmentValue} />
@@ -13113,14 +13116,34 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
         </div>
       )}
     >
-      <div class="space-y-5" inert={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}>
+      <div class="environment-connection-form" inert={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}>
         {props.beforeFields}
+        <div class="environment-connection-field environment-connection-group">
+          <label for="environment-label" class="block text-xs font-medium text-foreground">
+            {props.i18n.t('connectionDialog.name')} <span class="text-destructive">*</span>
+          </label>
+          <Input
+            id="environment-label"
+            value={props.state?.label ?? ''}
+            onInput={(event) => {
+              props.updateField('label', event.currentTarget.value);
+              props.clearFieldErrors();
+            }}
+            placeholder={props.i18n.t('connectionDialog.namePlaceholder')}
+            size="sm"
+            aria-invalid={Boolean(props.fieldErrors.label) || undefined}
+            class={cn('w-full', props.fieldErrors.label && 'border-destructive')}
+          />
+          <Show when={props.fieldErrors.label}>
+            <div class="text-[11px] text-destructive">{props.fieldErrors.label}</div>
+          </Show>
+        </div>
         <Show when={connectionKind() === 'gateway_url_profile'}>
           <div class="redeven-dialog-section">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <div class="environment-connection-section-title">
               {props.i18n.t('connectionDialog.throughGateway')}
             </div>
-            <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+            <div class="environment-connection-group">
               <Show
                 when={props.gatewayProfileSources.length > 0}
                 fallback={(
@@ -13138,7 +13161,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                     onSelect={(gatewayID) => props.updateField('gateway_id', gatewayID)}
                     clearFieldErrors={props.clearFieldErrors}
                   />
-                  <div class="space-y-1.5">
+                  <div class="environment-connection-field">
                     <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.gatewayEnvironmentRouteType')}</label>
                     <div class="flex h-8 items-center rounded-md border border-border/70 bg-background px-2.5 text-xs text-foreground">
                       {props.i18n.t('connectionDialog.gatewayEnvironmentRouteUrl')}
@@ -13148,7 +13171,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                     </div>
                   </div>
                   <Show when={true}>
-                  <div class="space-y-1.5">
+                  <div class="environment-connection-field">
                     <label for="gateway-environment-target-url" class="block text-xs font-medium text-foreground">
                       {props.i18n.t('connectionDialog.gatewayEnvironmentTargetUrl')} <span class="text-destructive">*</span>
                     </label>
@@ -13171,7 +13194,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                     </Show>
                   </div>
                   </Show>
-                  <div class="space-y-1.5">
+                  <div class="environment-connection-field">
                     <label for="gateway-environment-origin-label" class="block text-xs font-medium text-foreground">
                       {props.i18n.t('connectionDialog.gatewayEnvironmentOriginLabel')}
                     </label>
@@ -13195,11 +13218,11 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
 
         <Show when={connectionKind() === 'external_local_ui'}>
           <div class="redeven-dialog-section">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <div class="environment-connection-section-title">
               {props.i18n.t('connectionDialog.connectionUrl')}
             </div>
-            <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
-              <div class="space-y-1.5">
+            <div class="environment-connection-group">
+              <div class="environment-connection-field">
                 <label for="environment-url" class="block text-xs font-medium text-foreground">
                   {props.i18n.t('connectionDialog.environmentUrl')} <span class="text-destructive">*</span>
                 </label>
@@ -13227,16 +13250,16 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
 
         <Show when={isSSHBackedKind()}>
           <div class="redeven-dialog-section">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <div class="environment-connection-section-title">
               {props.i18n.t('connectionDialog.sshHostSection')}
             </div>
-            <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+            <div class="environment-connection-group">
               <div class="rounded-md border border-dashed border-border/40 bg-muted/10 px-2.5 py-2 text-[11px] leading-5 text-muted-foreground">
                 {props.i18n.t('connectionDialog.sshContainerNotice')}
               </div>
               <div class="mt-3 space-y-3">
                 <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
-                <div class="space-y-1.5">
+                <div class="environment-connection-field">
                   <label for="environment-ssh-destination" class="block text-xs font-medium text-foreground">
                     {props.i18n.t('connectionDialog.sshDestination')} <span class="text-destructive">*</span>
                   </label>
@@ -13263,7 +13286,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                     <div class="text-[11px] text-destructive">{props.fieldErrors.ssh_destination}</div>
                   </Show>
                 </div>
-                <div class="space-y-1.5">
+                <div class="environment-connection-field">
                   <label for="environment-ssh-port" class="block text-xs font-medium text-foreground">{props.i18n.t('settings.portLabel')}</label>
                   <Input
                     id="environment-ssh-port"
@@ -13284,7 +13307,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                   </Show>
                 </div>
               </div>
-              <div class="space-y-1.5">
+              <div class="environment-connection-field">
                 <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.authentication')}</label>
                 <Show
                   when={true}
@@ -13309,7 +13332,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                 </div>
               </div>
               <Show when={isSSHBackedKind() && ((props.state as SSHBackedConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE) === 'password'}>
-                <div class="space-y-1.5">
+                <div class="environment-connection-field">
                   <label for="environment-ssh-password" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.localSshPassword')}</label>
                   <Input
                     id="environment-ssh-password"
@@ -13341,16 +13364,14 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
 
         <Show when={isContainerKind()}>
           <div class="redeven-dialog-section">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <div class="environment-connection-section-title">
               {props.i18n.t('connectionDialog.container')}
             </div>
-            <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+            <div class="environment-connection-group">
               <div class="space-y-3">
                 <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)] items-start">
-                  <div class="space-y-1.5">
-                    <div class="flex items-center h-7">
-                      <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.engine')}</label>
-                    </div>
+                  <div class="environment-connection-field">
+                    <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.engine')}</label>
                     <SegmentedControl
                       value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' || props.state?.connection_kind === 'gateway_url_profile' ? props.state.container_engine : 'docker'}
                       onChange={(value) => {
@@ -13389,7 +13410,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                   }}
                 />
               </div>
-                <div class="space-y-1.5">
+                <div class="environment-connection-field">
                   <label for="environment-container-runtime-root" class="block text-xs font-medium text-foreground">
                   {props.i18n.t('connectionDialog.runtimeRoot')}
                   <Show when={connectionKind() === 'local_container_runtime'}>
@@ -13425,10 +13446,10 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
 
         <Show when={connectionDialogAutoRuntimeProbeConfigurable(props.state)}>
           <div class="redeven-dialog-section">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <div class="environment-connection-section-title">
               {props.i18n.t('connectionDialog.statusDetection')}
             </div>
-            <div class="mt-2 rounded-md border border-border/70 bg-muted/20 px-3 py-3">
+            <div class="environment-connection-group">
               <div class="flex items-start justify-between gap-4">
                 <div class="min-w-0">
                   <div class="text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.autoStatusDetection')}</div>
@@ -13447,26 +13468,6 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
           </div>
         </Show>
 
-        <div class="space-y-1.5 rounded-md border border-dashed border-border/30 bg-background/40 px-3 py-3">
-          <label for="environment-label" class="block text-xs font-medium text-foreground">
-            {props.i18n.t('connectionDialog.name')} <span class="text-destructive">*</span>
-          </label>
-          <Input
-            id="environment-label"
-            value={props.state?.label ?? ''}
-            onInput={(event) => {
-              props.updateField('label', event.currentTarget.value);
-              props.clearFieldErrors();
-            }}
-            placeholder={props.i18n.t('connectionDialog.namePlaceholder')}
-            size="sm"
-            aria-invalid={Boolean(props.fieldErrors.label) || undefined}
-            class={cn('w-full', props.fieldErrors.label && 'border-destructive')}
-          />
-          <Show when={props.fieldErrors.label}>
-            <div class="text-[11px] text-destructive">{props.fieldErrors.label}</div>
-          </Show>
-        </div>
 
         <Show when={props.error}>
           <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">

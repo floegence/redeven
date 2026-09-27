@@ -129,7 +129,7 @@ describe('SSH environment settings interactions', () => {
     expect(document.getElementById('ssh-settings-runtime_root')).toBeNull();
     expect(button('Save changes').disabled).toBe(true);
     input('label', 'Renamed');
-    expect(document.querySelector('[aria-describedby]')?.textContent).toContain('gzcom');
+    expect(document.querySelector('[role=dialog] h2')?.textContent).toContain('gzcom');
     expect(button('Save changes').disabled).toBe(false);
     button('Advanced settingsRemote Download & Install · Custom directory · Custom mirror · 30 s').click();
     await settle();

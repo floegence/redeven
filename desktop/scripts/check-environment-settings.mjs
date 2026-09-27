@@ -48,10 +48,7 @@ try {
     await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-floe-dialog-panel]')).opacity === '1');
     await settleMotion();
     assert.equal(await dialog.locator('[data-floe-dialog-header] p').count(), 0);
-    assert.equal(await dialog.evaluate(panel => {
-      const description = document.getElementById(panel.getAttribute('aria-describedby'));
-      return description?.parentElement === panel.querySelector('[data-floe-dialog-body]');
-    }), true, 'environment identity stays in the body');
+    assert.ok((await dialog.locator('h2').innerText()).includes(label), 'environment identity stays in the title row');
   }
   async function switchTab(name, { reducedMotion = false } = {}) {
     const frames = await page.evaluate(async name => {
@@ -230,6 +227,7 @@ try {
   await page.locator('#ssh-settings-label').fill('Retained during health refresh');
   await switchTab('Access & security');
   await dialog.locator('.redeven-endpoint-listener summary').click();
+  await dialog.locator('.redeven-address-group--summary > summary').first().click();
   await dialog.getByRole('button', { name: 'Share connection', exact: true }).first().click();
   const addressFilter = dialog.locator('input[type="search"]');
   await addressFilter.fill('192.168');
@@ -292,6 +290,43 @@ try {
   await capture('health-refresh-failed');
   report.cases.push('background-probes-retain-addresses-nodes-filter-selection-scroll-qr-and-drafts');
   report.cases.push('completed-probe-failure-removes-stale-addresses-without-reloading-settings');
+  // Exercise each connection adapter through the real Welcome settings entry.
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(new URL('environment-settings.html?locale=en-US', report.url).href);
+    const original = snapshot.environments.find(entry => entry.id === targets[0].id);
+    for (const kind of ['wsl', 'container', 'url', 'gateway']) {
+      const entry = { ...original, id: `fixture-${kind}`, label: `Fixture ${kind}`,
+        ...(kind === 'wsl' ? { kind: 'wsl_environment', managed_runtime_host_access: { kind: 'wsl_host', distribution_name: 'Ubuntu', linux_user: 'dev' } } : {}),
+        ...(kind === 'container' ? { managed_runtime_host_access: { kind: 'local_host' }, managed_runtime_placement: {
+          kind: 'container_process', container_engine: 'docker', container_id: 'fixture-container', container_ref: 'fixture-container', container_label: 'Container', runtime_root: '/root/.redeven', bridge_strategy: 'exec_stream',
+        } } : {}),
+        ...(kind === 'url' ? { kind: 'external_local_ui', registration_ref: { kind: 'saved_environment', id: 'fixture-url' }, local_ui_url: 'https://example.invalid/' } : {}),
+        ...(kind === 'gateway' ? { kind: 'gateway_environment', registration_ref: { kind: 'gateway_environment', gateway_id: 'fixture-gateway', gateway_env_id: 'fixture-profile' }, gateway_environment_profile_access_route: { kind: 'url', url: 'https://example.invalid/' } } : {}),
+      };
+      await page.evaluate(value => window.settingsFixture.publish(value), { ...snapshot, environments: [...snapshot.environments, entry] });
+      await page.getByRole('button', { name: `Settings for Fixture ${kind}`, exact: true }).click();
+      await dialog.waitFor(); await settleMotion();
+      const geometry = await dialog.evaluate(panel => ({
+        overflow: panel.scrollWidth > panel.clientWidth + 1,
+        fields: [...panel.querySelectorAll('.environment-connection-field')].map(field => {
+          const label = field.querySelector('label').getBoundingClientRect();
+          const control = field.querySelector('input, [role="radiogroup"]')?.getBoundingClientRect();
+          const bounds = field.getBoundingClientRect();
+          return { left: bounds.left, right: bounds.right, labelRight: label.right, controlLeft: control?.left, controlRight: control?.right };
+        }),
+      }));
+      assert.equal(geometry.overflow, false, `${kind} dialog fits ${width}px`);
+      for (const field of geometry.fields) {
+        if (field.controlLeft == null) continue;
+        assert.ok(field.controlLeft >= field.left && field.controlRight <= field.right + 1, `${kind} control stays within its row`);
+        if (width === 1280) assert.ok(field.controlLeft >= field.labelRight, `${kind} label precedes its control`);
+      }
+      await capture(`connection-${kind}-${width}`);
+      await close();
+      report.cases.push(`${kind}-connection-layout-${width}`);
+    }
+  }
   assert.deepEqual(report.errors, []);
   report.status = 'passed';
   console.log(`Environment card settings passed: ${report.cases.length} browser scenarios. Evidence: ${output}`);

@@ -2887,6 +2887,8 @@
     "profileInvalid": "保存された CodeSpace のブラウザープロファイルを読み取れません。codespace-profiles.json を復元してから、この CodeSpace を開き直してください。"
   },
   "sshSettings": {
+    "nameHelp": "Desktop に表示する環境名。",
+    "destinationHelp": "~/.ssh/config のホストエイリアスを使用できます。",
     "title": "環境設定",
     "connection": "接続",
     "connectionHelp": "接続方式について",

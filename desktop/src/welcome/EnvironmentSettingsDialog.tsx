@@ -38,9 +38,14 @@ export function EnvironmentSettingsDialog(props: {
   const hasConnection = () => presentation()?.registration_ref?.kind !== 'local_environment';
   const hasAccess = () => !!presentation() && environmentHasAccessSettings(presentation()!);
   const hasTabs = () => hasConnection() && hasAccess();
+  const dialogTitle = createMemo(() => {
+    const title = props.i18n.t('settings.settingsWindowTitle');
+    const label = presentation()?.label?.trim();
+    return label ? `${title} · ${label}` : title;
+  });
   return <Dialog open={isOpen()} onOpenChange={open => { if (!open) props.onClose(); }}
     onPresenceChange={props.onPresenceChange}
-    title={props.i18n.t('settings.settingsWindowTitle')} bodyDescription={presentation()?.label}
+    title={dialogTitle()}
     closeLabel={props.i18n.t('common.close')} escapeKeyPhase="bubble"
     class={`redeven-environment-settings-dialog${hasTabs() ? ' environment-settings-with-tabs' : ''}`} contentClass="environment-settings-content">
     <Show when={hasTabs()}>

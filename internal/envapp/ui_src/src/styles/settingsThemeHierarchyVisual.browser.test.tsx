@@ -1,4 +1,5 @@
 import '../index.css';
+import '../ui/pages/runtime-settings-compact.css';
 
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { page } from 'vitest/browser';
@@ -257,10 +258,11 @@ describe('Settings theme hierarchy', () => {
         contrastRatio(paintedColor(selectedStyle.color), selectedBackground),
         `${preset.name} selected text`,
       ).toBeGreaterThanOrEqual(4.5);
-      expect(
-        contrastRatio(paintedColor(indicatorStyle.backgroundColor), selectedBackground),
-        `${preset.name} selected indicator`,
-      ).toBeGreaterThanOrEqual(3);
+      if (preset.name.startsWith('hc-')) {
+        expect(contrastRatio(paintedColor(indicatorStyle.backgroundColor), selectedBackground), `${preset.name} selected indicator`).toBeGreaterThanOrEqual(3);
+      } else {
+        expect(indicatorStyle.display, `${preset.name} quiet selection`).toBe('none');
+      }
       expect(secondSectionStyle.marginTop, `${preset.name} section spacing`).toBe('32px');
 
       if (preset.name === 'hc-light') {

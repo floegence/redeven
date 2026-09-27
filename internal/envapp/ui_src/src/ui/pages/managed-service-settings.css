@@ -1,0 +1,29 @@
+/* Service configuration retains its review/apply owner and shares the settings rhythm. */
+.managed-settings-layout { container: managed-settings / inline-size; }
+.managed-settings-navigation { width: 184px; flex: none; overflow-y: auto; padding: 20px 14px; background: var(--sidebar); }
+.managed-settings-navigation button { height: auto; min-height: 35px; padding: 8px 10px; font-size: 13px; font-weight: 400; }
+.managed-settings-content { flex: 1; min-width: 0; overflow: auto; padding: 32px 36px 48px; scrollbar-gutter: stable; }
+.managed-settings-content > section { max-width: 780px; margin-inline: auto; }
+.managed-settings-content > section > header { margin-bottom: 28px; }
+.managed-settings-content > section > header h3 { font-size: 25px; line-height: 1.4; font-weight: 600; letter-spacing: -.6px; }
+.managed-settings-content > section > header p { font-size: 13px; line-height: 1.7; margin-top: 8px; }
+.managed-settings-fields { display: flex; flex-direction: column; padding: 0 17px; border: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); border-radius: 14px; background: var(--card); }
+.managed-settings-field, .managed-settings-fields > label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); align-items: center; gap: 4px 28px; min-width: 0; padding: 14px 0; min-height: 65px; }
+.managed-settings-fields > label + label { border-top: 1px solid var(--border); }
+.managed-settings-field > span:first-child, .managed-settings-fields > label > span:first-child { grid-column: 1; grid-row: 1; font-size: 13px; font-weight: 400; color: var(--foreground); }
+.managed-settings-field > input, .managed-settings-field > textarea, .managed-settings-fields > label > input, .managed-settings-fields > label > select { grid-column: 2; grid-row: 1 / span 2; font-size: 12px; width: 100%; min-width: 0; }
+.managed-settings-field > input[type=number] { width: 88px; justify-self: end; }
+.managed-settings-fields > label > span:last-child:not(:first-child) { grid-column: 1; grid-row: 2; font-size: 12px; line-height: 1.65; }
+@container managed-settings (max-width: 600px) {
+  .managed-settings-navigation { width: 128px; padding: 12px 8px; }
+  .managed-settings-content { padding: 24px 16px; }
+  .managed-settings-field, .managed-settings-fields > label { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+}
+@media (max-width: 600px) {
+  .managed-settings-layout { flex-direction: column; }
+  .managed-settings-navigation { display: flex; width: 100%; gap: 4px; overflow: auto; padding: 8px; }
+  .managed-settings-navigation button { width: auto; flex: none; }
+}
+@media (pointer: coarse) {
+  .managed-settings-content input, .managed-settings-content select, .managed-settings-content textarea { font-size: 16px; min-height: 44px; }
+}

@@ -90,9 +90,11 @@ the display name, and model identifiers remain fully readable when expanded.
 
 Four peer sections share one page background: current model, providers, default
 permission, and computer/browser use. Each has a localized accessible name and a
-full-width separator with generous vertical spacing. Wide containers align section
-titles and descriptions in a dedicated left column with controls in a shared right
-column. At 760 CSS pixels or below they stack, preserving the reading order.
+heading and description above its controls, with generous vertical spacing.
+The centered frame is at most 860px including 40px side padding and uses a 25px
+primary heading. Provider rows share one quiet 14px-radius group with internal
+dividers. At 760 CSS pixels or below page padding contracts to 16px while
+preserving the reading order.
 
 Current-model capabilities, capacity figures, and reasoning preferences have
 separate visual groups. Provider rows always expose identity, credential readiness,

@@ -1,7 +1,7 @@
 import { EnvironmentSettingsPanel, EnvironmentSettingsReveal } from './EnvironmentSettingsDialog';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
-import { Button, Input, SegmentedControl, Switch } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, SegmentedControl, SettingsList, Switch } from '@floegence/floe-webapp-core/ui';
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import { DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS, type DesktopSSHBootstrapStrategy } from '../shared/desktopSSH';
 import type { DesktopI18n } from '../shared/i18n';
@@ -148,18 +148,18 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
   function Field(field: { name: string; label: string; children: JSX.Element; help?: string }) {
     return (
       <div class="ssh-settings-field" classList={{ 'ssh-settings-field--invalid': !!props.fieldErrors[field.name] }}>
-        <label for={`ssh-settings-${field.name}`}>{field.label}</label>
-        {field.children}
-        <Show when={field.help}>
-          <p id={`ssh-settings-${field.name}-help`} class="ssh-settings-help">
-            {field.help}
-          </p>
-        </Show>
-        <Show when={props.fieldErrors[field.name]}>
-          <p id={`ssh-settings-${field.name}-error`} class="ssh-settings-error" role="alert">
-            {props.fieldErrors[field.name]}
-          </p>
-        </Show>
+        <div class="ssh-settings-field-label">
+          <label for={`ssh-settings-${field.name}`}>{field.label}</label>
+          <Show when={field.help}>
+            <p id={`ssh-settings-${field.name}-help`} class="ssh-settings-help">{field.help}</p>
+          </Show>
+        </div>
+        <div class="ssh-settings-field-control">
+          {field.children}
+          <Show when={props.fieldErrors[field.name]}>
+            <p id={`ssh-settings-${field.name}-error`} class="ssh-settings-error" role="alert">{props.fieldErrors[field.name]}</p>
+          </Show>
+        </div>
       </div>
     );
   }
@@ -185,17 +185,19 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
         </>
       }
     >
-      <div ref={form} class="ssh-settings-form redeven-dialog-section" inert={!props.open || busy()}>
+      <div ref={form} class="ssh-settings-form" inert={!props.open || busy()}>
         {props.beforeFields}
-        <Field name="label" label={t('connectionDialog.name')}>
+        <SettingsList class="ssh-settings-fields">
+        <Field name="label" label={t('connectionDialog.name')} help={t('sshSettings.nameHelp')}>
           <Input
             id="ssh-settings-label"
             data-floe-autofocus
             value={props.state.label}
-            {...inputA11y('label')}
+            {...inputA11y('label', true)}
             onInput={(event) => props.updateField('label', event.currentTarget.value)}
           />
         </Field>
+        </SettingsList>
 
         <section class="ssh-settings-section" aria-labelledby="ssh-settings-connection-heading">
           <div class="ssh-settings-section-heading">
@@ -217,8 +219,8 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
               </button>
             </DesktopActionPopover>
           </div>
-          <div class="ssh-settings-endpoint">
-            <Field name="ssh_destination" label={t('connectionDialog.sshDestination')}>
+          <SettingsList class="ssh-settings-fields">
+            <Field name="ssh_destination" label={t('connectionDialog.sshDestination')} help={t('sshSettings.destinationHelp')}>
               <SSHDestinationCombobox
                 i18n={props.i18n}
                 inputID="ssh-settings-ssh_destination"
@@ -227,7 +229,7 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
                 loading={props.sshConfigHostsLoading}
                 loadError={props.sshConfigHostsLoadError}
                 autofocus={false}
-                {...inputA11y('ssh_destination')}
+                {...inputA11y('ssh_destination', true)}
                 onInput={(value) => props.updateField('ssh_destination', value)}
                 onSelectHost={(host) => {
                   props.updateField('ssh_destination', host.alias);
@@ -246,9 +248,12 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
                 onInput={(event) => props.updateField('ssh_port', event.currentTarget.value.replace(/\D/g, ''))}
               />
             </Field>
-          </div>
           <div class="ssh-settings-field">
-            <span id="ssh-settings-auth-label">{t('connectionDialog.authentication')}</span>
+            <div class="ssh-settings-field-label">
+              <span id="ssh-settings-auth-label">{t('connectionDialog.authentication')}</span>
+              <Show when={props.state.auth_mode === 'key_agent'}><p class="ssh-settings-help">{t('sshSettings.keyHelp')}</p></Show>
+            </div>
+            <div class="ssh-settings-field-control">
             <SegmentedControl
               value={props.state.auth_mode}
               onChange={(value) => props.updateField('auth_mode', value)}
@@ -259,9 +264,7 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
                 { value: 'password', label: t('sshSettings.password') },
               ]}
             />
-            <Show when={props.state.auth_mode === 'key_agent'}>
-              <p class="ssh-settings-help">{t('sshSettings.keyHelp')}</p>
-            </Show>
+            </div>
           </div>
           <Show when={props.state.auth_mode === 'password'}>
             <Field
@@ -297,8 +300,12 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
               </Show>
             </Field>
           </Show>
+          </SettingsList>
         </section>
 
+        <section class="ssh-settings-section">
+          <h3>{t('connectionDialog.statusDetection')}</h3>
+          <SettingsList class="ssh-settings-fields">
         <div class="ssh-settings-probe">
           <div>
             <label for="ssh-settings-probe">{t('connectionDialog.autoStatusDetection')}</label>
@@ -314,6 +321,8 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
             aria-describedby="ssh-settings-probe-help"
           />
         </div>
+          </SettingsList>
+        </section>
 
         <section class="ssh-settings-advanced" onTransitionEnd={(event) => {
           if (event.propertyName !== 'grid-template-rows' || !advanced()) return;
@@ -334,7 +343,7 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
             </span>
           </button>
           <EnvironmentSettingsReveal open={advanced()}>
-            <div id="ssh-settings-advanced-fields" class="ssh-settings-advanced-fields">
+            <SettingsList id="ssh-settings-advanced-fields" class="ssh-settings-fields ssh-settings-advanced-fields">
               <Field
                 name="bootstrap_strategy"
                 label={t('sshSettings.delivery')}
@@ -405,7 +414,7 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
                   <span class="ssh-settings-help">{t('sshSettings.secondsUnit')}</span>
                 </div>
               </Field>
-            </div>
+            </SettingsList>
           </EnvironmentSettingsReveal>
         </section>
         <Show when={props.error}>

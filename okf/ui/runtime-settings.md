@@ -41,7 +41,12 @@ The visual selection uses the existing UI-first transaction. Committed sections
 remain mounted through `UIFirstKeepAlivePanel`, preserving form values and scroll.
 Opening runtime settings from Flower retains the existing return destination.
 Generic geometry is consumed from released `floe-webapp` components rather than
-copied into Redeven. The product adapter only supplies palette roles and content.
+copied into Redeven. The product adapter supplies palette roles, content, and
+the approved product scale: a 228px navigation rail, an 860px page including
+40px side padding, a 25px primary heading, 13px row labels, 12px supporting
+text, and 14px grouped-list corners. The desktop page starts with 44px top
+padding; narrow pages use 28px top and 20px side padding. Geometry lives with
+the settings page so global and lazy-loaded styles cannot compete for ownership.
 
 ## Configuration editing
 
@@ -59,6 +64,10 @@ Connection Center route. Debug Console remains a local interface preference.
 Runtime restart and upgrade display a confirmation that identifies active work
 and the upgrade version. The shared controller owns execution, authority routing,
 progress, and recovery; settings do not create another maintenance lifecycle.
+
+Codespaces shows the selected Browser Editor version and runtime state first.
+Source, binary path, and Runtime directories remain available in a technical
+information disclosure without hiding setup failures or update actions.
 
 Runtime Flower settings use Models & providers, Permissions, and Health & storage
 tabs. All three bodies retain their state. Blocked or degraded readiness exposes
@@ -106,7 +115,8 @@ Read access cannot edit administrator fields. All writes use existing authentica
 - `internal/envapp/ui_src/src/ui/pages/EnvSettingsPage.tsx` owns destinations,
   selection, and retained panels.
 - `internal/envapp/ui_src/src/ui/pages/settings/SettingsPrimitives.tsx` and
-  `internal/envapp/ui_src/src/styles/redeven.css` adapt published Floe surfaces.
+  `internal/envapp/ui_src/src/ui/pages/runtime-settings-compact.css` adapt published Floe surfaces;
+  `internal/envapp/ui_src/src/styles/redeven.css` owns semantic palette roles.
 - `internal/envapp/ui_src/src/ui/pages/settings/EnvSettingsPageContext.tsx`
   delegates settings writes and runtime maintenance.
 - `internal/envapp/ui_src/src/ui/pages/settings/sections/SkillsSection.tsx` and

@@ -448,7 +448,7 @@ it('keeps narrow settings pages and long resource names inside their scroll view
     for (const action of dialog.querySelectorAll<HTMLButtonElement>('.flower-computer-panel button, .flower-computer-footer button')) {
       if (action.checkVisibility()) {
         expect(action.scrollWidth).toBeLessThanOrEqual(action.clientWidth + 1);
-        expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+        expect(action.offsetHeight).toBeGreaterThanOrEqual(44);
       }
     }
   };

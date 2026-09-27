@@ -1,3 +1,4 @@
+import './managed-service-settings.css';
 import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import {
@@ -189,7 +190,7 @@ function NumberField(props: {
   onInput: (value: number) => void;
 }) {
   return (
-    <label class="block">
+    <label class="managed-settings-field">
       <span class="mb-1 block text-[11px] font-medium text-muted-foreground">
         {props.label}
       </span>
@@ -215,7 +216,7 @@ function TextListField(props: {
   onInput: (value: string[]) => void;
 }) {
   return (
-    <label class="block">
+    <label class="managed-settings-field">
       <span class="mb-1 block text-[11px] font-medium text-muted-foreground">
         {props.label}
       </span>
@@ -626,11 +627,11 @@ export function ManagedServiceSettingsDrawer(props: {
         >
           {(resolved) => (
             <div
-              class="flex min-h-0 flex-1 overflow-hidden"
+              class="managed-settings-layout flex min-h-0 flex-1 overflow-hidden"
               data-testid="managed-service-settings"
             >
               <nav
-                class="w-40 shrink-0 border-r px-2 py-3"
+                class="managed-settings-navigation"
                 aria-label={settingText("sections")}
               >
                 <For each={sections.filter(sectionVisible)}>
@@ -643,6 +644,7 @@ export function ManagedServiceSettingsDrawer(props: {
                           ? "bg-accent text-foreground"
                           : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                       )}
+                      aria-current={section() === id ? "page" : undefined}
                       onClick={() => setSection(id)}
                     >
                       {settingText(`section.${id}`)}
@@ -650,7 +652,7 @@ export function ManagedServiceSettingsDrawer(props: {
                   )}
                 </For>
               </nav>
-              <div class="min-w-0 flex-1 overflow-auto px-5 py-4">
+              <div class="managed-settings-content">
                 <Show when={resolved().deployment === "compose"}>
                   <div
                     class="mb-4 flex items-center gap-1 border-b pb-2"
@@ -700,7 +702,7 @@ export function ManagedServiceSettingsDrawer(props: {
                         {settingText("generalHelp")}
                       </p>
                     </header>
-                    <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="managed-settings-fields">
                       <label>
                         <span class="mb-1 block text-xs font-medium">
                           {settingText("name")}{" "}
@@ -745,7 +747,7 @@ export function ManagedServiceSettingsDrawer(props: {
                         </span>
                       </label>
                     </div>
-                    <label class="block">
+                    <label class="managed-settings-field">
                       <span class="mb-1 block text-xs font-medium">
                         {settingText("serviceDescription")}
                       </span>
@@ -1276,7 +1278,7 @@ export function ManagedServiceSettingsDrawer(props: {
                           {settingText("resourcesHelp")}
                         </p>
                       </header>
-                      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                      <div class="managed-settings-fields">
                         <NumberField
                           label={settingText("cpus")}
                           value={container.cpus}
@@ -1333,7 +1335,7 @@ export function ManagedServiceSettingsDrawer(props: {
                           {settingText("networkHelp")}
                         </p>
                       </header>
-                      <div class="mt-4 grid gap-4 sm:grid-cols-3">
+                      <div class="managed-settings-fields">
                         <label class="text-xs">
                           {settingText("networkMode")}
                           <Input

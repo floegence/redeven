@@ -178,7 +178,7 @@ describe('TerminalSettingsDialog', () => {
 
     const dialog = host.querySelector('[data-testid="dialog"]');
     expect(dialog).toBeTruthy();
-    expect(dialog?.className).toContain('w-[min(30rem,92vw)]');
+    expect(dialog?.className).toContain('w-[min(50rem,92vw)]');
     expect(host.textContent).toContain('Terminal settings');
     expect(host.textContent).toContain('System Theme');
     expect(host.textContent).toContain('Signal Safe Dark');
@@ -190,7 +190,8 @@ describe('TerminalSettingsDialog', () => {
     expect(themeRadios).toHaveLength(TERMINAL_THEME_DEFINITIONS.length + 1);
     expect(new Set(themeRadios.map((input) => input.value)).size).toBe(21);
     expect(themeRadios.find((input) => input.value === 'system')?.checked).toBe(true);
-    expect(themeRadios.find((input) => input.value === 'system')?.dataset.floeAutofocus).toBe('true');
+    expect(host.querySelector<HTMLElement>('[data-terminal-preview="theme"] > summary')?.hasAttribute('data-floe-autofocus')).toBe(true);
+    expect(host.querySelector<HTMLDetailsElement>('[data-terminal-preview="theme"]')?.open).toBe(false);
     expect(host.querySelector('[data-theme-appearance-group="dark"]')?.textContent).toContain('Dark');
     expect(host.querySelector('[data-theme-appearance-group="light"]')?.textContent).toContain('Light');
     expect(host.querySelector('[data-theme-appearance-group="dark"]')?.getAttribute('role')).toBe('group');

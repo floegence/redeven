@@ -104,7 +104,7 @@ try {
     for (const locale of ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU']) {
       await open(locale, theme, `&preset=${preset.name}`);
       const bounds = await geometry();
-      assert.equal(bounds.width, 768);
+      assert.equal(bounds.width, 800);
       assert.equal(bounds.horizontalOverflow, false, `${theme}/${locale}: horizontal overflow`);
       assert.ok(bounds.footerBottom < 800, `${theme}/${locale}: actions clipped`);
       assert.equal(bounds.scroll, 0, `${theme}/${locale}: default view scrolls`);
@@ -120,15 +120,18 @@ try {
   const typography = await page.locator('.redeven-environment-settings-dialog').evaluate((el) => ({
     title: getComputedStyle(el.querySelector('h2')).fontSize,
     field: getComputedStyle(el.querySelector('input')).fontSize,
-    label: getComputedStyle(el.querySelector('.ssh-settings-field > label')).fontSize,
+    label: getComputedStyle(el.querySelector('.ssh-settings-field-label > label')).fontSize,
     body: getComputedStyle(el).fontSize,
     radius: parseFloat(getComputedStyle(el).borderRadius),
   }));
   assert.equal(typography.title, '16px');
   assert.equal(typography.field, '12px');
-  assert.equal(typography.label, '12px');
+  assert.equal(typography.label, '13px');
   assert.equal(typography.body, '12px');
-  assert.ok(typography.radius <= 6, 'shared compact Dialog radius');
+  assert.equal(typography.radius, 14, 'approved settings dialog radius');
+  const fields = await page.locator('.ssh-settings-field').evaluateAll(rows => rows.map(row => { const label = row.querySelector('.ssh-settings-field-label').getBoundingClientRect(), control = row.querySelector('.ssh-settings-field-control').getBoundingClientRect(); return { label: label.right, control: control.left, right: control.right }; }));
+  assert.ok(fields.every(row => row.control - row.label >= 27), 'labels and controls occupy separate columns');
+  assert.ok(fields.every(row => Math.abs(row.right - fields[0].right) < 1), 'all controls share the same right edge');
   await page.addScriptTag({ path: axePath });
   const accessibility = await page.evaluate(async () => {
     const result = await window.axe.run('.redeven-environment-settings-dialog', { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] });
@@ -190,6 +193,7 @@ try {
   await page.getByRole('radio', { name: 'Password', exact: true }).click();
   await page.getByRole('button', { name: 'Remove stored password', exact: true }).click();
   await page.setViewportSize({ width: 480, height: 640 });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   let bounds = await geometry();
   assert.equal(bounds.horizontalOverflow, false);
   assert.ok(bounds.scroll > 0);

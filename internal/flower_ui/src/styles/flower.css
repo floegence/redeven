@@ -6,8 +6,8 @@
 }
 
 .flower-provider-dialog [data-floe-dialog-header] h2 {
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .flower-component-shell {
@@ -8360,9 +8360,9 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-settings-frame {
-  width: min(100%, 64rem);
+  width: min(100%, 860px);
   margin: 0 auto;
-  padding: 1.5rem 1.5rem 3rem;
+  padding: 44px 40px 64px;
 }
 
 .flower-settings-title-row {
@@ -8414,9 +8414,10 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-settings-title {
   margin: 0;
   color: var(--foreground);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  letter-spacing: 0;
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -.6px;
+  line-height: 1.4;
 }
 
 .flower-settings-model-field { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
@@ -9771,12 +9772,12 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-settings-section {
   display: grid;
-  grid-template-columns: 11.5rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 1.5rem;
+  gap: 12px;
   min-width: 0;
-  border-top: 1px solid var(--flower-settings-border);
-  padding: 1.25rem 0;
+
+  padding: 24px 0;
 }
 
 .flower-settings-subsection-header {
@@ -9835,6 +9836,10 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-settings-provider-gallery {
   display: grid;
+  padding: 0 17px;
+  border: 1px solid var(--flower-settings-divider);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--foreground) 4%, var(--background));
 }
 
 .flower-settings-provider-card {
@@ -9844,12 +9849,11 @@ button.flower-attachment-preview-trigger:disabled {
   align-items: start;
   gap: 0.875rem;
   text-align: left;
+  padding-block: 17px;
 }
 
 .flower-settings-provider-card + .flower-settings-provider-card {
-  margin-top: 1.25rem;
   border-top: 1px solid var(--flower-settings-divider);
-  padding-top: 1.25rem;
 }
 
 .flower-settings-provider-brand {
@@ -9947,7 +9951,7 @@ button.flower-attachment-preview-trigger:disabled {
 
 @container (max-width: 760px) {
   .flower-settings-frame { padding: 1rem; }
-  .flower-settings-section { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; padding: 1.75rem 0; }
+  .flower-settings-section { gap: 12px; padding: 24px 0; }
   .flower-settings-title-row { padding-bottom: 1rem; }
 }
 
