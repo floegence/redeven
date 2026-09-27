@@ -19,12 +19,15 @@ const priorLocale = readStoredLanguagePreference();
 let cleanup: (() => void) | undefined;
 afterEach(async () => { cleanup?.(); cleanup = undefined; unbind?.(); writeStoredLanguagePreference(priorLocale); document.documentElement.classList.remove('dark'); api.request.mockReset(); await page.viewport(1280, 800); });
 const button = (label: string) => [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === label)!;
-async function mount(locale: RedevenLocale = 'en-US') {
+async function mount(locale: RedevenLocale = 'en-US', installed = true) {
   writeStoredLanguagePreference(locale);
   let profiles = [{ id: 'browser-main', name: 'Default' }, { id: 'work', name: 'Work accounts' }];
   api.request.mockImplementation(async (path: string, options?: { method?: string; body?: string }) => {
     if (path.endsWith('/preference')) return { preference: null };
-    if (path.endsWith('/installation')) return { storage_bytes: 1, enabled: true, state: 'installed', launch: { state: 'ready' as const }, package: { id: 'fixture', name: 'Chromium', version: '153', platform: 'darwin', architecture: 'arm64', size_bytes: 1, installed_bytes: 1 }, received_bytes: 0, directory: '/fixture' };
+    if (path.endsWith('/installation')) {
+      if (options?.method === 'POST') installed = true;
+      return { storage_bytes: 1, enabled: true, state: installed ? 'installed' : 'not_installed', launch: { state: installed ? 'ready' : 'installation_required' }, package: { id: 'fixture', name: 'Chromium', version: '153', platform: 'darwin', architecture: 'arm64', size_bytes: 1, installed_bytes: 1 }, received_bytes: 0, directory: '/fixture' };
+    }
     if (path.endsWith('/profiles')) {
       if (options?.method === 'POST') profiles = [...profiles, { id: 'new-profile', name: JSON.parse(options.body!).name }];
       return profiles;
@@ -65,6 +68,17 @@ it('creates and selects an isolated profile without replacing the active page', 
   expect(select).not.toHaveBeenCalled();
   button('Open selection').click();
   await vi.waitFor(() => expect(select).toHaveBeenCalledWith({ label: 'Client account', request: { managed_profile_id: 'new-profile' } }, expect.any(AbortSignal)));
+});
+it('opens the selected source once after Install and open completes', async () => {
+  const { select } = await mount('en-US', false);
+  await page.getByRole('button', { name: 'Built-in browser', exact: true }).click();
+  button('Open selection').click();
+  await vi.waitFor(() => expect(button('Install and open')).toBeDefined());
+  expect(select).not.toHaveBeenCalled();
+  expect(api.request.mock.calls.filter(([path, options]) => path.endsWith('/installation') && options?.method === 'POST')).toHaveLength(0);
+  button('Install and open').click();
+  await vi.waitFor(() => expect(select).toHaveBeenCalledExactlyOnceWith({ label: 'Default profile', request: { managed_profile_id: 'browser-main' } }, expect.any(AbortSignal)));
+  expect(api.request.mock.calls.filter(([path, options]) => path.endsWith('/installation') && options?.method === 'POST')).toHaveLength(1);
 });
 it('discovers an advanced endpoint only on request and opens the exact discovered page', async () => {
   const { select } = await mount();
