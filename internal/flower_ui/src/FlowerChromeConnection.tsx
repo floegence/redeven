@@ -109,7 +109,7 @@ export function FlowerChromeConnection(props: {
     if (phase() === 'confirming') setPhase('waiting');
   };
   const manualDesktop = () => selectedInstallation()?.reason === 'desktop_session_unavailable';
-  const remoteAvailable = () => setup()?.platform === 'linux' && Boolean(props.management.prepareRemoteBrowser);
+  const remoteAvailable = () => (setup()?.platform ?? connectionStatus()?.platform ?? props.platform) === 'linux' && Boolean(props.management.prepareRemoteBrowser);
   const remotePrimary = () => remoteAvailable() && manualDesktop();
   const showDesktopGuide = () => !remotePrimary() || desktopGuide();
   const prepareRemote = async () => {
@@ -145,6 +145,7 @@ export function FlowerChromeConnection(props: {
     </Show>
     <FlowerChromeReadiness status={connectionStatus() ? { ...connectionStatus()!, profiles: connectionStatus()!.profiles.filter(profile => profile.installation_id === installationID()), browser_installed: selectedInstallation()?.installed } : undefined} diagnostic={remotePrimary() && !showDesktopGuide() && diagnostic()?.reason === 'desktop_session_unavailable' ? undefined : diagnostic()} environmentName={props.environmentName} platform={props.platform} copy={props.copy}
       onRetry={diagnostic() ? () => void prepare() : undefined} retryLabel={retryLabel()} retryDisabled={opening()} />
+    <Show when={status() && (phase() === 'preparing' || showDesktopGuide())}><p class="flower-body-copy" role={phase() === 'failed' ? 'alert' : 'status'} aria-live="polite">{status()}</p></Show>
     <Show when={remoteAvailable() && phase() !== 'connected' && phase() !== 'preparing' && diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}>
       <section class="space-y-3 rounded-lg border border-border bg-muted/20 p-4" data-remote-browser-setup>
         <div class="space-y-1"><h3 class="flower-body-copy font-medium">{props.copy.chromeRemoteTitle}</h3>
@@ -154,7 +155,7 @@ export function FlowerChromeConnection(props: {
       </section>
       <Show when={remotePrimary() && !desktopGuide()}><Button variant="ghost" size="sm" onClick={() => setDesktopGuide(true)}>{props.copy.chromeDesktopAction}</Button></Show>
     </Show>
-    <Show when={showDesktopGuide()}>
+    <Show when={showDesktopGuide() && phase() !== 'preparing'}>
     <Show when={diagnostic()?.stage !== 'prepare' && diagnostic()?.stage !== 'continue'}><ol class="grid grid-cols-2 gap-4 flower-body-copy">
       <li aria-current={step() === 'install' ? 'step' : undefined}
         class="flex items-center gap-2 border-b-2 pb-3" classList={{ 'border-primary font-medium': step() === 'install', 'border-border text-muted-foreground': step() !== 'install' }}>
@@ -165,7 +166,6 @@ export function FlowerChromeConnection(props: {
         <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs">2</span>{props.copy.setupConfirmTitle}
       </li>
     </ol></Show>
-    <Show when={status()}><p class="flower-body-copy" role={phase() === 'failed' ? 'alert' : 'status'} aria-live="polite">{status()}</p></Show>
     <Show when={setup() && phase() !== 'connected' && phase() !== 'preparing' && diagnostic()?.stage !== 'continue' && diagnostic()?.stage !== 'prepare'}>
       <Show when={step() === 'install'} fallback={<>
         <p class="flower-body-copy leading-relaxed text-muted-foreground">{props.reuseConnected ? props.copy.setupConfirmHint : props.copy.pairingConfirmHint}</p>
