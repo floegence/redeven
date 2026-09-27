@@ -9,15 +9,16 @@ import { browserDocumentURL } from './browserWindowProtocol';
 import { createBrowserWorkspaceWindows, openBrowserWorkspace } from './browserWorkspaceWindows';
 
 const hosts = vi.hoisted(() => [] as { options: BrowserWindowOptions; close: ReturnType<typeof vi.fn>; suspend: ReturnType<typeof vi.fn> }[]);
+const desktop = vi.hoisted(() => ({ available: vi.fn(() => false), prepare: vi.fn(async () => true) }));
 vi.mock('./browserWindow', () => ({ createBrowserWindow: (options: BrowserWindowOptions) => {
   const host = { options, close: vi.fn(() => options.onClose?.()), suspend: vi.fn() }; hosts.push(host); return host;
 } }));
-vi.mock('./desktopShellBridge', () => ({ desktopShellBridgeAvailable: () => false }));
+vi.mock('./desktopShellBridge', () => ({ desktopShellBridgeAvailable: desktop.available, prepareDesktopBrowserWindow: desktop.prepare }));
 vi.mock('./browserSourceManagement', () => ({ browserSourceService: () => ({ management: { loadBrowserInstallation: async () => ({ enabled: true, state: 'installed', launch: { state: 'ready' } }) } }) }));
 
 let release: (() => void) | undefined;
 let windows: ReturnType<typeof createBrowserWorkspaceWindows> | undefined;
-afterEach(() => { windows?.close(); windows = undefined; release?.(); hosts.length = 0; vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { windows?.close(); windows = undefined; release?.(); hosts.length = 0; desktop.available.mockReset().mockReturnValue(false); desktop.prepare.mockReset().mockResolvedValue(true); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it('creates browser views through the active Session even when local HTTP has a different identity', async () => {
   const local = vi.fn(() => Promise.reject(new Error('Synthetic local-ui identity')));
@@ -107,4 +108,28 @@ it('opens another window from the confirmed current source without replaying a s
   expect(children).toHaveLength(2);
   const posts = request.mock.calls.filter(([path, init]) => init?.method === 'POST' && !String(path).endsWith('/preference'));
   expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ targets: ['latest-tab'] });
+});
+
+it('ignores retired view events while Desktop admits the replacement document', async () => {
+  desktop.available.mockReturnValue(true);
+  const { children, request } = await setupWindows();
+  const original = hosts[0]!;
+  let admit!: (accepted: boolean) => void;
+  desktop.prepare.mockImplementationOnce(() => new Promise(resolve => { admit = resolve; }));
+  await original.options.sources!.select({ label: 'Another profile', request: { managed_profile_id: 'another-profile' } }, new AbortController().signal);
+  await vi.waitFor(() => expect(desktop.prepare).toHaveBeenCalledTimes(2));
+  // The controller has committed the new view and released the old one, but
+  // Desktop has not yet admitted its document. Old carrier events can arrive.
+  original.options.onFailure?.('BROWSER_SOURCE_UNAVAILABLE');
+  original.options.onStatus?.('disconnected');
+  original.options.onTabs?.({ active: 'retired-tab', tabs: [] });
+  admit(true);
+  await vi.waitFor(() => expect(hosts).toHaveLength(2));
+  expect(children).toHaveLength(1);
+  expect(children[0]!.close).not.toHaveBeenCalled();
+  expect(children[0]!.location.replace).toHaveBeenCalledOnce();
+  expect(original.suspend).not.toHaveBeenCalled();
+  await hosts[1]!.options.onOpenWindow?.();
+  const posts = request.mock.calls.filter(([path, init]) => init?.method === 'POST' && !String(path).endsWith('/preference'));
+  expect(JSON.parse(String(posts.at(-1)![1]?.body))).toEqual({ targets: ['selected-tab'] });
 });

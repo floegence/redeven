@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote browser presentation
 description: Present stable tab geometry and continuous input through current source authority.
 tags: [architecture, browser, ui, security]
-timestamp: 2026-09-26T00:00:00Z
+timestamp: 2026-09-28T00:00:00Z
 ---
 # Summary
 
@@ -37,6 +37,11 @@ Repeated clicks on an already focused text field receive a fresh source focus
 confirmation and restore the visible native caret without replaying a click.
 Chrome and Electron product qualification exercises this behavior through the
 same authorized Flowersec Session, including Unicode text insertion.
+The published source engine maps Command+A to Chromium’s native select-all command
+on that same authorized key event, including a Mac client controlling Linux.
+The website retains `preventDefault()` authority; Redeven adds no local selection
+mutation or alternate input path. Qualification replaces selected source text
+through both managed and extension sources, with Chrome and Desktop clients.
 
 Initial pointer and wheel targets can move, disappear, be replaced or become covered
 between projection and dispatch. Published FloeBrowser reports these known
@@ -104,6 +109,15 @@ after replacement. Page title changes do not invalidate a document. The same
 continuity contract applies to observers and controllers; source URL changes and
 revocation still invalidate the corresponding presentation.
 
+## Retained media during document replacement
+
+The released engine attaches a projected video consumer only after its prepared
+document becomes visible. Replacing a document presents the retained decoded
+picture even when the source video is paused. This reuses the authorized media
+stream and changes only viewer presentation; it never requests source playback,
+seeking, drawing or input replay. Teardown releases viewer-owned capture tracks
+without stopping website-owned tracks.
+
 ## Ordinary HTML inside object elements
 
 Published FloeBrowser 0.1.22 projects an `object` with absent or empty `data` and
@@ -136,6 +150,8 @@ is input evidence, not proof that a third-party verification challenge passes.
 
 # Evidence
 
+- [FloeBrowser v0.1.25: test/edit-shortcuts.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.25/test/edit-shortcuts.e2e.ts) — Native select-all, Unicode replacement and source cancellation across three viewer engines.
+- [FloeBrowser v0.1.25: test/media-reattach.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.25/test/media-reattach.e2e.ts) — Retained pictures across hidden document preparation without additional source frames.
 - `redeven:internal/envapp/ui_src/src/browserDocument.ts` - Cancellable preparation before display, with status and tab callbacks limited to notifications.
 - `redeven:internal/envapp/ui_src/src/browserDocument.test.ts` - Idle admission ordering, absence of live-status reacquisition and cancellation of obsolete requests.
 - [FloeBrowser v0.1.14: test/input-focus.e2e.ts](https://github.com/floegence/floebrowser/blob/v0.1.14/test/input-focus.e2e.ts) — Repeated source focus and native caret continuity.
